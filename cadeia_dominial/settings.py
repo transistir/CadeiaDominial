@@ -37,6 +37,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cadeia_dominial',
+    'django_extensions',
+    'django.contrib.gis',
+    'dominial',
 ]
 
 MIDDLEWARE = [
