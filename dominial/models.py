@@ -1,6 +1,6 @@
 from pyexpat import model
 from django.db import models
-from django.contrib.gis.db import models
+#from django.contrib.gis.db import models
 
 
 # Entidades do modelo de cadeia dominial (TIs, Imóveis, Pessoas, Cartórios)
@@ -11,7 +11,7 @@ class TIs(models.Model):
     codigo = models.CharField(max_length=50, unique=True)
     etnia = models.CharField(max_length=50)
     data_cadastro = models.DateField(auto_now_add=True)
-    poligonos = models.PolygonField(null=True, blank=True)  # Opcional, para armazenar polígonos geográficos
+    #poligonos = models.PolygonField(null=True, blank=True)  # Opcional, para armazenar polígonos geográficos
     
     def __str__(self):
         return self.nome
@@ -61,8 +61,10 @@ class Imovel(models.Model):
 # TIs e Imóveis (associação entre TIs e Imóveis) deixar aberto a possibilidade de verigicar sobreposicao geografica
 
 class TIs_Imovel(models.Model):
-    tis_codigo = models.ForeignKey(TIs, on_delete=models.CASCADE)
-    imovel = models.ForeignKey(TIs, on_delete=models.CASCADE)
+    tis_codigo = models.ForeignKey(TIs, on_delete=models.CASCADE, related_name='tis_codigo')
+    imovel = models.ForeignKey(Imovel, on_delete=models.CASCADE, related_name='imovel')
+    def __str__(self):
+        return self.tis_codigo.nome + " - " + self.imovel.nome
 
 # Tipos de alterações no modelo de cadeia dominial (Registro, Averbação, etc.)
 # Dependendo do tipo de alteração, pode ser necessário criar tabelas adicionais para registros e averbações específicas
