@@ -12,7 +12,10 @@ class TIs(models.Model):
     etnia = models.CharField(max_length=50)
     data_cadastro = models.DateField(auto_now_add=True)
     #poligonos = models.PolygonField(null=True, blank=True)  # Opcional, para armazenar polígonos geográficos
-    
+    class Meta:
+        verbose_name = "TI"
+        verbose_name_plural = "TIs"
+
     def __str__(self):
         return self.nome
 
@@ -23,6 +26,10 @@ class Cartorios(models.Model):
     endereco = models.CharField(max_length=255, null=True, blank=True) # Opcional
     telefone = models.CharField(max_length=15, null=True, blank=True) # Opcional
     email = models.EmailField(null=True, blank=True) # Opcional
+
+    class Meta:
+        verbose_name = "Cartório"
+        verbose_name_plural = "Cartórios"
 
     def __str__(self):
         return self.nome
@@ -35,6 +42,10 @@ class Pessoas(models.Model):
     data_nascimento = models.DateField(null=True, blank=True) # Opcional, para data de nascimento
     email = models.EmailField(null=True, blank=True) # Opcional, para email
     telefone = models.CharField(max_length=15, null=True, blank=True) # Opcional, para telefone
+
+    class Meta:
+        verbose_name = "Pessoa"
+        verbose_name_plural = "Pessoas"
     
     def __str__(self):
         return self.nome
@@ -50,6 +61,10 @@ class Imovel(models.Model):
     descricao = models.TextField(null=True, blank=True) # Opcional, para descrição do imóvel
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel
+
+    class Meta:
+        verbose_name = "Imóvel"
+        verbose_name_plural = "Imóveis"
     
     
     def __str__(self):
@@ -120,6 +135,11 @@ class Alteracoes(models.Model):
     area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) # Opcional, para área do imóvel
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro da alteração
+
+    class Meta:
+        verbose_name = "Alteração"
+        verbose_name_plural = "Alterações"
+
     
     def __str__(self):
         return f"{self.imovel_id} - {self.tipo_alteracao_id} - {self.data_alteracao}" if self.data_alteracao else f"{self.imovel_id} - {self.tipo_alteracao_id}"
