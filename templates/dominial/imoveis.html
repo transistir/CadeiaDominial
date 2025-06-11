@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de Imóveis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .usuario {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .aviso {
+            color: #555;
+            margin-bottom: 20px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Imóveis Registrados</h1>
+
+    <div class="usuario">
+        Olá, {{ user.get_full_name|default:user.username }}!
+    </div>
+
+    <div class="aviso">
+        Total de imóveis encontrados: {{ imoveis|length }}
+    </div>
+
+    <ul>
+        {% for imovel in imoveis %}
+            <li><strong>{{ imovel.nome }}</strong> — matrícula: {{ imovel.matricula }}</li>
+        {% empty %}
+            <li>Nenhum imóvel encontrado.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
