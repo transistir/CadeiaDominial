@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from .models import TIs, Imovel, TerraIndigenaReferencia
 from django.contrib import messages
 from .models import Imovel, TIs, Cartorios, Pessoas, Alteracoes
 from .forms import TIsForm, ImovelForm
@@ -11,7 +12,11 @@ logger = logging.getLogger(__name__)
 @login_required
 def home(request):
     terras_indigenas = TIs.objects.all().order_by('nome')
-    return render(request, 'dominial/home.html', {'terras_indigenas': terras_indigenas})
+    terras_referencia = TerraIndigenaReferencia.objects.all().order_by('nome')
+    return render(request, 'dominial/home.html', {
+        'terras_indigenas': terras_indigenas,
+        'terras_referencia': terras_referencia
+    })
 
 @login_required
 def tis_form(request):
@@ -123,19 +128,23 @@ def imovel_delete(request, tis_id, imovel_id):
         'tis': tis
     })
 
-# Views gerais
-def imoveis(request):
-    imoveis = Imovel.objects.all()
-    return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
-
-def cartorios(request):
-    cartorios = Cartorios.objects.all()
-    return render(request, 'dominial/cartorios.html', {'cartorios': cartorios})
-
-def pessoas(request):
-    pessoas = Pessoas.objects.all()
-    return render(request, 'dominial/pessoas.html', {'pessoas': pessoas})
-
-def alteracoes(request):
-    alteracoes = Alteracoes.objects.all()
-    return render(request, 'dominial/alteracoes.html', {'alteracoes': alteracoes})
+@login_required
+def tis_delete(request, tis_id):
+    if not request.user.is_staff:
+        messages.error(request, 'Você não tem permissão para excluir terras indígenas.')
+        return redirect('home')
+        
+    tis = get_object_or_404(TIs, id=tis_id)
+    
+    if request.method == 'POST':
+        try:
+            nome = tis.nome
+            tis.delete()
+            messages.success(request, f'Terra Indígena "{nome}" excluída com sucesso!')
+            return redirect('home')
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir Terra Indígena: {str(e)}')
+    
+    return render(request, 'dominial/tis_confirm_delete.html', {
+        'tis': tis
+    })

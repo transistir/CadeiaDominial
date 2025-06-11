@@ -34,6 +34,12 @@
         background: #417690;
     }
 
+    .section-title {
+        margin: 40px 0 20px;
+        color: #333;
+        font-size: 20px;
+    }
+
     .tis-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -50,6 +56,7 @@
         text-decoration: none;
         color: inherit;
         display: block;
+        position: relative;
     }
 
     .tis-card:hover {
@@ -59,11 +66,20 @@
     .tis-card h3 {
         margin: 0 0 10px 0;
         color: #333;
+        font-size: 18px;
+        border-bottom: 2px solid #79aec8;
+        padding-bottom: 5px;
     }
 
     .tis-card p {
-        margin: 5px 0;
+        margin: 8px 0;
         color: #666;
+        font-size: 14px;
+    }
+
+    .tis-card strong {
+        color: #333;
+        font-weight: 600;
     }
 
     .add-tis-button {
@@ -112,6 +128,50 @@
     .logout-button:hover {
         background: #a41515;
     }
+
+    .available-count {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        margin: 20px 0;
+    }
+
+    .available-count h3 {
+        color: #333;
+        margin: 0 0 10px 0;
+    }
+
+    .available-count .count {
+        font-size: 36px;
+        color: #79aec8;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+
+    .available-count p {
+        color: #666;
+        margin: 0;
+    }
+
+    .delete-tis-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #ba2121;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .delete-tis-button:hover {
+        background: #a41515;
+    }
 </style>
 {% endblock %}
 
@@ -124,14 +184,25 @@
         {% endif %}
     </div>
 
+    <h2 class="section-title">{% trans 'Terras Indígenas Cadastradas' %}</h2>
     <div class="tis-grid">
         {% for tis in terras_indigenas %}
-        <a href="{% url 'tis_detail' tis.id %}" class="tis-card">
-            <h3>{{ tis.nome }}</h3>
-            <p><strong>{% trans 'Código' %}:</strong> {{ tis.codigo }}</p>
-            <p><strong>{% trans 'Etnia' %}:</strong> {{ tis.etnia }}</p>
-            <p><strong>{% trans 'Data de Cadastro' %}:</strong> {{ tis.data_cadastro|date:"d/m/Y" }}</p>
-        </a>
+        <div class="tis-card">
+            {% if user.is_staff %}
+            <a href="{% url 'tis_delete' tis.id %}" class="delete-tis-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir esta Terra Indígena?' %}')">{% trans 'Excluir' %}</a>
+            {% endif %}
+            <a href="{% url 'tis_detail' tis.id %}" style="text-decoration: none; color: inherit;">
+                <h3>{{ tis.nome }}</h3>
+                <p><strong>{% trans 'Código' %}:</strong> {{ tis.codigo }}</p>
+                <p><strong>{% trans 'Etnia' %}:</strong> {{ tis.etnia }}</p>
+                <p><strong>{% trans 'Estado' %}:</strong> {{ tis.terra_referencia.estado }}</p>
+                <p><strong>{% trans 'Fase' %}:</strong> {{ tis.terra_referencia.fase }}</p>
+                {% if tis.terra_referencia.area_ha %}
+                <p><strong>{% trans 'Área' %}:</strong> {{ tis.terra_referencia.area_ha|floatformat:2 }} ha</p>
+                {% endif %}
+                <p><strong>{% trans 'Data de Cadastro' %}:</strong> {{ tis.data_cadastro|date:"d/m/Y" }}</p>
+            </a>
+        </div>
         {% empty %}
         <div class="tis-card">
             <h3>{% trans 'Nenhuma Terra Indígena cadastrada' %}</h3>
@@ -143,6 +214,13 @@
     {% if perms.dominial.add_tis %}
     <a href="{% url 'tis_form' %}" class="add-tis-button">{% trans 'Cadastrar Nova Terra Indígena' %}</a>
     {% endif %}
+
+    <h2 class="section-title">{% trans 'Terras Indígenas Disponíveis para Cadastro' %}</h2>
+    <div class="available-count">
+        <h3>{% trans 'Total de Terras Indígenas Disponíveis' %}</h3>
+        <div class="count">{{ terras_referencia.count }}</div>
+        <p>{% trans 'Terras indígenas importadas da FUNAI que ainda não foram cadastradas no sistema.' %}</p>
+    </div>
 
     <div class="user-info">
         <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>

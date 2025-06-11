@@ -1,0 +1,113 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .delete-container {
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .delete-header {
+        margin-bottom: 20px;
+    }
+
+    .delete-header h1 {
+        color: #ba2121;
+        margin: 0 0 10px 0;
+    }
+
+    .delete-content {
+        margin-bottom: 30px;
+    }
+
+    .delete-content p {
+        margin: 10px 0;
+        color: #666;
+    }
+
+    .delete-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .delete-button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        text-decoration: none;
+        color: white;
+    }
+
+    .confirm-button {
+        background: #ba2121;
+    }
+
+    .confirm-button:hover {
+        background: #a41515;
+    }
+
+    .cancel-button {
+        background: #6c757d;
+    }
+
+    .cancel-button:hover {
+        background: #5a6268;
+    }
+
+    .tis-info {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 15px 0;
+    }
+
+    .tis-info p {
+        margin: 5px 0;
+    }
+
+    .tis-info strong {
+        color: #333;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="delete-container">
+    <div class="delete-header">
+        <h1>{% trans 'Confirmar Exclusão' %}</h1>
+    </div>
+
+    <div class="delete-content">
+        <p>{% trans 'Você tem certeza que deseja excluir a Terra Indígena' %} "{{ tis.nome }}"?</p>
+        
+        <div class="tis-info">
+            <p><strong>{% trans 'Código' %}:</strong> {{ tis.codigo }}</p>
+            <p><strong>{% trans 'Etnia' %}:</strong> {{ tis.etnia }}</p>
+            <p><strong>{% trans 'Estado' %}:</strong> {{ tis.terra_referencia.estado }}</p>
+            <p><strong>{% trans 'Fase' %}:</strong> {{ tis.terra_referencia.fase }}</p>
+            {% if tis.terra_referencia.area_ha %}
+            <p><strong>{% trans 'Área' %}:</strong> {{ tis.terra_referencia.area_ha|floatformat:2 }} ha</p>
+            {% endif %}
+        </div>
+
+        <p class="warning">{% trans 'Esta ação não pode ser desfeita. Todos os imóveis associados a esta Terra Indígena também serão excluídos.' %}</p>
+    </div>
+
+    <div class="delete-actions">
+        <a href="{% url 'home' %}" class="delete-button cancel-button">{% trans 'Cancelar' %}</a>
+        <form method="post" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="delete-button confirm-button">{% trans 'Confirmar Exclusão' %}</button>
+        </form>
+    </div>
+</div>
+{% endblock %} 
