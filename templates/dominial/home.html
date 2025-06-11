@@ -47,6 +47,9 @@
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         padding: 20px;
         transition: transform 0.2s;
+        text-decoration: none;
+        color: inherit;
+        display: block;
     }
 
     .tis-card:hover {
@@ -123,12 +126,12 @@
 
     <div class="tis-grid">
         {% for tis in terras_indigenas %}
-        <div class="tis-card">
+        <a href="{% url 'tis_detail' tis.id %}" class="tis-card">
             <h3>{{ tis.nome }}</h3>
             <p><strong>{% trans 'Código' %}:</strong> {{ tis.codigo }}</p>
             <p><strong>{% trans 'Etnia' %}:</strong> {{ tis.etnia }}</p>
             <p><strong>{% trans 'Data de Cadastro' %}:</strong> {{ tis.data_cadastro|date:"d/m/Y" }}</p>
-        </div>
+        </a>
         {% empty %}
         <div class="tis-card">
             <h3>{% trans 'Nenhuma Terra Indígena cadastrada' %}</h3>
