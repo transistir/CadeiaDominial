@@ -1,0 +1,13 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div class="login-container">
+    <h2>{% trans 'Login' %}</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">{% trans 'Entrar' %}</button>
+    </form>
+</div>
+{% endblock %} 

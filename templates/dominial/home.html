@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div class="home-container">
+    <h1>{% trans 'Bem-vindo ao Sistema de Cadeia Dominial' %}</h1>
+    
+    <div class="menu-options">
+        <h2>{% trans 'Opções' %}</h2>
+        <ul>
+            <li><a href="{% url 'admin:dominial_tis_changelist' %}">{% trans 'Gerenciar Terras Indígenas' %}</a></li>
+            <li><a href="{% url 'admin:dominial_imovel_changelist' %}">{% trans 'Gerenciar Imóveis' %}</a></li>
+            <li><a href="{% url 'admin:dominial_pessoas_changelist' %}">{% trans 'Gerenciar Pessoas' %}</a></li>
+            <li><a href="{% url 'admin:dominial_alteracoes_changelist' %}">{% trans 'Gerenciar Alterações' %}</a></li>
+        </ul>
+    </div>
+
+    <div class="user-info">
+        <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit">{% trans 'Sair' %}</button>
+        </form>
+    </div>
+</div>
+{% endblock %} 
