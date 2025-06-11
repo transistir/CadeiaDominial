@@ -1,0 +1,161 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .form-container {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .form-header {
+        margin-bottom: 30px;
+    }
+
+    .form-header h1 {
+        color: #333;
+        margin: 0 0 10px 0;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .form-group textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    .error-message {
+        color: #ba2121;
+        font-size: 12px;
+        margin-top: 5px;
+    }
+
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .submit-button {
+        background: #79aec8;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .submit-button:hover {
+        background: #417690;
+    }
+
+    .back-button {
+        background: #ba2121;
+        color: white;
+        text-decoration: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+    }
+
+    .back-button:hover {
+        background: #a41515;
+    }
+
+    .form-info {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="form-header">
+        <h1>{% if imovel %}{% trans 'Editar Imóvel' %}{% else %}{% trans 'Cadastrar Novo Imóvel' %}{% endif %}</h1>
+        <div class="form-info">
+            <p><strong>{% trans 'Terra Indígena' %}:</strong> {{ tis.nome }}</p>
+        </div>
+    </div>
+
+    {% if form.errors %}
+    <div class="error-message">
+        {% for field in form %}
+            {% if field.errors %}
+                <p>{{ field.label }}: {{ field.errors|join:", " }}</p>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="{{ form.nome.id_for_label }}">{% trans 'Nome' %}:</label>
+            {{ form.nome }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.proprietario.id_for_label }}">{% trans 'Proprietário' %}:</label>
+            {{ form.proprietario }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.matricula.id_for_label }}">{% trans 'Matrícula' %}:</label>
+            {{ form.matricula }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.sncr.id_for_label }}">{% trans 'SNCR' %}:</label>
+            {{ form.sncr }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.sigef.id_for_label }}">{% trans 'SIGEF' %}:</label>
+            {{ form.sigef }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.descricao.id_for_label }}">{% trans 'Descrição' %}:</label>
+            {{ form.descricao }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.observacoes.id_for_label }}">{% trans 'Observações' %}:</label>
+            {{ form.observacoes }}
+        </div>
+
+        <div class="button-group">
+            <a href="{% url 'tis_detail' tis.id %}" class="back-button">{% trans 'Voltar' %}</a>
+            <button type="submit" class="submit-button">{% trans 'Salvar' %}</button>
+        </div>
+    </form>
+</div>
+{% endblock %} 

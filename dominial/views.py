@@ -1,10 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .models import TIs
 from django.contrib import messages
-from .forms import TIsForm
-
 from .models import Imovel, TIs, Cartorios, Pessoas, Alteracoes
+from .forms import TIsForm, ImovelForm
+
+logger = logging.getLogger(__name__)
+
 # Create your views here.
 
 @login_required
@@ -122,7 +123,7 @@ def imovel_delete(request, tis_id, imovel_id):
         'tis': tis
     })
 
-# Novas views da branch django-config
+# Views gerais
 def imoveis(request):
     imoveis = Imovel.objects.all()
     return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
