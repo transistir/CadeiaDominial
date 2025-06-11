@@ -83,11 +83,27 @@
         border-radius: 4px;
         margin-bottom: 10px;
     }
+
+    .back-button {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #6c757d;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+
+    .back-button:hover {
+        background: #5a6268;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="tis-form-container">
+    <a href="{% url 'home' %}" class="back-button">{% trans 'Voltar' %}</a>
+    
     <h1>{% trans 'Cadastro de Terra Indígena' %}</h1>
     
     {% if messages %}
@@ -114,18 +130,9 @@
         {% endif %}
 
         <div class="form-group">
-            <label for="{{ form.nome.id_for_label }}">{% trans 'Nome da Terra Indígena' %}:</label>
-            {{ form.nome }}
-        </div>
-
-        <div class="form-group">
-            <label for="{{ form.codigo.id_for_label }}">{% trans 'Código' %}:</label>
-            {{ form.codigo }}
-        </div>
-
-        <div class="form-group">
-            <label for="{{ form.etnia.id_for_label }}">{% trans 'Etnia' %}:</label>
-            {{ form.etnia }}
+            <label for="{{ form.terra_referencia.id_for_label }}">{% trans 'Selecione a Terra Indígena' %}:</label>
+            {{ form.terra_referencia }}
+            <p class="help-text">{% trans 'Selecione uma terra indígena da lista para cadastrar no sistema.' %}</p>
         </div>
 
         <div class="submit-row">

@@ -1,14 +1,19 @@
 from django import forms
-from .models import TIs, Imovel, Pessoas
+from .models import TIs, Imovel, Pessoas, TerraIndigenaReferencia
 
 class TIsForm(forms.ModelForm):
+    terra_referencia = forms.ModelChoiceField(
+        queryset=TerraIndigenaReferencia.objects.all().order_by('nome'),
+        required=True,
+        label='Terra Indígena',
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
     class Meta:
         model = TIs
-        fields = ['nome', 'codigo', 'etnia']
+        fields = ['terra_referencia']
         widgets = {
-            'nome': forms.TextInput(attrs={'class': 'form-control'}),
-            'codigo': forms.TextInput(attrs={'class': 'form-control'}),
-            'etnia': forms.TextInput(attrs={'class': 'form-control'}),
+            'terra_referencia': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class ImovelForm(forms.ModelForm):
