@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
-from dominial.views import home, imoveis
+from dominial.views import home, imoveis, tis, cartorios, pessoas, alteracoes
 
 urlpatterns = [
     path('', home, name='home'),
@@ -25,4 +25,8 @@ urlpatterns = [
     path('login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='login', http_method_names=['get', 'post']), name='logout'),
     path('imoveis/', imoveis, name='imoveis'),
+    path('tis/', tis, name='tis'),
+    path('cartorios/', cartorios, name='cartorios'),
+    path('pessoas/', pessoas, name='pessoas'),
+    path('alteracoes/', alteracoes, name='alteracoes'),
 ]
