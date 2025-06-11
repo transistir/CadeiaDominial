@@ -2,18 +2,34 @@
 
 Este documento descreve o processo de importação de Terras Indígenas (TIs) do GeoServer da FUNAI para o sistema Cadeia Dominial.
 
+## Instruções para Testes
+
+Antes de começar a testar o sistema, é necessário importar os dados das terras indígenas da FUNAI. Para isso, execute o comando:
+
+```bash
+python manage.py importar_terras_indigenas
+```
+
+Este comando irá:
+1. Conectar ao GeoServer da FUNAI via WFS (Web Feature Service)
+2. Importar todas as terras indígenas disponíveis
+3. Criar registros na tabela `TerraIndigenaReferencia`
+4. Permitir que você selecione uma terra indígena ao cadastrar uma nova TI no sistema
+
+**Importante**: Sem executar este comando, o select de terras indígenas ficará vazio no formulário de cadastro.
+
 ## Visão Geral
 
 O sistema permite a importação automática de dados de terras indígenas diretamente do GeoServer da FUNAI, facilitando o cadastro inicial das TIs no sistema. O processo é realizado através de um script Python que:
 
-1. Conecta ao GeoServer da FUNAI
+1. Conecta ao GeoServer da FUNAI via WFS
 2. Obtém os dados das TIs
 3. Processa e formata os dados
 4. Salva no banco de dados local
 
 ## Arquivos Envolvidos
 
-1. `dominial/management/commands/import_funai_tis.py`
+1. `dominial/management/commands/importar_terras_indigenas.py`
    - Script principal de importação
    - Gerencia a conexão com o GeoServer
    - Processa os dados recebidos
@@ -26,74 +42,54 @@ O sistema permite a importação automática de dados de terras indígenas diret
 
 ### 1. Conexão com o GeoServer
 
-O script se conecta ao GeoServer da FUNAI usando a biblioteca `owslib`:
+O script se conecta ao GeoServer da FUNAI usando a biblioteca `requests`:
 
 ```python
-from owslib.wfs import WebFeatureService
-
-wfs = WebFeatureService(
-    url='https://geoserver.funai.gov.br/geoserver/ows',
-    version='1.1.0'
-)
+url = 'https://geoserver.funai.gov.br/geoserver/wfs'
+params = {
+    'service': 'WFS',
+    'version': '1.1.0',
+    'request': 'GetFeature',
+    'typeName': 'Funai:tis_poligonais_portarias',
+    'outputFormat': 'application/json',
+    'srsName': 'EPSG:4674'
+}
 ```
 
 ### 2. Obtenção dos Dados
 
-Os dados são obtidos através de uma requisição WFS (Web Feature Service):
-
-```python
-response = wfs.getfeature(
-    typename='funai:ti_sirgas2000_quilombola',
-    srsname='EPSG:4326',
-    outputFormat='application/json'
-)
-```
-
-### 3. Processamento dos Dados
-
-Os dados recebidos são processados e convertidos para o formato do sistema:
-
+Os dados são obtidos através de uma requisição WFS (Web Feature Service) e incluem:
 - Nome da TI
 - Código
 - Etnia
 - Estado
 - Fase
 - Área (em hectares)
-- Geometria (polígono)
+- Datas importantes (regularização, homologação, etc.)
+
+### 3. Processamento dos Dados
+
+Os dados recebidos são processados e convertidos para o formato do sistema:
+- Limpeza de datas
+- Formatação de valores
+- Validação de campos obrigatórios
 
 ### 4. Salvamento no Banco de Dados
 
 Os dados processados são salvos no modelo `TerraReferencia`:
 
 ```python
-TerraReferencia.objects.create(
-    nome=ti_nome,
-    codigo=ti_codigo,
-    etnia=ti_etnia,
-    estado=ti_estado,
-    fase=ti_fase,
-    area_ha=ti_area,
-    geometria=ti_geometria
+TerraReferencia.objects.update_or_create(
+    codigo=codigo,
+    defaults={
+        'nome': nome,
+        'etnia': etnia,
+        'estado': estado,
+        'area_ha': area,
+        # ... outros campos
+    }
 )
 ```
-
-## Como Usar
-
-### Importação Manual
-
-Para importar os dados manualmente, execute o comando:
-
-```bash
-python manage.py import_funai_tis
-```
-
-### Importação Automática
-
-O sistema pode ser configurado para importar automaticamente através de:
-
-1. Tarefas agendadas (cron jobs)
-2. Webhooks do GeoServer
-3. API REST
 
 ## Estrutura dos Dados
 
@@ -107,7 +103,14 @@ Armazena os dados brutos da FUNAI:
 - `estado`: Estado onde está localizada
 - `fase`: Fase do processo de demarcação
 - `area_ha`: Área em hectares
-- `geometria`: Polígono da TI (GeoJSON)
+- `municipio`: Município onde está localizada
+- `modalidade`: Modalidade da TI
+- `coordenacao_regional`: Coordenação Regional da FUNAI
+- `data_regularizada`: Data de regularização
+- `data_homologada`: Data de homologação
+- `data_declarada`: Data de declaração
+- `data_delimitada`: Data de delimitação
+- `data_em_estudo`: Data de início do estudo
 
 ### TIs
 
@@ -122,8 +125,7 @@ Armazena os dados cadastrados no sistema:
 ## Considerações Técnicas
 
 1. **Geometria**
-   - Os dados são importados no sistema de coordenadas SIRGAS 2000
-   - A geometria é armazenada em formato GeoJSON
+   - Os dados são importados no sistema de coordenadas SIRGAS 2000 (EPSG:4674)
    - O sistema suporta polígonos complexos
 
 2. **Performance**
@@ -135,23 +137,6 @@ Armazena os dados cadastrados no sistema:
    - Conexão segura com o GeoServer
    - Validação dos dados recebidos
    - Log de todas as operações
-
-## Manutenção
-
-### Atualização dos Dados
-
-Os dados podem ser atualizados de duas formas:
-
-1. **Incremental**: Atualiza apenas TIs modificadas
-2. **Completa**: Recria todos os registros
-
-### Limpeza
-
-Para limpar dados obsoletos:
-
-```bash
-python manage.py import_funai_tis --clean
-```
 
 ## Troubleshooting
 
@@ -176,7 +161,7 @@ python manage.py import_funai_tis --clean
 
 Em caso de problemas:
 
-1. Verificar logs em `logs/import_funai.log`
+1. Verificar logs do Django
 2. Consultar documentação do GeoServer
 3. Contatar equipe de desenvolvimento
 
