@@ -4,24 +4,13 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
-    .login-container {
-        max-width: 400px;
-        margin: 100px auto;
-        padding: 30px;
-        background: white;
+    .tis-form-container {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #fff;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .login-header {
-        text-align: center;
-        margin-bottom: 30px;
-    }
-
-    .login-header h1 {
-        color: #333;
-        font-size: 24px;
-        margin-bottom: 10px;
     }
 
     .form-group {
@@ -31,37 +20,37 @@
     .form-group label {
         display: block;
         margin-bottom: 5px;
-        color: #333;
         font-weight: bold;
+        color: #333;
     }
 
-    .form-group input {
+    .form-control {
         width: 100%;
-        padding: 10px;
+        padding: 8px;
         border: 1px solid #ddd;
         border-radius: 4px;
         font-size: 14px;
     }
 
-    .form-group input:focus {
+    .form-control:focus {
         border-color: #79aec8;
         outline: none;
         box-shadow: 0 0 0 2px rgba(121,174,200,0.2);
     }
 
     .submit-row {
-        text-align: center;
+        margin-top: 20px;
+        text-align: right;
     }
 
     .submit-row input {
         background: #79aec8;
-        color: white;
-        padding: 12px 20px;
+        color: #fff;
+        padding: 10px 15px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        font-size: 16px;
-        width: 100%;
+        font-size: 14px;
     }
 
     .submit-row input:hover {
@@ -79,6 +68,14 @@
         margin-bottom: 20px;
     }
 
+    .messages .success {
+        background: #dff0d8;
+        color: #3c763d;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
+
     .messages .error {
         background: #f2dede;
         color: #a94442;
@@ -90,12 +87,9 @@
 {% endblock %}
 
 {% block content %}
-<div class="login-container">
-    <div class="login-header">
-        <h1>{% trans 'Sistema de Cadeia Dominial' %}</h1>
-        <p>{% trans 'Faça login para continuar' %}</p>
-    </div>
-
+<div class="tis-form-container">
+    <h1>{% trans 'Cadastro de Terra Indígena' %}</h1>
+    
     {% if messages %}
     <div class="messages">
         {% for message in messages %}
@@ -105,8 +99,8 @@
         {% endfor %}
     </div>
     {% endif %}
-
-    <form method="post" action="{% url 'login' %}">
+    
+    <form method="post">
         {% csrf_token %}
         
         {% if form.errors %}
@@ -120,20 +114,23 @@
         {% endif %}
 
         <div class="form-group">
-            <label for="id_username">{% trans 'Usuário' %}:</label>
-            {{ form.username }}
+            <label for="{{ form.nome.id_for_label }}">{% trans 'Nome da Terra Indígena' %}:</label>
+            {{ form.nome }}
         </div>
 
         <div class="form-group">
-            <label for="id_password">{% trans 'Senha' %}:</label>
-            {{ form.password }}
+            <label for="{{ form.codigo.id_for_label }}">{% trans 'Código' %}:</label>
+            {{ form.codigo }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.etnia.id_for_label }}">{% trans 'Etnia' %}:</label>
+            {{ form.etnia }}
         </div>
 
         <div class="submit-row">
-            <input type="submit" value="{% trans 'Entrar' %}">
+            <input type="submit" value="{% trans 'Salvar' %}">
         </div>
-
-        <input type="hidden" name="next" value="{{ next }}">
     </form>
 </div>
 {% endblock %} 
