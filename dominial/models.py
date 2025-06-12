@@ -28,20 +28,22 @@ class TIs(models.Model):
         super().save(*args, **kwargs)
 
 class Cartorios(models.Model):
-    id = models.AutoField(primary_key=True)
-    nome = models.CharField(max_length=100)
-    cns = models.CharField(max_length=50, unique=True) # Formato de registro dos cartórios? Código do Cartório (CNS) ??
-    endereco = models.CharField(max_length=255, null=True, blank=True) # Opcional
-    telefone = models.CharField(max_length=15, null=True, blank=True) # Opcional
-    email = models.EmailField(null=True, blank=True) # Opcional
-
-    class Meta:
-        verbose_name = "Cartório"
-        verbose_name_plural = "Cartórios"
+    nome = models.CharField(max_length=200)
+    cns = models.CharField(max_length=20, unique=True)
+    endereco = models.CharField(max_length=200, null=True, blank=True)
+    telefone = models.CharField(max_length=20, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    estado = models.CharField(max_length=2, null=True, blank=True)
+    cidade = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
-        return self.nome
-    
+        return f"{self.nome} - {self.cidade}/{self.estado}" if self.cidade and self.estado else self.nome
+
+    class Meta:
+        verbose_name = 'Cartório'
+        verbose_name_plural = 'Cartórios'
+        ordering = ['estado', 'cidade', 'nome']
+
 class Pessoas(models.Model):
     id = models.AutoField(primary_key=True)
     nome = models.CharField(max_length=100)
@@ -68,6 +70,7 @@ class Imovel(models.Model):
     sigef = models.CharField(max_length=50, null=True, blank=True) # Opcional, para SIGEF (Sistema de Gestão Fundiária)
     descricao = models.TextField(null=True, blank=True) # Opcional, para descrição do imóvel
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
+    cartorio = models.ForeignKey(Cartorios, on_delete=models.PROTECT, null=True, blank=True) # Cartório onde o imóvel está registrado
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel
 
     class Meta:
@@ -177,3 +180,28 @@ class TerraIndigenaReferencia(models.Model):
         verbose_name = "Terra Indígena (Referência)"
         verbose_name_plural = "Terras Indígenas (Referência)"
         ordering = ['nome']
+
+class ImportacaoCartorios(models.Model):
+    estado = models.CharField(max_length=2)
+    data_inicio = models.DateTimeField(auto_now_add=True)
+    data_fim = models.DateTimeField(null=True, blank=True)
+    total_cartorios = models.IntegerField(default=0)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pendente', 'Pendente'),
+            ('em_andamento', 'Em Andamento'),
+            ('concluido', 'Concluído'),
+            ('erro', 'Erro'),
+        ],
+        default='pendente'
+    )
+    erro = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Importação de Cartórios'
+        verbose_name_plural = 'Importações de Cartórios'
+        ordering = ['-data_inicio']
+
+    def __str__(self):
+        return f'Importação {self.estado} - {self.get_status_display()}'

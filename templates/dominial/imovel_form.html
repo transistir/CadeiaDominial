@@ -126,6 +126,66 @@
             <label for="{{ form.proprietario.id_for_label }}">{% trans 'Proprietário' %}:</label>
             {{ form.proprietario }}
         </div>
+        
+        <div class="form-group">
+            <label for="estado">Estado:</label>
+            <select class="form-control" id="estado" name="estado">
+                <option value="">Selecione um estado</option>
+                <option value="AC">Acre</option>
+                <option value="AL">Alagoas</option>
+                <option value="AM">Amazonas</option>
+                <option value="AP">Amapá</option>
+                <option value="BA">Bahia</option>
+                <option value="CE">Ceará</option>
+                <option value="DF">Distrito Federal</option>
+                <option value="ES">Espírito Santo</option>
+                <option value="GO">Goiás</option>
+                <option value="MA">Maranhão</option>
+                <option value="MG">Minas Gerais</option>
+                <option value="MS">Mato Grosso do Sul</option>
+                <option value="MT">Mato Grosso</option>
+                <option value="PA">Pará</option>
+                <option value="PB">Paraíba</option>
+                <option value="PE">Pernambuco</option>
+                <option value="PI">Piauí</option>
+                <option value="PR">Paraná</option>
+                <option value="RJ">Rio de Janeiro</option>
+                <option value="RN">Rio Grande do Norte</option>
+                <option value="RO">Rondônia</option>
+                <option value="RR">Roraima</option>
+                <option value="RS">Rio Grande do Sul</option>
+                <option value="SC">Santa Catarina</option>
+                <option value="SE">Sergipe</option>
+                <option value="SP">São Paulo</option>
+                <option value="TO">Tocantins</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="cidade_select">Cidade:</label>
+            <select class="form-control" id="cidade_select" disabled>
+                <option value="">Selecione uma cidade</option>
+            </select>
+            <!-- Campo cidade oculto para armazenar o valor real -->
+            {{ form.cidade }}
+        </div>
+
+        <div class="form-group">
+            <label for="cartorio">Cartório:</label>
+            <select class="form-control" id="cartorio" name="cartorio" disabled>
+                <option value="">Selecione um cartório</option>
+            </select>
+            <input type="hidden" name="cartorio_id" id="cartorio_id">
+        </div>
+
+        <div id="cartorio-info" class="form-info" style="display: none; margin-top: 10px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">
+            <h5>Informações do Cartório</h5>
+            <p><strong>Responsável:</strong> <span id="cartorio-responsavel">-</span></p>
+            <p><strong>Endereço:</strong> <span id="cartorio-endereco">-</span></p>
+            <p><strong>Telefone:</strong> <span id="cartorio-telefone">-</span></p>
+            <p><strong>E-mail:</strong> <span id="cartorio-email">-</span></p>
+            <p><strong>CNS:</strong> <span id="cartorio-cns">-</span></p>
+        </div>
 
         <div class="form-group">
             <label for="{{ form.matricula.id_for_label }}">{% trans 'Matrícula' %}:</label>
@@ -151,6 +211,144 @@
             <label for="{{ form.observacoes.id_for_label }}">{% trans 'Observações' %}:</label>
             {{ form.observacoes }}
         </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const estadoSelect = document.getElementById('estado');
+                const cidadeSelect = document.getElementById('cidade_select');
+                const cidadeHidden = document.getElementById('id_cidade');
+                const cartorioSelect = document.getElementById('cartorio');
+                const cartorioInfo = document.getElementById('cartorio-info');
+                const csrf_token = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+                
+                console.log('Script carregado', { estadoSelect, cidadeSelect, cartorioSelect });
+
+                // Quando o estado é alterado
+                estadoSelect.addEventListener('change', function() {
+                    const estado = this.value;
+                    cidadeSelect.disabled = true;
+                    cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
+                    cartorioSelect.disabled = true;
+                    cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option>';
+                    cartorioInfo.style.display = 'none';
+
+                    if (estado) {
+                        console.log('Estado selecionado:', estado);
+                        // Buscar cidades do estado usando nossa própria API
+                        fetch('/buscar-cidades/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-CSRFToken': csrf_token
+                            },
+                            body: `estado=${estado}`
+                        })
+                        .then(response => {
+                            console.log('Resposta recebida:', response.status);
+                            if (!response.ok) {
+                                throw new Error(`Erro HTTP: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(cidades => {
+                            console.log('Cidades recebidas:', cidades);
+                            if (cidades && Array.isArray(cidades)) {
+                                cidades.forEach(cidade => {
+                                    const option = document.createElement('option');
+                                    option.value = cidade.value;
+                                    option.textContent = cidade.label || cidade.value;
+                                    cidadeSelect.appendChild(option);
+                                });
+                                cidadeSelect.disabled = false;
+                            } else {
+                                console.error('Formato de resposta inválido:', cidades);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro ao buscar cidades:', error);
+                        });
+                    }
+                });
+
+                // Quando a cidade é alterada
+                cidadeSelect.addEventListener('change', function() {
+                    const estado = estadoSelect.value;
+                    const cidade = this.value;
+                    // Atualizar o valor do campo oculto
+                    cidadeHidden.value = cidade;
+                    
+                    cartorioSelect.disabled = true;
+                    cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option>';
+                    cartorioInfo.style.display = 'none';
+
+                    if (cidade) {
+                        console.log('Cidade selecionada:', cidade);
+                        // Buscar cartórios da cidade usando nossa própria API
+                        fetch('/buscar-cartorios/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-CSRFToken': csrf_token
+                            },
+                            body: `estado=${estado}&cidade=${encodeURIComponent(cidade)}`
+                        })
+                        .then(response => {
+                            console.log('Resposta recebida:', response.status);
+                            if (!response.ok) {
+                                throw new Error(`Erro HTTP: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(cartorios => {
+                            console.log('Cartórios recebidos:', cartorios);
+                            if (cartorios && Array.isArray(cartorios)) {
+                                cartorios.forEach(cartorio => {
+                                    const option = document.createElement('option');
+                                    option.value = cartorio.id;
+                                    option.textContent = cartorio.nome;
+                                    option.dataset.info = JSON.stringify(cartorio);
+                                    cartorioSelect.appendChild(option);
+                                });
+                                cartorioSelect.disabled = false;
+                            } else {
+                                console.error('Formato de resposta inválido:', cartorios);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro ao buscar cartórios:', error);
+                        });
+                    }
+                });
+
+                // Quando o cartório é alterado
+                cartorioSelect.addEventListener('change', function() {
+                    const option = this.options[this.selectedIndex];
+                    if (option.value) {
+                        try {
+                            const cartorioData = JSON.parse(option.dataset.info);
+                            console.log('Dados do cartório:', cartorioData);
+                            
+                            // Define o id do cartório no campo hidden
+                            document.getElementById('cartorio_id').value = cartorioData.id;
+                            
+                            // Atualizar informações na tela
+                            document.getElementById('cartorio-responsavel').textContent = cartorioData.responsavel || 'Não informado';
+                            document.getElementById('cartorio-endereco').textContent = cartorioData.endereco || 'Não informado';
+                            document.getElementById('cartorio-telefone').textContent = cartorioData.telefone || 'Não informado';
+                            document.getElementById('cartorio-email').textContent = cartorioData.email || 'Não informado';
+                            document.getElementById('cartorio-cns').textContent = cartorioData.cns || 'Não informado';
+
+                            cartorioInfo.style.display = 'block';
+                        } catch (e) {
+                            console.error('Erro ao processar dados do cartório:', e);
+                        }
+                    } else {
+                        document.getElementById('cartorio_id').value = '';
+                        cartorioInfo.style.display = 'none';
+                    }
+                });
+            });
+        </script>
 
         <div class="button-group">
             <a href="{% url 'tis_detail' tis.id %}" class="back-button">{% trans 'Voltar' %}</a>
