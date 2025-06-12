@@ -193,10 +193,10 @@
             <h3>{{ imovel.nome }}</h3>
             <div class="imovel-actions">
                 {% if perms.dominial.change_imovel %}
-                <a href="{% url 'imovel_edit' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button">{% trans 'Editar' %}</a>
+                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button">{% trans 'Editar' %}</a>
                 {% endif %}
                 {% if perms.dominial.delete_imovel %}
-                <form method="post" action="{% url 'imovel_delete' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;">
+                <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;">
                     {% csrf_token %}
                     <button type="submit" class="imovel-action-button delete-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir' %}</button>
                 </form>
@@ -224,7 +224,7 @@
     </div>
 
     {% if perms.dominial.add_imovel %}
-    <a href="{% url 'imovel_form' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
+    <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
     {% endif %}
 
     <div class="user-info">

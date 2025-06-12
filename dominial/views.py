@@ -5,6 +5,13 @@ from django.contrib import messages
 from .models import Imovel, TIs, Cartorios, Pessoas, Alteracoes
 from .forms import TIsForm, ImovelForm
 import logging
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+import requests
+import json
+from django.core.paginator import Paginator
+from django.urls import reverse
+from django.db.models import Count
 
 logger = logging.getLogger(__name__)
 
@@ -72,29 +79,40 @@ def tis_delete(request, tis_id):
     })
 
 @login_required
-def imovel_form(request, tis_id):
-    tis = get_object_or_404(TIs, id=tis_id)
-    if request.method == 'POST':
-        form = ImovelForm(request.POST)
-        if form.is_valid():
-            try:
-                imovel = form.save(commit=False)
-                imovel.terra_indigena_id = tis
-                imovel.save()
-                messages.success(request, 'Imóvel cadastrado com sucesso!')
-                return redirect('tis_detail', tis_id=tis.id)
-            except Exception as e:
-                messages.error(request, f'Erro ao cadastrar imóvel: {str(e)}')
-    else:
-        form = ImovelForm()
+def imovel_form(request, tis_id, imovel_id=None):
+    tis = get_object_or_404(TIs, pk=tis_id)
+    imovel = None
     
-    return render(request, 'dominial/imovel_form.html', {
-        'form': form,
-        'tis': tis
-    })
+    if imovel_id:
+        imovel = get_object_or_404(Imovel, pk=imovel_id)
+        
+    if request.method == 'POST':
+        form = ImovelForm(request.POST, instance=imovel)
+        
+        # Obter o ID do cartório do POST
+        cartorio_id = request.POST.get('cartorio_id')
+        if cartorio_id:
+            try:
+                cartorio = Cartorios.objects.get(pk=cartorio_id)
+                form.instance.cartorio = cartorio
+            except Cartorios.DoesNotExist:
+                pass
+        
+        if form.is_valid():
+            imovel = form.save(commit=False)
+            imovel.terra_indigena_id = tis
+            imovel.save()
+            messages.success(request, 'Imóvel cadastrado com sucesso!')
+            return redirect('tis_detail', tis_id=tis_id)
+        else:
+            print("Erros de formulário:", form.errors)
+    else:
+        form = ImovelForm(instance=imovel)
+        
+    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
 
 @login_required
-def imovel_edit(request, tis_id, imovel_id):
+def imovel_detail(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
@@ -136,8 +154,12 @@ def imovel_delete(request, tis_id, imovel_id):
     })
 
 @login_required
-def imoveis(request):
-    imoveis = Imovel.objects.all().order_by('matricula')
+def imoveis(request, tis_id=None):
+    if tis_id:
+        tis = get_object_or_404(TIs, id=tis_id)
+        imoveis = Imovel.objects.filter(terra_indigena_id=tis).order_by('matricula')
+    else:
+        imoveis = Imovel.objects.all().order_by('matricula')
     return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
 
 @login_required
@@ -154,3 +176,39 @@ def pessoas(request):
 def alteracoes(request):
     alteracoes = Alteracoes.objects.all().order_by('-data')
     return render(request, 'dominial/alteracoes.html', {'alteracoes': alteracoes})
+
+@require_http_methods(["POST"])
+@login_required
+def buscar_cidades(request):
+    estado = request.POST.get('estado', '')
+    if not estado:
+        return JsonResponse({'error': 'Estado não fornecido'}, status=400)
+    
+    cidades = Cartorios.objects.filter(estado=estado).values_list('cidade', flat=True).distinct().order_by('cidade')
+    cidades_list = [{'value': cidade, 'label': cidade} for cidade in cidades]
+    
+    return JsonResponse(cidades_list, safe=False)
+
+@require_http_methods(["POST"])
+@login_required
+def buscar_cartorios(request):
+    estado = request.POST.get('estado', '')
+    cidade = request.POST.get('cidade', '')
+    
+    if not estado or not cidade:
+        return JsonResponse({'error': 'Estado e cidade devem ser fornecidos'}, status=400)
+    
+    cartorios = Cartorios.objects.filter(estado=estado, cidade=cidade).order_by('nome')
+    cartorios_list = []
+    
+    for cartorio in cartorios:
+        cartorios_list.append({
+            'id': cartorio.id,
+            'nome': cartorio.nome,
+            'cns': cartorio.cns,
+            'endereco': cartorio.endereco,
+            'telefone': cartorio.telefone,
+            'email': cartorio.email
+        })
+    
+    return JsonResponse(cartorios_list, safe=False)
