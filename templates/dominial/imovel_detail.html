@@ -1,0 +1,235 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .imovel-detail-container {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 20px;
+    }
+
+    .imovel-header {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+
+    .imovel-header h1 {
+        color: #333;
+        margin: 0 0 10px 0;
+    }
+
+    .imovel-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .imovel-info-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+    }
+
+    .imovel-info-section h2 {
+        color: #333;
+        margin: 0 0 15px 0;
+        font-size: 1.2em;
+        border-bottom: 2px solid #dee2e6;
+        padding-bottom: 10px;
+    }
+
+    .info-item {
+        margin-bottom: 15px;
+    }
+
+    .info-item strong {
+        display: block;
+        color: #666;
+        margin-bottom: 5px;
+    }
+
+    .info-item p {
+        margin: 0;
+        color: #333;
+    }
+
+    .back-button {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #6c757d;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+
+    .back-button:hover {
+        background: #5a6268;
+    }
+
+    .action-buttons {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+    }
+
+    .action-button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+        color: white;
+        font-size: 14px;
+    }
+
+    .edit-button {
+        background: #79aec8;
+    }
+
+    .edit-button:hover {
+        background: #417690;
+    }
+
+    .delete-button {
+        background: #ba2121;
+    }
+
+    .delete-button:hover {
+        background: #a41515;
+    }
+
+    .user-info {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .user-info p {
+        margin: 0;
+    }
+
+    .logout-form {
+        margin: 0;
+    }
+
+    .logout-button {
+        background: #ba2121;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .logout-button:hover {
+        background: #a41515;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="imovel-detail-container">
+    <a href="{% url 'tis_detail' tis_id=tis.id %}" class="back-button">{% trans 'Voltar para TI' %}</a>
+
+    <div class="imovel-header">
+        <h1>{{ imovel.nome }}</h1>
+        <div class="action-buttons">
+            {% if perms.dominial.change_imovel %}
+            <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="action-button edit-button">{% trans 'Editar Imóvel' %}</a>
+            {% endif %}
+            {% if perms.dominial.delete_imovel %}
+            <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="action-button delete-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir Imóvel' %}</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="imovel-info">
+        <div class="imovel-info-section">
+            <h2>{% trans 'Informações Básicas' %}</h2>
+            <div class="info-item">
+                <strong>{% trans 'Matrícula' %}</strong>
+                <p>{{ imovel.matricula }}</p>
+            </div>
+            <div class="info-item">
+                <strong>{% trans 'SNCR' %}</strong>
+                <p>{{ imovel.sncr }}</p>
+            </div>
+            {% if imovel.sigef %}
+            <div class="info-item">
+                <strong>{% trans 'SIGEF' %}</strong>
+                <p>{{ imovel.sigef }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="imovel-info-section">
+            <h2>{% trans 'Localização' %}</h2>
+            <div class="info-item">
+                <strong>{% trans 'Estado' %}</strong>
+                <p>{{ imovel.estado }}</p>
+            </div>
+            <div class="info-item">
+                <strong>{% trans 'Cidade' %}</strong>
+                <p>{{ imovel.cidade }}</p>
+            </div>
+            <div class="info-item">
+                <strong>{% trans 'Cartório' %}</strong>
+                <p>{{ imovel.cartorio.nome }}</p>
+            </div>
+        </div>
+
+        <div class="imovel-info-section">
+            <h2>{% trans 'Proprietário' %}</h2>
+            <div class="info-item">
+                <strong>{% trans 'Nome' %}</strong>
+                <p>{{ imovel.proprietario.nome }}</p>
+            </div>
+            {% if imovel.proprietario.cpf %}
+            <div class="info-item">
+                <strong>{% trans 'CPF' %}</strong>
+                <p>{{ imovel.proprietario.cpf }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if imovel.descricao or imovel.observacoes %}
+        <div class="imovel-info-section">
+            <h2>{% trans 'Informações Adicionais' %}</h2>
+            {% if imovel.descricao %}
+            <div class="info-item">
+                <strong>{% trans 'Descrição' %}</strong>
+                <p>{{ imovel.descricao }}</p>
+            </div>
+            {% endif %}
+            {% if imovel.observacoes %}
+            <div class="info-item">
+                <strong>{% trans 'Observações' %}</strong>
+                <p>{{ imovel.observacoes }}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="user-info">
+        <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>
+        <form method="post" action="{% url 'logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="logout-button">{% trans 'Sair' %}</button>
+        </form>
+    </div>
+</div>
+{% endblock %} 

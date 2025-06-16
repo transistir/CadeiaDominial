@@ -53,6 +53,15 @@
         padding: 20px;
         margin-bottom: 20px;
         position: relative;
+        text-decoration: none;
+        color: inherit;
+        display: block;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .imovel-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     }
 
     .imovel-item h3 {
@@ -72,6 +81,7 @@
         right: 20px;
         display: flex;
         gap: 10px;
+        z-index: 1;
     }
 
     .imovel-action-button {
@@ -189,14 +199,14 @@
     
     <div class="imoveis-list">
         {% for imovel in imoveis %}
-        <div class="imovel-item">
+        <div class="imovel-item" onclick="window.location.href='{% url 'imovel_detail' tis_id=tis.id imovel_id=imovel.id %}';" style="cursor: pointer;">
             <h3>{{ imovel.nome }}</h3>
             <div class="imovel-actions">
                 {% if perms.dominial.change_imovel %}
-                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button">{% trans 'Editar' %}</a>
+                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button" onclick="event.stopPropagation();">{% trans 'Editar' %}</a>
                 {% endif %}
                 {% if perms.dominial.delete_imovel %}
-                <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;">
+                <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;" onclick="event.stopPropagation();">
                     {% csrf_token %}
                     <button type="submit" class="imovel-action-button delete-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir' %}</button>
                 </form>

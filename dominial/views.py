@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.db.models import Count
 from django.utils import timezone
 from django.core.management import call_command
+from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
 
@@ -115,25 +116,17 @@ def imovel_form(request, tis_id, imovel_id=None):
 
 @login_required
 def imovel_detail(request, tis_id, imovel_id):
-    tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    
-    if request.method == 'POST':
-        form = ImovelForm(request.POST, instance=imovel)
-        if form.is_valid():
-            try:
-                form.save()
-                messages.success(request, 'Imóvel atualizado com sucesso!')
-                return redirect('tis_detail', tis_id=tis.id)
-            except Exception as e:
-                messages.error(request, f'Erro ao atualizar imóvel: {str(e)}')
-    else:
-        form = ImovelForm(instance=imovel)
-    
-    return render(request, 'dominial/imovel_form.html', {
-        'form': form,
+    """View para visualização detalhada de um imóvel."""
+    try:
+        imovel = Imovel.objects.get(id=imovel_id, terra_indigena_id=tis_id)
+        tis = TIs.objects.get(id=tis_id)
+    except (Imovel.DoesNotExist, TIs.DoesNotExist):
+        messages.error(request, _('Imóvel ou Terra Indígena não encontrado.'))
+        return redirect('home')
+
+    return render(request, 'dominial/imovel_detail.html', {
+        'imovel': imovel,
         'tis': tis,
-        'imovel': imovel
     })
 
 @login_required
