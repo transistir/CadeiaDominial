@@ -8,11 +8,15 @@ from django.http import JsonResponse
 from django.db import transaction
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
+from django.conf import settings
 
-admin.site.site_header = "Sistema de Cadeia Dominial"
-admin.site.site_title = "Administração"
-admin.site.index_title = "Painel de Gestão"
+# Configurações do Admin
+admin.site.site_header = settings.ADMIN_SITE_HEADER
+admin.site.site_title = settings.ADMIN_SITE_TITLE
+admin.site.index_title = settings.ADMIN_INDEX_TITLE
 
+# Sobrescreve a URL de login do admin
+admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 
 # Register your models here.
 

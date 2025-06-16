@@ -133,7 +133,11 @@
             <input type="submit" value="{% trans 'Entrar' %}">
         </div>
 
-        <input type="hidden" name="next" value="{{ next }}">
+        {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+        {% else %}
+            <input type="hidden" name="next" value="/">
+        {% endif %}
     </form>
 </div>
 {% endblock %} 

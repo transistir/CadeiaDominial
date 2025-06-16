@@ -17,6 +17,10 @@ urlpatterns = [
     path('cartorios/', views.cartorios, name='cartorios'),
     path('buscar-cidades/', views.buscar_cidades, name='buscar_cidades'),
     path('buscar-cartorios/', views.buscar_cartorios, name='buscar_cartorios'),
-    path('accounts/login/', auth_views.LoginView.as_view(), name='login'),
+    path('accounts/login/', auth_views.LoginView.as_view(
+        template_name='registration/login.html',
+        redirect_authenticated_user=True,
+        next_page='/'
+    ), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 ] 

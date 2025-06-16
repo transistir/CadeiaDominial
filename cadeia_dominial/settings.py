@@ -27,7 +27,17 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-LOGIN_URL = '/login/'
+LOGIN_URL = '/accounts/login/'
+
+LOGIN_REDIRECT_URL = '/'
+
+# Configurações do Admin
+ADMIN_SITE_HEADER = "Sistema de Cadeia Dominial"
+ADMIN_SITE_TITLE = "Administração"
+ADMIN_INDEX_TITLE = "Painel de Gestão"
+
+# Configuração para redirecionar o admin para nossa página de login
+ADMIN_LOGIN_URL = '/accounts/login/'
 
 # Application definition
 
