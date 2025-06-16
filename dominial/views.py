@@ -6,12 +6,14 @@ from .models import Imovel, TIs, Cartorios, Pessoas, Alteracoes
 from .forms import TIsForm, ImovelForm
 import logging
 from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 import requests
 import json
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.db.models import Count
+from django.utils import timezone
+from django.core.management import call_command
 
 logger = logging.getLogger(__name__)
 
@@ -212,3 +214,40 @@ def buscar_cartorios(request):
         })
     
     return JsonResponse(cartorios_list, safe=False)
+
+@require_POST
+def verificar_cartorios_estado(request):
+    estado = request.POST.get('estado')
+    if not estado:
+        return JsonResponse({'error': 'Estado não informado'}, status=400)
+    
+    # Verifica se existem cartórios para o estado
+    cartorios_count = Cartorios.objects.filter(estado=estado).count()
+    
+    return JsonResponse({
+        'existem_cartorios': cartorios_count > 0,
+        'total_cartorios': cartorios_count
+    })
+
+@require_POST
+def importar_cartorios_estado(request):
+    estado = request.POST.get('estado')
+    if not estado:
+        return JsonResponse({'error': 'Estado não informado'}, status=400)
+    
+    try:
+        # Executa o comando de importação
+        call_command('importar_cartorios_estado', estado)
+        
+        # Conta quantos cartórios foram importados
+        cartorios_count = Cartorios.objects.filter(estado=estado).count()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Cartórios do estado {estado} importados com sucesso!',
+            'total_cartorios': cartorios_count
+        })
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Erro ao importar cartórios: {str(e)}'
+        }, status=500)

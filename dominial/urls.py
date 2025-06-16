@@ -23,4 +23,6 @@ urlpatterns = [
         next_page='/'
     ), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('verificar-cartorios/', views.verificar_cartorios_estado, name='verificar_cartorios_estado'),
+    path('importar-cartorios/', views.importar_cartorios_estado, name='importar_cartorios_estado'),
 ] 
