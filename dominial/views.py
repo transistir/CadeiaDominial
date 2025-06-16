@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from .models import TIs, Imovel, TerraIndigenaReferencia
 from django.contrib import messages
 from .models import Imovel, TIs, Cartorios, Pessoas, Alteracoes
-from .forms import TIsForm, ImovelForm
+from .forms import TIsForm, ImovelForm, AlteracaoForm
 import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
@@ -124,9 +124,12 @@ def imovel_detail(request, tis_id, imovel_id):
         messages.error(request, _('Imóvel ou Terra Indígena não encontrado.'))
         return redirect('home')
 
+    alteracoes = imovel.alteracoes_set.all().order_by('-data_alteracao')
+
     return render(request, 'dominial/imovel_detail.html', {
         'imovel': imovel,
         'tis': tis,
+        'alteracoes': alteracoes,
     })
 
 @login_required
@@ -244,3 +247,30 @@ def importar_cartorios_estado(request):
         return JsonResponse({
             'error': f'Erro ao importar cartórios: {str(e)}'
         }, status=500)
+
+@login_required
+def alteracao_create(request, tis_id, imovel_id):
+    """View para criar uma nova alteração em um imóvel."""
+    try:
+        imovel = Imovel.objects.get(id=imovel_id, terra_indigena_id=tis_id)
+        tis = TIs.objects.get(id=tis_id)
+    except (Imovel.DoesNotExist, TIs.DoesNotExist):
+        messages.error(request, _('Imóvel ou Terra Indígena não encontrado.'))
+        return redirect('home')
+
+    if request.method == 'POST':
+        form = AlteracaoForm(request.POST)
+        if form.is_valid():
+            alteracao = form.save(commit=False)
+            alteracao.imovel_id = imovel
+            alteracao.save()
+            messages.success(request, _('Alteração registrada com sucesso!'))
+            return redirect('imovel_detail', tis_id=tis_id, imovel_id=imovel_id)
+    else:
+        form = AlteracaoForm()
+
+    return render(request, 'dominial/alteracao_form.html', {
+        'form': form,
+        'imovel': imovel,
+        'tis': tis
+    })

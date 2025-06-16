@@ -12,6 +12,7 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/', views.imovel_detail, name='imovel_detail'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/editar/', views.imovel_form, name='imovel_editar'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/excluir/', views.imovel_delete, name='imovel_excluir'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/alteracao/nova/', views.alteracao_create, name='alteracao_create'),
     path('alteracoes/', views.alteracoes, name='alteracoes'),
     
     path('cartorios/', views.cartorios, name='cartorios'),
