@@ -147,6 +147,9 @@
             {% if perms.dominial.change_imovel %}
             <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="action-button edit-button">{% trans 'Editar Imóvel' %}</a>
             {% endif %}
+            {% if perms.dominial.add_alteracoes %}
+            <a href="{% url 'alteracao_create' tis_id=tis.id imovel_id=imovel.id %}" class="action-button edit-button">{% trans 'Registrar Alteração' %}</a>
+            {% endif %}
             {% if perms.dominial.delete_imovel %}
             <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;">
                 {% csrf_token %}
@@ -223,6 +226,72 @@
         </div>
         {% endif %}
     </div>
+
+    <hr style="margin: 40px 0;">
+    <h2 style="text-align:center; margin-bottom: 20px;">Alterações</h2>
+    {% if alteracoes %}
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; background:white;">
+        <thead>
+            <tr style="background:#f8f9fa;">
+                <th colspan="5" style="border:1px solid #333; text-align:center;">MATRICULA</th>
+                <th colspan="2" style="border:1px solid #333; text-align:center;">TRANSMITENTE</th>
+                <th colspan="2" style="border:1px solid #333; text-align:center;">ADQUIRENTE</th>
+                <th colspan="7" style="border:1px solid #333; text-align:center;">TRANSMISSAO</th>
+                <th style="border:1px solid #333; text-align:center;">Área</th>
+                <th style="border:1px solid #333; text-align:center;">Origem</th>
+                <th style="border:1px solid #333; text-align:center;">Observações</th>
+            </tr>
+            <tr>
+                <th style="border:1px solid #333;">Nº</th>
+                <th style="border:1px solid #333;">L</th>
+                <th style="border:1px solid #333;">Fls.</th>
+                <th style="border:1px solid #333;">Cartório</th>
+                <th style="border:1px solid #333;">Data</th>
+                <th style="border:1px solid #333;">Nome</th>
+                <th style="border:1px solid #333;">CPF</th>
+                <th style="border:1px solid #333;">Nome</th>
+                <th style="border:1px solid #333;">CPF</th>
+                <th style="border:1px solid #333;">Forma</th>
+                <th style="border:1px solid #333;">Título</th>
+                <th style="border:1px solid #333;">Cartório</th>
+                <th style="border:1px solid #333;">L</th>
+                <th style="border:1px solid #333;">Fls.</th>
+                <th style="border:1px solid #333;">Data</th>
+                <th style="border:1px solid #333;">Área</th>
+                <th style="border:1px solid #333;">Origem</th>
+                <th style="border:1px solid #333;">Observações</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for alt in alteracoes %}
+            <tr>
+                <td style="border:1px solid #333;">{{ imovel.matricula }}</td>
+                <td style="border:1px solid #333;">{{ alt.livro }}</td>
+                <td style="border:1px solid #333;">{{ alt.folha }}</td>
+                <td style="border:1px solid #333;">{{ alt.cartorio }}</td>
+                <td style="border:1px solid #333;">{{ alt.data_alteracao|date:'d/m/Y' }}</td>
+                <td style="border:1px solid #333;">{% if alt.transmitente %}{{ alt.transmitente.nome }}{% endif %}</td>
+                <td style="border:1px solid #333;">{% if alt.transmitente %}{{ alt.transmitente.cpf }}{% endif %}</td>
+                <td style="border:1px solid #333;">{% if alt.adquirente %}{{ alt.adquirente.nome }}{% endif %}</td>
+                <td style="border:1px solid #333;">{% if alt.adquirente %}{{ alt.adquirente.cpf }}{% endif %}</td>
+                <td style="border:1px solid #333;">{{ alt.registro_tipo }}</td>
+                <td style="border:1px solid #333;">{{ alt.titulo }}</td>
+                <td style="border:1px solid #333;">{{ alt.cartorio_origem }}</td>
+                <td style="border:1px solid #333;">{{ alt.livro_origem }}</td>
+                <td style="border:1px solid #333;">{{ alt.folha_origem }}</td>
+                <td style="border:1px solid #333;">{{ alt.data_origem|date:'d/m/Y' }}</td>
+                <td style="border:1px solid #333;">{{ alt.area }}</td>
+                <td style="border:1px solid #333;">{{ alt.origem }}</td>
+                <td style="border:1px solid #333;">{{ alt.observacoes }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="text-align:center; color:#888;">Nenhuma alteração registrada para este imóvel.</p>
+    {% endif %}
 
     <div class="user-info">
         <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>
