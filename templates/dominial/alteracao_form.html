@@ -1,0 +1,270 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .form-container {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 20px;
+    }
+
+    .form-header {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+
+    .form-header h1 {
+        color: #333;
+        margin: 0 0 10px 0;
+    }
+
+    .form-content {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        color: #666;
+        font-weight: bold;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .form-group textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    .form-actions {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        text-decoration: none;
+        color: white;
+    }
+
+    .btn-primary {
+        background: #79aec8;
+    }
+
+    .btn-primary:hover {
+        background: #417690;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+    }
+
+    .btn-secondary:hover {
+        background: #5a6268;
+    }
+
+    .error-message {
+        color: #dc3545;
+        margin-top: 5px;
+        font-size: 14px;
+    }
+
+    .success-message {
+        color: #28a745;
+        margin-top: 5px;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="form-header">
+        <h1>{% if alteracao %}{% trans 'Editar Alteração' %}{% else %}{% trans 'Nova Alteração' %}{% endif %}</h1>
+        <p>{% trans 'Imóvel' %}: {{ imovel.nome }}</p>
+    </div>
+
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}error-message{% else %}success-message{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="form-content">
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label for="id_tipo_alteracao_id">{% trans 'Tipo de Alteração' %}</label>
+                {{ form.tipo_alteracao_id }}
+                {% if form.tipo_alteracao_id.errors %}
+                <div class="error-message">{{ form.tipo_alteracao_id.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_cartorio">{% trans 'Cartório' %}</label>
+                {{ form.cartorio }}
+                {% if form.cartorio.errors %}
+                <div class="error-message">{{ form.cartorio.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_livro">{% trans 'Livro' %}</label>
+                {{ form.livro }}
+                {% if form.livro.errors %}
+                <div class="error-message">{{ form.livro.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_folha">{% trans 'Folha' %}</label>
+                {{ form.folha }}
+                {% if form.folha.errors %}
+                <div class="error-message">{{ form.folha.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_data_alteracao">{% trans 'Data da Alteração' %}</label>
+                {{ form.data_alteracao }}
+                {% if form.data_alteracao.errors %}
+                <div class="error-message">{{ form.data_alteracao.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_registro_tipo">{% trans 'Tipo de Registro' %}</label>
+                {{ form.registro_tipo }}
+                {% if form.registro_tipo.errors %}
+                <div class="error-message">{{ form.registro_tipo.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_averbacao_tipo">{% trans 'Tipo de Averbação' %}</label>
+                {{ form.averbacao_tipo }}
+                {% if form.averbacao_tipo.errors %}
+                <div class="error-message">{{ form.averbacao_tipo.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_titulo">{% trans 'Título' %}</label>
+                {{ form.titulo }}
+                {% if form.titulo.errors %}
+                <div class="error-message">{{ form.titulo.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_cartorio_origem">{% trans 'Cartório de Origem' %}</label>
+                {{ form.cartorio_origem }}
+                {% if form.cartorio_origem.errors %}
+                <div class="error-message">{{ form.cartorio_origem.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_livro_origem">{% trans 'Livro de Origem' %}</label>
+                {{ form.livro_origem }}
+                {% if form.livro_origem.errors %}
+                <div class="error-message">{{ form.livro_origem.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_folha_origem">{% trans 'Folha de Origem' %}</label>
+                {{ form.folha_origem }}
+                {% if form.folha_origem.errors %}
+                <div class="error-message">{{ form.folha_origem.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_data_origem">{% trans 'Data de Origem' %}</label>
+                {{ form.data_origem }}
+                {% if form.data_origem.errors %}
+                <div class="error-message">{{ form.data_origem.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_transmitente">{% trans 'Transmitente' %}</label>
+                {{ form.transmitente }}
+                {% if form.transmitente.errors %}
+                <div class="error-message">{{ form.transmitente.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_adquirente">{% trans 'Adquirente' %}</label>
+                {{ form.adquirente }}
+                {% if form.adquirente.errors %}
+                <div class="error-message">{{ form.adquirente.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_valor_transacao">{% trans 'Valor da Transação' %}</label>
+                {{ form.valor_transacao }}
+                {% if form.valor_transacao.errors %}
+                <div class="error-message">{{ form.valor_transacao.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_area">{% trans 'Área' %}</label>
+                {{ form.area }}
+                {% if form.area.errors %}
+                <div class="error-message">{{ form.area.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_observacoes">{% trans 'Observações' %}</label>
+                {{ form.observacoes }}
+                {% if form.observacoes.errors %}
+                <div class="error-message">{{ form.observacoes.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-actions">
+                <a href="{% url 'imovel_detail' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">{% trans 'Cancelar' %}</a>
+                <button type="submit" class="btn btn-primary">{% trans 'Salvar' %}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %} 
