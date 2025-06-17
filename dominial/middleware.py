@@ -20,7 +20,7 @@ class AuthenticationMiddleware:
             if request.path.startswith('/admin/'):
                 return redirect('admin:login')
             # Caso contrário, redireciona para nosso login personalizado
-            return redirect('login')
+                return redirect('login')
 
         response = self.get_response(request)
         return response 

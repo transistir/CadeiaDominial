@@ -1,5 +1,6 @@
 from pyexpat import model
 from django.db import models
+from django.core.exceptions import ValidationError
 #from django.contrib.gis.db import models
 
 
@@ -205,3 +206,80 @@ class ImportacaoCartorios(models.Model):
 
     def __str__(self):
         return f'Importação {self.estado} - {self.get_status_display()}'
+
+class DocumentoTipo(models.Model):
+    TIPO_CHOICES = [
+        ('transmissao', 'Transmissão'),
+        ('matricula', 'Matrícula')
+    ]
+    tipo = models.CharField(max_length=50, choices=TIPO_CHOICES)
+
+    def __str__(self):
+        return self.get_tipo_display()
+
+    class Meta:
+        verbose_name = "Tipo de Documento"
+        verbose_name_plural = "Tipos de Documento"
+
+class Documento(models.Model):
+    id = models.AutoField(primary_key=True)
+    imovel = models.ForeignKey(Imovel, on_delete=models.CASCADE)
+    tipo = models.ForeignKey(DocumentoTipo, on_delete=models.PROTECT)
+    numero = models.CharField(max_length=50)
+    data = models.DateField()
+    cartorio = models.ForeignKey(Cartorios, on_delete=models.PROTECT)
+    livro = models.CharField(max_length=50)
+    folha = models.CharField(max_length=50)
+    observacoes = models.TextField(null=True, blank=True)
+    data_cadastro = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.tipo.get_tipo_display()} - {self.numero}"
+
+    class Meta:
+        verbose_name = "Documento"
+        verbose_name_plural = "Documentos"
+        unique_together = ['numero', 'cartorio']
+
+class LancamentoTipo(models.Model):
+    TIPO_CHOICES = [
+        ('registro', 'Registro'),
+        ('averbacao', 'Averbação'),
+    ]
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, unique=True)
+
+    def __str__(self):
+        return self.get_tipo_display()
+
+    def get_tipo_display(self):
+        return dict(self.TIPO_CHOICES).get(self.tipo, self.tipo)
+
+    class Meta:
+        verbose_name = "Tipo de Lançamento"
+        verbose_name_plural = "Tipos de Lançamento"
+
+class Lancamento(models.Model):
+    id = models.AutoField(primary_key=True)
+    documento = models.ForeignKey(Documento, on_delete=models.CASCADE)
+    tipo = models.ForeignKey(LancamentoTipo, on_delete=models.PROTECT)
+    data = models.DateField()
+    transmitente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='transmitente_lancamento', null=True, blank=True)
+    adquirente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='adquirente_lancamento', null=True, blank=True)
+    valor_transacao = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    detalhes = models.TextField(null=True, blank=True)
+    observacoes = models.TextField(null=True, blank=True)
+    data_cadastro = models.DateField(auto_now_add=True)
+
+    def clean(self):
+        if self.tipo.tipo == 'registro' and not (self.transmitente and self.adquirente):
+            raise ValidationError('Registros devem ter transmitente e adquirente')
+        if self.tipo.tipo == 'averbacao' and not self.detalhes:
+            raise ValidationError('Averbações devem ter detalhes do conteúdo')
+
+    def __str__(self):
+        return f"{self.tipo.get_tipo_display()} - {self.documento}"
+
+    class Meta:
+        verbose_name = "Lançamento"
+        verbose_name_plural = "Lançamentos"
