@@ -1,2 +1,7 @@
+asgiref==3.8.1
+Django==5.2.3
+django-autocomplete-light==3.12.1
+django-extensions==4.1
+pytest==8.4.0
 requests==2.31.0
-beautifulsoup4==4.12.2 
+sqlparse==0.5.3
