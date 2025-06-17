@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.db.models import Count
 from django.utils import timezone
 from django.core.management import call_command
+from dal import autocomplete
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +252,16 @@ def importar_cartorios_estado(request):
         return JsonResponse({
             'error': f'Erro ao importar cartórios: {str(e)}'
         }, status=500)
+
+
+class PessoaAutocomplete(autocomplete.Select2QuerySetView):
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return Pessoas.objects.none()
+
+        qs = Pessoas.objects.all()
+
+        if self.q:
+            qs = qs.filter(nome__icontains=self.q)
+
+        return qs

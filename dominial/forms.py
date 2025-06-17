@@ -1,5 +1,6 @@
 from django import forms
 from .models import TIs, Imovel, Pessoas, TerraIndigenaReferencia, Cartorios
+from dal import autocomplete
 
 class TIsForm(forms.ModelForm):
     terra_referencia = forms.ModelChoiceField(
@@ -18,10 +19,10 @@ class TIsForm(forms.ModelForm):
 
 class ImovelForm(forms.ModelForm):
     proprietario = forms.ModelChoiceField(
-        queryset=Pessoas.objects.all().order_by('nome'),
+        queryset=Pessoas.objects.all(),
         required=True,
         label='Proprietário',
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=autocomplete.ModelSelect2(url='pessoa-autocomplete')
     )
 
     estado = forms.ChoiceField(

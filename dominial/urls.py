@@ -1,6 +1,8 @@
 from django.urls import path
 from . import views
 from django.contrib.auth import views as auth_views
+from dal import autocomplete
+
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -25,4 +27,5 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('verificar-cartorios/', views.verificar_cartorios_estado, name='verificar_cartorios_estado'),
     path('importar-cartorios/', views.importar_cartorios_estado, name='importar_cartorios_estado'),
-] 
+    path('pessoa-autocomplete/', views.PessoaAutocomplete.as_view(), name='pessoa-autocomplete'),
+]

@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     'django_extensions',
     'django.contrib.gis',
     'dominial',
+    'dal',
+    'dal_select2',
 ]
 
 MIDDLEWARE = [

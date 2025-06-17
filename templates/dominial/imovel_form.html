@@ -197,6 +197,9 @@
 {% endblock %}
 
 {% block content %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+ {{ form.media }}
 <div class="form-container">
     <div class="form-header">
         <h1>{% if imovel %}{% trans 'Editar Imóvel' %}{% else %}{% trans 'Cadastrar Novo Imóvel' %}{% endif %}</h1>
