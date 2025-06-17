@@ -18,11 +18,14 @@ class TIsForm(forms.ModelForm):
         }
 
 class ImovelForm(forms.ModelForm):
-    proprietario = forms.ModelChoiceField(
-        queryset=Pessoas.objects.all(),
-        required=True,
-        label='Proprietário',
-        widget=autocomplete.ModelSelect2(url='pessoa-autocomplete')
+    proprietario_nome = forms.CharField(
+        label='Nome do Proprietário',
+        required=False,  # Agora opcional, pois você vai validar manualmente depois
+        widget=forms.TextInput(attrs={'class': 'form-control', 'id': 'id_proprietario_nome'})
+    )
+    proprietario = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput()
     )
 
     estado = forms.ChoiceField(
@@ -54,7 +57,7 @@ class ImovelForm(forms.ModelForm):
 
     class Meta:
         model = Imovel
-        fields = ['nome', 'proprietario', 'matricula', 'sncr', 'sigef', 'descricao', 'observacoes', 'estado', 'cidade', 'cartorio']
+        fields = ['nome', 'matricula', 'sncr', 'sigef', 'descricao', 'observacoes', 'estado', 'cidade', 'cartorio']
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'matricula': forms.TextInput(attrs={'class': 'form-control'}),
@@ -63,3 +66,15 @@ class ImovelForm(forms.ModelForm):
             'descricao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         } 
+    def clean(self):
+        cleaned_data = super().clean()
+        nome = cleaned_data.get('proprietario_nome')
+        proprietario = cleaned_data.get('proprietario')
+
+        # Se usuário digitou nome mas não selecionou uma pessoa existente
+        if not proprietario:
+            # Validação extra se quiser
+            if not nome:
+                raise forms.ValidationError('É obrigatório informar o nome do proprietário.')
+        return cleaned_data
+    

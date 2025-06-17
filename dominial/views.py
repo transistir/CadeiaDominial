@@ -104,14 +104,47 @@ def imovel_form(request, tis_id, imovel_id=None):
         if form.is_valid():
             imovel = form.save(commit=False)
             imovel.terra_indigena_id = tis
+
+            proprietario_id = form.cleaned_data.get('proprietario')
+            nome = form.cleaned_data.get('proprietario_nome')
+
+            if proprietario_id:
+                try:
+                    imovel.proprietario = Pessoas.objects.get(id=proprietario_id)
+                except Pessoas.DoesNotExist:
+                    messages.error(request, 'O proprietário selecionado não foi encontrado.')
+                    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
+            else:
+                # Criar novo proprietário
+                cpf = request.POST.get('cpf')
+                rg = request.POST.get('rg')
+                data_nascimento = request.POST.get('data_nascimento')
+                email = request.POST.get('email')
+                telefone = request.POST.get('telefone')
+
+                if nome and cpf:
+                    nova_pessoa = Pessoas.objects.create(
+                        nome=nome,
+                        cpf=cpf,
+                        rg=rg,
+                        email=email,
+                        telefone=telefone,
+                        data_nascimento=data_nascimento if data_nascimento else None
+                    )
+                    imovel.proprietario = nova_pessoa
+                else:
+                    messages.error(request, "Para cadastrar novo proprietário, preencha pelo menos Nome e CPF.")
+                    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
+
             imovel.save()
             messages.success(request, 'Imóvel cadastrado com sucesso!')
             return redirect('tis_detail', tis_id=tis_id)
         else:
             print("Erros de formulário:", form.errors)
+
     else:
         form = ImovelForm(instance=imovel)
-        
+
     return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
 
 @login_required
@@ -254,14 +287,8 @@ def importar_cartorios_estado(request):
         }, status=500)
 
 
-class PessoaAutocomplete(autocomplete.Select2QuerySetView):
-    def get_queryset(self):
-        if not self.request.user.is_authenticated:
-            return Pessoas.objects.none()
-
-        qs = Pessoas.objects.all()
-
-        if self.q:
-            qs = qs.filter(nome__icontains=self.q)
-
-        return qs
+def pessoa_autocomplete(request):
+    term = request.GET.get('term', '')
+    pessoas = Pessoas.objects.filter(nome__icontains=term)[:10]
+    results = [{'id': p.id, 'label': p.nome, 'value': p.nome} for p in pessoas]
+    return JsonResponse(results, safe=False)

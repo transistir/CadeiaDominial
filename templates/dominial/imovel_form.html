@@ -198,6 +198,8 @@
 
 {% block content %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 
  {{ form.media }}
 <div class="form-container">
@@ -246,8 +248,19 @@
         </div>
 
         <div class="form-group">
-            <label for="{{ form.proprietario.id_for_label }}">{% trans 'Proprietário' %}:</label>
-            {{ form.proprietario }}
+            <label for="id_proprietario_nome">Proprietário:</label>
+            {{ form.proprietario_nome }}
+            <input type="hidden" name="proprietario" id="id_proprietario">
+        </div>
+
+        <!-- Campos extras para novo proprietário -->
+        <div id="campos_novo_proprietario" style="display: none;">
+            <h4>Novo Proprietário</h4>
+            <input type="text" name="cpf" placeholder="CPF">
+            <input type="text" name="rg" placeholder="RG">
+            <input type="date" name="data_nascimento" placeholder="Data de Nascimento">
+            <input type="email" name="email" placeholder="Email">
+            <input type="text" name="telefone" placeholder="Telefone">
         </div>
         
         <div class="form-group">
@@ -336,6 +349,26 @@
         </div>
 
         <script>
+
+            $(function() {
+                $("#id_proprietario_nome").autocomplete({
+                    source: "{% url 'pessoa-autocomplete' %}",
+                    minLength: 2,
+                    select: function(event, ui) {
+                        // Preenche o campo oculto com o ID da pessoa selecionada
+                        $("#id_proprietario").val(ui.item.id);
+                        $("#campos_novo_proprietario").hide();
+                    },
+                    change: function(event, ui) {
+                        if (!ui.item) {
+                            // Se o usuário digitou algo que não corresponde a uma pessoa existente
+                            $("#id_proprietario").val('');
+                            $("#campos_novo_proprietario").show();
+                        }
+                    }
+                });
+            });
+
             document.addEventListener('DOMContentLoaded', function() {
                 const estadoSelect = document.getElementById('estado');
                 const cidadeSelect = document.getElementById('cidade_select');
@@ -352,6 +385,22 @@
                 const csrf_token = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
                 
                 console.log('Script carregado', { estadoSelect, cidadeSelect, cartorioSelect });
+
+                $(document).ready(function() {
+                    // Se o usuário limpar o campo ou digitar algo que não veio do autocomplete, mostra os campos de novo proprietário
+                    var campo = $('#id_proprietario');
+                    var idHidden = $('<input type="hidden" name="proprietario_id" id="proprietario_id">');
+                    campo.after(idHidden);
+
+                    campo.on('change', function() {
+                        var selectedOption = $(this).find('option:selected').val();
+                        if (!selectedOption) {
+                            $('#novo-proprietario-campos').slideDown();
+                        } else {
+                            $('#novo-proprietario-campos').slideUp();
+                        }
+                    });
+                });
 
                 // Função para verificar cartórios do estado
                 function verificarCartorios(estado) {
