@@ -432,7 +432,7 @@
 
                 // Função para verificar cartórios do estado
                 function verificarCartorios(estado) {
-                    fetch('/verificar-cartorios/', {
+                    fetch('/dominial/verificar-cartorios/', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -489,7 +489,7 @@
                         }
                     }, 500);
 
-                    fetch('/importar-cartorios/', {
+                    fetch('/dominial/importar-cartorios/', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -549,7 +549,7 @@
 
                         console.log('Estado selecionado:', estado);
                         // Buscar cidades do estado usando nossa própria API
-                        fetch('/buscar-cidades/', {
+                        fetch('/dominial/buscar-cidades/', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -598,7 +598,7 @@
                     if (cidade) {
                         console.log('Cidade selecionada:', cidade);
                         // Buscar cartórios da cidade usando nossa própria API
-                        fetch('/buscar-cartorios/', {
+                        fetch('/dominial/buscar-cartorios/', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',

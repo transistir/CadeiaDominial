@@ -1,0 +1,662 @@
+{% extends "base.html" %}
+
+{% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.arvore-container {
+    position: relative;
+    width: 100%;
+    height: 600px;
+    overflow: auto;
+    background: linear-gradient(45deg, #f8f9fa 25%, transparent 25%), 
+                linear-gradient(-45deg, #f8f9fa 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #f8f9fa 75%), 
+                linear-gradient(-45deg, transparent 75%, #f8f9fa 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    cursor: grab;
+}
+
+.arvore-container:active {
+    cursor: grabbing;
+}
+
+.arvore-header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.imovel-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.imovel-info > div {
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.imovel-info strong {
+    color: var(--primary-color);
+    display: block;
+    margin-bottom: 5px;
+}
+
+.documento-card {
+    position: absolute;
+    width: 120px;
+    height: 80px;
+    background: white;
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.documento-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: var(--primary-color);
+}
+
+.documento-card.matricula {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border-color: #2196f3;
+}
+
+.documento-card.transcricao {
+    background: linear-gradient(135deg, #f3e5f5, #e1bee7);
+    border-color: #9c27b0;
+}
+
+.documento-card .numero {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.documento-card .tipo {
+    font-size: 0.8em;
+    color: var(--secondary-color);
+    text-transform: uppercase;
+}
+
+.documento-card .lancamentos {
+    font-size: 0.7em;
+    color: var(--accent-color);
+    margin-top: 3px;
+}
+
+.conexao {
+    position: absolute;
+    background: #007bff;
+    height: 4px;
+    transform-origin: left center;
+    z-index: 1;
+    border-radius: 2px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.conexao::after {
+    content: '';
+    position: absolute;
+    right: -10px;
+    top: -6px;
+    width: 0;
+    height: 0;
+    border-left: 15px solid #007bff;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+}
+
+.arvore-actions {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 1000;
+}
+
+.arvore-actions .btn {
+    padding: 12px 20px;
+    border-radius: 50px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+}
+
+.arvore-actions .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 400px;
+    font-size: 1.2em;
+    color: var(--secondary-color);
+}
+
+.error {
+    text-align: center;
+    padding: 40px;
+    color: var(--danger-color);
+}
+
+.zoom-controls {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 1000;
+}
+
+.zoom-controls button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: white;
+    color: var(--primary-color);
+    font-size: 1.2em;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.zoom-controls button:hover {
+    background: var(--primary-color);
+    color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="arvore-header">
+        <h1>🌳 Cadeia Dominial</h1>
+        <div class="imovel-info">
+            <div>
+                <strong>Imóvel:</strong>
+                {{ imovel.nome }}
+            </div>
+            <div>
+                <strong>Matrícula:</strong>
+                {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>Proprietário:</strong>
+                {{ imovel.proprietario.nome }}
+            </div>
+            {% if imovel.sncr %}
+            <div>
+                <strong>SNCR:</strong>
+                {{ imovel.sncr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="arvore-container" id="arvore-container">
+        <div class="loading">
+            <span>Carregando diagrama da cadeia dominial...</span>
+        </div>
+    </div>
+
+    <div class="zoom-controls">
+        <button onclick="zoomIn()" title="Zoom +">+</button>
+        <button onclick="zoomOut()" title="Zoom -">-</button>
+        <button onclick="resetZoom()" title="Reset">⟲</button>
+    </div>
+
+    <div class="arvore-actions">
+        <a href="{% url 'selecionar_documento_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+            ➕ Novo Lançamento
+        </a>
+        <a href="{% url 'novo_documento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">
+            📄 Novo Documento
+        </a>
+        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}?lancamentos=true" class="btn">
+            📋 Ver Tronco Principal
+        </a>
+        <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn">
+            ← Voltar
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let arvoreData = null;
+let zoomLevel = 1;
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let panOffset = { x: 0, y: 0 };
+
+// Carregar dados da árvore
+async function carregarArvore() {
+    try {
+        const response = await fetch('{% url "cadeia_dominial_arvore" tis_id=tis.id imovel_id=imovel.id %}');
+        if (!response.ok) throw new Error('Erro ao carregar dados');
+        
+        arvoreData = await response.json();
+        renderizarArvore();
+    } catch (error) {
+        console.error('Erro:', error);
+        document.getElementById('arvore-container').innerHTML = 
+            '<div class="error">Erro ao carregar a cadeia dominial. Tente novamente.</div>';
+    }
+}
+
+// Renderizar a árvore
+function renderizarArvore() {
+    const container = document.getElementById('arvore-container');
+    
+    if (!arvoreData || !arvoreData.documentos.length) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--secondary-color);">
+                <h3>Nenhum documento encontrado</h3>
+                <p>Clique em "Novo Documento" para iniciar a cadeia dominial</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Debug: mostrar dados no console
+    console.log('Dados da árvore:', arvoreData);
+    console.log('Documentos:', arvoreData.documentos);
+    console.log('Conexões:', arvoreData.conexoes);
+    
+    // Limpar container
+    container.innerHTML = '';
+    
+    // Calcular posições dos documentos
+    const posicoes = calcularPosicoes();
+    console.log('Posições calculadas:', posicoes);
+    
+    // Renderizar conexões primeiro (para ficarem atrás dos cards)
+    renderizarConexoes(posicoes);
+    
+    // Renderizar cards dos documentos
+    renderizarDocumentos(posicoes);
+    
+    // Configurar eventos de pan
+    configurarPan();
+}
+
+// Calcular posições dos documentos
+function calcularPosicoes() {
+    const posicoes = {};
+    const niveis = {};
+    const espacamentoX = 200;
+    const espacamentoY = 150;
+    
+    // Primeiro, vamos organizar os documentos por nível
+    // Documentos sem origem (mais atuais) ficam no nível 0 (topo)
+    const documentosPorNivel = {};
+    
+    // Encontrar documentos que não são origem de ninguém (mais atuais)
+    const todosDocumentos = new Set(arvoreData.documentos.map(d => d.numero));
+    const documentosOrigem = new Set(arvoreData.conexoes.map(c => c.from));
+    const documentosAtuais = arvoreData.documentos.filter(doc => !documentosOrigem.has(doc.numero));
+    
+    // Função para calcular o nível de um documento
+    function calcularNivel(numeroDoc, nivel = 0) {
+        if (!documentosPorNivel[nivel]) {
+            documentosPorNivel[nivel] = [];
+        }
+        
+        const doc = arvoreData.documentos.find(d => d.numero === numeroDoc);
+        if (doc && !documentosPorNivel[nivel].find(d => d.numero === numeroDoc)) {
+            documentosPorNivel[nivel].push(doc);
+            
+            // Encontrar documentos que têm este como origem
+            const conexoesFilhas = arvoreData.conexoes.filter(c => c.from === numeroDoc);
+            conexoesFilhas.forEach(conexao => {
+                calcularNivel(conexao.to, nivel + 1);
+            });
+        }
+    }
+    
+    // Começar pelos documentos mais atuais (nível 0)
+    documentosAtuais.forEach(doc => {
+        calcularNivel(doc.numero, 0);
+    });
+    
+    // Se ainda há documentos não processados, processar
+    arvoreData.documentos.forEach(doc => {
+        if (!Object.values(documentosPorNivel).flat().find(d => d.numero === doc.numero)) {
+            calcularNivel(doc.numero, 0);
+        }
+    });
+    
+    // Calcular posições baseadas nos níveis
+    Object.keys(documentosPorNivel).forEach(nivel => {
+        const docsNivel = documentosPorNivel[nivel];
+        const y = parseInt(nivel) * espacamentoY + 50;
+        
+        docsNivel.forEach((doc, index) => {
+            const x = index * espacamentoX + 100;
+            posicoes[doc.numero] = { x, y, nivel: parseInt(nivel) };
+        });
+    });
+    
+    return posicoes;
+}
+
+// Renderizar conexões
+function renderizarConexoes(posicoes) {
+    const container = document.getElementById('arvore-container');
+    
+    arvoreData.conexoes.forEach(conexao => {
+        const from = posicoes[conexao.from];
+        const to = posicoes[conexao.to];
+        
+        if (from && to) {
+            const conexaoEl = document.createElement('div');
+            conexaoEl.className = 'conexao';
+            
+            // Calcular posição e ângulo da linha
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const distancia = Math.sqrt(dx * dx + dy * dy);
+            const angulo = Math.atan2(dy, dx) * 180 / Math.PI;
+            
+            // Posicionar a linha
+            conexaoEl.style.width = `${distancia}px`;
+            conexaoEl.style.left = `${from.x + 60}px`; // 60 é metade da largura do card
+            conexaoEl.style.top = `${from.y + 40}px`; // 40 é metade da altura do card
+            conexaoEl.style.transform = `rotate(${angulo}deg)`;
+            conexaoEl.style.transformOrigin = 'left center';
+            
+            container.appendChild(conexaoEl);
+        }
+    });
+}
+
+// Renderizar documentos
+function renderizarDocumentos(posicoes) {
+    const container = document.getElementById('arvore-container');
+    
+    arvoreData.documentos.forEach(doc => {
+        const pos = posicoes[doc.numero];
+        if (!pos) return;
+        
+        const card = document.createElement('div');
+        card.className = `documento-card ${doc.tipo}`;
+        card.style.left = `${pos.x}px`;
+        card.style.top = `${pos.y}px`;
+        card.setAttribute('data-documento-id', doc.id);
+        card.setAttribute('data-documento-numero', doc.numero);
+        
+        // Destacar documento atual (nível 0)
+        if (pos.nivel === 0) {
+            card.style.border = '3px solid #007bff';
+            card.style.boxShadow = '0 4px 12px rgba(0,123,255,0.3)';
+        }
+        
+        // Adicionar tooltip
+        card.setAttribute('title', `Clique para ver lançamentos do ${doc.tipo_display} ${doc.numero}`);
+        
+        // Adicionar eventos
+        card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            abrirDocumento(doc.id);
+        });
+        
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'scale(1.05)';
+            card.style.zIndex = '10';
+        });
+        
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'scale(1)';
+            card.style.zIndex = '1';
+        });
+        
+        // Adicionar menu de contexto
+        card.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            mostrarMenuContexto(e, doc);
+        });
+        
+        card.innerHTML = `
+            <div class="numero">${doc.numero}</div>
+            <div class="tipo">${doc.tipo_display}</div>
+            <div class="lancamentos">${doc.total_lancamentos} lançamentos</div>
+            <div class="card-actions">
+                <button class="btn-action" onclick="event.stopPropagation(); abrirDocumento(${doc.id})" title="Ver Lançamentos">
+                    👁️
+                </button>
+                <button class="btn-action" onclick="event.stopPropagation(); novoLancamentoDocumento(${doc.id})" title="Novo Lançamento">
+                    ➕
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+}
+
+// Abrir documento
+function abrirDocumento(documentoId) {
+    const url = `/dominial/documento/${documentoId}/lancamentos/{{ tis.id }}/{{ imovel.id }}/`;
+    window.location.href = url;
+}
+
+// Novo lançamento em documento específico
+function novoLancamentoDocumento(documentoId) {
+    const url = `/dominial/tis/{{ tis.id }}/imovel/{{ imovel.id }}/novo-lancamento/`;
+    window.location.href = url;
+}
+
+// Mostrar menu de contexto
+function mostrarMenuContexto(event, documento) {
+    // Remover menu anterior se existir
+    const menuAnterior = document.querySelector('.context-menu');
+    if (menuAnterior) {
+        menuAnterior.remove();
+    }
+    
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    menu.style.position = 'fixed';
+    menu.style.left = event.clientX + 'px';
+    menu.style.top = event.clientY + 'px';
+    menu.style.background = 'white';
+    menu.style.border = '1px solid #ddd';
+    menu.style.borderRadius = '4px';
+    menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+    menu.style.zIndex = '1000';
+    menu.style.minWidth = '200px';
+    
+    menu.innerHTML = `
+        <div class="menu-header" style="padding: 10px; background: #f8f9fa; border-bottom: 1px solid #ddd; font-weight: bold;">
+            ${documento.tipo_display}: ${documento.numero}
+        </div>
+        <div class="menu-item" onclick="abrirDocumento(${documento.id})" style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee;">
+            👁️ Ver Lançamentos
+        </div>
+        <div class="menu-item" onclick="novoLancamentoDocumento(${documento.id})" style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee;">
+            ➕ Novo Lançamento
+        </div>
+        <div class="menu-item" onclick="copiarNumeroDocumento('${documento.numero}')" style="padding: 10px; cursor: pointer;">
+            📋 Copiar Número
+        </div>
+    `;
+    
+    document.body.appendChild(menu);
+    
+    // Fechar menu ao clicar fora
+    document.addEventListener('click', function fecharMenu() {
+        menu.remove();
+        document.removeEventListener('click', fecharMenu);
+    });
+}
+
+// Copiar número do documento
+function copiarNumeroDocumento(numero) {
+    navigator.clipboard.writeText(numero).then(() => {
+        mostrarNotificacao('Número copiado para a área de transferência!', 'success');
+    }).catch(() => {
+        mostrarNotificacao('Erro ao copiar número', 'error');
+    });
+}
+
+// Mostrar notificação
+function mostrarNotificacao(mensagem, tipo = 'info') {
+    const notificacao = document.createElement('div');
+    notificacao.className = `notificacao ${tipo}`;
+    notificacao.style.position = 'fixed';
+    notificacao.style.top = '20px';
+    notificacao.style.right = '20px';
+    notificacao.style.padding = '15px 20px';
+    notificacao.style.borderRadius = '4px';
+    notificacao.style.color = 'white';
+    notificacao.style.zIndex = '1001';
+    notificacao.style.animation = 'slideIn 0.3s ease';
+    
+    if (tipo === 'success') {
+        notificacao.style.background = '#28a745';
+    } else if (tipo === 'error') {
+        notificacao.style.background = '#dc3545';
+    } else {
+        notificacao.style.background = '#17a2b8';
+    }
+    
+    notificacao.textContent = mensagem;
+    document.body.appendChild(notificacao);
+    
+    setTimeout(() => {
+        notificacao.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notificacao.remove(), 300);
+    }, 3000);
+}
+
+// Configurar pan
+function configurarPan() {
+    const container = document.getElementById('arvore-container');
+    
+    container.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.documento-card') || e.target.closest('.btn-action')) {
+            return; // Não iniciar pan se clicou em um card ou botão
+        }
+        
+        isDragging = true;
+        dragStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+        container.style.cursor = 'grabbing';
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        panOffset.x = e.clientX - dragStart.x;
+        panOffset.y = e.clientY - dragStart.y;
+        
+        container.style.transform = `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`;
+    });
+    
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        container.style.cursor = 'grab';
+    });
+}
+
+// Controles de zoom
+function zoomIn() {
+    zoomLevel = Math.min(zoomLevel * 1.2, 3);
+    aplicarZoom();
+}
+
+function zoomOut() {
+    zoomLevel = Math.max(zoomLevel / 1.2, 0.3);
+    aplicarZoom();
+}
+
+function resetZoom() {
+    zoomLevel = 1;
+    panOffset = { x: 0, y: 0 };
+    aplicarZoom();
+}
+
+function aplicarZoom() {
+    const container = document.getElementById('arvore-container');
+    container.style.transform = `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`;
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    carregarArvore();
+    
+    // Adicionar estilos para animações
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        
+        .documento-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .card-actions {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            display: none;
+            gap: 5px;
+        }
+        
+        .documento-card:hover .card-actions {
+            display: flex;
+        }
+        
+        .btn-action {
+            background: rgba(255,255,255,0.9);
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-action:hover {
+            background: white;
+            transform: scale(1.1);
+        }
+    `;
+    document.head.appendChild(style);
+});
+</script>
+{% endblock %} 

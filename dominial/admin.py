@@ -6,7 +6,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction
-from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios
+from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
 
@@ -25,6 +25,64 @@ admin.site.register(Cartorios)
 admin.site.register(Pessoas)
 admin.site.register(Imovel)
 admin.site.register(Alteracoes)
+admin.site.register(DocumentoTipo)
+admin.site.register(LancamentoTipo)
+
+@admin.register(Documento)
+class DocumentoAdmin(admin.ModelAdmin):
+    list_display = ['numero', 'tipo', 'data', 'cartorio', 'imovel', 'livro', 'folha']
+    list_filter = ['tipo', 'data', 'cartorio', 'imovel__terra_indigena_id']
+    search_fields = ['numero', 'cartorio__nome', 'imovel__matricula', 'imovel__terra_indigena_id__nome']
+    date_hierarchy = 'data'
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('numero', 'tipo', 'data', 'cartorio')
+        }),
+        ('Localização', {
+            'fields': ('livro', 'folha')
+        }),
+        ('Relacionamentos', {
+            'fields': ('imovel', 'origem')
+        }),
+        ('Observações', {
+            'fields': ('observacoes',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('cartorio', 'imovel', 'imovel__terra_indigena_id', 'tipo')
+
+@admin.register(Lancamento)
+class LancamentoAdmin(admin.ModelAdmin):
+    list_display = ['numero_lancamento', 'tipo', 'documento', 'data', 'eh_inicio_matricula', 'forma']
+    list_filter = ['tipo', 'data', 'eh_inicio_matricula', 'documento__tipo', 'documento__cartorio']
+    search_fields = ['numero_lancamento', 'documento__numero', 'documento__imovel__matricula', 'documento__imovel__terra_indigena_id__nome']
+    date_hierarchy = 'data'
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('numero_lancamento', 'tipo', 'documento', 'data', 'eh_inicio_matricula')
+        }),
+        ('Detalhes do Lançamento', {
+            'fields': ('forma', 'descricao', 'titulo')
+        }),
+        ('Origem', {
+            'fields': ('cartorio_origem', 'livro_origem', 'folha_origem', 'data_origem', 'origem')
+        }),
+        ('Partes', {
+            'fields': ('transmitente', 'adquirente')
+        }),
+        ('Outros', {
+            'fields': ('area', 'observacoes')
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'documento', 'documento__cartorio', 'documento__imovel', 
+            'documento__imovel__terra_indigena_id', 'tipo', 'transmitente', 'adquirente'
+        )
 
 ESTADOS = [
     ('AC', 'Acre'),

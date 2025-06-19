@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Novo Lançamento - {{ imovel.nome }}{% endblock %}
+{% block title %}{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento - {{ imovel.nome }}{% endblock %}
 
 {% block content %}
 <div class="container">
-    <h1>Novo Lançamento</h1>
+    <h1>{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento</h1>
 
     <div class="field-group">
         <h4>Documento Ativo</h4>
@@ -43,28 +43,31 @@
             
             <div class="form-group">
                 <label for="tipo">Tipo de Lançamento *</label>
-                <select name="tipo" id="tipo" required>
+                <select name="tipo_lancamento" id="tipo" required>
                     <option value="">Selecione o tipo</option>
                     {% for tipo in tipos_lancamento %}
-                    <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}">{{ tipo.get_tipo_display }}</option>
+                    <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}" {% if modo_edicao and lancamento.tipo.id == tipo.id %}selected{% endif %}>{{ tipo.get_tipo_display }}</option>
                     {% endfor %}
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="numero_lancamento">Número do Lançamento *</label>
-                <input type="text" name="numero_lancamento" id="numero_lancamento" placeholder="Código/número gerado pelo cartório" required>
+                <input type="text" name="numero_lancamento" id="numero_lancamento" placeholder="Código/número gerado pelo cartório" required 
+                       value="{% if modo_edicao %}{{ lancamento.numero_lancamento }}{% endif %}">
                 <small style="color: #666; font-size: 0.9em;">Número ou código de referência do lançamento no cartório</small>
             </div>
 
             <div class="form-group">
                 <label for="data">Data do Lançamento *</label>
-                <input type="date" name="data" id="data" required>
+                <input type="date" name="data" id="data" required 
+                       value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% endif %}">
             </div>
 
             <div class="toggle-group">
                 <label class="toggle-label">
-                    <input type="checkbox" name="eh_inicio_matricula" id="eh_inicio_matricula" class="toggle-checkbox">
+                    <input type="checkbox" name="eh_inicio_matricula" id="eh_inicio_matricula" class="toggle-checkbox" 
+                           {% if modo_edicao and lancamento.eh_inicio_matricula %}checked{% endif %}>
                     <span>Este lançamento indica um "Início de Matrícula"</span>
                 </label>
                 <small style="display: block; margin-top: 5px; color: #666;">
@@ -80,12 +83,13 @@
             
             <div class="form-group">
                 <label for="forma_averbacao">Forma *</label>
-                <input type="text" name="forma" id="forma_averbacao" placeholder="Ex: Compra e Venda, Doação, etc.">
+                <input type="text" name="forma" id="forma_averbacao" placeholder="Ex: Compra e Venda, Doação, etc."
+                       value="{% if modo_edicao %}{{ lancamento.forma }}{% endif %}">
             </div>
 
             <div class="form-group">
                 <label for="descricao_averbacao">Descrição *</label>
-                <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação"></textarea>
+                <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação">{% if modo_edicao %}{{ lancamento.descricao }}{% endif %}</textarea>
             </div>
         </div>
 
@@ -95,12 +99,14 @@
             
             <div class="form-group">
                 <label for="forma_registro">Forma *</label>
-                <input type="text" name="forma" id="forma_registro" placeholder="Ex: Compra e Venda, Doação, etc.">
+                <input type="text" name="forma" id="forma_registro" placeholder="Ex: Compra e Venda, Doação, etc."
+                       value="{% if modo_edicao %}{{ lancamento.forma }}{% endif %}">
             </div>
 
             <div class="form-group">
                 <label for="titulo_registro">Título *</label>
-                <input type="text" name="titulo" id="titulo_registro" placeholder="Título do registro">
+                <input type="text" name="titulo" id="titulo_registro" placeholder="Título do registro"
+                       value="{% if modo_edicao %}{{ lancamento.titulo }}{% endif %}">
             </div>
 
             <div class="grid-3">
@@ -109,25 +115,28 @@
                     <select name="cartorio_origem" id="cartorio_origem">
                         <option value="">Selecione o cartório</option>
                         {% for cartorio in cartorios %}
-                        <option value="{{ cartorio.id }}">{{ cartorio.nome }}</option>
+                        <option value="{{ cartorio.id }}" {% if modo_edicao and lancamento.cartorio_origem and lancamento.cartorio_origem.id == cartorio.id %}selected{% endif %}>{{ cartorio.nome }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label for="livro_origem">Livro *</label>
-                    <input type="text" name="livro_origem" id="livro_origem">
+                    <input type="text" name="livro_origem" id="livro_origem" 
+                           value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% endif %}">
                 </div>
 
                 <div class="form-group">
                     <label for="folha_origem">Folha *</label>
-                    <input type="text" name="folha_origem" id="folha_origem">
+                    <input type="text" name="folha_origem" id="folha_origem" 
+                           value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% endif %}">
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="data_origem">Data *</label>
-                <input type="date" name="data_origem" id="data_origem">
+                <input type="date" name="data_origem" id="data_origem" 
+                       value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% endif %}">
             </div>
         </div>
 
@@ -137,12 +146,13 @@
             
             <div class="form-group">
                 <label for="forma_inicio">Forma *</label>
-                <input type="text" name="forma" id="forma_inicio" placeholder="Ex: Abertura, Criação, etc.">
+                <input type="text" name="forma" id="forma_inicio" placeholder="Ex: Abertura, Criação, etc."
+                       value="{% if modo_edicao %}{{ lancamento.forma }}{% endif %}">
             </div>
 
             <div class="form-group">
                 <label for="descricao_inicio">Descrição *</label>
-                <textarea name="descricao" id="descricao_inicio" placeholder="Descreva o motivo do início da matrícula"></textarea>
+                <textarea name="descricao" id="descricao_inicio" placeholder="Descreva o motivo do início da matrícula">{% if modo_edicao %}{{ lancamento.descricao }}{% endif %}</textarea>
             </div>
         </div>
 
@@ -152,36 +162,60 @@
             
             <div class="grid-2">
                 <div class="form-group">
-                    <label for="transmitente">Transmitente</label>
-                    <select name="transmitente" id="transmitente">
-                        <option value="">Selecione o transmitente</option>
-                        {% for pessoa in pessoas %}
-                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
-                        {% endfor %}
-                    </select>
+                    <label for="transmitente">Transmitente(s)</label>
+                    <div id="transmitentes-container">
+                        <div class="pessoa-item">
+                            <div class="pessoa-input-group">
+                                <div class="autocomplete-container">
+                                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
+                                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="">
+                                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
+                                </div>
+                                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
+                                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarTransmitente()" style="margin-top: 5px;">
+                        ➕ Adicionar Transmitente
+                    </button>
+                    <div class="percentual-total" id="transmitente-total">Total: 0%</div>
                 </div>
 
                 <div class="form-group">
-                    <label for="adquirente">Adquirente</label>
-                    <select name="adquirente" id="adquirente">
-                        <option value="">Selecione o adquirente</option>
-                        {% for pessoa in pessoas %}
-                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
-                        {% endfor %}
-                    </select>
+                    <label for="adquirente">Adquirente(s)</label>
+                    <div id="adquirentes-container">
+                        <div class="pessoa-item">
+                            <div class="pessoa-input-group">
+                                <div class="autocomplete-container">
+                                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
+                                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="">
+                                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
+                                </div>
+                                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
+                                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarAdquirente()" style="margin-top: 5px;">
+                        ➕ Adicionar Adquirente
+                    </button>
+                    <div class="percentual-total" id="adquirente-total">Total: 0%</div>
                 </div>
             </div>
 
             <div class="grid-2">
                 <div class="form-group">
                     <label for="area">Área</label>
-                    <input type="number" name="area" id="area" step="0.01" placeholder="0.00">
+                    <input type="number" name="area" id="area" step="0.01" placeholder="0.00"
+                           value="{% if modo_edicao %}{{ lancamento.area }}{% endif %}">
                 </div>
 
                 <div class="form-group">
                     <label for="origem">Origem</label>
                     <div class="input-group">
-                        <input type="text" name="origem" id="origem" placeholder="Origem do lançamento (opcional)">
+                        <input type="text" name="origem" id="origem" placeholder="Origem do lançamento (opcional)"
+                               value="{% if modo_edicao %}{{ lancamento.origem }}{% endif %}">
                         <button type="button" id="add-origem" class="btn btn-sm btn-outline">+</button>
                     </div>
                     <div id="origens-adicionais" class="origens-container" style="margin-top: 10px;"></div>
@@ -191,7 +225,7 @@
 
         <div class="form-group">
             <label for="observacoes">Observações</label>
-            <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o lançamento"></textarea>
+            <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o lançamento">{% if modo_edicao %}{{ lancamento.observacoes }}{% endif %}</textarea>
         </div>
 
         <div class="actions">
@@ -239,6 +273,232 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializar campos
     toggleFields();
     
+    // Inicializar autocomplete para campos existentes
+    initializeAutocomplete();
+    
+    // Funções para múltiplas pessoas
+    window.adicionarTransmitente = function() {
+        const container = document.getElementById('transmitentes-container');
+        const pessoaDiv = document.createElement('div');
+        pessoaDiv.className = 'pessoa-item';
+        pessoaDiv.innerHTML = `
+            <div class="pessoa-input-group">
+                <div class="autocomplete-container">
+                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
+                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="">
+                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
+                </div>
+                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
+                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+            </div>
+        `;
+        container.appendChild(pessoaDiv);
+        initializeAutocomplete();
+    };
+    
+    window.adicionarAdquirente = function() {
+        const container = document.getElementById('adquirentes-container');
+        const pessoaDiv = document.createElement('div');
+        pessoaDiv.className = 'pessoa-item';
+        pessoaDiv.innerHTML = `
+            <div class="pessoa-input-group">
+                <div class="autocomplete-container">
+                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
+                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="">
+                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
+                </div>
+                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
+                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+            </div>
+        `;
+        container.appendChild(pessoaDiv);
+        initializeAutocomplete();
+    };
+    
+    window.removePessoa = function(button) {
+        const pessoaItem = button.closest('.pessoa-item');
+        const container = pessoaItem.parentElement;
+        
+        // Não permitir remover se for o último item
+        if (container.children.length > 1) {
+            pessoaItem.remove();
+            updatePercentualTotal(container.id);
+        }
+    };
+    
+    function initializeAutocomplete() {
+        // Autocomplete para transmitentes
+        document.querySelectorAll('.transmitente-nome').forEach((input, index) => {
+            const hidden = input.parentElement.querySelector('.transmitente-id');
+            const suggestions = input.parentElement.querySelector('.transmitente-suggestions');
+            setupAutocomplete(input, hidden, suggestions, 'transmitente');
+        });
+        
+        // Autocomplete para adquirentes
+        document.querySelectorAll('.adquirente-nome').forEach((input, index) => {
+            const hidden = input.parentElement.querySelector('.adquirente-id');
+            const suggestions = input.parentElement.querySelector('.adquirente-suggestions');
+            setupAutocomplete(input, hidden, suggestions, 'adquirente');
+        });
+        
+        // Event listeners para percentuais
+        document.querySelectorAll('.percentual-input').forEach(input => {
+            input.addEventListener('input', function() {
+                const container = this.closest('.pessoa-item').parentElement;
+                updatePercentualTotal(container.id);
+            });
+        });
+    }
+    
+    function setupAutocomplete(input, hidden, suggestions, tipo) {
+        let selectedIndex = -1;
+        let suggestionsData = [];
+        
+        input.addEventListener('input', function() {
+            const query = this.value.trim();
+            if (query.length < 2) {
+                hideSuggestions();
+                return;
+            }
+            
+            fetch(`/dominial/pessoa-autocomplete/?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    suggestionsData = data;
+                    showSuggestions(data);
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar sugestões:', error);
+                });
+        });
+        
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectNext();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectPrevious();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                selectCurrent();
+            } else if (e.key === 'Escape') {
+                hideSuggestions();
+            }
+        });
+        
+        input.addEventListener('blur', function() {
+            setTimeout(() => {
+                hideSuggestions();
+            }, 200);
+        });
+        
+        function showSuggestions(data) {
+            if (data.length === 0) {
+                suggestions.innerHTML = '<div class="autocomplete-suggestion"><div class="nome">Nenhuma pessoa encontrada</div></div>';
+            } else {
+                suggestions.innerHTML = data.map((item, index) => `
+                    <div class="autocomplete-suggestion" data-index="${index}" data-id="${item.id}">
+                        <div class="nome">${item.nome}</div>
+                        ${item.cpf ? `<div class="cpf">CPF: ${item.cpf}</div>` : ''}
+                    </div>
+                `).join('');
+                
+                suggestions.innerHTML += `
+                    <div class="autocomplete-suggestion novo" data-index="new">
+                        <div class="nome">➕ Criar nova pessoa: "${input.value}"</div>
+                    </div>
+                `;
+            }
+            
+            suggestions.style.display = 'block';
+            selectedIndex = -1;
+        }
+        
+        function hideSuggestions() {
+            suggestions.style.display = 'none';
+            selectedIndex = -1;
+        }
+        
+        function selectNext() {
+            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
+            if (items.length === 0) return;
+            
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+            updateSelection(items);
+        }
+        
+        function selectPrevious() {
+            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
+            if (items.length === 0) return;
+            
+            selectedIndex = Math.max(selectedIndex - 1, -1);
+            updateSelection(items);
+        }
+        
+        function updateSelection(items) {
+            items.forEach((item, index) => {
+                item.classList.remove('selected');
+                if (index === selectedIndex) {
+                    item.classList.add('selected');
+                }
+            });
+        }
+        
+        function selectCurrent() {
+            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
+            if (selectedIndex >= 0 && selectedIndex < items.length) {
+                const selectedItem = items[selectedIndex];
+                const index = selectedItem.getAttribute('data-index');
+                
+                if (index === 'new') {
+                    input.value = input.value.trim();
+                    hidden.value = '';
+                } else {
+                    const pessoa = suggestionsData[index];
+                    input.value = pessoa.nome;
+                    hidden.value = pessoa.id;
+                }
+            }
+            hideSuggestions();
+        }
+        
+        suggestions.addEventListener('click', function(e) {
+            const suggestion = e.target.closest('.autocomplete-suggestion');
+            if (suggestion) {
+                const index = suggestion.getAttribute('data-index');
+                
+                if (index === 'new') {
+                    input.value = input.value.trim();
+                    hidden.value = '';
+                } else {
+                    const pessoa = suggestionsData[index];
+                    input.value = pessoa.nome;
+                    hidden.value = pessoa.id;
+                }
+                hideSuggestions();
+            }
+        });
+    }
+    
+    function updatePercentualTotal(containerId) {
+        const container = document.getElementById(containerId);
+        const percentuais = Array.from(container.querySelectorAll('.percentual-input'))
+            .map(input => parseFloat(input.value) || 0);
+        
+        const total = percentuais.reduce((sum, percentual) => sum + percentual, 0);
+        const totalElement = document.getElementById(containerId.replace('-container', '-total'));
+        
+        totalElement.textContent = `Total: ${total.toFixed(2)}%`;
+        totalElement.className = 'percentual-total';
+        
+        if (total > 100) {
+            totalElement.classList.add('warning');
+        } else if (total === 100) {
+            totalElement.classList.add('success');
+        }
+    }
+    
     // Gerenciamento de múltiplas origens
     const addOrigemBtn = document.getElementById('add-origem');
     const origensContainer = document.getElementById('origens-adicionais');
@@ -253,7 +513,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Permitir adicionar origem com Enter
     origemInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -279,20 +538,18 @@ document.addEventListener('DOMContentLoaded', function() {
         origensContainer.appendChild(origemDiv);
     }
     
-    function removeOrigem(button) {
+    window.removeOrigem = function(button) {
         button.parentElement.remove();
-    }
+    };
     
     // Modificar o formulário para incluir todas as origens
     document.querySelector('form').addEventListener('submit', function(e) {
         const origemPrincipal = origemInput.value.trim();
         const origensAdicionais = Array.from(document.querySelectorAll('input[name="origens_adicionais[]"]')).map(input => input.value.trim());
         
-        // Combinar todas as origens
         const todasOrigens = [origemPrincipal, ...origensAdicionais].filter(origem => origem);
         
         if (todasOrigens.length > 0) {
-            // Criar campo hidden com todas as origens
             const hiddenInput = document.createElement('input');
             hiddenInput.type = 'hidden';
             hiddenInput.name = 'origem_completa';
@@ -300,6 +557,71 @@ document.addEventListener('DOMContentLoaded', function() {
             this.appendChild(hiddenInput);
         }
     });
+    
+    // Carregar dados das pessoas se estiver em modo de edição
+    {% if modo_edicao %}
+    // Carregar transmitentes
+    {% for transmitente in transmitentes %}
+    (function() {
+        const container = document.getElementById('transmitentes-container');
+        const pessoaDiv = document.createElement('div');
+        pessoaDiv.className = 'pessoa-item';
+        pessoaDiv.innerHTML = `
+            <div class="pessoa-input-group">
+                <div class="autocomplete-container">
+                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off" value="{{ transmitente.pessoa.nome }}">
+                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="{{ transmitente.pessoa.id }}">
+                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
+                </div>
+                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ transmitente.percentual }}">
+                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+            </div>
+        `;
+        container.appendChild(pessoaDiv);
+    })();
+    {% endfor %}
+    
+    // Carregar adquirentes
+    {% for adquirente in adquirentes %}
+    (function() {
+        const container = document.getElementById('adquirentes-container');
+        const pessoaDiv = document.createElement('div');
+        pessoaDiv.className = 'pessoa-item';
+        pessoaDiv.innerHTML = `
+            <div class="pessoa-input-group">
+                <div class="autocomplete-container">
+                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off" value="{{ adquirente.pessoa.nome }}">
+                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="{{ adquirente.pessoa.id }}">
+                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
+                </div>
+                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ adquirente.percentual }}">
+                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+            </div>
+        `;
+        container.appendChild(pessoaDiv);
+    })();
+    {% endfor %}
+    
+    // Remover os campos vazios iniciais
+    setTimeout(() => {
+        const transmitentesContainer = document.getElementById('transmitentes-container');
+        const adquirentesContainer = document.getElementById('adquirentes-container');
+        
+        if (transmitentesContainer.children.length > 1) {
+            transmitentesContainer.removeChild(transmitentesContainer.firstElementChild);
+        }
+        if (adquirentesContainer.children.length > 1) {
+            adquirentesContainer.removeChild(adquirentesContainer.firstElementChild);
+        }
+        
+        // Atualizar totais
+        updatePercentualTotal('transmitentes-container');
+        updatePercentualTotal('adquirentes-container');
+        
+        // Reinicializar autocomplete
+        initializeAutocomplete();
+    }, 100);
+    {% endif %}
 });
 </script>
 {% endblock %}
@@ -356,6 +678,95 @@ document.addEventListener('DOMContentLoaded', function() {
 .origens-container {
     max-height: 200px;
     overflow-y: auto;
+}
+
+/* Autocomplete Styles */
+.autocomplete-container {
+    position: relative;
+}
+
+.autocomplete-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.autocomplete-suggestion {
+    padding: 10px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s ease;
+}
+
+.autocomplete-suggestion:hover {
+    background-color: #f8f9fa;
+}
+
+.autocomplete-suggestion:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-suggestion.selected {
+    background-color: #e3f2fd;
+}
+
+.autocomplete-suggestion .nome {
+    font-weight: 500;
+    color: #333;
+}
+
+.autocomplete-suggestion .cpf {
+    font-size: 0.85em;
+    color: #666;
+    margin-top: 2px;
+}
+
+.autocomplete-suggestion .novo {
+    color: #28a745;
+    font-style: italic;
+}
+
+/* Múltiplas Pessoas Styles */
+.pessoa-item {
+    margin-bottom: 10px;
+}
+
+.pessoa-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.percentual-input {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 0.9em;
+}
+
+.percentual-total {
+    margin-top: 5px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #666;
+}
+
+.percentual-total.warning {
+    color: #dc3545;
+}
+
+.percentual-total.success {
+    color: #28a745;
 }
 </style>
 {% endblock %} 

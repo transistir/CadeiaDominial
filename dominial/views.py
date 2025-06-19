@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .models import TIs, Imovel, TerraIndigenaReferencia, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from .models import TIs, Imovel, TerraIndigenaReferencia, Documento, Lancamento, DocumentoTipo, LancamentoTipo, LancamentoPessoa
 from django.contrib import messages
 from .models import Imovel, TIs, Cartorios, Pessoas, Alteracoes
 from .forms import TIsForm, ImovelForm
@@ -324,46 +324,41 @@ def importar_cartorios_estado(request):
 
 
 def pessoa_autocomplete(request):
-    term = request.GET.get('term', '')
-    pessoas = Pessoas.objects.filter(nome__icontains=term)[:10]
-    results = [{'id': p.id, 'label': p.nome, 'value': p.nome} for p in pessoas]
+    query = request.GET.get('q', '')
+    if len(query) < 2:
+        return JsonResponse([], safe=False)
+    
+    pessoas = Pessoas.objects.filter(nome__icontains=query).order_by('nome')[:10]
+    results = []
+    
+    for pessoa in pessoas:
+        results.append({
+            'id': pessoa.id,
+            'nome': pessoa.nome,
+            'cpf': pessoa.cpf if pessoa.cpf else None
+        })
+    
     return JsonResponse(results, safe=False)
 
 @login_required
 def cadeia_dominial(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Verificar se há documentos
     documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    tem_documentos = documentos.exists()
     
-    # Se não há documentos, criar automaticamente um documento de matrícula baseado no imóvel
-    if not documentos.exists():
-        try:
-            # Criar documento de matrícula automaticamente
-            tipo_matricula = DocumentoTipo.objects.get(tipo='matricula')
-            documento_matricula = Documento.objects.create(
-                imovel=imovel,
-                tipo=tipo_matricula,
-                numero=imovel.matricula,
-                data=imovel.data_cadastro,
-                cartorio=imovel.cartorio or Cartorios.objects.first(),
-                livro='',
-                folha='',
-                origem='Matrícula atual do imóvel',
-                observacoes='Documento criado automaticamente para iniciar a cadeia dominial'
-            )
-            documentos = Documento.objects.filter(imovel=imovel).order_by('data')
-            messages.info(request, f'Documento de matrícula "{imovel.matricula}" criado automaticamente.')
-        except Exception as e:
-            messages.error(request, f'Erro ao criar documento de matrícula: {str(e)}')
+    # Verificar se há apenas matrícula (documento inicial)
+    tem_apenas_matricula = documentos.count() == 1 and documentos.first().tipo.tipo == 'matricula'
     
-    # Verifica se existe apenas a matrícula atual
-    matricula = documentos.filter(tipo__tipo='matricula').first()
-    tem_apenas_matricula = documentos.count() == 1 and matricula is not None
-    
-    # Se tiver apenas matrícula, verifica se tem lançamentos
+    # Verificar se há lançamentos
     tem_lancamentos = False
-    if tem_apenas_matricula:
-        tem_lancamentos = matricula.lancamentos.exists()
+    if tem_documentos:
+        tem_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).exists()
+    
+    # Verificar se deve mostrar a visualização de lançamentos (tronco principal)
+    mostrar_lancamentos = request.GET.get('lancamentos') == 'true'
     
     context = {
         'tis': tis,
@@ -371,8 +366,13 @@ def cadeia_dominial(request, tis_id, imovel_id):
         'documentos': documentos,
         'tem_apenas_matricula': tem_apenas_matricula,
         'tem_lancamentos': tem_lancamentos,
+        'mostrar_lancamentos': mostrar_lancamentos,
     }
-    return render(request, 'dominial/cadeia_dominial.html', context)
+    
+    if mostrar_lancamentos:
+        return render(request, 'dominial/cadeia_dominial.html', context)
+    else:
+        return render(request, 'dominial/cadeia_dominial_arvore.html', context)
 
 @login_required
 def novo_documento(request, tis_id, imovel_id):
@@ -445,22 +445,48 @@ def novo_documento(request, tis_id, imovel_id):
     return render(request, 'dominial/documento_form.html', context)
 
 @login_required
-def novo_lancamento(request, tis_id, imovel_id):
+def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    documento_ativo = Documento.objects.filter(imovel=imovel).order_by('-data', '-id').first()
     
-    # Se não há documento ativo, redirecionar para criar o primeiro documento
+    # Se documento_id foi fornecido, usar esse documento
+    if documento_id:
+        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    else:
+        # Caso contrário, usar o documento mais recente
+        documento_ativo = Documento.objects.filter(imovel=imovel).order_by('-data', '-id').first()
+    
+    # Se não há documento ativo, criar automaticamente um documento de matrícula
     if not documento_ativo:
-        messages.warning(request, 'É necessário criar um documento antes de adicionar lançamentos.')
-        return redirect('novo_documento', tis_id=tis.id, imovel_id=imovel.id)
+        try:
+            # Obter o tipo de documento "matricula"
+            tipo_matricula = DocumentoTipo.objects.get(tipo='matricula')
+            
+            # Criar documento de matrícula automaticamente
+            documento_ativo = Documento.objects.create(
+                imovel=imovel,
+                tipo=tipo_matricula,
+                numero=imovel.matricula,  # Usar a matrícula do imóvel como número do documento
+                data=imovel.data_cadastro,  # Usar a data de cadastro do imóvel
+                cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
+                livro='1',  # Livro padrão
+                folha='1',  # Folha padrão
+                origem='Matrícula atual do imóvel',
+                observacoes='Documento criado automaticamente ao iniciar a cadeia dominial'
+            )
+            
+            messages.info(request, f'Documento de matrícula "{imovel.matricula}" criado automaticamente.')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar documento de matrícula: {str(e)}')
+            return redirect('novo_documento', tis_id=tis.id, imovel_id=imovel.id)
     
     pessoas = Pessoas.objects.all().order_by('nome')
     cartorios = Cartorios.objects.all().order_by('nome')
     tipos_lancamento = LancamentoTipo.objects.all().order_by('tipo')
     
     if request.method == 'POST':
-        tipo_id = request.POST.get('tipo')
+        tipo_id = request.POST.get('tipo_lancamento')
         numero_lancamento = request.POST.get('numero_lancamento')
         data = request.POST.get('data')
         observacoes = request.POST.get('observacoes')
@@ -479,18 +505,13 @@ def novo_lancamento(request, tis_id, imovel_id):
             }
             return render(request, 'dominial/lancamento_form.html', context)
         
-        # Campos específicos por tipo
-        forma = request.POST.get('forma')
-        descricao = request.POST.get('descricao')
-        titulo = request.POST.get('titulo')
-        cartorio_origem_id = request.POST.get('cartorio_origem')
-        livro_origem = request.POST.get('livro_origem')
-        folha_origem = request.POST.get('folha_origem')
-        data_origem = request.POST.get('data_origem')
-        
         # Campos opcionais
-        transmitente_id = request.POST.get('transmitente')
-        adquirente_id = request.POST.get('adquirente')
+        transmitente_ids = request.POST.getlist('transmitente[]')
+        transmitente_nomes = request.POST.getlist('transmitente_nome[]')
+        transmitente_percentuais = request.POST.getlist('transmitente_percentual[]')
+        adquirente_ids = request.POST.getlist('adquirente[]')
+        adquirente_nomes = request.POST.getlist('adquirente_nome[]')
+        adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
         area = request.POST.get('area')
         origem = request.POST.get('origem_completa') or request.POST.get('origem')
 
@@ -498,12 +519,12 @@ def novo_lancamento(request, tis_id, imovel_id):
             tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
             
             # Tratar campos vazios
-            data_origem_clean = data_origem if data_origem and data_origem.strip() else None
-            livro_origem_clean = livro_origem if livro_origem and livro_origem.strip() else None
-            folha_origem_clean = folha_origem if folha_origem and folha_origem.strip() else None
-            forma_clean = forma if forma and forma.strip() else None
-            descricao_clean = descricao if descricao and descricao.strip() else None
-            titulo_clean = titulo if titulo and titulo.strip() else None
+            data_origem_clean = data if data and data.strip() else None
+            livro_origem_clean = request.POST.get('livro_origem') if request.POST.get('livro_origem') and request.POST.get('livro_origem').strip() else None
+            folha_origem_clean = request.POST.get('folha_origem') if request.POST.get('folha_origem') and request.POST.get('folha_origem').strip() else None
+            forma_clean = request.POST.get('forma') if request.POST.get('forma') and request.POST.get('forma').strip() else None
+            descricao_clean = observacoes if observacoes and observacoes.strip() else None
+            titulo_clean = request.POST.get('titulo') if request.POST.get('titulo') and request.POST.get('titulo').strip() else None
             
             # Criar o lançamento
             lancamento = Lancamento.objects.create(
@@ -522,20 +543,65 @@ def novo_lancamento(request, tis_id, imovel_id):
             )
             
             # Adicionar cartório de origem se fornecido
+            cartorio_origem_id = request.POST.get('cartorio_origem')
             if cartorio_origem_id:
                 lancamento.cartorio_origem_id = cartorio_origem_id
-            
-            # Adicionar campos opcionais se fornecidos
-            if transmitente_id:
-                lancamento.transmitente_id = transmitente_id
-            if adquirente_id:
-                lancamento.adquirente_id = adquirente_id
             if area:
-                lancamento.area = area
+                lancamento.area = float(area) if area and area.strip() else None
             if origem:
                 lancamento.origem = origem
-                
             lancamento.save()
+
+            # Salvar múltiplos transmitentes
+            for idx, nome in enumerate(transmitente_nomes):
+                nome = nome.strip()
+                percentual = transmitente_percentuais[idx] if idx < len(transmitente_percentuais) else None
+                pessoa_id = transmitente_ids[idx] if idx < len(transmitente_ids) else None
+                pessoa = None
+                if pessoa_id:
+                    try:
+                        pessoa = Pessoas.objects.get(id=pessoa_id)
+                    except Pessoas.DoesNotExist:
+                        pessoa = None
+                if not pessoa and nome:
+                    pessoa, created = Pessoas.objects.get_or_create(
+                        nome=nome,
+                        defaults={'cpf': f'00000000000'}
+                    )
+                if pessoa and percentual:
+                    from .models import LancamentoPessoa
+                    LancamentoPessoa.objects.create(
+                        lancamento=lancamento,
+                        pessoa=pessoa,
+                        tipo='transmitente',
+                        percentual=percentual,
+                        nome_digitado=nome
+                    )
+            # Salvar múltiplos adquirentes
+            for idx, nome in enumerate(adquirente_nomes):
+                nome = nome.strip()
+                percentual = adquirente_percentuais[idx] if idx < len(adquirente_percentuais) else None
+                pessoa_id = adquirente_ids[idx] if idx < len(adquirente_ids) else None
+                pessoa = None
+                if pessoa_id:
+                    try:
+                        pessoa = Pessoas.objects.get(id=pessoa_id)
+                    except Pessoas.DoesNotExist:
+                        pessoa = None
+                if not pessoa and nome:
+                    pessoa, created = Pessoas.objects.get_or_create(
+                        nome=nome,
+                        defaults={'cpf': f'00000000000'}
+                    )
+                if pessoa and percentual:
+                    from .models import LancamentoPessoa
+                    LancamentoPessoa.objects.create(
+                        lancamento=lancamento,
+                        pessoa=pessoa,
+                        tipo='adquirente',
+                        percentual=percentual,
+                        nome_digitado=nome
+                    )
             
             messages.success(request, 'Lançamento criado com sucesso!')
             
@@ -571,7 +637,7 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
     
     for documento in documentos:
         doc_node = {
-            'name': f'{documento.get_tipo_display()}: {documento.numero}',
+            'name': f'{documento.tipo.get_tipo_display()}: {documento.numero}',
             'data': {
                 'tipo': 'documento',
                 'id': documento.id,
@@ -607,3 +673,343 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
         tree_data['children'].append(doc_node)
     
     return JsonResponse(tree_data, safe=False)
+
+@login_required
+def cadeia_dominial_arvore(request, tis_id, imovel_id):
+    """Retorna os dados da cadeia dominial em formato de árvore para o diagrama"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Obter todos os documentos do imóvel ordenados por data
+    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    
+    # Estrutura para armazenar a árvore
+    arvore = {
+        'imovel': {
+            'id': imovel.id,
+            'matricula': imovel.matricula,
+            'nome': imovel.nome,
+            'proprietario': imovel.proprietario.nome
+        },
+        'documentos': [],
+        'conexoes': []
+    }
+    
+    # Mapear documentos por número para facilitar busca
+    documentos_por_numero = {}
+    
+    # Processar cada documento
+    for documento in documentos:
+        doc_node = {
+            'id': documento.id,
+            'numero': documento.numero,
+            'tipo': documento.tipo.tipo,
+            'tipo_display': documento.tipo.get_tipo_display(),
+            'data': documento.data.strftime('%d/%m/%Y'),
+            'cartorio': documento.cartorio.nome,
+            'livro': documento.livro,
+            'folha': documento.folha,
+            'origem': documento.origem or '',
+            'observacoes': documento.observacoes or '',
+            'total_lancamentos': documento.lancamentos.count(),
+            'x': 0,  # Posição X (será calculada pelo frontend)
+            'y': 0,  # Posição Y (será calculada pelo frontend)
+            'nivel': 0  # Nível na árvore (será calculado)
+        }
+        
+        documentos_por_numero[documento.numero] = doc_node
+        arvore['documentos'].append(doc_node)
+    
+    # Criar conexões baseadas nas origens
+    for documento in documentos:
+        if documento.origem:
+            # Extrair códigos de origem (M ou T seguidos de números)
+            import re
+            origens = re.findall(r'[MT]\d+', documento.origem)
+            
+            # Se não encontrou padrões M/T, tentar extrair números
+            if not origens:
+                numeros = re.findall(r'\d+', documento.origem)
+                origens = numeros
+            
+            # Se ainda não encontrou, verificar se há referência a outros documentos
+            if not origens and 'matrícula' in documento.origem.lower():
+                # Procurar por documentos que podem ser a matrícula atual
+                for outro_doc in documentos:
+                    if outro_doc.tipo.tipo == 'matricula' and outro_doc != documento:
+                        origens = [outro_doc.numero]
+                        break
+            
+            for origem in origens:
+                # Verificar se existe um documento com esse número
+                if origem in documentos_por_numero:
+                    conexao = {
+                        'from': origem,  # Documento de origem
+                        'to': documento.numero,  # Documento atual
+                        'tipo': 'origem'
+                    }
+                    arvore['conexoes'].append(conexao)
+    
+    # Calcular níveis da árvore (documentos sem origem = nível 0)
+    documentos_processados = set()
+    
+    def calcular_nivel(numero_doc, nivel_atual=0):
+        if numero_doc in documentos_processados:
+            return nivel_atual
+        
+        documentos_processados.add(numero_doc)
+        doc_node = documentos_por_numero.get(numero_doc)
+        if doc_node:
+            doc_node['nivel'] = max(doc_node['nivel'], nivel_atual)
+            
+            # Encontrar documentos que têm este como origem
+            for conexao in arvore['conexoes']:
+                if conexao['from'] == numero_doc:
+                    calcular_nivel(conexao['to'], nivel_atual + 1)
+    
+    # Calcular níveis começando pelos documentos sem origem
+    documentos_com_origem = set()
+    for conexao in arvore['conexoes']:
+        documentos_com_origem.add(conexao['to'])
+    
+    for doc_node in arvore['documentos']:
+        if doc_node['numero'] not in documentos_com_origem:
+            calcular_nivel(doc_node['numero'], 0)
+    
+    # Se algum documento não foi processado, processar agora
+    for doc_node in arvore['documentos']:
+        if doc_node['numero'] not in documentos_processados:
+            calcular_nivel(doc_node['numero'], 0)
+    
+    return JsonResponse(arvore, safe=False)
+
+@login_required
+def documento_lancamentos(request, tis_id, imovel_id, documento_id):
+    """Visualiza os lançamentos de um documento específico"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    
+    # Obter lançamentos ordenados por data
+    lancamentos = documento.lancamentos.all().order_by('data')
+    
+    # Verificar se o usuário é admin para permitir edição
+    pode_editar = request.user.is_staff or request.user.is_superuser
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento,
+        'lancamentos': lancamentos,
+        'pode_editar': pode_editar,
+    }
+    
+    return render(request, 'dominial/documento_lancamentos.html', context)
+
+@login_required
+def selecionar_documento_lancamento(request, tis_id, imovel_id):
+    """Página para selecionar em qual documento adicionar um novo lançamento"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Obter todos os documentos do imóvel ordenados por data
+    documentos = Documento.objects.filter(imovel=imovel).order_by('-data')
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documentos': documentos,
+    }
+    
+    return render(request, 'dominial/selecionar_documento_lancamento.html', context)
+
+@login_required
+def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
+    """View para editar um lançamento existente"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
+    
+    if request.method == 'POST':
+        # Processar dados do formulário
+        try:
+            logger.info(f"Editando lançamento {lancamento_id}")
+            
+            # Atualizar dados básicos do lançamento
+            lancamento.tipo = LancamentoTipo.objects.get(id=request.POST.get('tipo_lancamento'))
+            lancamento.numero_lancamento = request.POST.get('numero_lancamento', '').strip()
+            lancamento.data = request.POST.get('data') if request.POST.get('data') else None
+            lancamento.origem = request.POST.get('origem', '').strip()
+            lancamento.observacoes = request.POST.get('observacoes', '').strip()
+            lancamento.eh_inicio_matricula = request.POST.get('eh_inicio_matricula') == 'on'
+            
+            logger.info(f"Dados básicos processados para lançamento {lancamento_id}")
+            
+            # Campos específicos por tipo
+            if lancamento.tipo.requer_titulo:
+                lancamento.titulo = request.POST.get('titulo', '').strip()
+            if lancamento.tipo.requer_cartorio_origem:
+                cartorio_origem_id = request.POST.get('cartorio_origem')
+                if cartorio_origem_id:
+                    lancamento.cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
+                else:
+                    lancamento.cartorio_origem = None
+            if lancamento.tipo.requer_livro_origem:
+                lancamento.livro_origem = request.POST.get('livro_origem', '').strip()
+            if lancamento.tipo.requer_folha_origem:
+                lancamento.folha_origem = request.POST.get('folha_origem', '').strip()
+            if lancamento.tipo.requer_data_origem:
+                lancamento.data_origem = request.POST.get('data_origem') if request.POST.get('data_origem') else None
+            if lancamento.tipo.requer_forma:
+                lancamento.forma = request.POST.get('forma', '').strip()
+            if lancamento.tipo.requer_descricao:
+                lancamento.descricao = request.POST.get('descricao', '').strip()
+            
+            logger.info(f"Campos específicos processados para lançamento {lancamento_id}")
+            
+            # Limpar campos não utilizados
+            if not lancamento.tipo.requer_titulo:
+                lancamento.titulo = None
+            if not lancamento.tipo.requer_cartorio_origem:
+                lancamento.cartorio_origem = None
+            if not lancamento.tipo.requer_livro_origem:
+                lancamento.livro_origem = None
+            if not lancamento.tipo.requer_folha_origem:
+                lancamento.folha_origem = None
+            if not lancamento.tipo.requer_data_origem:
+                lancamento.data_origem = None
+            if not lancamento.tipo.requer_forma:
+                lancamento.forma = None
+            if not lancamento.tipo.requer_descricao:
+                lancamento.descricao = None
+            
+            # Processar campos opcionais
+            area = request.POST.get('area')
+            lancamento.area = float(area) if area and area.strip() else None
+            
+            logger.info(f"Salvando lançamento {lancamento_id}")
+            lancamento.save()
+            
+            logger.info(f"Limpando pessoas existentes do lançamento {lancamento_id}")
+            # Limpar pessoas existentes
+            lancamento.pessoas.all().delete()
+            
+            # Processar transmitentes
+            transmitentes_data = request.POST.getlist('transmitente_nome[]')
+            transmitentes_percentual = request.POST.getlist('transmitente_percentual[]')
+            
+            logger.info(f"Processando {len(transmitentes_data)} transmitentes")
+            for i, nome in enumerate(transmitentes_data):
+                if nome.strip():
+                    percentual = transmitentes_percentual[i] if i < len(transmitentes_percentual) else 100
+                    try:
+                        pessoa = Pessoas.objects.get(nome__iexact=nome.strip())
+                    except Pessoas.DoesNotExist:
+                        # Criar nova pessoa sem CPF
+                        pessoa = Pessoas.objects.create(nome=nome.strip())
+                    
+                    LancamentoPessoa.objects.create(
+                        lancamento=lancamento,
+                        pessoa=pessoa,
+                        tipo='transmitente',
+                        percentual=percentual if percentual else 100,
+                        nome_digitado=nome.strip()
+                    )
+            
+            # Processar adquirentes
+            adquirentes_data = request.POST.getlist('adquirente_nome[]')
+            adquirentes_percentual = request.POST.getlist('adquirente_percentual[]')
+            
+            logger.info(f"Processando {len(adquirentes_data)} adquirentes")
+            for i, nome in enumerate(adquirentes_data):
+                if nome.strip():
+                    percentual = adquirentes_percentual[i] if i < len(adquirentes_percentual) else 100
+                    try:
+                        pessoa = Pessoas.objects.get(nome__iexact=nome.strip())
+                    except Pessoas.DoesNotExist:
+                        # Criar nova pessoa sem CPF
+                        pessoa = Pessoas.objects.create(nome=nome.strip())
+                    
+                    LancamentoPessoa.objects.create(
+                        lancamento=lancamento,
+                        pessoa=pessoa,
+                        tipo='adquirente',
+                        percentual=percentual if percentual else 100,
+                        nome_digitado=nome.strip()
+                    )
+            
+            logger.info(f"Lançamento {lancamento_id} atualizado com sucesso")
+            messages.success(request, 'Lançamento atualizado com sucesso!')
+            return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=lancamento.documento.id)
+            
+        except Exception as e:
+            logger.error(f'Erro ao atualizar lançamento {lancamento_id}: {str(e)}')
+            messages.error(request, f'Erro ao atualizar lançamento: {str(e)}')
+    
+    # Preparar dados para o template
+    tipos_lancamento = LancamentoTipo.objects.all()
+    cartorios = Cartorios.objects.all().order_by('nome')
+    
+    # Obter pessoas do lançamento
+    transmitentes = lancamento.pessoas.filter(tipo='transmitente')
+    adquirentes = lancamento.pessoas.filter(tipo='adquirente')
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'lancamento': lancamento,
+        'documento_ativo': lancamento.documento,
+        'tipos_lancamento': tipos_lancamento,
+        'cartorios': cartorios,
+        'transmitentes': transmitentes,
+        'adquirentes': adquirentes,
+        'modo_edicao': True
+    }
+    
+    return render(request, 'dominial/lancamento_form.html', context)
+
+@login_required
+def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
+    """View para excluir um lançamento"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
+    
+    if request.method == 'POST':
+        try:
+            documento_id = lancamento.documento.id
+            numero_lancamento = lancamento.numero_lancamento or f"Lançamento {lancamento.id}"
+            lancamento.delete()
+            messages.success(request, f'Lançamento "{numero_lancamento}" excluído com sucesso!')
+            return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir lançamento: {str(e)}')
+    
+    return render(request, 'dominial/lancamento_confirm_delete.html', {
+        'tis': tis,
+        'imovel': imovel,
+        'lancamento': lancamento,
+        'documento': lancamento.documento
+    })
+
+@login_required
+def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
+    """View para visualizar detalhes de um lançamento"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
+    
+    # Obter pessoas do lançamento
+    transmitentes = lancamento.pessoas.filter(tipo='transmitente')
+    adquirentes = lancamento.pessoas.filter(tipo='adquirente')
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'lancamento': lancamento,
+        'documento': lancamento.documento,
+        'transmitentes': transmitentes,
+        'adquirentes': adquirentes
+    }
+    
+    return render(request, 'dominial/lancamento_detail.html', context)

@@ -48,7 +48,7 @@ class Cartorios(models.Model):
 class Pessoas(models.Model):
     id = models.AutoField(primary_key=True)
     nome = models.CharField(max_length=100)
-    cpf = models.CharField(max_length=11, unique=True) # Verificar formato (Cadastro de Pessoa Física - CPF)
+    cpf = models.CharField(max_length=11, unique=True, null=True, blank=True) # Verificar formato (Cadastro de Pessoa Física - CPF)
     rg = models.CharField(max_length=20, null=True, blank=True) # Opcional, Registro Geral
     data_nascimento = models.DateField(null=True, blank=True) # Opcional, para data de nascimento
     email = models.EmailField(null=True, blank=True) # Opcional, para email
@@ -242,7 +242,7 @@ class Documento(models.Model):
         ordering = ['-data']
 
     def __str__(self):
-        return f"{self.get_tipo_display()} - {self.numero}"
+        return f"{self.tipo.get_tipo_display()} - {self.numero}"
 
     def clean(self):
         # Verificar se o imóvel está sobreposto a uma terra indígena
@@ -296,7 +296,7 @@ class Lancamento(models.Model):
     id = models.AutoField(primary_key=True)
     documento = models.ForeignKey(Documento, on_delete=models.CASCADE, related_name='lancamentos')
     tipo = models.ForeignKey(LancamentoTipo, on_delete=models.PROTECT)
-    numero_lancamento = models.CharField(max_length=50, help_text="Número/código do lançamento gerado pelo cartório")
+    numero_lancamento = models.CharField(max_length=50, help_text="Número/código do lançamento gerado pelo cartório", null=True, blank=True)
     data = models.DateField()
     transmitente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='transmitente_lancamento', null=True, blank=True)
     adquirente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='adquirente_lancamento', null=True, blank=True)
@@ -348,3 +348,28 @@ class Lancamento(models.Model):
                 raise ValidationError('Folha de origem é obrigatória para este tipo de lançamento.')
             if self.tipo.requer_data_origem and not self.data_origem:
                 raise ValidationError('Data de origem é obrigatória para este tipo de lançamento.')
+
+class LancamentoPessoa(models.Model):
+    """Modelo para armazenar múltiplas pessoas com percentuais em um lançamento"""
+    TIPO_CHOICES = [
+        ('transmitente', 'Transmitente'),
+        ('adquirente', 'Adquirente'),
+    ]
+    
+    lancamento = models.ForeignKey(Lancamento, on_delete=models.CASCADE, related_name='pessoas')
+    pessoa = models.ForeignKey(Pessoas, on_delete=models.PROTECT)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    percentual = models.DecimalField(max_digits=5, decimal_places=2, help_text="Percentual da participação (0-100)")
+    nome_digitado = models.CharField(max_length=255, null=True, blank=True, help_text="Nome digitado caso pessoa não existisse")
+    
+    class Meta:
+        verbose_name = "Pessoa do Lançamento"
+        verbose_name_plural = "Pessoas do Lançamento"
+        unique_together = ('lancamento', 'pessoa', 'tipo')
+    
+    def __str__(self):
+        return f"{self.get_tipo_display()}: {self.pessoa.nome} ({self.percentual}%)"
+    
+    def clean(self):
+        if self.percentual < 0 or self.percentual > 100:
+            raise ValidationError('Percentual deve estar entre 0 e 100.')

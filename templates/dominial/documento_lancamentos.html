@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamentos - {{ documento.numero }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-section">
+        <h1>📋 Lançamentos do Documento</h1>
+        
+        <div class="documento-info">
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>Documento:</strong> {{ documento.numero }}
+                </div>
+                <div class="info-item">
+                    <strong>Tipo:</strong> {{ documento.get_tipo_display }}
+                </div>
+                <div class="info-item">
+                    <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
+                </div>
+                <div class="info-item">
+                    <strong>Cartório:</strong> {{ documento.cartorio.nome }}
+                </div>
+                <div class="info-item">
+                    <strong>Livro:</strong> {{ documento.livro }}
+                </div>
+                <div class="info-item">
+                    <strong>Folha:</strong> {{ documento.folha }}
+                </div>
+            </div>
+            
+            {% if documento.origem %}
+            <div class="origem-info">
+                <strong>Origem:</strong> {{ documento.origem }}
+            </div>
+            {% endif %}
+            
+            {% if documento.observacoes %}
+            <div class="observacoes-info">
+                <strong>Observações:</strong> {{ documento.observacoes }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="lancamentos-section">
+        <div class="section-header">
+            <h2>📝 Lançamentos ({{ lancamentos.count }})</h2>
+            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+                ➕ Novo Lançamento
+            </a>
+        </div>
+
+        {% if lancamentos %}
+        <div class="lancamentos-list">
+            {% for lancamento in lancamentos %}
+            <div class="lancamento-card">
+                <div class="lancamento-header">
+                    <div class="lancamento-tipo">
+                        {% if lancamento.tipo.tipo == 'averbacao' %}📝
+                        {% elif lancamento.tipo.tipo == 'registro' %}📋
+                        {% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀
+                        {% elif lancamento.tipo.tipo == 'encerrar_matricula' %}🔚
+                        {% else %}📄{% endif %}
+                        {{ lancamento.tipo.get_tipo_display }}
+                    </div>
+                    <div class="lancamento-data">
+                        {{ lancamento.data|date:'d/m/Y' }}
+                    </div>
+                    {% if lancamento.numero_lancamento %}
+                    <div class="lancamento-numero">
+                        #{{ lancamento.numero_lancamento }}
+                    </div>
+                    {% endif %}
+                    {% if lancamento.eh_inicio_matricula %}
+                    <div class="inicio-matricula-badge">
+                        Início de Matrícula
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="lancamento-details">
+                    {% if lancamento.forma %}
+                    <div class="detail-item">
+                        <strong>Forma:</strong> {{ lancamento.forma }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if lancamento.descricao %}
+                    <div class="detail-item">
+                        <strong>Descrição:</strong> {{ lancamento.descricao|truncatechars:100 }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if lancamento.titulo %}
+                    <div class="detail-item">
+                        <strong>Título:</strong> {{ lancamento.titulo }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if lancamento.observacoes %}
+                    <div class="detail-item">
+                        <strong>Observações:</strong> {{ lancamento.observacoes|truncatechars:80 }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if lancamento.origem %}
+                    <div class="detail-item">
+                        <strong>Origem:</strong> {{ lancamento.origem }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if pode_editar %}
+                <div class="lancamento-actions">
+                    <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                       class="btn btn-sm btn-outline-info">
+                        <i class="fas fa-eye"></i> Ver
+                    </a>
+                    <a href="{% url 'editar_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                       class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-edit"></i> Editar
+                    </a>
+                    <a href="{% url 'excluir_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                       class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📝</div>
+            <h3>Nenhum lançamento encontrado</h3>
+            <p>Este documento ainda não possui lançamentos registrados.</p>
+            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+                ➕ Adicionar Primeiro Lançamento
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="actions">
+        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">
+            ← Voltar para Cadeia Dominial
+        </a>
+        <a href="{% url 'selecionar_documento_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">
+            📋 Ver Todos os Documentos
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.header-section {
+    margin-bottom: 30px;
+}
+
+.documento-info {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-top: 20px;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.info-item {
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.info-item strong {
+    color: var(--primary-color);
+    display: block;
+    margin-bottom: 5px;
+}
+
+.origem-info, .observacoes-info {
+    margin-top: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 4px solid var(--accent-color);
+}
+
+.lancamentos-section {
+    margin-bottom: 30px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.lancamentos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.lancamento-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-left: 4px solid var(--accent-color);
+    transition: all 0.3s ease;
+}
+
+.lancamento-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
+}
+
+.lancamento-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.lancamento-tipo {
+    font-weight: bold;
+    color: var(--primary-color);
+    font-size: 1.1em;
+}
+
+.lancamento-data {
+    color: var(--secondary-color);
+    font-size: 0.9em;
+}
+
+.lancamento-numero {
+    background: var(--accent-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+
+.inicio-matricula-badge {
+    background: var(--warning-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+
+.lancamento-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.detail-item {
+    font-size: 0.9em;
+}
+
+.detail-item strong {
+    color: var(--secondary-color);
+}
+
+.lancamento-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.empty-icon {
+    font-size: 4em;
+    margin-bottom: 20px;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: var(--secondary-color);
+    margin-bottom: 10px;
+}
+
+.empty-state p {
+    color: var(--text-color);
+    margin-bottom: 20px;
+}
+
+.actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 30px;
+}
+
+@media (max-width: 768px) {
+    .section-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .lancamento-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .actions {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function editarLancamento(lancamentoId) {
+    // Implementar edição de lançamento
+    alert('Funcionalidade de edição será implementada em breve!');
+}
+</script>
+{% endblock %} 
