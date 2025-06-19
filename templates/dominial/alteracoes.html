@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Lista de Alterações</title>
+    <title>Lista de Documentos</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -28,21 +28,21 @@
     </style>
 </head>
 <body>
-    <h1>Alterações Registradas</h1>
+    <h1>Documentos Registrados</h1>
 
     <div class="usuario">
         Olá, {{ user.get_full_name|default:user.username }}!
     </div>
 
     <div class="aviso">
-        Total de Alterações encontradas: {{ alteracoes|length }}
+        Total de Documentos encontrados: {{ documentos|length }}
     </div>
 
     <ul>
-        {% for alteracao in alteracoes %}
-            <li><strong>{{ alteracao.nome }}</strong> — matrícula: {{ alteracao.tipo_alteracao_id }}</li>
+        {% for documento in documentos %}
+            <li><strong>{{ documento.numero }}</strong> — Tipo: {{ documento.tipo.get_tipo_display }}</li>
         {% empty %}
-            <li>Nenhuma alteração encontrada.</li>
+            <li>Nenhum documento encontrado.</li>
         {% endfor %}
     </ul>
 </body>

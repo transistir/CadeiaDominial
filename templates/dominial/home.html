@@ -1,45 +1,10 @@
-{% extends "admin/base_site.html" %}
+{% extends "base.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}
-{{ block.super }}
+{% block title %}Sistema de Cadeia Dominial{% endblock %}
+
+{% block extra_css %}
 <style>
-    .home-container {
-        max-width: 1200px;
-        margin: 20px auto;
-        padding: 20px;
-    }
-
-    .header-section {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 30px;
-    }
-
-    .welcome-text {
-        font-size: 24px;
-        color: #333;
-    }
-
-    .admin-link {
-        background: #79aec8;
-        color: white;
-        padding: 10px 20px;
-        text-decoration: none;
-        border-radius: 4px;
-    }
-
-    .admin-link:hover {
-        background: #417690;
-    }
-
-    .section-title {
-        margin: 40px 0 20px;
-        color: #333;
-        font-size: 20px;
-    }
-
     .tis-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -65,20 +30,20 @@
 
     .tis-card h3 {
         margin: 0 0 10px 0;
-        color: #333;
+        color: var(--primary-color);
         font-size: 18px;
-        border-bottom: 2px solid #79aec8;
+        border-bottom: 2px solid var(--accent-color);
         padding-bottom: 5px;
     }
 
     .tis-card p {
         margin: 8px 0;
-        color: #666;
+        color: var(--secondary-color);
         font-size: 14px;
     }
 
     .tis-card strong {
-        color: #333;
+        color: var(--primary-color);
         font-weight: 600;
     }
 
@@ -87,7 +52,7 @@
         width: 200px;
         margin: 20px auto;
         padding: 15px 30px;
-        background: #79aec8;
+        background: var(--accent-color);
         color: white;
         text-align: center;
         text-decoration: none;
@@ -96,37 +61,7 @@
     }
 
     .add-tis-button:hover {
-        background: #417690;
-    }
-
-    .user-info {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        display: flex;
-        align-items: center;
-        gap: 20px;
-    }
-
-    .user-info p {
-        margin: 0;
-    }
-
-    .logout-form {
-        margin: 0;
-    }
-
-    .logout-button {
-        background: #ba2121;
-        color: white;
-        border: none;
-        padding: 8px 15px;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    .logout-button:hover {
-        background: #a41515;
+        background: #2980b9;
     }
 
     .available-count {
@@ -138,19 +73,19 @@
     }
 
     .available-count h3 {
-        color: #333;
+        color: var(--primary-color);
         margin: 0 0 10px 0;
     }
 
     .available-count .count {
         font-size: 36px;
-        color: #79aec8;
+        color: var(--accent-color);
         font-weight: bold;
         margin: 10px 0;
     }
 
     .available-count p {
-        color: #666;
+        color: var(--secondary-color);
         margin: 0;
     }
 
@@ -158,7 +93,7 @@
         position: absolute;
         top: 10px;
         right: 10px;
-        background: #ba2121;
+        background: var(--danger-color);
         color: white;
         border: none;
         padding: 5px 10px;
@@ -170,21 +105,22 @@
     }
 
     .delete-tis-button:hover {
-        background: #a41515;
+        background: #c0392b;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="home-container">
-    <div class="header-section">
-        <h1 class="welcome-text">{% trans 'Bem-vindo ao Sistema de Cadeia Dominial' %}</h1>
-        {% if user.is_staff %}
-        <a href="{% url 'admin:index' %}" class="admin-link">{% trans 'Painel Administrativo' %}</a>
-        {% endif %}
+<div class="container">
+    <h1>{% trans 'Bem-vindo ao Sistema de Cadeia Dominial' %}</h1>
+
+    <div class="available-count">
+        <h3>{% trans 'Terras Indígenas Cadastradas' %}</h3>
+        <div class="count">{{ terras_indigenas.count }}</div>
+        <p>{% trans 'Total de TIs no sistema' %}</p>
     </div>
 
-    <h2 class="section-title">{% trans 'Terras Indígenas Cadastradas' %}</h2>
+    <h2>{% trans 'Terras Indígenas Cadastradas' %}</h2>
     <div class="tis-grid">
         {% for tis in terras_indigenas %}
         <div class="tis-card">
@@ -195,39 +131,22 @@
                 <h3>{{ tis.nome }}</h3>
                 <p><strong>{% trans 'Código' %}:</strong> {{ tis.codigo }}</p>
                 <p><strong>{% trans 'Etnia' %}:</strong> {{ tis.etnia }}</p>
+                {% if tis.terra_referencia %}
                 <p><strong>{% trans 'Estado' %}:</strong> {{ tis.terra_referencia.estado }}</p>
                 <p><strong>{% trans 'Fase' %}:</strong> {{ tis.terra_referencia.fase }}</p>
                 {% if tis.terra_referencia.area_ha %}
                 <p><strong>{% trans 'Área' %}:</strong> {{ tis.terra_referencia.area_ha|floatformat:2 }} ha</p>
                 {% endif %}
-                <p><strong>{% trans 'Data de Cadastro' %}:</strong> {{ tis.data_cadastro|date:"d/m/Y" }}</p>
+                {% endif %}
             </a>
         </div>
         {% empty %}
-        <div class="tis-card">
-            <h3>{% trans 'Nenhuma Terra Indígena cadastrada' %}</h3>
-            <p>{% trans 'Clique no botão abaixo para cadastrar uma nova Terra Indígena.' %}</p>
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--secondary-color);">
+            <p>{% trans 'Nenhuma Terra Indígena cadastrada ainda.' %}</p>
         </div>
         {% endfor %}
     </div>
 
-    {% if perms.dominial.add_tis %}
     <a href="{% url 'tis_form' %}" class="add-tis-button">{% trans 'Cadastrar Nova Terra Indígena' %}</a>
-    {% endif %}
-
-    <h2 class="section-title">{% trans 'Terras Indígenas Disponíveis para Cadastro' %}</h2>
-    <div class="available-count">
-        <h3>{% trans 'Total de Terras Indígenas Disponíveis' %}</h3>
-        <div class="count">{{ terras_referencia.count }}</div>
-        <p>{% trans 'Terras indígenas importadas da FUNAI que ainda não foram cadastradas no sistema.' %}</p>
-    </div>
-
-    <div class="user-info">
-        <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>
-        <form method="post" action="{% url 'logout' %}" class="logout-form">
-            {% csrf_token %}
-            <button type="submit" class="logout-button">{% trans 'Sair' %}</button>
-        </form>
-    </div>
 </div>
 {% endblock %} 

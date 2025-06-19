@@ -189,14 +189,14 @@
     
     <div class="imoveis-list">
         {% for imovel in imoveis %}
-        <div class="imovel-item">
+        <div class="imovel-item" onclick="window.location.href='{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}'" style="cursor: pointer;">
             <h3>{{ imovel.nome }}</h3>
             <div class="imovel-actions">
                 {% if perms.dominial.change_imovel %}
-                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button">{% trans 'Editar' %}</a>
+                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button" onclick="event.stopPropagation();">{% trans 'Editar' %}</a>
                 {% endif %}
                 {% if perms.dominial.delete_imovel %}
-                <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;">
+                <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;" onclick="event.stopPropagation();">
                     {% csrf_token %}
                     <button type="submit" class="imovel-action-button delete-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir' %}</button>
                 </form>
