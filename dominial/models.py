@@ -208,8 +208,9 @@ class ImportacaoCartorios(models.Model):
         return f'Importação {self.estado} - {self.get_status_display()}'
 
 class DocumentoTipo(models.Model):
+    id = models.AutoField(primary_key=True)
     TIPO_CHOICES = [
-        ('transmissao', 'Transmissão'),
+        ('transcricao', 'Transcrição'),
         ('matricula', 'Matrícula')
     ]
     tipo = models.CharField(max_length=50, choices=TIPO_CHOICES)
@@ -223,63 +224,127 @@ class DocumentoTipo(models.Model):
 
 class Documento(models.Model):
     id = models.AutoField(primary_key=True)
-    imovel = models.ForeignKey(Imovel, on_delete=models.CASCADE)
+    imovel = models.ForeignKey(Imovel, on_delete=models.CASCADE, related_name='documentos')
     tipo = models.ForeignKey(DocumentoTipo, on_delete=models.PROTECT)
     numero = models.CharField(max_length=50)
     data = models.DateField()
     cartorio = models.ForeignKey(Cartorios, on_delete=models.PROTECT)
     livro = models.CharField(max_length=50)
     folha = models.CharField(max_length=50)
+    origem = models.TextField(null=True, blank=True)
     observacoes = models.TextField(null=True, blank=True)
     data_cadastro = models.DateField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.tipo.get_tipo_display()} - {self.numero}"
 
     class Meta:
         verbose_name = "Documento"
         verbose_name_plural = "Documentos"
-        unique_together = ['numero', 'cartorio']
+        unique_together = ('numero', 'cartorio')
+        ordering = ['-data']
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - {self.numero}"
+
+    def clean(self):
+        # Verificar se o imóvel está sobreposto a uma terra indígena
+        if not self.imovel.terra_indigena_id:
+            raise ValidationError('O imóvel deve estar sobreposto a uma terra indígena')
 
 class LancamentoTipo(models.Model):
+    id = models.AutoField(primary_key=True)
     TIPO_CHOICES = [
-        ('registro', 'Registro'),
         ('averbacao', 'Averbação'),
+        ('registro', 'Registro'),
+        ('encerrar_matricula', 'Encerrar Matrícula'),
+        ('inicio_matricula', 'Início de Matrícula'),
+        ('transcricao', 'Transcrição')
     ]
-    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, unique=True)
+    tipo = models.CharField(max_length=50, choices=TIPO_CHOICES)
+    requer_transmissao = models.BooleanField(default=False)
+    requer_detalhes = models.BooleanField(default=False)
+    requer_titulo = models.BooleanField(default=False)
+    requer_cartorio_origem = models.BooleanField(default=False)
+    requer_livro_origem = models.BooleanField(default=False)
+    requer_folha_origem = models.BooleanField(default=False)
+    requer_data_origem = models.BooleanField(default=False)
+    requer_forma = models.BooleanField(default=False)
+    requer_descricao = models.BooleanField(default=False)
+    requer_observacao = models.BooleanField(default=True)
 
     def __str__(self):
         return self.get_tipo_display()
-
-    def get_tipo_display(self):
-        return dict(self.TIPO_CHOICES).get(self.tipo, self.tipo)
 
     class Meta:
         verbose_name = "Tipo de Lançamento"
         verbose_name_plural = "Tipos de Lançamento"
 
+    def clean(self):
+        # Validações específicas por tipo
+        if self.tipo == 'registro':
+            self.requer_titulo = True
+            self.requer_cartorio_origem = True
+            self.requer_livro_origem = True
+            self.requer_folha_origem = True
+            self.requer_data_origem = True
+        elif self.tipo == 'averbacao':
+            self.requer_forma = True
+            self.requer_descricao = True
+        elif self.tipo == 'encerrar_matricula':
+            self.requer_forma = True
+            self.requer_descricao = True
+
 class Lancamento(models.Model):
     id = models.AutoField(primary_key=True)
-    documento = models.ForeignKey(Documento, on_delete=models.CASCADE)
+    documento = models.ForeignKey(Documento, on_delete=models.CASCADE, related_name='lancamentos')
     tipo = models.ForeignKey(LancamentoTipo, on_delete=models.PROTECT)
+    numero_lancamento = models.CharField(max_length=50, help_text="Número/código do lançamento gerado pelo cartório")
     data = models.DateField()
     transmitente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='transmitente_lancamento', null=True, blank=True)
     adquirente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='adquirente_lancamento', null=True, blank=True)
     valor_transacao = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    origem = models.CharField(max_length=255, null=True, blank=True)
     detalhes = models.TextField(null=True, blank=True)
     observacoes = models.TextField(null=True, blank=True)
     data_cadastro = models.DateField(auto_now_add=True)
-
-    def clean(self):
-        if self.tipo.tipo == 'registro' and not (self.transmitente and self.adquirente):
-            raise ValidationError('Registros devem ter transmitente e adquirente')
-        if self.tipo.tipo == 'averbacao' and not self.detalhes:
-            raise ValidationError('Averbações devem ter detalhes do conteúdo')
-
-    def __str__(self):
-        return f"{self.tipo.get_tipo_display()} - {self.documento}"
+    
+    # Novos campos para tipos específicos
+    forma = models.CharField(max_length=100, null=True, blank=True)
+    descricao = models.TextField(null=True, blank=True)
+    titulo = models.CharField(max_length=255, null=True, blank=True)
+    cartorio_origem = models.ForeignKey(Cartorios, on_delete=models.PROTECT, related_name='cartorio_origem_lancamento', null=True, blank=True)
+    livro_origem = models.CharField(max_length=50, null=True, blank=True)
+    folha_origem = models.CharField(max_length=50, null=True, blank=True)
+    data_origem = models.DateField(null=True, blank=True)
+    
+    # Campo para indicar se é início de matrícula
+    eh_inicio_matricula = models.BooleanField(default=False)
+    
+    # Campo para link com documento de origem (para cadeia dominial)
+    documento_origem = models.ForeignKey(Documento, on_delete=models.PROTECT, related_name='lancamentos_origem', null=True, blank=True)
 
     class Meta:
         verbose_name = "Lançamento"
         verbose_name_plural = "Lançamentos"
+        ordering = ['-data']
+
+    def __str__(self):
+        numero_ref = f" #{self.numero_lancamento}" if self.numero_lancamento else ""
+        return f"{self.tipo.get_tipo_display()}{numero_ref} - {self.data}"
+
+    def clean(self):
+        # Validar campos obrigatórios baseado no tipo de lançamento
+        if self.tipo:
+            if self.tipo.requer_titulo and not self.titulo:
+                raise ValidationError('Título é obrigatório para este tipo de lançamento.')
+            if self.tipo.requer_forma and not self.forma:
+                raise ValidationError('Forma é obrigatória para este tipo de lançamento.')
+            if self.tipo.requer_descricao and not self.descricao:
+                raise ValidationError('Descrição é obrigatória para este tipo de lançamento.')
+            if self.tipo.requer_cartorio_origem and not self.cartorio_origem:
+                raise ValidationError('Cartório de origem é obrigatório para este tipo de lançamento.')
+            if self.tipo.requer_livro_origem and not self.livro_origem:
+                raise ValidationError('Livro de origem é obrigatório para este tipo de lançamento.')
+            if self.tipo.requer_folha_origem and not self.folha_origem:
+                raise ValidationError('Folha de origem é obrigatória para este tipo de lançamento.')
+            if self.tipo.requer_data_origem and not self.data_origem:
+                raise ValidationError('Data de origem é obrigatória para este tipo de lançamento.')
