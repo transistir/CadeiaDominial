@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Lançamento - {{ imovel.nome }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Novo Lançamento</h1>
+
+    <div class="field-group">
+        <h4>Documento Ativo</h4>
+        <div class="grid-3">
+            <div>
+                <strong>Tipo:</strong> {{ documento_ativo.tipo.get_tipo_display }}
+            </div>
+            <div>
+                <strong>Número:</strong> {{ documento_ativo.numero }}
+            </div>
+            <div>
+                <strong>Data:</strong> {{ documento_ativo.data|date:'d/m/Y' }}
+            </div>
+            <div>
+                <strong>Cartório:</strong> {{ documento_ativo.cartorio.nome }}
+            </div>
+            <div>
+                <strong>Livro:</strong> {{ documento_ativo.livro }}
+            </div>
+            <div>
+                <strong>Folha:</strong> {{ documento_ativo.folha }}
+            </div>
+        </div>
+        {% if documento_ativo.origem %}
+        <div style="margin-top: 10px;">
+            <strong>Origem:</strong> {{ documento_ativo.origem }}
+        </div>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="field-group">
+            <h4>Informações Básicas</h4>
+            
+            <div class="form-group">
+                <label for="tipo">Tipo de Lançamento *</label>
+                <select name="tipo" id="tipo" required>
+                    <option value="">Selecione o tipo</option>
+                    {% for tipo in tipos_lancamento %}
+                    <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}">{{ tipo.get_tipo_display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="numero_lancamento">Número do Lançamento *</label>
+                <input type="text" name="numero_lancamento" id="numero_lancamento" placeholder="Código/número gerado pelo cartório" required>
+                <small style="color: #666; font-size: 0.9em;">Número ou código de referência do lançamento no cartório</small>
+            </div>
+
+            <div class="form-group">
+                <label for="data">Data do Lançamento *</label>
+                <input type="date" name="data" id="data" required>
+            </div>
+
+            <div class="toggle-group">
+                <label class="toggle-label">
+                    <input type="checkbox" name="eh_inicio_matricula" id="eh_inicio_matricula" class="toggle-checkbox">
+                    <span>Este lançamento indica um "Início de Matrícula"</span>
+                </label>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Marque esta opção se este lançamento representa o início de uma nova matrícula, 
+                    mesmo que não seja do tipo "Início de Matrícula".
+                </small>
+            </div>
+        </div>
+
+        <!-- Campos para Averbação -->
+        <div class="field-group averbacao-fields hidden">
+            <h4>Campos Específicos - Averbação</h4>
+            
+            <div class="form-group">
+                <label for="forma_averbacao">Forma *</label>
+                <input type="text" name="forma" id="forma_averbacao" placeholder="Ex: Compra e Venda, Doação, etc.">
+            </div>
+
+            <div class="form-group">
+                <label for="descricao_averbacao">Descrição *</label>
+                <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação"></textarea>
+            </div>
+        </div>
+
+        <!-- Campos para Registro -->
+        <div class="field-group registro-fields hidden">
+            <h4>Campos Específicos - Registro</h4>
+            
+            <div class="form-group">
+                <label for="forma_registro">Forma *</label>
+                <input type="text" name="forma" id="forma_registro" placeholder="Ex: Compra e Venda, Doação, etc.">
+            </div>
+
+            <div class="form-group">
+                <label for="titulo_registro">Título *</label>
+                <input type="text" name="titulo" id="titulo_registro" placeholder="Título do registro">
+            </div>
+
+            <div class="grid-3">
+                <div class="form-group">
+                    <label for="cartorio_origem">Cartório *</label>
+                    <select name="cartorio_origem" id="cartorio_origem">
+                        <option value="">Selecione o cartório</option>
+                        {% for cartorio in cartorios %}
+                        <option value="{{ cartorio.id }}">{{ cartorio.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="livro_origem">Livro *</label>
+                    <input type="text" name="livro_origem" id="livro_origem">
+                </div>
+
+                <div class="form-group">
+                    <label for="folha_origem">Folha *</label>
+                    <input type="text" name="folha_origem" id="folha_origem">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="data_origem">Data *</label>
+                <input type="date" name="data_origem" id="data_origem">
+            </div>
+        </div>
+
+        <!-- Campos para Início de Matrícula -->
+        <div class="field-group inicio-matricula-fields hidden">
+            <h4>Campos Específicos - Início de Matrícula</h4>
+            
+            <div class="form-group">
+                <label for="forma_inicio">Forma *</label>
+                <input type="text" name="forma" id="forma_inicio" placeholder="Ex: Abertura, Criação, etc.">
+            </div>
+
+            <div class="form-group">
+                <label for="descricao_inicio">Descrição *</label>
+                <textarea name="descricao" id="descricao_inicio" placeholder="Descreva o motivo do início da matrícula"></textarea>
+            </div>
+        </div>
+
+        <!-- Campos Opcionais de Transação -->
+        <div class="field-group transacao-fields hidden">
+            <h4>Campos Opcionais - Transação</h4>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="transmitente">Transmitente</label>
+                    <select name="transmitente" id="transmitente">
+                        <option value="">Selecione o transmitente</option>
+                        {% for pessoa in pessoas %}
+                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="adquirente">Adquirente</label>
+                    <select name="adquirente" id="adquirente">
+                        <option value="">Selecione o adquirente</option>
+                        {% for pessoa in pessoas %}
+                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="area">Área</label>
+                    <input type="number" name="area" id="area" step="0.01" placeholder="0.00">
+                </div>
+
+                <div class="form-group">
+                    <label for="origem">Origem</label>
+                    <div class="input-group">
+                        <input type="text" name="origem" id="origem" placeholder="Origem do lançamento (opcional)">
+                        <button type="button" id="add-origem" class="btn btn-sm btn-outline">+</button>
+                    </div>
+                    <div id="origens-adicionais" class="origens-container" style="margin-top: 10px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="observacoes">Observações</label>
+            <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o lançamento"></textarea>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Salvar Lançamento</button>
+            <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tipoSelect = document.getElementById('tipo');
+    const averbacaoFields = document.querySelector('.averbacao-fields');
+    const registroFields = document.querySelector('.registro-fields');
+    const inicioMatriculaFields = document.querySelector('.inicio-matricula-fields');
+    const transacaoFields = document.querySelector('.transacao-fields');
+    
+    function toggleFields() {
+        const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+        const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+        
+        // Esconde todos os campos específicos
+        averbacaoFields.classList.add('hidden');
+        registroFields.classList.add('hidden');
+        inicioMatriculaFields.classList.add('hidden');
+        transacaoFields.classList.add('hidden');
+        
+        // Mostra campos específicos do tipo selecionado
+        if (selectedTipo === 'averbacao') {
+            averbacaoFields.classList.remove('hidden');
+        } else if (selectedTipo === 'registro') {
+            registroFields.classList.remove('hidden');
+        } else if (selectedTipo === 'inicio_matricula') {
+            inicioMatriculaFields.classList.remove('hidden');
+        }
+        
+        // Mostra campos de transação para todos os tipos (opcional)
+        transacaoFields.classList.remove('hidden');
+    }
+    
+    tipoSelect.addEventListener('change', toggleFields);
+    
+    // Inicializar campos
+    toggleFields();
+    
+    // Gerenciamento de múltiplas origens
+    const addOrigemBtn = document.getElementById('add-origem');
+    const origensContainer = document.getElementById('origens-adicionais');
+    const origemInput = document.getElementById('origem');
+    let origemCount = 0;
+    
+    addOrigemBtn.addEventListener('click', function() {
+        const origemValue = origemInput.value.trim();
+        if (origemValue) {
+            addOrigemField(origemValue);
+            origemInput.value = '';
+        }
+    });
+    
+    // Permitir adicionar origem com Enter
+    origemInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const origemValue = origemInput.value.trim();
+            if (origemValue) {
+                addOrigemField(origemValue);
+                origemInput.value = '';
+            }
+        }
+    });
+    
+    function addOrigemField(value) {
+        origemCount++;
+        const origemDiv = document.createElement('div');
+        origemDiv.className = 'origem-item';
+        origemDiv.style.cssText = 'display: flex; align-items: center; margin-bottom: 5px; padding: 5px; background: #f8f9fa; border-radius: 4px;';
+        
+        origemDiv.innerHTML = `
+            <input type="text" name="origens_adicionais[]" value="${value}" readonly style="flex: 1; margin-right: 5px; background: white;">
+            <button type="button" class="btn btn-sm btn-danger" onclick="removeOrigem(this)" style="padding: 2px 6px;">×</button>
+        `;
+        
+        origensContainer.appendChild(origemDiv);
+    }
+    
+    function removeOrigem(button) {
+        button.parentElement.remove();
+    }
+    
+    // Modificar o formulário para incluir todas as origens
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const origemPrincipal = origemInput.value.trim();
+        const origensAdicionais = Array.from(document.querySelectorAll('input[name="origens_adicionais[]"]')).map(input => input.value.trim());
+        
+        // Combinar todas as origens
+        const todasOrigens = [origemPrincipal, ...origensAdicionais].filter(origem => origem);
+        
+        if (todasOrigens.length > 0) {
+            // Criar campo hidden com todas as origens
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'origem_completa';
+            hiddenInput.value = todasOrigens.join('; ');
+            this.appendChild(hiddenInput);
+        }
+    });
+});
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.input-group input {
+    flex: 1;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.875em;
+    border-radius: 4px;
+    min-width: 35px;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--primary-color);
+}
+
+.btn-outline:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+    border: 1px solid #dc3545;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    border-color: #bd2130;
+}
+
+.origem-item {
+    transition: all 0.2s ease;
+}
+
+.origem-item:hover {
+    background: #e9ecef !important;
+}
+
+.origens-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+</style>
+{% endblock %} 
