@@ -16,8 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('dominial.urls')),  # Incluir todas as URLs de dominial
+    path('', RedirectView.as_view(url='/dominial/', permanent=True)),  # Redirecionar raiz para /dominial/
+    path('dominial/', include('dominial.urls')),  # Incluir todas as URLs de dominial com o prefixo dominial/
 ]

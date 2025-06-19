@@ -14,8 +14,11 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/', views.imovel_detail, name='imovel_detail'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/editar/', views.imovel_form, name='imovel_editar'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/excluir/', views.imovel_delete, name='imovel_excluir'),
-    path('alteracoes/', views.alteracoes, name='alteracoes'),
-    
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', views.cadeia_dominial, name='cadeia_dominial'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/dados/', views.cadeia_dominial_dados, name='cadeia_dominial_dados'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-documento/', views.novo_documento, name='novo_documento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/', views.novo_lancamento, name='novo_lancamento'),
+    path('lancamentos/', views.lancamentos, name='lancamentos'),
     path('cartorios/', views.cartorios, name='cartorios'),
     path('buscar-cidades/', views.buscar_cidades, name='buscar_cidades'),
     path('buscar-cartorios/', views.buscar_cartorios, name='buscar_cartorios'),
