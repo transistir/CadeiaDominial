@@ -317,12 +317,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     window.removePessoa = function(button) {
         const pessoaItem = button.closest('.pessoa-item');
-        const container = pessoaItem.parentElement;
+        const container = pessoaItem?.parentElement;
         
         // Não permitir remover se for o último item
-        if (container.children.length > 1) {
+        if (container && container.children.length > 1) {
             pessoaItem.remove();
-            updatePercentualTotal(container.id);
+            if (container.id) {
+                updatePercentualTotal(container.id);
+            }
         }
     };
     
@@ -331,21 +333,27 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.transmitente-nome').forEach((input, index) => {
             const hidden = input.parentElement.querySelector('.transmitente-id');
             const suggestions = input.parentElement.querySelector('.transmitente-suggestions');
-            setupAutocomplete(input, hidden, suggestions, 'transmitente');
+            if (hidden && suggestions) {
+                setupAutocomplete(input, hidden, suggestions, 'transmitente');
+            }
         });
         
         // Autocomplete para adquirentes
         document.querySelectorAll('.adquirente-nome').forEach((input, index) => {
             const hidden = input.parentElement.querySelector('.adquirente-id');
             const suggestions = input.parentElement.querySelector('.adquirente-suggestions');
-            setupAutocomplete(input, hidden, suggestions, 'adquirente');
+            if (hidden && suggestions) {
+                setupAutocomplete(input, hidden, suggestions, 'adquirente');
+            }
         });
         
         // Event listeners para percentuais
         document.querySelectorAll('.percentual-input').forEach(input => {
             input.addEventListener('input', function() {
-                const container = this.closest('.pessoa-item').parentElement;
-                updatePercentualTotal(container.id);
+                const container = this.closest('.pessoa-item')?.parentElement;
+                if (container && container.id) {
+                    updatePercentualTotal(container.id);
+                }
             });
         });
     }
@@ -483,11 +491,21 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function updatePercentualTotal(containerId) {
         const container = document.getElementById(containerId);
+        if (!container) {
+            console.warn(`Container ${containerId} não encontrado`);
+            return;
+        }
+        
         const percentuais = Array.from(container.querySelectorAll('.percentual-input'))
             .map(input => parseFloat(input.value) || 0);
         
         const total = percentuais.reduce((sum, percentual) => sum + percentual, 0);
         const totalElement = document.getElementById(containerId.replace('-container', '-total'));
+        
+        if (!totalElement) {
+            console.warn(`Elemento total para ${containerId} não encontrado`);
+            return;
+        }
         
         totalElement.textContent = `Total: ${total.toFixed(2)}%`;
         totalElement.className = 'percentual-total';
@@ -607,16 +625,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const transmitentesContainer = document.getElementById('transmitentes-container');
         const adquirentesContainer = document.getElementById('adquirentes-container');
         
-        if (transmitentesContainer.children.length > 1) {
+        if (transmitentesContainer && transmitentesContainer.children.length > 1) {
             transmitentesContainer.removeChild(transmitentesContainer.firstElementChild);
         }
-        if (adquirentesContainer.children.length > 1) {
+        if (adquirentesContainer && adquirentesContainer.children.length > 1) {
             adquirentesContainer.removeChild(adquirentesContainer.firstElementChild);
         }
         
-        // Atualizar totais
-        updatePercentualTotal('transmitentes-container');
-        updatePercentualTotal('adquirentes-container');
+        // Atualizar totais apenas se os elementos existirem
+        if (document.getElementById('transmitentes-container')) {
+            updatePercentualTotal('transmitentes-container');
+        }
+        if (document.getElementById('adquirentes-container')) {
+            updatePercentualTotal('adquirentes-container');
+        }
         
         // Reinicializar autocomplete
         initializeAutocomplete();
