@@ -383,26 +383,21 @@ let panOffset = { x: 0, y: 0 };
 // Carregar dados da árvore
 async function carregarDadosArvore() {
     try {
-        console.log('Iniciando carregamento dos dados da árvore...');
         const url = `/dominial/cadeia-dominial/{{ tis.id }}/{{ imovel.id }}/arvore/`;
-        console.log('URL:', url);
         
         const response = await fetch(url);
-        console.log('Response status:', response.status);
-        console.log('Response ok:', response.ok);
         
         if (!response.ok) {
             throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
-        console.log('Dados recebidos:', data);
         
         arvoreData = data;
         renderizarArvore();
         
     } catch (error) {
-        console.error('Erro detalhado ao carregar dados da árvore:', error);
+        console.error('Erro ao carregar dados da árvore:', error);
         document.getElementById('arvore-container').innerHTML = 
             `<div class="error">Erro ao carregar dados da árvore: ${error.message}</div>`;
     }
@@ -415,9 +410,6 @@ document.addEventListener('DOMContentLoaded', carregarDadosArvore);
 function renderizarArvore() {
     const container = document.getElementById('arvore-container');
     if (!container || !arvoreData) return;
-    
-    console.log('Dados da árvore:', arvoreData);
-    console.log('Origens identificadas:', arvoreData.origens_identificadas);
     
     // Limpar container
     container.innerHTML = '';
@@ -715,15 +707,9 @@ function mostrarNotificacao(mensagem, tipo = 'info') {
 
 // Renderizar cards de origens identificadas
 function renderizarOrigensIdentificadas() {
-    console.log('Função renderizarOrigensIdentificadas chamada');
-    console.log('arvoreData.origens_identificadas:', arvoreData.origens_identificadas);
-    
     if (!arvoreData.origens_identificadas || arvoreData.origens_identificadas.length === 0) {
-        console.log('Nenhuma origem identificada encontrada');
         return;
     }
-    
-    console.log('Renderizando', arvoreData.origens_identificadas.length, 'origens identificadas');
     
     const container = document.getElementById('arvore-container');
     

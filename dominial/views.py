@@ -684,14 +684,11 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
 @login_required
 def cadeia_dominial_arvore(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato de árvore para o diagrama"""
-    print(f"DEBUG: Acessando cadeia_dominial_arvore para TIs {tis_id}, Imóvel {imovel_id}")
-    
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
     # Obter todos os documentos do imóvel ordenados por data
     documentos = Documento.objects.filter(imovel=imovel).order_by('data')
-    print(f"DEBUG: Encontrados {documentos.count()} documentos")
     
     # Obter origens identificadas de lançamentos que ainda não foram convertidas em documentos
     origens_identificadas = []
@@ -700,13 +697,9 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         origem__isnull=False
     ).exclude(origem='')
     
-    print(f"DEBUG: Encontrados {lancamentos_com_origem.count()} lançamentos com origem")
-    
     for lancamento in lancamentos_com_origem:
         if lancamento.origem:
-            print(f"DEBUG: Processando origem: {lancamento.origem}")
             origens_processadas = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
-            print(f"DEBUG: Origens processadas: {origens_processadas}")
             
             for origem_info in origens_processadas:
                 # Verificar se já existe um documento com esse número
@@ -765,8 +758,6 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
                         'documento_id': documento_existente.id,
                         'ja_criado': True
                     })
-    
-    print(f"DEBUG: Total de origens identificadas: {len(origens_identificadas)}")
     
     # Estrutura para armazenar a árvore
     arvore = {
