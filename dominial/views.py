@@ -15,6 +15,7 @@ from django.db.models import Count
 from django.utils import timezone
 from django.core.management import call_command
 from dal import autocomplete
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -552,6 +553,12 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 lancamento.origem = origem
             lancamento.save()
 
+            # Processar origens para criar documentos automáticos
+            if origem:
+                origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
+                if origens_processadas:
+                    messages.info(request, f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.')
+
             # Salvar múltiplos transmitentes
             for idx, nome in enumerate(transmitente_nomes):
                 nome = nome.strip()
@@ -677,11 +684,89 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
 @login_required
 def cadeia_dominial_arvore(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato de árvore para o diagrama"""
+    print(f"DEBUG: Acessando cadeia_dominial_arvore para TIs {tis_id}, Imóvel {imovel_id}")
+    
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
     # Obter todos os documentos do imóvel ordenados por data
     documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    print(f"DEBUG: Encontrados {documentos.count()} documentos")
+    
+    # Obter origens identificadas de lançamentos que ainda não foram convertidas em documentos
+    origens_identificadas = []
+    lancamentos_com_origem = Lancamento.objects.filter(
+        documento__imovel=imovel,
+        origem__isnull=False
+    ).exclude(origem='')
+    
+    print(f"DEBUG: Encontrados {lancamentos_com_origem.count()} lançamentos com origem")
+    
+    for lancamento in lancamentos_com_origem:
+        if lancamento.origem:
+            print(f"DEBUG: Processando origem: {lancamento.origem}")
+            origens_processadas = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
+            print(f"DEBUG: Origens processadas: {origens_processadas}")
+            
+            for origem_info in origens_processadas:
+                # Verificar se já existe um documento com esse número
+                documento_existente = Documento.objects.filter(imovel=imovel, numero=origem_info['numero']).first()
+                
+                if not documento_existente:
+                    # Criar o documento automaticamente
+                    try:
+                        tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
+                        documento_criado = Documento.objects.create(
+                            imovel=imovel,
+                            tipo=tipo_doc,
+                            numero=origem_info['numero'],
+                            data=date.today(),
+                            cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
+                            livro='1',  # Livro padrão
+                            folha='1',  # Folha padrão
+                            origem=f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
+                            observacoes=f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
+                        )
+                        
+                        # Adicionar à lista de origens identificadas (agora são documentos criados)
+                        origens_identificadas.append({
+                            'codigo': origem_info['numero'],
+                            'tipo': origem_info['tipo'],
+                            'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
+                            'lancamento_origem': lancamento.numero_lancamento,
+                            'documento_origem': lancamento.documento.numero,
+                            'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
+                            'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
+                            'documento_id': documento_criado.id,
+                            'ja_criado': True
+                        })
+                    except DocumentoTipo.DoesNotExist:
+                        # Se o tipo não existir, apenas listar como origem identificada
+                        origens_identificadas.append({
+                            'codigo': origem_info['numero'],
+                            'tipo': origem_info['tipo'],
+                            'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
+                            'lancamento_origem': lancamento.numero_lancamento,
+                            'documento_origem': lancamento.documento.numero,
+                            'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
+                            'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
+                            'ja_criado': False
+                        })
+                else:
+                    # Documento já existe, adicionar como origem identificada criada
+                    origens_identificadas.append({
+                        'codigo': origem_info['numero'],
+                        'tipo': origem_info['tipo'],
+                        'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
+                        'lancamento_origem': lancamento.numero_lancamento,
+                        'documento_origem': lancamento.documento.numero,
+                        'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
+                        'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
+                        'documento_id': documento_existente.id,
+                        'ja_criado': True
+                    })
+    
+    print(f"DEBUG: Total de origens identificadas: {len(origens_identificadas)}")
     
     # Estrutura para armazenar a árvore
     arvore = {
@@ -692,6 +777,7 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
             'proprietario': imovel.proprietario.nome
         },
         'documentos': [],
+        'origens_identificadas': origens_identificadas,
         'conexoes': []
     }
     
@@ -1013,3 +1099,157 @@ def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
     }
     
     return render(request, 'dominial/lancamento_detail.html', context)
+
+def processar_origens_para_documentos(origem_texto, imovel, lancamento):
+    """
+    Processa o texto de origem e identifica códigos de documentos para criação automática.
+    Retorna uma lista de dicionários com informações dos documentos identificados.
+    """
+    import re
+    from datetime import date
+    
+    # Padrões para identificar códigos de documentos
+    # M123456 = Matrícula, T123456 = Transcrição
+    padrao_matricula = r'\bM\d+\b'
+    padrao_transcricao = r'\bT\d+\b'
+    
+    documentos_identificados = []
+    
+    # Buscar matrículas
+    matriculas = re.findall(padrao_matricula, origem_texto, re.IGNORECASE)
+    for codigo in matriculas:
+        # Sempre adicionar a origem identificada, independente se o documento existe
+        documentos_identificados.append({
+            'tipo': 'matricula',
+            'numero': codigo,
+            'codigo_origem': codigo,
+            'lancamento_origem': lancamento
+        })
+    
+    # Buscar transcrições
+    transcricoes = re.findall(padrao_transcricao, origem_texto, re.IGNORECASE)
+    for codigo in transcricoes:
+        # Sempre adicionar a origem identificada, independente se o documento existe
+        documentos_identificados.append({
+            'tipo': 'transcricao',
+            'numero': codigo,
+            'codigo_origem': codigo,
+            'lancamento_origem': lancamento
+        })
+    
+    # Salvar as origens identificadas no lançamento para referência futura
+    if documentos_identificados:
+        lancamento.origem_processada = origem_texto
+        lancamento.save()
+    
+    return documentos_identificados
+
+def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
+    """
+    Cria um documento automaticamente baseado no código de origem fornecido.
+    """
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Determinar o tipo baseado no prefixo
+    if codigo_origem.upper().startswith('M'):
+        tipo_documento = 'matricula'
+    elif codigo_origem.upper().startswith('T'):
+        tipo_documento = 'transcricao'
+    else:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': f'Código de origem "{codigo_origem}" não é válido.'}, status=400)
+        messages.error(request, f'Código de origem "{codigo_origem}" não é válido.')
+        return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+    
+    try:
+        # Verificar se já existe um documento com esse número
+        if Documento.objects.filter(imovel=imovel, numero=codigo_origem).exists():
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': f'Documento "{codigo_origem}" já existe.'}, status=400)
+            messages.warning(request, f'Documento "{codigo_origem}" já existe.')
+            return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+        
+        # Obter o tipo de documento
+        tipo_doc = DocumentoTipo.objects.get(tipo=tipo_documento)
+        
+        # Criar o documento
+        documento = Documento.objects.create(
+            imovel=imovel,
+            tipo=tipo_doc,
+            numero=codigo_origem,
+            data=date.today(),
+            cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
+            livro='1',  # Livro padrão
+            folha='1',  # Folha padrão
+            origem=f'Criado automaticamente a partir de origem: {codigo_origem}',
+            observacoes=f'Documento criado automaticamente ao clicar no card de origem "{codigo_origem}"'
+        )
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'message': f'Documento "{codigo_origem}" criado com sucesso!',
+                'documento_id': documento.id
+            })
+        
+        messages.success(request, f'Documento "{codigo_origem}" criado com sucesso!')
+        
+        # Redirecionar para o novo documento
+        return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento.id)
+        
+    except DocumentoTipo.DoesNotExist:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': f'Tipo de documento "{tipo_documento}" não encontrado.'}, status=400)
+        messages.error(request, f'Tipo de documento "{tipo_documento}" não encontrado.')
+        return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+    except Exception as e:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': f'Erro ao criar documento: {str(e)}'}, status=500)
+        messages.error(request, f'Erro ao criar documento: {str(e)}')
+        return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+
+@login_required
+def editar_documento(request, documento_id, tis_id, imovel_id):
+    """View para editar um documento existente"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    
+    if request.method == 'POST':
+        try:
+            # Atualizar dados do documento
+            documento.numero = request.POST.get('numero', '').strip()
+            documento.data = request.POST.get('data') if request.POST.get('data') else None
+            documento.origem = request.POST.get('origem', '').strip()
+            documento.observacoes = request.POST.get('observacoes', '').strip()
+            documento.livro = request.POST.get('livro', '').strip()
+            documento.folha = request.POST.get('folha', '').strip()
+            
+            # Atualizar cartório se fornecido
+            cartorio_id = request.POST.get('cartorio')
+            if cartorio_id:
+                documento.cartorio = Cartorios.objects.get(id=cartorio_id)
+            
+            documento.save()
+            
+            messages.success(request, f'Documento "{documento.numero}" atualizado com sucesso!')
+            return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento.id)
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar documento: {str(e)}')
+    else:
+        # Formulário de edição
+        cartorios = Cartorios.objects.all().order_by('nome')
+        tipos_documento = DocumentoTipo.objects.all().order_by('tipo')
+        
+        context = {
+            'tis': tis,
+            'imovel': imovel,
+            'documento': documento,
+            'cartorios': cartorios,
+            'tipos_documento': tipos_documento,
+            'modo': 'editar'
+        }
+        
+        return render(request, 'dominial/documento_form.html', context)

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Novo Documento - {{ imovel.nome }}{% endblock %}
+{% block title %}{{ modo|title }} Documento - {{ imovel.nome }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -41,85 +41,90 @@
 
 {% block content %}
 <div class="container">
-    <h1>Novo Documento</h1>
+    <h1>{% if modo == 'editar' %}✏️ Editar{% else %}📄 Novo{% endif %} Documento</h1>
     
-    <form method="post">
-        {% csrf_token %}
-        
-        <div class="field-group">
-            <h4>Informações do Documento</h4>
-            
-            {% if sugestoes %}
-            <div class="sugestoes-container" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid var(--accent-color);">
-                <h5 style="margin-bottom: 10px; color: var(--primary-color);">💡 Sugestões de Número do Documento</h5>
-                <p style="margin-bottom: 10px; color: var(--secondary-color); font-size: 0.9em;">
-                    Baseadas na origem do lançamento de início de matrícula do documento anterior. Clique para preencher automaticamente:
-                </p>
-                <div class="sugestoes-list" style="display: flex; flex-wrap: wrap; gap: 10px;">
-                    {% for sugestao in sugestoes %}
-                    <button type="button" class="btn btn-sm btn-outline sugestao-btn" 
-                            data-valor="{{ sugestao.valor }}" 
-                            data-tipo="{{ sugestao.tipo }}"
-                            style="font-size: 0.85em; padding: 5px 10px;">
-                        {{ sugestao.tipo }}: {{ sugestao.valor }}
-                    </button>
-                    {% endfor %}
-                </div>
+    <div class="field-group">
+        <h4>{{ imovel.nome }}</h4>
+        <div class="grid-3">
+            <div>
+                <strong>Matrícula:</strong> {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>Proprietário:</strong> {{ imovel.proprietario.nome }}
+            </div>
+            {% if modo == 'editar' %}
+            <div>
+                <strong>Documento:</strong> {{ documento.numero }}
             </div>
             {% endif %}
+        </div>
+    </div>
+
+    <form method="post" class="form">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="numero">Número do Documento:</label>
+            <input type="text" id="numero" name="numero" value="{{ documento.numero|default:'' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="tipo">Tipo de Documento:</label>
+            <select id="tipo" name="tipo" required>
+                {% for tipo in tipos_documento %}
+                <option value="{{ tipo.id }}" {% if documento.tipo.id == tipo.id %}selected{% endif %}>
+                    {{ tipo.get_tipo_display }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="data">Data:</label>
+            <input type="date" id="data" name="data" value="{{ documento.data|date:'Y-m-d'|default:'' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="cartorio">Cartório:</label>
+            <select id="cartorio" name="cartorio">
+                <option value="">Selecione um cartório</option>
+                {% for cartorio in cartorios %}
+                <option value="{{ cartorio.id }}" {% if documento.cartorio.id == cartorio.id %}selected{% endif %}>
+                    {{ cartorio.nome }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="livro">Livro:</label>
+                <input type="text" id="livro" name="livro" value="{{ documento.livro|default:'' }}">
+            </div>
             
             <div class="form-group">
-                <label for="tipo">Tipo de Documento *</label>
-                <select name="tipo" id="tipo" required>
-                    <option value="">Selecione o tipo</option>
-                    <option value="transcricao">Transcrição</option>
-                    <option value="matricula">Matrícula</option>
-                </select>
-            </div>
-
-            <div class="grid-2">
-                <div class="form-group">
-                    <label for="numero">Número do Documento *</label>
-                    <input type="text" name="numero" id="numero" required placeholder="Número do documento">
-                </div>
-
-                <div class="form-group">
-                    <label for="data">Data do Documento *</label>
-                    <input type="date" name="data" id="data" required>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="cartorio">Cartório *</label>
-                <select name="cartorio" id="cartorio" required>
-                    <option value="">Selecione o cartório</option>
-                    {% for cartorio in cartorios %}
-                    <option value="{{ cartorio.id }}">{{ cartorio.nome }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="grid-2">
-                <div class="form-group">
-                    <label for="livro">Livro *</label>
-                    <input type="text" name="livro" id="livro" required placeholder="Número do livro">
-                </div>
-
-                <div class="form-group">
-                    <label for="folha">Folha *</label>
-                    <input type="text" name="folha" id="folha" required placeholder="Número da folha">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="observacoes">Observações</label>
-                <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o documento"></textarea>
+                <label for="folha">Folha:</label>
+                <input type="text" id="folha" name="folha" value="{{ documento.folha|default:'' }}">
             </div>
         </div>
-
+        
+        <div class="form-group">
+            <label for="origem">Origem:</label>
+            <textarea id="origem" name="origem" rows="2">{{ documento.origem|default:'' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="observacoes">Observações:</label>
+            <textarea id="observacoes" name="observacoes" rows="3">{{ documento.observacoes|default:'' }}</textarea>
+        </div>
+        
         <div class="actions">
-            <button type="submit" class="btn btn-success">Salvar Documento</button>
-            <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary">
+                {% if modo == 'editar' %}Atualizar{% else %}Criar{% endif %} Documento
+            </button>
+            <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">
+                Cancelar
+            </a>
         </div>
     </form>
 </div>

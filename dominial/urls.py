@@ -28,12 +28,16 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-documento/', views.novo_documento, name='novo_documento'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/', views.novo_lancamento, name='novo_lancamento'),
     path('documento/<int:documento_id>/lancamentos/<int:tis_id>/<int:imovel_id>/', views.documento_lancamentos, name='documento_lancamentos'),
+    path('documento/<int:documento_id>/editar/<int:tis_id>/<int:imovel_id>/', views.editar_documento, name='editar_documento'),
     path('selecionar-documento-lancamento/<int:tis_id>/<int:imovel_id>/', views.selecionar_documento_lancamento, name='selecionar_documento_lancamento'),
     
     # Edição e exclusão de lançamentos
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/editar/', views.editar_lancamento, name='editar_lancamento'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/excluir/', views.excluir_lancamento, name='excluir_lancamento'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/', views.lancamento_detail, name='lancamento_detail'),
+    
+    # Criação automática de documentos
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/criar-documento/<str:codigo_origem>/', views.criar_documento_automatico, name='criar_documento_automatico'),
     
     # Listagens
     path('lancamentos/', views.lancamentos, name='lancamentos'),

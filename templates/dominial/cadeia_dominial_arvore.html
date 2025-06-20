@@ -55,53 +55,70 @@
     position: absolute;
     width: 120px;
     height: 80px;
-    background: white;
-    border: 2px solid var(--accent-color);
     border-radius: 8px;
     padding: 10px;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    text-align: center;
+    z-index: 10;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-}
-
-.documento-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    border-color: var(--primary-color);
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    font-size: 0.8em;
 }
 
 .documento-card.matricula {
-    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-    border-color: #2196f3;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border: 2px solid #007bff;
+    /* Matrícula atual fica no topo */
+    z-index: 20;
 }
 
 .documento-card.transcricao {
-    background: linear-gradient(135deg, #f3e5f5, #e1bee7);
-    border-color: #9c27b0;
+    background: linear-gradient(135deg, #6f42c1, #5a32a3);
+    color: white;
+    border: 2px solid #6f42c1;
+}
+
+.documento-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 15;
 }
 
 .documento-card .numero {
     font-weight: bold;
-    font-size: 1.1em;
-    color: var(--primary-color);
-    margin-bottom: 5px;
+    font-size: 0.9em;
+    margin-bottom: 2px;
 }
 
 .documento-card .tipo {
-    font-size: 0.8em;
-    color: var(--secondary-color);
-    text-transform: uppercase;
+    font-size: 0.7em;
+    opacity: 0.9;
+    margin-bottom: 2px;
 }
 
 .documento-card .lancamentos {
+    font-size: 0.6em;
+    margin-top: 1px;
+}
+
+.documento-card.origem-criada {
+    width: 100px;
+    height: 60px;
     font-size: 0.7em;
-    color: var(--accent-color);
-    margin-top: 3px;
+    padding: 8px;
+}
+
+.documento-card.origem-criada .numero {
+    font-size: 0.8em;
+}
+
+.documento-card.origem-criada .tipo {
+    font-size: 0.6em;
 }
 
 .conexao {
@@ -189,6 +206,114 @@
     background: var(--primary-color);
     color: white;
 }
+
+/* Estilos para Origens Identificadas */
+.origens-identificadas {
+    margin-top: 30px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.origens-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.origens-header h3 {
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.origens-header p {
+    color: var(--secondary-color);
+    font-size: 0.9em;
+}
+
+.origens-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.origem-card {
+    position: absolute;
+    width: 100px;
+    height: 60px;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 0.7em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.origem-card.origem-identificada {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    border: 2px solid #28a745;
+}
+
+.origem-card.origem-criada {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border: 2px solid #007bff;
+}
+
+.origem-card:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 15;
+}
+
+.origem-card .click-hint {
+    font-size: 0.8em;
+    margin-bottom: 2px;
+    opacity: 0.9;
+}
+
+.origem-card .codigo,
+.origem-card .numero {
+    font-weight: bold;
+    font-size: 0.8em;
+    margin-bottom: 1px;
+}
+
+.origem-card .tipo {
+    font-size: 0.6em;
+    opacity: 0.9;
+    margin-bottom: 1px;
+}
+
+.origem-card .info {
+    font-size: 0.5em;
+    opacity: 0.8;
+    line-height: 1.2;
+}
+
+.edit-button {
+    background: #007bff;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.6em;
+    cursor: pointer;
+    margin-top: 2px;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.edit-button:hover {
+    background: #0056b3;
+    transform: scale(1.05);
+}
 </style>
 {% endblock %}
 
@@ -256,66 +381,64 @@ let dragStart = { x: 0, y: 0 };
 let panOffset = { x: 0, y: 0 };
 
 // Carregar dados da árvore
-async function carregarArvore() {
+async function carregarDadosArvore() {
     try {
-        const response = await fetch('{% url "cadeia_dominial_arvore" tis_id=tis.id imovel_id=imovel.id %}');
-        if (!response.ok) throw new Error('Erro ao carregar dados');
+        console.log('Iniciando carregamento dos dados da árvore...');
+        const url = `/dominial/cadeia-dominial/{{ tis.id }}/{{ imovel.id }}/arvore/`;
+        console.log('URL:', url);
         
-        arvoreData = await response.json();
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Dados recebidos:', data);
+        
+        arvoreData = data;
         renderizarArvore();
+        
     } catch (error) {
-        console.error('Erro:', error);
+        console.error('Erro detalhado ao carregar dados da árvore:', error);
         document.getElementById('arvore-container').innerHTML = 
-            '<div class="error">Erro ao carregar a cadeia dominial. Tente novamente.</div>';
+            `<div class="error">Erro ao carregar dados da árvore: ${error.message}</div>`;
     }
 }
+
+// Carregar dados quando a página carregar
+document.addEventListener('DOMContentLoaded', carregarDadosArvore);
 
 // Renderizar a árvore
 function renderizarArvore() {
     const container = document.getElementById('arvore-container');
+    if (!container || !arvoreData) return;
     
-    if (!arvoreData || !arvoreData.documentos.length) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 40px; color: var(--secondary-color);">
-                <h3>Nenhum documento encontrado</h3>
-                <p>Clique em "Novo Documento" para iniciar a cadeia dominial</p>
-            </div>
-        `;
-        return;
-    }
-    
-    // Debug: mostrar dados no console
     console.log('Dados da árvore:', arvoreData);
-    console.log('Documentos:', arvoreData.documentos);
-    console.log('Conexões:', arvoreData.conexoes);
+    console.log('Origens identificadas:', arvoreData.origens_identificadas);
     
     // Limpar container
     container.innerHTML = '';
     
-    // Calcular posições dos documentos
-    const posicoes = calcularPosicoes();
-    console.log('Posições calculadas:', posicoes);
+    // Renderizar documentos e obter posições
+    const posicoes = renderizarDocumentos();
     
-    // Renderizar conexões primeiro (para ficarem atrás dos cards)
-    renderizarConexoes(posicoes);
-    
-    // Renderizar cards dos documentos
-    renderizarDocumentos(posicoes);
-    
-    // Configurar eventos de pan
-    configurarPan();
+    // Renderizar origens identificadas
+    renderizarOrigensIdentificadas();
 }
 
 // Calcular posições dos documentos
 function calcularPosicoes() {
     const posicoes = {};
-    const niveis = {};
     const espacamentoX = 200;
     const espacamentoY = 150;
     
     // Primeiro, vamos organizar os documentos por nível
     // Documentos sem origem (mais atuais) ficam no nível 0 (topo)
     const documentosPorNivel = {};
+    const documentosProcessados = new Set();
     
     // Encontrar documentos que não são origem de ninguém (mais atuais)
     const todosDocumentos = new Set(arvoreData.documentos.map(d => d.numero));
@@ -324,6 +447,13 @@ function calcularPosicoes() {
     
     // Função para calcular o nível de um documento
     function calcularNivel(numeroDoc, nivel = 0) {
+        // Verificar se já foi processado para evitar recursão infinita
+        if (documentosProcessados.has(numeroDoc)) {
+            return;
+        }
+        
+        documentosProcessados.add(numeroDoc);
+        
         if (!documentosPorNivel[nivel]) {
             documentosPorNivel[nivel] = [];
         }
@@ -347,7 +477,7 @@ function calcularPosicoes() {
     
     // Se ainda há documentos não processados, processar
     arvoreData.documentos.forEach(doc => {
-        if (!Object.values(documentosPorNivel).flat().find(d => d.numero === doc.numero)) {
+        if (!documentosProcessados.has(doc.numero)) {
             calcularNivel(doc.numero, 0);
         }
     });
@@ -397,67 +527,95 @@ function renderizarConexoes(posicoes) {
 }
 
 // Renderizar documentos
-function renderizarDocumentos(posicoes) {
+function renderizarDocumentos() {
     const container = document.getElementById('arvore-container');
+    const posicoes = {};
     
-    arvoreData.documentos.forEach(doc => {
-        const pos = posicoes[doc.numero];
-        if (!pos) return;
-        
-        const card = document.createElement('div');
-        card.className = `documento-card ${doc.tipo}`;
-        card.style.left = `${pos.x}px`;
-        card.style.top = `${pos.y}px`;
-        card.setAttribute('data-documento-id', doc.id);
-        card.setAttribute('data-documento-numero', doc.numero);
-        
-        // Destacar documento atual (nível 0)
-        if (pos.nivel === 0) {
-            card.style.border = '3px solid #007bff';
-            card.style.boxShadow = '0 4px 12px rgba(0,123,255,0.3)';
-        }
-        
-        // Adicionar tooltip
-        card.setAttribute('title', `Clique para ver lançamentos do ${doc.tipo_display} ${doc.numero}`);
-        
-        // Adicionar eventos
-        card.addEventListener('click', (e) => {
-            e.stopPropagation();
-            abrirDocumento(doc.id);
-        });
-        
-        card.addEventListener('mouseenter', () => {
-            card.style.transform = 'scale(1.05)';
-            card.style.zIndex = '10';
-        });
-        
-        card.addEventListener('mouseleave', () => {
-            card.style.transform = 'scale(1)';
-            card.style.zIndex = '1';
-        });
-        
-        // Adicionar menu de contexto
-        card.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            mostrarMenuContexto(e, doc);
-        });
-        
-        card.innerHTML = `
-            <div class="numero">${doc.numero}</div>
-            <div class="tipo">${doc.tipo_display}</div>
-            <div class="lancamentos">${doc.total_lancamentos} lançamentos</div>
-            <div class="card-actions">
-                <button class="btn-action" onclick="event.stopPropagation(); abrirDocumento(${doc.id})" title="Ver Lançamentos">
-                    👁️
-                </button>
-                <button class="btn-action" onclick="event.stopPropagation(); novoLancamentoDocumento(${doc.id})" title="Novo Lançamento">
-                    ➕
-                </button>
-            </div>
-        `;
-        
-        container.appendChild(card);
+    // Ordenar documentos por nível (matrícula primeiro, depois transcrições)
+    const documentosOrdenados = [...arvoreData.documentos].sort((a, b) => {
+        if (a.tipo === 'matricula' && b.tipo !== 'matricula') return -1;
+        if (a.tipo !== 'matricula' && b.tipo === 'matricula') return 1;
+        return 0;
     });
+    
+    // Posicionar matrícula atual no topo da pirâmide
+    const matriculaAtual = documentosOrdenados.find(doc => doc.tipo === 'matricula');
+    if (matriculaAtual) {
+        const card = criarCardDocumento(matriculaAtual);
+        const centerX = container.offsetWidth / 2 || 600;
+        const x = centerX - 60; // Centralizar
+        const y = 10; // Topo da pirâmide
+        
+        card.style.left = `${x}px`;
+        card.style.top = `${y}px`;
+        container.appendChild(card);
+        posicoes[matriculaAtual.numero] = { x, y };
+    }
+    
+    // Posicionar transcrições abaixo das origens identificadas
+    const transcricoes = documentosOrdenados.filter(doc => doc.tipo === 'transcricao');
+    transcricoes.forEach((doc, index) => {
+        const card = criarCardDocumento(doc);
+        const centerX = container.offsetWidth / 2 || 600;
+        const x = centerX - 60 + (index - (transcricoes.length - 1) / 2) * 140; // Distribuir horizontalmente
+        const y = 220; // Abaixo das origens identificadas
+        
+        card.style.left = `${x}px`;
+        card.style.top = `${y}px`;
+        container.appendChild(card);
+        posicoes[doc.numero] = { x, y };
+    });
+    
+    return posicoes;
+}
+
+// Criar card de documento
+function criarCardDocumento(doc) {
+    const card = document.createElement('div');
+    card.className = `documento-card ${doc.tipo}`;
+    card.setAttribute('data-documento-id', doc.id);
+    card.setAttribute('data-documento-numero', doc.numero);
+    
+    // Adicionar tooltip
+    card.setAttribute('title', `Clique para ver lançamentos do ${doc.tipo_display} ${doc.numero}`);
+    
+    // Adicionar eventos
+    card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        abrirDocumento(doc.id);
+    });
+    
+    card.addEventListener('mouseenter', () => {
+        card.style.transform = 'scale(1.05)';
+        card.style.zIndex = '10';
+    });
+    
+    card.addEventListener('mouseleave', () => {
+        card.style.transform = 'scale(1)';
+        card.style.zIndex = '1';
+    });
+    
+    // Adicionar menu de contexto
+    card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        mostrarMenuContexto(e, doc);
+    });
+    
+    card.innerHTML = `
+        <div class="numero">${doc.numero}</div>
+        <div class="tipo">${doc.tipo_display}</div>
+        <div class="lancamentos">${doc.total_lancamentos} lançamentos</div>
+        <div class="card-actions">
+            <button class="btn-action" onclick="event.stopPropagation(); abrirDocumento(${doc.id})" title="Ver Lançamentos">
+                👁️
+            </button>
+            <button class="btn-action" onclick="event.stopPropagation(); novoLancamentoDocumento(${doc.id})" title="Novo Lançamento">
+                ➕
+            </button>
+        </div>
+    `;
+    
+    return card;
 }
 
 // Abrir documento
@@ -555,6 +713,155 @@ function mostrarNotificacao(mensagem, tipo = 'info') {
     }, 3000);
 }
 
+// Renderizar cards de origens identificadas
+function renderizarOrigensIdentificadas() {
+    console.log('Função renderizarOrigensIdentificadas chamada');
+    console.log('arvoreData.origens_identificadas:', arvoreData.origens_identificadas);
+    
+    if (!arvoreData.origens_identificadas || arvoreData.origens_identificadas.length === 0) {
+        console.log('Nenhuma origem identificada encontrada');
+        return;
+    }
+    
+    console.log('Renderizando', arvoreData.origens_identificadas.length, 'origens identificadas');
+    
+    const container = document.getElementById('arvore-container');
+    
+    // Ordenar origens por número (maior primeiro)
+    const origensOrdenadas = [...arvoreData.origens_identificadas].sort((a, b) => {
+        const numA = parseInt(a.codigo.replace(/[MT]/g, ''));
+        const numB = parseInt(b.codigo.replace(/[MT]/g, ''));
+        return numB - numA; // Maior primeiro
+    });
+    
+    // Calcular posições para criar uma linha horizontal de origens
+    const espacamentoX = 120; // Espaçamento horizontal entre cards
+    const centerX = container.offsetWidth / 2 || 600; // Centro da div
+    const y = 120; // Posição Y (mesma linha das transcrições)
+    
+    // Calcular posição inicial para centralizar a linha
+    const totalWidth = origensOrdenadas.length * espacamentoX;
+    const startX = centerX - (totalWidth / 2) + (espacamentoX / 2);
+    
+    // Renderizar cada origem na linha horizontal
+    origensOrdenadas.forEach((origem, index) => {
+        const card = document.createElement('div');
+        
+        // Se o documento já foi criado, usar estilo de documento normal
+        if (origem.ja_criado) {
+            card.className = `documento-card origem-criada ${origem.tipo}`;
+            card.onclick = () => abrirDocumento(origem.documento_id);
+        } else {
+            // Se não foi criado, usar estilo de origem identificada
+            card.className = `origem-card origem-identificada ${origem.tipo}`;
+            card.onclick = () => criarDocumentoAutomatico(origem.codigo);
+        }
+        
+        const x = startX + index * espacamentoX;
+        card.style.left = `${x}px`;
+        card.style.top = `${y}px`;
+        
+        // Conteúdo mais compacto para cards menores
+        if (origem.ja_criado) {
+            card.innerHTML = `
+                <div class="click-hint">✏️</div>
+                <div class="numero">${origem.codigo}</div>
+                <div class="tipo">${origem.tipo_display}</div>
+                <div class="edit-button" onclick="event.stopPropagation(); editarDocumento(${origem.documento_id})">Editar</div>
+            `;
+        } else {
+            card.innerHTML = `
+                <div class="click-hint">+</div>
+                <div class="codigo">${origem.codigo}</div>
+                <div class="tipo">${origem.tipo_display}</div>
+                <div class="info">Origem: ${origem.documento_origem}</div>
+            `;
+        }
+        
+        container.appendChild(card);
+        
+        // Criar conexão com a matrícula atual (no topo)
+        const matriculaAtual = arvoreData.documentos.find(doc => doc.tipo === 'matricula');
+        if (matriculaAtual) {
+            const conexaoEl = document.createElement('div');
+            conexaoEl.className = 'conexao';
+            conexaoEl.style.border = '2px dashed #28a745';
+            conexaoEl.style.background = 'transparent';
+            conexaoEl.style.opacity = '0.6';
+            conexaoEl.style.zIndex = '1';
+            
+            // Calcular posição e ângulo da conexão
+            const cardX = x + 50; // Centro do card
+            const cardY = y + 30; // Centro do card
+            const matriculaX = centerX; // Centro da matrícula (topo)
+            const matriculaY = 50; // Centro da matrícula (topo)
+            
+            const dx = matriculaX - cardX;
+            const dy = matriculaY - cardY;
+            const distancia = Math.sqrt(dx * dx + dy * dy);
+            const angulo = Math.atan2(dy, dx) * 180 / Math.PI;
+            
+            // Posicionar a linha
+            conexaoEl.style.width = `${distancia}px`;
+            conexaoEl.style.left = `${cardX}px`;
+            conexaoEl.style.top = `${cardY}px`;
+            conexaoEl.style.transform = `rotate(${angulo}deg)`;
+            conexaoEl.style.transformOrigin = 'left center';
+            
+            container.appendChild(conexaoEl);
+        }
+    });
+    
+    // Adicionar linha horizontal conectando os cards de origem
+    if (origensOrdenadas.length > 1) {
+        const linhaHorizontal = document.createElement('div');
+        linhaHorizontal.className = 'linha-nivel';
+        linhaHorizontal.style.position = 'absolute';
+        linhaHorizontal.style.height = '2px';
+        linhaHorizontal.style.background = '#28a745';
+        linhaHorizontal.style.opacity = '0.3';
+        linhaHorizontal.style.zIndex = '1';
+        
+        const primeiroCardX = startX + 50;
+        const ultimoCardX = startX + (origensOrdenadas.length - 1) * espacamentoX + 50;
+        const larguraLinha = ultimoCardX - primeiroCardX;
+        
+        linhaHorizontal.style.left = `${primeiroCardX}px`;
+        linhaHorizontal.style.top = `${y + 30}px`;
+        linhaHorizontal.style.width = `${larguraLinha}px`;
+        
+        container.appendChild(linhaHorizontal);
+    }
+}
+
+// Criar documento automaticamente
+async function criarDocumentoAutomatico(codigo) {
+    try {
+        const url = `{% url 'criar_documento_automatico' tis_id=tis.id imovel_id=imovel.id codigo_origem='CODIGO_PLACEHOLDER' %}`.replace('CODIGO_PLACEHOLDER', codigo);
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        
+        if (response.ok) {
+            mostrarNotificacao(`Documento "${codigo}" criado com sucesso!`, 'success');
+            // Recarregar a árvore para mostrar o novo documento
+            setTimeout(() => {
+                carregarDadosArvore();
+            }, 1000);
+        } else {
+            const data = await response.json();
+            mostrarNotificacao(data.error || 'Erro ao criar documento', 'error');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao criar documento', 'error');
+    }
+}
+
 // Configurar pan
 function configurarPan() {
     const container = document.getElementById('arvore-container');
@@ -606,57 +913,10 @@ function aplicarZoom() {
     container.style.transform = `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`;
 }
 
-// Inicializar
-document.addEventListener('DOMContentLoaded', function() {
-    carregarArvore();
-    
-    // Adicionar estilos para animações
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-        
-        .documento-card {
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .card-actions {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            display: none;
-            gap: 5px;
-        }
-        
-        .documento-card:hover .card-actions {
-            display: flex;
-        }
-        
-        .btn-action {
-            background: rgba(255,255,255,0.9);
-            border: none;
-            border-radius: 50%;
-            width: 25px;
-            height: 25px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s ease;
-        }
-        
-        .btn-action:hover {
-            background: white;
-            transform: scale(1.1);
-        }
-    `;
-    document.head.appendChild(style);
-});
+// Editar documento
+function editarDocumento(documentoId) {
+    const url = `/dominial/documento/${documentoId}/editar/{{ tis.id }}/{{ imovel.id }}/`;
+    window.location.href = url;
+}
 </script>
 {% endblock %} 
