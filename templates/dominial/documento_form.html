@@ -36,6 +36,21 @@
     max-height: 120px;
     overflow-y: auto;
 }
+
+.sugestao-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s ease;
+}
+
+.sugestao-item:hover {
+    background-color: #f5f5f5;
+}
+
+.sugestao-item:last-child {
+    border-bottom: none;
+}
 </style>
 {% endblock %}
 
@@ -86,14 +101,9 @@
         
         <div class="form-group">
             <label for="cartorio">Cartório:</label>
-            <select id="cartorio" name="cartorio">
-                <option value="">Selecione um cartório</option>
-                {% for cartorio in cartorios %}
-                <option value="{{ cartorio.id }}" {% if documento.cartorio.id == cartorio.id %}selected{% endif %}>
-                    {{ cartorio.nome }}
-                </option>
-                {% endfor %}
-            </select>
+            <input type="text" id="cartorio" name="cartorio" value="{{ documento.cartorio.nome|default:'' }}" placeholder="Digite o nome do cartório..." autocomplete="off">
+            <input type="hidden" id="cartorio_id" name="cartorio_id" value="{{ documento.cartorio.id|default:'' }}">
+            <div id="cartorio-sugestoes" class="sugestoes-container" style="display: none;"></div>
         </div>
         
         <div class="form-row">
@@ -135,6 +145,58 @@
 document.addEventListener('DOMContentLoaded', function() {
     const tipoSelect = document.getElementById('tipo');
     const numeroInput = document.getElementById('numero');
+    
+    // Autocomplete de cartórios de imóveis
+    const cartorioInput = document.getElementById('cartorio');
+    const cartorioIdInput = document.getElementById('cartorio_id');
+    const cartorioSugestoes = document.getElementById('cartorio-sugestoes');
+    
+    let timeoutId;
+    
+    cartorioInput.addEventListener('input', function() {
+        clearTimeout(timeoutId);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            cartorioSugestoes.style.display = 'none';
+            return;
+        }
+        
+        timeoutId = setTimeout(() => {
+            fetch(`/cartorio-imoveis-autocomplete/?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    cartorioSugestoes.innerHTML = '';
+                    
+                    if (data.length > 0) {
+                        data.forEach(cartorio => {
+                            const div = document.createElement('div');
+                            div.className = 'sugestao-item';
+                            div.textContent = cartorio.nome;
+                            div.addEventListener('click', () => {
+                                cartorioInput.value = cartorio.nome;
+                                cartorioIdInput.value = cartorio.id;
+                                cartorioSugestoes.style.display = 'none';
+                            });
+                            cartorioSugestoes.appendChild(div);
+                        });
+                        cartorioSugestoes.style.display = 'block';
+                    } else {
+                        cartorioSugestoes.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar cartórios:', error);
+                });
+        }, 300);
+    });
+    
+    // Esconder sugestões quando clicar fora
+    document.addEventListener('click', function(e) {
+        if (!cartorioInput.contains(e.target) && !cartorioSugestoes.contains(e.target)) {
+            cartorioSugestoes.style.display = 'none';
+        }
+    });
     
     // Funcionalidade para as sugestões
     const sugestaoBtns = document.querySelectorAll('.sugestao-btn');

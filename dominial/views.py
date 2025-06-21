@@ -16,6 +16,8 @@ from django.utils import timezone
 from django.core.management import call_command
 from dal import autocomplete
 from datetime import date
+import uuid
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +273,19 @@ def buscar_cartorios(request):
     if not estado or not cidade:
         return JsonResponse({'error': 'Estado e cidade devem ser fornecidos'}, status=400)
     
-    cartorios = Cartorios.objects.filter(estado=estado, cidade=cidade).order_by('nome')
+    # Filtrar apenas cartórios de imóveis (que tenham palavras relacionadas a imóveis)
+    cartorios = Cartorios.objects.filter(
+        estado=estado, 
+        cidade=cidade
+    ).filter(
+        Q(nome__icontains='imovel') | 
+        Q(nome__icontains='imoveis') | 
+        Q(nome__icontains='imóveis') |
+        Q(nome__icontains='imobiliario') |
+        Q(nome__icontains='imobiliária') |
+        Q(nome__icontains='Registro de Imóveis')
+    ).order_by('nome')
+    
     cartorios_list = []
     
     for cartorio in cartorios:
@@ -323,20 +337,68 @@ def importar_cartorios_estado(request):
             'error': f'Erro ao importar cartórios: {str(e)}'
         }, status=500)
 
-
 def pessoa_autocomplete(request):
-    query = request.GET.get('q', '')
+    """View para autocomplete de pessoas"""
+    query = request.GET.get('q', '').strip()
+    
     if len(query) < 2:
         return JsonResponse([], safe=False)
     
     pessoas = Pessoas.objects.filter(nome__icontains=query).order_by('nome')[:10]
-    results = []
     
+    results = []
     for pessoa in pessoas:
         results.append({
             'id': pessoa.id,
             'nome': pessoa.nome,
-            'cpf': pessoa.cpf if pessoa.cpf else None
+            'cpf': pessoa.cpf
+        })
+    
+    return JsonResponse(results, safe=False)
+
+def cartorio_autocomplete(request):
+    """View para autocomplete de cartórios (qualquer cartório)"""
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 2:
+        return JsonResponse([], safe=False)
+    
+    cartorios = Cartorios.objects.filter(nome__icontains=query).order_by('nome')[:10]
+    
+    results = []
+    for cartorio in cartorios:
+        results.append({
+            'id': cartorio.id,
+            'nome': cartorio.nome,
+            'cidade': cartorio.cidade if cartorio.cidade else None
+        })
+    
+    return JsonResponse(results, safe=False)
+
+def cartorio_imoveis_autocomplete(request):
+    """View para autocomplete de cartórios de imóveis (filtrados)"""
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 2:
+        return JsonResponse([], safe=False)
+    
+    # Filtrar apenas cartórios que tenham palavras relacionadas a imóveis
+    cartorios = Cartorios.objects.filter(
+        Q(nome__icontains=query) &
+        (Q(nome__icontains='imovel') | 
+         Q(nome__icontains='imoveis') | 
+         Q(nome__icontains='imóveis') |
+         Q(nome__icontains='imobiliario') |
+         Q(nome__icontains='imobiliária') |
+         Q(nome__icontains='Registro de Imóveis'))
+    ).order_by('nome')[:10]
+    
+    results = []
+    for cartorio in cartorios:
+        results.append({
+            'id': cartorio.id,
+            'nome': cartorio.nome,
+            'cidade': cartorio.cidade if cartorio.cidade else None
         })
     
     return JsonResponse(results, safe=False)
@@ -409,14 +471,16 @@ def novo_documento(request, tis_id, imovel_id):
         tipo = request.POST.get('tipo')
         numero = request.POST.get('numero')
         data = request.POST.get('data')
-        cartorio_id = request.POST.get('cartorio')
+        cartorio_id = request.POST.get('cartorio_id')
         livro = request.POST.get('livro')
         folha = request.POST.get('folha')
         origem = request.POST.get('origem')
         observacoes = request.POST.get('observacoes')
 
         try:
-            cartorio = Cartorios.objects.get(id=cartorio_id)
+            cartorio = None
+            if cartorio_id:
+                cartorio = Cartorios.objects.get(id=cartorio_id)
             tipo_doc = DocumentoTipo.objects.get(tipo=tipo)
             
             documento = Documento.objects.create(
@@ -520,115 +584,236 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             }
             return render(request, 'dominial/lancamento_form.html', context)
         
-        # Campos opcionais
-        transmitente_ids = request.POST.getlist('transmitente[]')
-        transmitente_nomes = request.POST.getlist('transmitente_nome[]')
-        transmitente_percentuais = request.POST.getlist('transmitente_percentual[]')
-        adquirente_ids = request.POST.getlist('adquirente[]')
-        adquirente_nomes = request.POST.getlist('adquirente_nome[]')
-        adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
-        area = request.POST.get('area')
-        origem = request.POST.get('origem_completa') or request.POST.get('origem')
-
+        # Validar unicidade do número de lançamento
+        if numero_lancamento.strip():
+            lancamento_existente = Lancamento.objects.filter(
+                documento=documento_ativo,
+                numero_lancamento=numero_lancamento.strip()
+            ).first()
+            
+            if lancamento_existente:
+                messages.error(request, f'Já existe um lançamento com o número "{numero_lancamento.strip()}" neste documento.')
+                context = {
+                    'tis': tis,
+                    'imovel': imovel,
+                    'documento_ativo': documento_ativo,
+                    'pessoas': pessoas,
+                    'cartorios': cartorios,
+                    'tipos_lancamento': tipos_lancamento,
+                    # Preservar dados do formulário
+                    'form_data': {
+                        'tipo_lancamento': request.POST.get('tipo_lancamento'),
+                        'numero_lancamento': numero_lancamento,
+                        'data': request.POST.get('data'),
+                        'observacoes': request.POST.get('observacoes'),
+                        'eh_inicio_matricula': request.POST.get('eh_inicio_matricula') == 'on',
+                        'transmitente_ids': request.POST.getlist('transmitente[]'),
+                        'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
+                        'transmitente_percentuais': request.POST.getlist('transmitente_percentual[]'),
+                        'adquirente_ids': request.POST.getlist('adquirente[]'),
+                        'adquirente_nomes': request.POST.getlist('adquirente_nome[]'),
+                        'adquirente_percentuais': request.POST.getlist('adquirente_percentual[]'),
+                        'area': request.POST.get('area'),
+                        'origem': request.POST.get('origem_completa') or request.POST.get('origem'),
+                        'forma': request.POST.get('forma'),
+                        'descricao': request.POST.get('descricao'),
+                        'titulo': request.POST.get('titulo'),
+                        'cartorio_origem': request.POST.get('cartorio_origem'),
+                        'livro_origem': request.POST.get('livro_origem'),
+                        'folha_origem': request.POST.get('folha_origem'),
+                        'data_origem': request.POST.get('data_origem'),
+                    },
+                    'numero_lancamento_error': True,  # Flag para destacar o campo em vermelho
+                }
+                return render(request, 'dominial/lancamento_form.html', context)
+        
         try:
+            # Criar o lançamento primeiro
             tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
             
             # Tratar campos vazios
-            data_origem_clean = data if data and data.strip() else None
+            data_clean = data if data and data.strip() else None
             livro_origem_clean = request.POST.get('livro_origem') if request.POST.get('livro_origem') and request.POST.get('livro_origem').strip() else None
             folha_origem_clean = request.POST.get('folha_origem') if request.POST.get('folha_origem') and request.POST.get('folha_origem').strip() else None
-            forma_clean = request.POST.get('forma') if request.POST.get('forma') and request.POST.get('forma').strip() else None
+            forma_value = request.POST.get('forma', '').strip()
+            logger.info(f"Forma recebida no POST: '{forma_value}'")
+            logger.info(f"Tipo de forma_value: {type(forma_value)}")
             descricao_clean = observacoes if observacoes and observacoes.strip() else None
             titulo_clean = request.POST.get('titulo') if request.POST.get('titulo') and request.POST.get('titulo').strip() else None
+            area = request.POST.get('area')
+            origem = request.POST.get('origem_completa') or request.POST.get('origem')
             
-            # Criar o lançamento
+            # Processar campo forma sempre (pode ser usado mesmo quando não é requerido)
+            # Pegar o valor correto baseado no tipo de lançamento
+            print(f"=== DEBUG CAMPOS FORMA ===")
+            print(f"Tipo do lançamento: {tipo_lanc.tipo}")
+            print(f"Todos os campos forma no POST:")
+            print(f"  forma: {request.POST.get('forma')}")
+            print(f"  forma_averbacao: {request.POST.get('forma_averbacao')}")
+            print(f"  forma_registro: {request.POST.get('forma_registro')}")
+            print(f"  forma_inicio: {request.POST.get('forma_inicio')}")
+            
+            if tipo_lanc.tipo == 'averbacao':
+                forma_value = request.POST.get('forma_averbacao', '').strip()
+            elif tipo_lanc.tipo == 'registro':
+                forma_value = request.POST.get('forma_registro', '').strip()
+            elif tipo_lanc.tipo == 'inicio_matricula':
+                forma_value = request.POST.get('forma_inicio', '').strip()
+            else:
+                # Fallback: tentar pegar qualquer campo forma
+                forma_value = request.POST.get('forma', '').strip()
+            
+            print(f"Forma selecionada para salvar: '{forma_value}'")
+            print(f"=== FIM DEBUG CAMPOS FORMA ===")
+            
+            print(f"Forma recebida no POST: '{forma_value}'")
+            print(f"Tipo de forma_value: {type(forma_value)}")
+            # Sempre usar o valor enviado, independente do tipo
             lancamento = Lancamento.objects.create(
                 documento=documento_ativo,
                 tipo=tipo_lanc,
                 numero_lancamento=numero_lancamento,
-                data=data,
+                data=data_clean,
                 observacoes=observacoes,
                 eh_inicio_matricula=eh_inicio_matricula,
-                forma=forma_clean,
+                forma=forma_value if forma_value else None,
                 descricao=descricao_clean,
                 titulo=titulo_clean,
                 livro_origem=livro_origem_clean,
                 folha_origem=folha_origem_clean,
-                data_origem=data_origem_clean,
+                data_origem=data_clean,
             )
             
             # Adicionar cartório de origem se fornecido
             cartorio_origem_id = request.POST.get('cartorio_origem')
-            if cartorio_origem_id:
+            cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
+            
+            if cartorio_origem_id and cartorio_origem_id.strip():
+                # Se tem ID, usar o cartório existente
                 lancamento.cartorio_origem_id = cartorio_origem_id
+            elif cartorio_origem_nome:
+                # Se tem nome mas não tem ID, tentar encontrar ou criar o cartório
+                try:
+                    cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
+                    lancamento.cartorio_origem = cartorio
+                except Cartorios.DoesNotExist:
+                    # Criar novo cartório (você pode adicionar mais campos se necessário)
+                    cartorio = Cartorios.objects.create(
+                        nome=cartorio_origem_nome,
+                        cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    )
+                    lancamento.cartorio_origem = cartorio
+            else:
+                lancamento.cartorio_origem_id = None
             if area:
                 lancamento.area = float(area) if area and area.strip() else None
             if origem:
                 lancamento.origem = origem
             lancamento.save()
-
+            
+            # Verificar se o campo foi salvo corretamente
+            lancamento.refresh_from_db()
+            logger.info(f"Forma após refresh: '{lancamento.forma}'")
+            
             # Processar origens para criar documentos automáticos
             if origem:
                 origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
                 if origens_processadas:
                     messages.info(request, f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.')
-
-            # Salvar múltiplos transmitentes
-            for idx, nome in enumerate(transmitente_nomes):
+            
+            # Processar transmitentes
+            transmitentes_data = request.POST.getlist('transmitente_nome[]')
+            transmitentes_percentual = request.POST.getlist('transmitente_percentual[]')
+            transmitente_ids = request.POST.getlist('transmitente[]')
+            
+            logger.info(f"Processando {len(transmitentes_data)} transmitentes")
+            for i, nome in enumerate(transmitentes_data):
                 nome = nome.strip()
-                percentual = transmitente_percentuais[idx] if idx < len(transmitente_percentuais) else None
-                pessoa_id = transmitente_ids[idx] if idx < len(transmitente_ids) else None
-                pessoa = None
-                if pessoa_id:
+                if not nome:  # Pular se o nome estiver vazio
+                    continue
+                    
+                percentual = transmitentes_percentual[i] if i < len(transmitentes_percentual) else None
+                pessoa_id = transmitente_ids[i] if i < len(transmitente_ids) else None
+                
+                # Validar se o ID não está vazio
+                if pessoa_id and pessoa_id.strip():
                     try:
                         pessoa = Pessoas.objects.get(id=pessoa_id)
-                    except Pessoas.DoesNotExist:
+                    except (Pessoas.DoesNotExist, ValueError):
                         pessoa = None
+                else:
+                    pessoa = None
+                    
                 if not pessoa and nome:
-                    pessoa, created = Pessoas.objects.get_or_create(
-                        nome=nome,
-                        defaults={'cpf': f'00000000000'}
-                    )
+                    # Tentar encontrar pessoa pelo nome primeiro
+                    try:
+                        pessoa = Pessoas.objects.get(nome__iexact=nome)
+                    except Pessoas.DoesNotExist:
+                        # Criar nova pessoa com CPF único
+                        cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
+                        pessoa = Pessoas.objects.create(
+                            nome=nome,
+                            cpf=cpf_unico
+                        )
                 if pessoa and percentual:
                     from .models import LancamentoPessoa
                     LancamentoPessoa.objects.create(
                         lancamento=lancamento,
                         pessoa=pessoa,
                         tipo='transmitente',
-                        percentual=percentual,
-                        nome_digitado=nome
+                        percentual=percentual if percentual else 100,
+                        nome_digitado=nome.strip()
                     )
-            # Salvar múltiplos adquirentes
-            for idx, nome in enumerate(adquirente_nomes):
+            
+            # Processar adquirentes
+            adquirentes_data = request.POST.getlist('adquirente_nome[]')
+            adquirentes_percentual = request.POST.getlist('adquirente_percentual[]')
+            adquirente_ids = request.POST.getlist('adquirente[]')
+            
+            logger.info(f"Processando {len(adquirentes_data)} adquirentes")
+            for i, nome in enumerate(adquirentes_data):
                 nome = nome.strip()
-                percentual = adquirente_percentuais[idx] if idx < len(adquirente_percentuais) else None
-                pessoa_id = adquirente_ids[idx] if idx < len(adquirente_ids) else None
-                pessoa = None
-                if pessoa_id:
+                if not nome:  # Pular se o nome estiver vazio
+                    continue
+                    
+                percentual = adquirentes_percentual[i] if i < len(adquirentes_percentual) else None
+                pessoa_id = adquirente_ids[i] if i < len(adquirente_ids) else None
+                
+                # Validar se o ID não está vazio
+                if pessoa_id and pessoa_id.strip():
                     try:
                         pessoa = Pessoas.objects.get(id=pessoa_id)
-                    except Pessoas.DoesNotExist:
+                    except (Pessoas.DoesNotExist, ValueError):
                         pessoa = None
+                else:
+                    pessoa = None
+                    
                 if not pessoa and nome:
-                    pessoa, created = Pessoas.objects.get_or_create(
-                        nome=nome,
-                        defaults={'cpf': f'00000000000'}
-                    )
+                    # Tentar encontrar pessoa pelo nome primeiro
+                    try:
+                        pessoa = Pessoas.objects.get(nome__iexact=nome)
+                    except Pessoas.DoesNotExist:
+                        # Criar nova pessoa com CPF único
+                        cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
+                        pessoa = Pessoas.objects.create(
+                            nome=nome,
+                            cpf=cpf_unico
+                        )
                 if pessoa and percentual:
                     from .models import LancamentoPessoa
                     LancamentoPessoa.objects.create(
                         lancamento=lancamento,
                         pessoa=pessoa,
                         tipo='adquirente',
-                        percentual=percentual,
-                        nome_digitado=nome
+                        percentual=percentual if percentual else 100,
+                        nome_digitado=nome.strip()
                     )
             
             messages.success(request, 'Lançamento criado com sucesso!')
             
             # Sempre redirecionar para a cadeia dominial após salvar
             return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-                
+                    
         except Exception as e:
             messages.error(request, f'Erro ao criar lançamento: {str(e)}')
     
@@ -917,6 +1102,18 @@ def selecionar_documento_lancamento(request, tis_id, imovel_id):
 @login_required
 def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     """View para editar um lançamento existente"""
+    print(f"=== INÍCIO DA VIEW editar_lancamento ===")
+    print(f"Método: {request.method}")
+    print(f"POST data: {dict(request.POST)}")
+    print(f"=== FIM DO LOG INICIAL ===")
+    
+    # Se for POST, mostrar todos os dados para debug
+    if request.method == 'POST':
+        print(f"=== TODOS OS DADOS DO POST ===")
+        for key, value in request.POST.items():
+            print(f"  {key}: {value}")
+        print(f"=== FIM DOS DADOS DO POST ===")
+    
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
@@ -924,53 +1121,151 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     if request.method == 'POST':
         # Processar dados do formulário
         try:
-            logger.info(f"Editando lançamento {lancamento_id}")
+            print(f"Editando lançamento {lancamento_id}")
             
             # Atualizar dados básicos do lançamento
             lancamento.tipo = LancamentoTipo.objects.get(id=request.POST.get('tipo_lancamento'))
-            lancamento.numero_lancamento = request.POST.get('numero_lancamento', '').strip()
+            novo_numero_lancamento = request.POST.get('numero_lancamento', '').strip()
+            
+            # Validar unicidade do número de lançamento (se foi alterado)
+            if novo_numero_lancamento and novo_numero_lancamento != lancamento.numero_lancamento:
+                lancamento_existente = Lancamento.objects.filter(
+                    documento=lancamento.documento,
+                    numero_lancamento=novo_numero_lancamento
+                ).exclude(pk=lancamento.pk).first()
+                
+                if lancamento_existente:
+                    messages.error(request, f'Já existe um lançamento com o número "{novo_numero_lancamento}" neste documento.')
+                    # Preparar dados para o template
+                    tipos_lancamento = LancamentoTipo.objects.all().order_by('tipo')
+                    cartorios = Cartorios.objects.all().order_by('nome')
+                    transmitentes = lancamento.pessoas.filter(tipo='transmitente')
+                    adquirentes = lancamento.pessoas.filter(tipo='adquirente')
+                    
+                    print(f"Editando lançamento {lancamento_id} - Forma: '{lancamento.forma}'")
+                    print(f"Transmitentes: {list(transmitentes)}")
+                    print(f"Adquirentes: {list(adquirentes)}")
+                    
+                    context = {
+                        'tis': tis,
+                        'imovel': imovel,
+                        'lancamento': lancamento,
+                        'documento_ativo': lancamento.documento,
+                        'tipos_lancamento': tipos_lancamento,
+                        'cartorios': cartorios,
+                        'transmitentes': transmitentes,
+                        'adquirentes': adquirentes,
+                        'modo_edicao': True,
+                        # Preservar dados do formulário
+                        'form_data': {
+                            'tipo_lancamento': request.POST.get('tipo_lancamento'),
+                            'numero_lancamento': novo_numero_lancamento,
+                            'data': request.POST.get('data'),
+                            'observacoes': request.POST.get('observacoes'),
+                            'eh_inicio_matricula': request.POST.get('eh_inicio_matricula') == 'on',
+                            'transmitente_ids': request.POST.getlist('transmitente[]'),
+                            'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
+                            'transmitente_percentuais': request.POST.getlist('transmitente_percentual[]'),
+                            'adquirente_ids': request.POST.getlist('adquirente[]'),
+                            'adquirente_nomes': request.POST.getlist('adquirente_nome[]'),
+                            'adquirente_percentuais': request.POST.getlist('adquirente_percentual[]'),
+                            'area': request.POST.get('area'),
+                            'origem': request.POST.get('origem_completa') or request.POST.get('origem'),
+                            'forma': request.POST.get('forma'),
+                            'descricao': request.POST.get('descricao'),
+                            'titulo': request.POST.get('titulo'),
+                            'cartorio_origem': request.POST.get('cartorio_origem'),
+                            'livro_origem': request.POST.get('livro_origem'),
+                            'folha_origem': request.POST.get('folha_origem'),
+                            'data_origem': request.POST.get('data_origem'),
+                        },
+                        'numero_lancamento_error': True,  # Flag para destacar o campo em vermelho
+                    }
+                    return render(request, 'dominial/lancamento_form.html', context)
+            
+            lancamento.numero_lancamento = novo_numero_lancamento
             lancamento.data = request.POST.get('data') if request.POST.get('data') else None
             lancamento.origem = request.POST.get('origem', '').strip()
             lancamento.observacoes = request.POST.get('observacoes', '').strip()
             lancamento.eh_inicio_matricula = request.POST.get('eh_inicio_matricula') == 'on'
             
-            logger.info(f"Dados básicos processados para lançamento {lancamento_id}")
+            print(f"Dados básicos processados para lançamento {lancamento_id}")
+            
+            # Processar campo forma sempre (pode ser usado mesmo quando não é requerido)
+            # Pegar o valor correto baseado no tipo de lançamento
+            print(f"=== DEBUG CAMPOS FORMA ===")
+            print(f"Tipo do lançamento: {lancamento.tipo.tipo}")
+            print(f"Todos os campos forma no POST:")
+            print(f"  forma: {request.POST.get('forma')}")
+            print(f"  forma_averbacao: {request.POST.get('forma_averbacao')}")
+            print(f"  forma_registro: {request.POST.get('forma_registro')}")
+            print(f"  forma_inicio: {request.POST.get('forma_inicio')}")
+            
+            if lancamento.tipo.tipo == 'averbacao':
+                forma_value = request.POST.get('forma_averbacao', '').strip()
+            elif lancamento.tipo.tipo == 'registro':
+                forma_value = request.POST.get('forma_registro', '').strip()
+            elif lancamento.tipo.tipo == 'inicio_matricula':
+                forma_value = request.POST.get('forma_inicio', '').strip()
+            else:
+                # Fallback: tentar pegar qualquer campo forma
+                forma_value = request.POST.get('forma', '').strip()
+            
+            print(f"Forma selecionada para salvar: '{forma_value}'")
+            print(f"=== FIM DEBUG CAMPOS FORMA ===")
+            
+            print(f"Forma recebida no POST: '{forma_value}'")
+            print(f"Tipo de forma_value: {type(forma_value)}")
+            # Sempre usar o valor enviado, independente do tipo
+            lancamento.forma = forma_value if forma_value else None
+            print(f"Forma definida no lançamento: '{lancamento.forma}'")
+            print(f"Tipo de lancamento.forma: {type(lancamento.forma)}")
+            print(f"Campos específicos processados para lançamento {lancamento_id}")
             
             # Campos específicos por tipo
             if lancamento.tipo.requer_titulo:
                 lancamento.titulo = request.POST.get('titulo', '').strip()
             if lancamento.tipo.requer_cartorio_origem:
                 cartorio_origem_id = request.POST.get('cartorio_origem')
-                if cartorio_origem_id:
-                    lancamento.cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
+                cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
+                
+                if cartorio_origem_id and cartorio_origem_id.strip():
+                    # Se tem ID, usar o cartório existente
+                    lancamento.cartorio_origem_id = cartorio_origem_id
+                elif cartorio_origem_nome:
+                    # Se tem nome mas não tem ID, tentar encontrar ou criar o cartório
+                    try:
+                        cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
+                        lancamento.cartorio_origem = cartorio
+                    except Cartorios.DoesNotExist:
+                        # Criar novo cartório (você pode adicionar mais campos se necessário)
+                        cartorio = Cartorios.objects.create(
+                            nome=cartorio_origem_nome,
+                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                        )
+                        lancamento.cartorio_origem = cartorio
                 else:
-                    lancamento.cartorio_origem = None
+                    lancamento.cartorio_origem_id = None
             if lancamento.tipo.requer_livro_origem:
                 lancamento.livro_origem = request.POST.get('livro_origem', '').strip()
             if lancamento.tipo.requer_folha_origem:
                 lancamento.folha_origem = request.POST.get('folha_origem', '').strip()
             if lancamento.tipo.requer_data_origem:
                 lancamento.data_origem = request.POST.get('data_origem') if request.POST.get('data_origem') else None
-            if lancamento.tipo.requer_forma:
-                lancamento.forma = request.POST.get('forma', '').strip()
             if lancamento.tipo.requer_descricao:
                 lancamento.descricao = request.POST.get('descricao', '').strip()
-            
-            logger.info(f"Campos específicos processados para lançamento {lancamento_id}")
             
             # Limpar campos não utilizados
             if not lancamento.tipo.requer_titulo:
                 lancamento.titulo = None
             if not lancamento.tipo.requer_cartorio_origem:
-                lancamento.cartorio_origem = None
+                lancamento.cartorio_origem_id = None
             if not lancamento.tipo.requer_livro_origem:
                 lancamento.livro_origem = None
             if not lancamento.tipo.requer_folha_origem:
                 lancamento.folha_origem = None
             if not lancamento.tipo.requer_data_origem:
                 lancamento.data_origem = None
-            if not lancamento.tipo.requer_forma:
-                lancamento.forma = None
             if not lancamento.tipo.requer_descricao:
                 lancamento.descricao = None
             
@@ -978,27 +1273,55 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             area = request.POST.get('area')
             lancamento.area = float(area) if area and area.strip() else None
             
-            logger.info(f"Salvando lançamento {lancamento_id}")
+            print(f"Salvando lançamento {lancamento_id}")
+            print(f"Forma antes de salvar: '{lancamento.forma}'")
             lancamento.save()
+            print(f"Forma após salvar: '{lancamento.forma}'")
             
-            logger.info(f"Limpando pessoas existentes do lançamento {lancamento_id}")
+            # Verificar se o campo foi salvo corretamente
+            lancamento.refresh_from_db()
+            print(f"Forma após refresh: '{lancamento.forma}'")
+            
+            print(f"Limpando pessoas existentes do lançamento {lancamento_id}")
             # Limpar pessoas existentes
             lancamento.pessoas.all().delete()
             
             # Processar transmitentes
             transmitentes_data = request.POST.getlist('transmitente_nome[]')
             transmitentes_percentual = request.POST.getlist('transmitente_percentual[]')
+            transmitente_ids = request.POST.getlist('transmitente[]')
             
-            logger.info(f"Processando {len(transmitentes_data)} transmitentes")
+            print(f"Processando {len(transmitentes_data)} transmitentes")
             for i, nome in enumerate(transmitentes_data):
-                if nome.strip():
-                    percentual = transmitentes_percentual[i] if i < len(transmitentes_percentual) else 100
-                    try:
-                        pessoa = Pessoas.objects.get(nome__iexact=nome.strip())
-                    except Pessoas.DoesNotExist:
-                        # Criar nova pessoa sem CPF
-                        pessoa = Pessoas.objects.create(nome=nome.strip())
+                nome = nome.strip()
+                if not nome:  # Pular se o nome estiver vazio
+                    continue
                     
+                percentual = transmitentes_percentual[i] if i < len(transmitentes_percentual) else None
+                pessoa_id = transmitente_ids[i] if i < len(transmitente_ids) else None
+                
+                # Validar se o ID não está vazio
+                if pessoa_id and pessoa_id.strip():
+                    try:
+                        pessoa = Pessoas.objects.get(id=pessoa_id)
+                    except (Pessoas.DoesNotExist, ValueError):
+                        pessoa = None
+                else:
+                    pessoa = None
+                    
+                if not pessoa and nome:
+                    # Tentar encontrar pessoa pelo nome primeiro
+                    try:
+                        pessoa = Pessoas.objects.get(nome__iexact=nome)
+                    except Pessoas.DoesNotExist:
+                        # Criar nova pessoa com CPF único
+                        cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
+                        pessoa = Pessoas.objects.create(
+                            nome=nome,
+                            cpf=cpf_unico
+                        )
+                if pessoa and percentual:
+                    from .models import LancamentoPessoa
                     LancamentoPessoa.objects.create(
                         lancamento=lancamento,
                         pessoa=pessoa,
@@ -1010,17 +1333,39 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirentes_percentual = request.POST.getlist('adquirente_percentual[]')
+            adquirente_ids = request.POST.getlist('adquirente[]')
             
-            logger.info(f"Processando {len(adquirentes_data)} adquirentes")
+            print(f"Processando {len(adquirentes_data)} adquirentes")
             for i, nome in enumerate(adquirentes_data):
-                if nome.strip():
-                    percentual = adquirentes_percentual[i] if i < len(adquirentes_percentual) else 100
-                    try:
-                        pessoa = Pessoas.objects.get(nome__iexact=nome.strip())
-                    except Pessoas.DoesNotExist:
-                        # Criar nova pessoa sem CPF
-                        pessoa = Pessoas.objects.create(nome=nome.strip())
+                nome = nome.strip()
+                if not nome:  # Pular se o nome estiver vazio
+                    continue
                     
+                percentual = adquirentes_percentual[i] if i < len(adquirentes_percentual) else None
+                pessoa_id = adquirente_ids[i] if i < len(adquirente_ids) else None
+                
+                # Validar se o ID não está vazio
+                if pessoa_id and pessoa_id.strip():
+                    try:
+                        pessoa = Pessoas.objects.get(id=pessoa_id)
+                    except (Pessoas.DoesNotExist, ValueError):
+                        pessoa = None
+                else:
+                    pessoa = None
+                    
+                if not pessoa and nome:
+                    # Tentar encontrar pessoa pelo nome primeiro
+                    try:
+                        pessoa = Pessoas.objects.get(nome__iexact=nome)
+                    except Pessoas.DoesNotExist:
+                        # Criar nova pessoa com CPF único
+                        cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
+                        pessoa = Pessoas.objects.create(
+                            nome=nome,
+                            cpf=cpf_unico
+                        )
+                if pessoa and percentual:
+                    from .models import LancamentoPessoa
                     LancamentoPessoa.objects.create(
                         lancamento=lancamento,
                         pessoa=pessoa,
@@ -1029,12 +1374,12 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         nome_digitado=nome.strip()
                     )
             
-            logger.info(f"Lançamento {lancamento_id} atualizado com sucesso")
+            print(f"Lançamento {lancamento_id} atualizado com sucesso")
             messages.success(request, 'Lançamento atualizado com sucesso!')
             return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=lancamento.documento.id)
             
         except Exception as e:
-            logger.error(f'Erro ao atualizar lançamento {lancamento_id}: {str(e)}')
+            print(f'Erro ao atualizar lançamento {lancamento_id}: {str(e)}')
             messages.error(request, f'Erro ao atualizar lançamento: {str(e)}')
     
     # Preparar dados para o template
@@ -1059,6 +1404,10 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
     adquirentes = lancamento.pessoas.filter(tipo='adquirente')
     
+    print(f"Editando lançamento {lancamento_id} - Forma: '{lancamento.forma}'")
+    print(f"Transmitentes: {list(transmitentes)}")
+    print(f"Adquirentes: {list(adquirentes)}")
+    
     context = {
         'tis': tis,
         'imovel': imovel,
@@ -1070,6 +1419,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'adquirentes': adquirentes,
         'modo_edicao': True
     }
+    
+    print(f"Context para template - Forma: '{lancamento.forma}'")
     
     return render(request, 'dominial/lancamento_form.html', context)
 
@@ -1246,9 +1597,11 @@ def editar_documento(request, documento_id, tis_id, imovel_id):
             documento.folha = request.POST.get('folha', '').strip()
             
             # Atualizar cartório se fornecido
-            cartorio_id = request.POST.get('cartorio')
+            cartorio_id = request.POST.get('cartorio_id')
             if cartorio_id:
                 documento.cartorio = Cartorios.objects.get(id=cartorio_id)
+            else:
+                documento.cartorio = None
             
             documento.save()
             

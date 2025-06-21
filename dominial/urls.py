@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 from django.contrib.auth import views as auth_views
 from dal import autocomplete
-from .views import pessoa_autocomplete
+from .views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
 
 urlpatterns = [
     # Páginas principais
@@ -49,6 +49,8 @@ urlpatterns = [
     path('verificar-cartorios/', views.verificar_cartorios_estado, name='verificar_cartorios_estado'),
     path('importar-cartorios/', views.importar_cartorios_estado, name='importar_cartorios_estado'),
     path('pessoa-autocomplete/', pessoa_autocomplete, name='pessoa-autocomplete'),
+    path('cartorio-autocomplete/', cartorio_autocomplete, name='cartorio-autocomplete'),
+    path('cartorio-imoveis-autocomplete/', cartorio_imoveis_autocomplete, name='cartorio-imoveis-autocomplete'),
     
     # Autenticação
     path('accounts/login/', auth_views.LoginView.as_view(
