@@ -72,7 +72,7 @@
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <div>
                                             <span style="font-weight: 500; color: var(--primary-color);">
-                                                {% if lancamento.tipo.tipo == 'averbacao' %}📝{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'encerrar_matricula' %}🔚{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
+                                                {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
                                                 {{ lancamento.tipo.get_tipo_display }}
                                             </span>
                                             <span style="color: var(--secondary-color); font-size: 0.9em;">
