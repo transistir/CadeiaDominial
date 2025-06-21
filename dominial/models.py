@@ -144,7 +144,7 @@ class Alteracoes(models.Model):
     transmitente = models.ForeignKey(Pessoas, on_delete=models.CASCADE, related_name='transmitente', null=True, blank=True) # Opcional, para pessoa que transmite o imóvel
     adquirente = models.ForeignKey(Pessoas, on_delete=models.CASCADE, related_name='adquirente', null=True, blank=True) # Opcional, para pessoa que adquire o imóvel
     valor_transacao = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) # Opcional, para valor da transação
-    area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) # Opcional, para área do imóvel
+    area = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True) # Opcional, para área do imóvel
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro da alteração
 
@@ -299,7 +299,7 @@ class Lancamento(models.Model):
     transmitente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='transmitente_lancamento', null=True, blank=True)
     adquirente = models.ForeignKey(Pessoas, on_delete=models.PROTECT, related_name='adquirente_lancamento', null=True, blank=True)
     valor_transacao = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    area = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     origem = models.CharField(max_length=255, null=True, blank=True)
     detalhes = models.TextField(null=True, blank=True)
     observacoes = models.TextField(null=True, blank=True)

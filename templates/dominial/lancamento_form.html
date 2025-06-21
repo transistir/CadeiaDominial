@@ -90,7 +90,7 @@
         </div>
 
         <!-- Campos para Averbação -->
-        <div class="field-group averbacao-fields hidden">
+        <div class="field-group" id="campos-averbacao" style="display: none;">
             <h4>Campos Específicos - Averbação</h4>
             
             <div class="form-group">
@@ -106,7 +106,7 @@
         </div>
 
         <!-- Campos para Registro -->
-        <div class="field-group registro-fields hidden">
+        <div class="field-group" id="campos-registro" style="display: none;">
             <h4>Campos Específicos - Registro</h4>
             
             <div class="form-group">
@@ -155,7 +155,7 @@
         </div>
 
         <!-- Campos para Início de Matrícula -->
-        <div class="field-group inicio-matricula-fields hidden">
+        <div class="field-group" id="campos-inicio-matricula" style="display: none;">
             <h4>Campos Específicos - Início de Matrícula</h4>
             
             <div class="form-group">
@@ -171,7 +171,7 @@
         </div>
 
         <!-- Campos Opcionais de Transação -->
-        <div class="field-group transacao-fields hidden">
+        <div class="field-group" id="campos-transacao" style="display: none;">
             <h4>Campos Opcionais - Transação</h4>
             
             <div class="grid-2">
@@ -221,7 +221,7 @@
             <div class="grid-2">
                 <div class="form-group">
                     <label for="area">Área</label>
-                    <input type="number" name="area" id="area" step="0.01" placeholder="0.00"
+                    <input type="number" name="area" id="area" step="0.0001" placeholder="0.0000"
                            value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}">
                 </div>
 
@@ -262,7 +262,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Função para alternar campos baseado no tipo selecionado
     function toggleFields() {
-        const selectedTipo = tipoSelect.value;
+        const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+        const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
         const modoEdicao = {% if modo_edicao %}true{% else %}false{% endif %};
         
         // Esconder todos os campos primeiro
@@ -274,10 +275,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Mostrar campos baseado no tipo selecionado
         if (selectedTipo === 'averbacao') {
             averbacaoFields.style.display = 'block';
+            transacaoFields.style.display = 'block';
         } else if (selectedTipo === 'registro') {
             registroFields.style.display = 'block';
+            transacaoFields.style.display = 'block';
         } else if (selectedTipo === 'inicio_matricula') {
             inicioMatriculaFields.style.display = 'block';
+            transacaoFields.style.display = 'block';
         }
     }
     
@@ -287,12 +291,70 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Carregar dados de pessoas existentes se estiver em modo de edição
         if ({% if modo_edicao %}true{% else %}false{% endif %}) {
-            // Dados já estão sendo carregados via template
+            // Carregar transmitentes existentes
+            {% if modo_edicao and transmitentes %}
+                {% for transmitente in transmitentes %}
+                (function() {
+                    const container = document.getElementById('transmitentes-container');
+                    const pessoaDiv = document.createElement('div');
+                    pessoaDiv.className = 'pessoa-item';
+                    pessoaDiv.innerHTML = `
+                        <div class="pessoa-input-group">
+                            <div class="autocomplete-container">
+                                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off" value="{{ transmitente.pessoa.nome }}">
+                                <input type="hidden" name="transmitente[]" class="transmitente-id" value="{{ transmitente.pessoa.id }}">
+                                <div class="autocomplete-suggestions transmitente-suggestions"></div>
+                            </div>
+                            <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ transmitente.percentual }}">
+                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                        </div>
+                    `;
+                    container.appendChild(pessoaDiv);
+                })();
+                {% endfor %}
+            {% endif %}
+            
+            // Carregar adquirentes existentes
+            {% if modo_edicao and adquirentes %}
+                {% for adquirente in adquirentes %}
+                (function() {
+                    const container = document.getElementById('adquirentes-container');
+                    const pessoaDiv = document.createElement('div');
+                    pessoaDiv.className = 'pessoa-item';
+                    pessoaDiv.innerHTML = `
+                        <div class="pessoa-input-group">
+                            <div class="autocomplete-container">
+                                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off" value="{{ adquirente.pessoa.nome }}">
+                                <input type="hidden" name="adquirente[]" class="adquirente-id" value="{{ adquirente.pessoa.id }}">
+                                <div class="autocomplete-suggestions adquirente-suggestions"></div>
+                            </div>
+                            <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ adquirente.percentual }}">
+                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                        </div>
+                    `;
+                    container.appendChild(pessoaDiv);
+                })();
+                {% endfor %}
+            {% endif %}
+            
+            // Remover os campos vazios iniciais
+            const transmitentesContainer = document.getElementById('transmitentes-container');
+            const adquirentesContainer = document.getElementById('adquirentes-container');
+            
+            if (transmitentesContainer && transmitentesContainer.children.length > 1) {
+                transmitentesContainer.removeChild(transmitentesContainer.firstElementChild);
+            }
+            if (adquirentesContainer && adquirentesContainer.children.length > 1) {
+                adquirentesContainer.removeChild(adquirentesContainer.firstElementChild);
+            }
         }
     }, 100);
     
     // Adicionar listener para mudanças no tipo
     tipoSelect.addEventListener('change', toggleFields);
+    
+    // Configurar autocomplete para pessoas existentes e adicionar listeners para novos campos
+    setupPessoaAutocomplete();
     
     // Autocomplete para cartório
     const cartorioInput = document.getElementById('cartorio_origem_nome');
@@ -301,6 +363,170 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (cartorioInput && cartorioHidden && cartorioSuggestions) {
         setupCartorioAutocomplete(cartorioInput, cartorioHidden, cartorioSuggestions);
+    }
+    
+    function setupPessoaAutocomplete() {
+        // Configurar autocomplete para campos existentes
+        document.querySelectorAll('.transmitente-nome, .adquirente-nome').forEach(input => {
+            setupPessoaFieldAutocomplete(input);
+        });
+        
+        // Configurar autocomplete para novos campos que serão adicionados
+        document.addEventListener('DOMContentLoaded', function() {
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            const newInputs = node.querySelectorAll ? node.querySelectorAll('.transmitente-nome, .adquirente-nome') : [];
+                            newInputs.forEach(input => {
+                                setupPessoaFieldAutocomplete(input);
+                            });
+                        }
+                    });
+                });
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        });
+    }
+    
+    function setupPessoaFieldAutocomplete(input) {
+        const hiddenInput = input.parentElement.querySelector('input[type="hidden"]');
+        const suggestions = input.parentElement.querySelector('.autocomplete-suggestions');
+        
+        if (!hiddenInput || !suggestions) return;
+        
+        let selectedIndex = -1;
+        let suggestionsData = [];
+        
+        input.addEventListener('input', function() {
+            const query = this.value.trim();
+            if (query.length < 2) {
+                hideSuggestions();
+                return;
+            }
+            
+            fetch(`/dominial/pessoa-autocomplete/?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    suggestionsData = data;
+                    showSuggestions(data);
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar sugestões de pessoa:', error);
+                });
+        });
+        
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectNext();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectPrevious();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                selectCurrent();
+            } else if (e.key === 'Escape') {
+                hideSuggestions();
+            }
+        });
+        
+        input.addEventListener('blur', function() {
+            setTimeout(() => {
+                hideSuggestions();
+            }, 200);
+        });
+        
+        function showSuggestions(data) {
+            if (data.length === 0) {
+                suggestions.innerHTML = '<div class="autocomplete-suggestion"><div class="nome">Nenhuma pessoa encontrada</div></div>';
+            } else {
+                suggestions.innerHTML = data.map((item, index) => `
+                    <div class="autocomplete-suggestion" data-index="${index}" data-id="${item.id}">
+                        <div class="nome">${item.nome}</div>
+                        ${item.cpf ? `<div class="cpf">CPF: ${item.cpf}</div>` : ''}
+                    </div>
+                `).join('');
+                
+                suggestions.innerHTML += `
+                    <div class="autocomplete-suggestion novo" data-index="new">
+                        <div class="nome">➕ Criar nova pessoa: "${input.value}"</div>
+                    </div>
+                `;
+            }
+            
+            suggestions.style.display = 'block';
+            selectedIndex = -1;
+        }
+        
+        function hideSuggestions() {
+            suggestions.style.display = 'none';
+            selectedIndex = -1;
+        }
+        
+        function selectNext() {
+            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
+            if (items.length === 0) return;
+            
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+            updateSelection(items);
+        }
+        
+        function selectPrevious() {
+            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
+            if (items.length === 0) return;
+            
+            selectedIndex = Math.max(selectedIndex - 1, -1);
+            updateSelection(items);
+        }
+        
+        function updateSelection(items) {
+            items.forEach((item, index) => {
+                item.classList.remove('selected');
+                if (index === selectedIndex) {
+                    item.classList.add('selected');
+                }
+            });
+        }
+        
+        function selectCurrent() {
+            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
+            if (selectedIndex >= 0 && selectedIndex < items.length) {
+                const selectedItem = items[selectedIndex];
+                const index = selectedItem.getAttribute('data-index');
+                
+                if (index === 'new') {
+                    input.value = input.value.trim();
+                    hiddenInput.value = '';
+                } else {
+                    const pessoa = suggestionsData[index];
+                    input.value = pessoa.nome;
+                    hiddenInput.value = pessoa.id;
+                }
+            }
+            hideSuggestions();
+        }
+        
+        suggestions.addEventListener('click', function(e) {
+            const suggestion = e.target.closest('.autocomplete-suggestion');
+            if (suggestion) {
+                const index = suggestion.getAttribute('data-index');
+                
+                if (index === 'new') {
+                    input.value = input.value.trim();
+                    hiddenInput.value = '';
+                } else {
+                    const pessoa = suggestionsData[index];
+                    input.value = pessoa.nome;
+                    hiddenInput.value = pessoa.id;
+                }
+                hideSuggestions();
+            }
+        });
     }
     
     function setupCartorioAutocomplete(input, hidden, suggestions) {
