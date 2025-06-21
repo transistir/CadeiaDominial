@@ -42,8 +42,8 @@
             <h4>Informações Básicas</h4>
             
             <div class="form-group">
-                <label for="tipo">Tipo de Lançamento *</label>
-                <select name="tipo_lancamento" id="tipo" required>
+                <label for="tipo_lancamento">Tipo de Lançamento *</label>
+                <select name="tipo_lancamento" id="tipo_lancamento" required>
                     <option value="">Selecione o tipo</option>
                     {% for tipo in tipos_lancamento %}
                     <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}" 
@@ -252,132 +252,47 @@
 
 {% block extra_js %}
 <script>
-console.log('Script carregado!');
-console.error('=== TESTE DE LOG ===');
-
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('=== DOM CARREGADO ===');
-    console.error('=== DOM CARREGADO (ERROR) ===');
+    // Elementos do formulário
+    const tipoSelect = document.getElementById('tipo_lancamento');
+    const averbacaoFields = document.getElementById('campos-averbacao');
+    const registroFields = document.getElementById('campos-registro');
+    const inicioMatriculaFields = document.getElementById('campos-inicio-matricula');
+    const transacaoFields = document.getElementById('campos-transacao');
     
-    const tipoSelect = document.getElementById('tipo');
-    const averbacaoFields = document.querySelector('.averbacao-fields');
-    const registroFields = document.querySelector('.registro-fields');
-    const inicioMatriculaFields = document.querySelector('.inicio-matricula-fields');
-    const transacaoFields = document.querySelector('.transacao-fields');
-    
-    console.log('Elementos encontrados:');
-    console.log('  tipoSelect:', tipoSelect);
-    console.log('  averbacaoFields:', averbacaoFields);
-    console.log('  registroFields:', registroFields);
-    console.log('  inicioMatriculaFields:', inicioMatriculaFields);
-    console.log('  transacaoFields:', transacaoFields);
-    
+    // Função para alternar campos baseado no tipo selecionado
     function toggleFields() {
-        const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
-        const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+        const selectedTipo = tipoSelect.value;
+        const modoEdicao = {% if modo_edicao %}true{% else %}false{% endif %};
         
-        console.log('=== DEBUG TOGGLE FIELDS ===');
-        console.error('=== DEBUG TOGGLE FIELDS (ERROR) ===');
-        console.log('Tipo selecionado:', selectedTipo);
-        console.log('Modo edição:', {% if modo_edicao %}true{% else %}false{% endif %});
-        console.log('Tipo do lançamento:', '{% if modo_edicao %}{{ lancamento.tipo.tipo }}{% endif %}');
-        console.log('Opções disponíveis:');
-        for (let i = 0; i < tipoSelect.options.length; i++) {
-            const option = tipoSelect.options[i];
-            console.log(`  ${i}: value="${option.value}", data-tipo="${option.getAttribute('data-tipo')}", selected=${option.selected}`);
-        }
+        // Esconder todos os campos primeiro
+        averbacaoFields.style.display = 'none';
+        registroFields.style.display = 'none';
+        inicioMatriculaFields.style.display = 'none';
+        transacaoFields.style.display = 'none';
         
-        // Esconde todos os campos específicos
-        averbacaoFields.classList.add('hidden');
-        registroFields.classList.add('hidden');
-        inicioMatriculaFields.classList.add('hidden');
-        transacaoFields.classList.add('hidden');
-        
-        // Mostra campos específicos do tipo selecionado
+        // Mostrar campos baseado no tipo selecionado
         if (selectedTipo === 'averbacao') {
-            averbacaoFields.classList.remove('hidden');
-            console.log('Mostrando campos de averbação');
+            averbacaoFields.style.display = 'block';
         } else if (selectedTipo === 'registro') {
-            registroFields.classList.remove('hidden');
-            console.log('Mostrando campos de registro');
+            registroFields.style.display = 'block';
         } else if (selectedTipo === 'inicio_matricula') {
-            inicioMatriculaFields.classList.remove('hidden');
-            console.log('Mostrando campos de início de matrícula');
+            inicioMatriculaFields.style.display = 'block';
         }
-        
-        // Mostra campos de transação para todos os tipos (opcional)
-        transacaoFields.classList.remove('hidden');
-        console.log('=== FIM DEBUG ===');
     }
     
-    tipoSelect.addEventListener('change', toggleFields);
-    
-    // Inicializar campos após um pequeno delay para garantir que o DOM esteja pronto
+    // Inicializar campos após um pequeno delay para garantir que o DOM está pronto
     setTimeout(() => {
-        console.log('Inicializando campos após delay...');
-        console.error('Inicializando campos após delay... (ERROR)');
         toggleFields();
         
-        // Carregar dados das pessoas se estiver em modo de edição
-        {% if modo_edicao %}
-        console.log('Carregando dados de pessoas existentes...');
-        
-        // Carregar transmitentes
-        {% for transmitente in transmitentes %}
-        (function() {
-            const container = document.getElementById('transmitentes-container');
-            const pessoaDiv = document.createElement('div');
-            pessoaDiv.className = 'pessoa-item';
-            pessoaDiv.innerHTML = `
-                <div class="pessoa-input-group">
-                    <div class="autocomplete-container">
-                        <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off" value="{{ transmitente.pessoa.nome }}">
-                        <input type="hidden" name="transmitente[]" class="transmitente-id" value="{{ transmitente.pessoa.id }}">
-                        <div class="autocomplete-suggestions transmitente-suggestions"></div>
-                    </div>
-                    <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ transmitente.percentual }}">
-                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-                </div>
-            `;
-            container.appendChild(pessoaDiv);
-        })();
-        {% endfor %}
-        
-        // Carregar adquirentes
-        {% for adquirente in adquirentes %}
-        (function() {
-            const container = document.getElementById('adquirentes-container');
-            const pessoaDiv = document.createElement('div');
-            pessoaDiv.className = 'pessoa-item';
-            pessoaDiv.innerHTML = `
-                <div class="pessoa-input-group">
-                    <div class="autocomplete-container">
-                        <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off" value="{{ adquirente.pessoa.nome }}">
-                        <input type="hidden" name="adquirente[]" class="adquirente-id" value="{{ adquirente.pessoa.id }}">
-                        <div class="autocomplete-suggestions adquirente-suggestions"></div>
-                    </div>
-                    <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ adquirente.percentual }}">
-                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-                </div>
-            `;
-            container.appendChild(pessoaDiv);
-        })();
-        {% endfor %}
-        
-        // Remover os campos vazios iniciais
-        const transmitentesContainer = document.getElementById('transmitentes-container');
-        const adquirentesContainer = document.getElementById('adquirentes-container');
-        
-        if (transmitentesContainer && transmitentesContainer.children.length > 1) {
-            transmitentesContainer.removeChild(transmitentesContainer.firstElementChild);
+        // Carregar dados de pessoas existentes se estiver em modo de edição
+        if ({% if modo_edicao %}true{% else %}false{% endif %}) {
+            // Dados já estão sendo carregados via template
         }
-        if (adquirentesContainer && adquirentesContainer.children.length > 1) {
-            adquirentesContainer.removeChild(adquirentesContainer.firstElementChild);
-        }
-        
-        console.log('Dados de pessoas carregados com sucesso!');
-        {% endif %}
     }, 100);
+    
+    // Adicionar listener para mudanças no tipo
+    tipoSelect.addEventListener('change', toggleFields);
     
     // Autocomplete para cartório
     const cartorioInput = document.getElementById('cartorio_origem_nome');

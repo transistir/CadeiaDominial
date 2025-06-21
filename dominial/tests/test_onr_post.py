@@ -12,5 +12,9 @@ headers = {
 data = 'estado=AC'
 
 response = requests.post(url, headers=headers, data=data)
-print('Status:', response.status_code)
-print('Resposta:', response.text[:2000]) 
+self.assertEqual(response.status_code, 200)
+
+response = self.client.post('/dominial/verificar-cartorios/', data={'estado': 'SP'})
+self.assertEqual(response.status_code, 200)
+data = response.json()
+self.assertIn('existem_cartorios', data) 

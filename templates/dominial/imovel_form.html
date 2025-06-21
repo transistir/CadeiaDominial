@@ -412,8 +412,6 @@
                 const statusText = document.querySelector('.status-text');
                 const csrf_token = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
                 
-                console.log('Script carregado', { estadoSelect, cidadeSelect, cartorioSelect });
-
                 $(document).ready(function() {
                     // Se o usuário limpar o campo ou digitar algo que não veio do autocomplete, mostra os campos de novo proprietário
                     var campo = $('#id_proprietario');
@@ -547,7 +545,6 @@
                         // Verificar se existem cartórios para o estado
                         verificarCartorios(estado);
 
-                        console.log('Estado selecionado:', estado);
                         // Buscar cidades do estado usando nossa própria API
                         fetch('/dominial/buscar-cidades/', {
                             method: 'POST',
@@ -558,14 +555,12 @@
                             body: `estado=${estado}`
                         })
                         .then(response => {
-                            console.log('Resposta recebida:', response.status);
                             if (!response.ok) {
                                 throw new Error(`Erro HTTP: ${response.status}`);
                             }
                             return response.json();
                         })
                         .then(cidades => {
-                            console.log('Cidades recebidas:', cidades);
                             if (cidades && Array.isArray(cidades)) {
                                 cidades.forEach(cidade => {
                                     const option = document.createElement('option');
@@ -596,7 +591,6 @@
                     cartorioInfo.style.display = 'none';
 
                     if (cidade) {
-                        console.log('Cidade selecionada:', cidade);
                         // Buscar cartórios da cidade usando nossa própria API
                         fetch('/dominial/buscar-cartorios/', {
                             method: 'POST',
@@ -607,14 +601,12 @@
                             body: `estado=${estado}&cidade=${encodeURIComponent(cidade)}`
                         })
                         .then(response => {
-                            console.log('Resposta recebida:', response.status);
                             if (!response.ok) {
                                 throw new Error(`Erro HTTP: ${response.status}`);
                             }
                             return response.json();
                         })
                         .then(cartorios => {
-                            console.log('Cartórios recebidos:', cartorios);
                             if (cartorios && Array.isArray(cartorios)) {
                                 cartorios.forEach(cartorio => {
                                     const option = document.createElement('option');
@@ -640,7 +632,6 @@
                     if (option.value) {
                         try {
                             const cartorioData = JSON.parse(option.dataset.info);
-                            console.log('Dados do cartório:', cartorioData);
                             
                             // Define o id do cartório no campo hidden
                             document.getElementById('cartorio_id').value = cartorioData.id;

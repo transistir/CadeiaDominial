@@ -9,9 +9,8 @@ def test_conexao_api_cnj():
     
     try:
         response = requests.get(url)
-        assert response.status_code == 200
-        print(f"Status Code: {response.status_code}")
-        print(f"Conteúdo: {response.text[:200]}...")  # Mostra os primeiros 200 caracteres
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('content', response.text)
     except requests.exceptions.RequestException as e:
         pytest.fail(f"Erro na conexão: {str(e)}")
 
