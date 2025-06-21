@@ -1,140 +1,161 @@
-# CadeiaDominial
+# Sistema de Cadeia Dominial
 
-Uma plataforma web para gerenciar e analisar cadeias dominiais de imóveis sobrepostos a terras indígenas. O sistema deve ser capaz de:
-1. Inserir e sistematizar dados fundiários :
-	- Registrar informações detalhadas de transações imobiliárias (compra, venda, transferência, etc.).
-	- Armazenar dados como matrícula, transmitente, adquirente, forma de transmissão, área, origem, observações, etc.
-2. Processar e analisar cadeias dominiais :
-	- Construir diagramas que representem as relações entre as transações.
-3. Emitir fichas automatizadas e relatórios :
-	- Gerar fichas por imóvel em formatos compatíveis com planilhas já utilizadas pela equipe técnica.
-	- Emitir relatórios sintetizando informações por terra indígena.
-4. Autenticação e controle de acesso :
-	- Implementar um sistema de autenticação e controle de acesso para garantir segurança.
-5. Banco de dados estruturado :
-	- Armazenar todas as informações de forma organizada e acessível.
-6. Exportação de resultados :
-	- Permitir exportação dos resultados em formatos abertos (por exemplo, CSV, JSON).
-7. Diagrama de rede :
-	- Criar visualizações gráficas das cadeias dominiais para facilitar a análise.
+Sistema web para gestão e visualização de cadeias dominiais de terras indígenas, desenvolvido em Django.
 
-## Fluxo do Usuario
-### ANALISAR CADEIA DOMINIAL DE MATRÍCULAS SOBREPOSTAS A UMA TI
-1. O usuário entra no sistema e escolhe uma terra indígena .
-2. Dentro da terra, ele vê uma lista de propriedades já cadastradas ou pode cadastrar uma nova.
-3. Para cada propriedade, ele pode ver uma lista de alterações ou adicionar uma nova.
-4. Ao cadastrar uma alteração, ele seleciona o tipo :
-	- Se for registro , preenche transmitente e adquirente .
-	- Se for averbação , seleciona o tipo específico.
-	- Se for não classificado , precisa preencher área e origem obrigatoriamente.
-5. Sempre há campos comuns: forma, título, cartório, livro, folha, data_alteracao, observação .
+## 🚀 Versão Beta v1.0.0
 
+Esta é a primeira versão beta do sistema, disponível para testes com clientes.
 
-### 🔗 Relacionamentos entre tabelas
-- Uma terra indígena pode ter muitas propriedades
-- Uma propriedade pode ter muitas alterações
-- Cada alteração tem um tipo (registro, averbação ou não classificado)
-- Se for registro , ela tem uma forma de registro
-- Se for averbação , ela tem uma forma de averbação
-- As formas de registro e averbação são listas fixas, mas editáveis pelo admin
+### Funcionalidades Implementadas
 
-## Instruções para Teste
+#### 📋 Gestão de Dados
+- **TIs (Terras Indígenas)**: Cadastro e gestão de terras indígenas
+- **Imóveis**: Registro de imóveis com matrícula, SNCR e SIGEF
+- **Cartórios**: Base de dados de cartórios brasileiros
+- **Pessoas**: Cadastro de proprietários e envolvidos
+- **Documentos**: Gestão de matrículas e transcrições
+- **Lançamentos**: Registro de averbações, registros e alterações
 
-### 1. Configuração Inicial
+#### 🌳 Visualização em Árvore
+- **Diagrama Interativo**: Visualização da cadeia dominial em formato de árvore
+- **Zoom e Pan**: Navegação fluida com controles de zoom
+- **Cards Dinâmicos**: Tamanho ajustável baseado na quantidade de documentos
+- **Conexões Visuais**: Linhas conectando documentos relacionados
+- **Origens Identificadas**: Detecção automática de documentos de origem
 
-1. Clone o repositório:
+#### 🎨 Interface Moderna
+- **Design Responsivo**: Adaptável a diferentes tamanhos de tela
+- **Tema Consistente**: Interface unificada e profissional
+- **Navegação Intuitiva**: Menu e botões organizados logicamente
+- **Feedback Visual**: Efeitos de hover e transições suaves
+
+#### 🔐 Segurança
+- **Autenticação**: Sistema de login/logout
+- **Autorização**: Controle de acesso baseado em permissões
+- **Validação**: Verificação de dados e integridade
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Backend**: Django 5.2.1
+- **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
+- **Banco de Dados**: SQLite (desenvolvimento)
+- **Geolocalização**: GeoDjango (PostGIS)
+- **Autocomplete**: Django Autocomplete Light
+
+## 📦 Instalação
+
+### Pré-requisitos
+- Python 3.8+
+- pip
+- Git
+
+### Passos de Instalação
+
+1. **Clone o repositório**
 ```bash
-git clone [URL_DO_REPOSITÓRIO]
+git clone https://github.com/transistir/CadeiaDominial.git
 cd CadeiaDominial
 ```
 
-2. Crie e ative um ambiente virtual:
+2. **Crie um ambiente virtual**
 ```bash
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # ou
-.\venv\Scripts\activate  # Windows
+venv\Scripts\activate  # Windows
 ```
 
-3. Instale as dependências:
+3. **Instale as dependências**
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configuração do Banco de Dados
-
-1. Execute as migrações:
+4. **Configure o banco de dados**
 ```bash
 python manage.py migrate
 ```
 
-2. Importe os dados das Terras Indígenas da FUNAI:
-```bash
-python manage.py importar_terras_indigenas
-```
-
-### 3. Criação de Usuário
-
-1. Crie um usuário administrador:
+5. **Crie um superusuário**
 ```bash
 python manage.py createsuperuser
 ```
-- Siga as instruções para criar um usuário e senha
-- Este usuário terá acesso total ao sistema
 
-### 4. Executando o Sistema
+6. **Execute os comandos de inicialização**
+```bash
+python manage.py criar_tipos_documento
+python manage.py criar_tipos_lancamento
+```
 
-1. Inicie o servidor de desenvolvimento:
+7. **Inicie o servidor**
 ```bash
 python manage.py runserver
 ```
 
-2. Acesse o sistema:
-- Abra o navegador e acesse: http://localhost:8000/
-- Faça login com o usuário criado no passo 3
+## 🎯 Como Usar
 
-### 5. Testando as Funcionalidades
+### Acesso ao Sistema
+- URL: `http://localhost:8000`
+- Use as credenciais do superusuário criado
 
-1. **Cadastro de Terras Indígenas**
-   - Após fazer login, você verá a lista de TIs disponíveis
-   - Clique em "Cadastrar Nova Terra Indígena"
-   - Selecione uma TI da lista importada da FUNAI
+### Fluxo Principal
+1. **Cadastre uma TI** (Terra Indígena)
+2. **Adicione Imóveis** à TI
+3. **Cadastre Documentos** (matrículas/transcrições)
+4. **Registre Lançamentos** nos documentos
+5. **Visualize a Cadeia** na árvore dominial
 
-2. **Cadastro de Imóveis**
-   - Dentro de uma TI, você pode cadastrar imóveis
-   - Preencha os dados do imóvel (matrícula, área, etc.)
+### Visualização em Árvore
+- Acesse um imóvel específico
+- Clique em "Cadeia Dominial"
+- Use os controles de zoom (+/-) para navegar
+- Clique nos cards para ver detalhes
+- Arraste para mover a visualização
 
-3. **Cadastro de Alterações**
-   - Para cada imóvel, você pode registrar alterações
-   - Escolha o tipo (registro, averbação ou não classificado)
-   - Preencha os dados específicos de cada tipo
+## 🔄 Estratégia de Versionamento
 
-4. **Visualização de Cadeia Dominial**
-   - Acesse um imóvel para ver sua cadeia dominial
-   - O sistema mostrará todas as alterações em ordem cronológica
+### Branches
+- **`main`**: Código estável e testado
+- **`develop`**: Desenvolvimento ativo
+- **`feature/*`**: Novas funcionalidades
+- **`hotfix/*`**: Correções urgentes
 
-### 6. Dados de Teste
+### Tags
+- **`v1.0.0-beta`**: Primeira versão para testes
+- **`v1.0.0`**: Versão estável (futuro)
+- **`v1.1.0`**: Novas funcionalidades (futuro)
 
-- O sistema já vem com dados de referência das TIs da FUNAI
-- Você pode criar dados de teste para imóveis e alterações
-- Use o painel administrativo (/admin) para gerenciar dados de referência
+## 📝 Próximas Versões
 
-### 7. Solução de Problemas
+### v1.1.0 (Planejado)
+- [ ] Relatórios em PDF
+- [ ] Exportação de dados
+- [ ] Notificações por email
+- [ ] Dashboard com estatísticas
 
-Se encontrar algum erro:
+### v1.2.0 (Planejado)
+- [ ] API REST
+- [ ] Integração com sistemas externos
+- [ ] Módulo de auditoria
+- [ ] Backup automático
 
-1. Verifique se todas as migrações foram aplicadas:
-```bash
-python manage.py showmigrations
-```
+## 🤝 Contribuição
 
-2. Verifique se os dados da FUNAI foram importados:
-```bash
-python manage.py importar_terras_indigenas
-```
+1. Faça um fork do projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
 
-3. Verifique os logs do servidor para mensagens de erro
+## 📞 Suporte
 
-4. Certifique-se de que o usuário tem as permissões necessárias:
-   - Acesse o painel administrativo
-   - Verifique os grupos e permissões do usuário
+Para dúvidas, sugestões ou problemas:
+- Abra uma [Issue](https://github.com/transistir/CadeiaDominial/issues)
+- Entre em contato com a equipe de desenvolvimento
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+---
+
+**Desenvolvido com ❤️ pela equipe Transistir**
