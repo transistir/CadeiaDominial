@@ -44,32 +44,6 @@ class Command(BaseCommand):
                 'requer_forma': True,
                 'requer_descricao': True,
                 'requer_observacao': True
-            },
-            {
-                'tipo': 'encerrar_matricula',
-                'requer_transmissao': False,
-                'requer_detalhes': False,
-                'requer_titulo': False,
-                'requer_cartorio_origem': False,
-                'requer_livro_origem': False,
-                'requer_folha_origem': False,
-                'requer_data_origem': False,
-                'requer_forma': False,
-                'requer_descricao': False,
-                'requer_observacao': True
-            },
-            {
-                'tipo': 'transcricao',
-                'requer_transmissao': False,
-                'requer_detalhes': False,
-                'requer_titulo': False,
-                'requer_cartorio_origem': False,
-                'requer_livro_origem': False,
-                'requer_folha_origem': False,
-                'requer_data_origem': False,
-                'requer_forma': False,
-                'requer_descricao': False,
-                'requer_observacao': True
             }
         ]
 

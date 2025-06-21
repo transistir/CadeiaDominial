@@ -18,23 +18,62 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'Tipo de documento "{nome}" criado/atualizado')
 
-        # Criar tipos de lançamento
+        # Criar tipos de lançamento (apenas os corretos)
         tipos_lancamento = [
-            ('transacao', 'Transação', True, False),
-            ('averbacao', 'Averbação', False, True),
-            ('matricula_cadeia', 'Matrícula de Cadeia', False, False),
-            ('registro', 'Registro', True, False)
+            {
+                'tipo': 'averbacao',
+                'requer_transmissao': True,
+                'requer_detalhes': False,
+                'requer_titulo': False,
+                'requer_cartorio_origem': False,
+                'requer_livro_origem': False,
+                'requer_folha_origem': False,
+                'requer_data_origem': False,
+                'requer_forma': True,
+                'requer_descricao': True,
+                'requer_observacao': True
+            },
+            {
+                'tipo': 'registro',
+                'requer_transmissao': True,
+                'requer_detalhes': False,
+                'requer_titulo': True,
+                'requer_cartorio_origem': True,
+                'requer_livro_origem': True,
+                'requer_folha_origem': True,
+                'requer_data_origem': True,
+                'requer_forma': True,
+                'requer_descricao': False,
+                'requer_observacao': True
+            },
+            {
+                'tipo': 'inicio_matricula',
+                'requer_transmissao': False,
+                'requer_detalhes': False,
+                'requer_titulo': False,
+                'requer_cartorio_origem': False,
+                'requer_livro_origem': False,
+                'requer_folha_origem': False,
+                'requer_data_origem': False,
+                'requer_forma': True,
+                'requer_descricao': True,
+                'requer_observacao': True
+            }
         ]
 
-        for codigo, nome, requer_transmissao, requer_detalhes in tipos_lancamento:
-            LancamentoTipo.objects.get_or_create(
-                tipo=codigo,
-                defaults={
-                    'tipo': codigo,
-                    'requer_transmissao': requer_transmissao,
-                    'requer_detalhes': requer_detalhes
-                }
+        for tipo_data in tipos_lancamento:
+            tipo, created = LancamentoTipo.objects.get_or_create(
+                tipo=tipo_data['tipo'],
+                defaults=tipo_data
             )
-            self.stdout.write(f'Tipo de lançamento "{nome}" criado/atualizado')
+            
+            if created:
+                self.stdout.write(
+                    self.style.SUCCESS(f'Tipo de lançamento "{tipo.get_tipo_display()}" criado com sucesso!')
+                )
+            else:
+                self.stdout.write(
+                    self.style.WARNING(f'Tipo de lançamento "{tipo.get_tipo_display()}" já existe.')
+                )
 
         self.stdout.write(self.style.SUCCESS('Tipos de documento e lançamento criados com sucesso!')) 
