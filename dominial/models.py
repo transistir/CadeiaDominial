@@ -254,9 +254,7 @@ class LancamentoTipo(models.Model):
     TIPO_CHOICES = [
         ('averbacao', 'Averbação'),
         ('registro', 'Registro'),
-        ('encerrar_matricula', 'Encerrar Matrícula'),
-        ('inicio_matricula', 'Início de Matrícula'),
-        ('transcricao', 'Transcrição')
+        ('inicio_matricula', 'Início de Matrícula')
     ]
     tipo = models.CharField(max_length=50, choices=TIPO_CHOICES)
     requer_transmissao = models.BooleanField(default=False)
@@ -288,7 +286,7 @@ class LancamentoTipo(models.Model):
         elif self.tipo == 'averbacao':
             self.requer_forma = True
             self.requer_descricao = True
-        elif self.tipo == 'encerrar_matricula':
+        elif self.tipo == 'inicio_matricula':
             self.requer_forma = True
             self.requer_descricao = True
 
@@ -348,6 +346,21 @@ class Lancamento(models.Model):
                 raise ValidationError('Folha de origem é obrigatória para este tipo de lançamento.')
             if self.tipo.requer_data_origem and not self.data_origem:
                 raise ValidationError('Data de origem é obrigatória para este tipo de lançamento.')
+        
+        # Validar unicidade do número de lançamento
+        if self.numero_lancamento and self.documento:
+            # Verificar se já existe outro lançamento com o mesmo número no mesmo documento
+            lancamentos_existentes = Lancamento.objects.filter(
+                documento=self.documento,
+                numero_lancamento=self.numero_lancamento
+            )
+            if self.pk:  # Se é uma edição, excluir o próprio registro da verificação
+                lancamentos_existentes = lancamentos_existentes.exclude(pk=self.pk)
+            
+            if lancamentos_existentes.exists():
+                raise ValidationError({
+                    'numero_lancamento': f'Já existe um lançamento com o número "{self.numero_lancamento}" neste documento.'
+                })
 
 class LancamentoPessoa(models.Model):
     """Modelo para armazenar múltiplas pessoas com percentuais em um lançamento"""
