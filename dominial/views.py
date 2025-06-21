@@ -484,7 +484,21 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     
     pessoas = Pessoas.objects.all().order_by('nome')
     cartorios = Cartorios.objects.all().order_by('nome')
-    tipos_lancamento = LancamentoTipo.objects.all().order_by('tipo')
+    
+    # Filtrar tipos de lançamento baseado no tipo do documento
+    if documento_ativo.tipo.tipo == 'matricula':
+        # Para documentos do tipo matrícula: Averbação, Registro e Início de Matrícula
+        tipos_lancamento = LancamentoTipo.objects.filter(
+            tipo__in=['averbacao', 'registro', 'inicio_matricula']
+        ).order_by('tipo')
+    elif documento_ativo.tipo.tipo == 'transcricao':
+        # Para documentos do tipo transcrição: Averbação e Início de Matrícula
+        tipos_lancamento = LancamentoTipo.objects.filter(
+            tipo__in=['averbacao', 'inicio_matricula']
+        ).order_by('tipo')
+    else:
+        # Fallback: todos os tipos
+        tipos_lancamento = LancamentoTipo.objects.all().order_by('tipo')
     
     if request.method == 'POST':
         tipo_id = request.POST.get('tipo_lancamento')
@@ -1024,7 +1038,21 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             messages.error(request, f'Erro ao atualizar lançamento: {str(e)}')
     
     # Preparar dados para o template
-    tipos_lancamento = LancamentoTipo.objects.all()
+    # Filtrar tipos de lançamento baseado no tipo do documento
+    if lancamento.documento.tipo.tipo == 'matricula':
+        # Para documentos do tipo matrícula: Averbação, Registro e Início de Matrícula
+        tipos_lancamento = LancamentoTipo.objects.filter(
+            tipo__in=['averbacao', 'registro', 'inicio_matricula']
+        ).order_by('tipo')
+    elif lancamento.documento.tipo.tipo == 'transcricao':
+        # Para documentos do tipo transcrição: Averbação e Início de Matrícula
+        tipos_lancamento = LancamentoTipo.objects.filter(
+            tipo__in=['averbacao', 'inicio_matricula']
+        ).order_by('tipo')
+    else:
+        # Fallback: todos os tipos
+        tipos_lancamento = LancamentoTipo.objects.all().order_by('tipo')
+    
     cartorios = Cartorios.objects.all().order_by('nome')
     
     # Obter pessoas do lançamento
