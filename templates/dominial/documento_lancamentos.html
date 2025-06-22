@@ -46,7 +46,7 @@
     <div class="lancamentos-section">
         <div class="section-header">
             <h2>📝 Lançamentos ({{ lancamentos.count }})</h2>
-            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+            <a href="{% url 'novo_lancamento_documento' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-success">
                 ➕ Novo Lançamento
             </a>
         </div>
@@ -131,7 +131,7 @@
             <div class="empty-icon">📝</div>
             <h3>Nenhum lançamento encontrado</h3>
             <p>Este documento ainda não possui lançamentos registrados.</p>
-            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+            <a href="{% url 'novo_lancamento_documento' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-success">
                 ➕ Adicionar Primeiro Lançamento
             </a>
         </div>

@@ -591,11 +591,6 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 numero_lancamento=numero_lancamento.strip()
             ).first()
             
-            print(f"DEBUG: Verificando unicidade - Documento: {documento_ativo.numero}, Número: {numero_lancamento.strip()}")
-            print(f"DEBUG: Lançamento existente encontrado: {lancamento_existente is not None}")
-            if lancamento_existente:
-                print(f"DEBUG: Lançamento existente ID: {lancamento_existente.id}")
-            
             if lancamento_existente:
                 messages.error(request, f'Já existe um lançamento com o número "{numero_lancamento.strip()}" neste documento.')
                 context = {
@@ -646,8 +641,6 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             area = request.POST.get('area')
             origem = request.POST.get('origem_completa') or request.POST.get('origem')
             
-            print(f"DEBUG: Criando lançamento - Documento: {documento_ativo.numero}, Número: {numero_lancamento}, Tipo: {tipo_lanc.tipo}")
-            
             # Processar campo forma sempre (pode ser usado mesmo quando não é requerido)
             # Pegar o valor correto baseado no tipo de lançamento
             if tipo_lanc.tipo == 'averbacao':
@@ -676,8 +669,6 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 data_origem=data_clean,
             )
             
-            print(f"DEBUG: Lançamento criado com ID: {lancamento.id}")
-            
             # Adicionar cartório de origem se fornecido
             cartorio_origem_id = request.POST.get('cartorio_origem')
             cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
@@ -704,8 +695,6 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             if origem:
                 lancamento.origem = origem
             lancamento.save()
-            
-            print(f"DEBUG: Lançamento salvo com origem: {lancamento.origem}")
             
             # Processar origens para criar documentos automáticos
             if origem:
@@ -758,15 +747,15 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
-            adquirentes_percentual = request.POST.getlist('adquirente_percentual[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
+            adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
             
-            for i, nome in enumerate(adquirentes_data):
-                nome = nome.strip()
+            for i in range(len(adquirente_ids)):
+                nome = adquirentes_data[i].strip() if i < len(adquirentes_data) else None
                 if not nome:  # Pular se o nome estiver vazio
                     continue
                     
-                percentual = adquirentes_percentual[i] if i < len(adquirentes_percentual) else None
+                percentual = adquirente_percentuais[i].strip() if i < len(adquirente_percentuais) and adquirente_percentuais[i].strip() else None
                 pessoa_id = adquirente_ids[i] if i < len(adquirente_ids) else None
                 
                 # Validar se o ID não está vazio
@@ -873,44 +862,78 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
 @login_required
 def cadeia_dominial_arvore(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato de árvore para o diagrama"""
-    tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    print(f"DEBUG: Iniciando cadeia_dominial_arvore - TIS: {tis_id}, Imóvel: {imovel_id}")
     
-    # Obter todos os documentos do imóvel ordenados por data
-    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
-    
-    # Obter origens identificadas de lançamentos que ainda não foram convertidas em documentos
-    origens_identificadas = []
-    lancamentos_com_origem = Lancamento.objects.filter(
-        documento__imovel=imovel,
-        origem__isnull=False
-    ).exclude(origem='')
-    
-    for lancamento in lancamentos_com_origem:
-        if lancamento.origem:
-            origens_processadas = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
-            
-            for origem_info in origens_processadas:
-                # Verificar se já existe um documento com esse número
-                documento_existente = Documento.objects.filter(imovel=imovel, numero=origem_info['numero']).first()
+    try:
+        tis = get_object_or_404(TIs, id=tis_id)
+        print(f"DEBUG: TI encontrada: {tis.nome}")
+        
+        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        print(f"DEBUG: Imóvel encontrado: {imovel.matricula}")
+        
+        # Obter todos os documentos do imóvel ordenados por data
+        documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+        print(f"DEBUG: Documentos encontrados: {documentos.count()}")
+        
+        # Obter origens identificadas de lançamentos que ainda não foram convertidas em documentos
+        origens_identificadas = []
+        lancamentos_com_origem = Lancamento.objects.filter(
+            documento__imovel=imovel,
+            origem__isnull=False
+        ).exclude(origem='')
+        
+        print(f"DEBUG: Lançamentos com origem: {lancamentos_com_origem.count()}")
+        
+        for lancamento in lancamentos_com_origem:
+            if lancamento.origem:
+                origens_processadas = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
                 
-                if not documento_existente:
-                    # Criar o documento automaticamente
-                    try:
-                        tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
-                        documento_criado = Documento.objects.create(
-                            imovel=imovel,
-                            tipo=tipo_doc,
-                            numero=origem_info['numero'],
-                            data=date.today(),
-                            cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
-                            livro='1',  # Livro padrão
-                            folha='1',  # Folha padrão
-                            origem=f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
-                            observacoes=f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
-                        )
-                        
-                        # Adicionar à lista de origens identificadas (agora são documentos criados)
+                for origem_info in origens_processadas:
+                    # Verificar se já existe um documento com esse número
+                    documento_existente = Documento.objects.filter(imovel=imovel, numero=origem_info['numero']).first()
+                    
+                    if not documento_existente:
+                        # Criar o documento automaticamente
+                        try:
+                            tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
+                            documento_criado = Documento.objects.create(
+                                imovel=imovel,
+                                tipo=tipo_doc,
+                                numero=origem_info['numero'],
+                                data=date.today(),
+                                cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
+                                livro='1',  # Livro padrão
+                                folha='1',  # Folha padrão
+                                origem=f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
+                                observacoes=f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
+                            )
+                            
+                            # Adicionar à lista de origens identificadas (agora são documentos criados)
+                            origens_identificadas.append({
+                                'codigo': origem_info['numero'],
+                                'tipo': origem_info['tipo'],
+                                'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
+                                'lancamento_origem': lancamento.numero_lancamento,
+                                'documento_origem': lancamento.documento.numero,
+                                'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
+                                'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
+                                'documento_id': documento_criado.id,
+                                'ja_criado': True
+                            })
+                        except DocumentoTipo.DoesNotExist:
+                            # Se o tipo não existir, apenas listar como origem identificada
+                            origens_identificadas.append({
+                                'codigo': origem_info['numero'],
+                                'tipo': origem_info['tipo'],
+                                'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
+                                'lancamento_origem': lancamento.numero_lancamento,
+                                'documento_origem': lancamento.documento.numero,
+                                'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
+                                'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
+                                'ja_criado': False
+                            })
+                    else:
+                        # Documento já existe, adicionar como origem identificada criada
                         origens_identificadas.append({
                             'codigo': origem_info['numero'],
                             'tipo': origem_info['tipo'],
@@ -919,140 +942,186 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
                             'documento_origem': lancamento.documento.numero,
                             'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
                             'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
-                            'documento_id': documento_criado.id,
+                            'documento_id': documento_existente.id,
                             'ja_criado': True
                         })
-                    except DocumentoTipo.DoesNotExist:
-                        # Se o tipo não existir, apenas listar como origem identificada
-                        origens_identificadas.append({
-                            'codigo': origem_info['numero'],
-                            'tipo': origem_info['tipo'],
-                            'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
-                            'lancamento_origem': lancamento.numero_lancamento,
-                            'documento_origem': lancamento.documento.numero,
-                            'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
-                            'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
-                            'ja_criado': False
-                        })
-                else:
-                    # Documento já existe, adicionar como origem identificada criada
-                    origens_identificadas.append({
-                        'codigo': origem_info['numero'],
-                        'tipo': origem_info['tipo'],
-                        'tipo_display': 'Matrícula' if origem_info['tipo'] == 'matricula' else 'Transcrição',
-                        'lancamento_origem': lancamento.numero_lancamento,
-                        'documento_origem': lancamento.documento.numero,
-                        'data_identificacao': lancamento.data.strftime('%d/%m/%Y'),
-                        'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
-                        'documento_id': documento_existente.id,
-                        'ja_criado': True
-                    })
-    
-    # Estrutura para armazenar a árvore
-    arvore = {
-        'imovel': {
-            'id': imovel.id,
-            'matricula': imovel.matricula,
-            'nome': imovel.nome,
-            'proprietario': imovel.proprietario.nome
-        },
-        'documentos': [],
-        'origens_identificadas': origens_identificadas,
-        'conexoes': []
-    }
-    
-    # Mapear documentos por número para facilitar busca
-    documentos_por_numero = {}
-    
-    # Processar cada documento
-    for documento in documentos:
-        doc_node = {
-            'id': documento.id,
-            'numero': documento.numero,
-            'tipo': documento.tipo.tipo,
-            'tipo_display': documento.tipo.get_tipo_display(),
-            'data': documento.data.strftime('%d/%m/%Y'),
-            'cartorio': documento.cartorio.nome,
-            'livro': documento.livro,
-            'folha': documento.folha,
-            'origem': documento.origem or '',
-            'observacoes': documento.observacoes or '',
-            'total_lancamentos': documento.lancamentos.count(),
-            'x': 0,  # Posição X (será calculada pelo frontend)
-            'y': 0,  # Posição Y (será calculada pelo frontend)
-            'nivel': 0  # Nível na árvore (será calculado)
+        
+        print(f"DEBUG: Origens identificadas: {len(origens_identificadas)}")
+        
+        # Estrutura para armazenar a árvore
+        arvore = {
+            'imovel': {
+                'id': imovel.id,
+                'matricula': imovel.matricula,
+                'nome': imovel.nome,
+                'proprietario': imovel.proprietario.nome
+            },
+            'documentos': [],
+            'origens_identificadas': [],
+            'conexoes': []
         }
         
-        documentos_por_numero[documento.numero] = doc_node
-        arvore['documentos'].append(doc_node)
-    
-    # Criar conexões baseadas nas origens
-    for documento in documentos:
-        if documento.origem:
-            # Extrair códigos de origem (M ou T seguidos de números)
-            import re
-            origens = re.findall(r'[MT]\d+', documento.origem)
-            
-            # Se não encontrou padrões M/T, tentar extrair números
-            if not origens:
-                numeros = re.findall(r'\d+', documento.origem)
-                origens = numeros
-            
-            # Se ainda não encontrou, verificar se há referência a outros documentos
-            if not origens and 'matrícula' in documento.origem.lower():
-                # Procurar por documentos que podem ser a matrícula atual
-                for outro_doc in documentos:
-                    if outro_doc.tipo.tipo == 'matricula' and outro_doc != documento:
-                        origens = [outro_doc.numero]
-                        break
-            
-            for origem in origens:
-                # Verificar se existe um documento com esse número
-                if origem in documentos_por_numero:
-                    conexao = {
-                        'from': origem,  # Documento de origem
-                        'to': documento.numero,  # Documento atual
-                        'tipo': 'origem'
-                    }
-                    arvore['conexoes'].append(conexao)
-    
-    # Calcular níveis da árvore (documentos sem origem = nível 0)
-    documentos_processados = set()
-    
-    def calcular_nivel(numero_doc, nivel_atual=0):
-        if numero_doc in documentos_processados:
-            return nivel_atual
+        # Mapear documentos por número para facilitar busca
+        documentos_por_numero = {}
         
-        documentos_processados.add(numero_doc)
-        doc_node = documentos_por_numero.get(numero_doc)
-        if doc_node:
-            doc_node['nivel'] = max(doc_node['nivel'], nivel_atual)
+        # Processar cada documento
+        for documento in documentos:
+            doc_node = {
+                'id': documento.id,
+                'numero': documento.numero,
+                'tipo': documento.tipo.tipo,
+                'tipo_display': documento.tipo.get_tipo_display(),
+                'data': documento.data.strftime('%d/%m/%Y'),
+                'cartorio': documento.cartorio.nome,
+                'livro': documento.livro,
+                'folha': documento.folha,
+                'origem': documento.origem or '',
+                'observacoes': documento.observacoes or '',
+                'total_lancamentos': documento.lancamentos.count(),
+                'x': 0,  # Posição X (será calculada pelo frontend)
+                'y': 0,  # Posição Y (será calculada pelo frontend)
+                'nivel': 0  # Nível na árvore (será calculado)
+            }
             
-            # Encontrar documentos que têm este como origem
+            documentos_por_numero[documento.numero] = doc_node
+            arvore['documentos'].append(doc_node)
+        
+        print(f"DEBUG: Documentos processados: {len(arvore['documentos'])}")
+        
+        # Criar conexões baseadas nas origens dos documentos e lançamentos
+        for documento in documentos:
+            # Verificar origem do documento
+            if documento.origem:
+                # Extrair códigos de origem (M ou T seguidos de números)
+                import re
+                origens = re.findall(r'[MT]\d+', documento.origem)
+                
+                # Se não encontrou padrões M/T, tentar extrair números
+                if not origens:
+                    numeros = re.findall(r'\d+', documento.origem)
+                    origens = numeros
+                
+                # Se ainda não encontrou, verificar se há referência a outros documentos
+                if not origens and 'matrícula' in documento.origem.lower():
+                    # Procurar por documentos que podem ser a matrícula atual
+                    for outro_doc in documentos:
+                        if outro_doc.tipo.tipo == 'matricula' and outro_doc != documento:
+                            origens = [outro_doc.numero]
+                            break
+                
+                for origem in origens:
+                    # Evitar auto-referências
+                    if origem != documento.numero and origem in documentos_por_numero:
+                        conexao = {
+                            'from': origem,  # Documento de origem
+                            'to': documento.numero,  # Documento atual
+                            'tipo': 'origem'
+                        }
+                        arvore['conexoes'].append(conexao)
+            
+            # Verificar origens dos lançamentos do documento
+            lancamentos = documento.lancamentos.all()
+            for lancamento in lancamentos:
+                if lancamento.origem:
+                    # Extrair códigos de origem dos lançamentos
+                    import re
+                    origens_lancamento = re.findall(r'[MT]\d+', lancamento.origem)
+                    
+                    for origem in origens_lancamento:
+                        # Evitar auto-referências e verificar se existe um documento com esse número
+                        if origem != documento.numero and origem in documentos_por_numero:
+                            conexao = {
+                                'from': origem,  # Documento de origem
+                                'to': documento.numero,  # Documento atual
+                                'tipo': 'origem_lancamento'
+                            }
+                            # Evitar duplicatas
+                            if not any(c['from'] == origem and c['to'] == documento.numero for c in arvore['conexoes']):
+                                arvore['conexoes'].append(conexao)
+        
+        print(f"DEBUG: Conexões criadas: {len(arvore['conexoes'])}")
+        
+        # Calcular níveis da árvore de forma hierárquica correta
+        # Nível 0: Matrícula atual (documento principal)
+        # Nível 1: Documentos que aparecem como origem na matrícula atual
+        # Nível 2: Documentos que aparecem como origem nos documentos do nível 1
+        # E assim por diante...
+        
+        # Identificar a matrícula atual (documento principal)
+        matricula_atual = None
+        for doc_node in arvore['documentos']:
+            if not doc_node['origem'] or doc_node['origem'] == '' or 'Matrícula atual' in doc_node['origem'] or 'Criado automaticamente' not in doc_node['origem']:
+                matricula_atual = doc_node['numero']
+                break
+        
+        # Se não encontrou matrícula atual, usar o primeiro documento
+        if not matricula_atual and arvore['documentos']:
+            matricula_atual = arvore['documentos'][0]['numero']
+        
+        print(f"DEBUG: Matrícula atual identificada: {matricula_atual}")
+        
+        # Definir níveis de forma hierárquica
+        niveis_hierarquicos = {}
+        
+        # Nível 0: Matrícula atual
+        niveis_hierarquicos[matricula_atual] = 0
+        
+        # Nível 1: Documentos que são referenciados pela matrícula atual
+        documentos_nivel_1 = []
+        for conexao in arvore['conexoes']:
+            if conexao['to'] == matricula_atual:  # Se a matrícula atual referencia este documento
+                documentos_nivel_1.append(conexao['from'])
+                niveis_hierarquicos[conexao['from']] = 1
+                print(f"DEBUG: {conexao['from']} definido como nível 1 (referenciado por {matricula_atual})")
+        
+        # Nível 2: Documentos que são referenciados pelos documentos do nível 1
+        documentos_nivel_2 = []
+        for conexao in arvore['conexoes']:
+            if conexao['to'] in documentos_nivel_1:  # Se um documento do nível 1 referencia este documento
+                if conexao['from'] not in niveis_hierarquicos:  # Se ainda não foi definido
+                    documentos_nivel_2.append(conexao['from'])
+                    niveis_hierarquicos[conexao['from']] = 2
+                    print(f"DEBUG: {conexao['from']} definido como nível 2 (referenciado por {conexao['to']})")
+        
+        # Nível 3+: Continuar para níveis mais profundos se necessário
+        nivel_atual = 3
+        documentos_nivel_anterior = documentos_nivel_2.copy()
+        
+        while documentos_nivel_anterior:
+            documentos_nivel_atual = []
             for conexao in arvore['conexoes']:
-                if conexao['from'] == numero_doc:
-                    calcular_nivel(conexao['to'], nivel_atual + 1)
-    
-    # Calcular níveis começando pelos documentos sem origem
-    documentos_com_origem = set()
-    for conexao in arvore['conexoes']:
-        documentos_com_origem.add(conexao['to'])
-    
-    for doc_node in arvore['documentos']:
-        if doc_node['numero'] not in documentos_com_origem:
-            calcular_nivel(doc_node['numero'], 0)
-    
-    # Se algum documento não foi processado, processar agora
-    for doc_node in arvore['documentos']:
-        if doc_node['numero'] not in documentos_processados:
-            calcular_nivel(doc_node['numero'], 0)
-    
-    # Adicionar apenas origens que ainda não foram convertidas em documentos
-    for origem in origens_identificadas:
-        if not origem['ja_criado']:
-            arvore['origens_identificadas'].append(origem)
-    
-    return JsonResponse(arvore, safe=False)
+                if conexao['to'] in documentos_nivel_anterior:  # Se um documento do nível anterior referencia este documento
+                    if conexao['from'] not in niveis_hierarquicos:  # Se ainda não foi definido
+                        documentos_nivel_atual.append(conexao['from'])
+                        niveis_hierarquicos[conexao['from']] = nivel_atual
+                        print(f"DEBUG: {conexao['from']} definido como nível {nivel_atual} (referenciado por {conexao['to']})")
+            
+            documentos_nivel_anterior = documentos_nivel_atual
+            nivel_atual += 1
+        
+        # Aplicar níveis aos documentos
+        for doc_node in arvore['documentos']:
+            doc_node['nivel'] = niveis_hierarquicos.get(doc_node['numero'], 0)
+        
+        print(f"DEBUG: Níveis hierárquicos finais: {[(doc['numero'], doc['tipo'], doc['nivel']) for doc in arvore['documentos']]}")
+        
+        # Adicionar apenas origens que ainda não foram convertidas em documentos
+        origens_finais = []
+        for origem in origens_identificadas:
+            if not origem['ja_criado']:
+                origens_finais.append(origem)
+        
+        arvore['origens_identificadas'] = origens_finais
+        
+        print(f"DEBUG: Origens finais (não criadas): {len(origens_finais)}")
+        
+        return JsonResponse(arvore, safe=False)
+        
+    except Exception as e:
+        print(f"DEBUG: Erro na view: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 def documento_lancamentos(request, tis_id, imovel_id, documento_id):
@@ -1209,9 +1278,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 })
             
             # Processar adquirentes
-            adquirentes_data = []
+            adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
-            adquirente_nomes = request.POST.getlist('adquirente_nome[]')
             adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
             
             for i in range(len(adquirente_ids)):
@@ -1237,6 +1305,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 })
             
             messages.success(request, f'Lançamento "{lancamento.numero_lancamento}" atualizado com sucesso!')
+            
+            # Sempre redirecionar para a cadeia dominial após salvar
             return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=lancamento.documento.id)
             
         except Exception as e:

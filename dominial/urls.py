@@ -27,6 +27,7 @@ urlpatterns = [
     # Documentos e Lançamentos
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-documento/', views.novo_documento, name='novo_documento'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/', views.novo_lancamento, name='novo_lancamento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/<int:documento_id>/', views.novo_lancamento, name='novo_lancamento_documento'),
     path('documento/<int:documento_id>/lancamentos/<int:tis_id>/<int:imovel_id>/', views.documento_lancamentos, name='documento_lancamentos'),
     path('documento/<int:documento_id>/editar/<int:tis_id>/<int:imovel_id>/', views.editar_documento, name='editar_documento'),
     path('selecionar-documento-lancamento/<int:tis_id>/<int:imovel_id>/', views.selecionar_documento_lancamento, name='selecionar_documento_lancamento'),
