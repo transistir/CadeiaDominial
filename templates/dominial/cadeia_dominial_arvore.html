@@ -191,24 +191,21 @@
 
 .conexao {
     position: absolute;
-    background: #007bff;
+    background: transparent;
     height: 4px;
     transform-origin: left center;
     z-index: 1;
     border-radius: 2px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-}
-
-.conexao::after {
-    content: '';
-    position: absolute;
-    right: -10px;
-    top: -6px;
-    width: 0;
-    height: 0;
-    border-left: 15px solid #007bff;
-    border-top: 8px solid transparent;
-    border-bottom: 8px solid transparent;
+    background-image: linear-gradient(
+        to right,
+        #28a745 0px,
+        #28a745 6px,
+        transparent 6px,
+        transparent 12px
+    );
+    background-size: 12px 4px;
+    background-repeat: repeat-x;
 }
 
 .arvore-actions {
@@ -477,8 +474,8 @@
 
     <div class="arvore-container" id="arvore-container">
         <div class="arvore-zoom-content" id="arvore-zoom-content">
-            <div class="loading">
-                <span>Carregando diagrama da cadeia dominial...</span>
+        <div class="loading">
+            <span>Carregando diagrama da cadeia dominial...</span>
             </div>
         </div>
     </div>
@@ -592,35 +589,87 @@ function renderizarDocumentos(zoomContent) {
         doc.size = cardSize;
     });
     
-    // Posicionar matrícula atual no topo da pirâmide
-    const matriculaAtual = documentosOrdenados.find(doc => doc.tipo === 'matricula');
-    if (matriculaAtual) {
-        const card = criarCardDocumento(matriculaAtual);
-        const centerX = container.offsetWidth / 2 || 600;
-        const cardWidth = cardSize === 'large' ? 70 : cardSize === 'medium' ? 60 : 50;
-        const x = centerX - cardWidth; // Centralizar
-        const y = 10; // Topo da pirâmide
-        
-        card.style.left = `${x}px`;
-        card.style.top = `${y}px`;
-        zoomContent.appendChild(card);
-        posicoes[matriculaAtual.numero] = { x, y };
-    }
-    
-    // Posicionar transcrições abaixo das origens identificadas
-    const transcricoes = documentosOrdenados.filter(doc => doc.tipo === 'transcricao');
-    transcricoes.forEach((doc, index) => {
-        const card = criarCardDocumento(doc);
-        const centerX = container.offsetWidth / 2 || 600;
-        const cardWidth = cardSize === 'large' ? 70 : cardSize === 'medium' ? 60 : 50;
-        const x = centerX - cardWidth + (index - (transcricoes.length - 1) / 2) * espacamentoX; // Distribuir horizontalmente
-        const y = 220; // Abaixo das origens identificadas
-        
-        card.style.left = `${x}px`;
-        card.style.top = `${y}px`;
-        zoomContent.appendChild(card);
-        posicoes[doc.numero] = { x, y };
+    // Posicionar documentos baseado nos níveis calculados pelo backend
+    const documentosPorNivel = {};
+    documentosOrdenados.forEach(doc => {
+        const nivel = doc.nivel || 0;
+        if (!documentosPorNivel[nivel]) {
+            documentosPorNivel[nivel] = [];
+        }
+        documentosPorNivel[nivel].push(doc);
     });
+    
+    // Posicionar documentos nível por nível
+    Object.keys(documentosPorNivel).sort((a, b) => parseInt(a) - parseInt(b)).forEach(nivel => {
+        const documentosNivel = documentosPorNivel[nivel];
+        const y = 10 + parseInt(nivel) * 150; // 10px do topo + 150px por nível
+        
+        // Ordenar documentos do nível: matrículas primeiro, depois transcrições, ambos do maior para o menor
+        documentosNivel.sort((a, b) => {
+            // Primeiro: priorizar matrículas sobre transcrições
+            if (a.tipo === 'matricula' && b.tipo !== 'matricula') return -1;
+            if (a.tipo !== 'matricula' && b.tipo === 'matricula') return 1;
+            
+            // Segundo: ordenar por número (maior primeiro)
+            const numA = parseInt(a.numero.replace(/[MT]/g, ''));
+            const numB = parseInt(b.numero.replace(/[MT]/g, ''));
+            return numB - numA; // Maior primeiro
+        });
+        
+        documentosNivel.forEach((doc, index) => {
+            const card = criarCardDocumento(doc);
+            const centerX = container.offsetWidth / 2 || 600;
+            const cardWidth = cardSize === 'large' ? 70 : cardSize === 'medium' ? 60 : 50;
+            
+            // Distribuir horizontalmente no nível
+            const totalWidth = documentosNivel.length * espacamentoX;
+            const startX = centerX - (totalWidth / 2) + (espacamentoX / 2);
+            const x = startX + index * espacamentoX;
+            
+            card.style.left = `${x}px`;
+            card.style.top = `${y}px`;
+            zoomContent.appendChild(card);
+            posicoes[doc.numero] = { x, y };
+        });
+    });
+    
+    // Criar conexões visuais entre documentos
+    if (arvoreData.conexoes && arvoreData.conexoes.length > 0) {
+        arvoreData.conexoes.forEach(conexao => {
+            const fromPos = posicoes[conexao.from];
+            const toPos = posicoes[conexao.to];
+            
+            if (fromPos && toPos) {
+                const conexaoEl = document.createElement('div');
+                conexaoEl.className = 'conexao';
+                conexaoEl.style.zIndex = '1';
+                
+                // Calcular posição e ângulo da conexão
+                const cardWidth = cardSize === 'large' ? 70 : cardSize === 'medium' ? 60 : 50;
+                const cardHeight = cardSize === 'large' ? 90 : cardSize === 'medium' ? 80 : 70;
+                
+                // Posições nas bordas dos cards
+                const fromX = fromPos.x + cardWidth; // Borda direita do card origem
+                const fromY = fromPos.y + (cardHeight / 2); // Centro vertical do card origem
+                const toX = toPos.x; // Borda esquerda do card destino
+                const toY = toPos.y + (cardHeight / 2); // Centro vertical do card destino
+                
+                const dx = toX - fromX;
+                const dy = toY - fromY;
+                const distancia = Math.sqrt(dx * dx + dy * dy);
+                const angulo = Math.atan2(dy, dx) * 180 / Math.PI;
+                
+                // Posicionar a linha
+                conexaoEl.style.width = `${distancia}px`;
+                conexaoEl.style.left = `${fromX}px`;
+                conexaoEl.style.top = `${fromY}px`;
+                conexaoEl.style.transform = `rotate(${angulo}deg)`;
+                conexaoEl.style.transformOrigin = 'left center';
+                
+                zoomContent.appendChild(conexaoEl);
+            }
+        });
+    }
     
     return posicoes;
 }
@@ -682,7 +731,7 @@ function abrirDocumento(documentoId) {
 
 // Novo lançamento em documento específico
 function novoLancamentoDocumento(documentoId) {
-    const url = `/dominial/tis/{{ tis.id }}/imovel/{{ imovel.id }}/novo-lancamento/`;
+    const url = `/dominial/tis/{{ tis.id }}/imovel/{{ imovel.id }}/novo-lancamento/${documentoId}/`;
     window.location.href = url;
 }
 
@@ -853,22 +902,24 @@ function renderizarOrigensIdentificadas(zoomContent) {
             conexaoEl.style.zIndex = '1';
             
             // Calcular posição e ângulo da conexão
-            const cardWidth = cardSize === 'large' ? 70 : cardSize === 'medium' ? 50 : 40;
-            const cardHeight = cardSize === 'large' ? 45 : cardSize === 'medium' ? 30 : 25;
-            const cardX = x + cardWidth; // Centro do card
-            const cardY = y + cardHeight; // Centro do card
-            const matriculaX = centerX; // Centro da matrícula (topo)
-            const matriculaY = 50; // Centro da matrícula (topo)
+            const cardWidth = cardSize === 'large' ? 70 : cardSize === 'medium' ? 60 : 50;
+            const cardHeight = cardSize === 'large' ? 90 : cardSize === 'medium' ? 80 : 70;
             
-            const dx = matriculaX - cardX;
-            const dy = matriculaY - cardY;
+            // Posições nas bordas dos cards
+            const fromX = fromPos.x + cardWidth; // Borda direita do card origem
+            const fromY = fromPos.y + (cardHeight / 2); // Centro vertical do card origem
+            const toX = toPos.x; // Borda esquerda do card destino
+            const toY = toPos.y + (cardHeight / 2); // Centro vertical do card destino
+            
+            const dx = toX - fromX;
+            const dy = toY - fromY;
             const distancia = Math.sqrt(dx * dx + dy * dy);
             const angulo = Math.atan2(dy, dx) * 180 / Math.PI;
             
             // Posicionar a linha
             conexaoEl.style.width = `${distancia}px`;
-            conexaoEl.style.left = `${cardX}px`;
-            conexaoEl.style.top = `${cardY}px`;
+            conexaoEl.style.left = `${fromX}px`;
+            conexaoEl.style.top = `${fromY}px`;
             conexaoEl.style.transform = `rotate(${angulo}deg)`;
             conexaoEl.style.transformOrigin = 'left center';
             

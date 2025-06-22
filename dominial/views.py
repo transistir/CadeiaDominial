@@ -591,6 +591,11 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 numero_lancamento=numero_lancamento.strip()
             ).first()
             
+            print(f"DEBUG: Verificando unicidade - Documento: {documento_ativo.numero}, Número: {numero_lancamento.strip()}")
+            print(f"DEBUG: Lançamento existente encontrado: {lancamento_existente is not None}")
+            if lancamento_existente:
+                print(f"DEBUG: Lançamento existente ID: {lancamento_existente.id}")
+            
             if lancamento_existente:
                 messages.error(request, f'Já existe um lançamento com o número "{numero_lancamento.strip()}" neste documento.')
                 context = {
@@ -641,6 +646,8 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             area = request.POST.get('area')
             origem = request.POST.get('origem_completa') or request.POST.get('origem')
             
+            print(f"DEBUG: Criando lançamento - Documento: {documento_ativo.numero}, Número: {numero_lancamento}, Tipo: {tipo_lanc.tipo}")
+            
             # Processar campo forma sempre (pode ser usado mesmo quando não é requerido)
             # Pegar o valor correto baseado no tipo de lançamento
             if tipo_lanc.tipo == 'averbacao':
@@ -669,6 +676,8 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 data_origem=data_clean,
             )
             
+            print(f"DEBUG: Lançamento criado com ID: {lancamento.id}")
+            
             # Adicionar cartório de origem se fornecido
             cartorio_origem_id = request.POST.get('cartorio_origem')
             cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
@@ -696,8 +705,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 lancamento.origem = origem
             lancamento.save()
             
-            # Verificar se o campo foi salvo corretamente
-            lancamento.refresh_from_db()
+            print(f"DEBUG: Lançamento salvo com origem: {lancamento.origem}")
             
             # Processar origens para criar documentos automáticos
             if origem:
@@ -1039,6 +1047,11 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         if doc_node['numero'] not in documentos_processados:
             calcular_nivel(doc_node['numero'], 0)
     
+    # Adicionar apenas origens que ainda não foram convertidas em documentos
+    for origem in origens_identificadas:
+        if not origem['ja_criado']:
+            arvore['origens_identificadas'].append(origem)
+    
     return JsonResponse(arvore, safe=False)
 
 @login_required
@@ -1156,8 +1169,16 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # Salvar o lançamento
             lancamento.save()
             
+            # Processar origens para criar documentos automáticos
+            origem = request.POST.get('origem_completa', '').strip()
+            if origem:
+                origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
+                if origens_processadas:
+                    messages.info(request, f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.')
+            
             # Limpar pessoas existentes do lançamento
-            lancamento.pessoas.clear()
+            from .models import LancamentoPessoa
+            LancamentoPessoa.objects.filter(lancamento=lancamento).delete()
             
             # Processar transmitentes
             transmitentes_data = []
