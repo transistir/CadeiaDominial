@@ -50,7 +50,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'cadeia_dominial',
     'django_extensions',
-    'django.contrib.gis',
     'dominial',
     'dal',
     'dal_select2',
