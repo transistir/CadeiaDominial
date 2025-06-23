@@ -26,9 +26,6 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASSWORD', 'sua_senha_segura_aqui'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
-        'OPTIONS': {
-            'charset': 'utf8',
-        },
     }
 }
 
