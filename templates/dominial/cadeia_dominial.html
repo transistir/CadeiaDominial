@@ -138,7 +138,6 @@
         {% if not tem_apenas_matricula or tem_lancamentos %}
         <div class="actions" style="margin-top: 20px;">
             <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">Novo Lançamento</a>
-            <a href="{% url 'novo_documento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">Novo Documento</a>
         </div>
         {% endif %}
     </div>
