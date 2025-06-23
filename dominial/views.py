@@ -1576,7 +1576,7 @@ def identificar_tronco_principal(imovel):
     if not matricula_principal:
         return []
     
-    print(f"DEBUG: Matrícula principal identificada: {matricula_principal.numero}")
+    # print(f"DEBUG: Matrícula principal identificada: {matricula_principal.numero}")
     
     # Construir o tronco principal começando pela matrícula atual
     tronco_principal = [matricula_principal]
@@ -1590,10 +1590,10 @@ def identificar_tronco_principal(imovel):
             origem__isnull=False
         ).exclude(origem='')
         
-        print(f"DEBUG: Documento atual: {documento_atual.numero}, Lançamentos com origem: {lancamentos_com_origem.count()}")
+        # print(f"DEBUG: Documento atual: {documento_atual.numero}, Lançamentos com origem: {lancamentos_com_origem.count()}")
         
         if not lancamentos_com_origem.exists():
-            print(f"DEBUG: Nenhum lançamento com origem encontrado para {documento_atual.numero}")
+            # print(f"DEBUG: Nenhum lançamento com origem encontrado para {documento_atual.numero}")
             break
         
         # Extrair códigos de origem dos lançamentos
@@ -1602,10 +1602,10 @@ def identificar_tronco_principal(imovel):
         
         for lancamento in lancamentos_com_origem:
             if lancamento.origem:
-                print(f"DEBUG: Processando origem: {lancamento.origem}")
+                # print(f"DEBUG: Processando origem: {lancamento.origem}")
                 # Extrair códigos M e T da origem
                 codigos = re.findall(r'[MT]\d+', lancamento.origem)
-                print(f"DEBUG: Códigos extraídos: {codigos}")
+                # print(f"DEBUG: Códigos extraídos: {codigos}")
                 for codigo in codigos:
                     # Verificar se existe um documento com esse código
                     doc_existente = Documento.objects.filter(
@@ -1615,12 +1615,12 @@ def identificar_tronco_principal(imovel):
                     
                     if doc_existente and doc_existente not in tronco_principal:
                         origens_identificadas.append(doc_existente)
-                        print(f"DEBUG: Documento encontrado: {doc_existente.numero}")
+                        # print(f"DEBUG: Documento encontrado: {doc_existente.numero}")
         
-        print(f"DEBUG: Origens identificadas: {[doc.numero for doc in origens_identificadas]}")
+        # print(f"DEBUG: Origens identificadas: {[doc.numero for doc in origens_identificadas]}")
         
         if not origens_identificadas:
-            print(f"DEBUG: Nenhuma origem válida encontrada")
+            # print(f"DEBUG: Nenhuma origem válida encontrada")
             break
         
         # Escolher o próximo documento: priorizar matrículas sobre transcrições
@@ -1632,25 +1632,25 @@ def identificar_tronco_principal(imovel):
         if matriculas:
             # Escolher a matrícula com maior número
             proximo_documento = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
-            print(f"DEBUG: Próxima matrícula escolhida: {proximo_documento.numero}")
+            # print(f"DEBUG: Próxima matrícula escolhida: {proximo_documento.numero}")
         else:
             # Se não há matrículas, escolher a transcrição com maior número
             transcricoes = [doc for doc in origens_identificadas if doc.tipo.tipo == 'transcricao']
             if transcricoes:
                 proximo_documento = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
-                print(f"DEBUG: Próxima transcrição escolhida: {proximo_documento.numero}")
+                # print(f"DEBUG: Próxima transcrição escolhida: {proximo_documento.numero}")
         
         # Se não encontrou próximo documento, parar
         if not proximo_documento:
-            print(f"DEBUG: Nenhum próximo documento encontrado")
+            # print(f"DEBUG: Nenhum próximo documento encontrado")
             break
         
         # Adicionar ao tronco e continuar
         tronco_principal.append(proximo_documento)
         documento_atual = proximo_documento
-        print(f"DEBUG: Tronco atual: {[doc.numero for doc in tronco_principal]}")
+        # print(f"DEBUG: Tronco atual: {[doc.numero for doc in tronco_principal]}")
     
-    print(f"DEBUG: Tronco principal final: {[doc.numero for doc in tronco_principal]}")
+    # print(f"DEBUG: Tronco principal final: {[doc.numero for doc in tronco_principal]}")
     return tronco_principal
 
 def identificar_troncos_secundarios(imovel, tronco_principal):
