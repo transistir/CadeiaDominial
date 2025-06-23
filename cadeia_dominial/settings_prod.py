@@ -32,6 +32,8 @@ DATABASES = {
 # Configurações de Arquivos Estáticos
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+# Remover STATICFILES_DIRS para evitar conflitos em produção
+STATICFILES_DIRS = []
 
 # Configurações de Logging
 LOGGING = {
