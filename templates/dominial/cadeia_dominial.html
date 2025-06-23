@@ -67,7 +67,7 @@
                             
                             {% if documento.lancamentos.exists %}
                             <div class="lancamentos-list" style="margin-left: 20px;">
-                                {% for lancamento in documento.lancamentos.all|dictsort:"data" %}
+                                {% for lancamento in documento.lancamentos.all|dictsort:"id" %}
                                 <div class="lancamento-node" style="margin: 10px 0; padding: 10px; background: white; border-radius: 4px; border: 1px solid var(--border-color);">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <div>

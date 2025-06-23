@@ -234,8 +234,8 @@ def lancamentos(request):
     if busca:
         lancamentos = lancamentos.filter(documento__numero__icontains=busca)
 
-    # Ordenar por data mais recente
-    lancamentos = lancamentos.order_by('-data')
+    # Ordenar por ordem de inserção (ID crescente)
+    lancamentos = lancamentos.order_by('id')
 
     # Paginação
     paginator = Paginator(lancamentos, 10)  # 10 itens por página
@@ -837,7 +837,7 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
         }
         
         # Adicionar lançamentos como filhos do documento
-        lancamentos = documento.lancamentos.order_by('-data')
+        lancamentos = documento.lancamentos.order_by('id')
         for lancamento in lancamentos:
             lanc_node = {
                 'name': f'{lancamento.tipo.get_tipo_display()}: {lancamento.data.strftime("%d/%m/%Y")}',
@@ -1130,8 +1130,8 @@ def documento_lancamentos(request, tis_id, imovel_id, documento_id):
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     
-    # Obter lançamentos ordenados por data
-    lancamentos = documento.lancamentos.all().order_by('data')
+    # Obter lançamentos ordenados por ordem de inserção
+    lancamentos = documento.lancamentos.all().order_by('id')
     
     # Verificar se o usuário é admin para permitir edição
     pode_editar = request.user.is_staff or request.user.is_superuser

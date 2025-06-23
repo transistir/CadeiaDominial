@@ -323,7 +323,7 @@ class Lancamento(models.Model):
     class Meta:
         verbose_name = "Lançamento"
         verbose_name_plural = "Lançamentos"
-        ordering = ['-data']
+        ordering = ['id']
 
     def __str__(self):
         numero_ref = f" #{self.numero_lancamento}" if self.numero_lancamento else ""
