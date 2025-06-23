@@ -22,6 +22,7 @@ urlpatterns = [
     
     # Cadeia Dominial
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', views.cadeia_dominial, name='cadeia_dominial'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/tronco-principal/', views.tronco_principal, name='tronco_principal'),
     path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', views.cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
     
     # Documentos e Lançamentos

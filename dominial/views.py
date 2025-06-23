@@ -423,6 +423,13 @@ def cadeia_dominial(request, tis_id, imovel_id):
     # Verificar se deve mostrar a visualização de lançamentos (tronco principal)
     mostrar_lancamentos = request.GET.get('lancamentos') == 'true'
     
+    # Identificar troncos se há documentos
+    tronco_principal = []
+    troncos_secundarios = []
+    if tem_documentos:
+        tronco_principal = identificar_tronco_principal(imovel)
+        troncos_secundarios = identificar_troncos_secundarios(imovel, tronco_principal)
+    
     context = {
         'tis': tis,
         'imovel': imovel,
@@ -430,6 +437,8 @@ def cadeia_dominial(request, tis_id, imovel_id):
         'tem_apenas_matricula': tem_apenas_matricula,
         'tem_lancamentos': tem_lancamentos,
         'mostrar_lancamentos': mostrar_lancamentos,
+        'tronco_principal': tronco_principal,
+        'troncos_secundarios': troncos_secundarios,
     }
     
     if mostrar_lancamentos:
@@ -1532,3 +1541,211 @@ def editar_documento(request, documento_id, tis_id, imovel_id):
         }
         
         return render(request, 'dominial/documento_form.html', context)
+
+def identificar_tronco_principal(imovel):
+    """
+    Identifica o tronco principal da cadeia dominial.
+    Lógica: começa na matrícula principal e segue sempre o documento de maior número,
+    priorizando matrículas sobre transcrições.
+    """
+    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    
+    if not documentos.exists():
+        return []
+    
+    # Identificar a matrícula principal (primeira matrícula ou matrícula atual do imóvel)
+    matricula_principal = None
+    
+    # Primeiro, tentar encontrar uma matrícula que corresponda à matrícula do imóvel
+    for doc in documentos:
+        if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula:
+            matricula_principal = doc
+            break
+    
+    # Se não encontrou, usar a primeira matrícula
+    if not matricula_principal:
+        for doc in documentos:
+            if doc.tipo.tipo == 'matricula':
+                matricula_principal = doc
+                break
+    
+    # Se ainda não encontrou, usar o primeiro documento
+    if not matricula_principal:
+        matricula_principal = documentos.first()
+    
+    if not matricula_principal:
+        return []
+    
+    print(f"DEBUG: Matrícula principal identificada: {matricula_principal.numero}")
+    
+    # Construir o tronco principal começando pela matrícula atual
+    tronco_principal = [matricula_principal]
+    documento_atual = matricula_principal
+    
+    # Buscar documentos que são referenciados como origem nos lançamentos do documento atual
+    while True:
+        # Buscar lançamentos do documento atual que têm origens
+        lancamentos_com_origem = Lancamento.objects.filter(
+            documento=documento_atual,
+            origem__isnull=False
+        ).exclude(origem='')
+        
+        print(f"DEBUG: Documento atual: {documento_atual.numero}, Lançamentos com origem: {lancamentos_com_origem.count()}")
+        
+        if not lancamentos_com_origem.exists():
+            print(f"DEBUG: Nenhum lançamento com origem encontrado para {documento_atual.numero}")
+            break
+        
+        # Extrair códigos de origem dos lançamentos
+        import re
+        origens_identificadas = []
+        
+        for lancamento in lancamentos_com_origem:
+            if lancamento.origem:
+                print(f"DEBUG: Processando origem: {lancamento.origem}")
+                # Extrair códigos M e T da origem
+                codigos = re.findall(r'[MT]\d+', lancamento.origem)
+                print(f"DEBUG: Códigos extraídos: {codigos}")
+                for codigo in codigos:
+                    # Verificar se existe um documento com esse código
+                    doc_existente = Documento.objects.filter(
+                        imovel=imovel,
+                        numero=codigo
+                    ).first()
+                    
+                    if doc_existente and doc_existente not in tronco_principal:
+                        origens_identificadas.append(doc_existente)
+                        print(f"DEBUG: Documento encontrado: {doc_existente.numero}")
+        
+        print(f"DEBUG: Origens identificadas: {[doc.numero for doc in origens_identificadas]}")
+        
+        if not origens_identificadas:
+            print(f"DEBUG: Nenhuma origem válida encontrada")
+            break
+        
+        # Escolher o próximo documento: priorizar matrículas sobre transcrições
+        # e, em caso de empate, escolher o de maior número
+        proximo_documento = None
+        
+        # Primeiro, tentar encontrar matrículas
+        matriculas = [doc for doc in origens_identificadas if doc.tipo.tipo == 'matricula']
+        if matriculas:
+            # Escolher a matrícula com maior número
+            proximo_documento = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
+            print(f"DEBUG: Próxima matrícula escolhida: {proximo_documento.numero}")
+        else:
+            # Se não há matrículas, escolher a transcrição com maior número
+            transcricoes = [doc for doc in origens_identificadas if doc.tipo.tipo == 'transcricao']
+            if transcricoes:
+                proximo_documento = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
+                print(f"DEBUG: Próxima transcrição escolhida: {proximo_documento.numero}")
+        
+        # Se não encontrou próximo documento, parar
+        if not proximo_documento:
+            print(f"DEBUG: Nenhum próximo documento encontrado")
+            break
+        
+        # Adicionar ao tronco e continuar
+        tronco_principal.append(proximo_documento)
+        documento_atual = proximo_documento
+        print(f"DEBUG: Tronco atual: {[doc.numero for doc in tronco_principal]}")
+    
+    print(f"DEBUG: Tronco principal final: {[doc.numero for doc in tronco_principal]}")
+    return tronco_principal
+
+def identificar_troncos_secundarios(imovel, tronco_principal):
+    """
+    Identifica troncos secundários (documentos que não fazem parte do tronco principal).
+    """
+    todos_documentos = Documento.objects.filter(imovel=imovel)
+    documentos_tronco_principal = set(doc.id for doc in tronco_principal)
+    
+    troncos_secundarios = []
+    documentos_processados = set()
+    
+    for doc in todos_documentos:
+        if doc.id in documentos_tronco_principal or doc.id in documentos_processados:
+            continue
+        
+        # Criar um novo tronco secundário
+        tronco_secundario = [doc]
+        documentos_processados.add(doc.id)
+        
+        # Seguir o mesmo padrão do tronco principal para este tronco
+        documento_atual = doc
+        while True:
+            # Buscar lançamentos do documento atual que têm origens
+            lancamentos_com_origem = Lancamento.objects.filter(
+                documento=documento_atual,
+                origem__isnull=False
+            ).exclude(origem='')
+            
+            if not lancamentos_com_origem.exists():
+                break
+            
+            # Extrair códigos de origem dos lançamentos
+            import re
+            origens_identificadas = []
+            
+            for lancamento in lancamentos_com_origem:
+                if lancamento.origem:
+                    # Extrair códigos M e T da origem
+                    codigos = re.findall(r'[MT]\d+', lancamento.origem)
+                    for codigo in codigos:
+                        # Verificar se existe um documento com esse código
+                        doc_existente = Documento.objects.filter(
+                            imovel=imovel,
+                            numero=codigo
+                        ).first()
+                        
+                        if doc_existente and doc_existente.id not in documentos_processados:
+                            origens_identificadas.append(doc_existente)
+            
+            if not origens_identificadas:
+                break
+            
+            # Escolher próximo documento (mesma lógica do tronco principal)
+            proximo_documento = None
+            matriculas = [d for d in origens_identificadas if d.tipo.tipo == 'matricula']
+            if matriculas:
+                proximo_documento = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
+            else:
+                transcricoes = [d for d in origens_identificadas if d.tipo.tipo == 'transcricao']
+                if transcricoes:
+                    proximo_documento = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
+            
+            if not proximo_documento or proximo_documento.id in documentos_processados:
+                break
+            
+            tronco_secundario.append(proximo_documento)
+            documentos_processados.add(proximo_documento.id)
+            documento_atual = proximo_documento
+        
+        if len(tronco_secundario) > 1:  # Só adicionar se tiver mais de um documento
+            troncos_secundarios.append(tronco_secundario)
+    
+    return troncos_secundarios
+
+@login_required
+def tronco_principal(request, tis_id, imovel_id):
+    """Exibe apenas o tronco principal da cadeia dominial"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Identificar o tronco principal
+    tronco_principal = identificar_tronco_principal(imovel)
+    
+    # Verificar se há lançamentos no tronco principal
+    tem_lancamentos = False
+    if tronco_principal:
+        tem_lancamentos = Lancamento.objects.filter(documento__in=tronco_principal).exists()
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documentos': tronco_principal,
+        'tem_lancamentos': tem_lancamentos,
+        'tipo_visualizacao': 'tronco_principal',
+    }
+    
+    return render(request, 'dominial/tronco_principal.html', context)
