@@ -6,50 +6,73 @@ from .settings import *
 
 # Configurações de Segurança
 DEBUG = False
-SECRET_KEY = os.environ.get('SECRET_KEY', 'sua-chave-secreta-de-producao')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'sua-chave-secreta-de-producao-muito-segura')
 
 # Configurações de Hosts Permitidos
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') + [
-    '.railway.app',
-    '.render.com', 
-    '.herokuapp.com',
-    'localhost',
-    '127.0.0.1'
-]
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '46.62.152.252,localhost,127.0.0.1').split(',')
 
 # Configurações de CSRF
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') + [
-    'https://*.railway.app',
-    'https://*.render.com',
-    'https://*.herokuapp.com'
+CSRF_TRUSTED_ORIGINS = [
+    'http://46.62.152.252',
+    'https://46.62.152.252',
 ]
 
-# Configurações do Banco de Dados
-import dj_database_url
+# Configurações do Banco de Dados PostgreSQL
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME', 'cadeia_dominial'),
+        'USER': os.environ.get('DB_USER', 'cadeia_user'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'sua_senha_segura_aqui'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'OPTIONS': {
+            'charset': 'utf8',
+        },
+    }
 }
 
 # Configurações de Arquivos Estáticos
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Configurações de Logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': '/var/log/cadeia_dominial/django.log',
+            'formatter': 'verbose',
+        },
         'console': {
+            'level': 'INFO',
             'class': 'logging.StreamHandler',
+            'formatter': 'simple',
         },
     },
     'root': {
-        'handlers': ['console'],
+        'handlers': ['file', 'console'],
         'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 
@@ -61,15 +84,21 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 
-# Configurações de Cache (opcional)
+# Configurações de Cache
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
 }
 
 # Configurações de Sessão
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False  # Mudar para True se usar HTTPS
+CSRF_COOKIE_SECURE = False     # Mudar para True se usar HTTPS
 SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True 
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Configurações de Segurança Adicionais
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True 
