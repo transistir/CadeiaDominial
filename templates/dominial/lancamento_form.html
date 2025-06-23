@@ -10,27 +10,27 @@
         <h4>Documento Ativo</h4>
         <div class="grid-3">
             <div>
-                <strong>Tipo:</strong> {{ documento_ativo.tipo.get_tipo_display }}
+                <strong>Tipo:</strong> {{ documento.tipo.get_tipo_display }}
             </div>
             <div>
-                <strong>Número:</strong> {{ documento_ativo.numero }}
+                <strong>Número:</strong> {{ documento.numero }}
             </div>
             <div>
-                <strong>Data:</strong> {{ documento_ativo.data|date:'d/m/Y' }}
+                <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
             </div>
             <div>
-                <strong>Cartório:</strong> {{ documento_ativo.cartorio.nome }}
+                <strong>Cartório:</strong> {{ documento.cartorio.nome }}
             </div>
             <div>
-                <strong>Livro:</strong> {{ documento_ativo.livro }}
+                <strong>Livro:</strong> {{ documento.livro }}
             </div>
             <div>
-                <strong>Folha:</strong> {{ documento_ativo.folha }}
+                <strong>Folha:</strong> {{ documento.folha }}
             </div>
         </div>
-        {% if documento_ativo.origem %}
+        {% if documento.origem %}
         <div style="margin-top: 10px;">
-            <strong>Origem:</strong> {{ documento_ativo.origem }}
+            <strong>Origem:</strong> {{ documento.origem }}
         </div>
         {% endif %}
     </div>
@@ -102,6 +102,60 @@
             <div class="form-group">
                 <label for="descricao_averbacao">Descrição *</label>
                 <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
+            </div>
+
+            <!-- Checkbox para adicionar informações de cartório na averbação -->
+            <div class="toggle-group" style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
+                <label class="toggle-label">
+                    <input type="checkbox" name="incluir_cartorio_averbacao" id="incluir_cartorio_averbacao" class="toggle-checkbox">
+                    <span>Incluir informações de cartório de origem</span>
+                </label>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Marque esta opção se a averbação contém informações de registro (cartório, livro, folha, data)
+                </small>
+            </div>
+
+            <!-- Campos de cartório para averbação (inicialmente ocultos) -->
+            <div id="campos-cartorio-averbacao" style="display: none; margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+                <h5 style="margin-top: 0; color: #495057;">Informações de Cartório de Origem</h5>
+                
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label for="cartorio_origem_averbacao">Cartório</label>
+                        <div class="autocomplete-container">
+                            <input type="text" name="cartorio_origem_nome_averbacao" id="cartorio_origem_nome_averbacao" 
+                                   placeholder="Digite o nome do cartório" autocomplete="off"
+                                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome_averbacao %}{{ form_data.cartorio_origem_nome_averbacao }}{% endif %}">
+                            <input type="hidden" name="cartorio_origem_averbacao" id="cartorio_origem_averbacao" 
+                                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem_averbacao %}{{ form_data.cartorio_origem_averbacao }}{% endif %}">
+                            <div class="autocomplete-suggestions cartorio-suggestions-averbacao"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="livro_origem_averbacao">Livro</label>
+                        <input type="text" name="livro_origem_averbacao" id="livro_origem_averbacao" 
+                               value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_averbacao }}{% endif %}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="folha_origem_averbacao">Folha</label>
+                        <input type="text" name="folha_origem_averbacao" id="folha_origem_averbacao" 
+                               value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_averbacao }}{% endif %}">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="data_origem_averbacao">Data</label>
+                    <input type="date" name="data_origem_averbacao" id="data_origem_averbacao" 
+                           value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem_averbacao }}{% endif %}">
+                </div>
+
+                <div class="form-group">
+                    <label for="titulo_averbacao">Título</label>
+                    <input type="text" name="titulo_averbacao" id="titulo_averbacao" placeholder="Título do registro"
+                           value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo_averbacao }}{% endif %}">
+                </div>
             </div>
         </div>
 
@@ -232,6 +286,10 @@
                                value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem }}{% endif %}">
                         <button type="button" id="add-origem" class="btn btn-sm btn-outline">+</button>
                     </div>
+                    <small style="color: #666; font-size: 0.9em;">
+                        💡 Dica: Use códigos M para matrículas (ex: M3214) e T para transcrições (ex: T1234)
+                    </small>
+                    <div id="origem-validation" style="display: none; margin-top: 5px; padding: 8px; border-radius: 4px; font-size: 0.9em;"></div>
                     <div id="origens-adicionais" class="origens-container" style="margin-top: 10px;"></div>
                 </div>
             </div>
@@ -242,9 +300,23 @@
             <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o lançamento">{% if modo_edicao %}{{ lancamento.observacoes }}{% elif form_data %}{{ form_data.observacoes }}{% endif %}</textarea>
         </div>
 
+        <!-- Checkbox para finalizar -->
+        <div class="field-group" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+            <div class="toggle-group">
+                <label class="toggle-label">
+                    <input type="checkbox" name="finalizar" id="finalizar" class="toggle-checkbox">
+                    <span>{% if modo_edicao %}Finalizar e voltar à visualização dos lançamentos{% else %}Finalizar e voltar à visualização dos lançamentos{% endif %}</span>
+                </label>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Marque esta opção se deseja finalizar e voltar à visualização dos lançamentos deste documento. 
+                    Se desmarcado, será redirecionado para criar um novo lançamento.
+                </small>
+            </div>
+        </div>
+
         <div class="actions">
             <button type="submit" class="btn btn-success">Salvar Lançamento</button>
-            <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">Cancelar</a>
+            <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
         </div>
     </form>
 </div>
@@ -363,6 +435,51 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (cartorioInput && cartorioHidden && cartorioSuggestions) {
         setupCartorioAutocomplete(cartorioInput, cartorioHidden, cartorioSuggestions);
+    }
+    
+    // Autocomplete para cartório da averbação
+    const cartorioAverbacaoInput = document.getElementById('cartorio_origem_nome_averbacao');
+    const cartorioAverbacaoHidden = document.getElementById('cartorio_origem_averbacao');
+    const cartorioAverbacaoSuggestions = document.querySelector('.cartorio-suggestions-averbacao');
+    
+    if (cartorioAverbacaoInput && cartorioAverbacaoHidden && cartorioAverbacaoSuggestions) {
+        setupCartorioAutocomplete(cartorioAverbacaoInput, cartorioAverbacaoHidden, cartorioAverbacaoSuggestions);
+    }
+    
+    // Controle dos campos de cartório na averbação
+    const incluirCartorioCheckbox = document.getElementById('incluir_cartorio_averbacao');
+    const camposCartorioAverbacao = document.getElementById('campos-cartorio-averbacao');
+    
+    if (incluirCartorioCheckbox && camposCartorioAverbacao) {
+        // Verificar se há dados preenchidos para mostrar os campos
+        const hasCartorioData = {% if modo_edicao and lancamento.cartorio_origem %}true{% else %}false{% endif %};
+        
+        if (hasCartorioData) {
+            incluirCartorioCheckbox.checked = true;
+            camposCartorioAverbacao.style.display = 'block';
+        }
+        
+        incluirCartorioCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                camposCartorioAverbacao.style.display = 'block';
+                // Adicionar animação suave
+                camposCartorioAverbacao.style.opacity = '0';
+                camposCartorioAverbacao.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    camposCartorioAverbacao.style.transition = 'all 0.3s ease';
+                    camposCartorioAverbacao.style.opacity = '1';
+                    camposCartorioAverbacao.style.transform = 'translateY(0)';
+                }, 10);
+            } else {
+                // Adicionar animação suave antes de esconder
+                camposCartorioAverbacao.style.transition = 'all 0.3s ease';
+                camposCartorioAverbacao.style.opacity = '0';
+                camposCartorioAverbacao.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    camposCartorioAverbacao.style.display = 'none';
+                }, 300);
+            }
+        });
     }
     
     function setupPessoaAutocomplete() {
@@ -706,6 +823,66 @@ document.addEventListener('DOMContentLoaded', function() {
             pessoaItem.remove();
         }
     };
+    
+    // Validação do campo de origem
+    const origemInput = document.getElementById('origem');
+    const origemValidation = document.getElementById('origem-validation');
+    
+    if (origemInput && origemValidation) {
+        origemInput.addEventListener('input', function() {
+            const valor = this.value;
+            const codigos = valor.match(/\b[A-Za-z]\d+\b/g) || [];
+            const codigosInvalidos = [];
+            const sugestoes = [];
+            
+            codigos.forEach(codigo => {
+                const prefixo = codigo.charAt(0).toUpperCase();
+                const numero = codigo.substring(1);
+                
+                // Verificar se é um código válido (M ou T seguido de números)
+                if (!/^[MT]\d+$/i.test(codigo)) {
+                    codigosInvalidos.push(codigo);
+                    
+                    // Gerar sugestão baseada no prefixo
+                    if (/^[A-Za-z]\d+$/i.test(codigo)) {
+                        if (prefixo === 'M' || prefixo === 'T') {
+                            sugestoes.push(`${prefixo}${numero}`);
+                        } else {
+                            // Se não é M nem T, sugerir M (matrícula é mais comum)
+                            sugestoes.push(`M${numero}`);
+                        }
+                    }
+                }
+            });
+            
+            // Mostrar validação se houver códigos inválidos
+            if (codigosInvalidos.length > 0) {
+                let mensagem = '<div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 8px; border-radius: 4px;">';
+                mensagem += '<strong>⚠️ Códigos detectados que não seguem o padrão:</strong><br>';
+                mensagem += codigosInvalidos.map((codigo, index) => {
+                    const sugestao = sugestoes[index];
+                    return `• "${codigo}" → sugerido: "${sugestao}"`;
+                }).join('<br>');
+                mensagem += '<br><small>💡 Use M para matrículas e T para transcrições</small>';
+                mensagem += '</div>';
+                
+                origemValidation.innerHTML = mensagem;
+                origemValidation.style.display = 'block';
+            } else {
+                origemValidation.style.display = 'none';
+            }
+        });
+        
+        // Também validar ao perder o foco
+        origemInput.addEventListener('blur', function() {
+            // Pequeno delay para permitir que o usuário veja a validação
+            setTimeout(() => {
+                if (origemValidation.style.display === 'block') {
+                    origemValidation.style.display = 'none';
+                }
+            }, 2000);
+        });
+    }
 });
 </script>
 {% endblock %}
@@ -872,6 +1049,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .percentual-total.success {
     color: #28a745;
+}
+
+/* Estilos para campos de cartório da averbação */
+#campos-cartorio-averbacao {
+    transition: all 0.3s ease;
+}
+
+#campos-cartorio-averbacao h5 {
+    margin-bottom: 15px;
+    font-weight: 600;
+    color: #495057;
+}
+
+#campos-cartorio-averbacao .form-group {
+    margin-bottom: 12px;
+}
+
+#campos-cartorio-averbacao .grid-3 {
+    gap: 12px;
+}
+
+/* Animação para mostrar/ocultar campos */
+.field-group {
+    transition: all 0.3s ease;
+}
+
+.toggle-group {
+    transition: background-color 0.2s ease;
+}
+
+.toggle-group:hover {
+    background-color: #e9ecef !important;
 }
 </style>
 {% endblock %} 

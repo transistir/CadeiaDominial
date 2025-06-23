@@ -18,6 +18,7 @@ from dal import autocomplete
 from datetime import date
 import uuid
 from django.db.models import Q
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -586,7 +587,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             context = {
                 'tis': tis,
                 'imovel': imovel,
-                'documento_ativo': documento_ativo,
+                'documento': documento_ativo,
                 'pessoas': pessoas,
                 'cartorios': cartorios,
                 'tipos_lancamento': tipos_lancamento,
@@ -605,7 +606,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 context = {
                     'tis': tis,
                     'imovel': imovel,
-                    'documento_ativo': documento_ativo,
+                    'documento': documento_ativo,
                     'pessoas': pessoas,
                     'cartorios': cartorios,
                     'tipos_lancamento': tipos_lancamento,
@@ -682,6 +683,22 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             cartorio_origem_id = request.POST.get('cartorio_origem')
             cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
             
+            # Verificar se é averbação com campos de cartório adicionais
+            if tipo_lanc.tipo == 'averbacao' and request.POST.get('incluir_cartorio_averbacao') == 'on':
+                # Usar campos específicos da averbação
+                cartorio_origem_id = request.POST.get('cartorio_origem_averbacao')
+                cartorio_origem_nome = request.POST.get('cartorio_origem_nome_averbacao', '').strip()
+                livro_origem_clean = request.POST.get('livro_origem_averbacao') if request.POST.get('livro_origem_averbacao') and request.POST.get('livro_origem_averbacao').strip() else None
+                folha_origem_clean = request.POST.get('folha_origem_averbacao') if request.POST.get('folha_origem_averbacao') and request.POST.get('folha_origem_averbacao').strip() else None
+                data_origem_clean = request.POST.get('data_origem_averbacao') if request.POST.get('data_origem_averbacao') else None
+                titulo_clean = request.POST.get('titulo_averbacao') if request.POST.get('titulo_averbacao') and request.POST.get('titulo_averbacao').strip() else None
+                
+                # Atualizar o lançamento com os novos valores
+                lancamento.livro_origem = livro_origem_clean
+                lancamento.folha_origem = folha_origem_clean
+                lancamento.data_origem = data_origem_clean
+                lancamento.titulo = titulo_clean
+            
             if cartorio_origem_id and cartorio_origem_id.strip():
                 # Se tem ID, usar o cartório existente
                 lancamento.cartorio_origem_id = cartorio_origem_id
@@ -691,9 +708,11 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
                     lancamento.cartorio_origem = cartorio
                 except Cartorios.DoesNotExist:
-                    # Criar novo cartório (você pode adicionar mais campos se necessário)
+                    # Criar novo cartório com CNS único
+                    cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
                     cartorio = Cartorios.objects.create(
                         nome=cartorio_origem_nome,
+                        cns=cns_unico,
                         cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                     )
                     lancamento.cartorio_origem = cartorio
@@ -713,94 +732,29 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             
             # Processar transmitentes
             transmitentes_data = request.POST.getlist('transmitente_nome[]')
-            transmitentes_percentual = request.POST.getlist('transmitente_percentual[]')
             transmitente_ids = request.POST.getlist('transmitente[]')
+            transmitente_percentuais = request.POST.getlist('transmitente_percentual[]')
             
-            for i, nome in enumerate(transmitentes_data):
-                nome = nome.strip()
-                if not nome:  # Pular se o nome estiver vazio
-                    continue
-                    
-                percentual = transmitentes_percentual[i] if i < len(transmitentes_percentual) else None
-                pessoa_id = transmitente_ids[i] if i < len(transmitente_ids) else None
-                
-                # Validar se o ID não está vazio
-                if pessoa_id and pessoa_id.strip():
-                    try:
-                        pessoa = Pessoas.objects.get(id=pessoa_id)
-                    except (Pessoas.DoesNotExist, ValueError):
-                        pessoa = None
-                else:
-                    pessoa = None
-                    
-                if not pessoa and nome:
-                    # Tentar encontrar pessoa pelo nome primeiro
-                    try:
-                        pessoa = Pessoas.objects.get(nome__iexact=nome)
-                    except Pessoas.DoesNotExist:
-                        # Criar nova pessoa com CPF único
-                        cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
-                        pessoa = Pessoas.objects.create(
-                            nome=nome,
-                            cpf=cpf_unico
-                        )
-                if pessoa and percentual:
-                    from .models import LancamentoPessoa
-                    LancamentoPessoa.objects.create(
-                        lancamento=lancamento,
-                        pessoa=pessoa,
-                        tipo='transmitente',
-                        percentual=percentual if percentual else 100,
-                        nome_digitado=nome.strip()
-                    )
+            processar_pessoas_lancamento(lancamento, transmitentes_data, transmitente_ids, transmitente_percentuais, 'transmitente')
             
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
             adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
             
-            for i in range(len(adquirente_ids)):
-                nome = adquirentes_data[i].strip() if i < len(adquirentes_data) else None
-                if not nome:  # Pular se o nome estiver vazio
-                    continue
-                    
-                percentual = adquirente_percentuais[i].strip() if i < len(adquirente_percentuais) and adquirente_percentuais[i].strip() else None
-                pessoa_id = adquirente_ids[i] if i < len(adquirente_ids) else None
-                
-                # Validar se o ID não está vazio
-                if pessoa_id and pessoa_id.strip():
-                    try:
-                        pessoa = Pessoas.objects.get(id=pessoa_id)
-                    except (Pessoas.DoesNotExist, ValueError):
-                        pessoa = None
-                else:
-                    pessoa = None
-                    
-                if not pessoa and nome:
-                    # Tentar encontrar pessoa pelo nome primeiro
-                    try:
-                        pessoa = Pessoas.objects.get(nome__iexact=nome)
-                    except Pessoas.DoesNotExist:
-                        # Criar nova pessoa com CPF único
-                        cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
-                        pessoa = Pessoas.objects.create(
-                            nome=nome,
-                            cpf=cpf_unico
-                        )
-                if pessoa and percentual:
-                    from .models import LancamentoPessoa
-                    LancamentoPessoa.objects.create(
-                        lancamento=lancamento,
-                        pessoa=pessoa,
-                        tipo='adquirente',
-                        percentual=percentual if percentual else 100,
-                        nome_digitado=nome.strip()
-                    )
+            processar_pessoas_lancamento(lancamento, adquirentes_data, adquirente_ids, adquirente_percentuais, 'adquirente')
             
             messages.success(request, 'Lançamento criado com sucesso!')
             
-            # Sempre redirecionar para a cadeia dominial após salvar
-            return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
+            # Verificar se o usuário marcou "finalizar"
+            finalizar = request.POST.get('finalizar') == 'on'
+            
+            if finalizar:
+                # Redirecionar para a visualização dos lançamentos do documento
+                return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+            else:
+                # Redirecionar para criar um novo lançamento no mesmo documento
+                return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
                     
         except Exception as e:
             messages.error(request, f'Erro ao criar lançamento: {str(e)}')
@@ -808,7 +762,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     context = {
         'tis': tis,
         'imovel': imovel,
-        'documento_ativo': documento_ativo,
+        'documento': documento_ativo,
         'pessoas': pessoas,
         'cartorios': cartorios,
         'tipos_lancamento': tipos_lancamento,
@@ -1229,17 +1183,77 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             
             # Processar campos específicos do tipo de lançamento
             if lancamento.tipo.tipo == 'averbacao':
-                lancamento.area = request.POST.get('area', '').strip() if request.POST.get('area') else None
+                area_value = request.POST.get('area', '').strip() if request.POST.get('area') else None
+                lancamento.area = float(area_value) if area_value else None
                 lancamento.origem = request.POST.get('origem_completa', '').strip() if request.POST.get('origem_completa') else None
                 lancamento.descricao = request.POST.get('descricao', '').strip() if request.POST.get('descricao') else None
                 lancamento.titulo = request.POST.get('titulo', '').strip() if request.POST.get('titulo') else None
+                
+                # Verificar se é averbação com campos de cartório adicionais
+                if request.POST.get('incluir_cartorio_averbacao') == 'on':
+                    # Processar cartório de origem
+                    cartorio_origem_id = request.POST.get('cartorio_origem_averbacao')
+                    cartorio_origem_nome = request.POST.get('cartorio_origem_nome_averbacao', '').strip()
+                    
+                    if cartorio_origem_id and cartorio_origem_id.strip():
+                        lancamento.cartorio_origem_id = cartorio_origem_id
+                    elif cartorio_origem_nome:
+                        try:
+                            cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
+                            lancamento.cartorio_origem = cartorio
+                        except Cartorios.DoesNotExist:
+                            # Criar novo cartório com CNS único
+                            cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
+                            cartorio = Cartorios.objects.create(
+                                nome=cartorio_origem_nome,
+                                cns=cns_unico,
+                                cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                            )
+                            lancamento.cartorio_origem = cartorio
+                    else:
+                        lancamento.cartorio_origem_id = None
+                    
+                    # Processar outros campos de cartório
+                    lancamento.livro_origem = request.POST.get('livro_origem_averbacao') if request.POST.get('livro_origem_averbacao') and request.POST.get('livro_origem_averbacao').strip() else None
+                    lancamento.folha_origem = request.POST.get('folha_origem_averbacao') if request.POST.get('folha_origem_averbacao') and request.POST.get('folha_origem_averbacao').strip() else None
+                    lancamento.data_origem = request.POST.get('data_origem_averbacao') if request.POST.get('data_origem_averbacao') else None
+                    lancamento.titulo = request.POST.get('titulo_averbacao') if request.POST.get('titulo_averbacao') and request.POST.get('titulo_averbacao').strip() else None
+                else:
+                    # Limpar campos de cartório se o checkbox não estiver marcado
+                    lancamento.cartorio_origem_id = None
+                    lancamento.livro_origem = None
+                    lancamento.folha_origem = None
+                    lancamento.data_origem = None
+                    
             elif lancamento.tipo.tipo == 'registro':
-                lancamento.cartorio_origem = request.POST.get('cartorio_origem', '').strip() if request.POST.get('cartorio_origem') else None
+                # Processar cartório de origem
+                cartorio_origem_id = request.POST.get('cartorio_origem')
+                cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
+                
+                if cartorio_origem_id and cartorio_origem_id.strip():
+                    lancamento.cartorio_origem_id = cartorio_origem_id
+                elif cartorio_origem_nome:
+                    try:
+                        cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
+                        lancamento.cartorio_origem = cartorio
+                    except Cartorios.DoesNotExist:
+                        # Criar novo cartório com CNS único
+                        cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
+                        cartorio = Cartorios.objects.create(
+                            nome=cartorio_origem_nome,
+                            cns=cns_unico,
+                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                        )
+                        lancamento.cartorio_origem = cartorio
+                else:
+                    lancamento.cartorio_origem_id = None
+                
                 lancamento.livro_origem = livro_origem_clean
                 lancamento.folha_origem = folha_origem_clean
                 lancamento.data_origem = request.POST.get('data_origem') if request.POST.get('data_origem') else None
             elif lancamento.tipo.tipo == 'inicio_matricula':
-                lancamento.area = request.POST.get('area', '').strip() if request.POST.get('area') else None
+                area_value = request.POST.get('area', '').strip() if request.POST.get('area') else None
+                lancamento.area = float(area_value) if area_value else None
                 lancamento.origem = request.POST.get('origem_completa', '').strip() if request.POST.get('origem_completa') else None
                 lancamento.descricao = request.POST.get('descricao', '').strip() if request.POST.get('descricao') else None
                 lancamento.titulo = request.POST.get('titulo', '').strip() if request.POST.get('titulo') else None
@@ -1259,64 +1273,30 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             LancamentoPessoa.objects.filter(lancamento=lancamento).delete()
             
             # Processar transmitentes
-            transmitentes_data = []
+            transmitentes_data = request.POST.getlist('transmitente_nome[]')
             transmitente_ids = request.POST.getlist('transmitente[]')
-            transmitente_nomes = request.POST.getlist('transmitente_nome[]')
             transmitente_percentuais = request.POST.getlist('transmitente_percentual[]')
             
-            for i in range(len(transmitente_ids)):
-                if transmitente_ids[i] and transmitente_ids[i].strip():
-                    transmitentes_data.append({
-                        'id': transmitente_ids[i].strip(),
-                        'percentual': transmitente_percentuais[i].strip() if i < len(transmitente_percentuais) and transmitente_percentuais[i].strip() else None
-                    })
-                elif transmitente_nomes[i] and transmitente_nomes[i].strip():
-                    # Criar nova pessoa
-                    pessoa = Pessoas.objects.create(nome=transmitente_nomes[i].strip())
-                    transmitentes_data.append({
-                        'id': pessoa.id,
-                        'percentual': transmitente_percentuais[i].strip() if i < len(transmitente_percentuais) and transmitente_percentuais[i].strip() else None
-                    })
-            
-            # Adicionar transmitentes ao lançamento
-            for transmitente_data in transmitentes_data:
-                pessoa = Pessoas.objects.get(id=transmitente_data['id'])
-                lancamento.pessoas.add(pessoa, through_defaults={
-                    'tipo': 'transmitente',
-                    'percentual': transmitente_data['percentual']
-                })
+            processar_pessoas_lancamento(lancamento, transmitentes_data, transmitente_ids, transmitente_percentuais, 'transmitente')
             
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
             adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
             
-            for i in range(len(adquirente_ids)):
-                if adquirente_ids[i] and adquirente_ids[i].strip():
-                    adquirentes_data.append({
-                        'id': adquirente_ids[i].strip(),
-                        'percentual': adquirente_percentuais[i].strip() if i < len(adquirente_percentuais) and adquirente_percentuais[i].strip() else None
-                    })
-                elif adquirente_nomes[i] and adquirente_nomes[i].strip():
-                    # Criar nova pessoa
-                    pessoa = Pessoas.objects.create(nome=adquirente_nomes[i].strip())
-                    adquirentes_data.append({
-                        'id': pessoa.id,
-                        'percentual': adquirente_percentuais[i].strip() if i < len(adquirente_percentuais) and adquirente_percentuais[i].strip() else None
-                    })
-            
-            # Adicionar adquirentes ao lançamento
-            for adquirente_data in adquirentes_data:
-                pessoa = Pessoas.objects.get(id=adquirente_data['id'])
-                lancamento.pessoas.add(pessoa, through_defaults={
-                    'tipo': 'adquirente',
-                    'percentual': adquirente_data['percentual']
-                })
+            processar_pessoas_lancamento(lancamento, adquirentes_data, adquirente_ids, adquirente_percentuais, 'adquirente')
             
             messages.success(request, f'Lançamento "{lancamento.numero_lancamento}" atualizado com sucesso!')
             
-            # Sempre redirecionar para a cadeia dominial após salvar
-            return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=lancamento.documento.id)
+            # Verificar se o usuário marcou "finalizar"
+            finalizar = request.POST.get('finalizar') == 'on'
+            
+            if finalizar:
+                # Redirecionar para a visualização dos lançamentos do documento
+                return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+            else:
+                # Redirecionar para criar um novo lançamento no mesmo documento
+                return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
             
         except Exception as e:
             messages.error(request, f'Erro ao atualizar lançamento: {str(e)}')
@@ -1390,6 +1370,12 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
     """
     Processa o texto de origem e identifica códigos de documentos para criação automática.
     Retorna uma lista de dicionários com informações dos documentos identificados.
+    
+    Padrões aceitos:
+    - M123456 = Matrícula
+    - T123456 = Transcrição
+    
+    Códigos que não seguem esses padrões são ignorados silenciosamente.
     """
     import re
     from datetime import date
@@ -1422,6 +1408,15 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
             'codigo_origem': codigo,
             'lancamento_origem': lancamento
         })
+    
+    # Log de códigos ignorados (para debug, pode ser removido em produção)
+    codigos_ignorados = re.findall(r'\b[A-Za-z]\d+\b', origem_texto, re.IGNORECASE)
+    codigos_validos = matriculas + transcricoes
+    codigos_invalidos = [codigo for codigo in codigos_ignorados if codigo not in codigos_validos]
+    
+    if codigos_invalidos:
+        print(f"DEBUG: Códigos ignorados no lançamento {lancamento.id}: {codigos_invalidos}")
+        print(f"DEBUG: Texto de origem: {origem_texto}")
     
     # Salvar as origens identificadas no lançamento para referência futura
     if documentos_identificados:
@@ -1547,6 +1542,12 @@ def identificar_tronco_principal(imovel):
     Identifica o tronco principal da cadeia dominial.
     Lógica: começa na matrícula principal e segue sempre o documento de maior número,
     priorizando matrículas sobre transcrições.
+    
+    Esta função é genérica e funciona para qualquer imóvel, pois:
+    - Busca documentos específicos do imóvel fornecido
+    - Identifica a matrícula principal baseada na matrícula do imóvel
+    - Segue a sequência baseada nas origens dos lançamentos do imóvel
+    - Funciona independentemente do número de documentos ou complexidade da cadeia
     """
     documentos = Documento.objects.filter(imovel=imovel).order_by('data')
     
@@ -1749,3 +1750,81 @@ def tronco_principal(request, tis_id, imovel_id):
     }
     
     return render(request, 'dominial/tronco_principal.html', context)
+
+def processar_pessoas_lancamento(lancamento, pessoas_data, pessoas_ids, pessoas_percentuais, tipo_pessoa):
+    """
+    Processa pessoas (transmitentes ou adquirentes) para um lançamento com percentual automático.
+    
+    Args:
+        lancamento: Instância do lançamento
+        pessoas_data: Lista de nomes das pessoas
+        pessoas_ids: Lista de IDs das pessoas
+        pessoas_percentuais: Lista de percentuais
+        tipo_pessoa: 'transmitente' ou 'adquirente'
+    """
+    pessoas_validas = []
+    
+    # Coletar pessoas válidas
+    for i, nome in enumerate(pessoas_data):
+        nome = nome.strip()
+        if not nome:  # Pular se o nome estiver vazio
+            continue
+            
+        percentual = pessoas_percentuais[i] if i < len(pessoas_percentuais) else None
+        pessoa_id = pessoas_ids[i] if i < len(pessoas_ids) else None
+        
+        # Validar se o ID não está vazio
+        if pessoa_id and pessoa_id.strip():
+            try:
+                pessoa = Pessoas.objects.get(id=pessoa_id)
+            except (Pessoas.DoesNotExist, ValueError):
+                pessoa = None
+        else:
+            pessoa = None
+            
+        if not pessoa and nome:
+            # Tentar encontrar pessoa pelo nome primeiro
+            try:
+                pessoa = Pessoas.objects.get(nome__iexact=nome)
+            except Pessoas.DoesNotExist:
+                # Criar nova pessoa com CPF único
+                cpf_unico = f"000000000{str(uuid.uuid4().int)[:2]}"
+                pessoa = Pessoas.objects.create(
+                    nome=nome,
+                    cpf=cpf_unico
+                )
+        
+        if pessoa:
+            pessoas_validas.append({
+                'pessoa': pessoa,
+                'percentual': percentual,
+                'nome_digitado': nome.strip()
+            })
+    
+    # Aplicar lógica de percentual automático
+    if len(pessoas_validas) == 1:
+        # Se há apenas uma pessoa, ela representa 100%
+        pessoas_validas[0]['percentual'] = '100'
+    elif len(pessoas_validas) > 1:
+        # Se há múltiplas pessoas, verificar se todos têm percentual
+        tem_percentual = all(p['percentual'] for p in pessoas_validas)
+        if not tem_percentual:
+            # Distribuir igualmente se algum não tem percentual
+            percentual_por_pessoa = 100 / len(pessoas_validas)
+            for pessoa_info in pessoas_validas:
+                pessoa_info['percentual'] = str(percentual_por_pessoa)
+    
+    # Criar registros LancamentoPessoa
+    for pessoa_info in pessoas_validas:
+        try:
+            percentual_decimal = Decimal(str(pessoa_info['percentual'])) if pessoa_info['percentual'] else Decimal('100')
+        except (ValueError, TypeError):
+            percentual_decimal = Decimal('100')
+        
+        LancamentoPessoa.objects.create(
+            lancamento=lancamento,
+            pessoa=pessoa_info['pessoa'],
+            tipo=tipo_pessoa,
+            percentual=percentual_decimal,
+            nome_digitado=pessoa_info['nome_digitado']
+        )
