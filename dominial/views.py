@@ -19,6 +19,7 @@ from datetime import date
 import uuid
 from django.db.models import Q
 from decimal import Decimal
+from django.contrib.auth import logout
 
 logger = logging.getLogger(__name__)
 
@@ -1828,3 +1829,8 @@ def processar_pessoas_lancamento(lancamento, pessoas_data, pessoas_ids, pessoas_
             percentual=percentual_decimal,
             nome_digitado=pessoa_info['nome_digitado']
         )
+
+def logout_view(request):
+    """View personalizada para logout que aceita GET requests"""
+    logout(request)
+    return redirect('/')
