@@ -1,11 +1,18 @@
 import requests
 from django.core.management.base import BaseCommand
-from dominial.models import TerraIndigenaReferencia
+from dominial.models import TerraIndigenaReferencia, TIs
 import json
 from datetime import datetime
 
 class Command(BaseCommand):
-    help = 'Importa as terras indígenas do WFS da FUNAI'
+    help = 'Importa as terras indígenas do WFS da FUNAI e cria TIs automaticamente'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--apenas-referencia',
+            action='store_true',
+            help='Importar apenas para TerraIndigenaReferencia, sem criar TIs',
+        )
 
     def limpar_data(self, data_str):
         """Limpa o formato da data removendo o Z e convertendo para o formato YYYY-MM-DD"""
@@ -21,7 +28,12 @@ class Command(BaseCommand):
             return None
 
     def handle(self, *args, **options):
-        self.stdout.write('Iniciando importação das terras indígenas...')
+        apenas_referencia = options['apenas_referencia']
+        
+        if apenas_referencia:
+            self.stdout.write('Iniciando importação das terras indígenas (apenas referência)...')
+        else:
+            self.stdout.write('Iniciando importação das terras indígenas e criação de TIs...')
         
         # URL do WFS da FUNAI
         url = 'https://geoserver.funai.gov.br/geoserver/wfs'
@@ -47,7 +59,9 @@ class Command(BaseCommand):
             # Parseando o JSON
             data = response.json()
             
-            contador = 0
+            contador_referencia = 0
+            contador_tis = 0
+            
             for feature in data['features']:
                 try:
                     properties = feature['properties']
@@ -73,8 +87,8 @@ class Command(BaseCommand):
                     data_em_estudo = self.limpar_data(properties.get('data_em_estudo'))
                     
                     if nome and codigo:
-                        # Criando ou atualizando o registro
-                        TerraIndigenaReferencia.objects.update_or_create(
+                        # Criando ou atualizando o registro de referência
+                        terra_referencia, created = TerraIndigenaReferencia.objects.update_or_create(
                             codigo=codigo,
                             defaults={
                                 'nome': nome,
@@ -92,14 +106,35 @@ class Command(BaseCommand):
                                 'data_em_estudo': data_em_estudo
                             }
                         )
-                        contador += 1
+                        contador_referencia += 1
+                        
+                        # Criar TI automaticamente se não for apenas referência
+                        if not apenas_referencia:
+                            # Verificar se já existe uma TI com esse código
+                            if not TIs.objects.filter(codigo=codigo).exists():
+                                # Criar nova TI
+                                tis = TIs.objects.create(
+                                    terra_referencia=terra_referencia,
+                                    nome=nome,
+                                    codigo=codigo,
+                                    etnia=etnia or 'Não informada'
+                                )
+                                contador_tis += 1
+                                self.stdout.write(f'TI criada: {nome} ({codigo})')
+                            else:
+                                self.stdout.write(f'TI já existe: {nome} ({codigo})')
+                        
                         self.stdout.write(f'Importada: {nome} ({etnia}) - {fase}')
                     
                 except Exception as e:
                     self.stdout.write(self.style.WARNING(f'Erro ao processar terra indígena {nome if "nome" in locals() else "desconhecida"}: {str(e)}'))
                     continue
             
-            self.stdout.write(self.style.SUCCESS(f'Importação concluída! {contador} terras indígenas importadas.'))
+            # Resumo final
+            self.stdout.write(self.style.SUCCESS(f'Importação concluída!'))
+            self.stdout.write(f'Referências: {contador_referencia}')
+            if not apenas_referencia:
+                self.stdout.write(f'TIs criadas: {contador_tis}')
             
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Erro ao importar terras indígenas: {str(e)}')) 

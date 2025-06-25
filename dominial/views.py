@@ -26,11 +26,58 @@ logger = logging.getLogger(__name__)
 
 @login_required
 def home(request):
-    terras_indigenas = TIs.objects.all().order_by('nome')
-    terras_referencia = TerraIndigenaReferencia.objects.all().order_by('nome')
+    # Obter parâmetro de busca
+    busca = request.GET.get('busca', '').strip()
+    
+    # Obter todas as TIs que já estão cadastradas no sistema
+    tis_cadastradas = TIs.objects.all()
+    
+    # Obter todas as terras indígenas de referência
+    terras_referencia = TerraIndigenaReferencia.objects.all()
+    
+    # Se há busca, filtrar
+    if busca:
+        tis_cadastradas = tis_cadastradas.filter(
+            Q(nome__icontains=busca) | 
+            Q(etnia__icontains=busca) | 
+            Q(codigo__icontains=busca)
+        )
+        terras_referencia = terras_referencia.filter(
+            Q(nome__icontains=busca) | 
+            Q(etnia__icontains=busca) | 
+            Q(codigo__icontains=busca)
+        )
+    
+    # Contar imóveis por TI para ordenação
+    tis_com_imoveis = {}
+    for tis in tis_cadastradas:
+        count = Imovel.objects.filter(terra_indigena_id=tis).count()
+        tis_com_imoveis[tis.id] = count
+    
+    # Ordenar TIs: primeiro as que têm imóveis (por quantidade), depois as que não têm
+    tis_ordenadas = sorted(
+        tis_cadastradas,
+        key=lambda x: (tis_com_imoveis.get(x.id, 0), x.nome),
+        reverse=True
+    )
+    
+    # Ordenar terras de referência por nome
+    terras_referencia = terras_referencia.order_by('nome')
+    
+    # Filtrar terras de referência que não estão cadastradas como TIs
+    codigos_tis_cadastradas = set(tis.codigo for tis in tis_cadastradas)
+    terras_referencia_nao_cadastradas = [
+        tr for tr in terras_referencia 
+        if tr.codigo not in codigos_tis_cadastradas
+    ]
+    
     return render(request, 'dominial/home.html', {
-        'terras_indigenas': terras_indigenas,
-        'terras_referencia': terras_referencia
+        'terras_indigenas': tis_ordenadas,
+        'terras_referencia': terras_referencia_nao_cadastradas,
+        'busca': busca,
+        'total_tis_cadastradas': tis_cadastradas.count(),
+        'total_terras_referencia': len(terras_referencia_nao_cadastradas),
+        'tis_com_imoveis': tis_com_imoveis,
     })
 
 @login_required
