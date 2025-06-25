@@ -50,6 +50,7 @@ urlpatterns = [
     path('buscar-cartorios/', views.buscar_cartorios, name='buscar_cartorios'),
     path('verificar-cartorios/', views.verificar_cartorios_estado, name='verificar_cartorios_estado'),
     path('importar-cartorios/', views.importar_cartorios_estado, name='importar_cartorios_estado'),
+    path('criar-cartorio/', views.criar_cartorio, name='criar_cartorio'),
     path('pessoa-autocomplete/', pessoa_autocomplete, name='pessoa-autocomplete'),
     path('cartorio-autocomplete/', cartorio_autocomplete, name='cartorio-autocomplete'),
     path('cartorio-imoveis-autocomplete/', cartorio_imoveis_autocomplete, name='cartorio-imoveis-autocomplete'),

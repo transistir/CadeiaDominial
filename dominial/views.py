@@ -385,6 +385,70 @@ def importar_cartorios_estado(request):
             'error': f'Erro ao importar cartórios: {str(e)}'
         }, status=500)
 
+@require_POST
+def criar_cartorio(request):
+    """View para criar um novo cartório via AJAX"""
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        # Validar campos obrigatórios
+        nome = data.get('nome', '').strip()
+        cns = data.get('cns', '').strip()
+        estado = data.get('estado', '').strip()
+        cidade = data.get('cidade', '').strip()
+        
+        if not nome or not cns or not estado or not cidade:
+            return JsonResponse({
+                'success': False,
+                'error': 'Nome, CNS, Estado e Cidade são obrigatórios.'
+            }, status=400)
+        
+        # Verificar se já existe um cartório com este CNS
+        if Cartorios.objects.filter(cns=cns).exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'Já existe um cartório com este CNS.'
+            }, status=400)
+        
+        # Criar o cartório
+        cartorio = Cartorios.objects.create(
+            nome=nome,
+            cns=cns,
+            endereco=data.get('endereco', '').strip(),
+            telefone=data.get('telefone', '').strip(),
+            email=data.get('email', '').strip(),
+            estado=estado,
+            cidade=cidade
+        )
+        
+        # Retornar dados do cartório criado
+        return JsonResponse({
+            'success': True,
+            'message': 'Cartório criado com sucesso!',
+            'cartorio': {
+                'id': cartorio.id,
+                'nome': cartorio.nome,
+                'cns': cartorio.cns,
+                'endereco': cartorio.endereco,
+                'telefone': cartorio.telefone,
+                'email': cartorio.email,
+                'estado': cartorio.estado,
+                'cidade': cartorio.cidade
+            }
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Dados inválidos.'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Erro ao criar cartório: {str(e)}'
+        }, status=500)
+
 def pessoa_autocomplete(request):
     """View para autocomplete de pessoas"""
     query = request.GET.get('q', '').strip()
