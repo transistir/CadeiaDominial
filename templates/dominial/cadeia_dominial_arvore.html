@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
+{% block title %}Árvore da Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -449,7 +449,7 @@
 {% block content %}
 <div class="container">
     <div class="arvore-header">
-        <h1>🌳 Cadeia Dominial</h1>
+        <h1>🌳 Árvore da Cadeia Dominial</h1>
         <div class="imovel-info">
             <div>
                 <strong>Imóvel:</strong>
@@ -475,7 +475,7 @@
     <div class="arvore-container" id="arvore-container">
         <div class="arvore-zoom-content" id="arvore-zoom-content">
         <div class="loading">
-            <span>Carregando diagrama da cadeia dominial...</span>
+            <span>Carregando diagrama da árvore da cadeia dominial...</span>
             </div>
         </div>
     </div>
@@ -491,7 +491,7 @@
             ➕ Novo Lançamento
         </a>
         <a href="{% url 'tronco_principal' tis_id=tis.id imovel_id=imovel.id %}" class="btn">
-            📋 Ver Tronco Principal
+            📋 Ver Cadeia Dominial
         </a>
         <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn">
             ← Voltar

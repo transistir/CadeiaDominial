@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Tronco Principal - {{ imovel.nome }}{% endblock %}
+{% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
 {% block content %}
 <div class="container">
-    <h1>📋 Tronco Principal da Cadeia Dominial</h1>
+    <h1>📋 Cadeia Dominial</h1>
     
     <div class="field-group">
         <h4>{{ imovel.nome }}</h4>
@@ -143,7 +143,7 @@
     </div>
 
     <div class="actions">
-        <a href="{% url 'cadeia_dominial_arvore' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-outline">🌳 Ver Árvore</a>
+        <a href="{% url 'cadeia_dominial_arvore' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-outline">🌳 Ver Árvore da Cadeia Dominial</a>
         <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn btn-secondary">← Voltar</a>
     </div>
 </div>

@@ -532,7 +532,7 @@ def cadeia_dominial(request, tis_id, imovel_id):
     if tem_documentos:
         tem_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).exists()
     
-    # Verificar se deve mostrar a visualização de lançamentos (tronco principal)
+    # Verificar se deve mostrar a visualização de lançamentos (cadeia dominial)
     mostrar_lancamentos = request.GET.get('lancamentos') == 'true'
     
     # Identificar troncos se há documentos
@@ -1650,7 +1650,7 @@ def editar_documento(request, documento_id, tis_id, imovel_id):
 
 def identificar_tronco_principal(imovel):
     """
-    Identifica o tronco principal da cadeia dominial.
+    Identifica a cadeia dominial principal.
     Lógica: começa na matrícula principal e segue sempre o documento de maior número,
     priorizando matrículas sobre transcrições.
     
@@ -1690,7 +1690,7 @@ def identificar_tronco_principal(imovel):
     
     # print(f"DEBUG: Matrícula principal identificada: {matricula_principal.numero}")
     
-    # Construir o tronco principal começando pela matrícula atual
+    # Construir a cadeia dominial principal começando pela matrícula atual
     tronco_principal = [matricula_principal]
     documento_atual = matricula_principal
     
@@ -1767,7 +1767,7 @@ def identificar_tronco_principal(imovel):
 
 def identificar_troncos_secundarios(imovel, tronco_principal):
     """
-    Identifica troncos secundários (documentos que não fazem parte do tronco principal).
+    Identifica cadeias dominiais secundárias (documentos que não fazem parte da cadeia dominial principal).
     """
     todos_documentos = Documento.objects.filter(imovel=imovel)
     documentos_tronco_principal = set(doc.id for doc in tronco_principal)
@@ -1783,7 +1783,7 @@ def identificar_troncos_secundarios(imovel, tronco_principal):
         tronco_secundario = [doc]
         documentos_processados.add(doc.id)
         
-        # Seguir o mesmo padrão do tronco principal para este tronco
+        # Seguir o mesmo padrão da cadeia dominial principal para este tronco
         documento_atual = doc
         while True:
             # Buscar lançamentos do documento atual que têm origens
