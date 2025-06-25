@@ -330,19 +330,19 @@
                         <span class="tis-info-value">{{ tis.etnia }}</span>
                     </div>
                     
-                    {% if tis.terra_referencia %}
+                {% if tis.terra_referencia %}
                     <div class="tis-info-item">
                         <span class="tis-info-label">{% trans 'Estado' %}</span>
                         <span class="tis-info-value">{{ tis.terra_referencia.estado }}</span>
                     </div>
                     
-                    {% if tis.terra_referencia.area_ha %}
+                {% if tis.terra_referencia.area_ha %}
                     <div class="tis-info-item">
                         <span class="tis-info-label">{% trans 'Área' %}</span>
                         <span class="tis-info-value">{{ tis.terra_referencia.area_ha|floatformat:0 }} ha</span>
                     </div>
                     {% endif %}
-                    {% endif %}
+                {% endif %}
                 </div>
                 
                 {% if tis.terra_referencia and tis.terra_referencia.fase %}
@@ -363,7 +363,7 @@
     </div>
 
     <div style="text-align: center;">
-        <a href="{% url 'tis_form' %}" class="add-tis-button">{% trans 'Cadastrar Nova Terra Indígena' %}</a>
+    <a href="{% url 'tis_form' %}" class="add-tis-button">{% trans 'Cadastrar Nova Terra Indígena' %}</a>
     </div>
 </div>
 {% endblock %} 

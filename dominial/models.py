@@ -12,6 +12,8 @@ class TIs(models.Model):
     nome = models.CharField(max_length=100)
     codigo = models.CharField(max_length=50, unique=True)
     etnia = models.CharField(max_length=50)
+    estado = models.CharField(max_length=100, null=True, blank=True, help_text="Estados separados por vírgula (ex: AM, PA, MT)")
+    area = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Área em hectares")
     data_cadastro = models.DateField(auto_now_add=True)
     #poligonos = models.PolygonField(null=True, blank=True)  # Opcional, para armazenar polígonos geográficos
     class Meta:
@@ -26,6 +28,8 @@ class TIs(models.Model):
             self.nome = self.terra_referencia.nome
             self.codigo = self.terra_referencia.codigo
             self.etnia = self.terra_referencia.etnia
+            self.estado = self.terra_referencia.estado
+            self.area = self.terra_referencia.area_ha
         super().save(*args, **kwargs)
 
 class Cartorios(models.Model):
