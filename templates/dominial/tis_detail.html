@@ -1,69 +1,131 @@
-{% extends "admin/base_site.html" %}
+{% extends "base.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}
-{{ block.super }}
+{% block title %}{{ tis.nome }} - Imóveis{% endblock %}
+
+{% block extra_css %}
 <style>
     .tis-detail-container {
-        max-width: 1200px;
-        margin: 20px auto;
-        padding: 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        padding: 30px;
+        margin-bottom: 20px;
+        border: 1px solid #e1e8ed;
     }
 
     .tis-header {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        padding: 20px;
-        margin-bottom: 30px;
+        text-align: center;
+        margin-bottom: 40px;
+        padding-bottom: 30px;
+        border-bottom: 2px solid #ecf0f1;
     }
 
     .tis-header h1 {
-        color: #333;
-        margin: 0 0 10px 0;
+        color: #2c3e50;
+        margin: 0 0 15px 0;
+        font-size: 32px;
+        font-weight: 600;
     }
 
-    .tis-info {
+    .tis-info-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 20px;
-        margin-top: 20px;
+        margin-top: 25px;
     }
 
-    .tis-info-item {
-        background: #f8f9fa;
-        padding: 15px;
-        border-radius: 4px;
-    }
-
-    .tis-info-item strong {
-        display: block;
-        color: #666;
-        margin-bottom: 5px;
-    }
-
-    .imoveis-list {
-        margin-top: 30px;
-    }
-
-    .imovel-item {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    .tis-info-card {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
         padding: 20px;
-        margin-bottom: 20px;
+        text-align: center;
+        border-left: 4px solid #3498db;
+    }
+
+    .tis-info-card strong {
+        display: block;
+        color: #34495e;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .tis-info-card span {
+        color: #2c3e50;
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .section-title {
+        color: #2c3e50;
+        font-size: 24px;
+        font-weight: 600;
+        margin: 40px 0 25px 0;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #ecf0f1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .section-title::before {
+        content: "🏠";
+        font-size: 28px;
+    }
+
+    .imoveis-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .imovel-card {
+        background: white;
+        border: 1px solid #e1e8ed;
+        border-radius: 12px;
+        padding: 25px;
+        transition: all 0.3s ease;
         position: relative;
+        overflow: hidden;
+        cursor: pointer;
     }
 
-    .imovel-item h3 {
-        margin: 0 0 10px 0;
-        color: #333;
-        padding-right: 100px;
+    .imovel-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: #3498db;
     }
 
-    .imovel-item p {
-        margin: 5px 0;
-        color: #666;
+    .imovel-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #3498db, #2980b9);
+    }
+
+    .imovel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15px;
+        padding-right: 80px;
+    }
+
+    .imovel-title {
+        margin: 0;
+        color: #2c3e50;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1.3;
+        flex: 1;
     }
 
     .imovel-actions {
@@ -71,168 +133,334 @@
         top: 20px;
         right: 20px;
         display: flex;
-        gap: 10px;
+        gap: 8px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
     }
 
-    .imovel-action-button {
-        padding: 5px 10px;
+    .imovel-card:hover .imovel-actions {
+        opacity: 1;
+    }
+
+    .action-button {
+        padding: 6px 12px;
         border: none;
-        border-radius: 4px;
+        border-radius: 6px;
         cursor: pointer;
-        font-size: 12px;
+        font-size: 11px;
+        font-weight: 600;
         text-decoration: none;
         color: white;
+        transition: all 0.2s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     .edit-button {
-        background: #79aec8;
+        background: linear-gradient(135deg, #3498db, #2980b9);
     }
 
     .edit-button:hover {
-        background: #417690;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
     .delete-button {
-        background: #ba2121;
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
     }
 
     .delete-button:hover {
-        background: #a41515;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .add-imovel-button {
-        display: block;
-        width: 200px;
-        margin: 20px auto;
-        padding: 15px 30px;
-        background: #79aec8;
-        color: white;
+    .imovel-info {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .imovel-info-item {
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        color: #7f8c8d;
+    }
+
+    .imovel-info-label {
+        font-weight: 600;
+        color: #34495e;
+        min-width: 80px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .imovel-info-value {
+        color: #2c3e50;
+        margin-left: 10px;
+        font-weight: 500;
+    }
+
+    .empty-state {
         text-align: center;
-        text-decoration: none;
-        border-radius: 4px;
+        padding: 60px 20px;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 12px;
+        border: 2px dashed #dee2e6;
+    }
+
+    .empty-state-icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .empty-state h3 {
+        color: #6c757d;
+        margin: 0 0 10px 0;
+        font-size: 20px;
+        font-weight: 600;
+    }
+
+    .empty-state p {
+        color: #95a5a6;
+        margin: 0;
         font-size: 16px;
     }
 
-    .add-imovel-button:hover {
-        background: #417690;
+    .add-imovel-section {
+        text-align: center;
+        margin-top: 40px;
+        padding-top: 30px;
+        border-top: 1px solid #ecf0f1;
     }
 
-    .back-button {
-        display: inline-block;
-        padding: 10px 20px;
-        background: #6c757d;
+    .add-imovel-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 15px 30px;
+        background: linear-gradient(135deg, #27ae60, #229954);
         color: white;
         text-decoration: none;
-        border-radius: 4px;
-        margin-bottom: 20px;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
     }
 
-    .back-button:hover {
-        background: #5a6268;
+    .add-imovel-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+        color: white;
+        text-decoration: none;
     }
 
-    .user-info {
-        position: absolute;
-        top: 20px;
-        right: 20px;
+    .stats-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 12px;
+        text-align: center;
+        margin: 30px 0;
+    }
+
+    .stats-number {
+        font-size: 48px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .stats-label {
+        font-size: 16px;
+        opacity: 0.9;
+        font-weight: 500;
+    }
+
+    .breadcrumb {
         display: flex;
         align-items: center;
-        gap: 20px;
+        gap: 10px;
+        margin-bottom: 25px;
+        font-size: 14px;
+        color: #7f8c8d;
     }
 
-    .user-info p {
-        margin: 0;
+    .breadcrumb a {
+        color: #3498db;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s ease;
     }
 
-    .logout-form {
-        margin: 0;
+    .breadcrumb a:hover {
+        color: #2980b9;
     }
 
-    .logout-button {
-        background: #ba2121;
-        color: white;
-        border: none;
-        padding: 8px 15px;
-        border-radius: 4px;
-        cursor: pointer;
+    .breadcrumb-separator {
+        color: #bdc3c7;
     }
 
-    .logout-button:hover {
-        background: #a41515;
+    .breadcrumb-current {
+        color: #2c3e50;
+        font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+        .imoveis-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .tis-info-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .imovel-actions {
+            opacity: 1;
+            position: static;
+            margin-top: 15px;
+            justify-content: center;
+        }
+        
+        .imovel-header {
+            padding-right: 0;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .tis-header h1 {
+            font-size: 24px;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="tis-detail-container">
-    <a href="{% url 'home' %}" class="back-button">{% trans 'Voltar' %}</a>
+    <div class="breadcrumb">
+        <a href="{% url 'home' %}">🏠 Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">{{ tis.nome }}</span>
+    </div>
 
     <div class="tis-header">
         <h1>{{ tis.nome }}</h1>
-        <div class="tis-info">
-            <div class="tis-info-item">
-                <strong>{% trans 'Código' %}</strong>
-                {{ tis.codigo }}
+        <div class="tis-info-grid">
+            <div class="tis-info-card">
+                <strong>Código</strong>
+                <span>{{ tis.codigo }}</span>
             </div>
-            <div class="tis-info-item">
-                <strong>{% trans 'Etnia' %}</strong>
-                {{ tis.etnia }}
+            <div class="tis-info-card">
+                <strong>Etnia</strong>
+                <span>{{ tis.etnia }}</span>
             </div>
-            <div class="tis-info-item">
-                <strong>{% trans 'Data de Cadastro' %}</strong>
-                {{ tis.data_cadastro|date:"d/m/Y" }}
+            <div class="tis-info-card">
+                <strong>Estados</strong>
+                <span>
+                    {% if tis.estados %}
+                        {{ tis.estados|join:", " }}
+                    {% else %}
+                        Não informado
+                    {% endif %}
+                </span>
+            </div>
+            <div class="tis-info-card">
+                <strong>Área</strong>
+                <span>
+                    {% if tis.area %}
+                        {{ tis.area|floatformat:2 }} ha
+                    {% else %}
+                        Não informada
+                    {% endif %}
+                </span>
+            </div>
+            <div class="tis-info-card">
+                <strong>Data de Cadastro</strong>
+                <span>{{ tis.data_cadastro|date:"d/m/Y" }}</span>
             </div>
         </div>
     </div>
 
-    <h2>{% trans 'Imóveis Sobrepostos' %}</h2>
+    <div class="stats-section">
+        <div class="stats-number">{{ imoveis.count }}</div>
+        <div class="stats-label">Imóveis Sobrepostos</div>
+    </div>
+
+    <h2 class="section-title">Imóveis Cadastrados</h2>
     
-    <div class="imoveis-list">
+    <div class="imoveis-grid">
         {% for imovel in imoveis %}
-        <div class="imovel-item" onclick="window.location.href='{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}'" style="cursor: pointer;">
-            <h3>{{ imovel.nome }}</h3>
+        <div class="imovel-card" onclick="window.location.href='{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}'">
+            <div class="imovel-header">
+                <h3 class="imovel-title">{{ imovel.nome|default:"Imóvel sem nome" }}</h3>
+            </div>
+            
             <div class="imovel-actions">
                 {% if perms.dominial.change_imovel %}
-                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button" onclick="event.stopPropagation();">{% trans 'Editar' %}</a>
+                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="action-button edit-button" onclick="event.stopPropagation();">
+                    ✏️ Editar
+                </a>
                 {% endif %}
                 {% if perms.dominial.delete_imovel %}
                 <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;" onclick="event.stopPropagation();">
                     {% csrf_token %}
-                    <button type="submit" class="imovel-action-button delete-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir' %}</button>
+                    <button type="submit" class="action-button delete-button" onclick="return confirm('Tem certeza que deseja excluir este imóvel?')">
+                        🗑️ Excluir
+                    </button>
                 </form>
                 {% endif %}
             </div>
-            <p><strong>{% trans 'Matrícula' %}:</strong> {{ imovel.matricula }}</p>
-            <p><strong>{% trans 'SNCR' %}:</strong> {{ imovel.sncr }}</p>
-            <p><strong>{% trans 'Proprietário' %}:</strong> {{ imovel.proprietario.nome }}</p>
-            {% if imovel.sigef %}
-            <p><strong>{% trans 'SIGEF' %}:</strong> {{ imovel.sigef }}</p>
-            {% endif %}
-            {% if imovel.descricao %}
-            <p><strong>{% trans 'Descrição' %}:</strong> {{ imovel.descricao }}</p>
-            {% endif %}
-            {% if imovel.observacoes %}
-            <p><strong>{% trans 'Observações' %}:</strong> {{ imovel.observacoes }}</p>
-            {% endif %}
+            
+            <div class="imovel-info">
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">Matrícula</span>
+                    <span class="imovel-info-value">{{ imovel.matricula|default:"Não informada" }}</span>
+                </div>
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">SNCR</span>
+                    <span class="imovel-info-value">{{ imovel.sncr|default:"Não informado" }}</span>
+                </div>
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">Proprietário</span>
+                    <span class="imovel-info-value">{{ imovel.proprietario.nome|default:"Não informado" }}</span>
+                </div>
+                {% if imovel.sigef %}
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">SIGEF</span>
+                    <span class="imovel-info-value">{{ imovel.sigef }}</span>
+                </div>
+                {% endif %}
+                {% if imovel.cartorio %}
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">Cartório</span>
+                    <span class="imovel-info-value">{{ imovel.cartorio.nome }}</span>
+                </div>
+                {% endif %}
+                {% if imovel.descricao %}
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">Descrição</span>
+                    <span class="imovel-info-value">{{ imovel.descricao|truncatechars:50 }}</span>
+                </div>
+                {% endif %}
+            </div>
         </div>
         {% empty %}
-        <div class="imovel-item">
-            <h3>{% trans 'Nenhum imóvel cadastrado' %}</h3>
-            <p>{% trans 'Clique no botão abaixo para cadastrar um novo imóvel.' %}</p>
+        <div class="empty-state">
+            <div class="empty-state-icon">🏠</div>
+            <h3>Nenhum imóvel cadastrado</h3>
+            <p>Clique no botão abaixo para cadastrar o primeiro imóvel desta terra indígena.</p>
         </div>
         {% endfor %}
     </div>
 
     {% if perms.dominial.add_imovel %}
-    <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
-    {% endif %}
-
-    <div class="user-info">
-        <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>
-        <form method="post" action="{% url 'logout' %}" class="logout-form">
-            {% csrf_token %}
-            <button type="submit" class="logout-button">{% trans 'Sair' %}</button>
-        </form>
+    <div class="add-imovel-section">
+        <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">
+            ➕ Cadastrar Novo Imóvel
+        </a>
     </div>
+    {% endif %}
 </div>
-{% endblock %} 
+{% endblock %}
