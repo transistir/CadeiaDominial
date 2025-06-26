@@ -6,6 +6,9 @@ from ..models import LancamentoTipo
 class LancamentoFormService:
     @staticmethod
     def processar_dados_lancamento(request, tipo_lanc):
+        """
+        Processa os dados básicos do formulário de lançamento
+        """
         numero_lancamento = request.POST.get('numero_lancamento')
         data = request.POST.get('data')
         observacoes = request.POST.get('observacoes')
@@ -18,6 +21,8 @@ class LancamentoFormService:
         titulo_clean = request.POST.get('titulo') if request.POST.get('titulo') and request.POST.get('titulo').strip() else None
         area = request.POST.get('area')
         origem = request.POST.get('origem_completa') or request.POST.get('origem')
+        
+        # Processar campo forma baseado no tipo de lançamento
         if tipo_lanc.tipo == 'averbacao':
             forma_value = request.POST.get('forma_averbacao', '').strip()
         elif tipo_lanc.tipo == 'registro':
@@ -26,6 +31,7 @@ class LancamentoFormService:
             forma_value = request.POST.get('forma_inicio', '').strip()
         else:
             forma_value = request.POST.get('forma', '').strip()
+        
         return {
             'numero_lancamento': numero_lancamento,
             'data': data_clean,
