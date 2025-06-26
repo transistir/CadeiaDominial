@@ -1,0 +1,28 @@
+<div class="field-group">
+    <h4>Documento Ativo</h4>
+    <div class="grid-3">
+        <div>
+            <strong>Tipo:</strong> {{ documento.tipo.get_tipo_display }}
+        </div>
+        <div>
+            <strong>Número:</strong> {{ documento.numero }}
+        </div>
+        <div>
+            <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
+        </div>
+        <div>
+            <strong>Cartório:</strong> {{ documento.cartorio.nome }}
+        </div>
+        <div>
+            <strong>Livro:</strong> {{ documento.livro }}
+        </div>
+        <div>
+            <strong>Folha:</strong> {{ documento.folha }}
+        </div>
+    </div>
+    {% if documento.origem %}
+    <div style="margin-top: 10px;">
+        <strong>Origem:</strong> {{ documento.origem }}
+    </div>
+    {% endif %}
+</div> 
