@@ -18,53 +18,7 @@
         {% include "dominial/components/_lancamento_averbacao_form.html" %}
 
         <!-- Campos para Registro -->
-        <div class="field-group" id="campos-registro" style="display: none;">
-            <h4>Campos Específicos - Registro</h4>
-            
-            <div class="form-group">
-                <label for="forma_registro">Forma *</label>
-                <input type="text" name="forma_registro" id="forma_registro" placeholder="Ex: Compra e Venda, Doação, etc."
-                       value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
-            </div>
-
-            <div class="form-group">
-                <label for="titulo_registro">Título *</label>
-                <input type="text" name="titulo" id="titulo_registro" placeholder="Título do registro"
-                       value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}">
-            </div>
-
-            <div class="grid-3">
-                <div class="form-group">
-                    <label for="cartorio_origem">Cartório *</label>
-                    <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off"
-                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome %}{{ form_data.cartorio_origem_nome }}{% endif %}">
-                        <input type="hidden" name="cartorio_origem" id="cartorio_origem" 
-                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem %}{{ form_data.cartorio_origem }}{% endif %}">
-                        <div class="autocomplete-suggestions cartorio-suggestions"></div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="livro_origem">Livro *</label>
-                    <input type="text" name="livro_origem" id="livro_origem" 
-                           value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem }}{% endif %}">
-                </div>
-
-                <div class="form-group">
-                    <label for="folha_origem">Folha *</label>
-                    <input type="text" name="folha_origem" id="folha_origem" 
-                           value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem }}{% endif %}">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="data_origem">Data *</label>
-                <input type="date" name="data_origem" id="data_origem" 
-                       value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem }}{% endif %}">
-            </div>
-        </div>
+        {% include "dominial/components/_lancamento_registro_form.html" %}
 
         <!-- Campos para Início de Matrícula -->
         <div class="field-group" id="campos-inicio-matricula" style="display: none;">
@@ -87,70 +41,11 @@
             <h4>Campos Opcionais - Transação</h4>
             
             <div class="grid-2">
-                <div class="form-group">
-                    <label for="transmitente">Transmitente(s)</label>
-                    <div id="transmitentes-container">
-                        <div class="pessoa-item">
-                            <div class="pessoa-input-group">
-                                <div class="autocomplete-container">
-                                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
-                                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="">
-                                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
-                                </div>
-                                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarTransmitente()" style="margin-top: 5px;">
-                        ➕ Adicionar Transmitente
-                    </button>
-                    <div class="percentual-total" id="transmitente-total">Total: 0%</div>
-                </div>
-
-                <div class="form-group">
-                    <label for="adquirente">Adquirente(s)</label>
-                    <div id="adquirentes-container">
-                        <div class="pessoa-item">
-                            <div class="pessoa-input-group">
-                                <div class="autocomplete-container">
-                                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
-                                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="">
-                                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
-                                </div>
-                                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarAdquirente()" style="margin-top: 5px;">
-                        ➕ Adicionar Adquirente
-                    </button>
-                    <div class="percentual-total" id="adquirente-total">Total: 0%</div>
-                </div>
+                {% include "dominial/components/_pessoa_form.html" with tipo="transmitente" label="Transmitente(s)" container_id="transmitentes-container" sugestao_class="transmitente-suggestions" %}
+                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container" sugestao_class="adquirente-suggestions" %}
             </div>
 
-            <div class="grid-2">
-                <div class="form-group">
-                    <label for="area">Área</label>
-                    <input type="number" name="area" id="area" step="0.0001" placeholder="0.0000"
-                           value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}">
-                </div>
-
-                <div class="form-group">
-                    <label for="origem">Origem</label>
-                    <div class="input-group">
-                        <input type="text" name="origem" id="origem" placeholder="Origem do lançamento (opcional)"
-                               value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem }}{% endif %}">
-                        <button type="button" id="add-origem" class="btn btn-sm btn-outline">+</button>
-                    </div>
-                    <small style="color: #666; font-size: 0.9em;">
-                        💡 Dica: Use códigos M para matrículas (ex: M3214) e T para transcrições (ex: T1234)
-                    </small>
-                    <div id="origem-validation" style="display: none; margin-top: 5px; padding: 8px; border-radius: 4px; font-size: 0.9em;"></div>
-                    <div id="origens-adicionais" class="origens-container" style="margin-top: 10px;"></div>
-                </div>
-            </div>
+            {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=False %}
         </div>
 
         <div class="form-group">
