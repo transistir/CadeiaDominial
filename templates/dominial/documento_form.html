@@ -123,10 +123,7 @@
             <textarea id="origem" name="origem" rows="2">{{ documento.origem|default:'' }}</textarea>
         </div>
         
-        <div class="form-group">
-            <label for="observacoes">Observações:</label>
-            <textarea id="observacoes" name="observacoes" rows="3">{{ documento.observacoes|default:'' }}</textarea>
-        </div>
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o documento" rows=3 %}
         
         <div class="actions">
             <button type="submit" class="btn btn-primary">
