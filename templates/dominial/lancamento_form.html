@@ -50,20 +50,6 @@
 
         {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
 
-        <!-- Checkbox para finalizar -->
-        <div class="field-group" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-            <div class="toggle-group">
-                <label class="toggle-label">
-                    <input type="checkbox" name="finalizar" id="finalizar" class="toggle-checkbox">
-                    <span>{% if modo_edicao %}Finalizar e voltar à visualização dos lançamentos{% else %}Finalizar e voltar à visualização dos lançamentos{% endif %}</span>
-                </label>
-                <small style="display: block; margin-top: 5px; color: #666;">
-                    Marque esta opção se deseja finalizar e voltar à visualização dos lançamentos deste documento. 
-                    Se desmarcado, será redirecionado para criar um novo lançamento.
-                </small>
-            </div>
-        </div>
-
         <div class="actions">
             <button type="submit" class="btn btn-success">Salvar Lançamento</button>
             <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
