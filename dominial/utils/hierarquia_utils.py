@@ -29,9 +29,46 @@ def identificar_tronco_principal(imovel):
     """
     Identifica o tronco principal da cadeia dominial de um imóvel.
     """
-    # TODO: Implementar lógica de identificação do tronco principal
-    # Esta função será implementada na Fase 2
-    pass
+    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    if not documentos.exists():
+        return []
+
+    tronco_principal = []
+    # Começar pelo documento mais antigo (primeira matrícula ou transcrição)
+    documento_atual = documentos.filter(tipo__tipo='matricula').order_by('data').first()
+    if not documento_atual:
+        documento_atual = documentos.filter(tipo__tipo='transcricao').order_by('data').first()
+    if not documento_atual:
+        return []
+
+    while documento_atual:
+        tronco_principal.append(documento_atual)
+        # Buscar lançamentos do documento atual que têm origens
+        lancamentos_com_origem = documento_atual.lancamentos.filter(origem__isnull=False).exclude(origem='')
+        if not lancamentos_com_origem.exists():
+            break
+        # Extrair códigos de origem dos lançamentos
+        origens_identificadas = []
+        for lancamento in lancamentos_com_origem:
+            if lancamento.origem:
+                codigos = re.findall(r'[MT]\d+', lancamento.origem)
+                for codigo in codigos:
+                    doc_existente = Documento.objects.filter(imovel=imovel, numero=codigo).first()
+                    if doc_existente:
+                        origens_identificadas.append(doc_existente)
+        # Escolher próximo documento (priorizar matrícula, depois transcrição)
+        proximo_documento = None
+        matriculas = [doc for doc in origens_identificadas if doc.tipo.tipo == 'matricula']
+        if matriculas:
+            proximo_documento = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
+        else:
+            transcricoes = [doc for doc in origens_identificadas if doc.tipo.tipo == 'transcricao']
+            if transcricoes:
+                proximo_documento = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
+        if not proximo_documento or proximo_documento in tronco_principal:
+            break
+        documento_atual = proximo_documento
+    return tronco_principal
 
 
 def identificar_troncos_secundarios(imovel, tronco_principal):

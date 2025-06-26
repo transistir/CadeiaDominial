@@ -54,10 +54,89 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
 
 @login_required
 def tronco_principal(request, tis_id, imovel_id):
-    # ... (código da view tronco_principal)
-    pass
+    """Exibe apenas o tronco principal da cadeia dominial"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Usar o service para obter o tronco principal (lista de documentos)
+    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    
+    # Buscar os documentos do tronco principal já com lançamentos pré-carregados
+    documentos = []
+    if tronco_principal:
+        ids = [doc.id for doc in tronco_principal]
+        documentos = list(
+            Documento.objects.filter(id__in=ids)
+            .prefetch_related('lancamentos', 'lancamentos__tipo', 'cartorio', 'tipo')
+            .order_by('data')
+        )
+        # Manter a ordem do tronco_principal
+        documentos = sorted(documentos, key=lambda d: ids.index(d.id))
+    
+    # Verificar se há lançamentos no tronco principal
+    tem_lancamentos = False
+    if documentos:
+        tem_lancamentos = Lancamento.objects.filter(documento__in=documentos).exists()
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documentos': documentos,
+        'tem_lancamentos': tem_lancamentos,
+        'tipo_visualizacao': 'tronco_principal',
+    }
+    
+    return render(request, 'dominial/tronco_principal.html', context)
 
 @login_required
 def cadeia_dominial_dados(request, tis_id, imovel_id):
-    # ... (código da view cadeia_dominial_dados)
-    pass 
+    """Retorna os dados da cadeia dominial em formato JSON para o diagrama de árvore"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    documentos = Documento.objects.filter(imovel=imovel).prefetch_related('lancamentos', 'lancamentos__tipo').order_by('data')
+    
+    # Estrutura para o diagrama de árvore
+    tree_data = {
+        'name': f'Imóvel: {imovel.matricula}',
+        'children': []
+    }
+    
+    for documento in documentos:
+        doc_node = {
+            'name': f'{documento.tipo.get_tipo_display()}: {documento.numero}',
+            'data': {
+                'tipo': 'documento',
+                'id': documento.id,
+                'numero': documento.numero,
+                'data': documento.data.strftime('%d/%m/%Y'),
+                'cartorio': documento.cartorio.nome,
+                'livro': documento.livro,
+                'folha': documento.folha,
+                'origem': documento.origem or ''
+            },
+            'children': []
+        }
+        
+        # Adicionar lançamentos como filhos do documento
+        lancamentos = documento.lancamentos.order_by('id')
+        for lancamento in lancamentos:
+            lanc_node = {
+                'name': f'{lancamento.tipo.get_tipo_display()}: {lancamento.data.strftime("%d/%m/%Y")}',
+                'data': {
+                    'tipo': 'lancamento',
+                    'id': lancamento.id,
+                    'tipo_lancamento': lancamento.tipo.tipo,
+                    'data': lancamento.data.strftime('%d/%m/%Y'),
+                    'eh_inicio_matricula': lancamento.eh_inicio_matricula,
+                    'forma': lancamento.forma or '',
+                    'descricao': lancamento.descricao or '',
+                    'titulo': lancamento.titulo or '',
+                    'observacoes': lancamento.observacoes or ''
+                }
+            }
+            doc_node['children'].append(lanc_node)
+        
+        tree_data['children'].append(doc_node)
+    
+    return JsonResponse(tree_data, safe=False) 
