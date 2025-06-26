@@ -48,10 +48,7 @@
             {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=False %}
         </div>
 
-        <div class="form-group">
-            <label for="observacoes">Observações</label>
-            <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o lançamento">{% if modo_edicao %}{{ lancamento.observacoes }}{% elif form_data %}{{ form_data.observacoes }}{% endif %}</textarea>
-        </div>
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
 
         <!-- Checkbox para finalizar -->
         <div class="field-group" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
