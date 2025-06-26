@@ -10,40 +10,5 @@
         <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
     </div>
     <!-- Campos de cartório para averbação (sempre visíveis) -->
-    <div id="campos-cartorio-averbacao" style="margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-        <h5 style="margin-top: 0; color: #495057;">Informações de Cartório de Origem</h5>
-        <div class="grid-3">
-            <div class="form-group">
-                <label for="cartorio_origem_averbacao">Cartório</label>
-                <div class="autocomplete-container">
-                    <input type="text" name="cartorio_origem_nome_averbacao" id="cartorio_origem_nome_averbacao" 
-                           placeholder="Digite o nome do cartório" autocomplete="off"
-                           value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome_averbacao %}{{ form_data.cartorio_origem_nome_averbacao }}{% endif %}">
-                    <input type="hidden" name="cartorio_origem_averbacao" id="cartorio_origem_averbacao" 
-                           value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem_averbacao %}{{ form_data.cartorio_origem_averbacao }}{% endif %}">
-                    <div class="autocomplete-suggestions cartorio-suggestions-averbacao"></div>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="livro_origem_averbacao">Livro</label>
-                <input type="text" name="livro_origem_averbacao" id="livro_origem_averbacao" 
-                       value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_averbacao }}{% endif %}">
-            </div>
-            <div class="form-group">
-                <label for="folha_origem_averbacao">Folha</label>
-                <input type="text" name="folha_origem_averbacao" id="folha_origem_averbacao" 
-                       value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_averbacao }}{% endif %}">
-            </div>
-        </div>
-        <div class="form-group">
-            <label for="data_origem_averbacao">Data</label>
-            <input type="date" name="data_origem_averbacao" id="data_origem_averbacao" 
-                   value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem_averbacao }}{% endif %}">
-        </div>
-        <div class="form-group">
-            <label for="titulo_averbacao">Título</label>
-            <input type="text" name="titulo_averbacao" id="titulo_averbacao" placeholder="Título do registro"
-                   value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo_averbacao }}{% endif %}">
-        </div>
-    </div>
+    {% include "dominial/components/_cartorio_form.html" with prefix="averbacao" titulo_obrigatorio=False data_obrigatorio=False cartorio_obrigatorio=False livro_obrigatorio=False folha_obrigatorio=False %}
 </div> 

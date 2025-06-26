@@ -1,0 +1,14 @@
+<div class="field-group" id="campos-registro">
+    <h4>Campos Específicos - Registro</h4>
+    <div class="form-group">
+        <label for="forma_registro">Forma *</label>
+        <input type="text" name="forma_registro" id="forma_registro" placeholder="Ex: Compra e Venda, Doação, etc."
+               value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
+    </div>
+    <div class="form-group">
+        <label for="titulo_registro">Título *</label>
+        <input type="text" name="titulo" id="titulo_registro" placeholder="Título do registro"
+               value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}">
+    </div>
+    {% include "dominial/components/_cartorio_form.html" with prefix="registro" titulo_obrigatorio=False data_obrigatorio=False cartorio_obrigatorio=True livro_obrigatorio=True folha_obrigatorio=True %}
+</div> 
