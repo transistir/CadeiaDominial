@@ -45,11 +45,11 @@ class LancamentoService:
         return LancamentoTipoService.obter_tipos_lancamento_por_documento(documento)
     
     @staticmethod
-    def validar_numero_lancamento(numero_lancamento, documento):
+    def validar_numero_lancamento(numero_lancamento, documento, lancamento_id=None):
         """
         Valida se o número do lançamento é válido e único
         """
-        return LancamentoTipoService.validar_numero_lancamento(numero_lancamento, documento)
+        return LancamentoTipoService.validar_numero_lancamento(numero_lancamento, documento, lancamento_id)
     
     @staticmethod
     def processar_dados_lancamento(request, tipo_lanc):
@@ -171,7 +171,7 @@ class LancamentoService:
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:
                 is_valid, error_message = LancamentoService.validar_numero_lancamento(
-                    numero_lancamento, lancamento.documento
+                    numero_lancamento, lancamento.documento, lancamento.id
                 )
                 if not is_valid:
                     return False, error_message

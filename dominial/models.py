@@ -351,20 +351,8 @@ class Lancamento(models.Model):
             if self.tipo.requer_data_origem and not self.data_origem:
                 raise ValidationError('Data de origem é obrigatória para este tipo de lançamento.')
         
-        # Validar unicidade do número de lançamento
-        if self.numero_lancamento and self.documento:
-            # Verificar se já existe outro lançamento com o mesmo número no mesmo documento
-            lancamentos_existentes = Lancamento.objects.filter(
-                documento=self.documento,
-                numero_lancamento=self.numero_lancamento
-            )
-            if self.pk:  # Se é uma edição, excluir o próprio registro da verificação
-                lancamentos_existentes = lancamentos_existentes.exclude(pk=self.pk)
-            
-            if lancamentos_existentes.exists():
-                raise ValidationError({
-                    'numero_lancamento': f'Já existe um lançamento com o número "{self.numero_lancamento}" neste documento.'
-                })
+        # Validação de unicidade do número de lançamento é feita no service
+        # para evitar duplicação de lógica
 
 class LancamentoPessoa(models.Model):
     """Modelo para armazenar múltiplas pessoas com percentuais em um lançamento"""
