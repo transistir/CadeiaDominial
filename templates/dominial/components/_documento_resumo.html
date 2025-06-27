@@ -1,5 +1,5 @@
 <div class="field-group">
-    <h4>Documento Ativo</h4>
+    <h4>📄 Documento</h4>
     <div class="grid-3">
         <div>
             <strong>Tipo:</strong> {{ documento.tipo.get_tipo_display }}
@@ -10,19 +10,19 @@
         <div>
             <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
         </div>
+        {% if documento.cartorio %}
         <div>
             <strong>Cartório:</strong> {{ documento.cartorio.nome }}
         </div>
+        {% endif %}
+        {% if documento.origem %}
         <div>
-            <strong>Livro:</strong> {{ documento.livro }}
+            <strong>Origem:</strong> {{ documento.origem }}
         </div>
-        <div>
-            <strong>Folha:</strong> {{ documento.folha }}
-        </div>
+        {% endif %}
     </div>
-    {% if documento.origem %}
-    <div style="margin-top: 10px;">
-        <strong>Origem:</strong> {{ documento.origem }}
+    
+    <div class="documento-actions">
+        <a href="{% url 'documento_editar' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-sm btn-outline">✏️ Editar Documento</a>
     </div>
-    {% endif %}
 </div> 

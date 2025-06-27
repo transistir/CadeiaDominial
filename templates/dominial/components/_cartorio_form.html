@@ -11,11 +11,19 @@
     - lancamento: objeto do lançamento (se modo_edicao)
     - form_data: dados do formulário
 -->
-<div id="campos-cartorio-{{ prefix }}" style="margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-    <h5 style="margin-top: 0; color: #495057;">Informações de Cartório de Origem</h5>
+<div class="toggle-group">
+    <label class="toggle-label">
+        <input type="checkbox" id="incluir_cartorio_{{ prefix }}" class="toggle-checkbox">
+        Incluir informações de cartório de origem
+    </label>
+</div>
+
+<div id="campos-cartorio-{{ prefix }}" class="cartorio-fields hidden">
+    <h5>Informações de Cartório de Origem</h5>
+    
     <div class="grid-3">
         <div class="form-group">
-            <label for="cartorio_origem_{{ prefix }}">Cartório{% if cartorio_obrigatorio %} *{% endif %}</label>
+            <label for="cartorio_origem_nome_{{ prefix }}">Nome do Cartório</label>
             <div class="autocomplete-container">
                 <input type="text" name="cartorio_origem_nome_{{ prefix }}" id="cartorio_origem_nome_{{ prefix }}" 
                        placeholder="Digite o nome do cartório" autocomplete="off"
@@ -26,15 +34,53 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="livro_origem_{{ prefix }}">Livro{% if livro_obrigatorio %} *{% endif %}</label>
-            <input type="text" name="livro_origem_{{ prefix }}" id="livro_origem_{{ prefix }}" 
-                   value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_prefix }}{% endif %}">
+            <label for="cartorio_origem_cidade_{{ prefix }}">Cidade</label>
+            <input type="text" name="cartorio_origem_cidade_{{ prefix }}" id="cartorio_origem_cidade_{{ prefix }}" 
+                   placeholder="Cidade do cartório">
         </div>
         <div class="form-group">
-            <label for="folha_origem_{{ prefix }}">Folha{% if folha_obrigatorio %} *{% endif %}</label>
-            <input type="text" name="folha_origem_{{ prefix }}" id="folha_origem_{{ prefix }}" 
-                   value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_prefix }}{% endif %}">
+            <label for="cartorio_origem_estado_{{ prefix }}">Estado</label>
+            <select name="cartorio_origem_estado_{{ prefix }}" id="cartorio_origem_estado_{{ prefix }}">
+                <option value="">Selecione...</option>
+                <option value="AC">Acre</option>
+                <option value="AL">Alagoas</option>
+                <option value="AP">Amapá</option>
+                <option value="AM">Amazonas</option>
+                <option value="BA">Bahia</option>
+                <option value="CE">Ceará</option>
+                <option value="DF">Distrito Federal</option>
+                <option value="ES">Espírito Santo</option>
+                <option value="GO">Goiás</option>
+                <option value="MA">Maranhão</option>
+                <option value="MT">Mato Grosso</option>
+                <option value="MS">Mato Grosso do Sul</option>
+                <option value="MG">Minas Gerais</option>
+                <option value="PA">Pará</option>
+                <option value="PB">Paraíba</option>
+                <option value="PR">Paraná</option>
+                <option value="PE">Pernambuco</option>
+                <option value="PI">Piauí</option>
+                <option value="RJ">Rio de Janeiro</option>
+                <option value="RN">Rio Grande do Norte</option>
+                <option value="RS">Rio Grande do Sul</option>
+                <option value="RO">Rondônia</option>
+                <option value="RR">Roraima</option>
+                <option value="SC">Santa Catarina</option>
+                <option value="SP">São Paulo</option>
+                <option value="SE">Sergipe</option>
+                <option value="TO">Tocantins</option>
+            </select>
         </div>
+    </div>
+    <div class="form-group">
+        <label for="livro_origem_{{ prefix }}">Livro{% if livro_obrigatorio %} *{% endif %}</label>
+        <input type="text" name="livro_origem_{{ prefix }}" id="livro_origem_{{ prefix }}" 
+               value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_prefix }}{% endif %}">
+    </div>
+    <div class="form-group">
+        <label for="folha_origem_{{ prefix }}">Folha{% if folha_obrigatorio %} *{% endif %}</label>
+        <input type="text" name="folha_origem_{{ prefix }}" id="folha_origem_{{ prefix }}" 
+               value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_prefix }}{% endif %}">
     </div>
     <div class="form-group">
         <label for="data_origem_{{ prefix }}">Data{% if data_obrigatorio %} *{% endif %}</label>

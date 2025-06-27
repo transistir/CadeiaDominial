@@ -8,23 +8,26 @@
     - form_data: dados do formulário (opcional)
     - pessoas: lista de pessoas já adicionadas (opcional)
 -->
-<div class="form-group">
-    <label for="{{ tipo }}">{{ label }}</label>
+<div class="field-group">
+    <h4>{{ label }}</h4>
+    
     <div id="{{ container_id }}">
         <div class="pessoa-item">
             <div class="pessoa-input-group">
                 <div class="autocomplete-container">
-                    <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" placeholder="Digite o nome do {{ label|lower }}" autocomplete="off">
-                    <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id" value="">
+                    <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
+                           placeholder="Digite o nome do {{ tipo }}" autocomplete="off">
+                    <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
                     <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
                 </div>
-                <input type="number" name="{{ tipo }}_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                <input type="number" name="{{ tipo }}_percentual[]" class="percentual-input" 
+                       placeholder="%" min="0" max="100" step="0.01">
+                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
             </div>
         </div>
     </div>
-    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|capfirst }}()" style="margin-top: 5px;">
-        ➕ Adicionar {{ label }}
+    
+    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|capfirst }}()">
+        ➕ Adicionar {{ tipo|title }}
     </button>
-    <div class="percentual-total" id="{{ tipo }}-total">Total: 0%</div>
 </div> 

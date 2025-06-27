@@ -1,27 +1,45 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento - {{ imovel.nome }}{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/forms.css' %}">
+{% endblock %}
+
 {% block content %}
 <div class="container">
-    <h1>{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento</h1>
+    <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
+    
+    <div class="field-group">
+        <h4>{{ imovel.nome }}</h4>
+        <div class="grid-3">
+            <div>
+                <strong>Matrícula:</strong> {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>SNCR:</strong> {{ imovel.sncr }}
+            </div>
+            <div>
+                <strong>Proprietário Atual:</strong> {{ imovel.proprietario.nome }}
+            </div>
+        </div>
+    </div>
 
-    {% include "dominial/components/_documento_resumo.html" %}
-
-    <form method="post">
+    <form method="post" id="lancamento-form">
         {% csrf_token %}
         
-        <!-- Substituir bloco de informações básicas pelo componente -->
+        <!-- Campos Básicos -->
         {% include "dominial/components/_lancamento_basico_form.html" %}
 
-        <!-- Campos para Averbação -->
+        <!-- Campos para Averbacao -->
         {% include "dominial/components/_lancamento_averbacao_form.html" %}
 
         <!-- Campos para Registro -->
         {% include "dominial/components/_lancamento_registro_form.html" %}
 
         <!-- Campos para Início de Matrícula -->
-        <div class="field-group" id="campos-inicio-matricula" style="display: none;">
+        <div class="field-group hidden" id="campos-inicio-matricula">
             <h4>Campos Específicos - Início de Matrícula</h4>
             
             <div class="form-group">
@@ -37,7 +55,7 @@
         </div>
 
         <!-- Campos Opcionais de Transação -->
-        <div class="field-group" id="campos-transacao" style="display: none;">
+        <div class="field-group hidden" id="campos-transacao">
             <h4>Campos Opcionais - Transação</h4>
             
             <div class="grid-2">
@@ -50,7 +68,7 @@
 
         {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
 
-        <div class="actions">
+        <div class="form-actions">
             <button type="submit" class="btn btn-success">Salvar Lançamento</button>
             <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
         </div>
@@ -75,21 +93,21 @@ document.addEventListener('DOMContentLoaded', function() {
         const modoEdicao = {% if modo_edicao %}true{% else %}false{% endif %};
         
         // Esconder todos os campos primeiro
-        averbacaoFields.style.display = 'none';
-        registroFields.style.display = 'none';
-        inicioMatriculaFields.style.display = 'none';
-        transacaoFields.style.display = 'none';
+        averbacaoFields.classList.add('hidden');
+        registroFields.classList.add('hidden');
+        inicioMatriculaFields.classList.add('hidden');
+        transacaoFields.classList.add('hidden');
         
         // Mostrar campos baseado no tipo selecionado
         if (selectedTipo === 'averbacao') {
-            averbacaoFields.style.display = 'block';
-            transacaoFields.style.display = 'block';
+            averbacaoFields.classList.remove('hidden');
+            transacaoFields.classList.remove('hidden');
         } else if (selectedTipo === 'registro') {
-            registroFields.style.display = 'block';
-            transacaoFields.style.display = 'block';
+            registroFields.classList.remove('hidden');
+            transacaoFields.classList.remove('hidden');
         } else if (selectedTipo === 'inicio_matricula') {
-            inicioMatriculaFields.style.display = 'block';
-            transacaoFields.style.display = 'block';
+            inicioMatriculaFields.classList.remove('hidden');
+            transacaoFields.classList.remove('hidden');
         }
     }
     
@@ -113,8 +131,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="hidden" name="transmitente[]" class="transmitente-id" value="{{ transmitente.pessoa.id }}">
                                 <div class="autocomplete-suggestions transmitente-suggestions"></div>
                             </div>
-                            <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ transmitente.percentual }}">
-                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                            <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" value="{{ transmitente.percentual }}">
+                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
                         </div>
                     `;
                     container.appendChild(pessoaDiv);
@@ -136,8 +154,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="hidden" name="adquirente[]" class="adquirente-id" value="{{ adquirente.pessoa.id }}">
                                 <div class="autocomplete-suggestions adquirente-suggestions"></div>
                             </div>
-                            <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ adquirente.percentual }}">
-                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                            <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" value="{{ adquirente.percentual }}">
+                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
                         </div>
                     `;
                     container.appendChild(pessoaDiv);
@@ -192,631 +210,186 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (hasCartorioData) {
             incluirCartorioCheckbox.checked = true;
-            camposCartorioAverbacao.style.display = 'block';
+            camposCartorioAverbacao.classList.remove('hidden');
         }
         
         incluirCartorioCheckbox.addEventListener('change', function() {
             if (this.checked) {
-                camposCartorioAverbacao.style.display = 'block';
-                // Adicionar animação suave
-                camposCartorioAverbacao.style.opacity = '0';
-                camposCartorioAverbacao.style.transform = 'translateY(-10px)';
-                setTimeout(() => {
-                    camposCartorioAverbacao.style.transition = 'all 0.3s ease';
-                    camposCartorioAverbacao.style.opacity = '1';
-                    camposCartorioAverbacao.style.transform = 'translateY(0)';
-                }, 10);
+                camposCartorioAverbacao.classList.remove('hidden');
+                camposCartorioAverbacao.classList.add('fade-in');
             } else {
-                // Adicionar animação suave antes de esconder
-                camposCartorioAverbacao.style.transition = 'all 0.3s ease';
-                camposCartorioAverbacao.style.opacity = '0';
-                camposCartorioAverbacao.style.transform = 'translateY(-10px)';
+                camposCartorioAverbacao.classList.add('fade-out');
                 setTimeout(() => {
-                    camposCartorioAverbacao.style.display = 'none';
+                    camposCartorioAverbacao.classList.add('hidden');
+                    camposCartorioAverbacao.classList.remove('fade-out');
                 }, 300);
             }
         });
     }
-    
-    function setupPessoaAutocomplete() {
-        // Configurar autocomplete para campos existentes
-        document.querySelectorAll('.transmitente-nome, .adquirente-nome').forEach(input => {
-            setupPessoaFieldAutocomplete(input);
-        });
-        
-        // Configurar autocomplete para novos campos que serão adicionados
-        document.addEventListener('DOMContentLoaded', function() {
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) { // Element node
-                            const newInputs = node.querySelectorAll ? node.querySelectorAll('.transmitente-nome, .adquirente-nome') : [];
-                            newInputs.forEach(input => {
-                                setupPessoaFieldAutocomplete(input);
-                            });
-                        }
-                    });
-                });
-            });
-            
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-        });
-    }
-    
-    function setupPessoaFieldAutocomplete(input) {
-        const hiddenInput = input.parentElement.querySelector('input[type="hidden"]');
-        const suggestions = input.parentElement.querySelector('.autocomplete-suggestions');
-        
-        if (!hiddenInput || !suggestions) return;
-        
-        let selectedIndex = -1;
-        let suggestionsData = [];
-        
-        input.addEventListener('input', function() {
-            const query = this.value.trim();
-            if (query.length < 2) {
-                hideSuggestions();
-                return;
-            }
-            
-            fetch(`/dominial/pessoa-autocomplete/?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    suggestionsData = data;
-                    showSuggestions(data);
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar sugestões de pessoa:', error);
-                });
-        });
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectNext();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectPrevious();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                selectCurrent();
-            } else if (e.key === 'Escape') {
-                hideSuggestions();
-            }
-        });
-        
-        input.addEventListener('blur', function() {
-            setTimeout(() => {
-                hideSuggestions();
-            }, 200);
-        });
-        
-        function showSuggestions(data) {
-            if (data.length === 0) {
-                suggestions.innerHTML = '<div class="autocomplete-suggestion"><div class="nome">Nenhuma pessoa encontrada</div></div>';
-            } else {
-                suggestions.innerHTML = data.map((item, index) => `
-                    <div class="autocomplete-suggestion" data-index="${index}" data-id="${item.id}">
-                        <div class="nome">${item.nome}</div>
-                        ${item.cpf ? `<div class="cpf">CPF: ${item.cpf}</div>` : ''}
-                    </div>
-                `).join('');
-                
-                suggestions.innerHTML += `
-                    <div class="autocomplete-suggestion novo" data-index="new">
-                        <div class="nome">➕ Criar nova pessoa: "${input.value}"</div>
-                    </div>
-                `;
-            }
-            
-            suggestions.style.display = 'block';
-            selectedIndex = -1;
-        }
-        
-        function hideSuggestions() {
-            suggestions.style.display = 'none';
-            selectedIndex = -1;
-        }
-        
-        function selectNext() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-            updateSelection(items);
-        }
-        
-        function selectPrevious() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.max(selectedIndex - 1, -1);
-            updateSelection(items);
-        }
-        
-        function updateSelection(items) {
-            items.forEach((item, index) => {
-                item.classList.remove('selected');
-                if (index === selectedIndex) {
-                    item.classList.add('selected');
-                }
-            });
-        }
-        
-        function selectCurrent() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (selectedIndex >= 0 && selectedIndex < items.length) {
-                const selectedItem = items[selectedIndex];
-                const index = selectedItem.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hiddenInput.value = '';
-                } else {
-                    const pessoa = suggestionsData[index];
-                    input.value = pessoa.nome;
-                    hiddenInput.value = pessoa.id;
-                }
-            }
-            hideSuggestions();
-        }
-        
-        suggestions.addEventListener('click', function(e) {
-            const suggestion = e.target.closest('.autocomplete-suggestion');
-            if (suggestion) {
-                const index = suggestion.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hiddenInput.value = '';
-                } else {
-                    const pessoa = suggestionsData[index];
-                    input.value = pessoa.nome;
-                    hiddenInput.value = pessoa.id;
-                }
-                hideSuggestions();
-            }
-        });
-    }
-    
-    function setupCartorioAutocomplete(input, hidden, suggestions) {
-        let selectedIndex = -1;
-        let suggestionsData = [];
-        
-        input.addEventListener('input', function() {
-            const query = this.value.trim();
-            if (query.length < 2) {
-                hideSuggestions();
-                return;
-            }
-            
-            fetch(`/dominial/cartorio-autocomplete/?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    suggestionsData = data;
-                    showSuggestions(data);
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar sugestões de cartório:', error);
-                });
-        });
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectNext();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectPrevious();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                selectCurrent();
-            } else if (e.key === 'Escape') {
-                hideSuggestions();
-            }
-        });
-        
-        input.addEventListener('blur', function() {
-            setTimeout(() => {
-                hideSuggestions();
-            }, 200);
-        });
-        
-        function showSuggestions(data) {
-            if (data.length === 0) {
-                suggestions.innerHTML = '<div class="autocomplete-suggestion"><div class="nome">Nenhum cartório encontrado</div></div>';
-            } else {
-                suggestions.innerHTML = data.map((item, index) => `
-                    <div class="autocomplete-suggestion" data-index="${index}" data-id="${item.id}">
-                        <div class="nome">${item.nome}</div>
-                        ${item.cidade ? `<div class="cidade">Cidade: ${item.cidade}</div>` : ''}
-                    </div>
-                `).join('');
-                
-                suggestions.innerHTML += `
-                    <div class="autocomplete-suggestion novo" data-index="new">
-                        <div class="nome">➕ Criar novo cartório: "${input.value}"</div>
-                    </div>
-                `;
-            }
-            
-            suggestions.style.display = 'block';
-            selectedIndex = -1;
-        }
-        
-        function hideSuggestions() {
-            suggestions.style.display = 'none';
-            selectedIndex = -1;
-        }
-        
-        function selectNext() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-            updateSelection(items);
-        }
-        
-        function selectPrevious() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.max(selectedIndex - 1, -1);
-            updateSelection(items);
-        }
-        
-        function updateSelection(items) {
-            items.forEach((item, index) => {
-                item.classList.remove('selected');
-                if (index === selectedIndex) {
-                    item.classList.add('selected');
-                }
-            });
-        }
-        
-        function selectCurrent() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (selectedIndex >= 0 && selectedIndex < items.length) {
-                const selectedItem = items[selectedIndex];
-                const index = selectedItem.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hidden.value = '';
-                } else {
-                    const cartorio = suggestionsData[index];
-                    input.value = cartorio.nome;
-                    hidden.value = cartorio.id;
-                }
-            }
-            hideSuggestions();
-        }
-        
-        suggestions.addEventListener('click', function(e) {
-            const suggestion = e.target.closest('.autocomplete-suggestion');
-            if (suggestion) {
-                const index = suggestion.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hidden.value = '';
-                } else {
-                    const cartorio = suggestionsData[index];
-                    input.value = cartorio.nome;
-                    hidden.value = cartorio.id;
-                }
-                hideSuggestions();
-            }
-        });
-    }
-    
-    // Funções para múltiplas pessoas
-    window.adicionarTransmitente = function() {
-        const container = document.getElementById('transmitentes-container');
-        const pessoaDiv = document.createElement('div');
-        pessoaDiv.className = 'pessoa-item';
-        pessoaDiv.innerHTML = `
-            <div class="pessoa-input-group">
-                <div class="autocomplete-container">
-                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
-                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="">
-                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
-                </div>
-                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-            </div>
-        `;
-        container.appendChild(pessoaDiv);
-    };
-    
-    window.adicionarAdquirente = function() {
-        const container = document.getElementById('adquirentes-container');
-        const pessoaDiv = document.createElement('div');
-        pessoaDiv.className = 'pessoa-item';
-        pessoaDiv.innerHTML = `
-            <div class="pessoa-input-group">
-                <div class="autocomplete-container">
-                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
-                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="">
-                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
-                </div>
-                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-            </div>
-        `;
-        container.appendChild(pessoaDiv);
-    };
-    
-    window.removePessoa = function(button) {
-        const pessoaItem = button.closest('.pessoa-item');
-        const container = pessoaItem?.parentElement;
-        
-        // Não permitir remover se for o último item
-        if (container && container.children.length > 1) {
-            pessoaItem.remove();
-        }
-    };
-    
-    // Validação do campo de origem
-    const origemInput = document.getElementById('origem');
-    const origemValidation = document.getElementById('origem-validation');
-    
-    if (origemInput && origemValidation) {
-        origemInput.addEventListener('input', function() {
-            const valor = this.value;
-            const codigos = valor.match(/\b[A-Za-z]\d+\b/g) || [];
-            const codigosInvalidos = [];
-            const sugestoes = [];
-            
-            codigos.forEach(codigo => {
-                const prefixo = codigo.charAt(0).toUpperCase();
-                const numero = codigo.substring(1);
-                
-                // Verificar se é um código válido (M ou T seguido de números)
-                if (!/^[MT]\d+$/i.test(codigo)) {
-                    codigosInvalidos.push(codigo);
-                    
-                    // Gerar sugestão baseada no prefixo
-                    if (/^[A-Za-z]\d+$/i.test(codigo)) {
-                        if (prefixo === 'M' || prefixo === 'T') {
-                            sugestoes.push(`${prefixo}${numero}`);
-                        } else {
-                            // Se não é M nem T, sugerir M (matrícula é mais comum)
-                            sugestoes.push(`M${numero}`);
-                        }
-                    }
-                }
-            });
-            
-            // Mostrar validação se houver códigos inválidos
-            if (codigosInvalidos.length > 0) {
-                let mensagem = '<div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 8px; border-radius: 4px;">';
-                mensagem += '<strong>⚠️ Códigos detectados que não seguem o padrão:</strong><br>';
-                mensagem += codigosInvalidos.map((codigo, index) => {
-                    const sugestao = sugestoes[index];
-                    return `• "${codigo}" → sugerido: "${sugestao}"`;
-                }).join('<br>');
-                mensagem += '<br><small>💡 Use M para matrículas e T para transcrições</small>';
-                mensagem += '</div>';
-                
-                origemValidation.innerHTML = mensagem;
-                origemValidation.style.display = 'block';
-            } else {
-                origemValidation.style.display = 'none';
-            }
-        });
-        
-        // Também validar ao perder o foco
-        origemInput.addEventListener('blur', function() {
-            // Pequeno delay para permitir que o usuário veja a validação
-            setTimeout(() => {
-                if (origemValidation.style.display === 'block') {
-                    origemValidation.style.display = 'none';
-                }
-            }, 2000);
-        });
-    }
 });
+
+// Função para remover pessoa
+function removePessoa(button) {
+    const pessoaItem = button.closest('.pessoa-item');
+    if (pessoaItem) {
+        pessoaItem.remove();
+    }
+}
+
+// Função para adicionar transmitente
+function adicionarTransmitente() {
+    const container = document.getElementById('transmitentes-container');
+    const pessoaDiv = document.createElement('div');
+    pessoaDiv.className = 'pessoa-item';
+    pessoaDiv.innerHTML = `
+        <div class="pessoa-input-group">
+            <div class="autocomplete-container">
+                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
+                <input type="hidden" name="transmitente[]" class="transmitente-id">
+                <div class="autocomplete-suggestions transmitente-suggestions"></div>
+            </div>
+            <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01">
+            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+        </div>
+    `;
+    container.appendChild(pessoaDiv);
+    
+    // Configurar autocomplete para o novo campo
+    const newInput = pessoaDiv.querySelector('.transmitente-nome');
+    const newHidden = pessoaDiv.querySelector('.transmitente-id');
+    const newSuggestions = pessoaDiv.querySelector('.transmitente-suggestions');
+    setupPessoaAutocompleteField(newInput, newHidden, newSuggestions, 'transmitente');
+}
+
+// Função para adicionar adquirente
+function adicionarAdquirente() {
+    const container = document.getElementById('adquirentes-container');
+    const pessoaDiv = document.createElement('div');
+    pessoaDiv.className = 'pessoa-item';
+    pessoaDiv.innerHTML = `
+        <div class="pessoa-input-group">
+            <div class="autocomplete-container">
+                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
+                <input type="hidden" name="adquirente[]" class="adquirente-id">
+                <div class="autocomplete-suggestions adquirente-suggestions"></div>
+            </div>
+            <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01">
+            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+        </div>
+    `;
+    container.appendChild(pessoaDiv);
+    
+    // Configurar autocomplete para o novo campo
+    const newInput = pessoaDiv.querySelector('.adquirente-nome');
+    const newHidden = pessoaDiv.querySelector('.adquirente-id');
+    const newSuggestions = pessoaDiv.querySelector('.adquirente-suggestions');
+    setupPessoaAutocompleteField(newInput, newHidden, newSuggestions, 'adquirente');
+}
+
+// Função para configurar autocomplete de pessoa
+function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
+    input.addEventListener('input', function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            suggestions.style.display = 'none';
+            return;
+        }
+        
+        fetch(`/api/pessoas/autocomplete/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                suggestions.innerHTML = '';
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(pessoa => {
+                        const div = document.createElement('div');
+                        div.className = 'autocomplete-suggestion';
+                        div.textContent = pessoa.nome;
+                        div.addEventListener('click', function() {
+                            input.value = pessoa.nome;
+                            hidden.value = pessoa.id;
+                            suggestions.style.display = 'none';
+                        });
+                        suggestions.appendChild(div);
+                    });
+                    suggestions.style.display = 'block';
+                } else {
+                    suggestions.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar pessoas:', error);
+                suggestions.style.display = 'none';
+            });
+    });
+    
+    // Esconder sugestões quando clicar fora
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+            suggestions.style.display = 'none';
+        }
+    });
+}
+
+// Função para configurar autocomplete de cartório
+function setupCartorioAutocomplete(input, hidden, suggestions) {
+    input.addEventListener('input', function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            suggestions.style.display = 'none';
+            return;
+        }
+        
+        fetch(`/api/cartorios/autocomplete/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                suggestions.innerHTML = '';
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(cartorio => {
+                        const div = document.createElement('div');
+                        div.className = 'autocomplete-suggestion';
+                        div.textContent = cartorio.nome;
+                        div.addEventListener('click', function() {
+                            input.value = cartorio.nome;
+                            hidden.value = cartorio.id;
+                            suggestions.style.display = 'none';
+                        });
+                        suggestions.appendChild(div);
+                    });
+                    suggestions.style.display = 'block';
+                } else {
+                    suggestions.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar cartórios:', error);
+                suggestions.style.display = 'none';
+            });
+    });
+    
+    // Esconder sugestões quando clicar fora
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+            suggestions.style.display = 'none';
+        }
+    });
+}
+
+// Função para configurar autocomplete geral de pessoas
+function setupPessoaAutocomplete() {
+    const transmitenteInputs = document.querySelectorAll('.transmitente-nome');
+    const adquirenteInputs = document.querySelectorAll('.adquirente-nome');
+    
+    transmitenteInputs.forEach((input, index) => {
+        const hidden = document.querySelectorAll('.transmitente-id')[index];
+        const suggestions = document.querySelectorAll('.transmitente-suggestions')[index];
+        setupPessoaAutocompleteField(input, hidden, suggestions, 'transmitente');
+    });
+    
+    adquirenteInputs.forEach((input, index) => {
+        const hidden = document.querySelectorAll('.adquirente-id')[index];
+        const suggestions = document.querySelectorAll('.adquirente-suggestions')[index];
+        setupPessoaAutocompleteField(input, hidden, suggestions, 'adquirente');
+    });
+}
 </script>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-/* Campo de erro */
-.error-field {
-    border: 2px solid #dc3545 !important;
-    background-color: #fff5f5 !important;
-    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
-}
-
-.error-field:focus {
-    border-color: #dc3545 !important;
-    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
-}
-
-.error-message {
-    animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.input-group {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.input-group input {
-    flex: 1;
-}
-
-.btn-sm {
-    padding: 5px 10px;
-    font-size: 0.875em;
-    border-radius: 4px;
-    min-width: 35px;
-}
-
-.btn-outline {
-    background: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--primary-color);
-}
-
-.btn-outline:hover {
-    background: var(--primary-color);
-    color: white;
-}
-
-.btn-danger {
-    background: #dc3545;
-    color: white;
-    border: 1px solid #dc3545;
-}
-
-.btn-danger:hover {
-    background: #c82333;
-    border-color: #bd2130;
-}
-
-.origem-item {
-    transition: all 0.2s ease;
-}
-
-.origem-item:hover {
-    background: #e9ecef !important;
-}
-
-.origens-container {
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-/* Autocomplete Styles */
-.autocomplete-container {
-    position: relative;
-}
-
-.autocomplete-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    max-height: 200px;
-    overflow-y: auto;
-    z-index: 1000;
-    display: none;
-}
-
-.autocomplete-suggestion {
-    padding: 10px 15px;
-    cursor: pointer;
-    border-bottom: 1px solid #f0f0f0;
-    transition: background-color 0.2s ease;
-}
-
-.autocomplete-suggestion:hover {
-    background-color: #f8f9fa;
-}
-
-.autocomplete-suggestion:last-child {
-    border-bottom: none;
-}
-
-.autocomplete-suggestion.selected {
-    background-color: #e3f2fd;
-}
-
-.autocomplete-suggestion .nome {
-    font-weight: 500;
-    color: #333;
-}
-
-.autocomplete-suggestion .cpf {
-    font-size: 0.85em;
-    color: #666;
-    margin-top: 2px;
-}
-
-.autocomplete-suggestion .novo {
-    color: #28a745;
-    font-style: italic;
-}
-
-/* Múltiplas Pessoas Styles */
-.pessoa-item {
-    margin-bottom: 10px;
-}
-
-.pessoa-input-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.percentual-input {
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 8px;
-    font-size: 0.9em;
-}
-
-.percentual-total {
-    margin-top: 5px;
-    font-size: 0.9em;
-    font-weight: 500;
-    color: #666;
-}
-
-.percentual-total.warning {
-    color: #dc3545;
-}
-
-.percentual-total.success {
-    color: #28a745;
-}
-
-/* Estilos para campos de cartório da averbação */
-#campos-cartorio-averbacao {
-    transition: all 0.3s ease;
-}
-
-#campos-cartorio-averbacao h5 {
-    margin-bottom: 15px;
-    font-weight: 600;
-    color: #495057;
-}
-
-#campos-cartorio-averbacao .form-group {
-    margin-bottom: 12px;
-}
-
-#campos-cartorio-averbacao .grid-3 {
-    gap: 12px;
-}
-
-/* Animação para mostrar/ocultar campos */
-.field-group {
-    transition: all 0.3s ease;
-}
-
-.toggle-group {
-    transition: background-color 0.2s ease;
-}
-
-.toggle-group:hover {
-    background-color: #e9ecef !important;
-}
-</style>
 {% endblock %} 

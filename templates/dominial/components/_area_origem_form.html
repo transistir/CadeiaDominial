@@ -7,24 +7,27 @@
     - lancamento: objeto do lançamento (se modo_edicao)
     - form_data: dados do formulário
 -->
-<div class="grid-2">
-    <div class="form-group">
-        <label for="area">Área{% if area_obrigatorio %} *{% endif %}</label>
-        <input type="number" name="area" id="area" step="0.0001" placeholder="0.0000"
-               value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}">
-    </div>
-
-    <div class="form-group">
-        <label for="origem">Origem{% if origem_obrigatorio %} *{% endif %}</label>
-        <div class="input-group">
-            <input type="text" name="origem" id="origem" placeholder="Origem do lançamento (opcional)"
-                   value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem }}{% endif %}">
-            <button type="button" id="add-origem" class="btn btn-sm btn-outline">+</button>
+<div class="area-origem-group">
+    <h5>Área e Origem</h5>
+    
+    <div class="grid-2">
+        <div class="form-group">
+            <label for="area">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
+            <input type="number" name="area" id="area" step="0.01" min="0" 
+                   value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}"
+                   placeholder="Ex: 150.50">
+            <small>Área em hectares do imóvel ou fração</small>
         </div>
-        <small style="color: #666; font-size: 0.9em;">
-            💡 Dica: Use códigos M para matrículas (ex: M3214) e T para transcrições (ex: T1234)
-        </small>
-        <div id="origem-validation" style="display: none; margin-top: 5px; padding: 8px; border-radius: 4px; font-size: 0.9em;"></div>
-        <div id="origens-adicionais" class="origens-container" style="margin-top: 10px;"></div>
+        
+        <div class="form-group">
+            <label for="origem">Origem{% if origem_obrigatorio %} *{% endif %}</label>
+            <input type="text" name="origem" id="origem" 
+                   value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem }}{% endif %}"
+                   placeholder="Ex: M123, T456, M789">
+            <small>Códigos de matrícula (M) ou transcrição (T) de origem</small>
+            <div id="origem-validation" class="validation-message"></div>
+        </div>
     </div>
+    
+    <div id="origens-adicionais" class="origens-container"></div>
 </div> 

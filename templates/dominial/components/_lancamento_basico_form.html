@@ -1,36 +1,56 @@
 <div class="field-group">
     <h4>Informações Básicas</h4>
+    
     <div class="form-group">
         <label for="tipo_lancamento">Tipo de Lançamento *</label>
         <select name="tipo_lancamento" id="tipo_lancamento" required>
-            <option value="">Selecione o tipo</option>
+            <option value="">Selecione o tipo...</option>
             {% for tipo in tipos_lancamento %}
-            <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}" 
-                    {% if modo_edicao and lancamento.tipo.id == tipo.id %}selected
-                    {% elif form_data and form_data.tipo_lancamento == tipo.id|stringformat:"s" %}selected{% endif %}>
+            <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}"
+                    {% if modo_edicao and lancamento.tipo.id == tipo.id %}selected{% endif %}>
                 {{ tipo.get_tipo_display }}
             </option>
             {% endfor %}
         </select>
     </div>
+
     <div class="form-group">
-        <label for="numero_lancamento">Número do Lançamento *</label>
+        <label for="numero_lancamento">Número do Lançamento</label>
         <input type="text" name="numero_lancamento" id="numero_lancamento" 
-               placeholder="Código/número gerado pelo cartório" required 
                value="{% if modo_edicao %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
-               class="{% if numero_lancamento_error %}error-field{% endif %}">
-        <small style="color: #666; font-size: 0.9em;">Número ou código de referência do lançamento no cartório</small>
-        {% if numero_lancamento_error %}
-        <div class="error-message" style="color: #dc3545; font-size: 0.9em; margin-top: 5px;">
-            ⚠️ Este número de lançamento já existe neste documento
+               placeholder="Ex: 12345, A123, etc.">
+        <small>Número ou código de referência do lançamento no cartório</small>
+        <div class="error-message">
+            {% if form.errors.numero_lancamento %}
+                {{ form.errors.numero_lancamento.0 }}
+            {% endif %}
         </div>
-        {% endif %}
     </div>
+
+    <div class="grid-2">
+        <div class="form-group">
+            <label for="data">Data *</label>
+            <input type="date" name="data" id="data" required
+                   value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
+        </div>
+        
+        <div class="form-group">
+            <label for="titulo">Título</label>
+            <input type="text" name="titulo" id="titulo" 
+                   value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}"
+                   placeholder="Título do lançamento">
+        </div>
+    </div>
+
     <div class="form-group">
-        <label for="data">Data do Lançamento *</label>
-        <input type="date" name="data" id="data" required 
-               value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
+        <label for="descricao">Descrição</label>
+        <textarea name="descricao" id="descricao" 
+                  placeholder="Descrição detalhada do lançamento">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
+        <small>
+            Descrição detalhada do lançamento, incluindo informações relevantes sobre a transação
+        </small>
     </div>
+
     <div class="toggle-group">
         <label class="toggle-label">
             <input type="checkbox" name="eh_inicio_matricula" id="eh_inicio_matricula" class="toggle-checkbox" 
