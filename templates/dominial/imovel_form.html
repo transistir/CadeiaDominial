@@ -287,7 +287,51 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 cidadeSelect.disabled = true;
                 cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
+                // Limpar cartórios também
+                const cartorioSelect = document.getElementById('cartorio');
+                if (cartorioSelect) {
+                    cartorioSelect.disabled = true;
+                    cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option><option value="novo">➕ Adicionar novo cartório</option>';
+                }
             }
+        });
+    }
+    
+    // Controle de cidade/cartório
+    if (cidadeSelect) {
+        cidadeSelect.addEventListener('change', function() {
+            const estado = document.getElementById('estado').value;
+            const cidade = this.value;
+            
+            if (estado && cidade) {
+                carregarCartorios(estado, cidade);
+            } else {
+                const cartorioSelect = document.getElementById('cartorio');
+                if (cartorioSelect) {
+                    cartorioSelect.disabled = true;
+                    cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option><option value="novo">➕ Adicionar novo cartório</option>';
+                }
+            }
+        });
+    }
+    
+    // Controle de seleção de cartório
+    if (cartorioSelect) {
+        cartorioSelect.addEventListener('change', function() {
+            if (this.value && this.value !== 'novo') {
+                mostrarDetalhesCartorio(this.value);
+            } else {
+                document.getElementById('cartorio-detalhes').innerHTML = '';
+            }
+        });
+    }
+    
+    // Formulário de novo cartório
+    const formNovoCartorio = document.getElementById('form-novo-cartorio');
+    if (formNovoCartorio) {
+        formNovoCartorio.addEventListener('submit', function(e) {
+            e.preventDefault();
+            criarNovoCartorio();
         });
     }
 });
@@ -305,27 +349,173 @@ function fecharModalCartorio() {
     }
 }
 
-// Função para carregar cidades
+// Função para carregar cidades via API
 function carregarCidades(estado) {
     const cidadeSelect = document.getElementById('cidade_select');
     
-    // Simular carregamento de cidades (implementar com API real)
-    const cidades = {
-        'SP': ['São Paulo', 'Campinas', 'Santos', 'Ribeirão Preto'],
-        'RJ': ['Rio de Janeiro', 'Niterói', 'Petrópolis', 'Nova Iguaçu'],
-        'MG': ['Belo Horizonte', 'Uberlândia', 'Juiz de Fora', 'Contagem']
+    // Mostrar loading
+    cidadeSelect.innerHTML = '<option value="">Carregando cidades...</option>';
+    cidadeSelect.disabled = true;
+    
+    // Fazer requisição para a API
+    fetch('/dominial/buscar-cidades/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: `estado=${encodeURIComponent(estado)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
+        
+        if (data.length > 0) {
+            data.forEach(cidade => {
+                const option = document.createElement('option');
+                option.value = cidade.value;
+                option.textContent = cidade.label;
+                cidadeSelect.appendChild(option);
+            });
+        } else {
+            cidadeSelect.innerHTML = '<option value="">Nenhuma cidade encontrada</option>';
+        }
+        
+        cidadeSelect.disabled = false;
+    })
+    .catch(error => {
+        console.error('Erro ao carregar cidades:', error);
+        cidadeSelect.innerHTML = '<option value="">Erro ao carregar cidades</option>';
+        cidadeSelect.disabled = false;
+    });
+}
+
+// Função para carregar cartórios via API
+function carregarCartorios(estado, cidade) {
+    const cartorioSelect = document.getElementById('cartorio');
+    
+    // Mostrar loading
+    cartorioSelect.innerHTML = '<option value="">Carregando cartórios...</option>';
+    cartorioSelect.disabled = true;
+    
+    // Fazer requisição para a API
+    fetch('/dominial/buscar-cartorios/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: `estado=${encodeURIComponent(estado)}&cidade=${encodeURIComponent(cidade)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option>';
+        cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
+        cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
+        
+        if (data.length > 0) {
+            data.forEach(cartorio => {
+                const option = document.createElement('option');
+                option.value = cartorio.id;
+                option.textContent = cartorio.nome;
+                option.setAttribute('data-cartorio', JSON.stringify(cartorio));
+                cartorioSelect.appendChild(option);
+            });
+        } else {
+            cartorioSelect.innerHTML = '<option value="">Nenhum cartório encontrado</option>';
+            cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
+            cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
+        }
+        
+        cartorioSelect.disabled = false;
+    })
+    .catch(error => {
+        console.error('Erro ao carregar cartórios:', error);
+        cartorioSelect.innerHTML = '<option value="">Erro ao carregar cartórios</option>';
+        cartorioSelect.disabled = false;
+    });
+}
+
+// Função para mostrar detalhes do cartório
+function mostrarDetalhesCartorio(cartorioId) {
+    const cartorioSelect = document.getElementById('cartorio');
+    const cartorioOption = cartorioSelect.querySelector(`option[value="${cartorioId}"]`);
+    const detalhesDiv = document.getElementById('cartorio-detalhes');
+    
+    if (cartorioOption && cartorioOption.hasAttribute('data-cartorio')) {
+        const cartorio = JSON.parse(cartorioOption.getAttribute('data-cartorio'));
+        
+        detalhesDiv.innerHTML = `
+            <div class="cartorio-info">
+                <p><strong>Nome:</strong> ${cartorio.nome}</p>
+                <p><strong>CNS:</strong> ${cartorio.cns || 'Não informado'}</p>
+                <p><strong>Endereço:</strong> ${cartorio.endereco || 'Não informado'}</p>
+                <p><strong>Telefone:</strong> ${cartorio.telefone || 'Não informado'}</p>
+                <p><strong>E-mail:</strong> ${cartorio.email || 'Não informado'}</p>
+            </div>
+        `;
+        
+        // Definir o ID do cartório no campo hidden
+        document.getElementById('cartorio_id').value = cartorioId;
+    }
+}
+
+// Função para criar novo cartório
+function criarNovoCartorio() {
+    const formData = new FormData(document.getElementById('form-novo-cartorio'));
+    const data = {
+        nome: formData.get('nome'),
+        cns: formData.get('cns'),
+        endereco: formData.get('endereco'),
+        telefone: formData.get('telefone'),
+        email: formData.get('email'),
+        estado: formData.get('estado'),
+        cidade: formData.get('cidade')
     };
     
-    cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
-    
-    if (cidades[estado]) {
-        cidades[estado].forEach(cidade => {
+    fetch('/dominial/criar-cartorio/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Adicionar o novo cartório à lista
+            const cartorioSelect = document.getElementById('cartorio');
             const option = document.createElement('option');
-            option.value = cidade;
-            option.textContent = cidade;
-            cidadeSelect.appendChild(option);
-        });
-    }
+            option.value = result.cartorio.id;
+            option.textContent = result.cartorio.nome;
+            option.setAttribute('data-cartorio', JSON.stringify(result.cartorio));
+            
+            // Inserir antes da opção "Adicionar novo cartório"
+            const novoOption = cartorioSelect.querySelector('option[value="novo"]');
+            cartorioSelect.insertBefore(option, novoOption);
+            
+            // Selecionar o novo cartório
+            cartorioSelect.value = result.cartorio.id;
+            
+            // Mostrar detalhes
+            mostrarDetalhesCartorio(result.cartorio.id);
+            
+            // Fechar modal
+            fecharModalCartorio();
+            
+            // Limpar formulário
+            document.getElementById('form-novo-cartorio').reset();
+            
+            alert('Cartório criado com sucesso!');
+        } else {
+            alert('Erro ao criar cartório: ' + result.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao criar cartório:', error);
+        alert('Erro ao criar cartório. Tente novamente.');
+    });
 }
 
 // Função para importar dados SIGEF

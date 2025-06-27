@@ -1,49 +1,28 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Lista de TIs</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-        }
-        h1 {
-            color: #2c3e50;
-        }
-        .usuario {
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-        .aviso {
-            color: #555;
-            margin-bottom: 20px;
-        }
-        ul {
-            padding-left: 20px;
-        }
-        li {
-            margin-bottom: 6px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Terras Indígenas Registradas</h1>
+{% extends "base.html" %}
+{% load static %}
 
-    <div class="usuario">
-        Olá, {{ user.get_full_name|default:user.username }}!
-    </div>
+{% block title %}Lista de TIs{% endblock %}
 
-    <div class="aviso">
-        Total de Terras Indígenas encontradas: {{ tis|length }}
-    </div>
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/tis.css' %}">
+{% endblock %}
 
-    <ul>
-        {% for ti in tis %}
-            <li><strong>{{ ti.nome }}</strong> — Etnia: {{ ti.etnia }}</li>
-        {% empty %}
-            <li>Nenhuma Terra Indígena encontrada.</li>
-        {% endfor %}
-    </ul>
-</body>
-</html>
+{% block content %}
+<h1>Terras Indígenas Registradas</h1>
+
+<div class="usuario">
+    Olá, {{ user.get_full_name|default:user.username }}!
+</div>
+
+<div class="aviso">
+    Total de Terras Indígenas encontradas: {{ tis|length }}
+</div>
+
+<ul>
+    {% for ti in tis %}
+        <li><strong>{{ ti.nome }}</strong> — Etnia: {{ ti.etnia }}</li>
+    {% empty %}
+        <li>Nenhuma Terra Indígena encontrada.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
