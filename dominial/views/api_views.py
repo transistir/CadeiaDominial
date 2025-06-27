@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.core.management import call_command
 from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from ..services.lancamento_consulta_service import LancamentoConsultaService
 import json
 
 @require_http_methods(["POST"])
@@ -174,35 +175,24 @@ def alteracoes(request):
 @login_required
 def lancamentos(request):
     # Obter parâmetros de filtro
-    tipo_documento = request.GET.get('tipo_documento')
-    tipo_lancamento = request.GET.get('tipo_lancamento')
-    busca = request.GET.get('busca')
-
-    # Iniciar queryset
-    lancamentos = Lancamento.objects.all()
-
-    # Aplicar filtros
-    if tipo_documento:
-        lancamentos = lancamentos.filter(documento__tipo_id=tipo_documento)
-    if tipo_lancamento:
-        lancamentos = lancamentos.filter(tipo_id=tipo_lancamento)
-    if busca:
-        lancamentos = lancamentos.filter(documento__numero__icontains=busca)
-
-    # Ordenar por ordem de inserção (ID crescente)
-    lancamentos = lancamentos.order_by('id')
-
-    # Paginação
-    paginator = Paginator(lancamentos, 10)  # 10 itens por página
-    page = request.GET.get('page')
-    lancamentos = paginator.get_page(page)
-
+    filtros = {
+        'tipo_documento': request.GET.get('tipo_documento'),
+        'tipo_lancamento': request.GET.get('tipo_lancamento'),
+        'busca': request.GET.get('busca'),
+    }
+    
+    # Usar o service para filtrar lançamentos
+    resultado = LancamentoConsultaService.filtrar_lancamentos(
+        filtros=filtros,
+        pagina=request.GET.get('page'),
+        itens_por_pagina=10
+    )
+    
     # Obter tipos para os filtros
-    tipos_documento = DocumentoTipo.objects.all()
-    tipos_lancamento = LancamentoTipo.objects.all()
-
+    tipos = LancamentoConsultaService.obter_tipos_para_filtros()
+    
     return render(request, 'dominial/lancamentos.html', {
-        'lancamentos': lancamentos,
-        'tipos_documento': tipos_documento,
-        'tipos_lancamento': tipos_lancamento,
+        'lancamentos': resultado['lancamentos'],
+        'tipos_documento': tipos['tipos_documento'],
+        'tipos_lancamento': tipos['tipos_lancamento'],
     }) 
