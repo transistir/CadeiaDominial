@@ -6,6 +6,7 @@ from ..models import Lancamento, LancamentoTipo, Documento
 from .lancamento_criacao_service import LancamentoCriacaoService
 from .lancamento_form_service import LancamentoFormService
 from .lancamento_tipo_service import LancamentoTipoService
+from .lancamento_validacao_service import LancamentoValidacaoService
 from .lancamento_cartorio_service import LancamentoCartorioService
 from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_pessoa_service import LancamentoPessoaService
@@ -49,7 +50,7 @@ class LancamentoService:
         """
         Valida se o número do lançamento é único no documento
         """
-        return LancamentoTipoService.validar_numero_lancamento(numero_lancamento, documento, lancamento_id)
+        return LancamentoValidacaoService.validar_numero_lancamento(numero_lancamento, documento, lancamento_id)
     
     @staticmethod
     def processar_dados_lancamento(request, tipo_lanc):

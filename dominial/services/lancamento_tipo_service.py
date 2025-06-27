@@ -1,11 +1,19 @@
 """
-Service para operações com tipos e validação de lançamentos
+Service para operações com tipos de lançamento
 """
-from ..models import Lancamento, LancamentoTipo
+from ..models import LancamentoTipo
+
 
 class LancamentoTipoService:
+    """
+    Service para operações com tipos de lançamento
+    """
+    
     @staticmethod
     def obter_tipos_lancamento_por_documento(documento):
+        """
+        Obtém os tipos de lançamento disponíveis baseado no tipo do documento
+        """
         if documento.tipo.tipo == 'matricula':
             return LancamentoTipo.objects.filter(
                 tipo__in=['averbacao', 'registro', 'inicio_matricula']

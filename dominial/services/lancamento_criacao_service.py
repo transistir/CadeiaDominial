@@ -4,7 +4,7 @@ Service especializado para criação e atualização de lançamentos
 
 from ..models import Lancamento, LancamentoTipo
 from .lancamento_form_service import LancamentoFormService
-from .lancamento_tipo_service import LancamentoTipoService
+from .lancamento_validacao_service import LancamentoValidacaoService
 from .lancamento_cartorio_service import LancamentoCartorioService
 from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_pessoa_service import LancamentoPessoaService
@@ -29,7 +29,7 @@ class LancamentoCriacaoService:
         dados_lancamento = LancamentoFormService.processar_dados_lancamento(request, tipo_lanc)
         
         # Validar número do lançamento
-        is_valid, error_message = LancamentoTipoService.validar_numero_lancamento(
+        is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(
             dados_lancamento['numero_lancamento'], documento_ativo
         )
         if not is_valid:
@@ -85,7 +85,7 @@ class LancamentoCriacaoService:
             
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:
-                is_valid, error_message = LancamentoTipoService.validar_numero_lancamento(
+                is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(
                     numero_lancamento, lancamento.documento, lancamento.id
                 )
                 if not is_valid:
