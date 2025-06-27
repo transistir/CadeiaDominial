@@ -2,6 +2,10 @@
 
 {% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial.css' %}">
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <h1>📋 Cadeia Dominial</h1>
@@ -34,57 +38,55 @@
     <div class="field-group">
         <h4>📝 Lançamentos por Documento</h4>
         
-        <div class="tree-container" style="min-height: 400px; border: 2px dashed var(--border-color); border-radius: 8px; padding: 20px;">
+        <div class="tree-container">
             {% if tem_apenas_matricula and not tem_lancamentos %}
-                <div style="display: flex; align-items: center; justify-content: center; min-height: 300px; flex-direction: column; gap: 20px;">
-                    <h3 style="color: var(--secondary-color);">Nenhum lançamento encontrado</h3>
-                    <p style="color: var(--text-color);">Clique no botão abaixo para iniciar a cadeia dominial</p>
-                    <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success" style="font-size: 1.2em; padding: 20px 40px;">Iniciar Cadeia Dominial</a>
+                <div class="empty-state">
+                    <h3>Nenhum lançamento encontrado</h3>
+                    <p>Clique no botão abaixo para iniciar a cadeia dominial</p>
+                    <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">Iniciar Cadeia Dominial</a>
                 </div>
             {% else %}
                 <!-- Visualização da árvore da cadeia dominial -->
                 <div id="tree-visualization">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <h3 style="color: var(--secondary-color);">Cronologia de Lançamentos</h3>
+                    <div class="timeline-header">
+                        <h3>Cronologia de Lançamentos</h3>
                     </div>
                     
                     <!-- Lista hierárquica dos documentos e lançamentos -->
                     <div class="tree-list">
                         {% for documento in documentos %}
-                        <div class="documento-node" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid var(--accent-color);">
-                            <div class="documento-header" style="font-weight: bold; color: var(--primary-color); margin-bottom: 10px;">
+                        <div class="documento-node">
+                            <div class="documento-header">
                                 📄 {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
-                                <span style="font-size: 0.9em; color: var(--secondary-color); font-weight: normal;">
-                                    ({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})
-                                </span>
+                                <span>({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
                             </div>
                             
                             {% if documento.origem %}
-                            <div style="font-size: 0.9em; color: var(--secondary-color); margin-bottom: 10px;">
+                            <div class="documento-origem">
                                 <strong>Origem:</strong> {{ documento.origem }}
                             </div>
                             {% endif %}
                             
                             {% if documento.lancamentos.exists %}
-                            <div class="lancamentos-list" style="margin-left: 20px;">
+                            <div class="lancamentos-list">
                                 {% for lancamento in documento.lancamentos.all|dictsort:"id" %}
-                                <div class="lancamento-node" style="margin: 10px 0; padding: 10px; background: white; border-radius: 4px; border: 1px solid var(--border-color);">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="lancamento-node">
+                                    <div class="lancamento-header">
                                         <div>
-                                            <span style="font-weight: 500; color: var(--primary-color);">
+                                            <span class="lancamento-title">
                                                 {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
                                                 {{ lancamento.tipo.get_tipo_display }}
                                             </span>
-                                            <span style="color: var(--secondary-color); font-size: 0.9em;">
+                                            <span class="lancamento-date">
                                                 - {{ lancamento.data|date:'d/m/Y' }}
                                             </span>
                                             {% if lancamento.numero_lancamento %}
-                                            <span style="background: var(--accent-color); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-left: 5px;">
+                                            <span class="lancamento-badge primary">
                                                 #{{ lancamento.numero_lancamento }}
                                             </span>
                                             {% endif %}
                                             {% if lancamento.eh_inicio_matricula %}
-                                            <span style="background: var(--warning-color); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-left: 5px;">
+                                            <span class="lancamento-badge warning">
                                                 Início de Matrícula
                                             </span>
                                             {% endif %}
@@ -92,31 +94,31 @@
                                     </div>
                                     
                                     {% if lancamento.forma %}
-                                    <div style="margin-top: 5px; font-size: 0.9em;">
+                                    <div class="lancamento-detail">
                                         <strong>Forma:</strong> {{ lancamento.forma }}
                                     </div>
                                     {% endif %}
                                     
                                     {% if lancamento.descricao %}
-                                    <div style="margin-top: 5px; font-size: 0.9em;">
+                                    <div class="lancamento-detail">
                                         <strong>Descrição:</strong> {{ lancamento.descricao|truncatechars:100 }}
                                     </div>
                                     {% endif %}
                                     
                                     {% if lancamento.titulo %}
-                                    <div style="margin-top: 5px; font-size: 0.9em;">
+                                    <div class="lancamento-detail">
                                         <strong>Título:</strong> {{ lancamento.titulo }}
                                     </div>
                                     {% endif %}
                                     
                                     {% if lancamento.observacoes %}
-                                    <div style="margin-top: 5px; font-size: 0.9em; color: var(--secondary-color);">
+                                    <div class="lancamento-detail secondary">
                                         <strong>Obs:</strong> {{ lancamento.observacoes|truncatechars:80 }}
                                     </div>
                                     {% endif %}
                                     
                                     {% if lancamento.origem %}
-                                    <div style="margin-top: 5px; font-size: 0.9em; color: var(--accent-color);">
+                                    <div class="lancamento-detail accent">
                                         <strong>Origem:</strong> {{ lancamento.origem }}
                                     </div>
                                     {% endif %}
@@ -124,7 +126,7 @@
                                 {% endfor %}
                             </div>
                             {% else %}
-                            <div style="color: var(--secondary-color); font-style: italic; margin-left: 20px;">
+                            <div class="no-lancamentos">
                                 Nenhum lançamento registrado
                             </div>
                             {% endif %}
@@ -136,7 +138,7 @@
         </div>
         
         {% if not tem_apenas_matricula or tem_lancamentos %}
-        <div class="actions" style="margin-top: 20px;">
+        <div class="tree-actions">
             <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">Novo Lançamento</a>
         </div>
         {% endif %}
