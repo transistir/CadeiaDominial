@@ -1,299 +1,128 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lançamentos</title>
-    <style>
-        :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #34495e;
-            --accent-color: #3498db;
-            --background-color: #f5f6fa;
-            --text-color: #2c3e50;
-            --border-color: #dcdde1;
-        }
+{% extends "base.html" %}
+{% load static %}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: var(--background-color);
-            color: var(--text-color);
-        }
+{% block title %}Lançamentos{% endblock %}
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/lancamentos.css' %}">
+{% endblock %}
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid var(--border-color);
-        }
-
-        h1 {
-            color: var(--primary-color);
-            margin: 0;
-            font-size: 2em;
-        }
-
-        .filters {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-
-        .filter-group {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 15px;
-        }
-
-        .filter-item {
-            flex: 1;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: var(--secondary-color);
-            font-weight: 500;
-        }
-
-        select, input {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .lancamentos {
-            display: grid;
-            gap: 20px;
-        }
-
-        .lancamento {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .lancamento-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .documento-info {
-            font-size: 1.2em;
-            color: var(--primary-color);
-            font-weight: 600;
-        }
-
-        .data {
-            color: var(--secondary-color);
-            font-size: 0.9em;
-        }
-
-        .detalhes {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .detalhe-item {
-            margin-bottom: 10px;
-        }
-
-        .detalhe-label {
-            font-weight: 500;
-            color: var(--secondary-color);
-            margin-bottom: 5px;
-        }
-
-        .detalhe-valor {
-            color: var(--text-color);
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 30px;
-        }
-
-        .pagination a {
-            padding: 8px 16px;
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            color: var(--primary-color);
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-
-        .pagination a:hover {
-            background: var(--accent-color);
-            color: white;
-            border-color: var(--accent-color);
-        }
-
-        .pagination .current {
-            background: var(--accent-color);
-            color: white;
-            border-color: var(--accent-color);
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 40px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        @media (max-width: 768px) {
-            .filter-group {
-                flex-direction: column;
-                gap: 10px;
-            }
-
-            .detalhes {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Lançamentos</h1>
-            <div class="usuario">
-                Olá, {{ user.get_full_name|default:user.username }}!
-            </div>
+{% block content %}
+<div class="container">
+    <div class="header">
+        <h1>Lançamentos</h1>
+        <div class="usuario">
+            Olá, {{ user.get_full_name|default:user.username }}!
         </div>
-
-        <div class="filters">
-            <form method="get" action="{% url 'lancamentos' %}">
-                <div class="filter-group">
-                    <div class="filter-item">
-                        <label for="tipo_documento">Tipo de Documento</label>
-                        <select name="tipo_documento" id="tipo_documento">
-                            <option value="">Todos</option>
-                            {% for tipo in tipos_documento %}
-                                <option value="{{ tipo.id }}" {% if request.GET.tipo_documento == tipo.id|stringformat:"i" %}selected{% endif %}>
-                                    {{ tipo.get_tipo_display }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="filter-item">
-                        <label for="tipo_lancamento">Tipo de Lançamento</label>
-                        <select name="tipo_lancamento" id="tipo_lancamento">
-                            <option value="">Todos</option>
-                            {% for tipo in tipos_lancamento %}
-                                <option value="{{ tipo.id }}" {% if request.GET.tipo_lancamento == tipo.id|stringformat:"i" %}selected{% endif %}>
-                                    {{ tipo.get_tipo_display }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="filter-item">
-                        <label for="busca">Buscar por número</label>
-                        <input type="text" name="busca" id="busca" value="{{ request.GET.busca }}" placeholder="Digite o número do documento">
-                    </div>
-                </div>
-                <button type="submit" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    Filtrar
-                </button>
-            </form>
-        </div>
-
-        <div class="lancamentos">
-            {% for lancamento in lancamentos %}
-                <div class="lancamento">
-                    <div class="lancamento-header">
-                        <div class="documento-info">
-                            {{ lancamento.documento.tipo.get_tipo_display }} - {{ lancamento.documento.numero }}
-                        </div>
-                        <div class="data">
-                            {{ lancamento.data|date:"d/m/Y" }}
-                        </div>
-                    </div>
-                    <div class="detalhes">
-                        <div class="detalhe-item">
-                            <div class="detalhe-label">Tipo de Lançamento</div>
-                            <div class="detalhe-valor">{{ lancamento.tipo.get_tipo_display }}</div>
-                        </div>
-                        {% if lancamento.transmitente %}
-                            <div class="detalhe-item">
-                                <div class="detalhe-label">Transmitente</div>
-                                <div class="detalhe-valor">{{ lancamento.transmitente.nome }}</div>
-                            </div>
-                        {% endif %}
-                        {% if lancamento.adquirente %}
-                            <div class="detalhe-item">
-                                <div class="detalhe-label">Adquirente</div>
-                                <div class="detalhe-valor">{{ lancamento.adquirente.nome }}</div>
-                            </div>
-                        {% endif %}
-                        {% if lancamento.valor_transacao %}
-                            <div class="detalhe-item">
-                                <div class="detalhe-label">Valor da Transação</div>
-                                <div class="detalhe-valor">R$ {{ lancamento.valor_transacao }}</div>
-                            </div>
-                        {% endif %}
-                        {% if lancamento.area %}
-                            <div class="detalhe-item">
-                                <div class="detalhe-label">Área</div>
-                                <div class="detalhe-valor">{{ lancamento.area }} ha</div>
-                            </div>
-                        {% endif %}
-                        {% if lancamento.detalhes %}
-                            <div class="detalhe-item">
-                                <div class="detalhe-label">Detalhes</div>
-                                <div class="detalhe-valor">{{ lancamento.detalhes }}</div>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            {% empty %}
-                <div class="no-results">
-                    <p>Nenhum lançamento encontrado.</p>
-                </div>
-            {% endfor %}
-        </div>
-
-        {% if lancamentos.has_other_pages %}
-            <div class="pagination">
-                {% if lancamentos.has_previous %}
-                    <a href="?page=1{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">&laquo; Primeira</a>
-                    <a href="?page={{ lancamentos.previous_page_number }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Anterior</a>
-                {% endif %}
-
-                <span class="current">
-                    Página {{ lancamentos.number }} de {{ lancamentos.paginator.num_pages }}
-                </span>
-
-                {% if lancamentos.has_next %}
-                    <a href="?page={{ lancamentos.next_page_number }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Próxima</a>
-                    <a href="?page={{ lancamentos.paginator.num_pages }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Última &raquo;</a>
-                {% endif %}
-            </div>
-        {% endif %}
     </div>
-</body>
-</html> 
+
+    <div class="filters">
+        <form method="get" action="{% url 'lancamentos' %}">
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label for="tipo_documento">Tipo de Documento</label>
+                    <select name="tipo_documento" id="tipo_documento">
+                        <option value="">Todos</option>
+                        {% for tipo in tipos_documento %}
+                            <option value="{{ tipo.id }}" {% if request.GET.tipo_documento == tipo.id|stringformat:"i" %}selected{% endif %}>
+                                {{ tipo.get_tipo_display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="tipo_lancamento">Tipo de Lançamento</label>
+                    <select name="tipo_lancamento" id="tipo_lancamento">
+                        <option value="">Todos</option>
+                        {% for tipo in tipos_lancamento %}
+                            <option value="{{ tipo.id }}" {% if request.GET.tipo_lancamento == tipo.id|stringformat:"i" %}selected{% endif %}>
+                                {{ tipo.get_tipo_display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="busca">Buscar por número</label>
+                    <input type="text" name="busca" id="busca" value="{{ request.GET.busca }}" placeholder="Digite o número do documento">
+                </div>
+            </div>
+            <button type="submit" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Filtrar
+            </button>
+        </form>
+    </div>
+
+    <div class="lancamentos">
+        {% for lancamento in lancamentos %}
+            <div class="lancamento">
+                <div class="lancamento-header">
+                    <div class="documento-info">
+                        {{ lancamento.documento.tipo.get_tipo_display }} - {{ lancamento.documento.numero }}
+                    </div>
+                    <div class="data">
+                        {{ lancamento.data|date:"d/m/Y" }}
+                    </div>
+                </div>
+                <div class="detalhes">
+                    <div class="detalhe-item">
+                        <div class="detalhe-label">Tipo de Lançamento</div>
+                        <div class="detalhe-valor">{{ lancamento.tipo.get_tipo_display }}</div>
+                    </div>
+                    {% if lancamento.transmitente %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Transmitente</div>
+                            <div class="detalhe-valor">{{ lancamento.transmitente.nome }}</div>
+                        </div>
+                    {% endif %}
+                    {% if lancamento.adquirente %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Adquirente</div>
+                            <div class="detalhe-valor">{{ lancamento.adquirente.nome }}</div>
+                        </div>
+                    {% endif %}
+                    {% if lancamento.valor_transacao %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Valor da Transação</div>
+                            <div class="detalhe-valor">R$ {{ lancamento.valor_transacao }}</div>
+                        </div>
+                    {% endif %}
+                    {% if lancamento.area %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Área</div>
+                            <div class="detalhe-valor">{{ lancamento.area }} ha</div>
+                        </div>
+                    {% endif %}
+                    {% if lancamento.detalhes %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Detalhes</div>
+                            <div class="detalhe-valor">{{ lancamento.detalhes }}</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% empty %}
+            <div class="no-results">
+                <p>Nenhum lançamento encontrado.</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% if lancamentos.has_other_pages %}
+        <div class="pagination">
+            {% if lancamentos.has_previous %}
+                <a href="?page=1{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">&laquo; Primeira</a>
+                <a href="?page={{ lancamentos.previous_page_number }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Anterior</a>
+            {% endif %}
+
+            <span class="current">
+                Página {{ lancamentos.number }} de {{ lancamentos.paginator.num_pages }}
+            </span>
+
+            {% if lancamentos.has_next %}
+                <a href="?page={{ lancamentos.next_page_number }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Próxima</a>
+                <a href="?page={{ lancamentos.paginator.num_pages }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Última &raquo;</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %} 
