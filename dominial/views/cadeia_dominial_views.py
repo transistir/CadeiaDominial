@@ -3,15 +3,25 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..services import HierarquiaService
+from ..services.cache_service import CacheService
 from datetime import date
 
 @login_required
 def cadeia_dominial(request, tis_id, imovel_id):
+    # Otimização: usar select_related para reduzir queries
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    
+    # Otimização: usar select_related e prefetch_related
+    documentos = Documento.objects.filter(imovel=imovel)\
+        .select_related('cartorio', 'tipo')\
+        .prefetch_related('lancamentos', 'lancamentos__tipo')\
+        .order_by('data')
+    
     tem_documentos = documentos.exists()
     tem_apenas_matricula = documentos.count() == 1 and documentos.first().tipo.tipo == 'matricula' if tem_documentos else False
+    
+    # Otimização: usar exists() em vez de count() para verificar lançamentos
     tem_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).exists() if tem_documentos else False
     mostrar_lancamentos = request.GET.get('lancamentos') == 'true'
 
@@ -67,7 +77,8 @@ def tronco_principal(request, tis_id, imovel_id):
         ids = [doc.id for doc in tronco_principal]
         documentos = list(
             Documento.objects.filter(id__in=ids)
-            .prefetch_related('lancamentos', 'lancamentos__tipo', 'cartorio', 'tipo')
+            .select_related('cartorio', 'tipo')
+            .prefetch_related('lancamentos', 'lancamentos__tipo')
             .order_by('data')
         )
         # Manter a ordem do tronco_principal
@@ -94,7 +105,11 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    documentos = Documento.objects.filter(imovel=imovel).prefetch_related('lancamentos', 'lancamentos__tipo').order_by('data')
+    # Otimização: usar select_related e prefetch_related
+    documentos = Documento.objects.filter(imovel=imovel)\
+        .select_related('cartorio', 'tipo')\
+        .prefetch_related('lancamentos', 'lancamentos__tipo')\
+        .order_by('data')
     
     # Estrutura para o diagrama de árvore
     tree_data = {
@@ -119,7 +134,10 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
         }
         
         # Adicionar lançamentos como filhos do documento
-        lancamentos = documento.lancamentos.order_by('id')
+        # Otimização: usar a lista já pré-carregada
+        lancamentos = list(documento.lancamentos.all())
+        lancamentos.sort(key=lambda x: x.id)  # Ordenar por ID
+        
         for lancamento in lancamentos:
             lanc_node = {
                 'name': f'{lancamento.tipo.get_tipo_display()}: {lancamento.data.strftime("%d/%m/%Y")}',

@@ -2,73 +2,122 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from ..models import Documento, DocumentoTipo, Imovel, TIs, Cartorios
+from django.views.decorators.http import require_http_methods, require_POST
+from ..models import Documento, DocumentoTipo, Imovel, TIs, Cartorios, Lancamento
 from ..forms import ImovelForm
 from datetime import date
+from ..services.documento_service import DocumentoService
+from ..services.cache_service import CacheService
 
 @login_required
-def novo_documento(request, tis_id, imovel_id):
-    """View para criar um novo documento"""
+def documentos(request, tis_id, imovel_id):
+    """Lista todos os documentos de um imóvel"""
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    if request.method == 'POST':
-        try:
-            # Obter dados do formulário
-            tipo_id = request.POST.get('tipo')
-            numero = request.POST.get('numero', '').strip()
-            data_doc = request.POST.get('data') if request.POST.get('data') else None
-            origem = request.POST.get('origem', '').strip()
-            observacoes = request.POST.get('observacoes', '').strip()
-            livro = request.POST.get('livro', '').strip()
-            folha = request.POST.get('folha', '').strip()
-            
-            # Validação básica
-            if not numero:
-                messages.error(request, 'O número do documento é obrigatório.')
-                return render(request, 'dominial/documento_form.html', {
-                    'tis': tis,
-                    'imovel': imovel,
-                    'tipos_documento': DocumentoTipo.objects.all()
-                })
-            
-            # Verificar se já existe um documento com esse número
-            if Documento.objects.filter(imovel=imovel, numero=numero).exists():
-                messages.error(request, f'Já existe um documento com o número "{numero}" neste imóvel.')
-                return render(request, 'dominial/documento_form.html', {
-                    'tis': tis,
-                    'imovel': imovel,
-                    'tipos_documento': DocumentoTipo.objects.all()
-                })
-            
-            # Obter o tipo de documento
-            tipo_doc = DocumentoTipo.objects.get(id=tipo_id)
-            
-            # Criar o documento
-            documento = Documento.objects.create(
-                imovel=imovel,
-                tipo=tipo_doc,
-                numero=numero,
-                data=data_doc,
-                cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
-                livro=livro,
-                folha=folha,
-                origem=origem,
-                observacoes=observacoes
-            )
-            
-            messages.success(request, f'Documento "{numero}" criado com sucesso!')
-            return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento.id)
-            
-        except Exception as e:
-            messages.error(request, f'Erro ao criar documento: {str(e)}')
+    # Otimização: usar select_related e prefetch_related
+    documentos = Documento.objects.filter(imovel=imovel)\
+        .select_related('cartorio', 'tipo')\
+        .prefetch_related('lancamentos')\
+        .order_by('-data')
     
     context = {
         'tis': tis,
         'imovel': imovel,
-        'tipos_documento': DocumentoTipo.objects.all()
+        'documentos': documentos,
     }
+    
+    return render(request, 'dominial/documentos.html', context)
+
+@login_required
+def novo_documento(request, tis_id, imovel_id):
+    """Cria um novo documento"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Otimização: usar select_related para cartórios
+    cartorios = Cartorios.objects.all().select_related().order_by('nome')
+    tipos_documento = DocumentoTipo.objects.all().order_by('tipo')
+    
+    if request.method == 'POST':
+        sucesso, mensagem = DocumentoService.criar_documento(request, imovel)
+        
+        if sucesso:
+            messages.success(request, f'Documento "{mensagem}" criado com sucesso!')
+            # Invalidar cache do imóvel
+            CacheService.invalidate_documentos_imovel(imovel.id)
+            CacheService.invalidate_tronco_principal(imovel.id)
+            return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
+        else:
+            messages.error(request, mensagem)
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'cartorios': cartorios,
+        'tipos_documento': tipos_documento,
+    }
+    
     return render(request, 'dominial/documento_form.html', context)
+
+@login_required
+def editar_documento(request, tis_id, imovel_id, documento_id):
+    """Edita um documento existente"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    
+    # Otimização: usar select_related para cartórios
+    cartorios = Cartorios.objects.all().select_related().order_by('nome')
+    tipos_documento = DocumentoTipo.objects.all().order_by('tipo')
+    
+    if request.method == 'POST':
+        sucesso, mensagem = DocumentoService.atualizar_documento(request, documento)
+        
+        if sucesso:
+            messages.success(request, f'Documento "{mensagem}" atualizado com sucesso!')
+            # Invalidar cache do imóvel
+            CacheService.invalidate_documentos_imovel(imovel.id)
+            CacheService.invalidate_tronco_principal(imovel.id)
+            return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
+        else:
+            messages.error(request, mensagem)
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento,
+        'cartorios': cartorios,
+        'tipos_documento': tipos_documento,
+        'modo_edicao': True
+    }
+    
+    return render(request, 'dominial/documento_form.html', context)
+
+@login_required
+def excluir_documento(request, tis_id, imovel_id, documento_id):
+    """Exclui um documento"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    
+    if request.method == 'POST':
+        try:
+            numero_documento = documento.numero
+            documento.delete()
+            messages.success(request, f'Documento "{numero_documento}" excluído com sucesso!')
+            # Invalidar cache do imóvel
+            CacheService.invalidate_documentos_imovel(imovel.id)
+            CacheService.invalidate_tronco_principal(imovel.id)
+            return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir documento: {str(e)}')
+    
+    return render(request, 'dominial/documento_confirm_delete.html', {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento
+    })
 
 @login_required
 def documento_lancamentos(request, tis_id, imovel_id, documento_id):
@@ -77,8 +126,11 @@ def documento_lancamentos(request, tis_id, imovel_id, documento_id):
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     
-    # Obter lançamentos ordenados por ordem de inserção
-    lancamentos = documento.lancamentos.all().order_by('id')
+    # Otimização: usar select_related e prefetch_related
+    lancamentos = documento.lancamentos.all()\
+        .select_related('tipo', 'transmitente', 'adquirente')\
+        .prefetch_related('pessoas')\
+        .order_by('id')
     
     # Verificar se o usuário é admin para permitir edição
     pode_editar = request.user.is_staff or request.user.is_superuser
@@ -99,8 +151,11 @@ def selecionar_documento_lancamento(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    # Obter todos os documentos do imóvel ordenados por data
-    documentos = Documento.objects.filter(imovel=imovel).order_by('-data')
+    # Otimização: usar select_related e prefetch_related
+    documentos = Documento.objects.filter(imovel=imovel)\
+        .select_related('cartorio', 'tipo')\
+        .prefetch_related('lancamentos')\
+        .order_by('-data')
     
     context = {
         'tis': tis,
@@ -109,46 +164,6 @@ def selecionar_documento_lancamento(request, tis_id, imovel_id):
     }
     
     return render(request, 'dominial/selecionar_documento_lancamento.html', context)
-
-@login_required
-def editar_documento(request, documento_id, tis_id, imovel_id):
-    """View para editar um documento existente"""
-    tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
-    
-    if request.method == 'POST':
-        try:
-            # Atualizar dados do documento
-            documento.numero = request.POST.get('numero', '').strip()
-            documento.data = request.POST.get('data') if request.POST.get('data') else None
-            documento.origem = request.POST.get('origem', '').strip()
-            documento.observacoes = request.POST.get('observacoes', '').strip()
-            documento.livro = request.POST.get('livro', '').strip()
-            documento.folha = request.POST.get('folha', '').strip()
-            
-            # Atualizar cartório se fornecido
-            cartorio_id = request.POST.get('cartorio_id')
-            if cartorio_id:
-                documento.cartorio = Cartorios.objects.get(id=cartorio_id)
-            else:
-                documento.cartorio = None
-            
-            documento.save()
-            
-            messages.success(request, f'Documento "{documento.numero}" atualizado com sucesso!')
-            return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento.id)
-            
-        except Exception as e:
-            messages.error(request, f'Erro ao atualizar documento: {str(e)}')
-    
-    context = {
-        'tis': tis,
-        'imovel': imovel,
-        'documento': documento,
-        'cartorios': Cartorios.objects.all().order_by('nome')
-    }
-    return render(request, 'dominial/documento_form.html', context)
 
 @login_required
 def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):

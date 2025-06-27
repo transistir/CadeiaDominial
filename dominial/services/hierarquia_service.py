@@ -9,6 +9,7 @@ from ..utils.hierarquia_utils import (
     identificar_troncos_secundarios,
     processar_origens_para_documentos
 )
+from .cache_service import CacheService
 from datetime import date
 import re
 
@@ -23,7 +24,12 @@ class HierarquiaService:
         """
         Calcula a hierarquia completa dos documentos de um imóvel
         """
-        documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+        # Otimização: usar select_related para cartório e tipo
+        documentos = Documento.objects.filter(imovel=imovel)\
+            .select_related('cartorio', 'tipo')\
+            .prefetch_related('lancamentos', 'lancamentos__tipo')\
+            .order_by('data')
+        
         conexoes = []
         
         # TODO: Implementar lógica de identificação de conexões
@@ -34,9 +40,18 @@ class HierarquiaService:
     @staticmethod
     def obter_tronco_principal(imovel):
         """
-        Obtém o tronco principal da cadeia dominial
+        Obtém o tronco principal da cadeia dominial com cache
         """
-        return identificar_tronco_principal(imovel)
+        # Tentar obter do cache primeiro
+        cached_tronco = CacheService.get_cached_tronco_principal(imovel.id)
+        if cached_tronco:
+            return cached_tronco
+        
+        # Se não estiver em cache, calcular e armazenar
+        tronco = identificar_tronco_principal(imovel)
+        CacheService.set_cached_tronco_principal(imovel.id, tronco)
+        
+        return tronco
     
     @staticmethod
     def obter_troncos_secundarios(imovel):
@@ -60,8 +75,11 @@ class HierarquiaService:
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         """
-        # Obter todos os documentos do imóvel ordenados por data
-        documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+        # Otimização: usar select_related e prefetch_related para reduzir queries
+        documentos = Documento.objects.filter(imovel=imovel)\
+            .select_related('cartorio', 'tipo')\
+            .prefetch_related('lancamentos', 'lancamentos__tipo')\
+            .order_by('data')
         
         # Processar origens identificadas de lançamentos
         origens_identificadas = HierarquiaService._processar_origens_identificadas(imovel)
@@ -72,7 +90,7 @@ class HierarquiaService:
                 'id': imovel.id,
                 'matricula': imovel.matricula,
                 'nome': imovel.nome,
-                'proprietario': imovel.proprietario.nome
+                'proprietario': imovel.proprietario.nome if imovel.proprietario else ''
             },
             'documentos': [],
             'origens_identificadas': [],
@@ -126,10 +144,13 @@ class HierarquiaService:
         Processa origens identificadas de lançamentos que ainda não foram convertidas em documentos
         """
         origens_identificadas = []
+        
+        # Otimização: usar select_related para reduzir queries
         lancamentos_com_origem = Lancamento.objects.filter(
             documento__imovel=imovel,
             origem__isnull=False
-        ).exclude(origem='')
+        ).exclude(origem='')\
+         .select_related('documento', 'documento__cartorio', 'documento__tipo')
         
         for lancamento in lancamentos_com_origem:
             if lancamento.origem:
@@ -154,6 +175,10 @@ class HierarquiaService:
                                 origem=f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
                                 observacoes=f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
                             )
+                            
+                            # Invalidar cache do imóvel
+                            CacheService.invalidate_documentos_imovel(imovel.id)
+                            CacheService.invalidate_tronco_principal(imovel.id)
                             
                             # Adicionar à lista de origens identificadas (agora são documentos criados)
                             origens_identificadas.append({
