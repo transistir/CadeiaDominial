@@ -7,6 +7,7 @@ from .lancamento_criacao_service import LancamentoCriacaoService
 from .lancamento_form_service import LancamentoFormService
 from .lancamento_tipo_service import LancamentoTipoService
 from .lancamento_validacao_service import LancamentoValidacaoService
+from .lancamento_documento_service import LancamentoDocumentoService
 from .lancamento_cartorio_service import LancamentoCartorioService
 from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_pessoa_service import LancamentoPessoaService
@@ -22,21 +23,14 @@ class LancamentoService:
         """
         Obtém o documento ativo do imóvel
         """
-        if documento_id:
-            return Documento.objects.get(id=documento_id, imovel=imovel)
-        return imovel.documento_set.filter(ativo=True).first()
+        return LancamentoDocumentoService.obter_documento_ativo(imovel, documento_id)
     
     @staticmethod
     def criar_documento_matricula_automatico(imovel):
         """
         Cria automaticamente um documento de matrícula para o imóvel
         """
-        return Documento.objects.create(
-            imovel=imovel,
-            tipo='matricula',
-            numero='MAT001',
-            ativo=True
-        )
+        return LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
     
     @staticmethod
     def obter_tipos_lancamento_por_documento(documento):
