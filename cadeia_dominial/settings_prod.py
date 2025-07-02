@@ -9,12 +9,14 @@ DEBUG = False
 SECRET_KEY = os.environ.get('SECRET_KEY', 'sua-chave-secreta-de-producao-muito-segura')
 
 # Configurações de Hosts Permitidos
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '46.62.152.252,localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '46.62.152.252,cadeiadominial.com.br,localhost,127.0.0.1').split(',')
 
 # Configurações de CSRF
 CSRF_TRUSTED_ORIGINS = [
     'http://46.62.152.252',
     'https://46.62.152.252',
+    'http://cadeiadominial.com.br',
+    'https://cadeiadominial.com.br',
 ]
 
 # Configurações do Banco de Dados PostgreSQL
@@ -32,8 +34,10 @@ DATABASES = {
 # Configurações de Arquivos Estáticos
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
-# Remover STATICFILES_DIRS para evitar conflitos em produção
-STATICFILES_DIRS = []
+# Configurar STATICFILES_DIRS para incluir o diretório static/
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
 
 # Configurações de Logging
 LOGGING = {
