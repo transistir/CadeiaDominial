@@ -33,10 +33,13 @@ RUN adduser --disabled-password --gecos '' appuser \
 RUN mkdir -p /var/log/cadeia_dominial \
     && chown -R appuser:appuser /var/log/cadeia_dominial
 
-USER appuser
-
-# Coletar arquivos estáticos
+# Coletar arquivos estáticos como root primeiro
 RUN python manage.py collectstatic --noinput
+
+# Mudar permissões dos arquivos estáticos
+RUN chown -R appuser:appuser /app/staticfiles
+
+USER appuser
 
 # Expor porta
 EXPOSE 8000
