@@ -1,12 +1,22 @@
-# 🐳 Cadeia Dominial - Docker
+# 🐳 Cadeia Dominial - Docker com SSL Automático
 
-Este documento explica como executar o sistema Cadeia Dominial usando Docker, incluindo configuração automática de SSL com Let's Encrypt.
+Este documento explica como executar o sistema Cadeia Dominial usando Docker com **SSL automático plug-and-play**, incluindo configuração automática de certificados Let's Encrypt.
+
+## ✨ Novidades - SSL Automático Plug-and-Play
+
+O sistema agora inclui **SSL automático** que funciona desde o primeiro build:
+
+- 🔐 **Certificados automáticos**: Obtém certificados Let's Encrypt automaticamente
+- 🚀 **Zero configuração**: Funciona sem scripts manuais
+- 🔄 **Renovação automática**: Renova certificados automaticamente
+- 🛡️ **Fallback seguro**: Funciona via HTTP se SSL falhar
+- 📱 **Health checks**: Monitoramento automático de saúde
 
 ## 📋 Pré-requisitos
 
 - Docker (versão 20.10+)
 - Docker Compose (versão 2.0+)
-- Domínio configurado (para SSL)
+- Domínio configurado (para SSL automático)
 - Acesso root no servidor
 
 ## 🚀 Início Rápido
@@ -42,9 +52,14 @@ DB_PASSWORD=sua_senha_segura_aqui
 DB_HOST=db
 DB_PORT=5432
 
-# Configurações do SSL/Let's Encrypt
+# Configurações do SSL/Let's Encrypt (OBRIGATÓRIO para SSL)
 DOMAIN_NAME=seu-dominio.com
 CERTBOT_EMAIL=seu-email@exemplo.com
+
+# Configurações do Usuário Admin (OBRIGATÓRIO)
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@cadeiadominial.com.br
+ADMIN_PASSWORD=sua_senha_admin_muito_segura_aqui
 
 # Configurações de Email (opcional)
 EMAIL_HOST=smtp.gmail.com
@@ -60,27 +75,39 @@ EMAIL_HOST_PASSWORD=sua_senha_de_app
 # Dar permissão de execução aos scripts
 chmod +x scripts/*.sh
 
-# Iniciar todo o sistema
+# Iniciar todo o sistema (inclui SSL automático)
 ./scripts/start.sh
 ```
 
-## 🏗️ Arquitetura
+**🎉 Pronto!** O sistema estará disponível em:
+- **HTTP**: http://seu-dominio.com
+- **HTTPS**: https://seu-dominio.com (ativado automaticamente)
 
-O sistema é composto pelos seguintes containers:
+## 🏗️ Arquitetura SSL Automático
 
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                    Nginx Container                         │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
+│  │   HTTP (80)     │  │   HTTPS (443)   │  │   Certbot   │ │
+│  │   (Sempre ativo)│  │   (Automático)  │  │   (Auto)    │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+           │                           │
+           ▼                           ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Nginx + SSL   │    │   Django App    │    │   PostgreSQL    │
-│   (Port 80/443) │◄──►│   (Port 8000)   │◄──►│   (Port 5432)   │
+│   Django App    │    │   PostgreSQL    │    │   SSL Certs     │
+│   (Port 8000)   │◄──►│   (Port 5432)   │    │   (Auto-renew)  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### Serviços
+### Como Funciona o SSL Automático
 
-- **Nginx**: Proxy reverso com SSL automático
-- **Django**: Aplicação web principal
-- **PostgreSQL**: Banco de dados
-- **Certbot**: Gerenciamento de certificados SSL
+1. **Inicialização**: Container Nginx inicia com certificados dummy
+2. **Detecção**: Verifica se DOMAIN_NAME é um domínio real
+3. **Obtenção**: Certbot obtém certificados Let's Encrypt automaticamente
+4. **Ativação**: Nginx recarrega com certificados reais
+5. **Renovação**: Cron renova certificados automaticamente
 
 ## 🔧 Comandos Úteis
 
@@ -140,36 +167,51 @@ docker-compose exec web python manage.py shell
 ### SSL/Let's Encrypt
 
 ```bash
-# Configurar SSL inicial
-./scripts/init-ssl.sh
-
-# Renovar certificados
-./scripts/renew-ssl.sh
-
 # Verificar status dos certificados
-docker-compose run --rm certbot certificates
+docker-compose exec nginx certbot certificates
+
+# Renovar certificados manualmente
+docker-compose exec nginx certbot renew
+
+# Ver logs do SSL
+docker-compose logs nginx | grep SSL
+
+# Verificar configuração SSL
+docker-compose exec nginx nginx -t
 ```
 
 ## 🔒 Configuração SSL
 
-### Configuração Automática
+### Configuração Automática (Recomendado)
 
-O sistema configura automaticamente SSL com Let's Encrypt:
+O SSL é configurado automaticamente quando você define:
 
-1. **Primeira execução**: Execute `./scripts/init-ssl.sh`
-2. **Renovação automática**: Configure um cron job:
-
-```bash
-# Adicionar ao crontab (renovar a cada 12 horas)
-0 */12 * * * cd /caminho/para/CadeiaDominial && ./scripts/renew-ssl.sh
+```env
+DOMAIN_NAME=seu-dominio.com
+CERTBOT_EMAIL=seu-email@exemplo.com
 ```
 
-### Configuração Manual
+**O que acontece automaticamente:**
+1. ✅ Certificados são obtidos via Let's Encrypt
+2. ✅ Nginx é configurado com HTTPS
+3. ✅ Redirecionamento HTTP → HTTPS é ativado
+4. ✅ Renovação automática é configurada
+5. ✅ Headers de segurança são aplicados
+
+### Configuração Manual (Avançado)
 
 Se preferir usar certificados próprios:
 
-1. Coloque os certificados em `certbot/conf/live/seu-dominio.com/`
-2. Reinicie o Nginx: `docker-compose restart nginx`
+1. Coloque os certificados em volumes Docker:
+   ```bash
+   # Montar certificados existentes
+   docker run -v /path/to/certs:/etc/letsencrypt nginx
+   ```
+
+2. Reinicie o Nginx:
+   ```bash
+   docker-compose restart nginx
+   ```
 
 ## 🛠️ Desenvolvimento
 
@@ -199,9 +241,22 @@ docker-compose -f docker-compose.dev.yml down
 
 Os logs são armazenados em:
 
-- **Nginx**: `/var/log/nginx/` (dentro do container)
+- **Nginx**: `docker-compose logs nginx`
 - **Django**: `docker-compose logs web`
 - **PostgreSQL**: `docker-compose logs db`
+
+### Health Checks
+
+```bash
+# Verificar saúde dos containers
+docker-compose ps
+
+# Verificar endpoint de saúde
+curl http://localhost/health
+
+# Verificar logs de erro
+docker-compose logs nginx | grep error
+```
 
 ### Métricas
 
@@ -235,11 +290,14 @@ netstat -tulpn | grep :443
 
 ```bash
 # Verificar certificados
-docker-compose run --rm certbot certificates
+docker-compose exec nginx certbot certificates
+
+# Verificar logs do SSL
+docker-compose logs nginx | grep -i ssl
 
 # Recriar certificados
-docker-compose run --rm certbot delete --cert-name $DOMAIN_NAME
-./scripts/init-ssl.sh
+docker-compose exec nginx certbot delete --cert-name $DOMAIN_NAME
+docker-compose restart nginx
 ```
 
 #### 3. Erro de banco de dados
@@ -261,13 +319,26 @@ docker-compose exec web python manage.py collectstatic --noinput --clear
 docker-compose restart nginx
 ```
 
+#### 5. SSL não ativa automaticamente
+
+```bash
+# Verificar variáveis de ambiente
+echo "DOMAIN_NAME: $DOMAIN_NAME"
+echo "CERTBOT_EMAIL: $CERTBOT_EMAIL"
+
+# Verificar logs do entrypoint
+docker-compose logs nginx | grep -i "ssl\|cert"
+
+# Forçar obtenção de certificados
+docker-compose exec nginx /usr/local/bin/ssl-init.sh $DOMAIN_NAME $CERTBOT_EMAIL
+```
+
 ### Limpeza Completa
 
 ```bash
 # Parar e remover tudo
 docker-compose down -v
 docker system prune -a
-rm -rf certbot/conf/*
 rm -rf staticfiles/*
 ```
 
@@ -289,10 +360,30 @@ rm -rf staticfiles/*
 
 ### Manutenção
 
-- Renove certificados SSL automaticamente
+- Certificados são renovados automaticamente
 - Faça backup regular do banco
 - Monitore logs de erro
 - Mantenha containers atualizados
+
+## 🎯 Benefícios do SSL Automático
+
+### ✅ Zero Configuração
+- Não precisa rodar scripts manuais
+- Funciona desde o primeiro `docker-compose up`
+
+### ✅ Alta Disponibilidade
+- Sistema funciona via HTTP se SSL falhar
+- Certificados dummy garantem inicialização
+
+### ✅ Segurança Automática
+- Renovação automática de certificados
+- Headers de segurança configurados
+- Redirecionamento HTTP → HTTPS
+
+### ✅ Monitoramento
+- Health checks automáticos
+- Logs detalhados de SSL
+- Status de certificados visível
 
 ## 🤝 Suporte
 
@@ -305,6 +396,6 @@ Para problemas ou dúvidas:
 
 ---
 
-**Versão**: 1.0  
+**Versão**: 2.0 (SSL Automático)  
 **Última atualização**: $(date)  
 **Compatível com**: Docker 20.10+, Docker Compose 2.0+ 

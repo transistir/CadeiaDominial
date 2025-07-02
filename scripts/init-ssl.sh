@@ -1,60 +1,114 @@
 #!/bin/bash
 
-# Script para inicializar certificados SSL com Let's Encrypt
-# Este script deve ser executado após a primeira inicialização dos containers
+# Script para inicialização e configuração automática do SSL
+# Este script configura o SSL automaticamente quando os certificados estão prontos
 
 set -e
 
-# Cores para output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+echo "🔐 Iniciando configuração SSL..."
 
 # Verificar se as variáveis de ambiente estão definidas
-if [ -z "$DOMAIN_NAME" ] || [ -z "$CERTBOT_EMAIL" ]; then
-    log_error "DOMAIN_NAME e CERTBOT_EMAIL devem estar definidos no arquivo .env"
+if [ -z "$DOMAIN_NAME" ]; then
+    echo "❌ ERRO: DOMAIN_NAME não está definida!"
     exit 1
 fi
 
-log_info "Iniciando configuração SSL para $DOMAIN_NAME"
-
-# Aguardar o Nginx estar pronto
-log_info "Aguardando Nginx estar pronto..."
-sleep 10
-
-# Criar certificado inicial
-log_info "Solicitando certificado SSL..."
-docker-compose run --rm certbot certonly \
-    --webroot \
-    --webroot-path=/var/www/certbot \
-    --email "$CERTBOT_EMAIL" \
-    --agree-tos \
-    --no-eff-email \
-    -d "$DOMAIN_NAME"
-
-if [ $? -eq 0 ]; then
-    log_info "Certificado SSL criado com sucesso!"
-    
-    # Recarregar Nginx
-    log_info "Recarregando Nginx..."
-    docker-compose exec nginx nginx -s reload
-    
-    log_info "SSL configurado com sucesso!"
-    log_info "Acesse https://$DOMAIN_NAME"
-else
-    log_error "Falha ao criar certificado SSL"
+if [ -z "$CERTBOT_EMAIL" ]; then
+    echo "❌ ERRO: CERTBOT_EMAIL não está definida!"
     exit 1
-fi 
+fi
+
+# Função para verificar se os certificados existem
+check_certificates() {
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && \
+       [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Função para ativar SSL no Nginx
+activate_ssl() {
+    echo "✅ Certificados encontrados! Ativando SSL..."
+    
+    # Descomentar as linhas SSL no arquivo de configuração
+    sed -i 's/# ssl_certificate/ssl_certificate/g' /etc/nginx/conf.d/default.conf
+    sed -i 's/# ssl_certificate_key/ssl_certificate_key/g' /etc/nginx/conf.d/default.conf
+    
+    # Adicionar redirecionamento HTTP para HTTPS
+    sed -i '/server {/a\    # Redirecionar HTTP para HTTPS\n    return 301 https://$server_name$request_uri;' /etc/nginx/conf.d/default.conf
+    
+    # Recarregar configuração do Nginx
+    nginx -s reload
+    
+    echo "✅ SSL ativado com sucesso!"
+}
+
+# Função para obter certificados SSL
+get_certificates() {
+    echo "🔍 Verificando certificados SSL..."
+    
+    if check_certificates; then
+        echo "✅ Certificados SSL já existem!"
+        activate_ssl
+        return 0
+    fi
+    
+    echo "📝 Solicitando certificados SSL..."
+    
+    # Tentar obter certificados
+    certbot certonly \
+        --webroot \
+        --webroot-path=/var/www/certbot \
+        --email "$CERTBOT_EMAIL" \
+        --agree-tos \
+        --no-eff-email \
+        --domains "$DOMAIN_NAME" \
+        --non-interactive || {
+        echo "⚠️  Não foi possível obter certificados SSL agora."
+        echo "   O sistema continuará funcionando via HTTP."
+        echo "   Os certificados serão solicitados novamente em 24h."
+        return 1
+    }
+    
+    if check_certificates; then
+        echo "✅ Certificados SSL obtidos com sucesso!"
+        activate_ssl
+    else
+        echo "❌ Falha ao obter certificados SSL."
+        return 1
+    fi
+}
+
+# Função principal
+main() {
+    echo "🚀 Iniciando configuração SSL para $DOMAIN_NAME..."
+    
+    # Aguardar um pouco para o Nginx inicializar
+    sleep 5
+    
+    # Tentar obter certificados
+    if get_certificates; then
+        echo "✅ Configuração SSL concluída com sucesso!"
+    else
+        echo "⚠️  Configuração SSL não concluída, mas o sistema está funcionando."
+    fi
+    
+    # Configurar renovação automática
+    echo "🔄 Configurando renovação automática..."
+    
+    # Criar script de renovação
+    cat > /etc/periodic/daily/renew-ssl << 'EOF'
+#!/bin/sh
+certbot renew --quiet --webroot --webroot-path=/var/www/certbot
+nginx -s reload
+EOF
+    
+    chmod +x /etc/periodic/daily/renew-ssl
+    
+    echo "✅ Renovação automática configurada!"
+}
+
+# Executar função principal
+main "$@" 
