@@ -1,49 +1,28 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Lista de Cartórios</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-        }
-        h1 {
-            color: #2c3e50;
-        }
-        .usuario {
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-        .aviso {
-            color: #555;
-            margin-bottom: 20px;
-        }
-        ul {
-            padding-left: 20px;
-        }
-        li {
-            margin-bottom: 6px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Cartórios Registrados</h1>
+{% extends "base.html" %}
+{% load static %}
 
-    <div class="usuario">
-        Olá, {{ user.get_full_name|default:user.username }}!
-    </div>
+{% block title %}Lista de Cartórios{% endblock %}
 
-    <div class="aviso">
-        Total de Cartórios encontrados: {{ cartorios|length }}
-    </div>
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/cartorios.css' %}">
+{% endblock %}
 
-    <ul>
-        {% for cartorio in cartorios %}
-            <li><strong>{{ cartorio.nome }}</strong> — Código do Cartório (CNS): {{ cartorio.cns }}</li>
-        {% empty %}
-            <li>Nenhum cartório encontrado.</li>
-        {% endfor %}
-    </ul>
-</body>
-</html>
+{% block content %}
+<h1>Cartórios Registrados</h1>
+
+<div class="usuario">
+    Olá, {{ user.get_full_name|default:user.username }}!
+</div>
+
+<div class="aviso">
+    Total de Cartórios encontrados: {{ cartorios|length }}
+</div>
+
+<ul>
+    {% for cartorio in cartorios %}
+        <li><strong>{{ cartorio.nome }}</strong> — Código do Cartório (CNS): {{ cartorio.cns }}</li>
+    {% empty %}
+        <li>Nenhum cartório encontrado.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

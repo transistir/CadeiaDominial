@@ -2,54 +2,63 @@ from django.urls import path
 from . import views
 from django.contrib.auth import views as auth_views
 from dal import autocomplete
-from .views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
+
+# Importar views específicas dos novos módulos
+from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, imovel_detail, imovel_delete
+from .views.imovel_views import imovel_form
+from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico
+from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail
+from .views.cadeia_dominial_views import cadeia_dominial, cadeia_dominial_arvore, tronco_principal
+from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos
+from .views.autocomplete_views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
 
 urlpatterns = [
     # Páginas principais
-    path('', views.home, name='home'),
+    path('', home, name='home'),
     
     # TIs
-    path('tis/', views.tis_form, name='tis_form'),
-    path('tis/<int:tis_id>/', views.tis_detail, name='tis_detail'),
-    path('tis/<int:tis_id>/excluir/', views.tis_delete, name='tis_delete'),
-    path('tis/<int:tis_id>/imoveis/', views.imoveis, name='imoveis'),
+    path('tis/', tis_form, name='tis_form'),
+    path('tis/<int:tis_id>/', tis_detail, name='tis_detail'),
+    path('tis/<int:tis_id>/excluir/', tis_delete, name='tis_delete'),
+    path('tis/<int:tis_id>/imoveis/', imoveis, name='imoveis'),
     
     # Imóveis
-    path('tis/<int:tis_id>/imovel/cadastro/', views.imovel_form, name='imovel_cadastro'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/', views.imovel_detail, name='imovel_detail'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/editar/', views.imovel_form, name='imovel_editar'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/excluir/', views.imovel_delete, name='imovel_excluir'),
+    path('tis/<int:tis_id>/imovel/cadastro/', imovel_form, name='imovel_cadastro'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/', imovel_detail, name='imovel_detail'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/editar/', imovel_form, name='imovel_editar'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/excluir/', imovel_delete, name='imovel_excluir'),
     
     # Cadeia Dominial
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', views.cadeia_dominial, name='cadeia_dominial'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/tronco-principal/', views.tronco_principal, name='tronco_principal'),
-    path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', views.cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', cadeia_dominial, name='cadeia_dominial'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/tronco-principal/', tronco_principal, name='tronco_principal'),
+    path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
     
     # Documentos e Lançamentos
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-documento/', views.novo_documento, name='novo_documento'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/', views.novo_lancamento, name='novo_lancamento'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/<int:documento_id>/', views.novo_lancamento, name='novo_lancamento_documento'),
-    path('documento/<int:documento_id>/lancamentos/<int:tis_id>/<int:imovel_id>/', views.documento_lancamentos, name='documento_lancamentos'),
-    path('documento/<int:documento_id>/editar/<int:tis_id>/<int:imovel_id>/', views.editar_documento, name='editar_documento'),
-    path('selecionar-documento-lancamento/<int:tis_id>/<int:imovel_id>/', views.selecionar_documento_lancamento, name='selecionar_documento_lancamento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-documento/', novo_documento, name='novo_documento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/', novo_lancamento, name='novo_lancamento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/<int:documento_id>/', novo_lancamento, name='novo_lancamento_documento'),
+    path('documento/<int:documento_id>/lancamentos/<int:tis_id>/<int:imovel_id>/', documento_lancamentos, name='documento_lancamentos'),
+    path('documento/<int:documento_id>/editar/<int:tis_id>/<int:imovel_id>/', editar_documento, name='editar_documento'),
+    path('selecionar-documento-lancamento/<int:tis_id>/<int:imovel_id>/', selecionar_documento_lancamento, name='selecionar_documento_lancamento'),
     
     # Edição e exclusão de lançamentos
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/editar/', views.editar_lancamento, name='editar_lancamento'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/excluir/', views.excluir_lancamento, name='excluir_lancamento'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/', views.lancamento_detail, name='lancamento_detail'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/editar/', editar_lancamento, name='editar_lancamento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/excluir/', excluir_lancamento, name='excluir_lancamento'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/', lancamento_detail, name='lancamento_detail'),
     
     # Criação automática de documentos
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/criar-documento/<str:codigo_origem>/', views.criar_documento_automatico, name='criar_documento_automatico'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/criar-documento/<str:codigo_origem>/', criar_documento_automatico, name='criar_documento_automatico'),
     
     # Listagens
-    path('lancamentos/', views.lancamentos, name='lancamentos'),
-    path('cartorios/', views.cartorios, name='cartorios'),
+    path('lancamentos/', lancamentos, name='lancamentos'),
+    path('cartorios/', cartorios, name='cartorios'),
     
     # APIs e autocomplete
-    path('buscar-cidades/', views.buscar_cidades, name='buscar_cidades'),
-    path('buscar-cartorios/', views.buscar_cartorios, name='buscar_cartorios'),
-    path('verificar-cartorios/', views.verificar_cartorios_estado, name='verificar_cartorios_estado'),
-    path('importar-cartorios/', views.importar_cartorios_estado, name='importar_cartorios_estado'),
+    path('buscar-cidades/', buscar_cidades, name='buscar_cidades'),
+    path('buscar-cartorios/', buscar_cartorios, name='buscar_cartorios'),
+    path('verificar-cartorios/', verificar_cartorios_estado, name='verificar_cartorios_estado'),
+    path('importar-cartorios/', importar_cartorios_estado, name='importar_cartorios_estado'),
+    path('criar-cartorio/', criar_cartorio, name='criar_cartorio'),
     path('pessoa-autocomplete/', pessoa_autocomplete, name='pessoa-autocomplete'),
     path('cartorio-autocomplete/', cartorio_autocomplete, name='cartorio-autocomplete'),
     path('cartorio-imoveis-autocomplete/', cartorio_imoveis_autocomplete, name='cartorio-imoveis-autocomplete'),

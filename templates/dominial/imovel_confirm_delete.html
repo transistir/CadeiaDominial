@@ -3,66 +3,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
-<style>
-    .delete-container {
-        max-width: 600px;
-        margin: 40px auto;
-        padding: 20px;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .delete-header {
-        margin-bottom: 20px;
-    }
-
-    .delete-header h1 {
-        color: #ba2121;
-        margin: 0 0 10px 0;
-    }
-
-    .delete-content {
-        margin-bottom: 30px;
-    }
-
-    .delete-content p {
-        margin: 10px 0;
-        color: #666;
-    }
-
-    .delete-actions {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-    }
-
-    .delete-button {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        text-decoration: none;
-        color: white;
-    }
-
-    .confirm-button {
-        background: #ba2121;
-    }
-
-    .confirm-button:hover {
-        background: #a41515;
-    }
-
-    .cancel-button {
-        background: #6c757d;
-    }
-
-    .cancel-button:hover {
-        background: #5a6268;
-    }
-</style>
+<link rel="stylesheet" href="{% static 'dominial/css/confirm_delete.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -73,7 +14,7 @@
 
     <div class="delete-content">
         <p>{% trans 'Você tem certeza que deseja excluir o imóvel' %} "{{ imovel.nome }}"?</p>
-        <p>{% trans 'Esta ação não pode ser desfeita.' %}</p>
+        <p class="warning">{% trans 'Esta ação não pode ser desfeita.' %}</p>
     </div>
 
     <div class="delete-actions">

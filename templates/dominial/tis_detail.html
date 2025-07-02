@@ -1,238 +1,97 @@
-{% extends "admin/base_site.html" %}
+{% extends "base.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}
-{{ block.super }}
-<style>
-    .tis-detail-container {
-        max-width: 1200px;
-        margin: 20px auto;
-        padding: 20px;
-    }
+{% block title %}{{ tis.nome }} - Imóveis{% endblock %}
 
-    .tis-header {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        padding: 20px;
-        margin-bottom: 30px;
-    }
-
-    .tis-header h1 {
-        color: #333;
-        margin: 0 0 10px 0;
-    }
-
-    .tis-info {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 20px;
-        margin-top: 20px;
-    }
-
-    .tis-info-item {
-        background: #f8f9fa;
-        padding: 15px;
-        border-radius: 4px;
-    }
-
-    .tis-info-item strong {
-        display: block;
-        color: #666;
-        margin-bottom: 5px;
-    }
-
-    .imoveis-list {
-        margin-top: 30px;
-    }
-
-    .imovel-item {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        padding: 20px;
-        margin-bottom: 20px;
-        position: relative;
-    }
-
-    .imovel-item h3 {
-        margin: 0 0 10px 0;
-        color: #333;
-        padding-right: 100px;
-    }
-
-    .imovel-item p {
-        margin: 5px 0;
-        color: #666;
-    }
-
-    .imovel-actions {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        display: flex;
-        gap: 10px;
-    }
-
-    .imovel-action-button {
-        padding: 5px 10px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        text-decoration: none;
-        color: white;
-    }
-
-    .edit-button {
-        background: #79aec8;
-    }
-
-    .edit-button:hover {
-        background: #417690;
-    }
-
-    .delete-button {
-        background: #ba2121;
-    }
-
-    .delete-button:hover {
-        background: #a41515;
-    }
-
-    .add-imovel-button {
-        display: block;
-        width: 200px;
-        margin: 20px auto;
-        padding: 15px 30px;
-        background: #79aec8;
-        color: white;
-        text-align: center;
-        text-decoration: none;
-        border-radius: 4px;
-        font-size: 16px;
-    }
-
-    .add-imovel-button:hover {
-        background: #417690;
-    }
-
-    .back-button {
-        display: inline-block;
-        padding: 10px 20px;
-        background: #6c757d;
-        color: white;
-        text-decoration: none;
-        border-radius: 4px;
-        margin-bottom: 20px;
-    }
-
-    .back-button:hover {
-        background: #5a6268;
-    }
-
-    .user-info {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        display: flex;
-        align-items: center;
-        gap: 20px;
-    }
-
-    .user-info p {
-        margin: 0;
-    }
-
-    .logout-form {
-        margin: 0;
-    }
-
-    .logout-button {
-        background: #ba2121;
-        color: white;
-        border: none;
-        padding: 8px 15px;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    .logout-button:hover {
-        background: #a41515;
-    }
-</style>
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/tis_detail.css' %}">
 {% endblock %}
 
 {% block content %}
 <div class="tis-detail-container">
-    <a href="{% url 'home' %}" class="back-button">{% trans 'Voltar' %}</a>
-
     <div class="tis-header">
         <h1>{{ tis.nome }}</h1>
-        <div class="tis-info">
-            <div class="tis-info-item">
+        
+        <div class="tis-info-grid">
+            <div class="tis-info-card">
                 <strong>{% trans 'Código' %}</strong>
-                {{ tis.codigo }}
+                <span>{{ tis.codigo }}</span>
             </div>
-            <div class="tis-info-item">
+            
+            <div class="tis-info-card">
                 <strong>{% trans 'Etnia' %}</strong>
-                {{ tis.etnia }}
+                <span>{{ tis.etnia }}</span>
             </div>
-            <div class="tis-info-item">
-                <strong>{% trans 'Data de Cadastro' %}</strong>
-                {{ tis.data_cadastro|date:"d/m/Y" }}
+            
+            {% if tis.terra_referencia %}
+            <div class="tis-info-card">
+                <strong>{% trans 'Estado' %}</strong>
+                <span>{{ tis.terra_referencia.estado }}</span>
             </div>
+            
+            <div class="tis-info-card">
+                <strong>{% trans 'Fase' %}</strong>
+                <span>{{ tis.terra_referencia.fase }}</span>
+            </div>
+            
+            {% if tis.terra_referencia.area_ha %}
+            <div class="tis-info-card">
+                <strong>{% trans 'Área' %}</strong>
+                <span>{{ tis.terra_referencia.area_ha|floatformat:0 }} ha</span>
+            </div>
+            {% endif %}
+            {% endif %}
         </div>
     </div>
 
-    <h2>{% trans 'Imóveis Sobrepostos' %}</h2>
+    <h2 class="section-title">{% trans 'Imóveis' %}</h2>
     
-    <div class="imoveis-list">
+    <div class="imoveis-grid">
         {% for imovel in imoveis %}
-        <div class="imovel-item" onclick="window.location.href='{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}'" style="cursor: pointer;">
-            <h3>{{ imovel.nome }}</h3>
+        <div class="imovel-card" onclick="window.location.href='{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}'">
             <div class="imovel-actions">
-                {% if perms.dominial.change_imovel %}
-                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="imovel-action-button edit-button" onclick="event.stopPropagation();">{% trans 'Editar' %}</a>
-                {% endif %}
-                {% if perms.dominial.delete_imovel %}
-                <form method="post" action="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" style="display: inline;" onclick="event.stopPropagation();">
-                    {% csrf_token %}
-                    <button type="submit" class="imovel-action-button delete-button" onclick="return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir' %}</button>
-                </form>
+                <a href="{% url 'imovel_editar' tis_id=tis.id imovel_id=imovel.id %}" class="action-button edit-button">{% trans 'Editar' %}</a>
+                <a href="{% url 'imovel_excluir' tis_id=tis.id imovel_id=imovel.id %}" class="action-button delete-button" onclick="event.stopPropagation(); return confirm('{% trans 'Tem certeza que deseja excluir este imóvel?' %}')">{% trans 'Excluir' %}</a>
+            </div>
+            
+            <div class="imovel-header">
+                <h3 class="imovel-title">{{ imovel.nome }}</h3>
+            </div>
+            
+            <div class="imovel-info">
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">{% trans 'Matrícula' %}</span>
+                    <span class="imovel-info-value">{{ imovel.matricula|default:"Não informada" }}</span>
+                </div>
+                
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">{% trans 'SNCR' %}</span>
+                    <span class="imovel-info-value">{{ imovel.sncr|default:"Não informado" }}</span>
+                </div>
+                
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">{% trans 'SIGEF' %}</span>
+                    <span class="imovel-info-value">{{ imovel.sigef|default:"Não informado" }}</span>
+                </div>
+                
+                {% if imovel.proprietario %}
+                <div class="imovel-info-item">
+                    <span class="imovel-info-label">{% trans 'Proprietário' %}</span>
+                    <span class="imovel-info-value">{{ imovel.proprietario.nome }}</span>
+                </div>
                 {% endif %}
             </div>
-            <p><strong>{% trans 'Matrícula' %}:</strong> {{ imovel.matricula }}</p>
-            <p><strong>{% trans 'SNCR' %}:</strong> {{ imovel.sncr }}</p>
-            <p><strong>{% trans 'Proprietário' %}:</strong> {{ imovel.proprietario.nome }}</p>
-            {% if imovel.sigef %}
-            <p><strong>{% trans 'SIGEF' %}:</strong> {{ imovel.sigef }}</p>
-            {% endif %}
-            {% if imovel.descricao %}
-            <p><strong>{% trans 'Descrição' %}:</strong> {{ imovel.descricao }}</p>
-            {% endif %}
-            {% if imovel.observacoes %}
-            <p><strong>{% trans 'Observações' %}:</strong> {{ imovel.observacoes }}</p>
-            {% endif %}
         </div>
         {% empty %}
-        <div class="imovel-item">
-            <h3>{% trans 'Nenhum imóvel cadastrado' %}</h3>
-            <p>{% trans 'Clique no botão abaixo para cadastrar um novo imóvel.' %}</p>
+        <div class="empty-state">
+            <div class="empty-state-icon">🏠</div>
+            <p>{% trans 'Nenhum imóvel cadastrado nesta Terra Indígena.' %}</p>
         </div>
         {% endfor %}
     </div>
 
-    {% if perms.dominial.add_imovel %}
-    <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
-    {% endif %}
-
-    <div class="user-info">
-        <p>{% trans 'Usuário' %}: {{ request.user.username }}</p>
-        <form method="post" action="{% url 'logout' %}" class="logout-form">
-            {% csrf_token %}
-            <button type="submit" class="logout-button">{% trans 'Sair' %}</button>
-        </form>
+    <div style="text-align: center;">
+        <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

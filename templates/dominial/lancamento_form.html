@@ -1,320 +1,123 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento - {{ imovel.nome }}{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/forms.css' %}">
+{% endblock %}
+
 {% block content %}
 <div class="container">
-    <h1>{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento</h1>
-
+    <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
+    
     <div class="field-group">
-        <h4>Documento Ativo</h4>
+        <h4>{{ imovel.nome }}</h4>
         <div class="grid-3">
             <div>
-                <strong>Tipo:</strong> {{ documento.tipo.get_tipo_display }}
+                <strong>Matrícula:</strong> {{ imovel.matricula }}
             </div>
             <div>
-                <strong>Número:</strong> {{ documento.numero }}
+                <strong>SNCR:</strong> {{ imovel.sncr }}
             </div>
             <div>
-                <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
-            </div>
-            <div>
-                <strong>Cartório:</strong> {{ documento.cartorio.nome }}
-            </div>
-            <div>
-                <strong>Livro:</strong> {{ documento.livro }}
-            </div>
-            <div>
-                <strong>Folha:</strong> {{ documento.folha }}
+                <strong>Proprietário Atual:</strong> {{ imovel.proprietario.nome }}
             </div>
         </div>
-        {% if documento.origem %}
-        <div style="margin-top: 10px;">
-            <strong>Origem:</strong> {{ documento.origem }}
-        </div>
-        {% endif %}
     </div>
 
-    <form method="post">
+    <form method="post" id="lancamento-form">
         {% csrf_token %}
         
-        <div class="field-group">
-            <h4>Informações Básicas</h4>
-            
-            <div class="form-group">
-                <label for="tipo_lancamento">Tipo de Lançamento *</label>
-                <select name="tipo_lancamento" id="tipo_lancamento" required>
-                    <option value="">Selecione o tipo</option>
-                    {% for tipo in tipos_lancamento %}
-                    <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}" 
-                            {% if modo_edicao and lancamento.tipo.id == tipo.id %}selected
-                            {% elif form_data and form_data.tipo_lancamento == tipo.id|stringformat:"s" %}selected{% endif %}>
-                        {{ tipo.get_tipo_display }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
+        <!-- Campos Básicos -->
+        {% include "dominial/components/_lancamento_basico_form.html" %}
 
-            <div class="form-group">
-                <label for="numero_lancamento">Número do Lançamento *</label>
-                <input type="text" name="numero_lancamento" id="numero_lancamento" 
-                       placeholder="Código/número gerado pelo cartório" required 
-                       value="{% if modo_edicao %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
-                       class="{% if numero_lancamento_error %}error-field{% endif %}">
-                <small style="color: #666; font-size: 0.9em;">Número ou código de referência do lançamento no cartório</small>
-                {% if numero_lancamento_error %}
-                <div class="error-message" style="color: #dc3545; font-size: 0.9em; margin-top: 5px;">
-                    ⚠️ Este número de lançamento já existe neste documento
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="form-group">
-                <label for="data">Data do Lançamento *</label>
-                <input type="date" name="data" id="data" required 
-                       value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
-            </div>
-
-            <div class="toggle-group">
-                <label class="toggle-label">
-                    <input type="checkbox" name="eh_inicio_matricula" id="eh_inicio_matricula" class="toggle-checkbox" 
-                           {% if modo_edicao and lancamento.eh_inicio_matricula %}checked
-                           {% elif form_data and form_data.eh_inicio_matricula %}checked{% endif %}>
-                    <span>Este lançamento indica um "Início de Matrícula"</span>
-                </label>
-                <small style="display: block; margin-top: 5px; color: #666;">
-                    Marque esta opção se este lançamento representa o início de uma nova matrícula, 
-                    mesmo que não seja do tipo "Início de Matrícula".
-                </small>
-            </div>
-        </div>
-
-        <!-- Campos para Averbação -->
-        <div class="field-group" id="campos-averbacao" style="display: none;">
-            <h4>Campos Específicos - Averbação</h4>
-            
-            <div class="form-group">
-                <label for="forma_averbacao">Forma *</label>
-                <input type="text" name="forma_averbacao" id="forma_averbacao" placeholder="Ex: Compra e Venda, Doação, etc."
-                       value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
-            </div>
-
-            <div class="form-group">
-                <label for="descricao_averbacao">Descrição *</label>
-                <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
-            </div>
-
-            <!-- Checkbox para adicionar informações de cartório na averbação -->
-            <div class="toggle-group" style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
-                <label class="toggle-label">
-                    <input type="checkbox" name="incluir_cartorio_averbacao" id="incluir_cartorio_averbacao" class="toggle-checkbox">
-                    <span>Incluir informações de cartório de origem</span>
-                </label>
-                <small style="display: block; margin-top: 5px; color: #666;">
-                    Marque esta opção se a averbação contém informações de registro (cartório, livro, folha, data)
-                </small>
-            </div>
-
-            <!-- Campos de cartório para averbação (inicialmente ocultos) -->
-            <div id="campos-cartorio-averbacao" style="display: none; margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-                <h5 style="margin-top: 0; color: #495057;">Informações de Cartório de Origem</h5>
-                
-                <div class="grid-3">
-                    <div class="form-group">
-                        <label for="cartorio_origem_averbacao">Cartório</label>
-                        <div class="autocomplete-container">
-                            <input type="text" name="cartorio_origem_nome_averbacao" id="cartorio_origem_nome_averbacao" 
-                                   placeholder="Digite o nome do cartório" autocomplete="off"
-                                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome_averbacao %}{{ form_data.cartorio_origem_nome_averbacao }}{% endif %}">
-                            <input type="hidden" name="cartorio_origem_averbacao" id="cartorio_origem_averbacao" 
-                                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem_averbacao %}{{ form_data.cartorio_origem_averbacao }}{% endif %}">
-                            <div class="autocomplete-suggestions cartorio-suggestions-averbacao"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="livro_origem_averbacao">Livro</label>
-                        <input type="text" name="livro_origem_averbacao" id="livro_origem_averbacao" 
-                               value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_averbacao }}{% endif %}">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="folha_origem_averbacao">Folha</label>
-                        <input type="text" name="folha_origem_averbacao" id="folha_origem_averbacao" 
-                               value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_averbacao }}{% endif %}">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="data_origem_averbacao">Data</label>
-                    <input type="date" name="data_origem_averbacao" id="data_origem_averbacao" 
-                           value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem_averbacao }}{% endif %}">
-                </div>
-
-                <div class="form-group">
-                    <label for="titulo_averbacao">Título</label>
-                    <input type="text" name="titulo_averbacao" id="titulo_averbacao" placeholder="Título do registro"
-                           value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo_averbacao }}{% endif %}">
-                </div>
-            </div>
-        </div>
+        <!-- Campos para Averbacao -->
+        {% include "dominial/components/_lancamento_averbacao_form.html" %}
 
         <!-- Campos para Registro -->
-        <div class="field-group" id="campos-registro" style="display: none;">
-            <h4>Campos Específicos - Registro</h4>
-            
-            <div class="form-group">
-                <label for="forma_registro">Forma *</label>
-                <input type="text" name="forma_registro" id="forma_registro" placeholder="Ex: Compra e Venda, Doação, etc."
-                       value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
-            </div>
-
-            <div class="form-group">
-                <label for="titulo_registro">Título *</label>
-                <input type="text" name="titulo" id="titulo_registro" placeholder="Título do registro"
-                       value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}">
-            </div>
-
-            <div class="grid-3">
-                <div class="form-group">
-                    <label for="cartorio_origem">Cartório *</label>
-                    <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off"
-                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome %}{{ form_data.cartorio_origem_nome }}{% endif %}">
-                        <input type="hidden" name="cartorio_origem" id="cartorio_origem" 
-                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem %}{{ form_data.cartorio_origem }}{% endif %}">
-                        <div class="autocomplete-suggestions cartorio-suggestions"></div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="livro_origem">Livro *</label>
-                    <input type="text" name="livro_origem" id="livro_origem" 
-                           value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem }}{% endif %}">
-                </div>
-
-                <div class="form-group">
-                    <label for="folha_origem">Folha *</label>
-                    <input type="text" name="folha_origem" id="folha_origem" 
-                           value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem }}{% endif %}">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="data_origem">Data *</label>
-                <input type="date" name="data_origem" id="data_origem" 
-                       value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem }}{% endif %}">
-            </div>
-        </div>
+        {% include "dominial/components/_lancamento_registro_form.html" %}
 
         <!-- Campos para Início de Matrícula -->
-        <div class="field-group" id="campos-inicio-matricula" style="display: none;">
+        <div class="field-group hidden" id="campos-inicio-matricula">
             <h4>Campos Específicos - Início de Matrícula</h4>
-            
             <div class="form-group">
-                <label for="forma_inicio">Forma *</label>
-                <input type="text" name="forma_inicio" id="forma_inicio" placeholder="Ex: Abertura, Criação, etc."
-                       value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
+                <label>Adquirente(s)</label>
+                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container" sugestao_class="adquirente-suggestions" %}
             </div>
-
             <div class="form-group">
-                <label for="descricao_inicio">Descrição *</label>
-                <textarea name="descricao" id="descricao_inicio" placeholder="Descreva o motivo do início da matrícula">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
+                <label for="origem_inicio">Origem *</label>
+                <input type="text" name="origem_inicio" id="origem_inicio" placeholder="Ex: Número do registro anterior, descrição, etc."
+                       value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem_inicio }}{% endif %}">
+            </div>
+            <div class="form-group">
+                <label for="cartorio_origem_nome_inicio">Cartório de Registro da Origem *</label>
+                <div class="autocomplete-container">
+                    <input type="text" name="cartorio_origem_nome_inicio" id="cartorio_origem_nome_inicio" 
+                           placeholder="Digite o nome do cartório" autocomplete="off"
+                           value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome_inicio %}{{ form_data.cartorio_origem_nome_inicio }}{% endif %}">
+                    <input type="hidden" name="cartorio_origem_inicio" id="cartorio_origem_inicio" 
+                           value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem_inicio %}{{ form_data.cartorio_origem_inicio }}{% endif %}">
+                    <div class="autocomplete-suggestions cartorio-origem-inicio-suggestions"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="area_inicio">Área (ha)</label>
+                <input type="number" name="area_inicio" id="area_inicio" step="0.01" min="0"
+                       value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area_inicio }}{% endif %}">
             </div>
         </div>
 
         <!-- Campos Opcionais de Transação -->
-        <div class="field-group" id="campos-transacao" style="display: none;">
-            <h4>Campos Opcionais - Transação</h4>
+        <div class="field-group hidden" id="campos-transacao">
+            <h4>Transmissão</h4>
             
-            <div class="grid-2">
+            <div class="grid-3">
                 <div class="form-group">
-                    <label for="transmitente">Transmitente(s)</label>
-                    <div id="transmitentes-container">
-                        <div class="pessoa-item">
-                            <div class="pessoa-input-group">
-                                <div class="autocomplete-container">
-                                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
-                                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="">
-                                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
-                                </div>
-                                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarTransmitente()" style="margin-top: 5px;">
-                        ➕ Adicionar Transmitente
-                    </button>
-                    <div class="percentual-total" id="transmitente-total">Total: 0%</div>
+                    <label for="forma_transacao">Forma</label>
+                    <input type="text" name="forma_transacao" id="forma_transacao" placeholder="Ex: Compra e Venda, Doação, etc."
+                           value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
                 </div>
-
                 <div class="form-group">
-                    <label for="adquirente">Adquirente(s)</label>
-                    <div id="adquirentes-container">
-                        <div class="pessoa-item">
-                            <div class="pessoa-input-group">
-                                <div class="autocomplete-container">
-                                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
-                                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="">
-                                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
-                                </div>
-                                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-                            </div>
-                        </div>
+                    <label for="titulo_transacao">Título</label>
+                    <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro"
+                           value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label for="cartorio_transacao_nome">Cartório</label>
+                    <div class="autocomplete-container">
+                        <input type="text" name="cartorio_transacao_nome" id="cartorio_transacao_nome" 
+                               placeholder="Digite o nome do cartório" autocomplete="off"
+                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_transacao_nome %}{{ form_data.cartorio_transacao_nome }}{% endif %}">
+                        <input type="hidden" name="cartorio_transacao" id="cartorio_transacao" 
+                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_transacao %}{{ form_data.cartorio_transacao }}{% endif %}">
+                        <div class="autocomplete-suggestions cartorio-transacao-suggestions"></div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarAdquirente()" style="margin-top: 5px;">
-                        ➕ Adicionar Adquirente
-                    </button>
-                    <div class="percentual-total" id="adquirente-total">Total: 0%</div>
                 </div>
             </div>
-
-            <div class="grid-2">
+            
+            <div class="grid-3">
                 <div class="form-group">
-                    <label for="area">Área</label>
-                    <input type="number" name="area" id="area" step="0.0001" placeholder="0.0000"
-                           value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}">
+                    <label for="livro_transacao">Livro</label>
+                    <input type="text" name="livro_transacao" id="livro_transacao" 
+                           value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_transacao }}{% endif %}">
                 </div>
-
                 <div class="form-group">
-                    <label for="origem">Origem</label>
-                    <div class="input-group">
-                        <input type="text" name="origem" id="origem" placeholder="Origem do lançamento (opcional)"
-                               value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem }}{% endif %}">
-                        <button type="button" id="add-origem" class="btn btn-sm btn-outline">+</button>
-                    </div>
-                    <small style="color: #666; font-size: 0.9em;">
-                        💡 Dica: Use códigos M para matrículas (ex: M3214) e T para transcrições (ex: T1234)
-                    </small>
-                    <div id="origem-validation" style="display: none; margin-top: 5px; padding: 8px; border-radius: 4px; font-size: 0.9em;"></div>
-                    <div id="origens-adicionais" class="origens-container" style="margin-top: 10px;"></div>
+                    <label for="folha_transacao">Folha</label>
+                    <input type="text" name="folha_transacao" id="folha_transacao" 
+                           value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_transacao }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label for="data_transacao">Data</label>
+                    <input type="date" name="data_transacao" id="data_transacao" 
+                           value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_transacao }}{% endif %}">
                 </div>
             </div>
         </div>
 
-        <div class="form-group">
-            <label for="observacoes">Observações</label>
-            <textarea name="observacoes" id="observacoes" placeholder="Observações adicionais sobre o lançamento">{% if modo_edicao %}{{ lancamento.observacoes }}{% elif form_data %}{{ form_data.observacoes }}{% endif %}</textarea>
-        </div>
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
 
-        <!-- Checkbox para finalizar -->
-        <div class="field-group" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-            <div class="toggle-group">
-                <label class="toggle-label">
-                    <input type="checkbox" name="finalizar" id="finalizar" class="toggle-checkbox">
-                    <span>{% if modo_edicao %}Finalizar e voltar à visualização dos lançamentos{% else %}Finalizar e voltar à visualização dos lançamentos{% endif %}</span>
-                </label>
-                <small style="display: block; margin-top: 5px; color: #666;">
-                    Marque esta opção se deseja finalizar e voltar à visualização dos lançamentos deste documento. 
-                    Se desmarcado, será redirecionado para criar um novo lançamento.
-                </small>
-            </div>
-        </div>
-
-        <div class="actions">
+        <div class="form-actions">
             <button type="submit" class="btn btn-success">Salvar Lançamento</button>
             <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
         </div>
@@ -339,21 +142,48 @@ document.addEventListener('DOMContentLoaded', function() {
         const modoEdicao = {% if modo_edicao %}true{% else %}false{% endif %};
         
         // Esconder todos os campos primeiro
-        averbacaoFields.style.display = 'none';
-        registroFields.style.display = 'none';
-        inicioMatriculaFields.style.display = 'none';
-        transacaoFields.style.display = 'none';
+        averbacaoFields.classList.add('hidden');
+        registroFields.classList.add('hidden');
+        inicioMatriculaFields.classList.add('hidden');
+        transacaoFields.classList.add('hidden');
+        
+        // Controlar visibilidade do campo de número simples (input)
+        const numeroSimplesField = document.querySelector('.form-group:has(#numero_lancamento_simples)');
+        if (numeroSimplesField) {
+            if (selectedTipo === 'inicio_matricula') {
+                // Ocultar apenas o campo de input, mantendo o campo readonly visível
+                const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
+                const numeroSimplesLabel = numeroSimplesField.querySelector('label[for="numero_lancamento_simples"]');
+                const numeroSimplesSmall = numeroSimplesField.querySelector('small');
+                
+                if (numeroSimplesInput) numeroSimplesInput.style.display = 'none';
+                if (numeroSimplesLabel) numeroSimplesLabel.style.display = 'none';
+                if (numeroSimplesSmall) numeroSimplesSmall.style.display = 'none';
+            } else {
+                // Mostrar todos os elementos do campo
+                const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
+                const numeroSimplesLabel = numeroSimplesField.querySelector('label[for="numero_lancamento_simples"]');
+                const numeroSimplesSmall = numeroSimplesField.querySelector('small');
+                
+                if (numeroSimplesInput) numeroSimplesInput.style.display = 'block';
+                if (numeroSimplesLabel) numeroSimplesLabel.style.display = 'block';
+                if (numeroSimplesSmall) numeroSimplesSmall.style.display = 'block';
+            }
+        }
         
         // Mostrar campos baseado no tipo selecionado
         if (selectedTipo === 'averbacao') {
-            averbacaoFields.style.display = 'block';
-            transacaoFields.style.display = 'block';
+            averbacaoFields.classList.remove('hidden');
         } else if (selectedTipo === 'registro') {
-            registroFields.style.display = 'block';
-            transacaoFields.style.display = 'block';
+            registroFields.classList.remove('hidden');
+            transacaoFields.classList.remove('hidden');
         } else if (selectedTipo === 'inicio_matricula') {
-            inicioMatriculaFields.style.display = 'block';
-            transacaoFields.style.display = 'block';
+            inicioMatriculaFields.classList.remove('hidden');
+            // Não exibir bloco de transação para início de matrícula
+            // Aplicar automaticamente a sigla da matrícula
+            if (typeof gerarNumeroLancamento === 'function') {
+                gerarNumeroLancamento();
+            }
         }
     }
     
@@ -377,8 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="hidden" name="transmitente[]" class="transmitente-id" value="{{ transmitente.pessoa.id }}">
                                 <div class="autocomplete-suggestions transmitente-suggestions"></div>
                             </div>
-                            <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ transmitente.percentual }}">
-                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
                         </div>
                     `;
                     container.appendChild(pessoaDiv);
@@ -400,8 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="hidden" name="adquirente[]" class="adquirente-id" value="{{ adquirente.pessoa.id }}">
                                 <div class="autocomplete-suggestions adquirente-suggestions"></div>
                             </div>
-                            <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;" value="{{ adquirente.percentual }}">
-                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
+                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
                         </div>
                     `;
                     container.appendChild(pessoaDiv);
@@ -425,662 +253,242 @@ document.addEventListener('DOMContentLoaded', function() {
     // Adicionar listener para mudanças no tipo
     tipoSelect.addEventListener('change', toggleFields);
     
+    // Configurar geração automática do número do lançamento
+    const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
+    const numeroCompletoInput = document.getElementById('numero_lancamento');
+    
+    if (numeroSimplesInput && numeroCompletoInput) {
+        // Função para gerar a sigla completa
+        function gerarNumeroLancamento() {
+            const numero = numeroSimplesInput.value.trim();
+            const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+            const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+            
+            // Obter a sigla da matrícula/transcrição do imóvel
+            const siglaMatriculaInput = document.querySelector('input[name="sigla_matricula"]');
+            const siglaMatricula = siglaMatriculaInput ? siglaMatriculaInput.value : '';
+            
+            if (selectedTipo === 'inicio_matricula') {
+                // Para início de matrícula, aplicar automaticamente a sigla da matrícula
+                numeroCompletoInput.value = siglaMatricula;
+            } else if (numero && selectedTipo) {
+                let sigla = '';
+                
+                if (selectedTipo === 'averbacao') {
+                    sigla = `AV${numero}${siglaMatricula}`;
+                } else if (selectedTipo === 'registro') {
+                    sigla = `R${numero}${siglaMatricula}`;
+                }
+                
+                numeroCompletoInput.value = sigla;
+            } else {
+                numeroCompletoInput.value = '';
+            }
+        }
+        
+        // Adicionar listeners
+        numeroSimplesInput.addEventListener('input', gerarNumeroLancamento);
+        tipoSelect.addEventListener('change', gerarNumeroLancamento);
+        
+        // Gerar número inicial se já houver dados
+        if (numeroSimplesInput.value) {
+            gerarNumeroLancamento();
+        }
+    }
+    
     // Configurar autocomplete para pessoas existentes e adicionar listeners para novos campos
     setupPessoaAutocomplete();
     
-    // Autocomplete para cartório
-    const cartorioInput = document.getElementById('cartorio_origem_nome');
-    const cartorioHidden = document.getElementById('cartorio_origem');
+    // Autocomplete para cartório principal
+    const cartorioInput = document.getElementById('cartorio_nome');
+    const cartorioHidden = document.getElementById('cartorio');
     const cartorioSuggestions = document.querySelector('.cartorio-suggestions');
     
     if (cartorioInput && cartorioHidden && cartorioSuggestions) {
         setupCartorioAutocomplete(cartorioInput, cartorioHidden, cartorioSuggestions);
     }
     
-    // Autocomplete para cartório da averbação
-    const cartorioAverbacaoInput = document.getElementById('cartorio_origem_nome_averbacao');
-    const cartorioAverbacaoHidden = document.getElementById('cartorio_origem_averbacao');
-    const cartorioAverbacaoSuggestions = document.querySelector('.cartorio-suggestions-averbacao');
+    // Autocomplete para cartório de transação
+    const cartorioTransacaoInput = document.getElementById('cartorio_transacao_nome');
+    const cartorioTransacaoHidden = document.getElementById('cartorio_transacao');
+    const cartorioTransacaoSuggestions = document.querySelector('.cartorio-transacao-suggestions');
     
-    if (cartorioAverbacaoInput && cartorioAverbacaoHidden && cartorioAverbacaoSuggestions) {
-        setupCartorioAutocomplete(cartorioAverbacaoInput, cartorioAverbacaoHidden, cartorioAverbacaoSuggestions);
+    if (cartorioTransacaoInput && cartorioTransacaoHidden && cartorioTransacaoSuggestions) {
+        setupCartorioAutocomplete(cartorioTransacaoInput, cartorioTransacaoHidden, cartorioTransacaoSuggestions);
     }
     
-    // Controle dos campos de cartório na averbação
-    const incluirCartorioCheckbox = document.getElementById('incluir_cartorio_averbacao');
-    const camposCartorioAverbacao = document.getElementById('campos-cartorio-averbacao');
+    // Autocomplete para cartório da origem (início de matrícula)
+    const cartorioOrigemInicioInput = document.getElementById('cartorio_origem_nome_inicio');
+    const cartorioOrigemInicioHidden = document.getElementById('cartorio_origem_inicio');
+    const cartorioOrigemInicioSuggestions = document.querySelector('.cartorio-origem-inicio-suggestions');
     
-    if (incluirCartorioCheckbox && camposCartorioAverbacao) {
-        // Verificar se há dados preenchidos para mostrar os campos
-        const hasCartorioData = {% if modo_edicao and lancamento.cartorio_origem %}true{% else %}false{% endif %};
-        
-        if (hasCartorioData) {
-            incluirCartorioCheckbox.checked = true;
-            camposCartorioAverbacao.style.display = 'block';
-        }
-        
-        incluirCartorioCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                camposCartorioAverbacao.style.display = 'block';
-                // Adicionar animação suave
-                camposCartorioAverbacao.style.opacity = '0';
-                camposCartorioAverbacao.style.transform = 'translateY(-10px)';
-                setTimeout(() => {
-                    camposCartorioAverbacao.style.transition = 'all 0.3s ease';
-                    camposCartorioAverbacao.style.opacity = '1';
-                    camposCartorioAverbacao.style.transform = 'translateY(0)';
-                }, 10);
-            } else {
-                // Adicionar animação suave antes de esconder
-                camposCartorioAverbacao.style.transition = 'all 0.3s ease';
-                camposCartorioAverbacao.style.opacity = '0';
-                camposCartorioAverbacao.style.transform = 'translateY(-10px)';
-                setTimeout(() => {
-                    camposCartorioAverbacao.style.display = 'none';
-                }, 300);
-            }
-        });
+    if (cartorioOrigemInicioInput && cartorioOrigemInicioHidden && cartorioOrigemInicioSuggestions) {
+        setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions);
     }
     
-    function setupPessoaAutocomplete() {
-        // Configurar autocomplete para campos existentes
-        document.querySelectorAll('.transmitente-nome, .adquirente-nome').forEach(input => {
-            setupPessoaFieldAutocomplete(input);
-        });
-        
-        // Configurar autocomplete para novos campos que serão adicionados
-        document.addEventListener('DOMContentLoaded', function() {
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) { // Element node
-                            const newInputs = node.querySelectorAll ? node.querySelectorAll('.transmitente-nome, .adquirente-nome') : [];
-                            newInputs.forEach(input => {
-                                setupPessoaFieldAutocomplete(input);
-                            });
-                        }
-                    });
-                });
-            });
-            
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-        });
-    }
-    
-    function setupPessoaFieldAutocomplete(input) {
-        const hiddenInput = input.parentElement.querySelector('input[type="hidden"]');
-        const suggestions = input.parentElement.querySelector('.autocomplete-suggestions');
-        
-        if (!hiddenInput || !suggestions) return;
-        
-        let selectedIndex = -1;
-        let suggestionsData = [];
-        
-        input.addEventListener('input', function() {
-            const query = this.value.trim();
-            if (query.length < 2) {
-                hideSuggestions();
-                return;
-            }
-            
-            fetch(`/dominial/pessoa-autocomplete/?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    suggestionsData = data;
-                    showSuggestions(data);
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar sugestões de pessoa:', error);
-                });
-        });
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectNext();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectPrevious();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                selectCurrent();
-            } else if (e.key === 'Escape') {
-                hideSuggestions();
-            }
-        });
-        
-        input.addEventListener('blur', function() {
-            setTimeout(() => {
-                hideSuggestions();
-            }, 200);
-        });
-        
-        function showSuggestions(data) {
-            if (data.length === 0) {
-                suggestions.innerHTML = '<div class="autocomplete-suggestion"><div class="nome">Nenhuma pessoa encontrada</div></div>';
-            } else {
-                suggestions.innerHTML = data.map((item, index) => `
-                    <div class="autocomplete-suggestion" data-index="${index}" data-id="${item.id}">
-                        <div class="nome">${item.nome}</div>
-                        ${item.cpf ? `<div class="cpf">CPF: ${item.cpf}</div>` : ''}
-                    </div>
-                `).join('');
-                
-                suggestions.innerHTML += `
-                    <div class="autocomplete-suggestion novo" data-index="new">
-                        <div class="nome">➕ Criar nova pessoa: "${input.value}"</div>
-                    </div>
-                `;
-            }
-            
-            suggestions.style.display = 'block';
-            selectedIndex = -1;
-        }
-        
-        function hideSuggestions() {
-            suggestions.style.display = 'none';
-            selectedIndex = -1;
-        }
-        
-        function selectNext() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-            updateSelection(items);
-        }
-        
-        function selectPrevious() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.max(selectedIndex - 1, -1);
-            updateSelection(items);
-        }
-        
-        function updateSelection(items) {
-            items.forEach((item, index) => {
-                item.classList.remove('selected');
-                if (index === selectedIndex) {
-                    item.classList.add('selected');
-                }
-            });
-        }
-        
-        function selectCurrent() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (selectedIndex >= 0 && selectedIndex < items.length) {
-                const selectedItem = items[selectedIndex];
-                const index = selectedItem.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hiddenInput.value = '';
-                } else {
-                    const pessoa = suggestionsData[index];
-                    input.value = pessoa.nome;
-                    hiddenInput.value = pessoa.id;
-                }
-            }
-            hideSuggestions();
-        }
-        
-        suggestions.addEventListener('click', function(e) {
-            const suggestion = e.target.closest('.autocomplete-suggestion');
-            if (suggestion) {
-                const index = suggestion.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hiddenInput.value = '';
-                } else {
-                    const pessoa = suggestionsData[index];
-                    input.value = pessoa.nome;
-                    hiddenInput.value = pessoa.id;
-                }
-                hideSuggestions();
-            }
-        });
-    }
-    
-    function setupCartorioAutocomplete(input, hidden, suggestions) {
-        let selectedIndex = -1;
-        let suggestionsData = [];
-        
-        input.addEventListener('input', function() {
-            const query = this.value.trim();
-            if (query.length < 2) {
-                hideSuggestions();
-                return;
-            }
-            
-            fetch(`/dominial/cartorio-autocomplete/?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    suggestionsData = data;
-                    showSuggestions(data);
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar sugestões de cartório:', error);
-                });
-        });
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectNext();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectPrevious();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                selectCurrent();
-            } else if (e.key === 'Escape') {
-                hideSuggestions();
-            }
-        });
-        
-        input.addEventListener('blur', function() {
-            setTimeout(() => {
-                hideSuggestions();
-            }, 200);
-        });
-        
-        function showSuggestions(data) {
-            if (data.length === 0) {
-                suggestions.innerHTML = '<div class="autocomplete-suggestion"><div class="nome">Nenhum cartório encontrado</div></div>';
-            } else {
-                suggestions.innerHTML = data.map((item, index) => `
-                    <div class="autocomplete-suggestion" data-index="${index}" data-id="${item.id}">
-                        <div class="nome">${item.nome}</div>
-                        ${item.cidade ? `<div class="cidade">Cidade: ${item.cidade}</div>` : ''}
-                    </div>
-                `).join('');
-                
-                suggestions.innerHTML += `
-                    <div class="autocomplete-suggestion novo" data-index="new">
-                        <div class="nome">➕ Criar novo cartório: "${input.value}"</div>
-                    </div>
-                `;
-            }
-            
-            suggestions.style.display = 'block';
-            selectedIndex = -1;
-        }
-        
-        function hideSuggestions() {
-            suggestions.style.display = 'none';
-            selectedIndex = -1;
-        }
-        
-        function selectNext() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-            updateSelection(items);
-        }
-        
-        function selectPrevious() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (items.length === 0) return;
-            
-            selectedIndex = Math.max(selectedIndex - 1, -1);
-            updateSelection(items);
-        }
-        
-        function updateSelection(items) {
-            items.forEach((item, index) => {
-                item.classList.remove('selected');
-                if (index === selectedIndex) {
-                    item.classList.add('selected');
-                }
-            });
-        }
-        
-        function selectCurrent() {
-            const items = suggestions.querySelectorAll('.autocomplete-suggestion');
-            if (selectedIndex >= 0 && selectedIndex < items.length) {
-                const selectedItem = items[selectedIndex];
-                const index = selectedItem.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hidden.value = '';
-                } else {
-                    const cartorio = suggestionsData[index];
-                    input.value = cartorio.nome;
-                    hidden.value = cartorio.id;
-                }
-            }
-            hideSuggestions();
-        }
-        
-        suggestions.addEventListener('click', function(e) {
-            const suggestion = e.target.closest('.autocomplete-suggestion');
-            if (suggestion) {
-                const index = suggestion.getAttribute('data-index');
-                
-                if (index === 'new') {
-                    input.value = input.value.trim();
-                    hidden.value = '';
-                } else {
-                    const cartorio = suggestionsData[index];
-                    input.value = cartorio.nome;
-                    hidden.value = cartorio.id;
-                }
-                hideSuggestions();
-            }
-        });
-    }
-    
-    // Funções para múltiplas pessoas
-    window.adicionarTransmitente = function() {
-        const container = document.getElementById('transmitentes-container');
-        const pessoaDiv = document.createElement('div');
-        pessoaDiv.className = 'pessoa-item';
-        pessoaDiv.innerHTML = `
-            <div class="pessoa-input-group">
-                <div class="autocomplete-container">
-                    <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
-                    <input type="hidden" name="transmitente[]" class="transmitente-id" value="">
-                    <div class="autocomplete-suggestions transmitente-suggestions"></div>
-                </div>
-                <input type="number" name="transmitente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-            </div>
-        `;
-        container.appendChild(pessoaDiv);
-    };
-    
-    window.adicionarAdquirente = function() {
-        const container = document.getElementById('adquirentes-container');
-        const pessoaDiv = document.createElement('div');
-        pessoaDiv.className = 'pessoa-item';
-        pessoaDiv.innerHTML = `
-            <div class="pessoa-input-group">
-                <div class="autocomplete-container">
-                    <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
-                    <input type="hidden" name="adquirente[]" class="adquirente-id" value="">
-                    <div class="autocomplete-suggestions adquirente-suggestions"></div>
-                </div>
-                <input type="number" name="adquirente_percentual[]" class="percentual-input" placeholder="%" min="0" max="100" step="0.01" style="width: 80px;">
-                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" style="padding: 2px 6px;">×</button>
-            </div>
-        `;
-        container.appendChild(pessoaDiv);
-    };
-    
-    window.removePessoa = function(button) {
-        const pessoaItem = button.closest('.pessoa-item');
-        const container = pessoaItem?.parentElement;
-        
-        // Não permitir remover se for o último item
-        if (container && container.children.length > 1) {
-            pessoaItem.remove();
-        }
-    };
-    
-    // Validação do campo de origem
-    const origemInput = document.getElementById('origem');
-    const origemValidation = document.getElementById('origem-validation');
-    
-    if (origemInput && origemValidation) {
-        origemInput.addEventListener('input', function() {
-            const valor = this.value;
-            const codigos = valor.match(/\b[A-Za-z]\d+\b/g) || [];
-            const codigosInvalidos = [];
-            const sugestoes = [];
-            
-            codigos.forEach(codigo => {
-                const prefixo = codigo.charAt(0).toUpperCase();
-                const numero = codigo.substring(1);
-                
-                // Verificar se é um código válido (M ou T seguido de números)
-                if (!/^[MT]\d+$/i.test(codigo)) {
-                    codigosInvalidos.push(codigo);
-                    
-                    // Gerar sugestão baseada no prefixo
-                    if (/^[A-Za-z]\d+$/i.test(codigo)) {
-                        if (prefixo === 'M' || prefixo === 'T') {
-                            sugestoes.push(`${prefixo}${numero}`);
-                        } else {
-                            // Se não é M nem T, sugerir M (matrícula é mais comum)
-                            sugestoes.push(`M${numero}`);
-                        }
-                    }
-                }
-            });
-            
-            // Mostrar validação se houver códigos inválidos
-            if (codigosInvalidos.length > 0) {
-                let mensagem = '<div style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 8px; border-radius: 4px;">';
-                mensagem += '<strong>⚠️ Códigos detectados que não seguem o padrão:</strong><br>';
-                mensagem += codigosInvalidos.map((codigo, index) => {
-                    const sugestao = sugestoes[index];
-                    return `• "${codigo}" → sugerido: "${sugestao}"`;
-                }).join('<br>');
-                mensagem += '<br><small>💡 Use M para matrículas e T para transcrições</small>';
-                mensagem += '</div>';
-                
-                origemValidation.innerHTML = mensagem;
-                origemValidation.style.display = 'block';
-            } else {
-                origemValidation.style.display = 'none';
-            }
-        });
-        
-        // Também validar ao perder o foco
-        origemInput.addEventListener('blur', function() {
-            // Pequeno delay para permitir que o usuário veja a validação
-            setTimeout(() => {
-                if (origemValidation.style.display === 'block') {
-                    origemValidation.style.display = 'none';
-                }
-            }, 2000);
-        });
-    }
+
 });
+
+// Função para remover pessoa
+function removePessoa(button) {
+    const pessoaItem = button.closest('.pessoa-item');
+    if (pessoaItem) {
+        pessoaItem.remove();
+    }
+}
+
+// Função para adicionar transmitente
+function adicionarTransmitente() {
+    const container = document.getElementById('transmitentes-container');
+    const pessoaDiv = document.createElement('div');
+    pessoaDiv.className = 'pessoa-item';
+    pessoaDiv.innerHTML = `
+        <div class="pessoa-input-group">
+            <div class="autocomplete-container">
+                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
+                <input type="hidden" name="transmitente[]" class="transmitente-id">
+                <div class="autocomplete-suggestions transmitente-suggestions"></div>
+            </div>
+            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+        </div>
+    `;
+    container.appendChild(pessoaDiv);
+    
+    // Configurar autocomplete para o novo campo
+    const newInput = pessoaDiv.querySelector('.transmitente-nome');
+    const newHidden = pessoaDiv.querySelector('.transmitente-id');
+    const newSuggestions = pessoaDiv.querySelector('.transmitente-suggestions');
+    setupPessoaAutocompleteField(newInput, newHidden, newSuggestions, 'transmitente');
+}
+
+// Função para adicionar adquirente
+function adicionarAdquirente() {
+    const container = document.getElementById('adquirentes-container');
+    const pessoaDiv = document.createElement('div');
+    pessoaDiv.className = 'pessoa-item';
+    pessoaDiv.innerHTML = `
+        <div class="pessoa-input-group">
+            <div class="autocomplete-container">
+                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
+                <input type="hidden" name="adquirente[]" class="adquirente-id">
+                <div class="autocomplete-suggestions adquirente-suggestions"></div>
+            </div>
+            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+        </div>
+    `;
+    container.appendChild(pessoaDiv);
+    
+    // Configurar autocomplete para o novo campo
+    const newInput = pessoaDiv.querySelector('.adquirente-nome');
+    const newHidden = pessoaDiv.querySelector('.adquirente-id');
+    const newSuggestions = pessoaDiv.querySelector('.adquirente-suggestions');
+    setupPessoaAutocompleteField(newInput, newHidden, newSuggestions, 'adquirente');
+}
+
+// Função para configurar autocomplete de pessoa
+function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
+    input.addEventListener('input', function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            suggestions.style.display = 'none';
+            return;
+        }
+        
+        fetch(`/api/pessoas/autocomplete/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                suggestions.innerHTML = '';
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(pessoa => {
+                        const div = document.createElement('div');
+                        div.className = 'autocomplete-suggestion';
+                        div.textContent = pessoa.nome;
+                        div.addEventListener('click', function() {
+                            input.value = pessoa.nome;
+                            hidden.value = pessoa.id;
+                            suggestions.style.display = 'none';
+                        });
+                        suggestions.appendChild(div);
+                    });
+                    suggestions.style.display = 'block';
+                } else {
+                    suggestions.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar pessoas:', error);
+                suggestions.style.display = 'none';
+            });
+    });
+    
+    // Esconder sugestões quando clicar fora
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+            suggestions.style.display = 'none';
+        }
+    });
+}
+
+// Função para configurar autocomplete de cartório
+function setupCartorioAutocomplete(input, hidden, suggestions) {
+    input.addEventListener('input', function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            suggestions.style.display = 'none';
+            return;
+        }
+        
+        fetch(`/api/cartorios/autocomplete/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                suggestions.innerHTML = '';
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(cartorio => {
+                        const div = document.createElement('div');
+                        div.className = 'autocomplete-suggestion';
+                        div.textContent = cartorio.nome;
+                        div.addEventListener('click', function() {
+                            input.value = cartorio.nome;
+                            hidden.value = cartorio.id;
+                            suggestions.style.display = 'none';
+                        });
+                        suggestions.appendChild(div);
+                    });
+                    suggestions.style.display = 'block';
+                } else {
+                    suggestions.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar cartórios:', error);
+                suggestions.style.display = 'none';
+            });
+    });
+    
+    // Esconder sugestões quando clicar fora
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+            suggestions.style.display = 'none';
+        }
+    });
+}
+
+// Função para configurar autocomplete geral de pessoas
+function setupPessoaAutocomplete() {
+    const transmitenteInputs = document.querySelectorAll('.transmitente-nome');
+    const adquirenteInputs = document.querySelectorAll('.adquirente-nome');
+    
+    transmitenteInputs.forEach((input, index) => {
+        const hidden = document.querySelectorAll('.transmitente-id')[index];
+        const suggestions = document.querySelectorAll('.transmitente-suggestions')[index];
+        setupPessoaAutocompleteField(input, hidden, suggestions, 'transmitente');
+    });
+    
+    adquirenteInputs.forEach((input, index) => {
+        const hidden = document.querySelectorAll('.adquirente-id')[index];
+        const suggestions = document.querySelectorAll('.adquirente-suggestions')[index];
+        setupPessoaAutocompleteField(input, hidden, suggestions, 'adquirente');
+    });
+}
 </script>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-/* Campo de erro */
-.error-field {
-    border: 2px solid #dc3545 !important;
-    background-color: #fff5f5 !important;
-    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
-}
-
-.error-field:focus {
-    border-color: #dc3545 !important;
-    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
-}
-
-.error-message {
-    animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.input-group {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.input-group input {
-    flex: 1;
-}
-
-.btn-sm {
-    padding: 5px 10px;
-    font-size: 0.875em;
-    border-radius: 4px;
-    min-width: 35px;
-}
-
-.btn-outline {
-    background: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--primary-color);
-}
-
-.btn-outline:hover {
-    background: var(--primary-color);
-    color: white;
-}
-
-.btn-danger {
-    background: #dc3545;
-    color: white;
-    border: 1px solid #dc3545;
-}
-
-.btn-danger:hover {
-    background: #c82333;
-    border-color: #bd2130;
-}
-
-.origem-item {
-    transition: all 0.2s ease;
-}
-
-.origem-item:hover {
-    background: #e9ecef !important;
-}
-
-.origens-container {
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-/* Autocomplete Styles */
-.autocomplete-container {
-    position: relative;
-}
-
-.autocomplete-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    max-height: 200px;
-    overflow-y: auto;
-    z-index: 1000;
-    display: none;
-}
-
-.autocomplete-suggestion {
-    padding: 10px 15px;
-    cursor: pointer;
-    border-bottom: 1px solid #f0f0f0;
-    transition: background-color 0.2s ease;
-}
-
-.autocomplete-suggestion:hover {
-    background-color: #f8f9fa;
-}
-
-.autocomplete-suggestion:last-child {
-    border-bottom: none;
-}
-
-.autocomplete-suggestion.selected {
-    background-color: #e3f2fd;
-}
-
-.autocomplete-suggestion .nome {
-    font-weight: 500;
-    color: #333;
-}
-
-.autocomplete-suggestion .cpf {
-    font-size: 0.85em;
-    color: #666;
-    margin-top: 2px;
-}
-
-.autocomplete-suggestion .novo {
-    color: #28a745;
-    font-style: italic;
-}
-
-/* Múltiplas Pessoas Styles */
-.pessoa-item {
-    margin-bottom: 10px;
-}
-
-.pessoa-input-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.percentual-input {
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 8px;
-    font-size: 0.9em;
-}
-
-.percentual-total {
-    margin-top: 5px;
-    font-size: 0.9em;
-    font-weight: 500;
-    color: #666;
-}
-
-.percentual-total.warning {
-    color: #dc3545;
-}
-
-.percentual-total.success {
-    color: #28a745;
-}
-
-/* Estilos para campos de cartório da averbação */
-#campos-cartorio-averbacao {
-    transition: all 0.3s ease;
-}
-
-#campos-cartorio-averbacao h5 {
-    margin-bottom: 15px;
-    font-weight: 600;
-    color: #495057;
-}
-
-#campos-cartorio-averbacao .form-group {
-    margin-bottom: 12px;
-}
-
-#campos-cartorio-averbacao .grid-3 {
-    gap: 12px;
-}
-
-/* Animação para mostrar/ocultar campos */
-.field-group {
-    transition: all 0.3s ease;
-}
-
-.toggle-group {
-    transition: background-color 0.2s ease;
-}
-
-.toggle-group:hover {
-    background-color: #e9ecef !important;
-}
-</style>
 {% endblock %} 

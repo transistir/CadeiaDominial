@@ -1,0 +1,19 @@
+# Models package
+
+# Importar todos os models para manter compatibilidade
+from .tis_models import TIs, TerraIndigenaReferencia, TIs_Imovel
+from .pessoa_models import Pessoas
+from .imovel_models import Imovel, Cartorios, ImportacaoCartorios
+from .documento_models import Documento, DocumentoTipo
+from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa
+from .alteracao_models import Alteracoes, AlteracoesTipo, RegistroTipo, AverbacoesTipo
+
+# Exportar todos os models para uso externo
+__all__ = [
+    'TIs', 'TerraIndigenaReferencia', 'TIs_Imovel',
+    'Pessoas',
+    'Imovel', 'Cartorios', 'ImportacaoCartorios',
+    'Documento', 'DocumentoTipo',
+    'Lancamento', 'LancamentoTipo', 'LancamentoPessoa',
+    'Alteracoes', 'AlteracoesTipo', 'RegistroTipo', 'AverbacoesTipo',
+] 

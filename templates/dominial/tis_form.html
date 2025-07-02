@@ -1,143 +1,113 @@
-{% extends "admin/base_site.html" %}
+{% extends "base.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}
-{{ block.super }}
-<style>
-    .tis-form-container {
-        max-width: 800px;
-        margin: 20px auto;
-        padding: 20px;
-        background: #fff;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
+{% block title %}Cadastro de Terra Indígena{% endblock %}
 
-    .form-group {
-        margin-bottom: 20px;
-    }
-
-    .form-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-        color: #333;
-    }
-
-    .form-control {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-    }
-
-    .form-control:focus {
-        border-color: #79aec8;
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(121,174,200,0.2);
-    }
-
-    .submit-row {
-        margin-top: 20px;
-        text-align: right;
-    }
-
-    .submit-row input {
-        background: #79aec8;
-        color: #fff;
-        padding: 10px 15px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-    }
-
-    .submit-row input:hover {
-        background: #417690;
-    }
-
-    .errorlist {
-        color: #ba2121;
-        list-style: none;
-        padding: 0;
-        margin: 5px 0;
-    }
-
-    .messages {
-        margin-bottom: 20px;
-    }
-
-    .messages .success {
-        background: #dff0d8;
-        color: #3c763d;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 10px;
-    }
-
-    .messages .error {
-        background: #f2dede;
-        color: #a94442;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 10px;
-    }
-
-    .back-button {
-        display: inline-block;
-        padding: 10px 20px;
-        background: #6c757d;
-        color: white;
-        text-decoration: none;
-        border-radius: 4px;
-        margin-bottom: 20px;
-    }
-
-    .back-button:hover {
-        background: #5a6268;
-    }
-</style>
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/tis_form.css' %}">
 {% endblock %}
 
 {% block content %}
 <div class="tis-form-container">
-    <a href="{% url 'home' %}" class="back-button">{% trans 'Voltar' %}</a>
+    <div class="tis-form-header">
+        <h2>
+            ➕ Cadastro de Nova Terra Indígena
+        </h2>
+    </div>
     
-    <h1>{% trans 'Cadastro de Terra Indígena' %}</h1>
-    
+    <div class="tis-form-body">
     {% if messages %}
     <div class="messages">
         {% for message in messages %}
-        <div class="{{ message.tags }}">
+            <div class="alert alert-{{ message.tags }} alert-dismissible">
             {{ message }}
+                <button type="button" class="btn-close" onclick="this.parentElement.remove()">&times;</button>
         </div>
         {% endfor %}
     </div>
     {% endif %}
     
-    <form method="post">
+        <form method="post" class="needs-validation" novalidate>
         {% csrf_token %}
         
         {% if form.errors %}
-        <div class="errorlist">
+            <div class="alert alert-danger">
+                <h6>Por favor, corrija os seguintes erros:</h6>
             {% for field in form %}
                 {% for error in field.errors %}
-                    <p>{{ field.label }}: {{ error }}</p>
+                        <p class="mb-1"><strong>{{ field.label }}:</strong> {{ error }}</p>
                 {% endfor %}
             {% endfor %}
         </div>
         {% endif %}
 
-        <div class="form-group">
-            <label for="{{ form.terra_referencia.id_for_label }}">{% trans 'Selecione a Terra Indígena' %}:</label>
-            {{ form.terra_referencia }}
-            <p class="help-text">{% trans 'Selecione uma terra indígena da lista para cadastrar no sistema.' %}</p>
-        </div>
+            <div class="form-row full-width">
+                <div class="form-group">
+                    <label for="{{ form.nome.id_for_label }}" class="form-label">
+                        {{ form.nome.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.nome }}
+                    {% if form.nome.help_text %}
+                    <div class="form-text">{{ form.nome.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
 
-        <div class="submit-row">
-            <input type="submit" value="{% trans 'Salvar' %}">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="{{ form.codigo.id_for_label }}" class="form-label">
+                        {{ form.codigo.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.codigo }}
+                    {% if form.codigo.help_text %}
+                    <div class="form-text">{{ form.codigo.help_text }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.etnia.id_for_label }}" class="form-label">
+                        {{ form.etnia.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.etnia }}
+                    {% if form.etnia.help_text %}
+                    <div class="form-text">{{ form.etnia.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row full-width">
+                <div class="form-group">
+                    <label class="form-label">
+                        {{ form.estado.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.estado }}
+                    {% if form.estado.help_text %}
+                    <div class="form-text">{{ form.estado.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row full-width">
+                <div class="form-group">
+                    <label for="{{ form.area.id_for_label }}" class="form-label">
+                        {{ form.area.label }}
+                    </label>
+                    {{ form.area }}
+                    {% if form.area.help_text %}
+                    <div class="form-text">{{ form.area.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <a href="{% url 'home' %}" class="btn btn-secondary">
+                    ← Voltar
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    💾 Cadastrar Terra Indígena
+                </button>
         </div>
     </form>
+    </div>
 </div>
 {% endblock %} 
