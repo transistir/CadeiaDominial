@@ -10,50 +10,60 @@ def imovel_form(request, tis_id, imovel_id=None):
     imovel = None
     if imovel_id:
         imovel = get_object_or_404(Imovel, pk=imovel_id)
+    
     if request.method == 'POST':
         form = ImovelForm(request.POST, instance=imovel)
+        
+        # Obter dados do formulário
+        nome_proprietario = request.POST.get('proprietario_nome')
         cartorio_id = request.POST.get('cartorio_id')
-        if cartorio_id:
-            try:
-                cartorio = Cartorios.objects.get(pk=cartorio_id)
-                form.instance.cartorio = cartorio
-            except Cartorios.DoesNotExist:
-                pass
+        
         if form.is_valid():
             imovel = form.save(commit=False)
             imovel.terra_indigena_id = tis
-            proprietario_id = form.cleaned_data.get('proprietario')
-            nome = form.cleaned_data.get('proprietario_nome')
-            if proprietario_id:
+            
+            # Processar proprietário
+            if nome_proprietario:
+                # Criar ou buscar proprietário
+                proprietario, created = Pessoas.objects.get_or_create(
+                    nome=nome_proprietario,
+                    defaults={
+                        'nome': nome_proprietario,
+                        'cpf': '',  # Campo obrigatório, mas não temos no formulário simplificado
+                        'rg': '',
+                        'email': '',
+                        'telefone': ''
+                    }
+                )
+                imovel.proprietario = proprietario
+            else:
+                messages.error(request, 'Nome do proprietário é obrigatório.')
+                return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
+            
+            # Processar cartório
+            if cartorio_id:
                 try:
-                    imovel.proprietario = Pessoas.objects.get(id=proprietario_id)
-                except Pessoas.DoesNotExist:
-                    messages.error(request, 'O proprietário selecionado não foi encontrado.')
+                    cartorio = Cartorios.objects.get(pk=cartorio_id)
+                    imovel.cartorio = cartorio
+                except Cartorios.DoesNotExist:
+                    messages.error(request, 'Cartório selecionado não foi encontrado.')
                     return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             else:
-                cpf = request.POST.get('cpf')
-                rg = request.POST.get('rg')
-                data_nascimento = request.POST.get('data_nascimento')
-                email = request.POST.get('email')
-                telefone = request.POST.get('telefone')
-                if nome and cpf:
-                    nova_pessoa = Pessoas.objects.create(
-                        nome=nome,
-                        cpf=cpf,
-                        rg=rg,
-                        email=email,
-                        telefone=telefone,
-                        data_nascimento=data_nascimento if data_nascimento else None
-                    )
-                    imovel.proprietario = nova_pessoa
-                else:
-                    messages.error(request, "Para cadastrar novo proprietário, preencha pelo menos Nome e CPF.")
-                    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
-            imovel.save()
-            messages.success(request, 'Imóvel cadastrado com sucesso!')
-            return redirect('tis_detail', tis_id=tis_id)
+                messages.error(request, 'Seleção de cartório é obrigatória.')
+                return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
+            
+            # Salvar imóvel
+            try:
+                imovel.save()
+                messages.success(request, 'Imóvel cadastrado com sucesso!')
+                return redirect('tis_detail', tis_id=tis_id)
+            except Exception as e:
+                messages.error(request, f'Erro ao salvar imóvel: {str(e)}')
+                return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
         else:
             messages.error(request, 'Erro no formulário. Verifique os dados.')
+            print("Erros do formulário:", form.errors)
     else:
         form = ImovelForm(instance=imovel)
+    
     return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel}) 

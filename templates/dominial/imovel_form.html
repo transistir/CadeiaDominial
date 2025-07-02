@@ -5,89 +5,80 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/imovel_form.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/modal.css' %}">
 {% endblock %}
 
 {% block content %}
 <div class="form-container">
     <div class="form-header">
-        <h1>🏠 Cadastro de Imóvel</h1>
-        <div class="tis-info">{{ tis.nome }}</div>
+        <h1>
+            <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Cadastro de Imóvel
+        </h1>
+        <div class="tis-info">
+            <svg class="info-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 16V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ tis.nome }}
+        </div>
     </div>
 
     <form method="post" id="imovel-form">
         {% csrf_token %}
         
         <div class="form-section">
-            <h3>👤 Informações do Proprietário</h3>
+            <h3>
+                <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Informações do Proprietário
+            </h3>
             
             <div class="form-group">
-                <label for="{{ form.proprietario.id_for_label }}">Proprietário:</label>
-                {{ form.proprietario }}
-            </div>
-
-            <div id="campos_novo_proprietario" class="campos-condicionais">
-                <h4>Novo Proprietário</h4>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label for="cpf">CPF:</label>
-                        <input type="text" id="cpf" name="cpf" class="form-control" placeholder="000.000.000-00">
-                    </div>
-                    <div class="form-group">
-                        <label for="rg">RG:</label>
-                        <input type="text" id="rg" name="rg" class="form-control" placeholder="00.000.000-0">
-                    </div>
-                </div>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label for="data_nascimento">Data de Nascimento:</label>
-                        <input type="date" id="data_nascimento" name="data_nascimento" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="telefone">Telefone:</label>
-                        <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(00) 00000-0000">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="email">E-mail:</label>
-                    <input type="email" id="email" name="email" class="form-control" placeholder="email@exemplo.com">
-                </div>
+                <label for="nome_proprietario">Nome do Proprietário:</label>
+                <input type="text" id="nome_proprietario" name="proprietario_nome" class="form-control" required placeholder="Nome completo do proprietário">
             </div>
         </div>
 
         <div class="form-section">
-            <h3>🏠 Informações do Imóvel</h3>
+            <h3>
+                <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Informações do Imóvel
+            </h3>
             
             <div class="form-group">
                 <label for="{{ form.nome.id_for_label }}">Nome do Imóvel:</label>
                 {{ form.nome }}
             </div>
 
-            <div class="grid-2">
-                <div class="form-group">
-                    <label for="{{ form.matricula.id_for_label }}">Matrícula:</label>
-                    {{ form.matricula }}
-                </div>
-                <div class="form-group">
-                    <label for="{{ form.sncr.id_for_label }}">SNCR:</label>
-                    {{ form.sncr }}
-                </div>
-            </div>
-
             <div class="form-group">
-                <label for="{{ form.sigef.id_for_label }}">SIGEF:</label>
-                {{ form.sigef }}
-            </div>
-
-            <div class="form-group">
-                <label for="{{ form.descricao.id_for_label }}">Descrição:</label>
-                {{ form.descricao }}
+                <label for="{{ form.matricula.id_for_label }}">Número da Matrícula:</label>
+                {{ form.matricula }}
             </div>
 
             {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o imóvel" rows=3 %}
+            
+            <!-- Campos hidden necessários para o Django -->
+            <input type="hidden" name="estado" id="id_estado" value="">
         </div>
 
         <div class="form-section">
-            <h3>📍 Localização e Cartório</h3>
+            <h3>
+                <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 10C21 17 12 23 12 23S3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Localização e Cartório
+            </h3>
             
             <div class="grid-2">
                 <div class="form-group">
@@ -125,7 +116,7 @@
                 </div>
                 <div class="form-group">
                     <label for="cidade_select">Cidade:</label>
-                    <select class="form-control" id="cidade_select" disabled>
+                    <select class="form-control" id="cidade_select" disabled required>
                         <option value="">Selecione uma cidade</option>
                     </select>
                     {{ form.cidade }}
@@ -134,11 +125,22 @@
 
             <div class="form-group">
                 <label for="cartorio">Cartório:</label>
-                <select class="form-control" id="cartorio" name="cartorio" disabled>
+                <select class="form-control" id="cartorio" name="cartorio" disabled required>
                     <option value="">Selecione um cartório</option>
-                    <option value="novo">➕ Adicionar novo cartório</option>
+                    <option value="novo">
+                        <svg class="add-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Adicionar novo cartório
+                    </option>
                 </select>
                 <input type="hidden" name="cartorio_id" id="cartorio_id">
+            </div>
+
+            <div id="cartorio-info" class="form-info">
+                <h5>Informações do Cartório</h5>
+                <div id="cartorio-detalhes"></div>
             </div>
 
             <!-- Modal para adicionar novo cartório -->
@@ -146,7 +148,7 @@
                 <div class="modal-content">
                     <div class="modal-header">
                         <h3>Adicionar Novo Cartório</h3>
-                        <span class="close" onclick="fecharModalCartorio()">&times;</span>
+                        <span class="close">&times;</span>
                     </div>
                     <div class="modal-body">
                         <form id="form-novo-cartorio">
@@ -162,68 +164,68 @@
                                 <label for="novo-cartorio-endereco">Endereço:</label>
                                 <input type="text" id="novo-cartorio-endereco" name="endereco" class="form-control">
                             </div>
-                            <div class="grid-2">
-                                <div class="form-group">
-                                    <label for="novo-cartorio-telefone">Telefone:</label>
-                                    <input type="text" id="novo-cartorio-telefone" name="telefone" class="form-control">
-                                </div>
-                                <div class="form-group">
-                                    <label for="novo-cartorio-email">E-mail:</label>
-                                    <input type="email" id="novo-cartorio-email" name="email" class="form-control">
-                                </div>
+                            <div class="form-group">
+                                <label for="novo-cartorio-telefone">Telefone:</label>
+                                <input type="text" id="novo-cartorio-telefone" name="telefone" class="form-control">
                             </div>
-                            <div class="grid-2">
-                                <div class="form-group">
-                                    <label for="novo-cartorio-estado">Estado:</label>
-                                    <select id="novo-cartorio-estado" name="estado" class="form-control" required>
-                                        <option value="">Selecione um estado</option>
-                                        <option value="AC">Acre</option>
-                                        <option value="AL">Alagoas</option>
-                                        <option value="AM">Amazonas</option>
-                                        <option value="AP">Amapá</option>
-                                        <option value="BA">Bahia</option>
-                                        <option value="CE">Ceará</option>
-                                        <option value="DF">Distrito Federal</option>
-                                        <option value="ES">Espírito Santo</option>
-                                        <option value="GO">Goiás</option>
-                                        <option value="MA">Maranhão</option>
-                                        <option value="MG">Minas Gerais</option>
-                                        <option value="MS">Mato Grosso do Sul</option>
-                                        <option value="MT">Mato Grosso</option>
-                                        <option value="PA">Pará</option>
-                                        <option value="PB">Paraíba</option>
-                                        <option value="PE">Pernambuco</option>
-                                        <option value="PI">Piauí</option>
-                                        <option value="PR">Paraná</option>
-                                        <option value="RJ">Rio de Janeiro</option>
-                                        <option value="RN">Rio Grande do Norte</option>
-                                        <option value="RO">Rondônia</option>
-                                        <option value="RR">Roraima</option>
-                                        <option value="RS">Rio Grande do Sul</option>
-                                        <option value="SC">Santa Catarina</option>
-                                        <option value="SE">Sergipe</option>
-                                        <option value="SP">São Paulo</option>
-                                        <option value="TO">Tocantins</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="novo-cartorio-cidade">Cidade:</label>
-                                    <input type="text" id="novo-cartorio-cidade" name="cidade" class="form-control" required>
-                                </div>
+                            <div class="form-group">
+                                <label for="novo-cartorio-email">E-mail:</label>
+                                <input type="email" id="novo-cartorio-email" name="email" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="novo-cartorio-estado">Estado:</label>
+                                <select id="novo-cartorio-estado" name="estado" class="form-control" required>
+                                    <option value="">Selecione um estado</option>
+                                    <option value="AC">Acre</option>
+                                    <option value="AL">Alagoas</option>
+                                    <option value="AM">Amazonas</option>
+                                    <option value="AP">Amapá</option>
+                                    <option value="BA">Bahia</option>
+                                    <option value="CE">Ceará</option>
+                                    <option value="DF">Distrito Federal</option>
+                                    <option value="ES">Espírito Santo</option>
+                                    <option value="GO">Goiás</option>
+                                    <option value="MA">Maranhão</option>
+                                    <option value="MG">Minas Gerais</option>
+                                    <option value="MS">Mato Grosso do Sul</option>
+                                    <option value="MT">Mato Grosso</option>
+                                    <option value="PA">Pará</option>
+                                    <option value="PB">Paraíba</option>
+                                    <option value="PE">Pernambuco</option>
+                                    <option value="PI">Piauí</option>
+                                    <option value="PR">Paraná</option>
+                                    <option value="RJ">Rio de Janeiro</option>
+                                    <option value="RN">Rio Grande do Norte</option>
+                                    <option value="RO">Rondônia</option>
+                                    <option value="RR">Roraima</option>
+                                    <option value="RS">Rio Grande do Sul</option>
+                                    <option value="SC">Santa Catarina</option>
+                                    <option value="SE">Sergipe</option>
+                                    <option value="SP">São Paulo</option>
+                                    <option value="TO">Tocantins</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="novo-cartorio-cidade">Cidade:</label>
+                                <input type="text" id="novo-cartorio-cidade" name="cidade" class="form-control" required>
                             </div>
                             <div class="modal-buttons">
-                                <button type="button" onclick="fecharModalCartorio()" class="btn btn-secondary">Cancelar</button>
+                                <button type="button" class="btn btn-secondary">Cancelar</button>
                                 <button type="submit" class="btn btn-primary">Salvar Cartório</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div id="cartorio-info" class="form-info">
-                <h5>Informações do Cartório</h5>
-                <div id="cartorio-detalhes"></div>
-            </div>
+        <div id="cartorio-info" class="form-info cartorio-details">
+            <h5>Informações do Cartório</h5>
+            <p><strong>Responsável:</strong> <span id="cartorio-responsavel">-</span></p>
+            <p><strong>Endereço:</strong> <span id="cartorio-endereco">-</span></p>
+            <p><strong>Telefone:</strong> <span id="cartorio-telefone">-</span></p>
+            <p><strong>E-mail:</strong> <span id="cartorio-email">-</span></p>
+            <p><strong>CNS:</strong> <span id="cartorio-cns">-</span></p>
         </div>
 
         <div class="button-group">
@@ -232,355 +234,10 @@
         </div>
     </form>
 </div>
-
-<!-- Banner de importação -->
-<div id="import-banner" class="import-banner">
-    <div class="banner-content">
-        <div class="banner-text">
-            <strong>📋 Importação Disponível!</strong> Encontramos dados do SIGEF para este imóvel. Deseja importar automaticamente?
-        </div>
-        <button class="banner-button" onclick="importarDadosSIGEF()">Importar Dados</button>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'dominial/js/cartorio_verificacao.js' %}"></script>
-<script>
-// JavaScript para o formulário de imóvel
-document.addEventListener('DOMContentLoaded', function() {
-    // Controle de campos condicionais
-    const proprietarioSelect = document.getElementById('id_proprietario');
-    const camposNovoProprietario = document.getElementById('campos_novo_proprietario');
-    
-    if (proprietarioSelect && camposNovoProprietario) {
-        proprietarioSelect.addEventListener('change', function() {
-            if (this.value === 'novo') {
-                camposNovoProprietario.classList.add('show');
-            } else {
-                camposNovoProprietario.classList.remove('show');
-            }
-        });
-    }
-    
-    // Controle do modal de cartório
-    const cartorioSelect = document.getElementById('cartorio');
-    const modalCartorio = document.getElementById('modal-novo-cartorio');
-    
-    if (cartorioSelect && modalCartorio) {
-        cartorioSelect.addEventListener('change', function() {
-            if (this.value === 'novo') {
-                modalCartorio.classList.add('show');
-            }
-        });
-    }
-    
-    // Controle de estado/cidade
-    const estadoSelect = document.getElementById('estado');
-    const cidadeSelect = document.getElementById('cidade_select');
-    
-    if (estadoSelect && cidadeSelect) {
-        estadoSelect.addEventListener('change', function() {
-            const estado = this.value;
-            if (estado) {
-                // Usar o serviço modularizado para verificar cartórios
-                verificarCartoriosEstado(estado);
-            } else {
-                cidadeSelect.disabled = true;
-                cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
-                // Limpar cartórios também
-                const cartorioSelect = document.getElementById('cartorio');
-                if (cartorioSelect) {
-                    cartorioSelect.disabled = true;
-                    cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option><option value="novo">➕ Adicionar novo cartório</option>';
-                }
-            }
-        });
-    }
-    
-    // Controle de cidade/cartório
-    if (cidadeSelect) {
-        cidadeSelect.addEventListener('change', function() {
-            const estado = document.getElementById('estado').value;
-            const cidade = this.value;
-            
-            console.log('Cidade selecionada:', cidade);
-            
-            if (estado && cidade) {
-                carregarCartorios(estado, cidade);
-            } else {
-                const cartorioSelect = document.getElementById('cartorio');
-                if (cartorioSelect) {
-                    cartorioSelect.disabled = true;
-                    cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option><option value="novo">➕ Adicionar novo cartório</option>';
-                }
-            }
-        });
-    }
-    
-    // Controle de seleção de cartório
-    if (cartorioSelect) {
-        cartorioSelect.addEventListener('change', function() {
-            if (this.value && this.value !== 'novo') {
-                mostrarDetalhesCartorio(this.value);
-            } else {
-                document.getElementById('cartorio-detalhes').innerHTML = '';
-            }
-        });
-    }
-    
-    // Formulário de novo cartório
-    const formNovoCartorio = document.getElementById('form-novo-cartorio');
-    if (formNovoCartorio) {
-        formNovoCartorio.addEventListener('submit', function(e) {
-            e.preventDefault();
-            criarNovoCartorio();
-        });
-    }
-    
-    // Listener para evento de cartórios importados
-    document.addEventListener('cartoriosImportados', function(event) {
-        const estado = event.detail.estado;
-        if (typeof carregarCidades === 'function') {
-            carregarCidades(estado);
-        }
-    });
-});
-
-// Função para fechar modal
-function fecharModalCartorio() {
-    const modal = document.getElementById('modal-novo-cartorio');
-    const select = document.getElementById('cartorio');
-    
-    if (modal) {
-        modal.classList.remove('show');
-    }
-    if (select) {
-        select.value = '';
-    }
-}
-
-// Função para carregar cidades via API
-function carregarCidades(estado) {
-    return new Promise((resolve, reject) => {
-        const cidadeSelect = document.getElementById('cidade_select');
-        
-        // Mostrar loading
-        cidadeSelect.innerHTML = '<option value="">Carregando cidades...</option>';
-        cidadeSelect.disabled = true;
-        
-        // Obter token CSRF
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
-        if (!csrfToken) {
-            console.error('Token CSRF não encontrado');
-            cidadeSelect.innerHTML = '<option value="">Erro: Token CSRF não encontrado</option>';
-            cidadeSelect.disabled = false;
-            reject(new Error('Token CSRF não encontrado'));
-            return;
-        }
-        
-        console.log('Fazendo requisição para buscar cidades do estado:', estado);
-        
-        // Fazer requisição para a API
-        fetch('/dominial/buscar-cidades/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': csrfToken.value,
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: `estado=${encodeURIComponent(estado)}`,
-            credentials: 'same-origin'
-        })
-        .then(response => {
-            console.log('Status da resposta:', response.status);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('Dados recebidos:', data);
-            cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
-            
-            if (data && data.length > 0) {
-                data.forEach(cidade => {
-                    const option = document.createElement('option');
-                    option.value = cidade.value;
-                    option.textContent = cidade.label;
-                    cidadeSelect.appendChild(option);
-                });
-            } else {
-                cidadeSelect.innerHTML = '<option value="">Nenhuma cidade encontrada</option>';
-            }
-            
-            cidadeSelect.disabled = false;
-            resolve(data);
-        })
-        .catch(error => {
-            console.error('Erro ao carregar cidades:', error);
-            cidadeSelect.innerHTML = '<option value="">Erro ao carregar cidades: ' + error.message + '</option>';
-            cidadeSelect.disabled = false;
-            reject(error);
-        });
-    });
-}
-
-// Função para carregar cartórios via API
-function carregarCartorios(estado, cidade) {
-    const cartorioSelect = document.getElementById('cartorio');
-    
-    // Mostrar loading
-    cartorioSelect.innerHTML = '<option value="">Carregando cartórios...</option>';
-    cartorioSelect.disabled = true;
-    
-    // Obter token CSRF
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
-    if (!csrfToken) {
-        console.error('Token CSRF não encontrado');
-        cartorioSelect.innerHTML = '<option value="">Erro: Token CSRF não encontrado</option>';
-        cartorioSelect.disabled = false;
-        return;
-    }
-    
-    console.log('Fazendo requisição para buscar cartórios:', estado, cidade);
-    
-    // Fazer requisição para a API
-    fetch('/dominial/buscar-cartorios/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': csrfToken.value,
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: `estado=${encodeURIComponent(estado)}&cidade=${encodeURIComponent(cidade)}`,
-        credentials: 'same-origin'
-    })
-    .then(response => {
-        console.log('Status da resposta:', response.status);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log('Dados recebidos:', data);
-        cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option>';
-        cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
-        cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
-        
-        if (data && data.length > 0) {
-            data.forEach(cartorio => {
-                const option = document.createElement('option');
-                option.value = cartorio.id;
-                option.textContent = cartorio.nome;
-                option.setAttribute('data-cartorio', JSON.stringify(cartorio));
-                cartorioSelect.appendChild(option);
-            });
-        } else {
-            cartorioSelect.innerHTML = '<option value="">Nenhum cartório encontrado</option>';
-            cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
-            cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
-        }
-        
-        cartorioSelect.disabled = false;
-    })
-    .catch(error => {
-        console.error('Erro ao carregar cartórios:', error);
-        cartorioSelect.innerHTML = '<option value="">Erro ao carregar cartórios: ' + error.message + '</option>';
-        cartorioSelect.disabled = false;
-    });
-}
-
-// Função para mostrar detalhes do cartório
-function mostrarDetalhesCartorio(cartorioId) {
-    const cartorioSelect = document.getElementById('cartorio');
-    const cartorioOption = cartorioSelect.querySelector(`option[value="${cartorioId}"]`);
-    const detalhesDiv = document.getElementById('cartorio-detalhes');
-    
-    if (cartorioOption && cartorioOption.hasAttribute('data-cartorio')) {
-        const cartorio = JSON.parse(cartorioOption.getAttribute('data-cartorio'));
-        
-        detalhesDiv.innerHTML = `
-            <div class="cartorio-info">
-                <p><strong>Nome:</strong> ${cartorio.nome}</p>
-                <p><strong>CNS:</strong> ${cartorio.cns || 'Não informado'}</p>
-                <p><strong>Endereço:</strong> ${cartorio.endereco || 'Não informado'}</p>
-                <p><strong>Telefone:</strong> ${cartorio.telefone || 'Não informado'}</p>
-                <p><strong>E-mail:</strong> ${cartorio.email || 'Não informado'}</p>
-            </div>
-        `;
-        
-        // Definir o ID do cartório no campo hidden
-        document.getElementById('cartorio_id').value = cartorioId;
-    }
-}
-
-// Função para criar novo cartório
-function criarNovoCartorio() {
-    const formData = new FormData(document.getElementById('form-novo-cartorio'));
-    const data = {
-        nome: formData.get('nome'),
-        cns: formData.get('cns'),
-        endereco: formData.get('endereco'),
-        telefone: formData.get('telefone'),
-        email: formData.get('email'),
-        estado: formData.get('estado'),
-        cidade: formData.get('cidade')
-    };
-    
-    fetch('/dominial/criar-cartorio/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(result => {
-        if (result.success) {
-            // Adicionar o novo cartório à lista
-            const cartorioSelect = document.getElementById('cartorio');
-            const option = document.createElement('option');
-            option.value = result.cartorio.id;
-            option.textContent = result.cartorio.nome;
-            option.setAttribute('data-cartorio', JSON.stringify(result.cartorio));
-            
-            // Inserir antes da opção "Adicionar novo cartório"
-            const novoOption = cartorioSelect.querySelector('option[value="novo"]');
-            cartorioSelect.insertBefore(option, novoOption);
-            
-            // Selecionar o novo cartório
-            cartorioSelect.value = result.cartorio.id;
-            
-            // Mostrar detalhes
-            mostrarDetalhesCartorio(result.cartorio.id);
-            
-            // Fechar modal
-            fecharModalCartorio();
-            
-            // Limpar formulário
-            document.getElementById('form-novo-cartorio').reset();
-            
-            alert('Cartório criado com sucesso!');
-        } else {
-            alert('Erro ao criar cartório: ' + result.error);
-        }
-    })
-    .catch(error => {
-        console.error('Erro ao criar cartório:', error);
-        alert('Erro ao criar cartório. Tente novamente.');
-    });
-}
-
-// Função para importar dados SIGEF
-function importarDadosSIGEF() {
-    const banner = document.getElementById('import-banner');
-    banner.classList.add('show');
-    
-    // Implementar lógica de importação
-    console.log('Importando dados SIGEF...');
-}
-</script>
-{% endblock %} 
+<script src="{% static 'dominial/js/cartorio_modal.js' %}"></script>
+<script src="{% static 'dominial/js/imovel_form.js' %}"></script>
+{% endblock %}

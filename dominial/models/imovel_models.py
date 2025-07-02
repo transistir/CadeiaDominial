@@ -7,9 +7,6 @@ class Imovel(models.Model):
     nome = models.CharField(max_length=100) # Obrigatório?
     proprietario = models.ForeignKey('Pessoas', on_delete=models.PROTECT) # Verificar 'on_delete'
     matricula = models.CharField(max_length=50, unique=True) # Verificar formato (Código Nacional de Matrícula - CNM ?? )
-    sncr = models.CharField(max_length=50, unique=True) # Obrigatório, Sistema Nacional de Cadastro Rural (SNCR)
-    sigef = models.CharField(max_length=50, null=True, blank=True) # Opcional, para SIGEF (Sistema de Gestão Fundiária)
-    descricao = models.TextField(null=True, blank=True) # Opcional, para descrição do imóvel
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
     cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT, null=True, blank=True) # Cartório onde o imóvel está registrado
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel

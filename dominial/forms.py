@@ -134,13 +134,10 @@ class ImovelForm(forms.ModelForm):
 
     class Meta:
         model = Imovel
-        fields = ['nome', 'matricula', 'sncr', 'sigef', 'descricao', 'observacoes', 'estado', 'cidade', 'cartorio']
+        fields = ['nome', 'matricula', 'observacoes', 'estado', 'cidade', 'cartorio']
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'matricula': forms.TextInput(attrs={'class': 'form-control'}),
-            'sncr': forms.TextInput(attrs={'class': 'form-control'}),
-            'sigef': forms.TextInput(attrs={'class': 'form-control'}),
-            'descricao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         } 
     def clean(self):
