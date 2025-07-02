@@ -318,7 +318,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Controle de seleção de cartório
     if (cartorioSelect) {
         cartorioSelect.addEventListener('change', function() {
-            if (this.value && this.value !== 'novo') {
+            if (this.value === 'importar') {
+                importarCartoriosAutomaticamente();
+            } else if (this.value && this.value !== 'novo') {
                 mostrarDetalhesCartorio(this.value);
             } else {
                 document.getElementById('cartorio-detalhes').innerHTML = '';
@@ -357,20 +359,40 @@ function carregarCidades(estado) {
     cidadeSelect.innerHTML = '<option value="">Carregando cidades...</option>';
     cidadeSelect.disabled = true;
     
+    // Obter token CSRF
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (!csrfToken) {
+        console.error('Token CSRF não encontrado');
+        cidadeSelect.innerHTML = '<option value="">Erro: Token CSRF não encontrado</option>';
+        cidadeSelect.disabled = false;
+        return;
+    }
+    
+    console.log('Fazendo requisição para buscar cidades do estado:', estado);
+    
     // Fazer requisição para a API
     fetch('/dominial/buscar-cidades/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            'X-CSRFToken': csrfToken.value,
+            'X-Requested-With': 'XMLHttpRequest'
         },
-        body: `estado=${encodeURIComponent(estado)}`
+        body: `estado=${encodeURIComponent(estado)}`,
+        credentials: 'same-origin'
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Status da resposta:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
     .then(data => {
+        console.log('Dados recebidos:', data);
         cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
         
-        if (data.length > 0) {
+        if (data && data.length > 0) {
             data.forEach(cidade => {
                 const option = document.createElement('option');
                 option.value = cidade.value;
@@ -385,7 +407,7 @@ function carregarCidades(estado) {
     })
     .catch(error => {
         console.error('Erro ao carregar cidades:', error);
-        cidadeSelect.innerHTML = '<option value="">Erro ao carregar cidades</option>';
+        cidadeSelect.innerHTML = '<option value="">Erro ao carregar cidades: ' + error.message + '</option>';
         cidadeSelect.disabled = false;
     });
 }
@@ -398,22 +420,42 @@ function carregarCartorios(estado, cidade) {
     cartorioSelect.innerHTML = '<option value="">Carregando cartórios...</option>';
     cartorioSelect.disabled = true;
     
+    // Obter token CSRF
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (!csrfToken) {
+        console.error('Token CSRF não encontrado');
+        cartorioSelect.innerHTML = '<option value="">Erro: Token CSRF não encontrado</option>';
+        cartorioSelect.disabled = false;
+        return;
+    }
+    
+    console.log('Fazendo requisição para buscar cartórios:', estado, cidade);
+    
     // Fazer requisição para a API
     fetch('/dominial/buscar-cartorios/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            'X-CSRFToken': csrfToken.value,
+            'X-Requested-With': 'XMLHttpRequest'
         },
-        body: `estado=${encodeURIComponent(estado)}&cidade=${encodeURIComponent(cidade)}`
+        body: `estado=${encodeURIComponent(estado)}&cidade=${encodeURIComponent(cidade)}`,
+        credentials: 'same-origin'
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Status da resposta:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
     .then(data => {
+        console.log('Dados recebidos:', data);
         cartorioSelect.innerHTML = '<option value="">Selecione um cartório</option>';
         cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
         cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
         
-        if (data.length > 0) {
+        if (data && data.length > 0) {
             data.forEach(cartorio => {
                 const option = document.createElement('option');
                 option.value = cartorio.id;
@@ -423,6 +465,8 @@ function carregarCartorios(estado, cidade) {
             });
         } else {
             cartorioSelect.innerHTML = '<option value="">Nenhum cartório encontrado</option>';
+            cartorioSelect.appendChild(document.createElement('option')).value = 'importar';
+            cartorioSelect.lastElementChild.textContent = '📥 Importar cartórios automaticamente';
             cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
             cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
         }
@@ -431,7 +475,7 @@ function carregarCartorios(estado, cidade) {
     })
     .catch(error => {
         console.error('Erro ao carregar cartórios:', error);
-        cartorioSelect.innerHTML = '<option value="">Erro ao carregar cartórios</option>';
+        cartorioSelect.innerHTML = '<option value="">Erro ao carregar cartórios: ' + error.message + '</option>';
         cartorioSelect.disabled = false;
     });
 }
@@ -515,6 +559,86 @@ function criarNovoCartorio() {
     .catch(error => {
         console.error('Erro ao criar cartório:', error);
         alert('Erro ao criar cartório. Tente novamente.');
+    });
+}
+
+// Função para importar cartórios automaticamente
+function importarCartoriosAutomaticamente() {
+    const estado = document.getElementById('estado').value;
+    const cidade = document.getElementById('cidade_select').value;
+    const cartorioSelect = document.getElementById('cartorio');
+    
+    if (!estado) {
+        alert('Selecione um estado primeiro.');
+        cartorioSelect.value = '';
+        return;
+    }
+    
+    if (!confirm(`Deseja importar automaticamente os cartórios do estado ${estado}? Isso pode levar alguns minutos.`)) {
+        cartorioSelect.value = '';
+        return;
+    }
+    
+    // Mostrar loading
+    cartorioSelect.innerHTML = '<option value="">Importando cartórios...</option>';
+    cartorioSelect.disabled = true;
+    
+    // Obter token CSRF
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (!csrfToken) {
+        alert('Erro: Token CSRF não encontrado');
+        cartorioSelect.value = '';
+        return;
+    }
+    
+    console.log('Iniciando importação automática de cartórios para:', estado);
+    
+    // Fazer requisição para importar cartórios
+    fetch('/dominial/importar-cartorios/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken.value,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: `estado=${encodeURIComponent(estado)}`,
+        credentials: 'same-origin'
+    })
+    .then(response => {
+        console.log('Status da resposta:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Resposta da importação:', data);
+        
+        if (data.success) {
+            alert(`Importação concluída! ${data.total_cartorios} cartórios importados.`);
+            // Recarregar cartórios para a cidade selecionada
+            if (cidade) {
+                carregarCartorios(estado, cidade);
+            }
+        } else {
+            alert('Erro na importação: ' + (data.error || 'Erro desconhecido'));
+            cartorioSelect.innerHTML = '<option value="">Erro na importação</option>';
+            cartorioSelect.appendChild(document.createElement('option')).value = 'importar';
+            cartorioSelect.lastElementChild.textContent = '📥 Importar cartórios automaticamente';
+            cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
+            cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
+            cartorioSelect.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Erro na importação:', error);
+        alert('Erro na importação: ' + error.message);
+        cartorioSelect.innerHTML = '<option value="">Erro na importação</option>';
+        cartorioSelect.appendChild(document.createElement('option')).value = 'importar';
+        cartorioSelect.lastElementChild.textContent = '📥 Importar cartórios automaticamente';
+        cartorioSelect.appendChild(document.createElement('option')).value = 'novo';
+        cartorioSelect.lastElementChild.textContent = '➕ Adicionar novo cartório';
+        cartorioSelect.disabled = false;
     });
 }
 
