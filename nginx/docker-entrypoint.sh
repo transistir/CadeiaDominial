@@ -42,9 +42,13 @@ configure_nginx() {
         sed -i 's/# ssl_certificate_key/ssl_certificate_key/g' /etc/nginx/conf.d/default.conf
         sed -i 's/# listen 443/listen 443/g' /etc/nginx/conf.d/default.conf
         
-        # Adicionar redirecionamento HTTP para HTTPS
+        # Descomentar todo o bloco HTTPS
+        sed -i 's/^# server {/server {/g' /etc/nginx/conf.d/default.conf
+        sed -i 's/^# }/}/g' /etc/nginx/conf.d/default.conf
+        
+        # Adicionar redirecionamento HTTP para HTTPS no bloco HTTP
         if ! grep -q "return 301 https://" /etc/nginx/conf.d/default.conf; then
-            sed -i '/server {/a\    # Redirecionar HTTP para HTTPS\n    return 301 https://$server_name$request_uri;' /etc/nginx/conf.d/default.conf
+            sed -i '/server_name cadeiadominial.com.br;/a\    # Redirecionar HTTP para HTTPS\n    return 301 https://$server_name$request_uri;' /etc/nginx/conf.d/default.conf
         fi
         
         log_info "SSL ativado para $domain"
