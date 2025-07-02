@@ -17,6 +17,11 @@ services:
     networks:
       - cadeia_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cadeia_user} -d ${DB_NAME:-cadeia_dominial}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Aplicação Django
   web:
@@ -39,15 +44,19 @@ services:
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - cadeia_network
     restart: unless-stopped
-    command: >
-      sh -c "python manage.py migrate &&
-             gunicorn --bind 0.0.0.0:8000 --workers 3 cadeia_dominial.wsgi:application"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Nginx com SSL
+  # Nginx (inicia sem SSL)
   nginx:
     image: nginx:alpine
     container_name: cadeia_dominial_nginx
@@ -62,7 +71,8 @@ services:
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
     depends_on:
-      - web
+      web:
+        condition: service_healthy
     networks:
       - cadeia_network
     restart: unless-stopped
@@ -74,9 +84,21 @@ services:
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
-    command: certonly --webroot --webroot-path=/var/www/certbot --email ${CERTBOT_EMAIL} --agree-tos --no-eff-email -d ${DOMAIN_NAME}
+    depends_on:
+      nginx:
+        condition: service_started
+    command: >
+      certonly 
+      --webroot 
+      --webroot-path=/var/www/certbot 
+      --email ${CERTBOT_EMAIL:-hiure@riseup.net} 
+      --agree-tos 
+      --no-eff-email 
+      --domains ${DOMAIN_NAME:-cadeiadominial.com.br}
+      --non-interactive
     networks:
       - cadeia_network
+    restart: "no"
 
 volumes:
   postgres_data:
