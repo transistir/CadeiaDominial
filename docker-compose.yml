@@ -32,6 +32,9 @@ services:
       - DB_PORT=5432
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - DJANGO_SETTINGS_MODULE=cadeia_dominial.settings_prod
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@cadeiadominial.com.br}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     volumes:
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media

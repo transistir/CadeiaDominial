@@ -44,5 +44,9 @@ USER appuser
 # Expor porta
 EXPOSE 8000
 
+# Copiar script de inicialização
+COPY scripts/init.sh /app/init.sh
+RUN chmod +x /app/init.sh
+
 # Comando de inicialização
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "cadeia_dominial.wsgi:application"] 
+CMD ["/app/init.sh"] 
