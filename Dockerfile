@@ -28,6 +28,11 @@ COPY . .
 # Criar usuário não-root para segurança
 RUN adduser --disabled-password --gecos '' appuser \
     && chown -R appuser:appuser /app
+
+# Criar diretório de logs
+RUN mkdir -p /var/log/cadeia_dominial \
+    && chown -R appuser:appuser /var/log/cadeia_dominial
+
 USER appuser
 
 # Coletar arquivos estáticos
