@@ -13,7 +13,7 @@ services:
       - postgres_data_dev:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     ports:
-      - "5432:5432"
+      - "5433:5432"
     networks:
       - cadeia_network_dev
     restart: unless-stopped
@@ -31,7 +31,7 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
-      - DJANGO_SETTINGS_MODULE=cadeia_dominial.settings
+      - DJANGO_SETTINGS_MODULE=cadeia_dominial.settings_dev
     volumes:
       - .:/app
       - ./staticfiles:/app/staticfiles

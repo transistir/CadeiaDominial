@@ -7,17 +7,37 @@ from django.core.management import call_command
 from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..services.lancamento_consulta_service import LancamentoConsultaService
+from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 import json
 
 @require_http_methods(["POST"])
 @login_required
 def buscar_cidades(request):
     estado = request.POST.get('estado', '')
-    if not estado:
-        return JsonResponse({'error': 'Estado não fornecido'}, status=400)
     
-    cidades = Cartorios.objects.filter(estado=estado).values_list('cidade', flat=True).distinct().order_by('cidade')
-    cidades_list = [{'value': cidade, 'label': cidade} for cidade in cidades]
+    if not estado:
+        return JsonResponse({'error': 'Estado deve ser fornecido'}, status=400)
+    
+    # Buscar cidades únicas que têm cartórios de imóveis
+    cidades = Cartorios.objects.filter(
+        estado=estado
+    ).filter(
+        Q(nome__icontains='imovel') | 
+        Q(nome__icontains='imoveis') | 
+        Q(nome__icontains='imóveis') |
+        Q(nome__icontains='imobiliario') |
+        Q(nome__icontains='imobiliária') |
+        Q(nome__icontains='Registro de Imóveis')
+    ).values_list('cidade', flat=True).distinct().order_by('cidade')
+    
+    cidades_list = []
+    
+    for cidade in cidades:
+        if cidade:  # Filtrar valores vazios
+            cidades_list.append({
+                'value': cidade,
+                'label': cidade
+            })
     
     return JsonResponse(cidades_list, safe=False)
 
@@ -63,13 +83,13 @@ def verificar_cartorios_estado(request):
     if not estado:
         return JsonResponse({'error': 'Estado não informado'}, status=400)
     
-    # Verifica se existem cartórios para o estado
-    cartorios_count = Cartorios.objects.filter(estado=estado).count()
+    # Usar o serviço para verificar cartórios
+    resultado = CartorioVerificacaoService.verificar_cartorios_estado(estado)
     
-    return JsonResponse({
-        'existem_cartorios': cartorios_count > 0,
-        'total_cartorios': cartorios_count
-    })
+    if 'erro' in resultado:
+        return JsonResponse(resultado, status=500)
+    
+    return JsonResponse(resultado)
 
 @require_POST
 def importar_cartorios_estado(request):
@@ -77,22 +97,13 @@ def importar_cartorios_estado(request):
     if not estado:
         return JsonResponse({'error': 'Estado não informado'}, status=400)
     
-    try:
-        # Executa o comando de importação
-        call_command('importar_cartorios_estado', estado)
-        
-        # Conta quantos cartórios foram importados
-        cartorios_count = Cartorios.objects.filter(estado=estado).count()
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Cartórios do estado {estado} importados com sucesso!',
-            'total_cartorios': cartorios_count
-        })
-    except Exception as e:
-        return JsonResponse({
-            'error': f'Erro ao importar cartórios: {str(e)}'
-        }, status=500)
+    # Usar o serviço para importar cartórios
+    resultado = CartorioVerificacaoService.importar_cartorios_estado(estado)
+    
+    if not resultado['success']:
+        return JsonResponse(resultado, status=500)
+    
+    return JsonResponse(resultado)
 
 @require_POST
 def criar_cartorio(request):

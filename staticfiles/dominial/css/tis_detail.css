@@ -1,0 +1,313 @@
+/* ========================================
+   SISTEMA DE CADEIA DOMINIAL - CSS DETALHES DA TI
+   ======================================== */
+
+/* ========================================
+   CONTAINER PRINCIPAL
+   ======================================== */
+.tis-detail-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 30px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e8ed;
+}
+
+/* ========================================
+   CABEÇALHO DA TI
+   ======================================== */
+.tis-header {
+    text-align: center;
+    margin-bottom: 40px;
+    padding-bottom: 30px;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.tis-header h1 {
+    color: #2c3e50;
+    margin: 0 0 15px 0;
+    font-size: 32px;
+    font-weight: 600;
+}
+
+/* ========================================
+   GRID DE INFORMAÇÕES
+   ======================================== */
+.tis-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 25px;
+}
+
+.tis-info-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    border-left: 4px solid #3498db;
+}
+
+.tis-info-card strong {
+    display: block;
+    color: #34495e;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tis-info-card span {
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* ========================================
+   TÍTULOS DE SEÇÃO
+   ======================================== */
+.section-title {
+    color: #2c3e50;
+    font-size: 24px;
+    font-weight: 600;
+    margin: 40px 0 25px 0;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #ecf0f1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-title::before {
+    content: "🏠";
+    font-size: 28px;
+}
+
+/* ========================================
+   GRID DE IMÓVEIS
+   ======================================== */
+.imoveis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+/* ========================================
+   CARDS DE IMÓVEIS
+   ======================================== */
+.imovel-card {
+    background: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 12px;
+    padding: 25px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.imovel-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    border-color: #3498db;
+}
+
+.imovel-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3498db, #2980b9);
+}
+
+/* ========================================
+   CABEÇALHO DO IMÓVEL
+   ======================================== */
+.imovel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+    padding-right: 80px;
+}
+
+.imovel-title {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+    flex: 1;
+}
+
+/* ========================================
+   AÇÕES DO IMÓVEL
+   ======================================== */
+.imovel-actions {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.imovel-card:hover .imovel-actions {
+    opacity: 1;
+}
+
+.action-button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    color: white;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.edit-button {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+}
+
+.edit-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.delete-button {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.delete-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* ========================================
+   INFORMAÇÕES DO IMÓVEL
+   ======================================== */
+.imovel-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.imovel-info-item {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    color: #7f8c8d;
+}
+
+.imovel-info-label {
+    font-weight: 600;
+    color: #34495e;
+    min-width: 80px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.imovel-info-value {
+    color: #2c3e50;
+    margin-left: 10px;
+    font-weight: 500;
+}
+
+/* ========================================
+   BOTÃO ADICIONAR IMÓVEL
+   ======================================== */
+.add-imovel-button {
+    display: inline-block;
+    padding: 16px 32px;
+    background: linear-gradient(135deg, #27ae60, #229954);
+    color: white;
+    text-align: center;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin: 20px auto;
+    border: none;
+    cursor: pointer;
+}
+
+.add-imovel-button:hover {
+    background: linear-gradient(135deg, #229954, #1e8449);
+    transform: translateY(-1px);
+    color: white;
+    text-decoration: none;
+}
+
+/* ========================================
+   ESTADO VAZIO
+   ======================================== */
+.empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: #7f8c8d;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+/* ========================================
+   RESPONSIVIDADE
+   ======================================== */
+@media (max-width: 768px) {
+    .tis-detail-container {
+        padding: 20px;
+        margin: 10px;
+    }
+    
+    .tis-header h1 {
+        font-size: 24px;
+    }
+    
+    .tis-info-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .imoveis-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .imovel-header {
+        padding-right: 60px;
+    }
+    
+    .imovel-actions {
+        opacity: 1;
+        top: 15px;
+        right: 15px;
+    }
+    
+    .action-button {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+    
+    .add-imovel-button {
+        width: 100%;
+        margin: 16px 0;
+    }
+} 
