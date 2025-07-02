@@ -39,14 +39,14 @@ RUN python manage.py collectstatic --noinput
 # Mudar permissões dos arquivos estáticos
 RUN chown -R appuser:appuser /app/staticfiles
 
+# Copiar script de inicialização e dar permissão
+COPY scripts/init.sh /app/init.sh
+RUN chmod +x /app/init.sh
+
 USER appuser
 
 # Expor porta
 EXPOSE 8000
-
-# Copiar script de inicialização
-COPY scripts/init.sh /app/init.sh
-RUN chmod +x /app/init.sh
 
 # Comando de inicialização
 CMD ["/app/init.sh"] 
