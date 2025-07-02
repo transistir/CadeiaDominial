@@ -20,7 +20,8 @@ RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 # Copiar configurações do Nginx
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY conf.d/default.conf /etc/nginx/conf.d/default.conf
+COPY conf.d/default.http.conf /etc/nginx/conf.d/default.http.conf
+COPY conf.d/default.https.conf /etc/nginx/conf.d/default.https.conf
 
 # Copiar scripts de SSL
 COPY ssl-init.sh /usr/local/bin/ssl-init.sh

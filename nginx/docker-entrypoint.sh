@@ -33,26 +33,13 @@ configure_nginx() {
     
     log_info "Configurando Nginx para domínio: $domain (SSL: $use_ssl)"
     
-    # Substituir localhost pelo domínio real na configuração
-    sed -i "s/localhost/$domain/g" /etc/nginx/conf.d/default.conf
-    
     if [ "$use_ssl" = "true" ]; then
-        # Ativar SSL
-        sed -i 's/# ssl_certificate/ssl_certificate/g' /etc/nginx/conf.d/default.conf
-        sed -i 's/# ssl_certificate_key/ssl_certificate_key/g' /etc/nginx/conf.d/default.conf
-        sed -i 's/# listen 443/listen 443/g' /etc/nginx/conf.d/default.conf
-        
-        # Descomentar todo o bloco HTTPS
-        sed -i 's/^# server {/server {/g' /etc/nginx/conf.d/default.conf
-        sed -i 's/^# }/}/g' /etc/nginx/conf.d/default.conf
-        
-        # Adicionar redirecionamento HTTP para HTTPS no bloco HTTP
-        if ! grep -q "return 301 https://" /etc/nginx/conf.d/default.conf; then
-            sed -i '/server_name cadeiadominial.com.br;/a\    # Redirecionar HTTP para HTTPS\n    return 301 https://$server_name$request_uri;' /etc/nginx/conf.d/default.conf
-        fi
-        
+        cp /etc/nginx/conf.d/default.https.conf /etc/nginx/conf.d/default.conf
+        sed -i "s/cadeiadominial.com.br/$domain/g" /etc/nginx/conf.d/default.conf
         log_info "SSL ativado para $domain"
     else
+        cp /etc/nginx/conf.d/default.http.conf /etc/nginx/conf.d/default.conf
+        sed -i "s/localhost/$domain/g" /etc/nginx/conf.d/default.conf
         log_warn "SSL não ativado - usando certificados dummy"
     fi
 }
