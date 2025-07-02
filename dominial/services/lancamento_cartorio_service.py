@@ -7,19 +7,13 @@ import uuid
 class LancamentoCartorioService:
     @staticmethod
     def processar_cartorio_origem(request, tipo_lanc, lancamento):
-        cartorio_origem_id = request.POST.get('cartorio_origem')
-        cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
-        if tipo_lanc.tipo == 'averbacao' and request.POST.get('incluir_cartorio_averbacao') == 'on':
-            cartorio_origem_id = request.POST.get('cartorio_origem_averbacao')
-            cartorio_origem_nome = request.POST.get('cartorio_origem_nome_averbacao', '').strip()
-            livro_origem_clean = request.POST.get('livro_origem_averbacao') if request.POST.get('livro_origem_averbacao') and request.POST.get('livro_origem_averbacao').strip() else None
-            folha_origem_clean = request.POST.get('folha_origem_averbacao') if request.POST.get('folha_origem_averbacao') and request.POST.get('folha_origem_averbacao').strip() else None
-            data_origem_clean = request.POST.get('data_origem_averbacao') if request.POST.get('data_origem_averbacao') else None
-            titulo_clean = request.POST.get('titulo_averbacao') if request.POST.get('titulo_averbacao') and request.POST.get('titulo_averbacao').strip() else None
-            lancamento.livro_origem = livro_origem_clean
-            lancamento.folha_origem = folha_origem_clean
-            lancamento.data_origem = data_origem_clean
-            lancamento.titulo = titulo_clean
+        """
+        Processa o cartório de origem do lançamento
+        Agora o cartório é sempre obrigatório no bloco básico
+        """
+        cartorio_origem_id = request.POST.get('cartorio')
+        cartorio_origem_nome = request.POST.get('cartorio_nome', '').strip()
+        
         if cartorio_origem_id and cartorio_origem_id.strip():
             lancamento.cartorio_origem_id = cartorio_origem_id
         elif cartorio_origem_nome:

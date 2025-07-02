@@ -24,7 +24,8 @@ class LancamentoDocumentoService:
         """
         if documento_id:
             return Documento.objects.get(id=documento_id, imovel=imovel)
-        return imovel.documento_set.filter(ativo=True).first()
+        # Retorna o documento mais recente como ativo
+        return imovel.documentos.order_by('-data').first()
     
     @staticmethod
     def criar_documento_matricula_automatico(imovel):
@@ -37,11 +38,17 @@ class LancamentoDocumentoService:
         Returns:
             Documento: Documento de matrícula criado
         """
+        from ..models import DocumentoTipo
+        tipo_matricula = DocumentoTipo.objects.get_or_create(tipo='matricula')[0]
+        
         return Documento.objects.create(
             imovel=imovel,
-            tipo='matricula',
+            tipo=tipo_matricula,
             numero='MAT001',
-            ativo=True
+            data='2024-01-01',
+            cartorio=imovel.cartorio if imovel.cartorio else None,
+            livro='1',
+            folha='1'
         )
     
     @staticmethod
@@ -55,39 +62,4 @@ class LancamentoDocumentoService:
         Returns:
             QuerySet: Documentos do imóvel
         """
-        return imovel.documento_set.all().order_by('-ativo', 'tipo', 'numero')
-    
-    @staticmethod
-    def ativar_documento(documento):
-        """
-        Ativa um documento e desativa os outros do mesmo imóvel
-        
-        Args:
-            documento: Documento a ser ativado
-            
-        Returns:
-            Documento: Documento ativado
-        """
-        # Desativar outros documentos do mesmo imóvel
-        documento.imovel.documento_set.exclude(id=documento.id).update(ativo=False)
-        
-        # Ativar o documento
-        documento.ativo = True
-        documento.save()
-        
-        return documento
-    
-    @staticmethod
-    def desativar_documento(documento):
-        """
-        Desativa um documento
-        
-        Args:
-            documento: Documento a ser desativado
-            
-        Returns:
-            Documento: Documento desativado
-        """
-        documento.ativo = False
-        documento.save()
-        return documento 
+        return imovel.documentos.all().order_by('-data', 'tipo', 'numero') 

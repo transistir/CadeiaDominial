@@ -9,6 +9,4 @@
         <label for="descricao_averbacao">Descrição *</label>
         <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
     </div>
-    <!-- Campos de cartório para averbação (sempre visíveis) -->
-    {% include "dominial/components/_cartorio_form.html" with prefix="averbacao" titulo_obrigatorio=False data_obrigatorio=False cartorio_obrigatorio=False livro_obrigatorio=False folha_obrigatorio=False %}
 </div> 

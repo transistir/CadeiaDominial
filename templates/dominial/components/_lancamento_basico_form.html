@@ -1,5 +1,5 @@
 <div class="field-group">
-    <h4>Informações Básicas</h4>
+    <h4>Informações Básicas da Matrícula/Transcrição</h4>
     
     <div class="form-group">
         <label for="tipo_lancamento">Tipo de Lançamento *</label>
@@ -15,52 +15,61 @@
     </div>
 
     <div class="form-group">
-        <label for="numero_lancamento">Número do Lançamento</label>
-        <input type="text" name="numero_lancamento" id="numero_lancamento" 
-               value="{% if modo_edicao %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
-               placeholder="Ex: 12345, A123, etc.">
-        <small>Número ou código de referência do lançamento no cartório</small>
+        <label for="numero_lancamento">Número do Lançamento *</label>
+        <div class="grid-2">
+            <div>
+                <input type="text" name="numero_lancamento_simples" id="numero_lancamento_simples" 
+                       placeholder="Ex: 1, 5, etc." style="width: 100%;"
+                       value="{% if modo_edicao %}{{ lancamento.numero_lancamento|slice:'2:-6' }}{% elif form_data %}{{ form_data.numero_lancamento_simples }}{% endif %}">
+                <small>Digite apenas o número</small>
+            </div>
+            <div>
+                <input type="text" name="numero_lancamento" id="numero_lancamento" readonly
+                       style="width: 100%; background-color: #f8f9fa;"
+                       value="{% if modo_edicao %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
+                       placeholder="Sigla será gerada automaticamente">
+                <small>Sigla completa gerada</small>
+            </div>
+        </div>
         <div class="error-message">
             {% if form.errors.numero_lancamento %}
                 {{ form.errors.numero_lancamento.0 }}
             {% endif %}
         </div>
+        <input type="hidden" name="sigla_matricula" value="{{ documento.numero }}">
     </div>
 
-    <div class="grid-2">
+    <div class="grid-3">
+        <div class="form-group">
+            <label for="livro">Livro *</label>
+            <input type="text" name="livro" id="livro" required
+                   value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro }}{% endif %}"
+                   placeholder="Ex: 1, 2, A, etc.">
+        </div>
+        
+        <div class="form-group">
+            <label for="folha">Folha *</label>
+            <input type="text" name="folha" id="folha" required
+                   value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha }}{% endif %}"
+                   placeholder="Ex: 1, 2, A, etc.">
+        </div>
+        
         <div class="form-group">
             <label for="data">Data *</label>
             <input type="date" name="data" id="data" required
                    value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
         </div>
-        
-        <div class="form-group">
-            <label for="titulo">Título</label>
-            <input type="text" name="titulo" id="titulo" 
-                   value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}"
-                   placeholder="Título do lançamento">
-        </div>
     </div>
 
     <div class="form-group">
-        <label for="descricao">Descrição</label>
-        <textarea name="descricao" id="descricao" 
-                  placeholder="Descrição detalhada do lançamento">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
-        <small>
-            Descrição detalhada do lançamento, incluindo informações relevantes sobre a transação
-        </small>
-    </div>
-
-    <div class="toggle-group">
-        <label class="toggle-label">
-            <input type="checkbox" name="eh_inicio_matricula" id="eh_inicio_matricula" class="toggle-checkbox" 
-                   {% if modo_edicao and lancamento.eh_inicio_matricula %}checked
-                   {% elif form_data and form_data.eh_inicio_matricula %}checked{% endif %}>
-            <span>Este lançamento indica um "Início de Matrícula"</span>
-        </label>
-        <small style="display: block; margin-top: 5px; color: #666;">
-            Marque esta opção se este lançamento representa o início de uma nova matrícula, 
-            mesmo que não seja do tipo "Início de Matrícula".
-        </small>
+        <label for="cartorio">Cartório *</label>
+        <div class="autocomplete-container">
+            <input type="text" name="cartorio_nome" id="cartorio_nome" 
+                   placeholder="Digite o nome do cartório" autocomplete="off" required
+                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_nome %}{{ form_data.cartorio_nome }}{% endif %}">
+            <input type="hidden" name="cartorio" id="cartorio" 
+                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio %}{{ form_data.cartorio }}{% endif %}">
+            <div class="autocomplete-suggestions cartorio-suggestions"></div>
+        </div>
     </div>
 </div> 

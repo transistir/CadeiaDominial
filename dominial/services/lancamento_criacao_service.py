@@ -51,19 +51,17 @@ class LancamentoCriacaoService:
             # Processar transmitentes
             transmitentes_data = request.POST.getlist('transmitente_nome[]')
             transmitente_ids = request.POST.getlist('transmitente[]')
-            transmitente_percentuais = request.POST.getlist('transmitente_percentual[]')
             
             LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, transmitentes_data, transmitente_ids, transmitente_percentuais, 'transmitente'
+                lancamento, transmitentes_data, transmitente_ids, 'transmitente'
             )
             
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
-            adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
             
             LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, adquirentes_data, adquirente_ids, adquirente_percentuais, 'adquirente'
+                lancamento, adquirentes_data, adquirente_ids, 'adquirente'
             )
             
             return lancamento, mensagem_origens
@@ -81,7 +79,6 @@ class LancamentoCriacaoService:
             numero_lancamento = request.POST.get('numero_lancamento')
             data = request.POST.get('data')
             observacoes = request.POST.get('observacoes')
-            eh_inicio_matricula = request.POST.get('eh_inicio_matricula') == 'on'
             
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:
@@ -95,7 +92,6 @@ class LancamentoCriacaoService:
             lancamento.numero_lancamento = numero_lancamento
             lancamento.data = data if data and data.strip() else None
             lancamento.observacoes = observacoes
-            lancamento.eh_inicio_matricula = eh_inicio_matricula
             
             # Processar campos específicos por tipo de lançamento
             LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
@@ -115,19 +111,17 @@ class LancamentoCriacaoService:
             # Processar transmitentes
             transmitentes_data = request.POST.getlist('transmitente_nome[]')
             transmitente_ids = request.POST.getlist('transmitente[]')
-            transmitente_percentuais = request.POST.getlist('transmitente_percentual[]')
             
             LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, transmitentes_data, transmitente_ids, transmitente_percentuais, 'transmitente'
+                lancamento, transmitentes_data, transmitente_ids, 'transmitente'
             )
             
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
-            adquirente_percentuais = request.POST.getlist('adquirente_percentual[]')
             
             LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, adquirentes_data, adquirente_ids, adquirente_percentuais, 'adquirente'
+                lancamento, adquirentes_data, adquirente_ids, 'adquirente'
             )
             
             return True, mensagem_origens
@@ -146,12 +140,12 @@ class LancamentoCriacaoService:
             numero_lancamento=dados_lancamento['numero_lancamento'],
             data=dados_lancamento['data'],
             observacoes=dados_lancamento['observacoes'],
-            eh_inicio_matricula=dados_lancamento['eh_inicio_matricula'],
             forma=dados_lancamento['forma'],
             descricao=dados_lancamento['descricao'],
             titulo=dados_lancamento['titulo'],
             livro_origem=dados_lancamento['livro_origem'],
             folha_origem=dados_lancamento['folha_origem'],
+            cartorio_origem=dados_lancamento['cartorio_origem'],
             data_origem=dados_lancamento['data'],
         )
         

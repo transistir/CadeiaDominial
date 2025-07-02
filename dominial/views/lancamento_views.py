@@ -18,6 +18,8 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
+
+    
     # Obter documento ativo usando o service
     documento_ativo = LancamentoService.obter_documento_ativo(imovel, documento_id)
     
@@ -61,7 +63,10 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     'numero_lancamento': request.POST.get('numero_lancamento'),
                     'data': request.POST.get('data'),
                     'observacoes': request.POST.get('observacoes'),
-                    'eh_inicio_matricula': request.POST.get('eh_inicio_matricula') == 'on',
+                    'livro': request.POST.get('livro'),
+                    'folha': request.POST.get('folha'),
+                    'cartorio': request.POST.get('cartorio'),
+                    'cartorio_nome': request.POST.get('cartorio_nome'),
                     'transmitente_ids': request.POST.getlist('transmitente[]'),
                     'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
                     'transmitente_percentuais': request.POST.getlist('transmitente_percentual[]'),
