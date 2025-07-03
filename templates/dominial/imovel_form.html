@@ -66,9 +66,6 @@
             </div>
 
             {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o imóvel" rows=3 %}
-            
-            <!-- Campos hidden necessários para o Django -->
-            <input type="hidden" name="estado" id="id_estado" value="">
         </div>
 
         <div class="form-section">
@@ -83,7 +80,7 @@
             <div class="grid-2">
                 <div class="form-group">
                     <label for="estado">Estado:</label>
-                    <select class="form-control" id="estado" required>
+                    <select class="form-control" id="estado" name="estado" required>
                         <option value="">Selecione um estado</option>
                         <option value="AC">Acre</option>
                         <option value="AL">Alagoas</option>
@@ -115,117 +112,25 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="cidade_select">Cidade:</label>
-                    <select class="form-control" id="cidade_select" disabled required>
+                    <label for="cidade">Cidade:</label>
+                    <select class="form-control" id="cidade" name="cidade" disabled required>
                         <option value="">Selecione uma cidade</option>
                     </select>
-                    {{ form.cidade }}
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="cartorio">Cartório:</label>
-                <select class="form-control" id="cartorio" name="cartorio" disabled required>
+                <select class="form-control" id="cartorio" name="cartorio_id" disabled required>
                     <option value="">Selecione um cartório</option>
-                    <option value="novo">
-                        <svg class="add-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Adicionar novo cartório
-                    </option>
+                    <option value="novo">Adicionar novo cartório</option>
                 </select>
-                <input type="hidden" name="cartorio_id" id="cartorio_id">
             </div>
 
-            <div id="cartorio-info" class="form-info">
+            <div id="cartorio-info" class="form-info" style="display: none;">
                 <h5>Informações do Cartório</h5>
                 <div id="cartorio-detalhes"></div>
             </div>
-
-            <!-- Modal para adicionar novo cartório -->
-            <div id="modal-novo-cartorio" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>Adicionar Novo Cartório</h3>
-                        <span class="close">&times;</span>
-                    </div>
-                    <div class="modal-body">
-                        <form id="form-novo-cartorio">
-                            <div class="form-group">
-                                <label for="novo-cartorio-nome">Nome do Cartório:</label>
-                                <input type="text" id="novo-cartorio-nome" name="nome" class="form-control" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="novo-cartorio-cns">CNS:</label>
-                                <input type="text" id="novo-cartorio-cns" name="cns" class="form-control" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="novo-cartorio-endereco">Endereço:</label>
-                                <input type="text" id="novo-cartorio-endereco" name="endereco" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label for="novo-cartorio-telefone">Telefone:</label>
-                                <input type="text" id="novo-cartorio-telefone" name="telefone" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label for="novo-cartorio-email">E-mail:</label>
-                                <input type="email" id="novo-cartorio-email" name="email" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label for="novo-cartorio-estado">Estado:</label>
-                                <select id="novo-cartorio-estado" name="estado" class="form-control" required>
-                                    <option value="">Selecione um estado</option>
-                                    <option value="AC">Acre</option>
-                                    <option value="AL">Alagoas</option>
-                                    <option value="AM">Amazonas</option>
-                                    <option value="AP">Amapá</option>
-                                    <option value="BA">Bahia</option>
-                                    <option value="CE">Ceará</option>
-                                    <option value="DF">Distrito Federal</option>
-                                    <option value="ES">Espírito Santo</option>
-                                    <option value="GO">Goiás</option>
-                                    <option value="MA">Maranhão</option>
-                                    <option value="MG">Minas Gerais</option>
-                                    <option value="MS">Mato Grosso do Sul</option>
-                                    <option value="MT">Mato Grosso</option>
-                                    <option value="PA">Pará</option>
-                                    <option value="PB">Paraíba</option>
-                                    <option value="PE">Pernambuco</option>
-                                    <option value="PI">Piauí</option>
-                                    <option value="PR">Paraná</option>
-                                    <option value="RJ">Rio de Janeiro</option>
-                                    <option value="RN">Rio Grande do Norte</option>
-                                    <option value="RO">Rondônia</option>
-                                    <option value="RR">Roraima</option>
-                                    <option value="RS">Rio Grande do Sul</option>
-                                    <option value="SC">Santa Catarina</option>
-                                    <option value="SE">Sergipe</option>
-                                    <option value="SP">São Paulo</option>
-                                    <option value="TO">Tocantins</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="novo-cartorio-cidade">Cidade:</label>
-                                <input type="text" id="novo-cartorio-cidade" name="cidade" class="form-control" required>
-                            </div>
-                            <div class="modal-buttons">
-                                <button type="button" class="btn btn-secondary">Cancelar</button>
-                                <button type="submit" class="btn btn-primary">Salvar Cartório</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="cartorio-info" class="form-info cartorio-details">
-            <h5>Informações do Cartório</h5>
-            <p><strong>Responsável:</strong> <span id="cartorio-responsavel">-</span></p>
-            <p><strong>Endereço:</strong> <span id="cartorio-endereco">-</span></p>
-            <p><strong>Telefone:</strong> <span id="cartorio-telefone">-</span></p>
-            <p><strong>E-mail:</strong> <span id="cartorio-email">-</span></p>
-            <p><strong>CNS:</strong> <span id="cartorio-cns">-</span></p>
         </div>
 
         <div class="button-group">
@@ -234,10 +139,42 @@
         </div>
     </form>
 </div>
+
+<!-- Modal para adicionar novo cartório -->
+<div id="modal-novo-cartorio" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Adicionar Novo Cartório</h3>
+            <span class="close" id="fechar-modal-cartorio">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="form-novo-cartorio">
+                <div class="form-group">
+                    <label for="novo-cartorio-nome">Nome do Cartório:</label>
+                    <input type="text" id="novo-cartorio-nome" name="nome" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="novo-cartorio-cns">CNS:</label>
+                    <input type="text" id="novo-cartorio-cns" name="cns" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="novo-cartorio-estado">Estado:</label>
+                    <input type="text" id="novo-cartorio-estado" name="estado" class="form-control" readonly required>
+                </div>
+                <div class="form-group">
+                    <label for="novo-cartorio-cidade">Cidade:</label>
+                    <input type="text" id="novo-cartorio-cidade" name="cidade" class="form-control" readonly required>
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" id="cancelar-novo-cartorio">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Cartório</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'dominial/js/cartorio_verificacao.js' %}"></script>
-<script src="{% static 'dominial/js/cartorio_modal.js' %}"></script>
 <script src="{% static 'dominial/js/imovel_form.js' %}"></script>
 {% endblock %}
