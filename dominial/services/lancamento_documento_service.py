@@ -44,11 +44,13 @@ class LancamentoDocumentoService:
         return Documento.objects.create(
             imovel=imovel,
             tipo=tipo_matricula,
-            numero='MAT001',
+            numero=imovel.matricula,  # Usar o número da matrícula do imóvel
             data='2024-01-01',
             cartorio=imovel.cartorio if imovel.cartorio else None,
             livro='1',
-            folha='1'
+            folha='1',
+            origem='Matrícula atual do imóvel',
+            observacoes='Documento de matrícula criado automaticamente para iniciar a cadeia dominial'
         )
     
     @staticmethod

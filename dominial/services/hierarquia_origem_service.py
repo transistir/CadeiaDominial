@@ -66,6 +66,15 @@ class HierarquiaOrigemService:
         """
         try:
             tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
+            
+            # Verificar se já existe um documento com esse número
+            documento_existente = Documento.objects.filter(imovel=imovel, numero=origem_info['numero']).first()
+            if documento_existente:
+                # Se já existe, retornar como origem identificada criada
+                return HierarquiaOrigemService._criar_origem_identificada(
+                    lancamento, origem_info, documento_existente.id, True
+                )
+            
             documento_criado = Documento.objects.create(
                 imovel=imovel,
                 tipo=tipo_doc,
