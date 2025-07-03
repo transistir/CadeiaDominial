@@ -29,20 +29,21 @@ class ImovelForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-control'})
     )
     
-    cidade = forms.CharField(
+    cidade = forms.ChoiceField(
+        choices=[('', 'Selecione uma cidade')],
         required=True,
-        widget=forms.HiddenInput()
+        widget=forms.Select(attrs={'class': 'form-control'})
     )
     
     cartorio = forms.ModelChoiceField(
         queryset=Cartorios.objects.all(),
         required=False,
-        widget=forms.HiddenInput()
+        widget=forms.Select(attrs={'class': 'form-control'})
     )
 
     class Meta:
         model = Imovel
-        fields = ['nome', 'matricula', 'observacoes', 'estado', 'cidade', 'cartorio']
+        fields = ['nome', 'matricula', 'observacoes']
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'matricula': forms.TextInput(attrs={'class': 'form-control'}),
@@ -59,4 +60,31 @@ class ImovelForm(forms.ModelForm):
             # Validação extra se quiser
             if not nome:
                 raise forms.ValidationError('É obrigatório informar o nome do proprietário.')
-        return cleaned_data 
+        return cleaned_data
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance = kwargs.get('instance')
+        if instance:
+            # Preencher campos customizados
+            if instance.proprietario:
+                self.fields['proprietario_nome'].initial = instance.proprietario.nome
+            if hasattr(instance, 'cartorio') and instance.cartorio:
+                self.fields['cartorio'].initial = instance.cartorio
+            # Estado e cidade
+            if hasattr(instance, 'cartorio') and instance.cartorio:
+                if instance.cartorio.estado:
+                    self.fields['estado'].initial = instance.cartorio.estado
+                    # Popular cidades do estado
+                    cidades_estado = Cartorios.objects.filter(
+                        estado=instance.cartorio.estado
+                    ).values_list('cidade', 'cidade').distinct().order_by('cidade')
+                    self.fields['cidade'].choices = [('', 'Selecione uma cidade')] + list(cidades_estado)
+                if instance.cartorio.cidade:
+                    self.fields['cidade'].initial = instance.cartorio.cidade
+                    # Filtrar cartórios pela cidade
+                    cartorios_cidade = Cartorios.objects.filter(
+                        estado=instance.cartorio.estado,
+                        cidade=instance.cartorio.cidade
+                    ).order_by('nome')
+                    self.fields['cartorio'].queryset = cartorios_cidade 

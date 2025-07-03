@@ -1,12 +1,22 @@
 // Formulário de Imóvel - Versão Simplificada
 class ImovelForm {
     constructor() {
-        this.estadoSelect = document.getElementById('estado');
-        this.cidadeSelect = document.getElementById('cidade');
-        this.cartorioSelect = document.getElementById('cartorio');
+        this.estadoSelect = document.getElementById('id_estado');
+        this.cidadeSelect = document.getElementById('id_cidade');
+        this.cartorioSelect = document.getElementById('id_cartorio');
         this.form = document.getElementById('imovel-form');
         this.cartorioInfo = document.getElementById('cartorio-info');
         this.cartorioDetalhes = document.getElementById('cartorio-detalhes');
+        
+        // Verificar se os elementos essenciais existem
+        if (!this.estadoSelect || !this.cidadeSelect || !this.cartorioSelect) {
+            console.warn('Elementos do formulário não encontrados:', {
+                estado: !!this.estadoSelect,
+                cidade: !!this.cidadeSelect,
+                cartorio: !!this.cartorioSelect
+            });
+            return;
+        }
         
         this.init();
     }
@@ -16,6 +26,11 @@ class ImovelForm {
     }
 
     bindEvents() {
+        // Verificar se os elementos existem antes de adicionar event listeners
+        if (!this.estadoSelect || !this.cidadeSelect || !this.cartorioSelect) {
+            return;
+        }
+        
         // Carregar cidades quando estado for selecionado
         this.estadoSelect.addEventListener('change', (e) => {
             this.carregarCidades(e.target.value);
@@ -39,8 +54,8 @@ class ImovelForm {
                     // Copiar estado e cidade do formulário principal para o modal
                     const modalEstadoInput = document.getElementById('novo-cartorio-estado');
                     const modalCidadeInput = document.getElementById('novo-cartorio-cidade');
-                    const estadoPrincipal = document.getElementById('estado');
-                    const cidadePrincipal = document.getElementById('cidade');
+                    const estadoPrincipal = document.getElementById('id_estado');
+                    const cidadePrincipal = document.getElementById('id_cidade');
                     
                     // Obter o texto do estado selecionado
                     const estadoText = estadoPrincipal.options[estadoPrincipal.selectedIndex]?.text || '';
@@ -205,7 +220,7 @@ function setupNovoCartorioModal() {
     const fecharBtn = document.getElementById('fechar-modal-cartorio');
     const cancelarBtn = document.getElementById('cancelar-novo-cartorio');
     const form = document.getElementById('form-novo-cartorio');
-    const cartorioSelect = document.getElementById('cartorio');
+    const cartorioSelect = document.getElementById('id_cartorio');
 
     // Só ativa se o modal e o form existem
     if (!modal || !fecharBtn || !cancelarBtn || !form || !cartorioSelect) {
@@ -256,8 +271,8 @@ function setupNovoCartorioModal() {
         const data = {
             nome: document.getElementById('novo-cartorio-nome').value,
             cns: document.getElementById('novo-cartorio-cns').value,
-            estado: document.getElementById('estado').value, // Usar o código do estado do formulário principal
-            cidade: document.getElementById('cidade').value, // Usar o código da cidade do formulário principal
+            estado: document.getElementById('id_estado').value, // Usar o código do estado do formulário principal
+            cidade: document.getElementById('id_cidade').value, // Usar o código da cidade do formulário principal
             endereco: '',
             telefone: '',
             email: ''

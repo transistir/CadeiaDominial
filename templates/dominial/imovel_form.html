@@ -42,7 +42,7 @@
             
             <div class="form-group">
                 <label for="nome_proprietario">Nome do Proprietário:</label>
-                <input type="text" id="nome_proprietario" name="proprietario_nome" class="form-control" required placeholder="Nome completo do proprietário">
+                {{ form.proprietario_nome }}
             </div>
         </div>
 
@@ -80,51 +80,17 @@
             <div class="grid-2">
                 <div class="form-group">
                     <label for="estado">Estado:</label>
-                    <select class="form-control" id="estado" name="estado" required>
-                        <option value="">Selecione um estado</option>
-                        <option value="AC">Acre</option>
-                        <option value="AL">Alagoas</option>
-                        <option value="AM">Amazonas</option>
-                        <option value="AP">Amapá</option>
-                        <option value="BA">Bahia</option>
-                        <option value="CE">Ceará</option>
-                        <option value="DF">Distrito Federal</option>
-                        <option value="ES">Espírito Santo</option>
-                        <option value="GO">Goiás</option>
-                        <option value="MA">Maranhão</option>
-                        <option value="MG">Minas Gerais</option>
-                        <option value="MS">Mato Grosso do Sul</option>
-                        <option value="MT">Mato Grosso</option>
-                        <option value="PA">Pará</option>
-                        <option value="PB">Paraíba</option>
-                        <option value="PE">Pernambuco</option>
-                        <option value="PI">Piauí</option>
-                        <option value="PR">Paraná</option>
-                        <option value="RJ">Rio de Janeiro</option>
-                        <option value="RN">Rio Grande do Norte</option>
-                        <option value="RO">Rondônia</option>
-                        <option value="RR">Roraima</option>
-                        <option value="RS">Rio Grande do Sul</option>
-                        <option value="SC">Santa Catarina</option>
-                        <option value="SE">Sergipe</option>
-                        <option value="SP">São Paulo</option>
-                        <option value="TO">Tocantins</option>
-                    </select>
+                    {{ form.estado }}
                 </div>
                 <div class="form-group">
                     <label for="cidade">Cidade:</label>
-                    <select class="form-control" id="cidade" name="cidade" disabled required>
-                        <option value="">Selecione uma cidade</option>
-                    </select>
+                    {{ form.cidade }}
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="cartorio">Cartório:</label>
-                <select class="form-control" id="cartorio" name="cartorio_id" disabled required>
-                    <option value="">Selecione um cartório</option>
-                    <option value="novo">Adicionar novo cartório</option>
-                </select>
+                {{ form.cartorio }}
             </div>
 
             <div id="cartorio-info" class="form-info" style="display: none;">
