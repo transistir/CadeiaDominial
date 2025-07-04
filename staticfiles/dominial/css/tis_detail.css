@@ -82,99 +82,183 @@
 }
 
 .section-title::before {
-    content: "🏠";
-    font-size: 28px;
+    content: "";
+    width: 24px;
+    height: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z' stroke='%233498db' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='9,22 9,12 15,12 15,22' stroke='%233498db' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    display: inline-block;
+    margin-right: 10px;
 }
 
 /* ========================================
-   GRID DE IMÓVEIS
+   TABELA DE IMÓVEIS
    ======================================== */
-.imoveis-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 20px;
+.imoveis-table-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    overflow: hidden;
+    border: 1px solid #e1e8ed;
     margin-bottom: 30px;
 }
 
-/* ========================================
-   CARDS DE IMÓVEIS
-   ======================================== */
-.imovel-card {
+.imoveis-table {
+    width: 100%;
+    border-collapse: collapse;
     background: white;
-    border: 1px solid #e1e8ed;
-    border-radius: 12px;
-    padding: 25px;
-    transition: all 0.3s ease;
+}
+
+/* ========================================
+   CABEÇALHO DA TABELA
+   ======================================== */
+.imoveis-table thead {
+    background: linear-gradient(135deg, #34495e, #2c3e50);
+    color: white;
+}
+
+.imoveis-table th {
+    padding: 18px 20px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    position: relative;
+}
+
+.th-matricula {
+    width: 25%;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.th-nome {
+    width: 60%;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.th-acoes {
+    width: 15%;
+    text-align: center;
+}
+
+/* ========================================
+   LINHAS DA TABELA
+   ======================================== */
+.imovel-row {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #f1f3f4;
+    background: white;
+}
+
+.imovel-row:hover {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.imovel-row:nth-child(even) {
+    background: #fafbfc;
+}
+
+.imovel-row:nth-child(even):hover {
+    background: linear-gradient(135deg, #f1f3f4, #e8eaed);
+}
+
+/* ========================================
+   CÉLULAS DA TABELA
+   ======================================== */
+.imoveis-table td {
+    padding: 16px 20px;
+    border: none;
+    vertical-align: middle;
+    position: relative;
+}
+
+.td-matricula {
+    border-right: 1px solid #f1f3f4;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+}
+
+.td-nome {
+    border-right: 1px solid #f1f3f4;
+}
+
+.td-acoes {
+    text-align: center;
+    padding: 12px 20px;
+}
+
+/* ========================================
+   VALORES DAS CÉLULAS
+   ======================================== */
+.matricula-value {
+    color: #2c3e50;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.nome-value {
+    color: #34495e;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+/* ========================================
+   AÇÕES DOS IMÓVEIS
+   ======================================== */
+.imovel-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    color: white;
+    transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
-    cursor: pointer;
 }
 
-.imovel-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-    border-color: #3498db;
-}
-
-.imovel-card::before {
+.action-button::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #3498db, #2980b9);
-}
-
-/* ========================================
-   CABEÇALHO DO IMÓVEL
-   ======================================== */
-.imovel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 15px;
-    padding-right: 80px;
-}
-
-.imovel-title {
-    margin: 0;
-    color: #2c3e50;
-    font-size: 18px;
-    font-weight: 600;
-    line-height: 1.3;
-    flex: 1;
-}
-
-/* ========================================
-   AÇÕES DO IMÓVEL
-   ======================================== */
-.imovel-actions {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    display: flex;
-    gap: 8px;
+    bottom: 0;
+    background: rgba(255,255,255,0.1);
     opacity: 0;
     transition: opacity 0.2s ease;
 }
 
-.imovel-card:hover .imovel-actions {
+.action-button:hover::before {
     opacity: 1;
 }
 
-.action-button {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
-    text-decoration: none;
-    color: white;
-    transition: all 0.2s ease;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.action-button svg {
+    position: relative;
+    z-index: 1;
 }
 
 .edit-button {
@@ -182,8 +266,8 @@
 }
 
 .edit-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
 }
 
 .delete-button {
@@ -191,39 +275,8 @@
 }
 
 .delete-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-/* ========================================
-   INFORMAÇÕES DO IMÓVEL
-   ======================================== */
-.imovel-info {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.imovel-info-item {
-    display: flex;
-    align-items: center;
-    font-size: 14px;
-    color: #7f8c8d;
-}
-
-.imovel-info-label {
-    font-weight: 600;
-    color: #34495e;
-    min-width: 80px;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.imovel-info-value {
-    color: #2c3e50;
-    margin-left: 10px;
-    font-weight: 500;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
 }
 
 /* ========================================
@@ -248,24 +301,32 @@
 .add-imovel-button:hover {
     background: linear-gradient(135deg, #229954, #1e8449);
     transform: translateY(-1px);
-    color: white;
-    text-decoration: none;
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
 }
 
 /* ========================================
    ESTADO VAZIO
    ======================================== */
 .empty-state {
-    grid-column: 1 / -1;
     text-align: center;
     padding: 60px 20px;
-    color: #7f8c8d;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 12px;
+    border: 2px dashed #dee2e6;
+    margin: 30px 0;
 }
 
 .empty-state-icon {
     font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
+    margin-bottom: 20px;
+    opacity: 0.6;
+}
+
+.empty-state p {
+    color: #6c757d;
+    font-size: 16px;
+    margin: 0;
+    font-weight: 500;
 }
 
 /* ========================================
@@ -286,24 +347,41 @@
         gap: 15px;
     }
     
-    .imoveis-grid {
-        grid-template-columns: 1fr;
-        gap: 15px;
+    .imoveis-table-container {
+        overflow-x: auto;
+        border-radius: 8px;
     }
     
-    .imovel-header {
-        padding-right: 60px;
+    .imoveis-table {
+        min-width: 600px;
     }
     
-    .imovel-actions {
-        opacity: 1;
-        top: 15px;
-        right: 15px;
+    .imoveis-table th,
+    .imoveis-table td {
+        padding: 12px 15px;
+        font-size: 13px;
+    }
+    
+    .th-matricula {
+        width: 30%;
+    }
+    
+    .th-nome {
+        width: 55%;
+    }
+    
+    .th-acoes {
+        width: 15%;
     }
     
     .action-button {
-        padding: 4px 8px;
-        font-size: 10px;
+        width: 32px;
+        height: 32px;
+    }
+    
+    .action-button svg {
+        width: 14px;
+        height: 14px;
     }
     
     .add-imovel-button {

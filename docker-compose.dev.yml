@@ -30,7 +30,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-dev_password}
       - DB_HOST=db
       - DB_PORT=5432
-      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,10.208.23.208
       - DJANGO_SETTINGS_MODULE=cadeia_dominial.settings_dev
     volumes:
       - .:/app
