@@ -91,18 +91,4 @@ class LancamentoValidacaoService:
         if not pessoas_data or not any(p.strip() for p in pessoas_data):
             return False, 'É necessário informar pelo menos uma pessoa.'
         
-        # Validar percentuais
-        total_percentual = 0
-        for i, percentual in enumerate(pessoas_percentuais):
-            if pessoas_data[i].strip():  # Só validar se há nome
-                try:
-                    if percentual and percentual.strip():
-                        total_percentual += float(percentual)
-                except ValueError:
-                    return False, f'Percentual inválido para {pessoas_data[i]}.'
-        
-        # Verificar se o total é 100% (com tolerância de 0.01)
-        if abs(total_percentual - 100.0) > 0.01:
-            return False, f'O total dos percentuais deve ser 100%. Atual: {total_percentual:.2f}%'
-        
         return True, None 

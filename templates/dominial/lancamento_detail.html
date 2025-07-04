@@ -152,7 +152,7 @@
                             {% for transmitente in transmitentes %}
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span>{{ transmitente.pessoa.nome }}</span>
-                                <span class="badge bg-secondary">{{ transmitente.percentual }}%</span>
+                                <span class="badge bg-secondary">{{ transmitente.nome }}</span>
                             </div>
                             {% endfor %}
                         </div>
@@ -172,7 +172,7 @@
                             {% for adquirente in adquirentes %}
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span>{{ adquirente.pessoa.nome }}</span>
-                                <span class="badge bg-secondary">{{ adquirente.percentual }}%</span>
+                                <span class="badge bg-secondary">{{ adquirente.nome }}</span>
                             </div>
                             {% endfor %}
                         </div>

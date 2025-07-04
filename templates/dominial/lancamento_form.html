@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento - {{ imovel.nome }}{% endblock %}
+{% block title %}
+    {% if modo_edicao %}Editar Lançamento{% else %}Novo Lançamento{% endif %} - {{ imovel.nome }}
+{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/forms.css' %}">
@@ -43,29 +45,9 @@
             <h4>Campos Específicos - Início de Matrícula</h4>
             <div class="form-group">
                 <label>Adquirente(s)</label>
-                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container" sugestao_class="adquirente-suggestions" %}
+                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
             </div>
-            <div class="form-group">
-                <label for="origem_inicio">Origem *</label>
-                <input type="text" name="origem_inicio" id="origem_inicio" placeholder="Ex: Número do registro anterior, descrição, etc."
-                       value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem_inicio }}{% endif %}">
-            </div>
-            <div class="form-group">
-                <label for="cartorio_origem_nome_inicio">Cartório de Registro da Origem *</label>
-                <div class="autocomplete-container">
-                    <input type="text" name="cartorio_origem_nome_inicio" id="cartorio_origem_nome_inicio" 
-                           placeholder="Digite o nome do cartório" autocomplete="off"
-                           value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome_inicio %}{{ form_data.cartorio_origem_nome_inicio }}{% endif %}">
-                    <input type="hidden" name="cartorio_origem_inicio" id="cartorio_origem_inicio" 
-                           value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem_inicio %}{{ form_data.cartorio_origem_inicio }}{% endif %}">
-                    <div class="autocomplete-suggestions cartorio-origem-inicio-suggestions"></div>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="area_inicio">Área (ha)</label>
-                <input type="number" name="area_inicio" id="area_inicio" step="0.01" min="0"
-                       value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area_inicio }}{% endif %}">
-            </div>
+            {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=True container_id="origens-container" %}
         </div>
 
         <!-- Campos Opcionais de Transação -->
@@ -88,9 +70,9 @@
                     <div class="autocomplete-container">
                         <input type="text" name="cartorio_transacao_nome" id="cartorio_transacao_nome" 
                                placeholder="Digite o nome do cartório" autocomplete="off"
-                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_transacao_nome %}{{ form_data.cartorio_transacao_nome }}{% endif %}">
+                               value="{% if modo_edicao and lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.nome }}{% elif form_data and form_data.cartorio_transacao_nome %}{{ form_data.cartorio_transacao_nome }}{% endif %}">
                         <input type="hidden" name="cartorio_transacao" id="cartorio_transacao" 
-                               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_transacao %}{{ form_data.cartorio_transacao }}{% endif %}">
+                               value="{% if modo_edicao and lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.id }}{% elif form_data and form_data.cartorio_transacao %}{{ form_data.cartorio_transacao }}{% endif %}">
                         <div class="autocomplete-suggestions cartorio-transacao-suggestions"></div>
                     </div>
                 </div>
@@ -100,17 +82,17 @@
                 <div class="form-group">
                     <label for="livro_transacao">Livro</label>
                     <input type="text" name="livro_transacao" id="livro_transacao" 
-                           value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_transacao }}{% endif %}">
+                           value="{% if modo_edicao %}{{ lancamento.livro_transacao }}{% elif form_data %}{{ form_data.livro_transacao }}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="folha_transacao">Folha</label>
                     <input type="text" name="folha_transacao" id="folha_transacao" 
-                           value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_transacao }}{% endif %}">
+                           value="{% if modo_edicao %}{{ lancamento.folha_transacao }}{% elif form_data %}{{ form_data.folha_transacao }}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="data_transacao">Data</label>
                     <input type="date" name="data_transacao" id="data_transacao" 
-                           value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_transacao }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_transacao }}{% endif %}">
                 </div>
             </div>
         </div>
@@ -126,369 +108,11 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
+{% if modo_edicao %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Elementos do formulário
-    const tipoSelect = document.getElementById('tipo_lancamento');
-    const averbacaoFields = document.getElementById('campos-averbacao');
-    const registroFields = document.getElementById('campos-registro');
-    const inicioMatriculaFields = document.getElementById('campos-inicio-matricula');
-    const transacaoFields = document.getElementById('campos-transacao');
-    
-    // Função para alternar campos baseado no tipo selecionado
-    function toggleFields() {
-        const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
-        const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
-        const modoEdicao = {% if modo_edicao %}true{% else %}false{% endif %};
-        
-        // Esconder todos os campos primeiro
-        averbacaoFields.classList.add('hidden');
-        registroFields.classList.add('hidden');
-        inicioMatriculaFields.classList.add('hidden');
-        transacaoFields.classList.add('hidden');
-        
-        // Controlar visibilidade do campo de número simples (input)
-        const numeroSimplesField = document.querySelector('.form-group:has(#numero_lancamento_simples)');
-        if (numeroSimplesField) {
-            if (selectedTipo === 'inicio_matricula') {
-                // Ocultar apenas o campo de input, mantendo o campo readonly visível
-                const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
-                const numeroSimplesLabel = numeroSimplesField.querySelector('label[for="numero_lancamento_simples"]');
-                const numeroSimplesSmall = numeroSimplesField.querySelector('small');
-                
-                if (numeroSimplesInput) numeroSimplesInput.style.display = 'none';
-                if (numeroSimplesLabel) numeroSimplesLabel.style.display = 'none';
-                if (numeroSimplesSmall) numeroSimplesSmall.style.display = 'none';
-            } else {
-                // Mostrar todos os elementos do campo
-                const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
-                const numeroSimplesLabel = numeroSimplesField.querySelector('label[for="numero_lancamento_simples"]');
-                const numeroSimplesSmall = numeroSimplesField.querySelector('small');
-                
-                if (numeroSimplesInput) numeroSimplesInput.style.display = 'block';
-                if (numeroSimplesLabel) numeroSimplesLabel.style.display = 'block';
-                if (numeroSimplesSmall) numeroSimplesSmall.style.display = 'block';
-            }
-        }
-        
-        // Mostrar campos baseado no tipo selecionado
-        if (selectedTipo === 'averbacao') {
-            averbacaoFields.classList.remove('hidden');
-        } else if (selectedTipo === 'registro') {
-            registroFields.classList.remove('hidden');
-            transacaoFields.classList.remove('hidden');
-        } else if (selectedTipo === 'inicio_matricula') {
-            inicioMatriculaFields.classList.remove('hidden');
-            // Não exibir bloco de transação para início de matrícula
-            // Aplicar automaticamente a sigla da matrícula
-            if (typeof gerarNumeroLancamento === 'function') {
-                gerarNumeroLancamento();
-            }
-        }
-    }
-    
-    // Inicializar campos após um pequeno delay para garantir que o DOM está pronto
-    setTimeout(() => {
-        toggleFields();
-        
-        // Carregar dados de pessoas existentes se estiver em modo de edição
-        if ({% if modo_edicao %}true{% else %}false{% endif %}) {
-            // Carregar transmitentes existentes
-            {% if modo_edicao and transmitentes %}
-                {% for transmitente in transmitentes %}
-                (function() {
-                    const container = document.getElementById('transmitentes-container');
-                    const pessoaDiv = document.createElement('div');
-                    pessoaDiv.className = 'pessoa-item';
-                    pessoaDiv.innerHTML = `
-                        <div class="pessoa-input-group">
-                            <div class="autocomplete-container">
-                                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off" value="{{ transmitente.pessoa.nome }}">
-                                <input type="hidden" name="transmitente[]" class="transmitente-id" value="{{ transmitente.pessoa.id }}">
-                                <div class="autocomplete-suggestions transmitente-suggestions"></div>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
-                        </div>
-                    `;
-                    container.appendChild(pessoaDiv);
-                })();
-                {% endfor %}
-            {% endif %}
-            
-            // Carregar adquirentes existentes
-            {% if modo_edicao and adquirentes %}
-                {% for adquirente in adquirentes %}
-                (function() {
-                    const container = document.getElementById('adquirentes-container');
-                    const pessoaDiv = document.createElement('div');
-                    pessoaDiv.className = 'pessoa-item';
-                    pessoaDiv.innerHTML = `
-                        <div class="pessoa-input-group">
-                            <div class="autocomplete-container">
-                                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off" value="{{ adquirente.pessoa.nome }}">
-                                <input type="hidden" name="adquirente[]" class="adquirente-id" value="{{ adquirente.pessoa.id }}">
-                                <div class="autocomplete-suggestions adquirente-suggestions"></div>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
-                        </div>
-                    `;
-                    container.appendChild(pessoaDiv);
-                })();
-                {% endfor %}
-            {% endif %}
-            
-            // Remover os campos vazios iniciais
-            const transmitentesContainer = document.getElementById('transmitentes-container');
-            const adquirentesContainer = document.getElementById('adquirentes-container');
-            
-            if (transmitentesContainer && transmitentesContainer.children.length > 1) {
-                transmitentesContainer.removeChild(transmitentesContainer.firstElementChild);
-            }
-            if (adquirentesContainer && adquirentesContainer.children.length > 1) {
-                adquirentesContainer.removeChild(adquirentesContainer.firstElementChild);
-            }
-        }
-    }, 100);
-    
-    // Adicionar listener para mudanças no tipo
-    tipoSelect.addEventListener('change', toggleFields);
-    
-    // Configurar geração automática do número do lançamento
-    const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
-    const numeroCompletoInput = document.getElementById('numero_lancamento');
-    
-    if (numeroSimplesInput && numeroCompletoInput) {
-        // Função para gerar a sigla completa
-        function gerarNumeroLancamento() {
-            const numero = numeroSimplesInput.value.trim();
-            const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
-            const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
-            
-            // Obter a sigla da matrícula/transcrição do imóvel
-            const siglaMatriculaInput = document.querySelector('input[name="sigla_matricula"]');
-            const siglaMatricula = siglaMatriculaInput ? siglaMatriculaInput.value : '';
-            
-            if (selectedTipo === 'inicio_matricula') {
-                // Para início de matrícula, aplicar automaticamente a sigla da matrícula
-                numeroCompletoInput.value = siglaMatricula;
-            } else if (numero && selectedTipo) {
-                let sigla = '';
-                
-                if (selectedTipo === 'averbacao') {
-                    sigla = `AV${numero}${siglaMatricula}`;
-                } else if (selectedTipo === 'registro') {
-                    sigla = `R${numero}${siglaMatricula}`;
-                }
-                
-                numeroCompletoInput.value = sigla;
-            } else {
-                numeroCompletoInput.value = '';
-            }
-        }
-        
-        // Adicionar listeners
-        numeroSimplesInput.addEventListener('input', gerarNumeroLancamento);
-        tipoSelect.addEventListener('change', gerarNumeroLancamento);
-        
-        // Gerar número inicial se já houver dados
-        if (numeroSimplesInput.value) {
-            gerarNumeroLancamento();
-        }
-    }
-    
-    // Configurar autocomplete para pessoas existentes e adicionar listeners para novos campos
-    setupPessoaAutocomplete();
-    
-    // Autocomplete para cartório principal
-    const cartorioInput = document.getElementById('cartorio_nome');
-    const cartorioHidden = document.getElementById('cartorio');
-    const cartorioSuggestions = document.querySelector('.cartorio-suggestions');
-    
-    if (cartorioInput && cartorioHidden && cartorioSuggestions) {
-        setupCartorioAutocomplete(cartorioInput, cartorioHidden, cartorioSuggestions);
-    }
-    
-    // Autocomplete para cartório de transação
-    const cartorioTransacaoInput = document.getElementById('cartorio_transacao_nome');
-    const cartorioTransacaoHidden = document.getElementById('cartorio_transacao');
-    const cartorioTransacaoSuggestions = document.querySelector('.cartorio-transacao-suggestions');
-    
-    if (cartorioTransacaoInput && cartorioTransacaoHidden && cartorioTransacaoSuggestions) {
-        setupCartorioAutocomplete(cartorioTransacaoInput, cartorioTransacaoHidden, cartorioTransacaoSuggestions);
-    }
-    
-    // Autocomplete para cartório da origem (início de matrícula)
-    const cartorioOrigemInicioInput = document.getElementById('cartorio_origem_nome_inicio');
-    const cartorioOrigemInicioHidden = document.getElementById('cartorio_origem_inicio');
-    const cartorioOrigemInicioSuggestions = document.querySelector('.cartorio-origem-inicio-suggestions');
-    
-    if (cartorioOrigemInicioInput && cartorioOrigemInicioHidden && cartorioOrigemInicioSuggestions) {
-        setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions);
-    }
-    
-
-});
-
-// Função para remover pessoa
-function removePessoa(button) {
-    const pessoaItem = button.closest('.pessoa-item');
-    if (pessoaItem) {
-        pessoaItem.remove();
-    }
-}
-
-// Função para adicionar transmitente
-function adicionarTransmitente() {
-    const container = document.getElementById('transmitentes-container');
-    const pessoaDiv = document.createElement('div');
-    pessoaDiv.className = 'pessoa-item';
-    pessoaDiv.innerHTML = `
-        <div class="pessoa-input-group">
-            <div class="autocomplete-container">
-                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
-                <input type="hidden" name="transmitente[]" class="transmitente-id">
-                <div class="autocomplete-suggestions transmitente-suggestions"></div>
-            </div>
-            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
-        </div>
-    `;
-    container.appendChild(pessoaDiv);
-    
-    // Configurar autocomplete para o novo campo
-    const newInput = pessoaDiv.querySelector('.transmitente-nome');
-    const newHidden = pessoaDiv.querySelector('.transmitente-id');
-    const newSuggestions = pessoaDiv.querySelector('.transmitente-suggestions');
-    setupPessoaAutocompleteField(newInput, newHidden, newSuggestions, 'transmitente');
-}
-
-// Função para adicionar adquirente
-function adicionarAdquirente() {
-    const container = document.getElementById('adquirentes-container');
-    const pessoaDiv = document.createElement('div');
-    pessoaDiv.className = 'pessoa-item';
-    pessoaDiv.innerHTML = `
-        <div class="pessoa-input-group">
-            <div class="autocomplete-container">
-                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
-                <input type="hidden" name="adquirente[]" class="adquirente-id">
-                <div class="autocomplete-suggestions adquirente-suggestions"></div>
-            </div>
-            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
-        </div>
-    `;
-    container.appendChild(pessoaDiv);
-    
-    // Configurar autocomplete para o novo campo
-    const newInput = pessoaDiv.querySelector('.adquirente-nome');
-    const newHidden = pessoaDiv.querySelector('.adquirente-id');
-    const newSuggestions = pessoaDiv.querySelector('.adquirente-suggestions');
-    setupPessoaAutocompleteField(newInput, newHidden, newSuggestions, 'adquirente');
-}
-
-// Função para configurar autocomplete de pessoa
-function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
-    input.addEventListener('input', function() {
-        const query = this.value.trim();
-        if (query.length < 2) {
-            suggestions.style.display = 'none';
-            return;
-        }
-        
-        fetch(`/api/pessoas/autocomplete/?q=${encodeURIComponent(query)}`)
-            .then(response => response.json())
-            .then(data => {
-                suggestions.innerHTML = '';
-                if (data.results && data.results.length > 0) {
-                    data.results.forEach(pessoa => {
-                        const div = document.createElement('div');
-                        div.className = 'autocomplete-suggestion';
-                        div.textContent = pessoa.nome;
-                        div.addEventListener('click', function() {
-                            input.value = pessoa.nome;
-                            hidden.value = pessoa.id;
-                            suggestions.style.display = 'none';
-                        });
-                        suggestions.appendChild(div);
-                    });
-                    suggestions.style.display = 'block';
-                } else {
-                    suggestions.style.display = 'none';
-                }
-            })
-            .catch(error => {
-                console.error('Erro ao buscar pessoas:', error);
-                suggestions.style.display = 'none';
-            });
-    });
-    
-    // Esconder sugestões quando clicar fora
-    document.addEventListener('click', function(e) {
-        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
-            suggestions.style.display = 'none';
-        }
-    });
-}
-
-// Função para configurar autocomplete de cartório
-function setupCartorioAutocomplete(input, hidden, suggestions) {
-    input.addEventListener('input', function() {
-        const query = this.value.trim();
-        if (query.length < 2) {
-            suggestions.style.display = 'none';
-            return;
-        }
-        
-        fetch(`/api/cartorios/autocomplete/?q=${encodeURIComponent(query)}`)
-            .then(response => response.json())
-            .then(data => {
-                suggestions.innerHTML = '';
-                if (data.results && data.results.length > 0) {
-                    data.results.forEach(cartorio => {
-                        const div = document.createElement('div');
-                        div.className = 'autocomplete-suggestion';
-                        div.textContent = cartorio.nome;
-                        div.addEventListener('click', function() {
-                            input.value = cartorio.nome;
-                            hidden.value = cartorio.id;
-                            suggestions.style.display = 'none';
-                        });
-                        suggestions.appendChild(div);
-                    });
-                    suggestions.style.display = 'block';
-                } else {
-                    suggestions.style.display = 'none';
-                }
-            })
-            .catch(error => {
-                console.error('Erro ao buscar cartórios:', error);
-                suggestions.style.display = 'none';
-            });
-    });
-    
-    // Esconder sugestões quando clicar fora
-    document.addEventListener('click', function(e) {
-        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
-            suggestions.style.display = 'none';
-        }
-    });
-}
-
-// Função para configurar autocomplete geral de pessoas
-function setupPessoaAutocomplete() {
-    const transmitenteInputs = document.querySelectorAll('.transmitente-nome');
-    const adquirenteInputs = document.querySelectorAll('.adquirente-nome');
-    
-    transmitenteInputs.forEach((input, index) => {
-        const hidden = document.querySelectorAll('.transmitente-id')[index];
-        const suggestions = document.querySelectorAll('.transmitente-suggestions')[index];
-        setupPessoaAutocompleteField(input, hidden, suggestions, 'transmitente');
-    });
-    
-    adquirenteInputs.forEach((input, index) => {
-        const hidden = document.querySelectorAll('.adquirente-id')[index];
-        const suggestions = document.querySelectorAll('.adquirente-suggestions')[index];
-        setupPessoaAutocompleteField(input, hidden, suggestions, 'adquirente');
-    });
-}
+    // Adicionar classe para modo de edição
+    document.body.classList.add('modo-edicao');
 </script>
+{% endif %}
 {% endblock %} 

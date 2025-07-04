@@ -9,24 +9,10 @@ class LancamentoCartorioService:
     def processar_cartorio_origem(request, tipo_lanc, lancamento):
         """
         Processa o cartório de origem do lançamento
-        Agora o cartório é sempre obrigatório no bloco básico
+        O cartório da matrícula atual já está no documento, não precisa salvar no lançamento
         """
-        cartorio_origem_id = request.POST.get('cartorio')
-        cartorio_origem_nome = request.POST.get('cartorio_nome', '').strip()
-        
-        if cartorio_origem_id and cartorio_origem_id.strip():
-            lancamento.cartorio_origem_id = cartorio_origem_id
-        elif cartorio_origem_nome:
-            try:
-                cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
-                lancamento.cartorio_origem = cartorio
-            except Cartorios.DoesNotExist:
-                cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                cartorio = Cartorios.objects.create(
-                    nome=cartorio_origem_nome,
-                    cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                )
-                lancamento.cartorio_origem = cartorio
-        else:
-            lancamento.cartorio_origem_id = None 
+        # O cartório da matrícula atual já está no documento.lancamento.cartorio
+        # Não precisamos salvar no campo cartorio_origem do lançamento
+        # O campo cartorio_origem é específico para origem (início de matrícula)
+        # O campo cartorio_transacao é específico para transação
+        pass 

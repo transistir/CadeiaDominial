@@ -14,12 +14,28 @@
    ======================================== */
 .pessoa-item {
     margin-bottom: 10px;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .pessoa-input-group {
     display: flex;
     gap: 10px;
     align-items: center;
+    min-height: 40px;
+}
+
+
+
+#adquirentes-container,
+#adquirentes-container-registro,
+#transmitentes-container,
+#transmitentes-container-registro,
+#origens-container {
+    min-height: 50px;
+    display: block !important;
+    visibility: visible !important;
 }
 
 .autocomplete-container {
@@ -150,24 +166,70 @@
     display: flex;
     gap: 10px;
     align-items: center;
-    margin-bottom: 10px;
-    padding: 10px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
     background: white;
     border-radius: 4px;
     border: 1px solid var(--border-color);
+    min-height: 50px;
+    width: 100%;
 }
 
 .origem-item input {
     flex: 1;
 }
 
+.origem-input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    flex-wrap: nowrap;
+}
+
+.origem-input-group .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.origem-input-group .form-group {
+    margin-bottom: 0;
+}
+
+.origem-input-group .form-group label {
+    font-size: 0.85em;
+    margin-bottom: 2px;
+    color: #666;
+}
+
+.origem-input-group .form-group input {
+    font-size: 0.9em;
+    padding: 6px 8px;
+    height: 32px;
+}
+
 .remove-origem {
-    padding: 2px 6px;
+    padding: 4px 8px;
     background: var(--danger-color);
     color: white;
     border: none;
     border-radius: 3px;
     cursor: pointer;
+    font-size: 12px;
+    min-width: 24px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    position: relative;
+    top: 0;
+    right: 0;
 }
 
 /* ========================================
@@ -237,6 +299,21 @@
         flex-direction: column;
         align-items: stretch;
         gap: 5px;
+    }
+    
+    .origem-input-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .origem-input-group .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .remove-origem {
+        align-self: flex-end;
+        margin-top: 5px;
     }
     
     .percentual-input {

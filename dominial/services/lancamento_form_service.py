@@ -14,12 +14,33 @@ class LancamentoFormService:
         numero_lancamento = request.POST.get('numero_lancamento', '').strip()
         
         # Se não foi gerado automaticamente, gerar agora
-        if numero_simples and not numero_lancamento:
-            numero_lancamento = LancamentoFormService._gerar_numero_lancamento(numero_simples, tipo_lanc, request)
+        if not numero_lancamento:
+            if numero_simples:
+                numero_lancamento = LancamentoFormService._gerar_numero_lancamento(numero_simples, tipo_lanc, request)
+            else:
+                # Se não há número simples nem número completo, usar a sigla da matrícula
+                sigla_matricula = request.POST.get('sigla_matricula', '')
+                numero_lancamento = sigla_matricula
         
         data = request.POST.get('data')
         observacoes = request.POST.get('observacoes')
-        data_clean = data if data and data.strip() else None
+        
+        # Processar data com validação
+        data_clean = None
+        if data and data.strip():
+            data_value = data.strip()
+            # Validar formato da data (YYYY-MM-DD)
+            if len(data_value) == 10 and data_value.count('-') == 2:
+                try:
+                    # Tentar converter para validar o formato
+                    from datetime import datetime
+                    datetime.strptime(data_value, '%Y-%m-%d')
+                    data_clean = data_value
+                except ValueError:
+                    # Se a data for inválida, definir como None
+                    data_clean = None
+            else:
+                data_clean = None
         
         # Campos básicos da matrícula/transcrição
         livro = request.POST.get('livro') if request.POST.get('livro') and request.POST.get('livro').strip() else None

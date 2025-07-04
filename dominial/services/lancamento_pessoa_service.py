@@ -19,7 +19,10 @@ class LancamentoPessoaService:
                         pessoa = Pessoas.objects.create(nome=nome.strip())
                 else:
                     pessoa = Pessoas.objects.create(nome=nome.strip())
-                lancamento.lancamentopessoa_set.create(
+                
+                # Usar lancamento.pessoas.create() em vez de lancamentopessoa_set.create()
+                lancamento.pessoas.create(
                     pessoa=pessoa,
-                    tipo=tipo_pessoa
+                    tipo=tipo_pessoa,
+                    nome_digitado=nome.strip() if not pessoa_id else None
                 ) 

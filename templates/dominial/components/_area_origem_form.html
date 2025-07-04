@@ -6,6 +6,7 @@
     - modo_edicao: se está em modo de edição
     - lancamento: objeto do lançamento (se modo_edicao)
     - form_data: dados do formulário
+    - container_id: id do container de origens (opcional, padrão: 'origens-container')
 -->
 <div class="area-origem-group">
     <h5>Área e Origem</h5>
@@ -18,16 +19,52 @@
                    placeholder="Ex: 150.50">
             <small>Área em hectares do imóvel ou fração</small>
         </div>
-        
-        <div class="form-group">
-            <label for="origem">Origem{% if origem_obrigatorio %} *{% endif %}</label>
-            <input type="text" name="origem" id="origem" 
-                   value="{% if modo_edicao %}{{ lancamento.origem }}{% elif form_data %}{{ form_data.origem }}{% endif %}"
-                   placeholder="Ex: M123, T456, M789">
-            <small>Códigos de matrícula (M) ou transcrição (T) de origem</small>
-            <div id="origem-validation" class="validation-message"></div>
-        </div>
     </div>
     
-    <div id="origens-adicionais" class="origens-container"></div>
+    <div id="{{ container_id|default:'origens-container' }}">
+        <div class="origem-labels">
+            <label>Origem{% if origem_obrigatorio %} *{% endif %}</label>
+            <label>Cartório de Registro da Origem{% if origem_obrigatorio %} *{% endif %}</label>
+        </div>
+        {% if modo_edicao and lancamento.origem %}
+            <div class="origem-item">
+                <div class="form-group origem-field">
+                    <input type="text" name="origem_completa" id="origem_completa" class="origem-texto" 
+                           placeholder="Ex: Número do registro anterior, descrição, etc." 
+                           value="{{ lancamento.origem }}">
+                </div>
+                <div class="form-group cartorio-field">
+                    <div class="autocomplete-container">
+                        <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                               placeholder="Digite o nome do cartório" autocomplete="off" 
+                               value="{% if lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% endif %}">
+                        <input type="hidden" name="cartorio_origem" id="cartorio_origem" class="cartorio-origem-id" 
+                               value="{% if lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% endif %}">
+                        <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+            </div>
+        {% else %}
+            <div class="origem-item">
+                <div class="form-group origem-field">
+                    <input type="text" name="origem_completa" id="origem_completa" class="origem-texto" 
+                           placeholder="Ex: Número do registro anterior, descrição, etc.">
+                </div>
+                <div class="form-group cartorio-field">
+                    <div class="autocomplete-container">
+                        <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                               placeholder="Digite o nome do cartório" autocomplete="off">
+                        <input type="hidden" name="cartorio_origem" id="cartorio_origem" class="cartorio-origem-id">
+                        <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+            </div>
+        {% endif %}
+    </div>
+    
+    <button type="button" class="btn btn-sm btn-outline" onclick="adicionarOrigem()">
+        ➕ Adicionar Origem
+    </button>
 </div> 

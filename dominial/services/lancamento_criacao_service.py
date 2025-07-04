@@ -41,6 +41,10 @@ class LancamentoCriacaoService:
             
             # Processar cartório de origem
             LancamentoCartorioService.processar_cartorio_origem(request, tipo_lanc, lancamento)
+            
+            # Processar campos específicos por tipo de lançamento
+            LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+            
             lancamento.save()
             
             # Processar origens para criar documentos automáticos
@@ -90,7 +94,25 @@ class LancamentoCriacaoService:
             
             # Atualizar campos básicos
             lancamento.numero_lancamento = numero_lancamento
-            lancamento.data = data if data and data.strip() else None
+            
+            # Processar data principal com validação
+            if data and data.strip():
+                data_value = data.strip()
+                # Validar formato da data (YYYY-MM-DD)
+                if len(data_value) == 10 and data_value.count('-') == 2:
+                    try:
+                        # Tentar converter para validar o formato
+                        from datetime import datetime
+                        datetime.strptime(data_value, '%Y-%m-%d')
+                        lancamento.data = data_value
+                    except ValueError:
+                        # Se a data for inválida, definir como None
+                        lancamento.data = None
+                else:
+                    lancamento.data = None
+            else:
+                lancamento.data = None
+                
             lancamento.observacoes = observacoes
             
             # Processar campos específicos por tipo de lançamento
@@ -106,7 +128,7 @@ class LancamentoCriacaoService:
             )
             
             # Limpar pessoas existentes do lançamento
-            lancamento.lancamentopessoa_set.all().delete()
+            lancamento.pessoas.all().delete()
             
             # Processar transmitentes
             transmitentes_data = request.POST.getlist('transmitente_nome[]')

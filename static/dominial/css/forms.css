@@ -14,12 +14,28 @@
    ======================================== */
 .pessoa-item {
     margin-bottom: 10px;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .pessoa-input-group {
     display: flex;
     gap: 10px;
     align-items: center;
+    min-height: 40px;
+}
+
+
+
+#adquirentes-container,
+#adquirentes-container-registro,
+#transmitentes-container,
+#transmitentes-container-registro,
+#origens-container {
+    min-height: 50px;
+    display: block !important;
+    visibility: visible !important;
 }
 
 .autocomplete-container {
@@ -146,15 +162,32 @@
     margin-top: 10px;
 }
 
+.origem-labels {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 5px;
+    padding: 0 12px;
+}
+
+.origem-labels label {
+    flex: 1;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--primary-color);
+    margin-bottom: 0;
+}
+
 .origem-item {
     display: flex;
     gap: 10px;
     align-items: center;
-    margin-bottom: 10px;
-    padding: 10px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
     background: white;
     border-radius: 4px;
     border: 1px solid var(--border-color);
+    min-height: 50px;
+    width: 100%;
 }
 
 .origem-item input {
@@ -162,12 +195,23 @@
 }
 
 .remove-origem {
-    padding: 2px 6px;
+    padding: 4px 8px;
     background: var(--danger-color);
     color: white;
     border: none;
     border-radius: 3px;
     cursor: pointer;
+    font-size: 12px;
+    min-width: 24px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    position: relative;
+    top: 0;
+    right: 0;
 }
 
 /* ========================================
@@ -237,6 +281,16 @@
         flex-direction: column;
         align-items: stretch;
         gap: 5px;
+    }
+    
+    .origem-item {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .remove-origem {
+        align-self: flex-end;
+        margin-top: 5px;
     }
     
     .percentual-input {

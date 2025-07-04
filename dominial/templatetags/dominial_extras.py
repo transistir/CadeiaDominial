@@ -14,4 +14,6 @@ def format_status(status):
         return ''
     
     # Converter para lowercase e remover espaços para usar como classe CSS
-    return status.lower().replace(' ', '-').replace('ã', 'a').replace('ç', 'c') 
+    return status.lower().replace(' ', '-').replace('ã', 'a').replace('ç', 'c')
+
+ 

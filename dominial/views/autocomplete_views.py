@@ -7,7 +7,7 @@ def pessoa_autocomplete(request):
     query = request.GET.get('q', '').strip()
     
     if len(query) < 2:
-        return JsonResponse([], safe=False)
+        return JsonResponse({'results': []})
     
     # Otimização: limitar resultados e usar select_related se necessário
     pessoas = Pessoas.objects.filter(nome__icontains=query)\
@@ -22,14 +22,14 @@ def pessoa_autocomplete(request):
             'cpf': pessoa['cpf']
         })
     
-    return JsonResponse(results, safe=False)
+    return JsonResponse({'results': results})
 
 def cartorio_autocomplete(request):
     """View para autocomplete de cartórios"""
     query = request.GET.get('q', '').strip()
     
     if len(query) < 2:
-        return JsonResponse([], safe=False)
+        return JsonResponse({'results': []})
     
     # Otimização: limitar resultados e usar select_related se necessário
     cartorios = Cartorios.objects.filter(nome__icontains=query)\
@@ -45,7 +45,7 @@ def cartorio_autocomplete(request):
             'estado': cartorio['estado']
         })
     
-    return JsonResponse(results, safe=False)
+    return JsonResponse({'results': results})
 
 def cartorio_imoveis_autocomplete(request):
     """View para autocomplete de cartórios de imóveis (filtrados)"""

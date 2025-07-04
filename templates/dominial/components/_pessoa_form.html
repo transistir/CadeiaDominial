@@ -12,20 +12,37 @@
     <h4>{{ label }}</h4>
     
     <div id="{{ container_id }}">
-        <div class="pessoa-item">
-            <div class="pessoa-input-group">
-                <div class="autocomplete-container">
-                    <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
-                           placeholder="Digite o nome do {{ tipo }}" autocomplete="off">
-                    <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
-                    <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
+        {% if pessoas and pessoas|length > 0 %}
+            {% for pessoa in pessoas %}
+            <div class="pessoa-item">
+                <div class="pessoa-input-group">
+                    <div class="autocomplete-container">
+                        <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off"
+                               value="{{ pessoa.pessoa.nome }}">
+                        <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id" value="{{ pessoa.pessoa.id }}">
+                        <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
                 </div>
-                <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
             </div>
-        </div>
+            {% endfor %}
+        {% else %}
+            <div class="pessoa-item">
+                <div class="pessoa-input-group">
+                    <div class="autocomplete-container">
+                        <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off">
+                        <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
+                        <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+                </div>
+            </div>
+        {% endif %}
     </div>
     
-    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|capfirst }}()">
+    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|title }}()">
         ➕ Adicionar {{ tipo|title }}
     </button>
 </div> 

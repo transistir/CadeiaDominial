@@ -59,10 +59,20 @@ class Lancamento(models.Model):
     forma = models.CharField(max_length=100, null=True, blank=True)
     descricao = models.TextField(null=True, blank=True)
     titulo = models.CharField(max_length=255, null=True, blank=True)
-    cartorio_origem = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_origem_lancamento', null=True, blank=True)
-    livro_origem = models.CharField(max_length=50, null=True, blank=True)
-    folha_origem = models.CharField(max_length=50, null=True, blank=True)
-    data_origem = models.DateField(null=True, blank=True)
+    
+    # Campos de cartório separados por contexto
+    cartorio_origem = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_origem_lancamento', null=True, blank=True, help_text="Cartório de origem (início de matrícula)")
+    cartorio_transacao = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_transacao_lancamento', null=True, blank=True, help_text="Cartório onde foi registrada a transmissão")
+    
+    # Campos de transação (separados dos campos de origem)
+    livro_transacao = models.CharField(max_length=50, null=True, blank=True, help_text="Livro da transação")
+    folha_transacao = models.CharField(max_length=50, null=True, blank=True, help_text="Folha da transação")
+    data_transacao = models.DateField(null=True, blank=True, help_text="Data da transação")
+    
+    # Campos de origem (apenas para início de matrícula)
+    livro_origem = models.CharField(max_length=50, null=True, blank=True, help_text="Livro da origem")
+    folha_origem = models.CharField(max_length=50, null=True, blank=True, help_text="Folha da origem")
+    data_origem = models.DateField(null=True, blank=True, help_text="Data da origem")
     
     # Campo para indicar se é início de matrícula
     eh_inicio_matricula = models.BooleanField(default=False)
@@ -101,7 +111,6 @@ class LancamentoPessoa(models.Model):
     lancamento = models.ForeignKey(Lancamento, on_delete=models.CASCADE, related_name='pessoas')
     pessoa = models.ForeignKey('Pessoas', on_delete=models.PROTECT)
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
-    percentual = models.DecimalField(max_digits=5, decimal_places=2, help_text="Percentual da participação (0-100)")
     nome_digitado = models.CharField(max_length=255, null=True, blank=True, help_text="Nome digitado caso pessoa não existisse")
 
     class Meta:
@@ -110,8 +119,4 @@ class LancamentoPessoa(models.Model):
         unique_together = ('lancamento', 'pessoa', 'tipo')
 
     def __str__(self):
-        return f"{self.pessoa.nome} ({self.get_tipo_display()}) - {self.percentual}%"
-
-    def clean(self):
-        if self.percentual < 0 or self.percentual > 100:
-            raise ValidationError("Percentual deve estar entre 0 e 100") 
+        return f"{self.pessoa.nome} ({self.get_tipo_display()})" 

@@ -17,10 +17,10 @@
     <div class="form-group">
         <label for="numero_lancamento">Número do Lançamento *</label>
         <div class="grid-2">
-            <div>
+            <div class="numero-simples-field">
                 <input type="text" name="numero_lancamento_simples" id="numero_lancamento_simples" 
                        placeholder="Ex: 1, 5, etc." style="width: 100%;"
-                       value="{% if modo_edicao %}{{ lancamento.numero_lancamento|slice:'2:-6' }}{% elif form_data %}{{ form_data.numero_lancamento_simples }}{% endif %}">
+                       value="{% if form_data %}{{ form_data.numero_lancamento_simples }}{% endif %}">
                 <small>Digite apenas o número</small>
             </div>
             <div>
