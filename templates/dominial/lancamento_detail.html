@@ -1,217 +1,638 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Detalhes do Lançamento{% endblock %}
+{% block title %}Detalhes do Lançamento - {{ lancamento.numero_lancamento|default:"Lançamento" }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/lancamento_detail.css' %}">
+{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-10 offset-md-1">
-            <!-- Breadcrumb -->
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'tis_detail' tis_id=tis.id %}">{{ tis.nome }}</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}">{{ imovel.matricula }}</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}">{{ documento.numero }}</a></li>
-                    <li class="breadcrumb-item active">{{ lancamento.numero_lancamento|default:"Lançamento" }}</li>
-                </ol>
-            </nav>
+<div class="lancamento-detail-container">
+    <!-- Breadcrumb Moderno -->
+    <div class="breadcrumb-section">
+        <nav class="breadcrumb-nav">
+            <a href="{% url 'home' %}" class="breadcrumb-item">🏠 Home</a>
+            <span class="breadcrumb-separator">›</span>
+            <a href="{% url 'tis_detail' tis_id=tis.id %}" class="breadcrumb-item">{{ tis.nome }}</a>
+            <span class="breadcrumb-separator">›</span>
+            <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="breadcrumb-item">{{ imovel.matricula }}</a>
+            <span class="breadcrumb-separator">›</span>
+            <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="breadcrumb-item">{{ documento.numero }}</a>
+            <span class="breadcrumb-separator">›</span>
+            <span class="breadcrumb-item active">{{ lancamento.numero_lancamento|default:"Lançamento" }}</span>
+        </nav>
+    </div>
 
-            <!-- Cabeçalho -->
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h2>
-                        <i class="fas fa-file-alt text-primary"></i>
-                        Detalhes do Lançamento
-                    </h2>
-                    <p class="text-muted mb-0">
-                        {{ lancamento.tipo.get_tipo_display }} - {{ lancamento.numero_lancamento|default:"Sem número" }}
-                    </p>
+    <!-- Header Principal -->
+    <div class="lancamento-header">
+        <div class="header-content">
+            <div class="header-info">
+                <div class="tipo-badge tipo-{{ lancamento.tipo.tipo }}">
+                    {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
+                    {{ lancamento.tipo.get_tipo_display }}
                 </div>
-                <div>
-                    <a href="{% url 'editar_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
-                       class="btn btn-primary">
-                        <i class="fas fa-edit"></i>
-                        Editar
-                    </a>
-                    <a href="{% url 'excluir_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
-                       class="btn btn-danger">
-                        <i class="fas fa-trash"></i>
-                        Excluir
-                    </a>
-                </div>
+                <h1 class="lancamento-title">
+                    Lançamento {{ lancamento.numero_lancamento|default:"Sem número" }}
+                </h1>
+                <p class="lancamento-subtitle">
+                    {{ lancamento.data|date:"d/m/Y"|default:"Data não informada" }}
+                </p>
             </div>
-
-            <div class="row">
-                <!-- Informações Principais -->
-                <div class="col-md-8">
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">
-                                <i class="fas fa-info-circle"></i>
-                                Informações do Lançamento
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <p><strong>Tipo:</strong> {{ lancamento.tipo.get_tipo_display }}</p>
-                                    <p><strong>Número:</strong> {{ lancamento.numero_lancamento|default:"Não informado" }}</p>
-                                    <p><strong>Data:</strong> {{ lancamento.data|date:"d/m/Y"|default:"Não informada" }}</p>
-                                    <p><strong>Origem:</strong> {{ lancamento.origem|default:"Não informada" }}</p>
-                                </div>
-                                <div class="col-md-6">
-                                    <p><strong>Documento:</strong> {{ lancamento.documento.numero }}</p>
-                                    <p><strong>Cartório:</strong> {{ lancamento.documento.cartorio.nome }}</p>
-                                    <p><strong>Livro:</strong> {{ lancamento.documento.livro }}</p>
-                                    <p><strong>Folha:</strong> {{ lancamento.documento.folha }}</p>
-                                </div>
-                            </div>
-
-                            {% if lancamento.detalhes %}
-                            <div class="mt-3">
-                                <p><strong>Detalhes:</strong></p>
-                                <p class="text-muted">{{ lancamento.detalhes }}</p>
-                            </div>
-                            {% endif %}
-
-                            {% if lancamento.observacoes %}
-                            <div class="mt-3">
-                                <p><strong>Observações:</strong></p>
-                                <p class="text-muted">{{ lancamento.observacoes }}</p>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Campos Específicos por Tipo -->
-                    {% if lancamento.titulo or lancamento.cartorio_origem or lancamento.livro_origem or lancamento.folha_origem or lancamento.data_origem or lancamento.forma or lancamento.descricao %}
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">
-                                <i class="fas fa-cogs"></i>
-                                Campos Específicos
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                {% if lancamento.titulo %}
-                                <div class="col-md-6">
-                                    <p><strong>Título:</strong> {{ lancamento.titulo }}</p>
-                                </div>
-                                {% endif %}
-                                {% if lancamento.cartorio_origem %}
-                                <div class="col-md-6">
-                                    <p><strong>Cartório de Origem:</strong> {{ lancamento.cartorio_origem.nome }}</p>
-                                </div>
-                                {% endif %}
-                                {% if lancamento.livro_origem %}
-                                <div class="col-md-6">
-                                    <p><strong>Livro de Origem:</strong> {{ lancamento.livro_origem }}</p>
-                                </div>
-                                {% endif %}
-                                {% if lancamento.folha_origem %}
-                                <div class="col-md-6">
-                                    <p><strong>Folha de Origem:</strong> {{ lancamento.folha_origem }}</p>
-                                </div>
-                                {% endif %}
-                                {% if lancamento.data_origem %}
-                                <div class="col-md-6">
-                                    <p><strong>Data de Origem:</strong> {{ lancamento.data_origem|date:"d/m/Y" }}</p>
-                                </div>
-                                {% endif %}
-                                {% if lancamento.forma %}
-                                <div class="col-md-6">
-                                    <p><strong>Forma:</strong> {{ lancamento.forma }}</p>
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% if lancamento.descricao %}
-                            <div class="mt-3">
-                                <p><strong>Descrição:</strong></p>
-                                <p class="text-muted">{{ lancamento.descricao }}</p>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-
-                <!-- Sidebar -->
-                <div class="col-md-4">
-                    <!-- Transmitentes -->
-                    {% if transmitentes %}
-                    <div class="card mb-4">
-                        <div class="card-header bg-warning text-dark">
-                            <h6 class="mb-0">
-                                <i class="fas fa-user-minus"></i>
-                                Transmitentes
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            {% for transmitente in transmitentes %}
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span>{{ transmitente.pessoa.nome }}</span>
-                                <span class="badge bg-secondary">{{ transmitente.nome }}</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <!-- Adquirentes -->
-                    {% if adquirentes %}
-                    <div class="card mb-4">
-                        <div class="card-header bg-success text-white">
-                            <h6 class="mb-0">
-                                <i class="fas fa-user-plus"></i>
-                                Adquirentes
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            {% for adquirente in adquirentes %}
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span>{{ adquirente.pessoa.nome }}</span>
-                                <span class="badge bg-secondary">{{ adquirente.nome }}</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <!-- Informações do Imóvel -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h6 class="mb-0">
-                                <i class="fas fa-home"></i>
-                                Imóvel
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>TI:</strong> {{ tis.nome }}</p>
-                            <p><strong>Matrícula:</strong> {{ imovel.matricula }}</p>
-                            <p><strong>SNCR:</strong> {{ imovel.sncr }}</p>
-                            <p><strong>Proprietário:</strong> {{ imovel.proprietario.nome }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Botões de Ação -->
-            <div class="d-flex justify-content-between mt-4">
-                <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" 
-                   class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i>
-                    Voltar aos Lançamentos
+            <div class="header-actions">
+                <a href="{% url 'editar_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                   class="action-button edit-button" title="Editar lançamento">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M18.5 2.50023C18.8978 2.10243 19.4374 1.87891 20 1.87891C20.5626 1.87891 21.1022 2.10243 21.5 2.50023C21.8978 2.89804 22.1213 3.43762 22.1213 4.00023C22.1213 4.56284 21.8978 5.10243 21.5 5.50023L12 15.0002L8 16.0002L9 12.0002L18.5 2.50023Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Editar
                 </a>
-                <div>
-                    <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" 
-                       class="btn btn-info">
-                        <i class="fas fa-sitemap"></i>
-                        Ver Cadeia Dominial
-                    </a>
+                <a href="{% url 'excluir_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                   class="action-button delete-button" title="Excluir lançamento" 
+                   onclick="return confirm('Tem certeza que deseja excluir este lançamento?')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 6H5H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Excluir
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <div class="lancamento-content">
+        <div class="content-grid">
+            <!-- Coluna Principal -->
+            <div class="main-column">
+                <!-- Informações Básicas -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📋 Informações Básicas</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">Tipo</span>
+                                <span class="info-value">{{ lancamento.tipo.get_tipo_display }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Número</span>
+                                <span class="info-value">{{ lancamento.numero_lancamento|default:"Não informado" }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Data</span>
+                                <span class="info-value">{{ lancamento.data|date:"d/m/Y"|default:"Não informada" }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Documento</span>
+                                <span class="info-value">{{ lancamento.documento.numero }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Cartório</span>
+                                <span class="info-value">{{ lancamento.documento.cartorio.nome }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Livro/Folha</span>
+                                <span class="info-value">{{ lancamento.documento.livro }}/{{ lancamento.documento.folha }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Data de Cadastro</span>
+                                <span class="info-value">{{ lancamento.data_cadastro|date:"d/m/Y" }}</span>
+                            </div>
+                            {% if lancamento.eh_inicio_matricula %}
+                            <div class="info-item">
+                                <span class="info-label">Início de Matrícula</span>
+                                <span class="info-value">Sim</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detalhes Específicos por Tipo -->
+                {% if lancamento.tipo.tipo == 'registro' %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📄 Detalhes do Registro</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.forma %}
+                            <div class="info-item">
+                                <span class="info-label">Forma</span>
+                                <span class="info-value">{{ lancamento.forma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.titulo %}
+                            <div class="info-item">
+                                <span class="info-label">Título</span>
+                                <span class="info-value">{{ lancamento.titulo }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.valor_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Valor</span>
+                                <span class="info-value">R$ {{ lancamento.valor_transacao|floatformat:2 }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.area %}
+                            <div class="info-item">
+                                <span class="info-label">Área</span>
+                                <span class="info-value">{{ lancamento.area|floatformat:2 }} ha</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% elif lancamento.tipo.tipo == 'averbacao' %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📋 Detalhes da Averbação</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.forma %}
+                            <div class="info-item">
+                                <span class="info-label">Forma</span>
+                                <span class="info-value">{{ lancamento.forma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.descricao %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Descrição</span>
+                                <span class="info-value">{{ lancamento.descricao }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.valor_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Valor</span>
+                                <span class="info-value">R$ {{ lancamento.valor_transacao|floatformat:2 }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.area %}
+                            <div class="info-item">
+                                <span class="info-label">Área</span>
+                                <span class="info-value">{{ lancamento.area|floatformat:2 }} ha</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>🚀 Detalhes do Início de Matrícula</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.valor_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Valor da Transação</span>
+                                <span class="info-value">R$ {{ lancamento.valor_transacao|floatformat:2 }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.area %}
+                            <div class="info-item">
+                                <span class="info-label">Área</span>
+                                <span class="info-value">{{ lancamento.area|floatformat:2 }} ha</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.origem %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Origem</span>
+                                <span class="info-value">{{ lancamento.origem }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.detalhes %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Detalhes</span>
+                                <span class="info-value">{{ lancamento.detalhes }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Origem para Início de Matrícula -->
+                {% if lancamento.cartorio_origem or lancamento.livro_origem or lancamento.folha_origem or lancamento.data_origem or lancamento.documento_origem %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📋 Origem</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.documento_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Documento de Origem</span>
+                                <span class="info-value">{{ lancamento.documento_origem.numero }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.cartorio_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Cartório</span>
+                                <span class="info-value">{{ lancamento.cartorio_origem.nome }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.livro_origem or lancamento.folha_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Livro/Folha</span>
+                                <span class="info-value">{{ lancamento.livro_origem|default:"-" }}/{{ lancamento.folha_origem|default:"-" }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.data_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Data</span>
+                                <span class="info-value">{{ lancamento.data_origem|date:"d/m/Y" }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Origem (para outros tipos que não sejam Início de Matrícula) -->
+                {% if lancamento.cartorio_origem or lancamento.livro_origem or lancamento.folha_origem or lancamento.data_origem or lancamento.documento_origem or lancamento.origem %}
+                {% if lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📋 Origem</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.origem %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Descrição da Origem</span>
+                                <span class="info-value">{{ lancamento.origem }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.documento_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Documento de Origem</span>
+                                <span class="info-value">{{ lancamento.documento_origem.numero }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.cartorio_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Cartório</span>
+                                <span class="info-value">{{ lancamento.cartorio_origem.nome }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.livro_origem or lancamento.folha_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Livro/Folha</span>
+                                <span class="info-value">{{ lancamento.livro_origem|default:"-" }}/{{ lancamento.folha_origem|default:"-" }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.data_origem %}
+                            <div class="info-item">
+                                <span class="info-label">Data</span>
+                                <span class="info-value">{{ lancamento.data_origem|date:"d/m/Y" }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+                {% else %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📄 Detalhes Gerais</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.forma %}
+                            <div class="info-item">
+                                <span class="info-label">Forma</span>
+                                <span class="info-value">{{ lancamento.forma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.descricao %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Descrição</span>
+                                <span class="info-value">{{ lancamento.descricao }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.valor_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Valor</span>
+                                <span class="info-value">R$ {{ lancamento.valor_transacao|floatformat:2 }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.area %}
+                            <div class="info-item">
+                                <span class="info-label">Área</span>
+                                <span class="info-value">{{ lancamento.area|floatformat:2 }} ha</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Detalhes (campo específico) -->
+                {% if lancamento.detalhes and lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📋 Detalhes</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="detalhes-content">
+                            {{ lancamento.detalhes }}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Transação (para Registro e outros tipos que tenham) -->
+                {% if lancamento.cartorio_transacao or lancamento.livro_transacao or lancamento.folha_transacao or lancamento.data_transacao or lancamento.titulo or lancamento.forma or lancamento.descricao or lancamento.valor_transacao or lancamento.area or lancamento.origem or lancamento.observacoes or lancamento.detalhes or lancamento.transmitente or lancamento.adquirente or lancamento.pessoas.all %}
+                {% if lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>📋 Transação</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            {% if lancamento.forma %}
+                            <div class="info-item">
+                                <span class="info-label">Forma</span>
+                                <span class="info-value">{{ lancamento.forma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.valor_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Valor</span>
+                                <span class="info-value">R$ {{ lancamento.valor_transacao|floatformat:2 }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.area %}
+                            <div class="info-item">
+                                <span class="info-label">Área</span>
+                                <span class="info-value">{{ lancamento.area|floatformat:2 }} ha</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.origem %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Origem</span>
+                                <span class="info-value">{{ lancamento.origem }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.titulo %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Título</span>
+                                <span class="info-value">{{ lancamento.titulo }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.descricao %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Descrição</span>
+                                <span class="info-value">{{ lancamento.descricao }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.detalhes %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Detalhes</span>
+                                <span class="info-value">{{ lancamento.detalhes }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.observacoes %}
+                            <div class="info-item full-width">
+                                <span class="info-label">Observações</span>
+                                <span class="info-value">{{ lancamento.observacoes }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.cartorio_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Cartório</span>
+                                <span class="info-value">{{ lancamento.cartorio_transacao.nome }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.livro_transacao or lancamento.folha_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Livro/Folha</span>
+                                <span class="info-value">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
+                            </div>
+                            {% endif %}
+                            {% if lancamento.data_transacao %}
+                            <div class="info-item">
+                                <span class="info-label">Data</span>
+                                <span class="info-value">{{ lancamento.data_transacao|date:"d/m/Y" }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <!-- Observações -->
+                {% if lancamento.observacoes and lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}
+                <div class="info-card observacoes-card">
+                    <div class="card-header">
+                        <h3>📝 Observações</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="observacoes-content">
+                            {{ lancamento.observacoes }}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar-column">
+                <!-- Pessoas -->
+                {% if lancamento.pessoas.all or lancamento.transmitente or lancamento.adquirente %}
+                <div class="info-card pessoas-card">
+                    <div class="card-header">
+                        <h3>👥 Pessoas Envolvidas</h3>
+                    </div>
+                    <div class="card-content">
+                        {% if lancamento.tipo.tipo == 'registro' %}
+                            {% if transmitentes %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title transmitentes">📤 Transmitentes</h4>
+                                <div class="pessoas-list">
+                                    {% for transmitente in transmitentes %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ transmitente.pessoa.nome }}</span>
+                                        {% if transmitente.nome_digitado and transmitente.nome_digitado != transmitente.pessoa.nome %}
+                                        <span class="pessoa-tipo">{{ transmitente.nome_digitado }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif lancamento.transmitente %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title transmitentes">📤 Transmitente</h4>
+                                <div class="pessoas-list">
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ lancamento.transmitente.nome }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if adquirentes %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title adquirentes">📥 Adquirentes</h4>
+                                <div class="pessoas-list">
+                                    {% for adquirente in adquirentes %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ adquirente.pessoa.nome }}</span>
+                                        {% if adquirente.nome_digitado and adquirente.nome_digitado != adquirente.pessoa.nome %}
+                                        <span class="pessoa-tipo">{{ adquirente.nome_digitado }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif lancamento.adquirente %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title adquirentes">📥 Adquirente</h4>
+                                <div class="pessoas-list">
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ lancamento.adquirente.nome }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                            {% if adquirentes %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title adquirentes">📥 Adquirente</h4>
+                                <div class="pessoas-list">
+                                    {% for adquirente in adquirentes %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ adquirente.pessoa.nome }}</span>
+                                        {% if adquirente.nome_digitado and adquirente.nome_digitado != adquirente.pessoa.nome %}
+                                        <span class="pessoa-tipo">{{ adquirente.nome_digitado }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif lancamento.adquirente %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title adquirentes">📥 Adquirente</h4>
+                                <div class="pessoas-list">
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ lancamento.adquirente.nome }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if transmitentes %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title transmitentes">📤 Transmitente</h4>
+                                <div class="pessoas-list">
+                                    {% for transmitente in transmitentes %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ transmitente.pessoa.nome }}</span>
+                                        {% if transmitente.nome_digitado and transmitente.nome_digitado != transmitente.pessoa.nome %}
+                                        <span class="pessoa-tipo">{{ transmitente.nome_digitado }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif lancamento.transmitente %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title transmitentes">📤 Transmitente</h4>
+                                <div class="pessoas-list">
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ lancamento.transmitente.nome }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                            {% if lancamento.pessoas.all %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title">👤 Pessoas</h4>
+                                <div class="pessoas-list">
+                                    {% for pessoa in lancamento.pessoas.all %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>
+                                        {% if pessoa.nome_digitado and pessoa.nome_digitado != pessoa.pessoa.nome %}
+                                        <span class="pessoa-tipo">{{ pessoa.nome_digitado }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif lancamento.transmitente or lancamento.adquirente %}
+                            <div class="pessoas-section">
+                                <h4 class="pessoas-title">👤 Pessoas</h4>
+                                <div class="pessoas-list">
+                                    {% if lancamento.transmitente %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ lancamento.transmitente.nome }}</span>
+                                        <span class="pessoa-tipo">Transmitente</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if lancamento.adquirente %}
+                                    <div class="pessoa-item">
+                                        <span class="pessoa-nome">{{ lancamento.adquirente.nome }}</span>
+                                        <span class="pessoa-tipo">Adquirente</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Informações do Imóvel -->
+                <div class="info-card imovel-card">
+                    <div class="card-header">
+                        <h3>🏠 Informações do Imóvel</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">TI</span>
+                                <span class="info-value">{{ tis.nome }}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Matrícula</span>
+                                <span class="info-value">{{ imovel.matricula|default:"Não informada" }}</span>
+                            </div>
+                            {% if imovel.sncr %}
+                            <div class="info-item">
+                                <span class="info-label">SNCR</span>
+                                <span class="info-value">{{ imovel.sncr }}</span>
+                            </div>
+                            {% endif %}
+                            {% if imovel.proprietario %}
+                            <div class="info-item">
+                                <span class="info-label">Proprietário</span>
+                                <span class="info-value">{{ imovel.proprietario.nome }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Navegação -->
+    <div class="navigation-section">
+        <div class="nav-buttons">
+            <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" 
+               class="nav-button secondary">
+                ← Voltar aos Lançamentos
+            </a>
+            <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" 
+               class="nav-button primary">
+                Ver Cadeia Dominial →
+            </a>
         </div>
     </div>
 </div>
