@@ -69,12 +69,15 @@ class LancamentoFormService:
                     cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                 )
         
-        # Campos específicos por tipo (mantidos para compatibilidade)
-        forma_value = request.POST.get('forma', '').strip()
-        descricao_clean = request.POST.get('descricao') if request.POST.get('descricao') and request.POST.get('descricao').strip() else None
-        titulo_clean = request.POST.get('titulo') if request.POST.get('titulo') and request.POST.get('titulo').strip() else None
-        area = request.POST.get('area')
-        origem = request.POST.get('origem_completa') or request.POST.get('origem')
+        # Processar múltiplas origens
+        origens_completas = request.POST.getlist('origem_completa[]')
+        if origens_completas:
+            # Filtrar origens vazias e concatenar
+            origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
+            origem = '; '.join(origens_validas) if origens_validas else None
+        else:
+            # Fallback para campo único
+            origem = request.POST.get('origem_completa') or request.POST.get('origem')
         
         # Processar campo forma baseado no tipo de lançamento
         if tipo_lanc.tipo == 'averbacao':
@@ -87,6 +90,9 @@ class LancamentoFormService:
             descricao_clean = request.POST.get('descricao') if request.POST.get('descricao') and request.POST.get('descricao').strip() else None
         else:
             forma_value = request.POST.get('forma', '').strip()
+        
+        titulo_clean = request.POST.get('titulo') if request.POST.get('titulo') and request.POST.get('titulo').strip() else None
+        area = request.POST.get('area')
         
         return {
             'numero_lancamento': numero_lancamento,

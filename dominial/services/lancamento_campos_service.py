@@ -158,13 +158,36 @@ class LancamentoCamposService:
         """
         Processa campos específicos para lançamentos do tipo início de matrícula
         """
-        # Processar origem
-        origem_value = request.POST.get('origem_completa', '').strip()
-        lancamento.origem = origem_value if origem_value else None
+        # Processar múltiplas origens
+        origens_completas = request.POST.getlist('origem_completa[]')
+        cartorios_origem_ids = request.POST.getlist('cartorio_origem[]')
+        cartorios_origem_nomes = request.POST.getlist('cartorio_origem_nome[]')
         
-        # Processar cartório da origem
-        cartorio_origem_id = request.POST.get('cartorio_origem')
-        cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
+        # Se há múltiplas origens, concatenar com ponto e vírgula
+        if origens_completas:
+            # Filtrar origens vazias
+            origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
+            if origens_validas:
+                lancamento.origem = '; '.join(origens_validas)
+            else:
+                lancamento.origem = None
+        else:
+            # Fallback para campo único (compatibilidade)
+            origem_value = request.POST.get('origem_completa', '').strip()
+            lancamento.origem = origem_value if origem_value else None
+        
+        # Processar cartório da primeira origem (ou única origem)
+        cartorio_origem_id = None
+        cartorio_origem_nome = None
+        
+        if cartorios_origem_ids and cartorios_origem_ids[0].strip():
+            cartorio_origem_id = cartorios_origem_ids[0].strip()
+        elif cartorios_origem_nomes and cartorios_origem_nomes[0].strip():
+            cartorio_origem_nome = cartorios_origem_nomes[0].strip()
+        else:
+            # Fallback para campo único (compatibilidade)
+            cartorio_origem_id = request.POST.get('cartorio_origem')
+            cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
         
         if cartorio_origem_id and cartorio_origem_id.strip():
             lancamento.cartorio_origem_id = cartorio_origem_id
@@ -191,17 +214,17 @@ class LancamentoCamposService:
         # Processar data de origem com validação
         data_origem_value = request.POST.get('data_origem', '').strip()
         if data_origem_value:
-            # Validar formato da data (YYYY-MM-DD)
-            if len(data_origem_value) == 10 and data_origem_value.count('-') == 2:
-                try:
-                    # Tentar converter para validar o formato
-                    from datetime import datetime
-                    datetime.strptime(data_origem_value, '%Y-%m-%d')
-                    lancamento.data_origem = data_origem_value
-                except ValueError:
-                    # Se a data for inválida, definir como None
-                    lancamento.data_origem = None
-            else:
+            try:
+                from datetime import datetime
+                lancamento.data_origem = datetime.strptime(data_origem_value, '%Y-%m-%d').date()
+            except ValueError:
                 lancamento.data_origem = None
         else:
-            lancamento.data_origem = None 
+            lancamento.data_origem = None
+        
+        # Processar livro e folha de origem
+        livro_origem_value = request.POST.get('livro_origem', '').strip()
+        lancamento.livro_origem = livro_origem_value if livro_origem_value else None
+        
+        folha_origem_value = request.POST.get('folha_origem', '').strip()
+        lancamento.folha_origem = folha_origem_value if folha_origem_value else None 

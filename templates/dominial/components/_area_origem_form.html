@@ -29,16 +29,16 @@
         {% if modo_edicao and lancamento.origem %}
             <div class="origem-item">
                 <div class="form-group origem-field">
-                    <input type="text" name="origem_completa" id="origem_completa" class="origem-texto" 
+                    <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
                            placeholder="Ex: Número do registro anterior, descrição, etc." 
                            value="{{ lancamento.origem }}">
                 </div>
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                        <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
                                placeholder="Digite o nome do cartório" autocomplete="off" 
                                value="{% if lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% endif %}">
-                        <input type="hidden" name="cartorio_origem" id="cartorio_origem" class="cartorio-origem-id" 
+                        <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id" 
                                value="{% if lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% endif %}">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
@@ -48,14 +48,14 @@
         {% else %}
             <div class="origem-item">
                 <div class="form-group origem-field">
-                    <input type="text" name="origem_completa" id="origem_completa" class="origem-texto" 
+                    <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
                            placeholder="Ex: Número do registro anterior, descrição, etc.">
                 </div>
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                        <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
                                placeholder="Digite o nome do cartório" autocomplete="off">
-                        <input type="hidden" name="cartorio_origem" id="cartorio_origem" class="cartorio-origem-id">
+                        <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
                 </div>

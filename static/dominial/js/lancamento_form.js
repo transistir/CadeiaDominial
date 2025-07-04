@@ -392,18 +392,22 @@ function adicionarOrigem() {
         return;
     }
     
+    // Contar quantas origens já existem para gerar IDs únicos
+    const existingOrigins = container.querySelectorAll('.origem-item');
+    const newIndex = existingOrigins.length;
+    
     const origemDiv = document.createElement('div');
     origemDiv.className = 'origem-item';
     origemDiv.innerHTML = `
         <div class="form-group origem-field">
-            <input type="text" name="origem_completa" id="origem_completa_nova" class="origem-texto" 
+            <input type="text" name="origem_completa[]" id="origem_completa_${newIndex}" class="origem-texto" 
                    placeholder="Ex: Número do registro anterior, descrição, etc." required>
         </div>
         <div class="form-group cartorio-field">
             <div class="autocomplete-container">
-                <input type="text" name="cartorio_origem_nome" id="cartorio_origem_nome_nova" class="cartorio-origem-nome" 
+                <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_${newIndex}" class="cartorio-origem-nome" 
                        placeholder="Digite o nome do cartório" autocomplete="off" required>
-                <input type="hidden" name="cartorio_origem" id="cartorio_origem_nova" class="cartorio-origem-id">
+                <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_${newIndex}" class="cartorio-origem-id">
                 <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
             </div>
         </div>
@@ -412,8 +416,8 @@ function adicionarOrigem() {
     container.appendChild(origemDiv);
     
     // Configurar autocomplete para o novo campo de cartório
-    const newInput = origemDiv.querySelector('#cartorio_origem_nome_nova');
-    const newHidden = origemDiv.querySelector('#cartorio_origem_nova');
+    const newInput = origemDiv.querySelector(`#cartorio_origem_nome_${newIndex}`);
+    const newHidden = origemDiv.querySelector(`#cartorio_origem_${newIndex}`);
     const newSuggestions = origemDiv.querySelector('.cartorio-origem-suggestions');
     setupCartorioAutocomplete(newInput, newHidden, newSuggestions);
 }

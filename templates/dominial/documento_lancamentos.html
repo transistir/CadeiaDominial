@@ -1,6 +1,11 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Lançamentos - {{ documento.numero }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/documento_lancamentos.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -52,79 +57,223 @@
         </div>
 
         {% if lancamentos %}
-        <div class="lancamentos-list">
-            {% for lancamento in lancamentos %}
-            <div class="lancamento-card">
-                <div class="lancamento-header">
-                    <div class="lancamento-tipo">
-                        {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
-                        {{ lancamento.tipo.get_tipo_display }}
-                    </div>
-                    <div class="lancamento-data">
-                        {{ lancamento.data|date:'d/m/Y' }}
-                    </div>
-                    {% if lancamento.numero_lancamento %}
-                    <div class="lancamento-numero">
-                        #{{ lancamento.numero_lancamento }}
-                    </div>
-                    {% endif %}
-                    {% if lancamento.eh_inicio_matricula %}
-                    <div class="inicio-matricula-badge">
-                        Início de Matrícula
-                    </div>
-                    {% endif %}
-                </div>
-
-                <div class="lancamento-details">
-                    {% if lancamento.forma %}
-                    <div class="detail-item">
-                        <strong>Forma:</strong> {{ lancamento.forma }}
-                    </div>
-                    {% endif %}
-                    
-                    {% if lancamento.descricao %}
-                    <div class="detail-item">
-                        <strong>Descrição:</strong> {{ lancamento.descricao|truncatechars:100 }}
-                    </div>
-                    {% endif %}
-                    
-                    {% if lancamento.titulo %}
-                    <div class="detail-item">
-                        <strong>Título:</strong> {{ lancamento.titulo }}
-                    </div>
-                    {% endif %}
-                    
-                    {% if lancamento.observacoes %}
-                    <div class="detail-item">
-                        <strong>Observações:</strong> {{ lancamento.observacoes|truncatechars:80 }}
-                    </div>
-                    {% endif %}
-                    
-                    {% if lancamento.origem %}
-                    <div class="detail-item">
-                        <strong>Origem:</strong> {{ lancamento.origem }}
-                    </div>
-                    {% endif %}
-                </div>
-
-                {% if pode_editar %}
-                <div class="lancamento-actions">
-                    <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
-                       class="btn btn-sm btn-outline-info">
-                        <i class="fas fa-eye"></i> Ver
-                    </a>
-                    <a href="{% url 'editar_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
-                       class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-edit"></i> Editar
-                    </a>
-                    <a href="{% url 'excluir_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
-                       class="btn btn-sm btn-outline-danger">
-                        <i class="fas fa-trash"></i> Excluir
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
+        <div class="lancamentos-table-container">
+            <table class="lancamentos-table">
+                <thead>
+                    <tr>
+                        <th class="th-tipo">Tipo</th>
+                        <th class="th-numero">Número</th>
+                        <th class="th-data">Data</th>
+                        <th class="th-detalhes">Detalhes Específicos</th>
+                        <th class="th-pessoas">Pessoas</th>
+                        {% if pode_editar %}
+                        <th class="th-acoes">Ações</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lancamento in lancamentos %}
+                    <tr class="lancamento-row" onclick="window.location.href='{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}'">
+                        <td class="td-tipo">
+                            <div class="tipo-badge tipo-{{ lancamento.tipo.tipo }}">
+                                {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
+                                {{ lancamento.tipo.get_tipo_display }}
+                            </div>
+                        </td>
+                        <td class="td-numero">
+                            <span class="numero-value">{{ lancamento.numero_lancamento|default:"-" }}</span>
+                        </td>
+                        <td class="td-data">
+                            <span class="data-value">{{ lancamento.data|date:'d/m/Y' }}</span>
+                        </td>
+                        <td class="td-detalhes">
+                            {% if lancamento.tipo.tipo == 'registro' %}
+                                <!-- DADOS ESPECÍFICOS PARA REGISTRO -->
+                                <div class="detalhes-registro">
+                                    {% if lancamento.forma %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Forma:</span>
+                                            <span class="detalhe-valor">{{ lancamento.forma|truncatechars:25 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.titulo %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Título:</span>
+                                            <span class="detalhe-valor">{{ lancamento.titulo|truncatechars:25 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.cartorio_transacao %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Cartório:</span>
+                                            <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome|truncatechars:20 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.livro_transacao or lancamento.folha_transacao %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Livro/Folha:</span>
+                                            <span class="detalhe-valor">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% elif lancamento.tipo.tipo == 'averbacao' %}
+                                <!-- DADOS ESPECÍFICOS PARA AVERBAÇÃO -->
+                                <div class="detalhes-averbacao">
+                                    {% if lancamento.forma %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Forma:</span>
+                                            <span class="detalhe-valor">{{ lancamento.forma|truncatechars:30 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.descricao %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Descrição:</span>
+                                            <span class="detalhe-valor">{{ lancamento.descricao|truncatechars:40 }}</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                                <!-- DADOS ESPECÍFICOS PARA INÍCIO DE MATRÍCULA -->
+                                <div class="detalhes-inicio">
+                                    {% if lancamento.forma %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Forma:</span>
+                                            <span class="detalhe-valor">{{ lancamento.forma|truncatechars:25 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.area %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Área:</span>
+                                            <span class="detalhe-valor">{{ lancamento.area|floatformat:2 }} ha</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.origem %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Origem:</span>
+                                            <span class="detalhe-valor">{{ lancamento.origem|truncatechars:25 }}</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <!-- DADOS GENÉRICOS PARA OUTROS TIPOS -->
+                                <div class="detalhes-generico">
+                                    {% if lancamento.forma %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Forma:</span>
+                                            <span class="detalhe-valor">{{ lancamento.forma|truncatechars:30 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    {% if lancamento.descricao %}
+                                        <div class="detalhe-item">
+                                            <span class="detalhe-label">Descrição:</span>
+                                            <span class="detalhe-valor">{{ lancamento.descricao|truncatechars:40 }}</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                            
+                            <!-- OBSERVAÇÕES (COMUM A TODOS OS TIPOS) -->
+                            {% if lancamento.observacoes %}
+                                <div class="observacoes-item">
+                                    <span class="obs-label">📝 Obs:</span>
+                                    <span class="obs-valor">{{ lancamento.observacoes|truncatechars:35 }}</span>
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="td-pessoas">
+                            {% if lancamento.tipo.tipo == 'registro' %}
+                                <!-- PESSOAS ESPECÍFICAS PARA REGISTRO -->
+                                <div class="pessoas-registro">
+                                    {% with transmitentes=lancamento.pessoas.all|slice:":2" %}
+                                        {% if transmitentes %}
+                                            <div class="pessoas-item">
+                                                <small class="pessoa-tipo">Transmitente:</small> 
+                                                {% for pessoa in transmitentes %}
+                                                    {{ pessoa.pessoa.nome|truncatechars:15 }}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                                {% if lancamento.pessoas.count > 2 %}
+                                                    <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                    {% with adquirentes=lancamento.pessoas.all|slice:":2" %}
+                                        {% if adquirentes %}
+                                            <div class="pessoas-item">
+                                                <small class="pessoa-tipo">Adquirente:</small> 
+                                                {% for pessoa in adquirentes %}
+                                                    {{ pessoa.pessoa.nome|truncatechars:15 }}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                </div>
+                            {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                                <!-- PESSOAS ESPECÍFICAS PARA INÍCIO DE MATRÍCULA -->
+                                <div class="pessoas-inicio">
+                                    {% with adquirentes=lancamento.pessoas.all|slice:":2" %}
+                                        {% if adquirentes %}
+                                            <div class="pessoas-item">
+                                                <small class="pessoa-tipo">Adquirente:</small> 
+                                                {% for pessoa in adquirentes %}
+                                                    {{ pessoa.pessoa.nome|truncatechars:20 }}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                                {% if lancamento.pessoas.count > 2 %}
+                                                    <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                </div>
+                            {% else %}
+                                <!-- PESSOAS GENÉRICAS PARA OUTROS TIPOS -->
+                                <div class="pessoas-generico">
+                                    {% with pessoas=lancamento.pessoas.all|slice:":2" %}
+                                        {% if pessoas %}
+                                            <div class="pessoas-item">
+                                                <small class="pessoa-tipo">Pessoas:</small> 
+                                                {% for pessoa in pessoas %}
+                                                    {{ pessoa.pessoa.nome|truncatechars:20 }}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                                {% if lancamento.pessoas.count > 2 %}
+                                                    <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                </div>
+                            {% endif %}
+                        </td>
+                        {% if pode_editar %}
+                        <td class="td-acoes" onclick="event.stopPropagation();">
+                            <div class="lancamento-actions">
+                                <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                                   class="action-button view-button" title="Ver detalhes">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M1 12S5 4 12 4S23 12 23 12S19 20 12 20S1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </a>
+                                <a href="{% url 'editar_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                                   class="action-button edit-button" title="Editar">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M18.5 2.50023C18.8978 2.10243 19.4374 1.87891 20 1.87891C20.5626 1.87891 21.1022 2.10243 21.5 2.50023C21.8978 2.89804 22.1213 3.43762 22.1213 4.00023C22.1213 4.56284 21.8978 5.10243 21.5 5.50023L12 15.0002L8 16.0002L9 12.0002L18.5 2.50023Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </a>
+                                <a href="{% url 'excluir_lancamento' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" 
+                                   class="action-button delete-button" title="Excluir" onclick="return confirm('Tem certeza que deseja excluir este lançamento?')">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M3 6H5H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </a>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
         {% else %}
         <div class="empty-state">
@@ -147,195 +296,4 @@
         </a>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-.header-section {
-    margin-bottom: 30px;
-}
-
-.documento-info {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-top: 20px;
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 15px;
-}
-
-.info-item {
-    padding: 10px;
-    background: #f8f9fa;
-    border-radius: 4px;
-    text-align: center;
-}
-
-.info-item strong {
-    color: var(--primary-color);
-    display: block;
-    margin-bottom: 5px;
-}
-
-.origem-info, .observacoes-info {
-    margin-top: 15px;
-    padding: 10px;
-    background: #f8f9fa;
-    border-radius: 4px;
-    border-left: 4px solid var(--accent-color);
-}
-
-.lancamentos-section {
-    margin-bottom: 30px;
-}
-
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.lancamentos-list {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.lancamento-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    border-left: 4px solid var(--accent-color);
-    transition: all 0.3s ease;
-}
-
-.lancamento-card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-    transform: translateY(-1px);
-}
-
-.lancamento-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.lancamento-tipo {
-    font-weight: bold;
-    color: var(--primary-color);
-    font-size: 1.1em;
-}
-
-.lancamento-data {
-    color: var(--secondary-color);
-    font-size: 0.9em;
-}
-
-.lancamento-numero {
-    background: var(--accent-color);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: bold;
-}
-
-.inicio-matricula-badge {
-    background: var(--warning-color);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: bold;
-}
-
-.lancamento-details {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.detail-item {
-    font-size: 0.9em;
-}
-
-.detail-item strong {
-    color: var(--secondary-color);
-}
-
-.lancamento-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.empty-icon {
-    font-size: 4em;
-    margin-bottom: 20px;
-    opacity: 0.5;
-}
-
-.empty-state h3 {
-    color: var(--secondary-color);
-    margin-bottom: 10px;
-}
-
-.empty-state p {
-    color: var(--text-color);
-    margin-bottom: 20px;
-}
-
-.actions {
-    display: flex;
-    gap: 15px;
-    justify-content: center;
-    margin-top: 30px;
-}
-
-@media (max-width: 768px) {
-    .section-header {
-        flex-direction: column;
-        gap: 15px;
-        align-items: stretch;
-    }
-    
-    .lancamento-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .actions {
-        flex-direction: column;
-    }
-}
-</style>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-function editarLancamento(lancamentoId) {
-    // Implementar edição de lançamento
-    alert('Funcionalidade de edição será implementada em breve!');
-}
-</script>
 {% endblock %} 

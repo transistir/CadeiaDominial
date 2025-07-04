@@ -122,7 +122,15 @@ class LancamentoCriacaoService:
             lancamento.save()
             
             # Processar origens para criar documentos automáticos
-            origem = request.POST.get('origem_completa', '').strip()
+            origens_completas = request.POST.getlist('origem_completa[]')
+            if origens_completas:
+                # Filtrar origens vazias e concatenar
+                origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
+                origem = '; '.join(origens_validas) if origens_validas else ''
+            else:
+                # Fallback para campo único
+                origem = request.POST.get('origem_completa', '').strip()
+            
             mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
                 lancamento, origem, imovel
             )
