@@ -8,7 +8,7 @@ from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, im
 from .views.imovel_views import imovel_form
 from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico
 from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail
-from .views.cadeia_dominial_views import cadeia_dominial, cadeia_dominial_arvore, tronco_principal
+from .views.cadeia_dominial_views import cadeia_dominial, cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela
 from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos
 from .views.autocomplete_views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
 
@@ -30,7 +30,8 @@ urlpatterns = [
     
     # Cadeia Dominial
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', cadeia_dominial, name='cadeia_dominial'),
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/tronco-principal/', tronco_principal, name='tronco_principal'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/ver-cadeia-dominial/', tronco_principal, name='tronco_principal'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-tabela/', cadeia_dominial_tabela, name='cadeia_dominial_tabela'),
     path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
     
     # Documentos e Lançamentos

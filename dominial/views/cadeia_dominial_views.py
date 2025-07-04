@@ -4,7 +4,9 @@ from django.http import JsonResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..services import HierarquiaService
 from ..services.cache_service import CacheService
+from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 from datetime import date
+import json
 
 @login_required
 def cadeia_dominial(request, tis_id, imovel_id):
@@ -64,40 +66,36 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
 
 @login_required
 def tronco_principal(request, tis_id, imovel_id):
-    """Exibe apenas o tronco principal da cadeia dominial"""
+    """Exibe o tronco principal da cadeia dominial em formato de tabela"""
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    # Usar o service para obter o tronco principal (lista de documentos)
-    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    # Obter escolhas de origem da URL (se houver)
+    escolhas_origem = {}
+    escolhas_param = request.GET.get('escolhas')
+    if escolhas_param:
+        try:
+            escolhas_origem = json.loads(escolhas_param)
+        except json.JSONDecodeError:
+            escolhas_origem = {}
     
-    # Buscar os documentos do tronco principal já com lançamentos pré-carregados
-    documentos = []
-    if tronco_principal:
-        ids = [doc.id for doc in tronco_principal]
-        documentos = list(
-            Documento.objects.filter(id__in=ids)
-            .select_related('cartorio', 'tipo')
-            .prefetch_related('lancamentos', 'lancamentos__tipo')
-            .order_by('data')
-        )
-        # Manter a ordem do tronco_principal
-        documentos = sorted(documentos, key=lambda d: ids.index(d.id))
+    # Obter cadeia em formato de tabela
+    cadeia = CadeiaDominialTabelaService.obter_cadeia_tabela(imovel, escolhas_origem)
     
-    # Verificar se há lançamentos no tronco principal
+    # Verificar se há lançamentos
     tem_lancamentos = False
-    if documentos:
-        tem_lancamentos = Lancamento.objects.filter(documento__in=documentos).exists()
+    if cadeia:
+        tem_lancamentos = any(len(item['lancamentos']) > 0 for item in cadeia)
     
     context = {
         'tis': tis,
         'imovel': imovel,
-        'documentos': documentos,
+        'cadeia': cadeia,
         'tem_lancamentos': tem_lancamentos,
-        'tipo_visualizacao': 'tronco_principal',
+        'tipo_visualizacao': 'tabela',
     }
     
-    return render(request, 'dominial/tronco_principal.html', context)
+    return render(request, 'dominial/cadeia_dominial_tabela.html', context)
 
 @login_required
 def cadeia_dominial_dados(request, tis_id, imovel_id):
@@ -157,4 +155,39 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
         
         tree_data['children'].append(doc_node)
     
-    return JsonResponse(tree_data, safe=False) 
+    return JsonResponse(tree_data, safe=False)
+
+@login_required
+def cadeia_dominial_tabela(request, tis_id, imovel_id):
+    """
+    Exibe a cadeia dominial em formato de tabela com lançamentos expandíveis
+    """
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    # Obter escolhas de origem da URL (se houver)
+    escolhas_origem = {}
+    escolhas_param = request.GET.get('escolhas')
+    if escolhas_param:
+        try:
+            escolhas_origem = json.loads(escolhas_param)
+        except json.JSONDecodeError:
+            escolhas_origem = {}
+    
+    # Obter cadeia em formato de tabela
+    cadeia = CadeiaDominialTabelaService.obter_cadeia_tabela(imovel, escolhas_origem)
+    
+    # Verificar se há lançamentos
+    tem_lancamentos = False
+    if cadeia:
+        tem_lancamentos = any(len(item['lancamentos']) > 0 for item in cadeia)
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'cadeia': cadeia,
+        'tem_lancamentos': tem_lancamentos,
+        'tipo_visualizacao': 'tabela',
+    }
+    
+    return render(request, 'dominial/cadeia_dominial_tabela.html', context) 

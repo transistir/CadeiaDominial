@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>📋 Cadeia Dominial</h1>
+    
+    <div class="field-group">
+        <h4>{{ imovel.nome }}</h4>
+        <div class="grid-3">
+            <div>
+                <strong>Matrícula:</strong> {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>SNCR:</strong> {{ imovel.sncr }}
+            </div>
+            <div>
+                <strong>Proprietário Atual:</strong> {{ imovel.proprietario.nome }}
+            </div>
+            {% if imovel.sigef %}
+            <div>
+                <strong>SIGEF:</strong> {{ imovel.sigef }}
+            </div>
+            {% endif %}
+            {% if imovel.cartorio %}
+            <div>
+                <strong>Cartório:</strong> {{ imovel.cartorio.nome }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="field-group">
+        <h4>📋 Cadeia Dominial - Cronologia de Lançamentos</h4>
+        
+        {% if not cadeia %}
+            <div class="empty-state">
+                <h3>Nenhum documento encontrado</h3>
+                <p>Clique no botão abaixo para iniciar a cadeia dominial</p>
+                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">Iniciar Cadeia Dominial</a>
+            </div>
+        {% elif not tem_lancamentos %}
+            <div class="empty-state">
+                <h3>Nenhum lançamento na cadeia dominial</h3>
+                <p>Clique no botão abaixo para adicionar lançamentos</p>
+                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">Adicionar Lançamento</a>
+            </div>
+        {% else %}
+            <!-- Tabela Principal de Documentos -->
+            <div class="cadeia-tabela-container">
+                <table class="cadeia-tabela-principal">
+                    <thead>
+                        <tr>
+                            <th>Documento</th>
+                            <th>Data</th>
+                            <th>Cartório</th>
+                            <th>Lançamentos</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in cadeia %}
+                        <tr class="documento-row" data-documento-id="{{ item.documento.id }}">
+                            <td>
+                                <button class="expand-btn" onclick="toggleLancamentos({{ item.documento.id }})">
+                                    <span class="expand-icon">▶</span>
+                                    {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
+                                </button>
+                            </td>
+                            <td>{{ item.documento.data|date:"d/m/Y" }}</td>
+                            <td>{{ item.documento.cartorio.nome }}</td>
+                            <td>{{ item.lancamentos.count }} lanç.</td>
+                            <td>
+                                {% if item.tem_multiplas_origens %}
+                                    <div class="origem-buttons">
+                                        {% for origem in item.origens_disponiveis %}
+                                            <button class="origem-btn {% if origem.escolhida %}ativo{% endif %}" 
+                                                    onclick="escolherOrigem({{ item.documento.id }}, '{{ origem.numero }}')">
+                                                {{ origem.numero }}
+                                            </button>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <!-- Linha expandível com tabela de lançamentos -->
+                        <tr class="lancamentos-row" id="lancamentos-{{ item.documento.id }}" style="display: none;">
+                            <td colspan="5">
+                                <div class="lancamentos-table-container">
+                                    <h5>Lançamentos do {{ item.documento.tipo.get_tipo_display }} {{ item.documento.numero }}</h5>
+                                    <table class="lancamentos-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Tipo</th>
+                                                <th>Data</th>
+                                                <th>Transmitente</th>
+                                                <th>Adquirente</th>
+                                                <th>Valor</th>
+                                                <th>Área</th>
+                                                <th>Detalhes</th>
+                                                <th>Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for lancamento in item.lancamentos %}
+                                            <tr>
+                                                <td>{{ lancamento.tipo.get_tipo_display }}</td>
+                                                <td>{{ lancamento.data|date:"d/m/Y" }}</td>
+                                                <td>
+                                                    {% for pessoa in lancamento.pessoas.all %}
+                                                        {% if pessoa.tipo == 'transmitente' %}
+                                                            {{ pessoa.pessoa.nome }}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </td>
+                                                <td>
+                                                    {% for pessoa in lancamento.pessoas.all %}
+                                                        {% if pessoa.tipo == 'adquirente' %}
+                                                            {{ pessoa.pessoa.nome }}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </td>
+                                                <td>
+                                                    {% if lancamento.valor_transacao %}
+                                                        R$ {{ lancamento.valor_transacao }}
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if lancamento.area %}
+                                                        {{ lancamento.area }} ha
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if lancamento.origem %}
+                                                        <strong>Origem:</strong> {{ lancamento.origem }}
+                                                    {% endif %}
+                                                    {% if lancamento.descricao %}
+                                                        <br><strong>Desc:</strong> {{ lancamento.descricao|truncatechars:50 }}
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem %}
+                                                        <div class="origem-buttons">
+                                                            {% for origem in item.origens_disponiveis %}
+                                                                <button class="origem-btn-mini {% if origem.escolhida %}ativo{% endif %}" 
+                                                                        onclick="escolherOrigemLancamento({{ lancamento.id }}, '{{ origem.numero }}')">
+                                                                    {{ origem.numero }}
+                                                                </button>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+        
+        {% if tem_lancamentos %}
+        <div class="tree-actions">
+            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">Novo Lançamento</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="actions">
+        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-outline">🌳 Ver Árvore da Cadeia Dominial</a>
+        <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn btn-secondary">← Voltar</a>
+    </div>
+</div>
+
+<!-- CSRF Token para AJAX -->
+{% csrf_token %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'dominial/js/cadeia_dominial_tabela.js' %}"></script>
+{% endblock %} 
