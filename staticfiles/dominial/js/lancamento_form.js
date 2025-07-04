@@ -19,38 +19,36 @@ document.addEventListener('DOMContentLoaded', function() {
         inicioMatriculaFields.classList.add('hidden');
         transacaoFields.classList.add('hidden');
         
+        // Desabilitar campos hidden para evitar validação HTML
+        averbacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = true);
+        registroFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = true);
+        inicioMatriculaFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = true);
+        transacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = true);
+        
         // Controlar visibilidade do campo de número simples (input)
-        const numeroSimplesField = document.querySelector('.form-group:has(#numero_lancamento_simples)');
+        const numeroSimplesField = document.querySelector('.numero-simples-field');
         if (numeroSimplesField) {
             if (selectedTipo === 'inicio_matricula') {
-                // Ocultar apenas o campo de input, mantendo o campo readonly visível
-                const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
-                const numeroSimplesLabel = numeroSimplesField.querySelector('label[for="numero_lancamento_simples"]');
-                const numeroSimplesSmall = numeroSimplesField.querySelector('small');
-                
-                if (numeroSimplesInput) numeroSimplesInput.style.display = 'none';
-                if (numeroSimplesLabel) numeroSimplesLabel.style.display = 'none';
-                if (numeroSimplesSmall) numeroSimplesSmall.style.display = 'none';
+                // Ocultar o campo de número simples para início de matrícula
+                numeroSimplesField.style.display = 'none';
             } else {
-                // Mostrar todos os elementos do campo
-                const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
-                const numeroSimplesLabel = numeroSimplesField.querySelector('label[for="numero_lancamento_simples"]');
-                const numeroSimplesSmall = numeroSimplesField.querySelector('small');
-                
-                if (numeroSimplesInput) numeroSimplesInput.style.display = 'block';
-                if (numeroSimplesLabel) numeroSimplesLabel.style.display = 'block';
-                if (numeroSimplesSmall) numeroSimplesSmall.style.display = 'block';
+                // Mostrar o campo para outros tipos
+                numeroSimplesField.style.display = 'block';
             }
         }
         
         // Mostrar campos baseado no tipo selecionado
         if (selectedTipo === 'averbacao') {
             averbacaoFields.classList.remove('hidden');
+            averbacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
         } else if (selectedTipo === 'registro') {
             registroFields.classList.remove('hidden');
             transacaoFields.classList.remove('hidden');
+            registroFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
+            transacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
         } else if (selectedTipo === 'inicio_matricula') {
             inicioMatriculaFields.classList.remove('hidden');
+            inicioMatriculaFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
             // Não exibir bloco de transação para início de matrícula
             // Aplicar automaticamente a sigla da matrícula
             if (typeof gerarNumeroLancamento === 'function') {
@@ -63,18 +61,51 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         toggleFields();
         
-        // Carregar dados de pessoas existentes se estiver em modo de edição
-        if (document.body.classList.contains('modo-edicao')) {
-            // Carregar transmitentes existentes
-            const transmitentesContainer = document.getElementById('transmitentes-container');
-            if (transmitentesContainer && transmitentesContainer.children.length > 1) {
-                transmitentesContainer.removeChild(transmitentesContainer.firstElementChild);
+        // Preencher automaticamente o número do lançamento com a sigla da matrícula
+        const siglaMatriculaInput = document.querySelector('input[name="sigla_matricula"]');
+        const numeroCompletoInput = document.getElementById('numero_lancamento');
+        
+        if (siglaMatriculaInput && numeroCompletoInput && !numeroCompletoInput.value) {
+            let siglaMatricula = siglaMatriculaInput.value;
+            // Garantir que a sigla tenha o prefixo M se não tiver
+            if (siglaMatricula && !siglaMatricula.startsWith('M')) {
+                siglaMatricula = 'M' + siglaMatricula;
             }
+            numeroCompletoInput.value = siglaMatricula;
+        }
+        
+        // Extrair número do lançamento no modo de edição
+        if (document.body.classList.contains('modo-edicao')) {
+            const numeroSimplesInput = document.getElementById('numero_lancamento_simples');
+            const numeroCompletoInput = document.getElementById('numero_lancamento');
+            const tipoSelect = document.getElementById('tipo_lancamento');
             
-            // Carregar adquirentes existentes
-            const adquirentesContainer = document.getElementById('adquirentes-container');
-            if (adquirentesContainer && adquirentesContainer.children.length > 1) {
-                adquirentesContainer.removeChild(adquirentesContainer.firstElementChild);
+            if (numeroSimplesInput && numeroCompletoInput && tipoSelect) {
+                const siglaCompleta = numeroCompletoInput.value;
+                const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+                const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+                
+                if (siglaCompleta && selectedTipo) {
+                    let numero = '';
+                    if (selectedTipo === 'averbacao' && siglaCompleta.startsWith('AV')) {
+                        // Para averbação: AV + número + sigla_matricula
+                        numero = siglaCompleta.substring(2);
+                        // Remover a sigla da matrícula do final (assumindo que começa com M)
+                        const indexM = numero.indexOf('M');
+                        if (indexM > 0) {
+                            numero = numero.substring(0, indexM);
+                        }
+                    } else if (selectedTipo === 'registro' && siglaCompleta.startsWith('R')) {
+                        // Para registro: R + número + sigla_matricula
+                        numero = siglaCompleta.substring(1);
+                        // Remover a sigla da matrícula do final (assumindo que começa com M)
+                        const indexM = numero.indexOf('M');
+                        if (indexM > 0) {
+                            numero = numero.substring(0, indexM);
+                        }
+                    }
+                    numeroSimplesInput.value = numero;
+                }
             }
         }
     }, 100);
@@ -117,6 +148,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 numeroCompletoInput.value = sigla;
+            } else if (selectedTipo && siglaMatricula) {
+                // Se não há número simples mas há tipo selecionado, usar apenas a sigla da matrícula
+                numeroCompletoInput.value = siglaMatricula;
             } else {
                 numeroCompletoInput.value = '';
             }
@@ -321,53 +355,6 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
     });
 }
 
-// Função para remover origem
-function removeOrigem(button) {
-    const origemItem = button.closest('.origem-item');
-    if (origemItem) {
-        origemItem.remove();
-    }
-}
-
-// Função para adicionar origem
-function adicionarOrigem() {
-    const container = document.getElementById('origens-container');
-    if (!container) {
-        return;
-    }
-    
-    const origemDiv = document.createElement('div');
-    origemDiv.className = 'origem-item';
-    origemDiv.innerHTML = `
-        <div class="origem-input-group">
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Origem *</label>
-                    <input type="text" name="origem[]" class="origem-texto" 
-                           placeholder="Ex: Número do registro anterior, descrição, etc." required>
-                </div>
-                <div class="form-group">
-                    <label>Cartório de Registro da Origem *</label>
-                    <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome[]" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off" required>
-                        <input type="hidden" name="cartorio_origem[]" class="cartorio-origem-id">
-                        <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
-                    </div>
-                </div>
-            </div>
-            <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
-        </div>
-    `;
-    container.appendChild(origemDiv);
-    
-    // Configurar autocomplete para o novo campo de cartório
-    const newInput = origemDiv.querySelector('.cartorio-origem-nome');
-    const newHidden = origemDiv.querySelector('.cartorio-origem-id');
-    const newSuggestions = origemDiv.querySelector('.cartorio-origem-suggestions');
-    setupCartorioAutocomplete(newInput, newHidden, newSuggestions);
-}
-
 // Função para configurar autocomplete geral de pessoas
 function setupPessoaAutocomplete() {
     const transmitenteInputs = document.querySelectorAll('.transmitente-nome');
@@ -390,15 +377,58 @@ function setupPessoaAutocomplete() {
     });
 }
 
+// Função para remover origem
+function removeOrigem(button) {
+    const origemItem = button.closest('.origem-item');
+    if (origemItem) {
+        origemItem.remove();
+    }
+}
+
+// Função para adicionar origem
+function adicionarOrigem() {
+    const container = document.getElementById('origens-container');
+    if (!container) {
+        return;
+    }
+    
+    // Contar quantas origens já existem para gerar IDs únicos
+    const existingOrigins = container.querySelectorAll('.origem-item');
+    const newIndex = existingOrigins.length;
+    
+    const origemDiv = document.createElement('div');
+    origemDiv.className = 'origem-item';
+    origemDiv.innerHTML = `
+        <div class="form-group origem-field">
+            <input type="text" name="origem_completa[]" id="origem_completa_${newIndex}" class="origem-texto" 
+                   placeholder="Ex: Número do registro anterior, descrição, etc." required>
+        </div>
+        <div class="form-group cartorio-field">
+            <div class="autocomplete-container">
+                <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_${newIndex}" class="cartorio-origem-nome" 
+                       placeholder="Digite o nome do cartório" autocomplete="off" required>
+                <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_${newIndex}" class="cartorio-origem-id">
+                <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+            </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+    `;
+    container.appendChild(origemDiv);
+    
+    // Configurar autocomplete para o novo campo de cartório
+    const newInput = origemDiv.querySelector(`#cartorio_origem_nome_${newIndex}`);
+    const newHidden = origemDiv.querySelector(`#cartorio_origem_${newIndex}`);
+    const newSuggestions = origemDiv.querySelector('.cartorio-origem-suggestions');
+    setupCartorioAutocomplete(newInput, newHidden, newSuggestions);
+}
+
 // Função para configurar autocomplete geral de origens
 function setupOrigemAutocomplete() {
-    const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
+    const cartorioOrigemInput = document.getElementById('cartorio_origem_nome');
+    const cartorioOrigemHidden = document.getElementById('cartorio_origem');
+    const cartorioOrigemSuggestions = document.querySelector('.cartorio-origem-suggestions');
     
-    cartorioOrigemInputs.forEach((input, index) => {
-        const hidden = document.querySelectorAll('.cartorio-origem-id')[index];
-        const suggestions = document.querySelectorAll('.cartorio-origem-suggestions')[index];
-        if (input && hidden && suggestions) {
-            setupCartorioAutocomplete(input, hidden, suggestions);
-        }
-    });
+    if (cartorioOrigemInput && cartorioOrigemHidden && cartorioOrigemSuggestions) {
+        setupCartorioAutocomplete(cartorioOrigemInput, cartorioOrigemHidden, cartorioOrigemSuggestions);
+    }
 } 

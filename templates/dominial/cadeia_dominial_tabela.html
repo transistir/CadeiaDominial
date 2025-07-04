@@ -9,47 +9,99 @@
 
 {% block content %}
 <div class="container">
-    <h1>📋 Cadeia Dominial</h1>
-    
-    <div class="field-group">
-        <h4>{{ imovel.nome }}</h4>
-        <div class="grid-3">
+    <div class="cadeia-header">
+        <h1>
+            <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Cadeia Dominial
+        </h1>
+        <div class="imovel-info">
             <div>
-                <strong>Matrícula:</strong> {{ imovel.matricula }}
+                <strong>Imóvel:</strong>
+                {{ imovel.nome }}
             </div>
             <div>
-                <strong>SNCR:</strong> {{ imovel.sncr }}
+                <strong>Matrícula:</strong>
+                {{ imovel.matricula }}
             </div>
             <div>
-                <strong>Proprietário Atual:</strong> {{ imovel.proprietario.nome }}
+                <strong>Proprietário:</strong>
+                {{ imovel.proprietario.nome }}
             </div>
-            {% if imovel.sigef %}
+            {% if imovel.sncr %}
             <div>
-                <strong>SIGEF:</strong> {{ imovel.sigef }}
+                <strong>SNCR:</strong>
+                {{ imovel.sncr }}
             </div>
             {% endif %}
             {% if imovel.cartorio %}
             <div>
-                <strong>Cartório:</strong> {{ imovel.cartorio.nome }}
+                <strong>Cartório:</strong>
+                {{ imovel.cartorio.nome }}
             </div>
             {% endif %}
         </div>
     </div>
 
     <div class="field-group">
-        <h4>📋 Cadeia Dominial - Cronologia de Lançamentos</h4>
+        <h4>
+            <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 6H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 12H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 18H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Cronologia de Lançamentos
+        </h4>
         
         {% if not cadeia %}
             <div class="empty-state">
+                <div class="empty-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
                 <h3>Nenhum documento encontrado</h3>
                 <p>Clique no botão abaixo para iniciar a cadeia dominial</p>
-                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">Iniciar Cadeia Dominial</a>
+                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Iniciar Cadeia Dominial
+                </a>
             </div>
         {% elif not tem_lancamentos %}
             <div class="empty-state">
+                <div class="empty-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
                 <h3>Nenhum lançamento na cadeia dominial</h3>
                 <p>Clique no botão abaixo para adicionar lançamentos</p>
-                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">Adicionar Lançamento</a>
+                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Adicionar Lançamento
+                </a>
             </div>
         {% else %}
             <!-- Tabela Principal de Documentos -->
@@ -69,7 +121,9 @@
                         <tr class="documento-row" data-documento-id="{{ item.documento.id }}">
                             <td>
                                 <button class="expand-btn" onclick="toggleLancamentos({{ item.documento.id }})">
-                                    <span class="expand-icon">▶</span>
+                                    <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
                                     {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
                                 </button>
                             </td>
@@ -81,7 +135,11 @@
                                     <div class="origem-buttons">
                                         {% for origem in item.origens_disponiveis %}
                                             <button class="origem-btn {% if origem.escolhida %}ativo{% endif %}" 
-                                                    onclick="escolherOrigem({{ item.documento.id }}, '{{ origem.numero }}')">
+                                                    onclick="escolherOrigem({{ item.documento.id }}, '{{ origem.numero }}')" 
+                                                    title="Escolher origem {{ origem.numero }}">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
                                                 {{ origem.numero }}
                                             </button>
                                         {% endfor %}
@@ -93,7 +151,16 @@
                         <tr class="lancamentos-row" id="lancamentos-{{ item.documento.id }}" style="display: none;">
                             <td colspan="5">
                                 <div class="lancamentos-table-container">
-                                    <h5>Lançamentos do {{ item.documento.tipo.get_tipo_display }} {{ item.documento.numero }}</h5>
+                                    <h5>
+                                        <svg class="section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                        Lançamentos do {{ item.documento.tipo.get_tipo_display }} {{ item.documento.numero }}
+                                    </h5>
                                     <table class="lancamentos-table">
                                         <thead>
                                             <tr>
@@ -110,7 +177,33 @@
                                         <tbody>
                                             {% for lancamento in item.lancamentos %}
                                             <tr>
-                                                <td>{{ lancamento.tipo.get_tipo_display }}</td>
+                                                <td>
+                                                    <div class="lancamento-tipo">
+                                                        {% if lancamento.tipo.tipo == 'averbacao' %}
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        {% elif lancamento.tipo.tipo == 'registro' %}
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        {% else %}
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        {% endif %}
+                                                        {{ lancamento.tipo.get_tipo_display }}
+                                                    </div>
+                                                </td>
                                                 <td>{{ lancamento.data|date:"d/m/Y" }}</td>
                                                 <td>
                                                     {% for pessoa in lancamento.pessoas.all %}
@@ -149,7 +242,11 @@
                                                         <div class="origem-buttons">
                                                             {% for origem in item.origens_disponiveis %}
                                                                 <button class="origem-btn-mini {% if origem.escolhida %}ativo{% endif %}" 
-                                                                        onclick="escolherOrigemLancamento({{ lancamento.id }}, '{{ origem.numero }}')">
+                                                                        onclick="escolherOrigemLancamento({{ lancamento.id }}, '{{ origem.numero }}')"
+                                                                        title="Escolher origem {{ origem.numero }}">
+                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                        <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    </svg>
                                                                     {{ origem.numero }}
                                                                 </button>
                                                             {% endfor %}
@@ -171,14 +268,31 @@
         
         {% if tem_lancamentos %}
         <div class="tree-actions">
-            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">Novo Lançamento</a>
+            <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Novo Lançamento
+            </a>
         </div>
         {% endif %}
     </div>
 
     <div class="actions">
-        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-outline">🌳 Ver Árvore da Cadeia Dominial</a>
-        <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn btn-secondary">← Voltar</a>
+        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-outline">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 3C17.2626 2.73744 17.5744 2.52901 17.9176 2.38687C18.2608 2.24473 18.6286 2.17157 19 2.17157C19.3714 2.17157 19.7392 2.24473 20.0824 2.38687C20.4256 2.52901 20.7374 2.73744 21 3C21.2626 3.26256 21.471 3.57444 21.6131 3.9176C21.7553 4.26077 21.8284 4.62856 21.8284 5C21.8284 5.37144 21.7553 5.73923 21.6131 6.0824C21.471 6.42556 21.2626 6.73744 21 7L12 16L3 7C2.73744 6.73744 2.52901 6.42556 2.38687 6.0824C2.24473 5.73923 2.17157 5.37144 2.17157 5C2.17157 4.62856 2.24473 4.26077 2.38687 3.9176C2.52901 3.57444 2.73744 3.26256 3 3C3.26256 2.73744 3.57444 2.52901 3.9176 2.38687C4.26077 2.24473 4.62856 2.17157 5 2.17157C5.37144 2.17157 5.73923 2.24473 6.0824 2.38687C6.42556 2.52901 6.73744 2.73744 7 3L12 8L17 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Ver Árvore da Cadeia Dominial
+        </a>
+        <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Voltar
+        </a>
     </div>
 </div>
 
