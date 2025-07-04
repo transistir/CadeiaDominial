@@ -160,34 +160,15 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
 @login_required
 def cadeia_dominial_tabela(request, tis_id, imovel_id):
     """
-    Exibe a cadeia dominial em formato de tabela com lançamentos expandíveis
+    View para visualização de tabela da cadeia dominial
     """
-    tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    service = CadeiaDominialTabelaService()
     
-    # Obter escolhas de origem da URL (se houver)
-    escolhas_origem = {}
-    escolhas_param = request.GET.get('escolhas')
-    if escolhas_param:
-        try:
-            escolhas_origem = json.loads(escolhas_param)
-        except json.JSONDecodeError:
-            escolhas_origem = {}
+    # Obter dados da cadeia dominial com escolhas da sessão
+    context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
     
-    # Obter cadeia em formato de tabela
-    cadeia = CadeiaDominialTabelaService.obter_cadeia_tabela(imovel, escolhas_origem)
-    
-    # Verificar se há lançamentos
-    tem_lancamentos = False
-    if cadeia:
-        tem_lancamentos = any(len(item['lancamentos']) > 0 for item in cadeia)
-    
-    context = {
-        'tis': tis,
-        'imovel': imovel,
-        'cadeia': cadeia,
-        'tem_lancamentos': tem_lancamentos,
-        'tipo_visualizacao': 'tabela',
-    }
+    # Adicionar estatísticas
+    if context['cadeia']:
+        context['estatisticas'] = service.get_estatisticas_cadeia(context['cadeia'])
     
     return render(request, 'dominial/cadeia_dominial_tabela.html', context) 

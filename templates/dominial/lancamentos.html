@@ -80,12 +80,7 @@
                             <div class="detalhe-valor">{{ lancamento.adquirente.nome }}</div>
                         </div>
                     {% endif %}
-                    {% if lancamento.valor_transacao %}
-                        <div class="detalhe-item">
-                            <div class="detalhe-label">Valor da Transação</div>
-                            <div class="detalhe-valor">R$ {{ lancamento.valor_transacao }}</div>
-                        </div>
-                    {% endif %}
+
                     {% if lancamento.area %}
                         <div class="detalhe-item">
                             <div class="detalhe-label">Área</div>

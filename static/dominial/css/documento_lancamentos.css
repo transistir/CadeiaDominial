@@ -168,18 +168,13 @@
 }
 
 .td-detalhes {
-    min-width: 350px;
+    min-width: 400px;
     border-right: 1px solid #f1f3f4;
 }
 
 .td-pessoas {
-    width: 200px;
+    width: 250px;
     border-right: 1px solid #f1f3f4;
-}
-
-.td-acoes {
-    width: 120px;
-    text-align: center;
 }
 
 /* ===== BADGES DE TIPO ===== */
@@ -337,59 +332,7 @@
     margin-left: 4px;
 }
 
-/* ===== AÇÕES ===== */
 
-.lancamento-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-    align-items: center;
-}
-
-.action-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-decoration: none;
-}
-
-.action-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.view-button {
-    background: linear-gradient(135deg, #34495e, #2c3e50);
-    color: white;
-}
-
-.view-button:hover {
-    background: linear-gradient(135deg, #2c3e50, #1a252f);
-}
-
-.edit-button {
-    background: linear-gradient(135deg, #3498db, #2980b9);
-    color: white;
-}
-
-.edit-button:hover {
-    background: linear-gradient(135deg, #2980b9, #1f5f8b);
-}
-
-.delete-button {
-    background: linear-gradient(135deg, #e74c3c, #c0392b);
-    color: white;
-}
-
-.delete-button:hover {
-    background: linear-gradient(135deg, #c0392b, #a93226);
-}
 
 /* ===== RESPONSIVIDADE ===== */
 
@@ -425,10 +368,7 @@
         font-size: 11px;
     }
     
-    .action-button {
-        width: 28px;
-        height: 28px;
-    }
+
     
     .detalhe-item {
         font-size: 12px;
@@ -465,14 +405,7 @@
         font-size: 10px;
     }
     
-    .action-button {
-        width: 24px;
-        height: 24px;
-    }
-    
-    .lancamento-actions {
-        gap: 4px;
-    }
+
     
     .detalhe-item {
         font-size: 11px;

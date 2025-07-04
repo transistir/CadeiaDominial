@@ -12,18 +12,25 @@ class HierarquiaTroncoService:
     """
     
     @staticmethod
-    def obter_tronco_principal(imovel):
+    def obter_tronco_principal(imovel, escolhas_origem=None):
         """
         Obtém o tronco principal da cadeia dominial com cache
         """
-        # Tentar obter do cache primeiro
-        cached_tronco = CacheService.get_cached_tronco_principal(imovel.id)
-        if cached_tronco:
-            return cached_tronco
+        if escolhas_origem is None:
+            escolhas_origem = {}
         
-        # Se não estiver em cache, calcular e armazenar
-        tronco = identificar_tronco_principal(imovel)
-        CacheService.set_cached_tronco_principal(imovel.id, tronco)
+        # Tentar obter do cache primeiro (apenas se não houver escolhas)
+        if not escolhas_origem:
+            cached_tronco = CacheService.get_cached_tronco_principal(imovel.id)
+            if cached_tronco:
+                return cached_tronco
+        
+        # Calcular tronco considerando escolhas de origem
+        tronco = identificar_tronco_principal(imovel, escolhas_origem)
+        
+        # Armazenar em cache apenas se não houver escolhas
+        if not escolhas_origem:
+            CacheService.set_cached_tronco_principal(imovel.id, tronco)
         
         return tronco
     

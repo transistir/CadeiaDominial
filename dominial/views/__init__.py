@@ -39,6 +39,7 @@ from .cadeia_dominial_views import (
     cadeia_dominial_arvore,
     tronco_principal,
     cadeia_dominial_dados,
+    cadeia_dominial_tabela,
 )
 
 # Views de API/AJAX
@@ -52,6 +53,9 @@ from .api_views import (
     pessoas,
     alteracoes,
     lancamentos,
+    escolher_origem_documento,
+    escolher_origem_lancamento,
+    get_cadeia_dominial_atualizada,
 )
 
 # Views de Autocomplete
@@ -93,6 +97,7 @@ __all__ = [
     'cadeia_dominial_arvore',
     'tronco_principal',
     'cadeia_dominial_dados',
+    'cadeia_dominial_tabela',
     
     # Views de API/AJAX
     'buscar_cidades',
@@ -104,6 +109,9 @@ __all__ = [
     'pessoas',
     'alteracoes',
     'lancamentos',
+    'escolher_origem_documento',
+    'escolher_origem_lancamento',
+    'get_cadeia_dominial_atualizada',
     
     # Views de Autocomplete
     'pessoa_autocomplete',

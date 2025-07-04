@@ -20,11 +20,11 @@ class HierarquiaService:
         return HierarquiaTroncoService.calcular_hierarquia_documentos(imovel)
     
     @staticmethod
-    def obter_tronco_principal(imovel):
+    def obter_tronco_principal(imovel, escolhas_origem=None):
         """
         Obtém o tronco principal da cadeia dominial com cache
         """
-        return HierarquiaTroncoService.obter_tronco_principal(imovel)
+        return HierarquiaTroncoService.obter_tronco_principal(imovel, escolhas_origem)
     
     @staticmethod
     def obter_troncos_secundarios(imovel):

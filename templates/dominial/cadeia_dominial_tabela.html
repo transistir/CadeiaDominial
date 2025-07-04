@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div class="container">
     <div class="cadeia-header">
         <h1>
@@ -120,7 +121,7 @@
                         {% for item in cadeia %}
                         <tr class="documento-row" data-documento-id="{{ item.documento.id }}">
                             <td>
-                                <button class="expand-btn" onclick="toggleLancamentos({{ item.documento.id }})">
+                                <button class="expand-btn" data-documento-id="{{ item.documento.id }}">
                                     <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
@@ -131,20 +132,7 @@
                             <td>{{ item.documento.cartorio.nome }}</td>
                             <td>{{ item.lancamentos.count }} lanç.</td>
                             <td>
-                                {% if item.tem_multiplas_origens %}
-                                    <div class="origem-buttons">
-                                        {% for origem in item.origens_disponiveis %}
-                                            <button class="origem-btn {% if origem.escolhida %}ativo{% endif %}" 
-                                                    onclick="escolherOrigem({{ item.documento.id }}, '{{ origem.numero }}')" 
-                                                    title="Escolher origem {{ origem.numero }}">
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                    <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                </svg>
-                                                {{ origem.numero }}
-                                            </button>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
+                                <!-- Ações podem ser adicionadas aqui no futuro -->
                             </td>
                         </tr>
                         <!-- Linha expandível com tabela de lançamentos -->
@@ -164,92 +152,215 @@
                                     <table class="lancamentos-table">
                                         <thead>
                                             <tr>
-                                                <th>Tipo</th>
-                                                <th>Data</th>
-                                                <th>Transmitente</th>
-                                                <th>Adquirente</th>
-                                                <th>Valor</th>
-                                                <th>Área</th>
-                                                <th>Detalhes</th>
-                                                <th>Ações</th>
+                                                <th class="th-tipo">Tipo</th>
+                                                <th class="th-numero">Número</th>
+                                                <th class="th-data">Data</th>
+                                                <th class="th-detalhes">Detalhes e Transmissão</th>
+                                                <th class="th-pessoas">Pessoas</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {% for lancamento in item.lancamentos %}
                                             <tr>
-                                                <td>
-                                                    <div class="lancamento-tipo">
-                                                        {% if lancamento.tipo.tipo == 'averbacao' %}
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        {% elif lancamento.tipo.tipo == 'registro' %}
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        {% else %}
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        {% endif %}
+                                                <td class="td-tipo">
+                                                    <div class="tipo-badge tipo-{{ lancamento.tipo.tipo }}">
+                                                        {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
                                                         {{ lancamento.tipo.get_tipo_display }}
                                                     </div>
                                                 </td>
-                                                <td>{{ lancamento.data|date:"d/m/Y" }}</td>
-                                                <td>
-                                                    {% for pessoa in lancamento.pessoas.all %}
-                                                        {% if pessoa.tipo == 'transmitente' %}
-                                                            {{ pessoa.pessoa.nome }}
-                                                        {% endif %}
-                                                    {% endfor %}
+                                                <td class="td-numero">
+                                                    <span class="numero-value">{{ lancamento.numero_lancamento|default:"-" }}</span>
                                                 </td>
-                                                <td>
-                                                    {% for pessoa in lancamento.pessoas.all %}
-                                                        {% if pessoa.tipo == 'adquirente' %}
-                                                            {{ pessoa.pessoa.nome }}
-                                                        {% endif %}
-                                                    {% endfor %}
+                                                <td class="td-data">
+                                                    <span class="data-value">{{ lancamento.data|date:'d/m/Y' }}</span>
                                                 </td>
-                                                <td>
-                                                    {% if lancamento.valor_transacao %}
-                                                        R$ {{ lancamento.valor_transacao }}
+                                                <td class="td-detalhes">
+                                                    {% if lancamento.tipo.tipo == 'registro' %}
+                                                        <div class="detalhes-registro">
+                                                            {% if lancamento.forma %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Forma:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.titulo %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Título:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.titulo }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.cartorio_transacao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Cartório Transação:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.livro_transacao or lancamento.folha_transacao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Livro/Folha Transação:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.data_transacao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Data Transação:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.data_transacao|date:'d/m/Y' }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% elif lancamento.tipo.tipo == 'averbacao' %}
+                                                        <div class="detalhes-averbacao">
+                                                            {% if lancamento.forma %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Forma:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.descricao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Descrição:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.descricao }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.cartorio_transacao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Cartório Transação:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.livro_transacao or lancamento.folha_transacao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Livro/Folha Transação:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.data_transacao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Data Transação:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.data_transacao|date:'d/m/Y' }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                                                        <div class="detalhes-inicio">
+                                                            {% if lancamento.forma %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Forma:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.area %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Área:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.area|floatformat:2 }} ha</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.origem %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Origem:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.origem }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.cartorio_origem %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Cartório Origem:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.cartorio_origem.nome }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.livro_origem or lancamento.folha_origem %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Livro/Folha Origem:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.livro_origem|default:"-" }}/{{ lancamento.folha_origem|default:"-" }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.data_origem %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Data Origem:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.data_origem|date:'d/m/Y' }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="detalhes-generico">
+                                                            {% if lancamento.forma %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Forma:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if lancamento.descricao %}
+                                                                <div class="detalhe-item">
+                                                                    <span class="detalhe-label">Descrição:</span>
+                                                                    <span class="detalhe-valor">{{ lancamento.descricao }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% endif %}
+                                                    {% if lancamento.observacoes %}
+                                                        <div class="observacoes-item">
+                                                            <span class="obs-label">📝 Obs:</span>
+                                                            <span class="obs-valor">{{ lancamento.observacoes }}</span>
+                                                        </div>
                                                     {% endif %}
                                                 </td>
-                                                <td>
-                                                    {% if lancamento.area %}
-                                                        {{ lancamento.area }} ha
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    {% if lancamento.origem %}
-                                                        <strong>Origem:</strong> {{ lancamento.origem }}
-                                                    {% endif %}
-                                                    {% if lancamento.descricao %}
-                                                        <br><strong>Desc:</strong> {{ lancamento.descricao|truncatechars:50 }}
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    {% if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem %}
-                                                        <div class="origem-buttons">
-                                                            {% for origem in item.origens_disponiveis %}
-                                                                <button class="origem-btn-mini {% if origem.escolhida %}ativo{% endif %}" 
-                                                                        onclick="escolherOrigemLancamento({{ lancamento.id }}, '{{ origem.numero }}')"
-                                                                        title="Escolher origem {{ origem.numero }}">
-                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                                        <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                    </svg>
-                                                                    {{ origem.numero }}
-                                                                </button>
-                                                            {% endfor %}
+                                                <td class="td-pessoas">
+                                                    {% if lancamento.tipo.tipo == 'registro' %}
+                                                        <div class="pessoas-registro">
+                                                            {% with transmitentes=lancamento.pessoas.all|slice:":2" %}
+                                                                {% if transmitentes %}
+                                                                    <div class="pessoas-item">
+                                                                        <small class="pessoa-tipo destacado">Transmitente:</small> 
+                                                                        {% for pessoa in transmitentes %}
+                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
+                                                                        {% endfor %}
+                                                                        {% if lancamento.pessoas.count > 2 %}
+                                                                            <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                {% endif %}
+                                                            {% endwith %}
+                                                            {% with adquirentes=lancamento.pessoas.all|slice:":2" %}
+                                                                {% if adquirentes %}
+                                                                    <div class="pessoas-item">
+                                                                        <small class="pessoa-tipo destacado">Adquirente:</small> 
+                                                                        {% for pessoa in adquirentes %}
+                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
+                                                                        {% endfor %}
+                                                                    </div>
+                                                                {% endif %}
+                                                            {% endwith %}
+                                                        </div>
+                                                    {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+                                                        <div class="pessoas-inicio">
+                                                            {% with adquirentes=lancamento.pessoas.all|slice:":2" %}
+                                                                {% if adquirentes %}
+                                                                    <div class="pessoas-item">
+                                                                        <small class="pessoa-tipo destacado">Adquirente:</small> 
+                                                                        {% for pessoa in adquirentes %}
+                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
+                                                                        {% endfor %}
+                                                                        {% if lancamento.pessoas.count > 2 %}
+                                                                            <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                {% endif %}
+                                                            {% endwith %}
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="pessoas-generico">
+                                                            {% with pessoas=lancamento.pessoas.all|slice:":2" %}
+                                                                {% if pessoas %}
+                                                                    <div class="pessoas-item">
+                                                                        <small class="pessoa-tipo">Pessoas:</small> 
+                                                                        {% for pessoa in pessoas %}
+                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
+                                                                        {% endfor %}
+                                                                        {% if lancamento.pessoas.count > 2 %}
+                                                                            <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                {% endif %}
+                                                            {% endwith %}
                                                         </div>
                                                     {% endif %}
                                                 </td>
@@ -257,6 +368,27 @@
                                             {% endfor %}
                                         </tbody>
                                     </table>
+                                    
+                                    <!-- Botões de origem no final da cadeia -->
+                                    {% if item.tem_multiplas_origens %}
+                                        <div class="origem-controls">
+                                            <div class="origem-buttons">
+                                                <span class="origem-label">Escolher origem:</span>
+                                                {% for origem in item.origens_disponiveis %}
+                                                    <button class="origem-btn {% if origem.escolhida %}ativo{% endif %}" 
+                                                            data-documento-id="{{ item.documento.id }}"
+                                                            data-origem-numero="{{ origem.numero }}"
+                                                            title="Escolher origem {{ origem.numero }}">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                            <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        </svg>
+                                                        {{ origem.numero }}
+                                                    </button>
+                                                {% endfor %}
+
+                                            </div>
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -275,6 +407,7 @@
                 </svg>
                 Novo Lançamento
             </a>
+
         </div>
         {% endif %}
     </div>
@@ -295,9 +428,6 @@
         </a>
     </div>
 </div>
-
-<!-- CSRF Token para AJAX -->
-{% csrf_token %}
 {% endblock %}
 
 {% block extra_js %}
