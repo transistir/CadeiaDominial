@@ -40,7 +40,7 @@ configure_nginx() {
     else
         cp /etc/nginx/conf.d/default.http.conf /etc/nginx/conf.d/default.conf
         sed -i "s/localhost/$domain/g" /etc/nginx/conf.d/default.conf
-        log_warn "SSL não ativado - usando certificados dummy"
+        log_info "Configuração HTTP ativada para $domain"
     fi
 }
 
@@ -105,38 +105,25 @@ main() {
         log_warn "Usando domínio local - SSL não será configurado"
         configure_nginx "$domain" "false"
     else
-        log_info "Domínio real detectado - configurando SSL"
-        
-        # Configurar Nginx inicialmente com certificados dummy
-        configure_nginx "$domain" "false"
-        
-        # Iniciar Nginx em background
-        nginx -g "daemon off;" &
-        nginx_pid=$!
-        
-        # Aguardar Nginx inicializar
-        sleep 3
+        log_info "Domínio real detectado - verificando certificados SSL"
         
         # Verificar se existem certificados reais
         if check_real_certificates "$domain"; then
-            # Reconfigurar Nginx com certificados reais
+            log_info "Certificados SSL encontrados - configurando HTTPS"
             configure_nginx "$domain" "true"
-            
-            # Recarregar Nginx
-            nginx -s reload
-            
-            log_info "SSL configurado com sucesso para $domain"
         else
-            log_warn "Certificados SSL não encontrados - sistema funcionará via HTTP"
+            log_warn "Certificados SSL não encontrados - configurando HTTP"
+            configure_nginx "$domain" "false"
             log_info "Para obter certificados, execute: docker-compose exec nginx /usr/local/bin/ssl-init.sh $domain $email"
         fi
         
         # Configurar renovação automática
         setup_auto_renewal
-        
-        # Aguardar Nginx
-        wait $nginx_pid
     fi
+    
+    # Iniciar Nginx
+    log_info "Iniciando Nginx..."
+    exec nginx -g "daemon off;"
 }
 
 # Executar função principal
