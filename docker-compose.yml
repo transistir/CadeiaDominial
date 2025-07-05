@@ -68,8 +68,8 @@ services:
     volumes:
       - ./staticfiles:/var/www/static:ro
       - ./media:/var/www/media:ro
-      - ssl_certs:/etc/letsencrypt:ro
-      - ssl_www:/var/www/certbot:ro
+      - ssl_certs:/etc/letsencrypt
+      - ssl_www:/var/www/certbot
     depends_on:
       web:
         condition: service_healthy
