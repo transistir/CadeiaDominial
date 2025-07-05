@@ -117,8 +117,8 @@ main() {
         # Aguardar Nginx inicializar
         sleep 3
         
-        # Tentar obter certificados reais
-        if obtain_ssl_certificates "$domain" "$email"; then
+        # Verificar se existem certificados reais
+        if check_real_certificates "$domain"; then
             # Reconfigurar Nginx com certificados reais
             configure_nginx "$domain" "true"
             
@@ -127,7 +127,8 @@ main() {
             
             log_info "SSL configurado com sucesso para $domain"
         else
-            log_warn "SSL não configurado - sistema funcionará via HTTP"
+            log_warn "Certificados SSL não encontrados - sistema funcionará via HTTP"
+            log_info "Para obter certificados, execute: docker-compose exec nginx /usr/local/bin/ssl-init.sh $domain $email"
         fi
         
         # Configurar renovação automática
