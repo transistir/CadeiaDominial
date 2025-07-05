@@ -68,8 +68,8 @@ services:
     volumes:
       - ./staticfiles:/var/www/static:ro
       - ./media:/var/www/media:ro
-      - ./certbot/conf:/etc/letsencrypt:ro
-      - ./certbot/www:/var/www/certbot:ro
+      - ssl_certs:/etc/letsencrypt:ro
+      - ssl_www:/var/www/certbot:ro
     depends_on:
       web:
         condition: service_healthy
@@ -87,6 +87,8 @@ services:
 
 volumes:
   postgres_data:
+  ssl_certs:
+  ssl_www:
 
 networks:
   cadeia_network:
