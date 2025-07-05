@@ -38,8 +38,6 @@ configure_nginx() {
         sed -i "s/cadeiadominial.com.br/$domain/g" /etc/nginx/conf.d/default.conf
         log_info "SSL ativado para $domain"
     else
-        # Remover arquivo HTTPS para evitar conflitos
-        rm -f /etc/nginx/conf.d/default.https.conf
         cp /etc/nginx/conf.d/default.http.conf /etc/nginx/conf.d/default.conf
         sed -i "s/localhost/$domain/g" /etc/nginx/conf.d/default.conf
         log_info "Configuração HTTP ativada para $domain"
