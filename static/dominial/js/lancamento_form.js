@@ -316,9 +316,9 @@ function adicionarTransmitente() {
 // Função para adicionar adquirente
 function adicionarAdquirente() {
     // Tentar encontrar o container correto baseado no contexto
-    let container = document.getElementById('adquirentes-container');
+    let container = document.getElementById('adquirentes-container-registro');
     if (!container) {
-        container = document.getElementById('adquirentes-container-registro');
+        container = document.getElementById('adquirentes-container');
     }
     if (!container) {
         return;
