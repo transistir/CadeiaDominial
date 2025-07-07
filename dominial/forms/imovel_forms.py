@@ -30,9 +30,7 @@ class ImovelForm(forms.ModelForm):
     )
     
     cidade = forms.ChoiceField(
-        choices=lambda: [('', 'Selecione uma cidade')] + list(
-            Cartorios.objects.values_list('cidade', 'cidade').distinct().order_by('cidade')
-        ),
+        choices=[('', 'Selecione uma cidade')],
         required=True,
         widget=forms.Select(attrs={'class': 'form-control'})
     )
@@ -66,9 +64,18 @@ class ImovelForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        # Sempre carregar todas as cidades disponíveis
+        try:
+            cidades_todas = Cartorios.objects.values_list('cidade', 'cidade').distinct().order_by('cidade')
+            self.fields['cidade'].choices = [('', 'Selecione uma cidade')] + list(cidades_todas)
+        except Exception as e:
+            # Se houver erro, manter apenas a opção padrão
+            self.fields['cidade'].choices = [('', 'Selecione uma cidade')]
+        
+        # Preencher campos customizados
         instance = kwargs.get('instance')
         if instance:
-            # Preencher campos customizados
             if instance.proprietario:
                 self.fields['proprietario_nome'].initial = instance.proprietario.nome
             if hasattr(instance, 'cartorio') and instance.cartorio:
