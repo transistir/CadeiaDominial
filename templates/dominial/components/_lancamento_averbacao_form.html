@@ -3,7 +3,7 @@
     <div class="form-group">
         <label for="forma_averbacao">Forma *</label>
         <input type="text" name="forma_averbacao" id="forma_averbacao" placeholder="Ex: Compra e Venda, Doação, etc."
-               value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
+               value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma_averbacao %}{{ form_data.forma_averbacao }}{% else %}{% endif %}">
     </div>
     <div class="form-group">
         <label for="descricao_averbacao">Descrição *</label>

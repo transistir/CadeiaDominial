@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <form method="post" id="lancamento-form">
+    <form method="post" id="lancamento-form" {% if numero_lancamento_error %}data-numero-lancamento-error="true"{% endif %}>
         {% csrf_token %}
         
         <!-- Campos Básicos -->

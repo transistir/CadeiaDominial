@@ -7,7 +7,7 @@
             <option value="">Selecione o tipo...</option>
             {% for tipo in tipos_lancamento %}
             <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo }}"
-                    {% if modo_edicao and lancamento.tipo.id == tipo.id %}selected{% endif %}>
+                    {% if modo_edicao and lancamento.tipo.id == tipo.id %}selected{% elif form_data and form_data.tipo_lancamento == tipo.id|stringformat:"s" %}selected{% endif %}>
                 {{ tipo.get_tipo_display }}
             </option>
             {% endfor %}
