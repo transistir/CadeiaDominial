@@ -29,9 +29,7 @@ class ImovelForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-control'})
     )
     
-    cidade = forms.ModelChoiceField(
-        queryset=Cartorios.objects.values_list('cidade', 'cidade').distinct().order_by('cidade'),
-        empty_label='Selecione uma cidade',
+    cidade = forms.CharField(
         required=True,
         widget=forms.Select(attrs={'class': 'form-control'})
     )
@@ -77,10 +75,11 @@ class ImovelForm(forms.ModelForm):
             if hasattr(instance, 'cartorio') and instance.cartorio:
                 if instance.cartorio.estado:
                     self.fields['estado'].initial = instance.cartorio.estado
-                    # Filtrar cidades do estado
-                    self.fields['cidade'].queryset = Cartorios.objects.filter(
+                    # Popular cidades do estado
+                    cidades_estado = Cartorios.objects.filter(
                         estado=instance.cartorio.estado
                     ).values_list('cidade', 'cidade').distinct().order_by('cidade')
+                    self.fields['cidade'].choices = [('', 'Selecione uma cidade')] + list(cidades_estado)
                 if instance.cartorio.cidade:
                     self.fields['cidade'].initial = instance.cartorio.cidade
                     # Filtrar cartórios pela cidade
@@ -90,14 +89,15 @@ class ImovelForm(forms.ModelForm):
                     ).order_by('nome')
                     self.fields['cartorio'].queryset = cartorios_cidade
         
-        # Se há dados do POST (formulário com erro), filtrar cidades do estado
+        # Se há dados do POST (formulário com erro), carregar choices da cidade
         if self.data:  # Se há dados do POST
             estado_post = self.data.get('estado')
             if estado_post:
-                # Filtrar cidades do estado do POST
-                self.fields['cidade'].queryset = Cartorios.objects.filter(
+                # Popular cidades do estado do POST
+                cidades_estado = Cartorios.objects.filter(
                     estado=estado_post
                 ).values_list('cidade', 'cidade').distinct().order_by('cidade')
+                self.fields['cidade'].choices = [('', 'Selecione uma cidade')] + list(cidades_estado)
                 
                 # Se há cidade no POST, filtrar cartórios
                 cidade_post = self.data.get('cidade')
