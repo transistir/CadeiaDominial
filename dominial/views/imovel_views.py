@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
+from ..services.lancamento_documento_service import LancamentoDocumentoService
 
 @login_required
 def imovel_form(request, tis_id, imovel_id=None):
@@ -48,6 +49,15 @@ def imovel_form(request, tis_id, imovel_id=None):
             # Salvar imóvel
             try:
                 imovel.save()
+                
+                # Criar automaticamente o documento de matrícula para o imóvel
+                if not imovel_id:  # Apenas para novos imóveis
+                    try:
+                        documento_matricula = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
+                        messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
+                    except Exception as e:
+                        messages.warning(request, f'Imóvel criado, mas houve um problema ao criar o documento de matrícula: {str(e)}')
+                
                 messages.success(request, 'Imóvel cadastrado com sucesso!')
                 return redirect('tis_detail', tis_id=tis_id)
             except Exception as e:
