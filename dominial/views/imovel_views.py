@@ -30,7 +30,7 @@ def imovel_form(request, tis_id, imovel_id=None):
                     nome=nome_proprietario,
                     defaults={
                         'nome': nome_proprietario,
-                        'cpf': '',  # Campo obrigatório, mas não temos no formulário simplificado
+                        'cpf': None,  # CPF é opcional, usar None em vez de string vazia
                         'rg': '',
                         'email': '',
                         'telefone': ''
