@@ -17,25 +17,11 @@ def imovel_form(request, tis_id, imovel_id=None):
         # Obter dados do formulário
         nome_proprietario = request.POST.get('proprietario_nome')
         
-        # Debug: verificar dados do POST
-        print("DEBUG: Dados do POST:")
-        print("proprietario_nome:", nome_proprietario)
-        print("cartorio:", request.POST.get('cartorio'))
-        print("Todos os dados:", dict(request.POST))
-        
         if form.is_valid():
             imovel = form.save(commit=False)
             imovel.terra_indigena_id = tis
-            
-            # Debug: verificar dados do form
-            print("DEBUG: Dados do form:")
-            print("cartorio do form:", imovel.cartorio)
-            print("form.cleaned_data:", form.cleaned_data)
-            
             # Atribuir o cartório explicitamente
             imovel.cartorio = form.cleaned_data.get('cartorio')
-            print("DEBUG: Cartório após atribuição:", imovel.cartorio)
-            
             # Processar proprietário
             if nome_proprietario:
                 # Criar ou buscar proprietário
@@ -69,7 +55,6 @@ def imovel_form(request, tis_id, imovel_id=None):
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
         else:
             messages.error(request, 'Erro no formulário. Verifique os dados.')
-            print("Erros do formulário:", form.errors)
     else:
         form = ImovelForm(instance=imovel)
     

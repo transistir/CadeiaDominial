@@ -1,35 +1,16 @@
 // Formulário de Imóvel - Versão Simplificada
 class ImovelForm {
     constructor() {
-        console.log('DEBUG: Iniciando construtor ImovelForm');
-        
         this.estadoSelect = document.getElementById('id_estado');
         this.cidadeSelect = document.getElementById('id_cidade');
         this.cartorioSelect = document.getElementById('id_cartorio');
         this.form = document.getElementById('imovel-form');
         this.cartorioInfo = document.getElementById('cartorio-info');
         this.cartorioDetalhes = document.getElementById('cartorio-detalhes');
-        
-        console.log('DEBUG: Elementos encontrados:', {
-            estado: !!this.estadoSelect,
-            cidade: !!this.cidadeSelect,
-            cartorio: !!this.cartorioSelect,
-            form: !!this.form,
-            cartorioInfo: !!this.cartorioInfo,
-            cartorioDetalhes: !!this.cartorioDetalhes
-        });
-        
         // Verificar se os elementos essenciais existem
         if (!this.estadoSelect || !this.cidadeSelect || !this.cartorioSelect) {
-            console.warn('Elementos do formulário não encontrados:', {
-                estado: !!this.estadoSelect,
-                cidade: !!this.cidadeSelect,
-                cartorio: !!this.cartorioSelect
-            });
             return;
         }
-        
-        console.log('DEBUG: Todos os elementos encontrados, inicializando...');
         this.init();
     }
 
@@ -45,7 +26,6 @@ class ImovelForm {
         
         // Carregar cidades quando estado for selecionado
         this.estadoSelect.addEventListener('change', (e) => {
-            console.log('DEBUG: Estado mudou para:', e.target.value);
             this.carregarCidades(e.target.value);
         });
         
@@ -56,12 +36,10 @@ class ImovelForm {
         
         // Mostrar detalhes do cartório quando selecionado
         this.cartorioSelect.addEventListener('change', (e) => {
-            console.log('ImovelForm: Select cartório mudou para:', e.target.value);
             if (e.target.value === 'novo') {
                 // Abrir modal para novo cartório
                 const modal = document.getElementById('modal-novo-cartorio');
                 if (modal) {
-                    console.log('Abrindo modal...');
                     modal.style.display = 'flex';
                     
                     // Copiar estado e cidade do formulário principal para o modal
@@ -76,8 +54,6 @@ class ImovelForm {
                     
                     modalEstadoInput.value = estadoText;
                     modalCidadeInput.value = cidadeText;
-                } else {
-                    console.error('Modal não encontrado!');
                 }
                 return;
             }
@@ -86,9 +62,7 @@ class ImovelForm {
     }
 
     async carregarCidades(estado) {
-        console.log('DEBUG: carregarCidades chamado com estado:', estado);
         if (!estado) {
-            console.log('DEBUG: Estado vazio, resetando selects');
             this.resetCidadeSelect();
             // Não resetar o cartório aqui, deixar as opções disponíveis
             return;
@@ -99,9 +73,7 @@ class ImovelForm {
         // Não resetar o cartório aqui, deixar as opções disponíveis
 
         try {
-            console.log('DEBUG: Fazendo requisição para /dominial/buscar-cidades/');
             const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-            console.log('DEBUG: CSRF Token:', csrfToken ? 'Encontrado' : 'NÃO ENCONTRADO');
             
             const response = await fetch('/dominial/buscar-cidades/', {
                 method: 'POST',
@@ -112,14 +84,11 @@ class ImovelForm {
                 body: `estado=${encodeURIComponent(estado)}`
             });
 
-            console.log('DEBUG: Status da resposta:', response.status);
             if (!response.ok) {
-                console.log('DEBUG: Erro na resposta:', response.status, response.statusText);
                 throw new Error(`HTTP ${response.status}`);
             }
 
             const cidades = await response.json();
-            console.log('DEBUG: Cidades recebidas:', cidades);
             
             this.cidadeSelect.innerHTML = '<option value="">Selecione uma cidade</option>';
             
@@ -136,7 +105,6 @@ class ImovelForm {
             
             this.cidadeSelect.disabled = false;
         } catch (error) {
-            console.error('Erro ao carregar cidades:', error);
             this.cidadeSelect.innerHTML = '<option value="">Erro ao carregar cidades</option>';
             this.cidadeSelect.disabled = false;
         }
@@ -187,7 +155,6 @@ class ImovelForm {
 
             this.cartorioSelect.disabled = false;
         } catch (error) {
-            console.error('Erro ao carregar cartórios:', error);
             this.cartorioSelect.innerHTML = '<option value="">Erro ao carregar cartórios</option>';
             this.cartorioSelect.disabled = false;
         }
@@ -232,7 +199,6 @@ class ImovelForm {
 
 // Inicializar quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Inicializando ImovelForm...');
     new ImovelForm();
 });
 
@@ -246,22 +212,9 @@ function setupNovoCartorioModal() {
 
     // Só ativa se o modal e o form existem
     if (!modal || !fecharBtn || !cancelarBtn || !form || !cartorioSelect) {
-        console.error('Elementos do modal não encontrados:', {
-            modal: !!modal,
-            fecharBtn: !!fecharBtn,
-            cancelarBtn: !!cancelarBtn,
-            form: !!form,
-            cartorioSelect: !!cartorioSelect
-        });
         return;
     }
     
-    console.log('Modal configurado com sucesso');
-    console.log('Botões encontrados:', {
-        fecharBtn: fecharBtn,
-        cancelarBtn: cancelarBtn
-    });
-
     // Fechar modal
     fecharBtn.onclick = function() {
         modal.style.display = 'none';
@@ -287,8 +240,6 @@ function setupNovoCartorioModal() {
     form.onsubmit = async function(e) {
         e.preventDefault();
         e.stopPropagation(); // Impedir que o evento se propague para o formulário principal
-        
-        console.log('Submetendo novo cartório...');
         
         const data = {
             nome: document.getElementById('novo-cartorio-nome').value,
@@ -333,6 +284,5 @@ function setupNovoCartorioModal() {
 
 // Inicializar modal quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Inicializando modal...');
     setupNovoCartorioModal();
 }); 
