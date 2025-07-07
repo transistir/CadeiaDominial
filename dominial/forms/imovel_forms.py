@@ -30,7 +30,9 @@ class ImovelForm(forms.ModelForm):
     )
     
     cidade = forms.ChoiceField(
-        choices=[('', 'Selecione uma cidade')],
+        choices=lambda: [('', 'Selecione uma cidade')] + list(
+            Cartorios.objects.values_list('cidade', 'cidade').distinct().order_by('cidade')
+        ),
         required=True,
         widget=forms.Select(attrs={'class': 'form-control'})
     )
