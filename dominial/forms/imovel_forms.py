@@ -29,7 +29,8 @@ class ImovelForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-control'})
     )
     
-    cidade = forms.CharField(
+    cidade = forms.ChoiceField(
+        choices=[('', 'Selecione uma cidade')],
         required=True,
         widget=forms.Select(attrs={'class': 'form-control'})
     )
