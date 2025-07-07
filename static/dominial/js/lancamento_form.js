@@ -34,6 +34,29 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Mostrar o campo para outros tipos
                 numeroSimplesField.style.display = 'block';
+                
+                // Apenas adicionar indicador visual de obrigatório (sem destacar em vermelho)
+                if (selectedTipo === 'registro' || selectedTipo === 'averbacao') {
+                    // Adicionar indicador visual de obrigatório
+                    const label = numeroSimplesField.querySelector('label') || numeroSimplesField.previousElementSibling;
+                    if (label && !label.querySelector('.required-indicator')) {
+                        const indicator = document.createElement('span');
+                        indicator.className = 'required-indicator';
+                        indicator.textContent = ' *';
+                        indicator.style.color = '#ff6b6b';
+                        indicator.style.fontWeight = 'bold';
+                        label.appendChild(indicator);
+                    }
+                } else {
+                    // Remover indicador visual
+                    const label = numeroSimplesField.querySelector('label') || numeroSimplesField.previousElementSibling;
+                    if (label) {
+                        const indicator = label.querySelector('.required-indicator');
+                        if (indicator) {
+                            indicator.remove();
+                        }
+                    }
+                }
             }
         }
         
@@ -149,8 +172,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 numeroCompletoInput.value = sigla;
             } else if (selectedTipo && siglaMatricula) {
-                // Se não há número simples mas há tipo selecionado, usar apenas a sigla da matrícula
-                numeroCompletoInput.value = siglaMatricula;
+                // Se não há número simples mas há tipo selecionado, deixar vazio para o usuário preencher
+                numeroCompletoInput.value = '';
             } else {
                 numeroCompletoInput.value = '';
             }
@@ -194,6 +217,60 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (cartorioOrigemInicioInput && cartorioOrigemInicioHidden && cartorioOrigemInicioSuggestions) {
         setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions);
+    }
+    
+    // Debug: Adicionar listener para capturar envio do formulário
+    const form = document.getElementById('lancamento-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            console.log('Formulário sendo enviado...');
+            console.log('Tipo selecionado:', tipoSelect.value);
+            console.log('Número do lançamento:', document.getElementById('numero_lancamento').value);
+            console.log('Data:', document.getElementById('data').value);
+            console.log('Cartório:', document.getElementById('cartorio').value);
+            console.log('Cartório nome:', document.getElementById('cartorio_nome').value);
+            
+            // Verificar se todos os campos obrigatórios estão preenchidos
+            const requiredFields = form.querySelectorAll('[required]');
+            let hasError = false;
+            
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    console.error('Campo obrigatório vazio:', field.name);
+                    hasError = true;
+                }
+            });
+            
+            // Validação específica para número simples em registro e averbação
+            const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+            const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+            const numeroSimplesValue = numeroSimplesInput ? numeroSimplesInput.value.trim() : '';
+            
+            if ((selectedTipo === 'registro' || selectedTipo === 'averbacao') && !numeroSimplesValue) {
+                console.error('Número simples é obrigatório para registro e averbação');
+                hasError = true;
+                
+                // Mostrar mensagem de erro
+                alert('Para lançamentos do tipo "Registro" e "Averbação", é obrigatório preencher o campo "Número" (ex: 1, 5, etc.)');
+                
+                // Destacar o campo
+                if (numeroSimplesInput) {
+                    numeroSimplesInput.style.borderColor = 'red';
+                    numeroSimplesInput.focus();
+                }
+                
+                e.preventDefault();
+                return false;
+            }
+            
+            if (hasError) {
+                console.error('Formulário tem campos obrigatórios vazios!');
+                e.preventDefault();
+                return false;
+            }
+            
+            console.log('Formulário válido, enviando...');
+        });
     }
 });
 
