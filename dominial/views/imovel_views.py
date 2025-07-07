@@ -16,11 +16,25 @@ def imovel_form(request, tis_id, imovel_id=None):
         
         # Obter dados do formulário
         nome_proprietario = request.POST.get('proprietario_nome')
-        cartorio_id = request.POST.get('cartorio_id')
+        
+        # Debug: verificar dados do POST
+        print("DEBUG: Dados do POST:")
+        print("proprietario_nome:", nome_proprietario)
+        print("cartorio:", request.POST.get('cartorio'))
+        print("Todos os dados:", dict(request.POST))
         
         if form.is_valid():
             imovel = form.save(commit=False)
             imovel.terra_indigena_id = tis
+            
+            # Debug: verificar dados do form
+            print("DEBUG: Dados do form:")
+            print("cartorio do form:", imovel.cartorio)
+            print("form.cleaned_data:", form.cleaned_data)
+            
+            # Atribuir o cartório explicitamente
+            imovel.cartorio = form.cleaned_data.get('cartorio')
+            print("DEBUG: Cartório após atribuição:", imovel.cartorio)
             
             # Processar proprietário
             if nome_proprietario:
@@ -40,15 +54,8 @@ def imovel_form(request, tis_id, imovel_id=None):
                 messages.error(request, 'Nome do proprietário é obrigatório.')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             
-            # Processar cartório
-            if cartorio_id:
-                try:
-                    cartorio = Cartorios.objects.get(pk=cartorio_id)
-                    imovel.cartorio = cartorio
-                except Cartorios.DoesNotExist:
-                    messages.error(request, 'Cartório selecionado não foi encontrado.')
-                    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
-            else:
+            # O cartório já foi processado pelo form.is_valid() e está em imovel.cartorio
+            if not imovel.cartorio:
                 messages.error(request, 'Seleção de cartório é obrigatória.')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             
