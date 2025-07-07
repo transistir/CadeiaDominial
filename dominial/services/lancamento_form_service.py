@@ -79,6 +79,9 @@ class LancamentoFormService:
             # Fallback para campo único
             origem = request.POST.get('origem_completa') or request.POST.get('origem')
         
+        # Inicializar descricao_clean
+        descricao_clean = None
+        
         # Processar campo forma baseado no tipo de lançamento
         if tipo_lanc.tipo == 'averbacao':
             forma_value = request.POST.get('forma_averbacao', '').strip()
