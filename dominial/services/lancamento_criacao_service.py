@@ -117,6 +117,34 @@ class LancamentoCriacaoService:
         Atualiza um lançamento completo com todas as validações e processamentos
         """
         try:
+            print(f"DEBUG: Iniciando atualização do lançamento {lancamento.id}")
+            
+            # Obter e processar o tipo de lançamento
+            tipo_id = request.POST.get('tipo_lancamento')
+            print(f"DEBUG: Tipo de lançamento ID recebido: {tipo_id}")
+            
+            if not tipo_id:
+                print("DEBUG: Erro - tipo_lancamento não fornecido")
+                return False, "Tipo de lançamento é obrigatório"
+            
+            try:
+                tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
+                print(f"DEBUG: Tipo de lançamento encontrado: {tipo_lanc.tipo}")
+                
+                # Atualizar o tipo do lançamento
+                lancamento.tipo = tipo_lanc
+                print(f"DEBUG: Tipo do lançamento atualizado para: {tipo_lanc.tipo}")
+                
+            except LancamentoTipo.DoesNotExist:
+                print(f"DEBUG: Erro - tipo de lançamento {tipo_id} não encontrado")
+                return False, f"Tipo de lançamento {tipo_id} não encontrado"
+            
+            # Validar se o número simples foi fornecido para registro e averbação
+            numero_simples = request.POST.get('numero_lancamento_simples', '').strip()
+            if (tipo_lanc.tipo == 'registro' or tipo_lanc.tipo == 'averbacao') and not numero_simples:
+                print(f"DEBUG: Erro - número simples obrigatório para {tipo_lanc.tipo}")
+                return False, f"Para lançamentos do tipo '{tipo_lanc.get_tipo_display()}', é obrigatório preencher o campo 'Número' (ex: 1, 5, etc.)"
+            
             # Obter dados do formulário
             numero_lancamento = request.POST.get('numero_lancamento')
             data = request.POST.get('data')
@@ -154,10 +182,13 @@ class LancamentoCriacaoService:
             lancamento.observacoes = observacoes
             
             # Processar campos específicos por tipo de lançamento
+            print("DEBUG: Processando campos específicos por tipo...")
             LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
             
             # Salvar o lançamento
+            print("DEBUG: Salvando lançamento...")
             lancamento.save()
+            print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
             
             # Processar origens para criar documentos automáticos
             origens_completas = request.POST.getlist('origem_completa[]')
@@ -192,9 +223,13 @@ class LancamentoCriacaoService:
                 lancamento, adquirentes_data, adquirente_ids, 'adquirente'
             )
             
+            print("DEBUG: Lançamento atualizado com sucesso!")
             return True, mensagem_origens
             
         except Exception as e:
+            print(f"DEBUG: Erro durante atualização: {str(e)}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return False, f'Erro ao atualizar lançamento: {str(e)}'
     
     @staticmethod
