@@ -7,17 +7,10 @@ class ImovelForm {
         this.form = document.getElementById('imovel-form');
         this.cartorioInfo = document.getElementById('cartorio-info');
         this.cartorioDetalhes = document.getElementById('cartorio-detalhes');
-        
         // Verificar se os elementos essenciais existem
         if (!this.estadoSelect || !this.cidadeSelect || !this.cartorioSelect) {
-            console.warn('Elementos do formulário não encontrados:', {
-                estado: !!this.estadoSelect,
-                cidade: !!this.cidadeSelect,
-                cartorio: !!this.cartorioSelect
-            });
             return;
         }
-        
         this.init();
     }
 
@@ -43,12 +36,10 @@ class ImovelForm {
         
         // Mostrar detalhes do cartório quando selecionado
         this.cartorioSelect.addEventListener('change', (e) => {
-            console.log('ImovelForm: Select cartório mudou para:', e.target.value);
             if (e.target.value === 'novo') {
                 // Abrir modal para novo cartório
                 const modal = document.getElementById('modal-novo-cartorio');
                 if (modal) {
-                    console.log('Abrindo modal...');
                     modal.style.display = 'flex';
                     
                     // Copiar estado e cidade do formulário principal para o modal
@@ -63,8 +54,6 @@ class ImovelForm {
                     
                     modalEstadoInput.value = estadoText;
                     modalCidadeInput.value = cidadeText;
-                } else {
-                    console.error('Modal não encontrado!');
                 }
                 return;
             }
@@ -75,20 +64,22 @@ class ImovelForm {
     async carregarCidades(estado) {
         if (!estado) {
             this.resetCidadeSelect();
-            this.resetCartorioSelect();
+            // Não resetar o cartório aqui, deixar as opções disponíveis
             return;
         }
 
         this.cidadeSelect.innerHTML = '<option value="">Carregando cidades...</option>';
         this.cidadeSelect.disabled = true;
-        this.resetCartorioSelect();
+        // Não resetar o cartório aqui, deixar as opções disponíveis
 
         try {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
             const response = await fetch('/dominial/buscar-cidades/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-CSRFToken': csrfToken,
                 },
                 body: `estado=${encodeURIComponent(estado)}`
             });
@@ -114,7 +105,6 @@ class ImovelForm {
             
             this.cidadeSelect.disabled = false;
         } catch (error) {
-            console.error('Erro ao carregar cidades:', error);
             this.cidadeSelect.innerHTML = '<option value="">Erro ao carregar cidades</option>';
             this.cidadeSelect.disabled = false;
         }
@@ -122,7 +112,7 @@ class ImovelForm {
 
     async carregarCartorios(estado, cidade) {
         if (!estado || !cidade) {
-            this.resetCartorioSelect();
+            // Não resetar o cartório aqui, deixar as opções originais
             return;
         }
 
@@ -165,7 +155,6 @@ class ImovelForm {
 
             this.cartorioSelect.disabled = false;
         } catch (error) {
-            console.error('Erro ao carregar cartórios:', error);
             this.cartorioSelect.innerHTML = '<option value="">Erro ao carregar cartórios</option>';
             this.cartorioSelect.disabled = false;
         }
@@ -210,7 +199,6 @@ class ImovelForm {
 
 // Inicializar quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Inicializando ImovelForm...');
     new ImovelForm();
 });
 
@@ -224,22 +212,9 @@ function setupNovoCartorioModal() {
 
     // Só ativa se o modal e o form existem
     if (!modal || !fecharBtn || !cancelarBtn || !form || !cartorioSelect) {
-        console.error('Elementos do modal não encontrados:', {
-            modal: !!modal,
-            fecharBtn: !!fecharBtn,
-            cancelarBtn: !!cancelarBtn,
-            form: !!form,
-            cartorioSelect: !!cartorioSelect
-        });
         return;
     }
     
-    console.log('Modal configurado com sucesso');
-    console.log('Botões encontrados:', {
-        fecharBtn: fecharBtn,
-        cancelarBtn: cancelarBtn
-    });
-
     // Fechar modal
     fecharBtn.onclick = function() {
         modal.style.display = 'none';
@@ -265,8 +240,6 @@ function setupNovoCartorioModal() {
     form.onsubmit = async function(e) {
         e.preventDefault();
         e.stopPropagation(); // Impedir que o evento se propague para o formulário principal
-        
-        console.log('Submetendo novo cartório...');
         
         const data = {
             nome: document.getElementById('novo-cartorio-nome').value,
@@ -311,6 +284,5 @@ function setupNovoCartorioModal() {
 
 // Inicializar modal quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Inicializando modal...');
     setupNovoCartorioModal();
 }); 
