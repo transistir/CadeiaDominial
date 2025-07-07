@@ -21,38 +21,71 @@ class LancamentoCriacaoService:
         """
         Cria um lançamento completo com todas as validações e processamentos
         """
+        print(f"DEBUG: Iniciando criação de lançamento para documento {documento_ativo.id}")
+        
         # Obter dados do formulário
         tipo_id = request.POST.get('tipo_lancamento')
-        tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
+        print(f"DEBUG: Tipo de lançamento ID: {tipo_id}")
+        
+        if not tipo_id:
+            print("DEBUG: Erro - tipo_lancamento não fornecido")
+            return None, "Tipo de lançamento é obrigatório"
+        
+        try:
+            tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
+            print(f"DEBUG: Tipo de lançamento encontrado: {tipo_lanc.tipo}")
+        except LancamentoTipo.DoesNotExist:
+            print(f"DEBUG: Erro - tipo de lançamento {tipo_id} não encontrado")
+            return None, f"Tipo de lançamento {tipo_id} não encontrado"
+        
+        # Validar se o número simples foi fornecido para registro e averbação
+        numero_simples = request.POST.get('numero_lancamento_simples', '').strip()
+        if (tipo_lanc.tipo == 'registro' or tipo_lanc.tipo == 'averbacao') and not numero_simples:
+            print(f"DEBUG: Erro - número simples obrigatório para {tipo_lanc.tipo}")
+            return None, f"Para lançamentos do tipo '{tipo_lanc.get_tipo_display()}', é obrigatório preencher o campo 'Número' (ex: 1, 5, etc.)"
         
         # Processar dados do lançamento
+        print("DEBUG: Processando dados do lançamento...")
         dados_lancamento = LancamentoFormService.processar_dados_lancamento(request, tipo_lanc)
+        print(f"DEBUG: Dados processados: {dados_lancamento}")
         
         # Validar número do lançamento
+        print("DEBUG: Validando número do lançamento...")
         is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(
             dados_lancamento['numero_lancamento'], documento_ativo
         )
+        print(f"DEBUG: Validação do número: {is_valid}, mensagem: {error_message}")
+        
         if not is_valid:
+            print(f"DEBUG: Erro na validação: {error_message}")
             return None, error_message
         
         try:
+            print("DEBUG: Criando lançamento básico...")
             # Criar o lançamento
             lancamento = LancamentoCriacaoService._criar_lancamento_basico(documento_ativo, dados_lancamento, tipo_lanc)
+            print(f"DEBUG: Lançamento criado com ID: {lancamento.id}")
             
             # Processar cartório de origem
+            print("DEBUG: Processando cartório de origem...")
             LancamentoCartorioService.processar_cartorio_origem(request, tipo_lanc, lancamento)
             
             # Processar campos específicos por tipo de lançamento
+            print("DEBUG: Processando campos específicos...")
             LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
             
+            print("DEBUG: Salvando lançamento...")
             lancamento.save()
+            print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
             
             # Processar origens para criar documentos automáticos
+            print("DEBUG: Processando origens...")
             mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
                 lancamento, dados_lancamento['origem'], imovel
             )
             
             # Processar transmitentes
+            print("DEBUG: Processando transmitentes...")
             transmitentes_data = request.POST.getlist('transmitente_nome[]')
             transmitente_ids = request.POST.getlist('transmitente[]')
             
@@ -61,6 +94,7 @@ class LancamentoCriacaoService:
             )
             
             # Processar adquirentes
+            print("DEBUG: Processando adquirentes...")
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
             
@@ -68,9 +102,13 @@ class LancamentoCriacaoService:
                 lancamento, adquirentes_data, adquirente_ids, 'adquirente'
             )
             
+            print("DEBUG: Lançamento criado com sucesso!")
             return lancamento, mensagem_origens
             
         except Exception as e:
+            print(f"DEBUG: Erro durante criação: {str(e)}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return None, f'Erro ao criar lançamento: {str(e)}'
     
     @staticmethod

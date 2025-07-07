@@ -39,18 +39,28 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     
     # Processar POST
     if request.method == 'POST':
-        # Usar o service para criar o lançamento completo
-        lancamento, mensagem_origens = LancamentoService.criar_lancamento_completo(
-            request, tis, imovel, documento_ativo
-        )
+        try:
+            # Usar o service para criar o lançamento completo
+            lancamento, mensagem_origens = LancamentoService.criar_lancamento_completo(
+                request, tis, imovel, documento_ativo
+            )
+            
+            if lancamento:
+                messages.success(request, f'Lançamento "{lancamento.numero_lancamento}" criado com sucesso!')
+                if mensagem_origens:
+                    messages.info(request, mensagem_origens)
+                return redirect('documento_lancamentos', documento_id=documento_ativo.id, tis_id=tis.id, imovel_id=imovel.id)
+            else:
+                # Erro na criação - preparar contexto com dados do formulário
+                messages.error(request, f'Erro ao criar lançamento: {mensagem_origens}')
+        except Exception as e:
+            # Capturar exceções para debug
+            import traceback
+            error_msg = f'Erro inesperado: {str(e)}\n{traceback.format_exc()}'
+            messages.error(request, error_msg)
+            print(f"ERRO NA CRIAÇÃO DE LANÇAMENTO: {error_msg}")
         
-        if lancamento:
-            messages.success(request, f'Lançamento "{lancamento.numero_lancamento}" criado com sucesso!')
-            if mensagem_origens:
-                messages.info(request, mensagem_origens)
-            return redirect('documento_lancamentos', documento_id=documento_ativo.id, tis_id=tis.id, imovel_id=imovel.id)
-        else:
-            # Erro na criação - preparar contexto com dados do formulário
+        # Erro na criação - preparar contexto com dados do formulário
             context = {
                 'tis': tis,
                 'imovel': imovel,

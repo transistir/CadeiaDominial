@@ -55,6 +55,16 @@ class LancamentoValidacaoService:
         if not dados_lancamento.get('numero_lancamento'):
             return False, 'O número do lançamento é obrigatório.'
         
+        # Validar se o número do lançamento tem o formato correto baseado no tipo
+        numero_lancamento = dados_lancamento.get('numero_lancamento', '')
+        tipo_lancamento = dados_lancamento.get('tipo_lancamento')
+        
+        if tipo_lancamento:
+            if tipo_lancamento.tipo == 'averbacao' and not numero_lancamento.startswith('AV'):
+                return False, 'Lançamentos do tipo "Averbação" devem ter o prefixo "AV" seguido do número e sigla da matrícula.'
+            elif tipo_lancamento.tipo == 'registro' and not numero_lancamento.startswith('R'):
+                return False, 'Lançamentos do tipo "Registro" devem ter o prefixo "R" seguido do número e sigla da matrícula.'
+        
         # Validar data (se fornecida, deve ser válida)
         data = dados_lancamento.get('data')
         if data and data.strip():

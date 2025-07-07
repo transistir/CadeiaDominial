@@ -176,36 +176,9 @@ class LancamentoCamposService:
             origem_value = request.POST.get('origem_completa', '').strip()
             lancamento.origem = origem_value if origem_value else None
         
-        # Processar cartório da primeira origem (ou única origem)
-        cartorio_origem_id = None
-        cartorio_origem_nome = None
-        
-        if cartorios_origem_ids and cartorios_origem_ids[0].strip():
-            cartorio_origem_id = cartorios_origem_ids[0].strip()
-        elif cartorios_origem_nomes and cartorios_origem_nomes[0].strip():
-            cartorio_origem_nome = cartorios_origem_nomes[0].strip()
-        else:
-            # Fallback para campo único (compatibilidade)
-            cartorio_origem_id = request.POST.get('cartorio_origem')
-            cartorio_origem_nome = request.POST.get('cartorio_origem_nome', '').strip()
-        
-        if cartorio_origem_id and cartorio_origem_id.strip():
-            lancamento.cartorio_origem_id = cartorio_origem_id
-        elif cartorio_origem_nome:
-            try:
-                cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
-                lancamento.cartorio_origem = cartorio
-            except Cartorios.DoesNotExist:
-                # Criar novo cartório com CNS único
-                cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                cartorio = Cartorios.objects.create(
-                    nome=cartorio_origem_nome,
-                    cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                )
-                lancamento.cartorio_origem = cartorio
-        else:
-            lancamento.cartorio_origem_id = None
+        # Para início de matrícula, NÃO sobrescrever o cartório da matrícula
+        # O cartório da matrícula já foi definido nos campos básicos
+        # O cartório da origem é apenas informativo e não deve substituir o cartório da matrícula
         
         # Processar área
         area_value = request.POST.get('area', '').strip()

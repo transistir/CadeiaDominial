@@ -18,9 +18,8 @@ class LancamentoFormService:
             if numero_simples:
                 numero_lancamento = LancamentoFormService._gerar_numero_lancamento(numero_simples, tipo_lanc, request)
             else:
-                # Se não há número simples nem número completo, usar a sigla da matrícula
-                sigla_matricula = request.POST.get('sigla_matricula', '')
-                numero_lancamento = sigla_matricula
+                # Se não há número simples nem número completo, deixar vazio para validação
+                numero_lancamento = ''
         
         data = request.POST.get('data')
         observacoes = request.POST.get('observacoes')
