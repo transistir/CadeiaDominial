@@ -9,4 +9,7 @@
         <label for="descricao_averbacao">Descrição *</label>
         <textarea name="descricao" id="descricao_averbacao" placeholder="Descreva o conteúdo da averbação">{% if modo_edicao %}{{ lancamento.descricao }}{% elif form_data %}{{ form_data.descricao }}{% endif %}</textarea>
     </div>
+    
+    <!-- Campo de área opcional -->
+    {% include "dominial/components/_area_form.html" with area_obrigatorio=False area_id="area_averbacao" %}
 </div> 

@@ -39,6 +39,10 @@ class LancamentoCamposService:
         descricao_value = request.POST.get('descricao', '').strip()
         lancamento.descricao = descricao_value if descricao_value else None
         
+        # Processar área
+        area_value = request.POST.get('area', '').strip()
+        lancamento.area = float(area_value) if area_value else None
+        
         # Processar origem (se presente)
         origem_value = request.POST.get('origem_completa', '').strip()
         if origem_value:
@@ -71,6 +75,10 @@ class LancamentoCamposService:
         """
         # Campos específicos do registro (transmitentes e adquirentes são processados separadamente)
         # Não há mais campos específicos no bloco de registro, apenas pessoas
+        
+        # Processar área
+        area_value = request.POST.get('area', '').strip()
+        lancamento.area = float(area_value) if area_value else None
         
         # Processar origem (se presente)
         origem_value = request.POST.get('origem_completa', '').strip()

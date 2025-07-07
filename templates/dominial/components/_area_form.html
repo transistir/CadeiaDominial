@@ -1,0 +1,16 @@
+<!--
+  Componente para campo de área
+  Parâmetros esperados:
+    - area_obrigatorio: se a área é obrigatória (true/false, padrão: false)
+    - modo_edicao: se está em modo de edição
+    - lancamento: objeto do lançamento (se modo_edicao)
+    - form_data: dados do formulário
+    - area_id: ID personalizado para o campo (opcional, padrão: 'area')
+-->
+<div class="form-group">
+    <label for="{{ area_id|default:'area' }}">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
+    <input type="number" name="area" id="{{ area_id|default:'area' }}" step="0.01" min="0" 
+           value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}"
+           placeholder="Ex: 150.50">
+    <small>Área em hectares do imóvel ou fração (opcional)</small>
+</div> 
