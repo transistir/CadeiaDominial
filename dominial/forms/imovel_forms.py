@@ -86,4 +86,23 @@ class ImovelForm(forms.ModelForm):
                         estado=instance.cartorio.estado,
                         cidade=instance.cartorio.cidade
                     ).order_by('nome')
+                    self.fields['cartorio'].queryset = cartorios_cidade
+        
+        # Se há dados do POST (formulário com erro), carregar choices da cidade
+        if args and args[0]:  # Se há dados do POST
+            estado_post = args[0].get('estado')
+            if estado_post:
+                # Popular cidades do estado do POST
+                cidades_estado = Cartorios.objects.filter(
+                    estado=estado_post
+                ).values_list('cidade', 'cidade').distinct().order_by('cidade')
+                self.fields['cidade'].choices = [('', 'Selecione uma cidade')] + list(cidades_estado)
+                
+                # Se há cidade no POST, filtrar cartórios
+                cidade_post = args[0].get('cidade')
+                if cidade_post:
+                    cartorios_cidade = Cartorios.objects.filter(
+                        estado=estado_post,
+                        cidade=cidade_post
+                    ).order_by('nome')
                     self.fields['cartorio'].queryset = cartorios_cidade 
