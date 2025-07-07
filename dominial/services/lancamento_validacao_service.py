@@ -36,7 +36,8 @@ class LancamentoValidacaoService:
             lancamento_existente = lancamento_existente.exclude(pk=lancamento_id)
         
         if lancamento_existente.exists():
-            return False, f'Já existe um lançamento com o número "{numero_lancamento.strip()}" neste documento.'
+            lancamento_duplicado = lancamento_existente.first()
+            return False, f'Já existe um lançamento com o número "{numero_lancamento.strip()}" neste documento. O lançamento existente é do tipo "{lancamento_duplicado.tipo.get_tipo_display()}" com data {lancamento_duplicado.data.strftime("%d/%m/%Y") if lancamento_duplicado.data else "sem data"}.'
         
         return True, None
     

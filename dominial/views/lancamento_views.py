@@ -52,15 +52,98 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 return redirect('documento_lancamentos', documento_id=documento_ativo.id, tis_id=tis.id, imovel_id=imovel.id)
             else:
                 # Erro na criação - preparar contexto com dados do formulário
-                messages.error(request, f'Erro ao criar lançamento: {mensagem_origens}')
+                messages.error(request, f'❌ Erro ao criar lançamento: {mensagem_origens}')
+                
+                # Verificar se é erro de número duplicado para destacar o campo
+                numero_lancamento_error = 'Já existe um lançamento com o número' in mensagem_origens
+                
+                # Adicionar dados das pessoas para preservação
+                transmitentes_data = []
+                for i, nome in enumerate(request.POST.getlist('transmitente_nome[]')):
+                    if nome.strip():
+                        transmitentes_data.append({
+                            'nome': nome.strip(),
+                            'id': request.POST.getlist('transmitente[]')[i] if i < len(request.POST.getlist('transmitente[]')) else ''
+                        })
+                
+                adquirentes_data = []
+                for i, nome in enumerate(request.POST.getlist('adquirente_nome[]')):
+                    if nome.strip():
+                        adquirentes_data.append({
+                            'nome': nome.strip(),
+                            'id': request.POST.getlist('adquirente[]')[i] if i < len(request.POST.getlist('adquirente[]')) else ''
+                        })
+                
+                context = {
+                    'tis': tis,
+                    'imovel': imovel,
+                    'documento': documento_ativo,
+                    'pessoas': pessoas,
+                    'cartorios': cartorios,
+                    'tipos_lancamento': tipos_lancamento,
+                    'form_data': {
+                        'tipo_lancamento': request.POST.get('tipo_lancamento'),
+                        'numero_lancamento': request.POST.get('numero_lancamento'),
+                        'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
+                        'data': request.POST.get('data'),
+                        'observacoes': request.POST.get('observacoes'),
+                        'livro': request.POST.get('livro'),
+                        'folha': request.POST.get('folha'),
+                        'cartorio': request.POST.get('cartorio'),
+                        'cartorio_nome': request.POST.get('cartorio_nome'),
+                        'transmitente_ids': request.POST.getlist('transmitente[]'),
+                        'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
+                        'adquirente_ids': request.POST.getlist('adquirente[]'),
+                        'adquirente_nomes': request.POST.getlist('adquirente_nome[]'),
+                        'area': request.POST.get('area'),
+                        'origem': request.POST.get('origem_completa') or request.POST.get('origem'),
+                        'forma': request.POST.get('forma'),
+                        'descricao': request.POST.get('descricao'),
+                        'titulo': request.POST.get('titulo'),
+                        'cartorio_origem': request.POST.get('cartorio_origem'),
+                        'livro_origem': request.POST.get('livro_origem'),
+                        'folha_origem': request.POST.get('folha_origem'),
+                        'data_origem': request.POST.get('data_origem'),
+                        # Campos específicos por tipo
+                        'forma_averbacao': request.POST.get('forma_averbacao'),
+                        'forma_registro': request.POST.get('forma_registro'),
+                        'forma_inicio': request.POST.get('forma_inicio'),
+                    },
+                    'numero_lancamento_error': numero_lancamento_error,
+                }
+                
+                context['transmitentes'] = transmitentes_data
+                context['adquirentes'] = adquirentes_data
+                
+                return render(request, 'dominial/lancamento_form.html', context)
+                
         except Exception as e:
             # Capturar exceções para debug
             import traceback
             error_msg = f'Erro inesperado: {str(e)}\n{traceback.format_exc()}'
-            messages.error(request, error_msg)
+            messages.error(request, f'❌ {error_msg}')
             print(f"ERRO NA CRIAÇÃO DE LANÇAMENTO: {error_msg}")
-        
-        # Erro na criação - preparar contexto com dados do formulário
+            
+            # Verificar se é erro de número duplicado para destacar o campo
+            numero_lancamento_error = 'Já existe um lançamento com o número' in str(e)
+            
+            # Adicionar dados das pessoas para preservação
+            transmitentes_data = []
+            for i, nome in enumerate(request.POST.getlist('transmitente_nome[]')):
+                if nome.strip():
+                    transmitentes_data.append({
+                        'nome': nome.strip(),
+                        'id': request.POST.getlist('transmitente[]')[i] if i < len(request.POST.getlist('transmitente[]')) else ''
+                    })
+            
+            adquirentes_data = []
+            for i, nome in enumerate(request.POST.getlist('adquirente_nome[]')):
+                if nome.strip():
+                    adquirentes_data.append({
+                        'nome': nome.strip(),
+                        'id': request.POST.getlist('adquirente[]')[i] if i < len(request.POST.getlist('adquirente[]')) else ''
+                    })
+            
             context = {
                 'tis': tis,
                 'imovel': imovel,
@@ -71,6 +154,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 'form_data': {
                     'tipo_lancamento': request.POST.get('tipo_lancamento'),
                     'numero_lancamento': request.POST.get('numero_lancamento'),
+                    'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
                     'data': request.POST.get('data'),
                     'observacoes': request.POST.get('observacoes'),
                     'livro': request.POST.get('livro'),
@@ -90,9 +174,17 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     'livro_origem': request.POST.get('livro_origem'),
                     'folha_origem': request.POST.get('folha_origem'),
                     'data_origem': request.POST.get('data_origem'),
+                    # Campos específicos por tipo
+                    'forma_averbacao': request.POST.get('forma_averbacao'),
+                    'forma_registro': request.POST.get('forma_registro'),
+                    'forma_inicio': request.POST.get('forma_inicio'),
                 },
-                'numero_lancamento_error': True,  # Flag para destacar o campo em vermelho
+                'numero_lancamento_error': numero_lancamento_error,
             }
+            
+            context['transmitentes'] = transmitentes_data
+            context['adquirentes'] = adquirentes_data
+            
             return render(request, 'dominial/lancamento_form.html', context)
     
     # GET - mostrar formulário
