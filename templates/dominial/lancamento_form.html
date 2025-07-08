@@ -41,14 +41,7 @@
         {% include "dominial/components/_lancamento_registro_form.html" %}
 
         <!-- Campos para Início de Matrícula -->
-        <div class="field-group hidden" id="campos-inicio-matricula">
-            <h4>Campos Específicos - Início de Matrícula</h4>
-            <div class="form-group">
-                <label>Adquirente(s)</label>
-                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
-            </div>
-            {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=True container_id="origens-container" %}
-        </div>
+        {% include "dominial/components/_lancamento_inicio_matricula_form.html" %}
 
         <!-- Campos Opcionais de Transação -->
         <div class="field-group hidden" id="campos-transacao">

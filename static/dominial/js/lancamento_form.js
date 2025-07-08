@@ -295,6 +295,9 @@ function adicionarTransmitente() {
     // Tentar encontrar o container correto baseado no contexto
     let container = document.getElementById('transmitentes-container-registro');
     if (!container) {
+        container = document.getElementById('transmitentes-container-inicio');
+    }
+    if (!container) {
         container = document.getElementById('transmitentes-container');
     }
     if (!container) {
@@ -325,6 +328,9 @@ function adicionarTransmitente() {
 function adicionarAdquirente() {
     // Tentar encontrar o container correto baseado no contexto
     let container = document.getElementById('adquirentes-container-registro');
+    if (!container) {
+        container = document.getElementById('adquirentes-container-inicio');
+    }
     if (!container) {
         container = document.getElementById('adquirentes-container');
     }
