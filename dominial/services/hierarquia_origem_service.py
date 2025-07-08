@@ -19,6 +19,7 @@ class HierarquiaOrigemService:
         Processa origens identificadas de lançamentos que ainda não foram convertidas em documentos
         """
         origens_identificadas = []
+        origens_processadas = set()  # Para evitar duplicação
         
         # Otimização: usar select_related para reduzir queries
         lancamentos_com_origem = Lancamento.objects.filter(
@@ -29,14 +30,18 @@ class HierarquiaOrigemService:
         
         for lancamento in lancamentos_com_origem:
             if lancamento.origem:
-                origens_processadas = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
+                origens_processadas_info = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
                 
-                for origem_info in origens_processadas:
-                    origem_identificada = HierarquiaOrigemService._processar_origem_individual(
-                        imovel, lancamento, origem_info
-                    )
-                    if origem_identificada:
-                        origens_identificadas.append(origem_identificada)
+                for origem_info in origens_processadas_info:
+                    # Verificar se esta origem já foi processada
+                    chave_origem = f"{origem_info['numero']}_{origem_info['tipo']}"
+                    if chave_origem not in origens_processadas:
+                        origem_identificada = HierarquiaOrigemService._processar_origem_individual(
+                            imovel, lancamento, origem_info
+                        )
+                        if origem_identificada:
+                            origens_identificadas.append(origem_identificada)
+                            origens_processadas.add(chave_origem)
         
         return origens_identificadas
     
@@ -45,8 +50,12 @@ class HierarquiaOrigemService:
         """
         Processa uma origem individual
         """
-        # Verificar se já existe um documento com esse número
-        documento_existente = Documento.objects.filter(imovel=imovel, numero=origem_info['numero']).first()
+        # Verificar se já existe um documento com esse número e cartório
+        cartorio_destino = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+        documento_existente = Documento.objects.filter(
+            numero=origem_info['numero'], 
+            cartorio=cartorio_destino
+        ).first()
         
         if not documento_existente:
             # Criar o documento automaticamente
@@ -67,8 +76,13 @@ class HierarquiaOrigemService:
         try:
             tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
             
-            # Verificar se já existe um documento com esse número
-            documento_existente = Documento.objects.filter(imovel=imovel, numero=origem_info['numero']).first()
+            # Verificar se já existe um documento com esse número e cartório
+            cartorio_destino = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+            documento_existente = Documento.objects.filter(
+                numero=origem_info['numero'], 
+                cartorio=cartorio_destino
+            ).first()
+            
             if documento_existente:
                 # Se já existe, retornar como origem identificada criada
                 return HierarquiaOrigemService._criar_origem_identificada(
@@ -80,7 +94,7 @@ class HierarquiaOrigemService:
                 tipo=tipo_doc,
                 numero=origem_info['numero'],
                 data=date.today(),
-                cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
+                cartorio=cartorio_destino,
                 livro='1',  # Livro padrão
                 folha='1',  # Folha padrão
                 origem=f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
