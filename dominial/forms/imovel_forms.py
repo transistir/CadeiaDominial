@@ -6,7 +6,13 @@ class ImovelForm(forms.ModelForm):
     proprietario_nome = forms.CharField(
         label='Nome do Proprietário',
         required=False,  # Agora opcional, pois você vai validar manualmente depois
-        widget=forms.TextInput(attrs={'class': 'form-control', 'id': 'id_proprietario_nome'})
+        max_length=255,  # Limite máximo para o nome
+        widget=forms.TextInput(attrs={
+            'class': 'form-control', 
+            'id': 'id_proprietario_nome',
+            'maxlength': '255',
+            'placeholder': 'Digite o nome completo do proprietário'
+        })
     )
     proprietario = forms.CharField(
         required=False,

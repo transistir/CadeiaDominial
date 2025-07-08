@@ -197,9 +197,48 @@ class ImovelForm {
     }
 }
 
+// Validação do campo nome do proprietário
+function validarNomeProprietario() {
+    const nomeInput = document.getElementById('id_proprietario_nome');
+    if (nomeInput) {
+        nomeInput.addEventListener('input', function() {
+            const maxLength = 255;
+            const currentLength = this.value.length;
+            
+            // Criar ou atualizar contador de caracteres
+            let counter = document.getElementById('nome-counter');
+            if (!counter) {
+                counter = document.createElement('div');
+                counter.id = 'nome-counter';
+                counter.style.fontSize = '12px';
+                counter.style.color = '#666';
+                counter.style.marginTop = '5px';
+                this.parentNode.appendChild(counter);
+            }
+            
+            counter.textContent = `${currentLength}/${maxLength} caracteres`;
+            
+            // Mudar cor se estiver próximo do limite
+            if (currentLength > maxLength * 0.9) {
+                counter.style.color = currentLength >= maxLength ? '#d32f2f' : '#f57c00';
+            } else {
+                counter.style.color = '#666';
+            }
+            
+            // Truncar se exceder o limite
+            if (currentLength > maxLength) {
+                this.value = this.value.substring(0, maxLength);
+                counter.textContent = `${maxLength}/${maxLength} caracteres`;
+                counter.style.color = '#d32f2f';
+            }
+        });
+    }
+}
+
 // Inicializar quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
     new ImovelForm();
+    validarNomeProprietario();
 });
 
 // Configurar modal de novo cartório

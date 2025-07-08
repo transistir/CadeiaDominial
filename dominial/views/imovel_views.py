@@ -25,11 +25,18 @@ def imovel_form(request, tis_id, imovel_id=None):
             imovel.cartorio = form.cleaned_data.get('cartorio')
             # Processar proprietário
             if nome_proprietario:
+                # Truncar nome se for muito longo (máximo 255 caracteres)
+                nome_truncado = nome_proprietario[:255] if len(nome_proprietario) > 255 else nome_proprietario
+                
+                # Avisar se o nome foi truncado
+                if len(nome_proprietario) > 255:
+                    messages.warning(request, f'O nome do proprietário foi truncado para {len(nome_truncado)} caracteres.')
+                
                 # Criar ou buscar proprietário
                 proprietario, created = Pessoas.objects.get_or_create(
-                    nome=nome_proprietario,
+                    nome=nome_truncado,
                     defaults={
-                        'nome': nome_proprietario,
+                        'nome': nome_truncado,
                         'cpf': None,  # CPF é opcional, usar None em vez de string vazia
                         'rg': '',
                         'email': '',
