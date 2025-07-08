@@ -35,7 +35,6 @@ from .lancamento_views import (
 
 # Views de Cadeia Dominial
 from .cadeia_dominial_views import (
-    cadeia_dominial,
     cadeia_dominial_arvore,
     tronco_principal,
     cadeia_dominial_dados,
@@ -94,7 +93,6 @@ __all__ = [
     'lancamento_detail',
     
     # Views de Cadeia Dominial
-    'cadeia_dominial',
     'cadeia_dominial_arvore',
     'tronco_principal',
     'cadeia_dominial_dados',

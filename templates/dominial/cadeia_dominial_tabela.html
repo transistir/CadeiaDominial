@@ -190,13 +190,13 @@
                                                 <!-- Transmitente -->
                                                 <td>
                                                     {% for pessoa in lancamento.transmitentes.all %}
-                                                        {{ pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                                        {{ pessoa.pessoa.nome }}{% if not forloop.last %}, {% endif %}
                                                     {% empty %}-{% endfor %}
                                                 </td>
                                                 <!-- Adquirente -->
                                                 <td>
                                                     {% for pessoa in lancamento.adquirentes.all %}
-                                                        {{ pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                                        {{ pessoa.pessoa.nome }}{% if not forloop.last %}, {% endif %}
                                                     {% empty %}-{% endfor %}
                                                 </td>
                                                 <!-- Transmissão -->

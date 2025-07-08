@@ -100,6 +100,14 @@ class Lancamento(models.Model):
             if self.tipo.requer_forma and not self.forma:
                 raise ValidationError("Forma é obrigatória para este tipo de lançamento")
 
+    @property
+    def transmitentes(self):
+        return self.pessoas.filter(tipo='transmitente')
+
+    @property
+    def adquirentes(self):
+        return self.pessoas.filter(tipo='adquirente')
+
 
 class LancamentoPessoa(models.Model):
     """Modelo para armazenar múltiplas pessoas com percentuais em um lançamento"""
