@@ -94,12 +94,94 @@ function centralizarArvore(width, height) {
     window._zoomTransform = t;
 }
 
+// Calcular espaçamento adaptativo baseado na quantidade de nós
+function calcularEspacamentoAdaptativo(root) {
+    // Encontrar o nível com mais nós
+    const niveis = {};
+    root.descendants().forEach(node => {
+        const nivel = node.depth;
+        if (!niveis[nivel]) niveis[nivel] = 0;
+        niveis[nivel]++;
+    });
+    
+    // Encontrar o nível com mais nós
+    let maxNos = 0;
+    Object.values(niveis).forEach(count => {
+        if (count > maxNos) maxNos = count;
+    });
+    
+    // Calcular espaçamento baseado na quantidade máxima de nós
+    let espacamentoHorizontal = 200; // padrão
+    if (maxNos > 15) {
+        espacamentoHorizontal = 300; // muito espaçado para muitos nós
+    } else if (maxNos > 10) {
+        espacamentoHorizontal = 250; // espaçado para muitos nós
+    } else if (maxNos > 6) {
+        espacamentoHorizontal = 220; // moderadamente espaçado
+    }
+    
+    return espacamentoHorizontal;
+}
+
+// Corrigir sobreposições pós-processamento
+function corrigirSobreposicoes(root) {
+    // Agrupar nós por profundidade (nível)
+    const niveis = {};
+    root.descendants().forEach(node => {
+        if (!niveis[node.depth]) niveis[node.depth] = [];
+        niveis[node.depth].push(node);
+    });
+    
+    // Para cada nível, ajustar posições se necessário
+    Object.keys(niveis).forEach(depth => {
+        const nosNivel = niveis[depth];
+        if (nosNivel.length > 1) {
+            // Ordenar por posição Y
+            nosNivel.sort((a, b) => a.x - b.x);
+            
+            // Calcular espaçamento mínimo necessário
+            const espacamentoMinimo = 120; // altura do card + margem
+            const espacamentoAtual = nosNivel.length > 1 ? 
+                (nosNivel[nosNivel.length - 1].x - nosNivel[0].x) / (nosNivel.length - 1) : 0;
+            
+            // Se o espaçamento atual é menor que o mínimo, redistribuir
+            if (espacamentoAtual < espacamentoMinimo) {
+                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+                const inicio = nosNivel[0].x - (larguraTotal / 2);
+                
+                nosNivel.forEach((node, index) => {
+                    node.x = inicio + (index * espacamentoMinimo);
+                });
+            }
+        }
+    });
+}
+
 function renderArvoreD3(data, svgGroup, width, height) {
     // Converter para d3.hierarchy
     const root = d3.hierarchy(data);
-    // Aumentar espaçamento vertical e horizontal
-    const treeLayout = d3.tree().size([height * 1.8, width - 240]);
+    
+    // Calcular espaçamento adaptativo
+    const espacamentoHorizontal = calcularEspacamentoAdaptativo(root);
+    
+    // Configurar layout da árvore com espaçamento adaptativo
+    const treeLayout = d3.tree()
+        .size([height * 1.8, width - 240])
+        .separation((a, b) => {
+            // Aumentar separação entre nós irmãos quando há muitos
+            const irmaos = a.parent ? a.parent.children.length : 1;
+            if (irmaos > 10) {
+                return 2.0; // Dobrar a separação
+            } else if (irmaos > 6) {
+                return 1.5; // Aumentar 50%
+            }
+            return 1.0; // Separação padrão
+        });
+    
     treeLayout(root);
+    
+    // Aplicar correção de sobreposições
+    corrigirSobreposicoes(root);
 
     // Desenhar links
     svgGroup.selectAll('path.link')
