@@ -98,7 +98,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Converter para d3.hierarchy
     const root = d3.hierarchy(data);
     // Aumentar espaçamento vertical e horizontal
-    const treeLayout = d3.tree().size([height * 1.8, width - 200]);
+    const treeLayout = d3.tree().size([height * 1.8, width - 240]);
     treeLayout(root);
 
     // Desenhar links
@@ -111,7 +111,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('stroke', '#28a745')
         .attr('stroke-width', 2)
         .attr('d', d3.linkHorizontal()
-            .x(d => d.y + 100)
+            .x(d => d.y + 120)
             .y(d => d.x + 20)
         );
 
@@ -121,15 +121,15 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .enter()
         .append('g')
         .attr('class', 'node')
-        .attr('transform', d => `translate(${d.y + 100},${d.x + 20})`)
+        .attr('transform', d => `translate(${d.y + 120},${d.x + 20})`)
         .style('cursor', 'pointer');
 
     // Card base
     node.append('rect')
-        .attr('width', 120)
-        .attr('height', 60)
-        .attr('x', -60)
-        .attr('y', -30)
+        .attr('width', 140)
+        .attr('height', 80)
+        .attr('x', -70)
+        .attr('y', -40)
         .attr('rx', 12)
         .attr('fill', d => d.data.tipo === 'transcricao' ? '#6f42c1' : '#007bff')
         .attr('stroke', d => d.data.tipo === 'transcricao' ? '#5a32a3' : '#0056b3')
@@ -171,11 +171,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Botões SVG
     const btnGroup = node.append('g')
         .attr('class', 'card-buttons')
-        .attr('transform', 'translate(0,28)');
+        .attr('transform', 'translate(0,35)');
 
     // 👁️ Ver lançamentos
     btnGroup.append('text')
-        .attr('x', -20)
+        .attr('x', -25)
         .attr('y', 0)
         .attr('font-size', 18)
         .attr('cursor', 'pointer')
@@ -188,7 +188,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
     // ➕ Novo lançamento
     btnGroup.append('text')
-        .attr('x', 20)
+        .attr('x', 25)
         .attr('y', 0)
         .attr('font-size', 18)
         .attr('cursor', 'pointer')

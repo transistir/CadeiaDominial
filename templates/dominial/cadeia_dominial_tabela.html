@@ -122,7 +122,7 @@
                         <tr class="documento-row" data-documento-id="{{ item.documento.id }}">
                             <td>
                                 <button class="expand-btn" data-documento-id="{{ item.documento.id }}">
-                                    <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <svg class="expand-icon expanded" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
@@ -136,7 +136,7 @@
                             </td>
                         </tr>
                         <!-- Linha expandível com tabela de lançamentos -->
-                        <tr class="lancamentos-row" id="lancamentos-{{ item.documento.id }}" style="display: none;">
+                        <tr class="lancamentos-row show" id="lancamentos-{{ item.documento.id }}">
                             <td colspan="5">
                                 <div class="lancamentos-table-container">
                                     <h5>
@@ -149,221 +149,85 @@
                                         </svg>
                                         Lançamentos do {{ item.documento.tipo.get_tipo_display }} {{ item.documento.numero }}
                                     </h5>
-                                    <table class="lancamentos-table">
+                                    <table class="cadeia-tabela-planilha">
                                         <thead>
                                             <tr>
-                                                <th class="th-tipo">Tipo</th>
-                                                <th class="th-numero">Número</th>
-                                                <th class="th-data">Data</th>
-                                                <th class="th-detalhes">Detalhes e Transmissão</th>
-                                                <th class="th-pessoas">Pessoas</th>
+                                                <th colspan="5" class="agrupamento">MATRÍCULA</th>
+                                                <th colspan="2" class="agrupamento">&nbsp;</th>
+                                                <th colspan="6" class="agrupamento">TRANSMISSÃO</th>
+                                                <th rowspan="2">Área (ha)</th>
+                                                <th rowspan="2">Origem</th>
+                                                <th rowspan="2">Observações</th>
+                                            </tr>
+                                            <tr>
+                                                <!-- Matrícula -->
+                                                <th>Nº</th>
+                                                <th>L</th>
+                                                <th>Fls.</th>
+                                                <th>Cartório</th>
+                                                <th>Data</th>
+                                                <!-- Transmitente/Adquirente -->
+                                                <th>Transmitente</th>
+                                                <th>Adquirente</th>
+                                                <!-- Transmissão -->
+                                                <th>Forma</th>
+                                                <th>Título</th>
+                                                <th>Cartório</th>
+                                                <th>L</th>
+                                                <th>Fls.</th>
+                                                <th>Data</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {% for lancamento in item.lancamentos %}
-                                            <tr>
-                                                <td class="td-tipo">
-                                                    <div class="tipo-badge tipo-{{ lancamento.tipo.tipo }}">
-                                                        {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
-                                                        {{ lancamento.tipo.get_tipo_display }}
-                                                    </div>
+                                            <tr class="planilha-row {% cycle 'linha-par' 'linha-impar' %}">
+                                                <!-- Matrícula -->
+                                                <td>{{ lancamento.numero_lancamento }}</td>
+                                                <td>{{ item.documento.livro|default_if_none:"-" }}</td>
+                                                <td>{{ item.documento.folha|default_if_none:"-" }}</td>
+                                                <td>{{ item.documento.cartorio.nome }}</td>
+                                                <td>{{ item.documento.data|date:'d/m/Y' }}</td>
+                                                <!-- Transmitente -->
+                                                <td>
+                                                    {% for pessoa in lancamento.transmitentes.all %}
+                                                        {{ pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                                    {% empty %}-{% endfor %}
                                                 </td>
-                                                <td class="td-numero">
-                                                    <span class="numero-value">{{ lancamento.numero_lancamento|default:"-" }}</span>
+                                                <!-- Adquirente -->
+                                                <td>
+                                                    {% for pessoa in lancamento.adquirentes.all %}
+                                                        {{ pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                                    {% empty %}-{% endfor %}
                                                 </td>
-                                                <td class="td-data">
-                                                    <span class="data-value">{{ lancamento.data|date:'d/m/Y' }}</span>
-                                                </td>
-                                                <td class="td-detalhes">
-                                                    {% if lancamento.tipo.tipo == 'registro' %}
-                                                        <div class="detalhes-registro">
-                                                            {% if lancamento.forma %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Forma:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.titulo %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Título:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.titulo }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.cartorio_transacao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Cartório Transação:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.livro_transacao or lancamento.folha_transacao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Livro/Folha Transação:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.data_transacao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Data Transação:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.data_transacao|date:'d/m/Y' }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% elif lancamento.tipo.tipo == 'averbacao' %}
-                                                        <div class="detalhes-averbacao">
-                                                            {% if lancamento.forma %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Forma:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.descricao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Descrição:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.descricao }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.cartorio_transacao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Cartório Transação:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.livro_transacao or lancamento.folha_transacao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Livro/Folha Transação:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.data_transacao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Data Transação:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.data_transacao|date:'d/m/Y' }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
-                                                        <div class="detalhes-inicio">
-                                                            {% if lancamento.forma %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Forma:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.area %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Área:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.area|floatformat:2 }} ha</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.origem %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Origem:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.origem }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.cartorio_origem %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Cartório Origem:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.cartorio_origem.nome }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.livro_origem or lancamento.folha_origem %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Livro/Folha Origem:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.livro_origem|default:"-" }}/{{ lancamento.folha_origem|default:"-" }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.data_origem %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Data Origem:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.data_origem|date:'d/m/Y' }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% else %}
-                                                        <div class="detalhes-generico">
-                                                            {% if lancamento.forma %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Forma:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.forma }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if lancamento.descricao %}
-                                                                <div class="detalhe-item">
-                                                                    <span class="detalhe-label">Descrição:</span>
-                                                                    <span class="detalhe-valor">{{ lancamento.descricao }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% endif %}
-                                                    {% if lancamento.observacoes %}
-                                                        <div class="observacoes-item">
-                                                            <span class="obs-label">📝 Obs:</span>
-                                                            <span class="obs-valor">{{ lancamento.observacoes }}</span>
-                                                        </div>
-                                                    {% endif %}
-                                                </td>
-                                                <td class="td-pessoas">
-                                                    {% if lancamento.tipo.tipo == 'registro' %}
-                                                        <div class="pessoas-registro">
-                                                            {% with transmitentes=lancamento.pessoas.all|slice:":2" %}
-                                                                {% if transmitentes %}
-                                                                    <div class="pessoas-item">
-                                                                        <small class="pessoa-tipo destacado">Transmitente:</small> 
-                                                                        {% for pessoa in transmitentes %}
-                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
-                                                                        {% endfor %}
-                                                                        {% if lancamento.pessoas.count > 2 %}
-                                                                            <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
-                                                                        {% endif %}
-                                                                    </div>
-                                                                {% endif %}
-                                                            {% endwith %}
-                                                            {% with adquirentes=lancamento.pessoas.all|slice:":2" %}
-                                                                {% if adquirentes %}
-                                                                    <div class="pessoas-item">
-                                                                        <small class="pessoa-tipo destacado">Adquirente:</small> 
-                                                                        {% for pessoa in adquirentes %}
-                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
-                                                                        {% endfor %}
-                                                                    </div>
-                                                                {% endif %}
-                                                            {% endwith %}
-                                                        </div>
-                                                    {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
-                                                        <div class="pessoas-inicio">
-                                                            {% with adquirentes=lancamento.pessoas.all|slice:":2" %}
-                                                                {% if adquirentes %}
-                                                                    <div class="pessoas-item">
-                                                                        <small class="pessoa-tipo destacado">Adquirente:</small> 
-                                                                        {% for pessoa in adquirentes %}
-                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
-                                                                        {% endfor %}
-                                                                        {% if lancamento.pessoas.count > 2 %}
-                                                                            <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
-                                                                        {% endif %}
-                                                                    </div>
-                                                                {% endif %}
-                                                            {% endwith %}
-                                                        </div>
-                                                    {% else %}
-                                                        <div class="pessoas-generico">
-                                                            {% with pessoas=lancamento.pessoas.all|slice:":2" %}
-                                                                {% if pessoas %}
-                                                                    <div class="pessoas-item">
-                                                                        <small class="pessoa-tipo">Pessoas:</small> 
-                                                                        {% for pessoa in pessoas %}
-                                                                            <span class="pessoa-nome">{{ pessoa.pessoa.nome }}</span>{% if not forloop.last %}, {% endif %}
-                                                                        {% endfor %}
-                                                                        {% if lancamento.pessoas.count > 2 %}
-                                                                            <span class="mais-pessoas">+{{ lancamento.pessoas.count|add:"-2" }}</span>
-                                                                        {% endif %}
-                                                                    </div>
-                                                                {% endif %}
-                                                            {% endwith %}
-                                                        </div>
-                                                    {% endif %}
-                                                </td>
+                                                <!-- Transmissão -->
+                                                {% if lancamento.tipo.tipo == 'averbacao' %}
+                                                    <td colspan="6">
+                                                        {% if lancamento.descricao and lancamento.descricao|length > 100 %}
+                                                            <span class="descricao-curta">{{ lancamento.descricao|slice:":100" }}...</span>
+                                                            <span class="descricao-completa" style="display:none;">{{ lancamento.descricao }}</span>
+                                                            <a href="#" class="ler-mais" onclick="toggleDescricao(this); return false;">Ler mais</a>
+                                                        {% else %}
+                                                            {{ lancamento.descricao|default_if_none:"-" }}
+                                                        {% endif %}
+                                                    </td>
+                                                {% else %}
+                                                    <td>{{ lancamento.forma|default_if_none:"-" }}</td>
+                                                    <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
+                                                    <td>{% if lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.nome }}{% else %}-{% endif %}</td>
+                                                    <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
+                                                    <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
+                                                    <td>
+                                                        {% if lancamento.data_transacao %}
+                                                            {{ lancamento.data_transacao|date:'d/m/Y' }}
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                    </td>
+                                                {% endif %}
+                                                <!-- Restante -->
+                                                <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                                                <td>{{ lancamento.origem|default_if_none:"-" }}</td>
+                                                <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>

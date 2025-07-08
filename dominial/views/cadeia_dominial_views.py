@@ -162,15 +162,19 @@ def cadeia_dominial_tabela(request, tis_id, imovel_id):
     """
     View para visualização de tabela da cadeia dominial
     """
+    # NOVO: processar escolha de origem
+    origem_escolhida = request.GET.get('origem')
+    documento_id = request.GET.get('documento_id')
+    if origem_escolhida and documento_id:
+        request.session[f'origem_documento_{documento_id}'] = origem_escolhida
+
     service = CadeiaDominialTabelaService()
-    
-    # Obter dados da cadeia dominial com escolhas da sessão
     context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
-    
+
     # Adicionar estatísticas
     if context['cadeia']:
         context['estatisticas'] = service.get_estatisticas_cadeia(context['cadeia'])
-    
+
     return render(request, 'dominial/cadeia_dominial_tabela.html', context)
 
 @login_required

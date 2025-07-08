@@ -70,61 +70,89 @@
                             
                             {% if documento.lancamentos.exists %}
                             <div class="lancamentos-list">
-                                {% for lancamento in documento.lancamentos.all|dictsort:"id" %}
-                                <div class="lancamento-node">
-                                    <div class="lancamento-header">
-                                        <div>
-                                            <span class="lancamento-title">
-                                                {% if lancamento.tipo.tipo == 'averbacao' %}📋{% elif lancamento.tipo.tipo == 'registro' %}📋{% elif lancamento.tipo.tipo == 'inicio_matricula' %}🚀{% else %}📄{% endif %}
-                                                {{ lancamento.tipo.get_tipo_display }}
-                                            </span>
-                                            <span class="lancamento-date">
-                                                - {{ lancamento.data|date:'d/m/Y' }}
-                                            </span>
-                                            {% if lancamento.numero_lancamento %}
-                                            <span class="lancamento-badge primary">
-                                                #{{ lancamento.numero_lancamento }}
-                                            </span>
+                                <table class="cadeia-tabela-planilha">
+                                    <thead>
+                                        <tr>
+                                            <th colspan="5" class="agrupamento">MATRÍCULA</th>
+                                            <th colspan="2" class="agrupamento">&nbsp;</th>
+                                            <th colspan="6" class="agrupamento">TRANSMISSÃO</th>
+                                            <th rowspan="2">Área (ha)</th>
+                                            <th rowspan="2">Origem</th>
+                                            <th rowspan="2">Observações</th>
+                                        </tr>
+                                        <tr>
+                                            <!-- Matrícula -->
+                                            <th>Nº</th>
+                                            <th>L</th>
+                                            <th>Fls.</th>
+                                            <th>Cartório</th>
+                                            <th>Data</th>
+                                            <!-- Transmitente/Adquirente -->
+                                            <th>Transmitente</th>
+                                            <th>Adquirente</th>
+                                            <!-- Transmissão -->
+                                            <th>Forma</th>
+                                            <th>Título</th>
+                                            <th>Cartório</th>
+                                            <th>L</th>
+                                            <th>Fls.</th>
+                                            <th>Data</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for lancamento in documento.lancamentos.all|dictsort:"id" %}
+                                        <tr class="planilha-row {% cycle 'linha-par' 'linha-impar' %}">
+                                            <!-- Matrícula -->
+                                            <td>{{ lancamento.numero_lancamento }}</td>
+                                            <td>{{ documento.livro|default_if_none:"-" }}</td>
+                                            <td>{{ documento.folha|default_if_none:"-" }}</td>
+                                            <td>{{ documento.cartorio.nome }}</td>
+                                            <td>{{ documento.data|date:'d/m/Y' }}</td>
+                                            <!-- Transmitente -->
+                                            <td>
+                                                {% for pessoa in lancamento.transmitentes.all %}
+                                                    {{ pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                                {% empty %}-{% endfor %}
+                                            </td>
+                                            <!-- Adquirente -->
+                                            <td>
+                                                {% for pessoa in lancamento.adquirentes.all %}
+                                                    {{ pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                                {% empty %}-{% endfor %}
+                                            </td>
+                                            <!-- Transmissão -->
+                                            {% if lancamento.tipo.tipo == 'averbacao' %}
+                                                <td colspan="6">
+                                                    {% if lancamento.descricao and lancamento.descricao|length > 100 %}
+                                                        <span class="descricao-curta">{{ lancamento.descricao|slice:":100" }}...</span>
+                                                        <span class="descricao-completa" style="display:none;">{{ lancamento.descricao }}</span>
+                                                        <a href="#" class="ler-mais" onclick="toggleDescricao(this); return false;">Ler mais</a>
+                                                    {% else %}
+                                                        {{ lancamento.descricao|default_if_none:"-" }}
+                                                    {% endif %}
+                                                </td>
+                                            {% else %}
+                                                <td>{{ lancamento.forma|default_if_none:"-" }}</td>
+                                                <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
+                                                <td>{% if lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.nome }}{% else %}-{% endif %}</td>
+                                                <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
+                                                <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
+                                                <td>
+                                                    {% if lancamento.data_transacao %}
+                                                        {{ lancamento.data_transacao|date:'d/m/Y' }}
+                                                    {% else %}
+                                                        -
+                                                    {% endif %}
+                                                </td>
                                             {% endif %}
-                                            {% if lancamento.eh_inicio_matricula %}
-                                            <span class="lancamento-badge warning">
-                                                Início de Matrícula
-                                            </span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    
-                                    {% if lancamento.forma %}
-                                    <div class="lancamento-detail">
-                                        <strong>Forma:</strong> {{ lancamento.forma }}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    {% if lancamento.descricao %}
-                                    <div class="lancamento-detail">
-                                        <strong>Descrição:</strong> {{ lancamento.descricao|truncatechars:100 }}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    {% if lancamento.titulo %}
-                                    <div class="lancamento-detail">
-                                        <strong>Título:</strong> {{ lancamento.titulo }}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    {% if lancamento.observacoes %}
-                                    <div class="lancamento-detail secondary">
-                                        <strong>Obs:</strong> {{ lancamento.observacoes|truncatechars:80 }}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    {% if lancamento.origem %}
-                                    <div class="lancamento-detail accent">
-                                        <strong>Origem:</strong> {{ lancamento.origem }}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                                {% endfor %}
+                                            <!-- Restante -->
+                                            <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                                            <td>{{ lancamento.origem|default_if_none:"-" }}</td>
+                                            <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             </div>
                             {% else %}
                             <div class="no-lancamentos">

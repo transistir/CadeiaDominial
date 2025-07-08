@@ -675,4 +675,96 @@
 
 .btn:hover svg {
     transform: scale(1.1);
+}
+
+/* Estilo para tabela tipo planilha da cadeia dominial */
+.cadeia-tabela-planilha {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.cadeia-tabela-planilha th,
+.cadeia-tabela-planilha td {
+  border: 1px solid #333;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.cadeia-tabela-planilha th.agrupamento {
+  background: #f3f3f3;
+  font-weight: bold;
+  font-size: 1.05em;
+  text-align: center;
+  border-bottom: 2px solid #333;
+}
+
+.cadeia-tabela-planilha tr.linha-par {
+  background: #f9f9f9;
+}
+
+.cadeia-tabela-planilha tr.linha-impar {
+  background: #e9f1fa;
+}
+
+.cadeia-tabela-planilha th,
+.cadeia-tabela-planilha td {
+  min-width: 60px;
+}
+
+.cadeia-tabela-planilha th[colspan] {
+  font-size: 1.1em;
+}
+
+.cadeia-tabela-planilha th,
+.cadeia-tabela-planilha td {
+  vertical-align: middle;
+}
+
+.cadeia-tabela-planilha td[colspan="6"] {
+  text-align: left;
+  font-style: italic;
+  background: #fffbe6;
+}
+
+.cadeia-tabela-planilha-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.cadeia-tabela-planilha {
+  min-width: 1400px;
+}
+
+@media (max-width: 900px) {
+  .cadeia-tabela-planilha-container {
+    overflow-x: auto;
+  }
+  .cadeia-tabela-planilha {
+    min-width: 900px;
+  }
+}
+
+.linha-origem-multipla {
+  background: #fff3cd;
+}
+
+.btn-origem {
+  display: inline-block;
+  margin: 0 4px;
+  padding: 2px 10px;
+  background: #e9ecef;
+  border: 1px solid #b8b8b8;
+  border-radius: 4px;
+  color: #333;
+  font-weight: bold;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+  cursor: pointer;
+}
+
+.btn-origem.ativo, .btn-origem:hover {
+  background: #007bff;
+  color: #fff;
+  border-color: #007bff;
 } 

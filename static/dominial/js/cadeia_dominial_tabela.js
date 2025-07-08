@@ -162,17 +162,8 @@ function escolherOrigem(documentoId, origemNumero) {
     })
     .then(cadeiaData => {
         if (cadeiaData && cadeiaData.success && cadeiaData.cadeia) {
-            // Salvar estado de expansão atual
-            const expandedDocuments = [];
-            document.querySelectorAll('.lancamentos-row').forEach(row => {
-                if (row.style.display !== 'none') {
-                    const documentoId = row.id.replace('lancamentos-', '');
-                    expandedDocuments.push(documentoId);
-                }
-            });
-            
-            // Atualizar a tabela com os novos dados
-            atualizarTabelaCadeia(cadeiaData.cadeia, expandedDocuments);
+            // Atualizar a tabela com os novos dados (sempre expandido)
+            atualizarTabelaCadeia(cadeiaData.cadeia);
             
             // Mostrar mensagem de sucesso
             mostrarNotificacao('Cadeia atualizada com sucesso!', 'success');
@@ -193,7 +184,7 @@ function escolherOrigem(documentoId, origemNumero) {
     });
 }
 
-function atualizarTabelaCadeia(cadeia, expandedDocuments) {
+function atualizarTabelaCadeia(cadeia) {
     const tbody = document.querySelector('.cadeia-tabela-principal tbody');
     if (!tbody) {
         console.error('Tbody não encontrado');
@@ -213,7 +204,7 @@ function atualizarTabelaCadeia(cadeia, expandedDocuments) {
         documentoRow.innerHTML = `
             <td>
                 <button class="expand-btn" data-documento-id="${item.documento.id}">
-                    <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg class="expand-icon expanded" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     ${item.documento.tipo_display}: ${item.documento.numero}
@@ -234,18 +225,9 @@ function atualizarTabelaCadeia(cadeia, expandedDocuments) {
         lancamentosRow.className = 'lancamentos-row';
         lancamentosRow.id = `lancamentos-${item.documento.id}`;
         
-        // Definir se deve estar expandida baseado no estado anterior
-        const shouldBeExpanded = expandedDocuments.includes(item.documento.id.toString());
-        if (shouldBeExpanded) {
-            lancamentosRow.style.display = 'table-row';
-            lancamentosRow.classList.add('show');
-            const expandIcon = documentoRow.querySelector('.expand-icon');
-            if (expandIcon) {
-                expandIcon.classList.add('expanded');
-            }
-        } else {
-            lancamentosRow.style.display = 'none';
-        }
+        // Todos os documentos expandidos por padrão
+        lancamentosRow.style.display = 'table-row';
+        lancamentosRow.classList.add('show');
         
         // Criar conteúdo dos lançamentos
         const lancamentosContent = criarConteudoLancamentos(item);
@@ -271,21 +253,41 @@ function criarConteudoLancamentos(item) {
                 </svg>
                 Lançamentos do ${item.documento.tipo_display} ${item.documento.numero}
             </h5>
-            <table class="lancamentos-table">
+            <table class="cadeia-tabela-planilha">
                 <thead>
                     <tr>
-                        <th class="th-tipo">Tipo</th>
-                        <th class="th-numero">Número</th>
-                        <th class="th-data">Data</th>
-                        <th class="th-detalhes">Detalhes e Transmissão</th>
-                        <th class="th-pessoas">Pessoas</th>
+                        <th colspan="5" class="agrupamento">MATRÍCULA</th>
+                        <th colspan="2" class="agrupamento">&nbsp;</th>
+                        <th colspan="6" class="agrupamento">TRANSMISSÃO</th>
+                        <th rowspan="2">Área (ha)</th>
+                        <th rowspan="2">Origem</th>
+                        <th rowspan="2">Observações</th>
+                    </tr>
+                    <tr>
+                        <!-- Matrícula -->
+                        <th>Nº</th>
+                        <th>L</th>
+                        <th>Fls.</th>
+                        <th>Cartório</th>
+                        <th>Data</th>
+                        <!-- Transmitente/Adquirente -->
+                        <th>Transmitente</th>
+                        <th>Adquirente</th>
+                        <!-- Transmissão -->
+                        <th>Forma</th>
+                        <th>Título</th>
+                        <th>Cartório</th>
+                        <th>L</th>
+                        <th>Fls.</th>
+                        <th>Data</th>
                     </tr>
                 </thead>
                 <tbody>
     `;
     
-    item.lancamentos.forEach(lancamento => {
-        lancamentosHtml += criarLinhaLancamento(lancamento);
+    item.lancamentos.forEach((lancamento, index) => {
+        const rowClass = index % 2 === 0 ? 'linha-par' : 'linha-impar';
+        lancamentosHtml += criarLinhaLancamentoPlanilha(lancamento, item.documento, rowClass);
     });
     
     lancamentosHtml += `
@@ -327,6 +329,59 @@ function criarConteudoLancamentos(item) {
     `;
     
     return lancamentosHtml;
+}
+
+function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
+    // Separar transmitentes e adquirentes
+    const transmitentes = lancamento.pessoas ? lancamento.pessoas.filter(p => p.tipo === 'transmitente').map(p => p.pessoa_nome) : [];
+    const adquirentes = lancamento.pessoas ? lancamento.pessoas.filter(p => p.tipo === 'adquirente').map(p => p.pessoa_nome) : [];
+    
+    // Função para formatar descrição longa
+    const formatarDescricao = (descricao) => {
+        if (!descricao) return '-';
+        if (descricao.length > 100) {
+            return `
+                <span class="descricao-curta">${descricao.substring(0, 100)}...</span>
+                <span class="descricao-completa" style="display:none;">${descricao}</span>
+                <a href="#" class="ler-mais" onclick="toggleDescricao(this); return false;">Ler mais</a>
+            `;
+        }
+        return descricao;
+    };
+    
+    // Verificar se é averbação
+    const isAverbacao = lancamento.tipo_tipo === 'averbacao';
+    
+    const html = `
+        <tr class="planilha-row ${rowClass}">
+            <!-- Matrícula -->
+            <td>${lancamento.numero_lancamento || '-'}</td>
+            <td>${documento.livro || '-'}</td>
+            <td>${documento.folha || '-'}</td>
+            <td>${documento.cartorio_nome || '-'}</td>
+            <td>${documento.data || '-'}</td>
+            <!-- Transmitente -->
+            <td>${transmitentes.length > 0 ? transmitentes.join(', ') : '-'}</td>
+            <!-- Adquirente -->
+            <td>${adquirentes.length > 0 ? adquirentes.join(', ') : '-'}</td>
+            <!-- Transmissão -->
+            ${isAverbacao ? 
+                `<td colspan="6">${formatarDescricao(lancamento.descricao)}</td>` :
+                `<td>${lancamento.forma || '-'}</td>
+                 <td>${lancamento.titulo || '-'}</td>
+                 <td>${lancamento.cartorio_transacao_nome || '-'}</td>
+                 <td>${lancamento.livro_transacao || '-'}</td>
+                 <td>${lancamento.folha_transacao || '-'}</td>
+                 <td>${lancamento.data_transacao || '-'}</td>`
+            }
+            <!-- Restante -->
+            <td>${lancamento.area || '-'}</td>
+            <td>${lancamento.origem || '-'}</td>
+            <td>${lancamento.observacoes || '-'}</td>
+        </tr>
+    `;
+    
+    return html;
 }
 
 function criarLinhaLancamento(lancamento) {
@@ -433,6 +488,24 @@ function criarLinhaLancamento(lancamento) {
     `;
     
     return html;
+}
+
+function toggleDescricao(element) {
+    const row = element.closest('tr');
+    const descricaoCurta = row.querySelector('.descricao-curta');
+    const descricaoCompleta = row.querySelector('.descricao-completa');
+    
+    if (descricaoCurta.style.display !== 'none') {
+        // Mostrar descrição completa
+        descricaoCurta.style.display = 'none';
+        descricaoCompleta.style.display = 'inline';
+        element.textContent = 'Ler menos';
+    } else {
+        // Mostrar descrição curta
+        descricaoCurta.style.display = 'inline';
+        descricaoCompleta.style.display = 'none';
+        element.textContent = 'Ler mais';
+    }
 }
 
 function mostrarNotificacao(mensagem, tipo = 'info') {

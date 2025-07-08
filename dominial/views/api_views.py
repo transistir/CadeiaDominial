@@ -315,7 +315,9 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                 'numero': item['documento'].numero,
                 'data': item['documento'].data.strftime('%d/%m/%Y'),
                 'tipo_display': item['documento'].tipo.get_tipo_display(),
-                'cartorio_nome': item['documento'].cartorio.nome if item['documento'].cartorio else ''
+                'cartorio_nome': item['documento'].cartorio.nome if item['documento'].cartorio else '',
+                'livro': item['documento'].livro,
+                'folha': item['documento'].folha
             }
             
             lancamentos_serializados = []
@@ -323,6 +325,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                 lancamento_serializado = {
                     'id': lancamento.id,
                     'tipo': lancamento.tipo.tipo,
+                    'tipo_tipo': lancamento.tipo.tipo,  # Adicionar para compatibilidade
                     'tipo_display': lancamento.tipo.get_tipo_display(),
                     'numero_lancamento': lancamento.numero_lancamento,
                     'data': lancamento.data.strftime('%d/%m/%Y'),
@@ -332,13 +335,18 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                     'area': lancamento.area,
                     'origem': lancamento.origem,
                     'observacoes': lancamento.observacoes,
+                    'cartorio_transacao_nome': lancamento.cartorio_transacao.nome if lancamento.cartorio_transacao else None,
+                    'livro_transacao': lancamento.livro_transacao,
+                    'folha_transacao': lancamento.folha_transacao,
+                    'data_transacao': lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else None,
                     'pessoas': []
                 }
                 
                 # Serializar pessoas
                 for lancamento_pessoa in lancamento.pessoas.all():
                     lancamento_serializado['pessoas'].append({
-                        'pessoa_nome': lancamento_pessoa.pessoa.nome
+                        'pessoa_nome': lancamento_pessoa.pessoa.nome,
+                        'tipo': lancamento_pessoa.tipo
                     })
                 
                 lancamentos_serializados.append(lancamento_serializado)

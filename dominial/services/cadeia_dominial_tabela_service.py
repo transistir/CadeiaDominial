@@ -50,12 +50,20 @@ class CadeiaDominialTabelaService:
             # Verificar escolha atual da sessão
             escolha_atual = session.get(f'origem_documento_{documento.id}') if session else None
             
+            # Se não há escolha na sessão E há origens disponíveis, usar a origem de número maior como padrão
+            if not escolha_atual and origens_disponiveis:
+                # A lista já está ordenada do maior para o menor, então pegamos o primeiro
+                escolha_atual = origens_disponiveis[0]
+            
             # Formatar origens para o template (ordenadas do maior para o menor)
             origens_formatadas = []
-            for origem in origens_disponiveis:
+            for i, origem in enumerate(origens_disponiveis):
+                # Se não há escolha na sessão, a primeira origem (maior número) é escolhida por padrão
+                # Se há escolha na sessão, usar a escolha
+                is_escolhida = (origem == escolha_atual) if escolha_atual else (i == 0)
                 origens_formatadas.append({
                     'numero': origem,
-                    'escolhida': origem == escolha_atual
+                    'escolhida': is_escolhida
                 })
             
             cadeia_processada.append({
@@ -66,12 +74,13 @@ class CadeiaDominialTabelaService:
                 'escolha_atual': escolha_atual
             })
         
-        return {
+        result = {
             'tis': tis,
             'imovel': imovel,
             'cadeia': cadeia_processada,
             'tem_lancamentos': any(len(item['lancamentos']) > 0 for item in cadeia_processada)
         }
+        return result
     
     def _obter_origens_documento(self, documento, lancamentos):
         """
@@ -87,7 +96,14 @@ class CadeiaDominialTabelaService:
         
         # Ordenar do maior para o menor número
         origens_list = list(origens)
-        return sorted(origens_list, key=lambda x: int(x.replace('M', '').replace('T', '')), reverse=True)
+        if origens_list:
+            # Ordenar numericamente removendo M/T e convertendo para int
+            try:
+                return sorted(origens_list, key=lambda x: int(str(x).replace('M', '').replace('T', '')), reverse=True)
+            except (ValueError, AttributeError):
+                # Se falhar, ordenar alfabeticamente reverso
+                return sorted(origens_list, reverse=True)
+        return []
     
     def _extrair_origens(self, origem_string):
         """
@@ -156,12 +172,28 @@ class CadeiaDominialTabelaService:
                         origens_disponiveis = origens
                         break
             
+            # Verificar escolha atual
+            escolha_atual = escolhas_origem.get(str(documento.id))
+            
+            # Se não há escolha e há origens disponíveis, usar a primeira (maior número)
+            if not escolha_atual and origens_disponiveis:
+                escolha_atual = origens_disponiveis[0]['numero']
+            
+            # Formatar origens para o template
+            origens_formatadas = []
+            for i, origem in enumerate(origens_disponiveis):
+                is_escolhida = (origem['numero'] == escolha_atual) if escolha_atual else (i == 0)
+                origens_formatadas.append({
+                    'numero': origem['numero'],
+                    'escolhida': is_escolhida
+                })
+            
             cadeia_completa.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'tem_multiplas_origens': tem_multiplas_origens,
-                'origens_disponiveis': origens_disponiveis,
-                'escolha_atual': escolhas_origem.get(str(documento.id))
+                'origens_disponiveis': origens_formatadas,
+                'escolha_atual': escolha_atual
             })
         
         return cadeia_completa
@@ -199,5 +231,12 @@ class CadeiaDominialTabelaService:
                         'documento': doc_existente,
                         'escolhida': False  # Será definida pelo contexto
                     })
+        
+        # Ordenar do maior para o menor número
+        if origens:
+            try:
+                return sorted(origens, key=lambda x: int(str(x['numero']).replace('M', '').replace('T', '')), reverse=True)
+            except (ValueError, AttributeError):
+                return sorted(origens, key=lambda x: x['numero'], reverse=True)
         
         return origens 
