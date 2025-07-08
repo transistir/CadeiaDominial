@@ -171,4 +171,25 @@ def cadeia_dominial_tabela(request, tis_id, imovel_id):
     if context['cadeia']:
         context['estatisticas'] = service.get_estatisticas_cadeia(context['cadeia'])
     
-    return render(request, 'dominial/cadeia_dominial_tabela.html', context) 
+    return render(request, 'dominial/cadeia_dominial_tabela.html', context)
+
+@login_required
+def cadeia_dominial_d3(request, tis_id, imovel_id):
+    """Nova visualização D3.js da árvore da cadeia dominial"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    documentos = Documento.objects.filter(imovel=imovel)\
+        .select_related('cartorio', 'tipo')\
+        .prefetch_related('lancamentos', 'lancamentos__tipo')\
+        .order_by('data')
+    tem_documentos = documentos.exists()
+    tem_apenas_matricula = documentos.count() == 1 and documentos.first().tipo.tipo == 'matricula' if tem_documentos else False
+    tem_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).exists() if tem_documentos else False
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documentos': documentos,
+        'tem_apenas_matricula': tem_apenas_matricula,
+        'tem_lancamentos': tem_lancamentos,
+    }
+    return render(request, 'dominial/cadeia_dominial_d3.html', context) 

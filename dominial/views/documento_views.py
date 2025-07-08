@@ -8,6 +8,7 @@ from ..forms import ImovelForm
 from datetime import date
 from ..services.documento_service import DocumentoService
 from ..services.cache_service import CacheService
+import json
 
 @login_required
 def documentos(request, tis_id, imovel_id):
@@ -229,4 +230,48 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'error': f'Erro ao criar documento: {str(e)}'}, status=500)
         messages.error(request, f'Erro ao criar documento: {str(e)}')
-        return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id) 
+        return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+
+@login_required
+@require_POST
+def ajustar_nivel_documento(request, documento_id):
+    """
+    Ajusta o nível manual de um documento via AJAX
+    """
+    try:
+        documento = get_object_or_404(Documento, id=documento_id)
+        
+        # Verificar se o usuário tem permissão para editar este documento
+        if not (request.user.is_staff or request.user.is_superuser):
+            return JsonResponse({'error': 'Permissão negada'}, status=403)
+        
+        # Parsear dados JSON
+        data = json.loads(request.body)
+        nivel_manual = data.get('nivel_manual')
+        
+        # Validar nível
+        if nivel_manual is not None:
+            try:
+                nivel_manual = int(nivel_manual)
+                if nivel_manual < 0 or nivel_manual > 10:
+                    return JsonResponse({'error': 'Nível deve estar entre 0 e 10'}, status=400)
+            except (ValueError, TypeError):
+                return JsonResponse({'error': 'Nível deve ser um número válido'}, status=400)
+        
+        # Salvar nível manual no documento
+        documento.nivel_manual = nivel_manual
+        documento.save()
+        
+        # Invalidar cache do imóvel
+        CacheService.invalidate_documentos_imovel(documento.imovel.id)
+        CacheService.invalidate_tronco_principal(documento.imovel.id)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Nível do documento {documento.numero} ajustado para {nivel_manual if nivel_manual is not None else "automático"}'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Dados JSON inválidos'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500) 

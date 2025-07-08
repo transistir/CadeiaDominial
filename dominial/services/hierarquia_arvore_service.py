@@ -5,6 +5,7 @@ Service especializado para construção da árvore de hierarquia
 from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 import re
+from collections import deque
 
 
 class HierarquiaArvoreService:
@@ -83,7 +84,8 @@ class HierarquiaArvoreService:
             'total_lancamentos': documento.lancamentos.count(),
             'x': 0,  # Posição X (será calculada pelo frontend)
             'y': 0,  # Posição Y (será calculada pelo frontend)
-            'nivel': 0  # Nível na árvore (será calculado)
+            'nivel': 0,  # Nível na árvore (será calculado)
+            'nivel_manual': documento.nivel_manual  # Nível manual definido pelo usuário
         }
     
     @staticmethod
@@ -110,6 +112,7 @@ class HierarquiaArvoreService:
     def _processar_origem_documento(arvore, documento, documentos_por_numero):
         """
         Processa origem de um documento específico
+        Lógica: documento referenciado como origem → documento atual
         """
         # Extrair códigos de origem (M ou T seguidos de números)
         origens = re.findall(r'[MT]\d+', documento.origem)
@@ -141,6 +144,7 @@ class HierarquiaArvoreService:
     def _processar_origem_lancamento(arvore, documento, lancamento, documentos_por_numero):
         """
         Processa origem de um lançamento específico
+        Lógica: documento referenciado como origem → documento atual
         """
         # Extrair códigos de origem dos lançamentos
         origens_lancamento = re.findall(r'[MT]\d+', lancamento.origem)
@@ -169,7 +173,8 @@ class HierarquiaArvoreService:
         niveis_hierarquicos = {}
         
         # Nível 0: Matrícula atual
-        niveis_hierarquicos[matricula_atual] = 0
+        if matricula_atual:
+            niveis_hierarquicos[matricula_atual] = 0
         
         # Calcular níveis para documentos conectados
         HierarquiaArvoreService._calcular_niveis_conectados(
@@ -178,18 +183,38 @@ class HierarquiaArvoreService:
         
         # Aplicar níveis aos documentos
         for doc_node in arvore['documentos']:
-            doc_node['nivel'] = niveis_hierarquicos.get(doc_node['numero'], 0)
+            # Se há nível manual definido, usar ele; senão usar o calculado
+            nivel_calculado = niveis_hierarquicos.get(doc_node['numero'], 0)
+            doc_node['nivel'] = doc_node['nivel_manual'] if doc_node['nivel_manual'] is not None else nivel_calculado
     
     @staticmethod
     def _identificar_matricula_atual(arvore):
         """
         Identifica a matrícula atual (documento principal)
+        Usa a matrícula do imóvel como ponto de partida
         """
+        # Primeiro, tentar encontrar um documento que corresponda à matrícula do imóvel
+        matricula_imovel = arvore['imovel']['matricula']
+        
+        # Procurar por documento com número igual à matrícula do imóvel
         for doc_node in arvore['documentos']:
-            if not doc_node['origem'] or doc_node['origem'] == '' or 'Matrícula atual' in doc_node['origem'] or 'Criado automaticamente' not in doc_node['origem']:
+            if doc_node['numero'] == matricula_imovel and doc_node['tipo'] == 'matricula':
                 return doc_node['numero']
         
-        # Se não encontrou matrícula atual, usar o primeiro documento
+        # Se não encontrou, procurar por documento de matrícula mais recente
+        documentos_matricula = [doc for doc in arvore['documentos'] if doc['tipo'] == 'matricula']
+        if documentos_matricula:
+            # Ordenar por data (mais recente primeiro) e pegar o primeiro
+            documentos_matricula.sort(key=lambda x: x['data'], reverse=True)
+            return documentos_matricula[0]['numero']
+        
+        # Se não há matrículas, procurar por transcrições mais recentes
+        documentos_transcricao = [doc for doc in arvore['documentos'] if doc['tipo'] == 'transcricao']
+        if documentos_transcricao:
+            documentos_transcricao.sort(key=lambda x: x['data'], reverse=True)
+            return documentos_transcricao[0]['numero']
+        
+        # Último recurso: usar o primeiro documento disponível
         if arvore['documentos']:
             return arvore['documentos'][0]['numero']
         
@@ -198,34 +223,37 @@ class HierarquiaArvoreService:
     @staticmethod
     def _calcular_niveis_conectados(arvore, niveis_hierarquicos, matricula_atual):
         """
-        Calcula níveis para documentos conectados de forma recursiva
+        Calcula níveis para documentos conectados baseado na hierarquia de lançamentos
+        Lógica simples: nível 0 (matrícula atual) → nível 1 (origens dos lançamentos do nível 0) → nível 2 (origens dos lançamentos do nível 1)
         """
-        # Nível 1: Documentos que são referenciados pela matrícula atual
-        documentos_nivel_1 = []
-        for conexao in arvore['conexoes']:
-            if conexao['to'] == matricula_atual:  # Se a matrícula atual referencia este documento
-                documentos_nivel_1.append(conexao['from'])
-                niveis_hierarquicos[conexao['from']] = 1
+        if not matricula_atual:
+            return
         
-        # Nível 2: Documentos que são referenciados pelos documentos do nível 1
-        documentos_nivel_2 = []
-        for conexao in arvore['conexoes']:
-            if conexao['to'] in documentos_nivel_1:  # Se um documento do nível 1 referencia este documento
-                if conexao['from'] not in niveis_hierarquicos:  # Se ainda não foi definido
-                    documentos_nivel_2.append(conexao['from'])
-                    niveis_hierarquicos[conexao['from']] = 2
+        # Usar BFS para calcular níveis corretamente
+        fila = deque([(matricula_atual, 0)])
+        visitados = set()
         
-        # Nível 3+: Continuar para níveis mais profundos se necessário
-        nivel_atual = 3
-        documentos_nivel_anterior = documentos_nivel_2.copy()
-        
-        while documentos_nivel_anterior:
-            documentos_nivel_atual = []
-            for conexao in arvore['conexoes']:
-                if conexao['to'] in documentos_nivel_anterior:  # Se um documento do nível anterior referencia este documento
-                    if conexao['from'] not in niveis_hierarquicos:  # Se ainda não foi definido
-                        documentos_nivel_atual.append(conexao['from'])
-                        niveis_hierarquicos[conexao['from']] = nivel_atual
+        while fila:
+            documento_atual, nivel_atual = fila.popleft()
             
-            documentos_nivel_anterior = documentos_nivel_atual
-            nivel_atual += 1 
+            if documento_atual in visitados:
+                continue
+                
+            visitados.add(documento_atual)
+            niveis_hierarquicos[documento_atual] = nivel_atual
+            
+            # Encontrar todos os documentos que são referenciados como origem em lançamentos do documento atual
+            documentos_referenciados = set()
+            for conexao in arvore['conexoes']:
+                if conexao['to'] == documento_atual:
+                    documentos_referenciados.add(conexao['from'])
+            
+            # Adicionar documentos referenciados à fila com nível + 1
+            for doc_ref in documentos_referenciados:
+                if doc_ref not in visitados:
+                    fila.append((doc_ref, nivel_atual + 1))
+        
+        # Para documentos que não foram visitados (isolados), atribuir nível 0
+        for doc_node in arvore['documentos']:
+            if doc_node['numero'] not in niveis_hierarquicos:
+                niveis_hierarquicos[doc_node['numero']] = 0 

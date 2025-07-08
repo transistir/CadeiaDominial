@@ -40,6 +40,7 @@ from .cadeia_dominial_views import (
     tronco_principal,
     cadeia_dominial_dados,
     cadeia_dominial_tabela,
+    cadeia_dominial_d3,
 )
 
 # Views de API/AJAX
@@ -98,6 +99,7 @@ __all__ = [
     'tronco_principal',
     'cadeia_dominial_dados',
     'cadeia_dominial_tabela',
+    'cadeia_dominial_d3',
     
     # Views de API/AJAX
     'buscar_cidades',

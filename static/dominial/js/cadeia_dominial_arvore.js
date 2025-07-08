@@ -201,6 +201,9 @@ function criarCardDocumento(doc) {
             <button class="btn-action" onclick="event.stopPropagation(); novoLancamentoDocumento(${doc.id})" title="Novo Lançamento">
                 ➕
             </button>
+            <button class="btn-action nivel-selector" onclick="event.stopPropagation(); mostrarSeletorNivel(event, ${doc.id}, ${doc.nivel})" title="Ajustar Nível">
+                ⚙️
+            </button>
         </div>
     `;
     
@@ -415,7 +418,7 @@ function renderizarOrigensIdentificadas(zoomContent) {
 // Criar documento automaticamente
 async function criarDocumentoAutomatico(codigo) {
     try {
-        const url = `/dominial/criar-documento-automatico/${window.tisId}/${window.imovelId}/${codigo}/`;
+        const url = `/tis/${window.tisId}/imovel/${window.imovelId}/criar-documento/${codigo}/`;
         
         const response = await fetch(url, {
             method: 'GET',
@@ -496,4 +499,128 @@ function aplicarZoom() {
 function editarDocumento(documentoId) {
     const url = `/dominial/documento/${documentoId}/editar/${window.tisId}/${window.imovelId}/`;
     window.location.href = url;
+}
+
+// Mostrar seletor de nível
+function mostrarSeletorNivel(event, documentoId, nivelAtual) {
+    // Remover seletor anterior se existir
+    const seletorAnterior = document.querySelector('.nivel-selector-popup');
+    if (seletorAnterior) {
+        seletorAnterior.remove();
+    }
+    
+    const seletor = document.createElement('div');
+    seletor.className = 'nivel-selector-popup';
+    seletor.style.position = 'fixed';
+    seletor.style.left = event.clientX + 'px';
+    seletor.style.top = event.clientY + 'px';
+    seletor.style.background = 'white';
+    seletor.style.border = '1px solid #ddd';
+    seletor.style.borderRadius = '4px';
+    seletor.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+    seletor.style.zIndex = '1000';
+    seletor.style.minWidth = '200px';
+    seletor.style.padding = '10px';
+    
+    // Criar opções de nível (0 a 10)
+    const opcoesNivel = [];
+    for (let i = 0; i <= 10; i++) {
+        opcoesNivel.push(`<option value="${i}" ${i === nivelAtual ? 'selected' : ''}>Nível ${i}</option>`);
+    }
+    
+    seletor.innerHTML = `
+        <div style="margin-bottom: 10px; font-weight: bold; color: #333;">
+            Ajustar Nível do Documento
+        </div>
+        <select id="nivel-select-${documentoId}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px;">
+            ${opcoesNivel.join('')}
+        </select>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="salvarNivelManual(${documentoId})" style="flex: 1; padding: 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Salvar
+            </button>
+            <button onclick="removerNivelManual(${documentoId})" style="flex: 1; padding: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Remover Manual
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(seletor);
+    
+    // Fechar seletor ao clicar fora
+    document.addEventListener('click', function fecharSeletor(e) {
+        if (!seletor.contains(e.target)) {
+            seletor.remove();
+            document.removeEventListener('click', fecharSeletor);
+        }
+    });
+}
+
+// Salvar nível manual
+async function salvarNivelManual(documentoId) {
+    const select = document.getElementById(`nivel-select-${documentoId}`);
+    const novoNivel = parseInt(select.value);
+    
+    try {
+        const response = await fetch(`/dominial/documento/${documentoId}/ajustar-nivel/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                nivel_manual: novoNivel
+            })
+        });
+        
+        if (response.ok) {
+            mostrarNotificacao('Nível ajustado com sucesso!', 'success');
+            // Recarregar a árvore para refletir as mudanças
+            carregarDadosArvore();
+        } else {
+            mostrarNotificacao('Erro ao ajustar nível', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao salvar nível:', error);
+        mostrarNotificacao('Erro ao ajustar nível', 'error');
+    }
+    
+    // Fechar seletor
+    const seletor = document.querySelector('.nivel-selector-popup');
+    if (seletor) {
+        seletor.remove();
+    }
+}
+
+// Remover nível manual (voltar ao automático)
+async function removerNivelManual(documentoId) {
+    try {
+        const response = await fetch(`/dominial/documento/${documentoId}/ajustar-nivel/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                nivel_manual: null
+            })
+        });
+        
+        if (response.ok) {
+            mostrarNotificacao('Nível manual removido!', 'success');
+            // Recarregar a árvore para refletir as mudanças
+            carregarDadosArvore();
+        } else {
+            mostrarNotificacao('Erro ao remover nível manual', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao remover nível manual:', error);
+        mostrarNotificacao('Erro ao remover nível manual', 'error');
+    }
+    
+    // Fechar seletor
+    const seletor = document.querySelector('.nivel-selector-popup');
+    if (seletor) {
+        seletor.remove();
+    }
 } 

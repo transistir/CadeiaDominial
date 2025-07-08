@@ -30,6 +30,7 @@ class Documento(models.Model):
     origem = models.TextField(null=True, blank=True)
     observacoes = models.TextField(null=True, blank=True)
     data_cadastro = models.DateField(auto_now_add=True)
+    nivel_manual = models.IntegerField(null=True, blank=True, help_text="Nível manual na árvore da cadeia dominial (0-10)")
 
     class Meta:
         verbose_name = "Documento"

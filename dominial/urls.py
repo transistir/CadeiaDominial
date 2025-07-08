@@ -6,9 +6,9 @@ from dal import autocomplete
 # Importar views específicas dos novos módulos
 from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, imovel_detail, imovel_delete
 from .views.imovel_views import imovel_form
-from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico
+from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico, ajustar_nivel_documento
 from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail
-from .views.cadeia_dominial_views import cadeia_dominial, cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela
+from .views.cadeia_dominial_views import cadeia_dominial, cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela, cadeia_dominial_d3
 from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos, escolher_origem_documento, escolher_origem_lancamento, get_cadeia_dominial_atualizada
 from .views.autocomplete_views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
 
@@ -29,10 +29,12 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/excluir/', imovel_delete, name='imovel_excluir'),
     
     # Cadeia Dominial
-    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', cadeia_dominial, name='cadeia_dominial'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', cadeia_dominial_d3, name='cadeia_dominial'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial-legacy/', cadeia_dominial, name='cadeia_dominial_legacy'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/ver-cadeia-dominial/', tronco_principal, name='tronco_principal'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-tabela/', cadeia_dominial_tabela, name='cadeia_dominial_tabela'),
     path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial-d3/', views.cadeia_dominial_d3, name='cadeia_dominial_d3'),
     
     # Documentos e Lançamentos
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-documento/', novo_documento, name='novo_documento'),
@@ -40,6 +42,7 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/novo-lancamento/<int:documento_id>/', novo_lancamento, name='novo_lancamento_documento'),
     path('documento/<int:documento_id>/lancamentos/<int:tis_id>/<int:imovel_id>/', documento_lancamentos, name='documento_lancamentos'),
     path('documento/<int:documento_id>/editar/<int:tis_id>/<int:imovel_id>/', editar_documento, name='editar_documento'),
+    path('documento/<int:documento_id>/ajustar-nivel/', ajustar_nivel_documento, name='ajustar_nivel_documento'),
     path('selecionar-documento-lancamento/<int:tis_id>/<int:imovel_id>/', selecionar_documento_lancamento, name='selecionar_documento_lancamento'),
     
     # Edição e exclusão de lançamentos

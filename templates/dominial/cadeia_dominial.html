@@ -146,6 +146,8 @@
     </div>
 
     <div class="actions">
+        <a href="{% url 'tronco_principal' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-primary">📋 Cadeia Dominial Completa</a>
+        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">🌳 Nova Visualização D3</a>
         <a href="{% url 'cadeia_dominial_arvore' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-outline">🌳 Ver Árvore da Cadeia Dominial</a>
         <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn btn-secondary">← Voltar</a>
     </div>

@@ -114,11 +114,11 @@
     font-size: 0.9em;
 }
 
+/* Cores por tipo de documento */
 .documento-card.matricula {
     background: linear-gradient(135deg, #007bff, #0056b3);
     color: white;
     border: 2px solid #007bff;
-    /* Matrícula atual fica no topo */
     z-index: 20;
 }
 
@@ -128,6 +128,7 @@
     border: 2px solid #6f42c1;
 }
 
+/* Efeitos de hover */
 .documento-card:hover {
     transform: scale(1.05);
     box-shadow: 0 6px 20px rgba(0,0,0,0.3);
@@ -140,29 +141,21 @@
     border-bottom-color: rgba(255,255,255,0.6);
 }
 
+/* Elementos internos do card */
 .documento-card .numero {
     font-weight: bold;
     font-size: 1.4em;
     margin-bottom: 4px;
     line-height: 1.1;
-    /* Garantir que o número seja o elemento mais proeminente */
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 0;
-    /* Efeitos para melhor legibilidade */
     text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
     letter-spacing: 0.5px;
     border-bottom: 2px solid rgba(255,255,255,0.3);
     padding-bottom: 2px;
-}
-
-.documento-card .tipo-icone {
-    font-size: 0.8em;
-    opacity: 0.7;
-    margin-bottom: 2px;
-    flex-shrink: 0;
 }
 
 .documento-card .tipo {
@@ -197,6 +190,7 @@
     letter-spacing: 0.7px;
 }
 
+/* Cards de origem criada */
 .documento-card.origem-criada {
     width: 100px;
     height: 60px;
@@ -516,4 +510,39 @@
 .edit-button:hover {
     background: #0056b3;
     transform: scale(1.05);
+}
+
+/* ========================================
+   SELETOR DE NÍVEL
+   ======================================== */
+.nivel-selector-popup {
+    animation: fadeIn 0.2s ease;
+}
+
+.nivel-selector-popup select {
+    font-size: 14px;
+}
+
+.nivel-selector-popup button {
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.nivel-selector-popup button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* ========================================
+   ANIMAÇÕES
+   ======================================== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 } 

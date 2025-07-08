@@ -84,6 +84,14 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         toggleFields();
         
+        // Verificar se há erro de número duplicado e destacar o campo
+        const numeroLancamentoError = document.querySelector('input[name="numero_lancamento_simples"]');
+        const form = document.getElementById('lancamento-form');
+        if (numeroLancamentoError && form && form.dataset.numeroLancamentoError === 'true') {
+            numeroLancamentoError.style.border = '2px solid #ff6b6b';
+            numeroLancamentoError.style.backgroundColor = '#fff5f5';
+        }
+        
         // Preencher automaticamente o número do lançamento com a sigla da matrícula
         const siglaMatriculaInput = document.querySelector('input[name="sigla_matricula"]');
         const numeroCompletoInput = document.getElementById('numero_lancamento');
