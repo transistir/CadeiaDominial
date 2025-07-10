@@ -359,7 +359,7 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
             <td>${documento.livro || '-'}</td>
             <td>${documento.folha || '-'}</td>
             <td>${documento.cartorio_nome || '-'}</td>
-            <td>${documento.data || '-'}</td>
+            <td>${lancamento.data || '-'}</td>
             <!-- Transmitente -->
             <td>${transmitentes.length > 0 ? transmitentes.join(', ') : '-'}</td>
             <!-- Adquirente -->
