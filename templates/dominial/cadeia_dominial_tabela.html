@@ -186,7 +186,7 @@
                                                 <td>{{ item.documento.livro|default_if_none:"-" }}</td>
                                                 <td>{{ item.documento.folha|default_if_none:"-" }}</td>
                                                 <td>{{ item.documento.cartorio.nome }}</td>
-                                                <td>{{ item.documento.data|date:'d/m/Y' }}</td>
+                                                <td>{{ lancamento.data|date:'d/m/Y' }}</td>
                                                 <!-- Transmitente -->
                                                 <td>
                                                     {% for pessoa in lancamento.transmitentes.all %}
