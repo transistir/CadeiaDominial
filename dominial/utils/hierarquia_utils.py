@@ -37,12 +37,18 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         return []
 
     tronco_principal = []
-    # Começar pelo documento mais antigo (primeira matrícula ou transcrição)
-    documento_atual = documentos.filter(tipo__tipo='matricula').order_by('data').first()
-    if not documento_atual:
-        documento_atual = documentos.filter(tipo__tipo='transcricao').order_by('data').first()
-    if not documento_atual:
-        return []
+    # CORREÇÃO: Começar pela matrícula atual (maior número) em vez da mais antiga
+    matriculas = documentos.filter(tipo__tipo='matricula')
+    if matriculas.exists():
+        # Pegar a matrícula com maior número (matrícula atual)
+        documento_atual = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
+    else:
+        # Se não há matrículas, pegar a transcrição com maior número
+        transcricoes = documentos.filter(tipo__tipo='transcricao')
+        if transcricoes.exists():
+            documento_atual = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
+        else:
+            return []
 
     while documento_atual:
         tronco_principal.append(documento_atual)
