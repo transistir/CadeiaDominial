@@ -2,6 +2,23 @@
 
 Sistema web para gestão e visualização de cadeias dominiais de terras indígenas, desenvolvido em Django.
 
+## 📚 Documentação
+
+Toda a documentação está organizada na pasta [`docs/`](docs/README.md):
+
+- **🚀 Deploy e Produção**: Checklists, guias de deploy e configuração
+- **🔧 Refatoração**: Documentação das melhorias implementadas
+- **🏛️ Cartórios**: Análise e planejamento da estrutura de cartórios
+- **📋 Planejamento**: Prioridades e estratégias de implementação
+
+## 🧪 Scripts de Teste
+
+Scripts de teste e análise estão na pasta [`tests_scripts/`](tests_scripts/):
+
+- Scripts de teste de funcionalidades
+- Análise de estrutura de cartórios
+- Testes de integração
+
 ## 🚀 Versão Beta v1.0.0
 
 Esta é a primeira versão beta do sistema, disponível para testes com clientes.
