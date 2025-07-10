@@ -213,7 +213,7 @@
                                                 {% else %}
                                                     <td>{{ lancamento.forma|default_if_none:"-" }}</td>
                                                     <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
-                                                    <td>{% if lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.nome }}{% else %}-{% endif %}</td>
+                                                    <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
                                                     <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
                                                     <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
                                                     <td>

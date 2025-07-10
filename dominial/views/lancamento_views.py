@@ -196,6 +196,21 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'cartorios': cartorios,
         'tipos_lancamento': tipos_lancamento,
     }
+    
+    # Verificar se é o primeiro lançamento do documento
+    total_lancamentos = Lancamento.objects.filter(documento=documento_ativo).count()
+    is_primeiro_lancamento = total_lancamentos == 0
+    
+    if is_primeiro_lancamento:
+        # Para o primeiro lançamento, pré-preencher o cartório com o cartório da matrícula
+        context['is_primeiro_lancamento'] = True
+        context['cartorio_matricula'] = imovel.cartorio
+        context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
+        
+        # Se não há cartório definido, mostrar aviso
+        if not imovel.cartorio:
+            messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
+    
     return render(request, 'dominial/lancamento_form.html', context)
 
 @login_required

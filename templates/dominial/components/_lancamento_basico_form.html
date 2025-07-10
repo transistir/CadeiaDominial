@@ -1,6 +1,33 @@
 <div class="field-group">
     <h4>Informações Básicas da Matrícula/Transcrição</h4>
     
+    {% if is_primeiro_lancamento %}
+    <!-- Cartório da Matrícula para Primeiro Lançamento -->
+    <div class="form-group cartorio-matricula-info">
+        <label>Cartório da Matrícula</label>
+        <div class="cartorio-display">
+            <span class="cartorio-nome">{{ cartorio_matricula_nome }}</span>
+
+        </div>
+        <input type="hidden" name="cartorio" id="cartorio" value="{{ cartorio_matricula.id }}">
+        <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ cartorio_matricula_nome }}">
+    </div>
+    {% else %}
+    <!-- Cartório da Origem para Lançamentos Subsequentes -->
+    <div class="form-group cartorio-origem-info">
+        <label>Cartório da Origem</label>
+        <div class="cartorio-display">
+            <span class="cartorio-nome">{{ documento.cartorio.nome }}</span>
+            <small class="form-text text-muted">
+                <strong>💡 Dica:</strong> Este é o cartório da origem do documento. 
+                Para lançamentos subsequentes, o cartório é definido pela origem do documento.
+            </small>
+        </div>
+        <input type="hidden" name="cartorio" id="cartorio" value="{{ documento.cartorio.id }}">
+        <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ documento.cartorio.nome }}">
+    </div>
+    {% endif %}
+    
     <div class="form-group">
         <label for="tipo_lancamento">Tipo de Lançamento *</label>
         <select name="tipo_lancamento" id="tipo_lancamento" required>
@@ -59,18 +86,6 @@
             <label for="data">Data *</label>
             <input type="date" name="data" id="data" required
                    value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
-        </div>
-    </div>
-
-    <div class="form-group">
-        <label for="cartorio">Cartório *</label>
-        <div class="autocomplete-container">
-            <input type="text" name="cartorio_nome" id="cartorio_nome" 
-                   placeholder="Digite o nome do cartório" autocomplete="off" required
-                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_nome %}{{ form_data.cartorio_nome }}{% endif %}">
-            <input type="hidden" name="cartorio" id="cartorio" 
-                   value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio %}{{ form_data.cartorio }}{% endif %}">
-            <div class="autocomplete-suggestions cartorio-suggestions"></div>
         </div>
     </div>
 </div> 

@@ -100,10 +100,10 @@
                                         </div>
                                     {% endif %}
                                     <!-- INFORMAÇÕES DE TRANSMISSÃO PARA REGISTRO -->
-                                    {% if lancamento.cartorio_transacao %}
+                                    {% if lancamento.cartorio_transmissao_compat %}
                                         <div class="detalhe-item">
                                             <span class="detalhe-label">Cartório Transação:</span>
-                                            <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome|truncatechars:20 }}</span>
+                                            <span class="detalhe-valor">{{ lancamento.cartorio_transmissao_compat.nome|truncatechars:20 }}</span>
                                         </div>
                                     {% endif %}
                                     {% if lancamento.livro_transacao or lancamento.folha_transacao %}
@@ -135,10 +135,10 @@
                                         </div>
                                     {% endif %}
                                     <!-- INFORMAÇÕES DE TRANSMISSÃO PARA AVERBAÇÃO -->
-                                    {% if lancamento.cartorio_transacao %}
+                                    {% if lancamento.cartorio_transmissao_compat %}
                                         <div class="detalhe-item">
                                             <span class="detalhe-label">Cartório Transação:</span>
-                                            <span class="detalhe-valor">{{ lancamento.cartorio_transacao.nome|truncatechars:20 }}</span>
+                                            <span class="detalhe-valor">{{ lancamento.cartorio_transmissao_compat.nome|truncatechars:20 }}</span>
                                         </div>
                                     {% endif %}
                                     {% if lancamento.livro_transacao or lancamento.folha_transacao %}

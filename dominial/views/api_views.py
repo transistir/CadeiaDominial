@@ -335,7 +335,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                     'area': lancamento.area,
                     'origem': lancamento.origem,
                     'observacoes': lancamento.observacoes,
-                    'cartorio_transacao_nome': lancamento.cartorio_transacao.nome if lancamento.cartorio_transacao else None,
+                    'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,
                     'livro_transacao': lancamento.livro_transacao,
                     'folha_transacao': lancamento.folha_transacao,
                     'data_transacao': lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else None,

@@ -323,7 +323,7 @@
                 {% endif %}
 
                 <!-- Transação (para Registro e outros tipos que tenham) -->
-                {% if lancamento.cartorio_transacao or lancamento.livro_transacao or lancamento.folha_transacao or lancamento.data_transacao or lancamento.titulo or lancamento.forma or lancamento.descricao or lancamento.valor_transacao or lancamento.area or lancamento.origem or lancamento.observacoes or lancamento.detalhes or lancamento.transmitente or lancamento.adquirente or lancamento.pessoas.all %}
+                {% if lancamento.cartorio_transmissao_compat or lancamento.livro_transacao or lancamento.folha_transacao or lancamento.data_transacao or lancamento.titulo or lancamento.forma or lancamento.descricao or lancamento.valor_transacao or lancamento.area or lancamento.origem or lancamento.observacoes or lancamento.detalhes or lancamento.transmitente or lancamento.adquirente or lancamento.pessoas.all %}
                 {% if lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}
                 <div class="info-card">
                     <div class="card-header">
@@ -379,10 +379,10 @@
                                 <span class="info-value">{{ lancamento.observacoes }}</span>
                             </div>
                             {% endif %}
-                            {% if lancamento.cartorio_transacao %}
+                            {% if lancamento.cartorio_transmissao_compat %}
                             <div class="info-item">
                                 <span class="info-label">Cartório</span>
-                                <span class="info-value">{{ lancamento.cartorio_transacao.nome }}</span>
+                                <span class="info-value">{{ lancamento.cartorio_transmissao_compat.nome }}</span>
                             </div>
                             {% endif %}
                             {% if lancamento.livro_transacao or lancamento.folha_transacao %}
