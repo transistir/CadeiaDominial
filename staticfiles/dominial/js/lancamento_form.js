@@ -210,9 +210,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Autocomplete para cartório de transação
-    const cartorioTransacaoInput = document.getElementById('cartorio_transacao_nome');
-    const cartorioTransacaoHidden = document.getElementById('cartorio_transacao');
-    const cartorioTransacaoSuggestions = document.querySelector('.cartorio-transacao-suggestions');
+            const cartorioTransacaoInput = document.getElementById('cartorio_transmissao_nome');
+        const cartorioTransacaoHidden = document.getElementById('cartorio_transmissao');
+            const cartorioTransacaoSuggestions = document.querySelector('.cartorio-transmissao-suggestions');
     
     if (cartorioTransacaoInput && cartorioTransacaoHidden && cartorioTransacaoSuggestions) {
         setupCartorioAutocomplete(cartorioTransacaoInput, cartorioTransacaoHidden, cartorioTransacaoSuggestions);
@@ -295,6 +295,9 @@ function adicionarTransmitente() {
     // Tentar encontrar o container correto baseado no contexto
     let container = document.getElementById('transmitentes-container-registro');
     if (!container) {
+        container = document.getElementById('transmitentes-container-inicio');
+    }
+    if (!container) {
         container = document.getElementById('transmitentes-container');
     }
     if (!container) {
@@ -325,6 +328,9 @@ function adicionarTransmitente() {
 function adicionarAdquirente() {
     // Tentar encontrar o container correto baseado no contexto
     let container = document.getElementById('adquirentes-container-registro');
+    if (!container) {
+        container = document.getElementById('adquirentes-container-inicio');
+    }
     if (!container) {
         container = document.getElementById('adquirentes-container');
     }

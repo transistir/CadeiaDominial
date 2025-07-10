@@ -210,9 +210,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Autocomplete para cartório de transação
-    const cartorioTransacaoInput = document.getElementById('cartorio_transacao_nome');
-    const cartorioTransacaoHidden = document.getElementById('cartorio_transacao');
-    const cartorioTransacaoSuggestions = document.querySelector('.cartorio-transacao-suggestions');
+            const cartorioTransacaoInput = document.getElementById('cartorio_transmissao_nome');
+        const cartorioTransacaoHidden = document.getElementById('cartorio_transmissao');
+            const cartorioTransacaoSuggestions = document.querySelector('.cartorio-transmissao-suggestions');
     
     if (cartorioTransacaoInput && cartorioTransacaoHidden && cartorioTransacaoSuggestions) {
         setupCartorioAutocomplete(cartorioTransacaoInput, cartorioTransacaoHidden, cartorioTransacaoSuggestions);

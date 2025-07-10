@@ -59,14 +59,14 @@
                            value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}">
                 </div>
                 <div class="form-group">
-                    <label for="cartorio_transacao_nome">Cartório</label>
+                    <label for="cartorio_transmissao_nome">Cartório</label>
                     <div class="autocomplete-container">
-                        <input type="text" name="cartorio_transacao_nome" id="cartorio_transacao_nome" 
+                        <input type="text" name="cartorio_transmissao_nome" id="cartorio_transmissao_nome" 
                                placeholder="Digite o nome do cartório" autocomplete="off"
-                               value="{% if modo_edicao and lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.nome }}{% elif form_data and form_data.cartorio_transacao_nome %}{{ form_data.cartorio_transacao_nome }}{% endif %}">
-                        <input type="hidden" name="cartorio_transacao" id="cartorio_transacao" 
-                               value="{% if modo_edicao and lancamento.cartorio_transacao %}{{ lancamento.cartorio_transacao.id }}{% elif form_data and form_data.cartorio_transacao %}{{ form_data.cartorio_transacao }}{% endif %}">
-                        <div class="autocomplete-suggestions cartorio-transacao-suggestions"></div>
+                               value="{% if modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% elif form_data and form_data.cartorio_transmissao_nome %}{{ form_data.cartorio_transmissao_nome }}{% endif %}">
+                        <input type="hidden" name="cartorio_transmissao" id="cartorio_transmissao" 
+                               value="{% if modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.id }}{% elif form_data and form_data.cartorio_transmissao %}{{ form_data.cartorio_transmissao }}{% endif %}">
+                        <div class="autocomplete-suggestions cartorio-transmissao-suggestions"></div>
                     </div>
                 </div>
             </div>
