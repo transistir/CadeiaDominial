@@ -162,6 +162,21 @@
     margin-top: 10px;
 }
 
+.origem-labels {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 5px;
+    padding: 0 12px;
+}
+
+.origem-labels label {
+    flex: 1;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--primary-color);
+    margin-bottom: 0;
+}
+
 .origem-item {
     display: flex;
     gap: 10px;
@@ -177,39 +192,6 @@
 
 .origem-item input {
     flex: 1;
-}
-
-.origem-input-group {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    width: 100%;
-    flex-wrap: nowrap;
-}
-
-.origem-input-group .grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    align-items: center;
-    flex: 1;
-    min-width: 0;
-}
-
-.origem-input-group .form-group {
-    margin-bottom: 0;
-}
-
-.origem-input-group .form-group label {
-    font-size: 0.85em;
-    margin-bottom: 2px;
-    color: #666;
-}
-
-.origem-input-group .form-group input {
-    font-size: 0.9em;
-    padding: 6px 8px;
-    height: 32px;
 }
 
 .remove-origem {
@@ -301,13 +283,8 @@
         gap: 5px;
     }
     
-    .origem-input-group {
+    .origem-item {
         flex-direction: column;
-        gap: 8px;
-    }
-    
-    .origem-input-group .grid-2 {
-        grid-template-columns: 1fr;
         gap: 8px;
     }
     
@@ -327,4 +304,64 @@
     .cartorio-fields {
         padding: 10px;
     }
+} 
+
+/* Estilos para o cartório da matrícula no primeiro lançamento */
+.cartorio-matricula-info {
+    background-color: #f8f9fa;
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.cartorio-matricula-info label {
+    color: #155724;
+    font-weight: bold;
+}
+
+.cartorio-matricula-info .form-text {
+    color: #155724;
+    font-style: italic;
+}
+
+.cartorio-matricula-info input[readonly] {
+    border-color: #28a745;
+    color: #155724;
+    font-weight: 500;
+}
+
+/* Estilos para o cartório da origem nos lançamentos subsequentes */
+.cartorio-origem-info {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.cartorio-origem-info label {
+    color: #856404;
+    font-weight: bold;
+}
+
+.cartorio-origem-info .form-text {
+    color: #856404;
+    font-style: italic;
+}
+
+/* Estilos comuns para exibição do cartório */
+.cartorio-display {
+    padding: 10px;
+    background-color: white;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+.cartorio-nome {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #495057;
+    display: block;
+    margin-bottom: 5px;
 } 

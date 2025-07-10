@@ -369,7 +369,7 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
                 `<td colspan="6">${formatarDescricao(lancamento.descricao)}</td>` :
                 `<td>${lancamento.forma || '-'}</td>
                  <td>${lancamento.titulo || '-'}</td>
-                 <td>${lancamento.cartorio_transacao_nome || '-'}</td>
+                 <td>${lancamento.cartorio_transmissao_nome || '-'}</td>
                  <td>${lancamento.livro_transacao || '-'}</td>
                  <td>${lancamento.folha_transacao || '-'}</td>
                  <td>${lancamento.data_transacao || '-'}</td>`
