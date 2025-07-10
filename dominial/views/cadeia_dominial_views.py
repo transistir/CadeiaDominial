@@ -14,24 +14,20 @@ def cadeia_dominial(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    # Otimização: usar select_related e prefetch_related
-    documentos = Documento.objects.filter(imovel=imovel)\
-        .select_related('cartorio', 'tipo')\
-        .prefetch_related('lancamentos', 'lancamentos__tipo')\
-        .order_by('data')
+    # Obter documentos seguindo a hierarquia correta (tronco principal)
+    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    documentos = list(tronco_principal)  # Usar a ordem do tronco principal
     
-    tem_documentos = documentos.exists()
-    tem_apenas_matricula = documentos.count() == 1 and documentos.first().tipo.tipo == 'matricula' if tem_documentos else False
+    tem_documentos = len(documentos) > 0
+    tem_apenas_matricula = len(documentos) == 1 and documentos[0].tipo.tipo == 'matricula' if tem_documentos else False
     
     # Otimização: usar exists() em vez de count() para verificar lançamentos
     tem_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).exists() if tem_documentos else False
     mostrar_lancamentos = request.GET.get('lancamentos') == 'true'
 
     # Refatoração: delegar identificação de troncos para o service
-    tronco_principal = []
     troncos_secundarios = []
     if tem_documentos:
-        tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
         troncos_secundarios = HierarquiaService.obter_troncos_secundarios(imovel)
 
     context = {
@@ -103,11 +99,9 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    # Otimização: usar select_related e prefetch_related
-    documentos = Documento.objects.filter(imovel=imovel)\
-        .select_related('cartorio', 'tipo')\
-        .prefetch_related('lancamentos', 'lancamentos__tipo')\
-        .order_by('data')
+    # Obter documentos seguindo a hierarquia correta (tronco principal)
+    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    documentos = list(tronco_principal)  # Usar a ordem do tronco principal
     
     # Estrutura para o diagrama de árvore
     tree_data = {
