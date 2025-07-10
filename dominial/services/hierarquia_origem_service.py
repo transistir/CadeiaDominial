@@ -103,8 +103,8 @@ class HierarquiaOrigemService:
                 'numero': origem_info['numero'],
                 'data': date.today(),
                 'cartorio': cartorio_origem,  # CRI da origem
-                'livro': None,  # Será preenchido pelo primeiro lançamento
-                'folha': None,  # Será preenchido pelo primeiro lançamento
+                'livro': '',  # Vazio, será preenchido pelo primeiro lançamento
+                'folha': '',  # Vazio, será preenchido pelo primeiro lançamento
                 'origem': f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
                 'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
             }

@@ -27,11 +27,14 @@ class RegraPetreaService:
         # Como o lançamento já foi salvo, contar todos os lançamentos do documento
         total_lancamentos = Lancamento.objects.filter(documento=documento).count()
         
-        if total_lancamentos == 1:
-            # É o primeiro lançamento - aplicar regra pétrea
+        # Verificar se o documento já tem livro e folha definidos
+        documento_tem_livro_folha = bool(documento.livro and documento.folha)
+        
+        if total_lancamentos == 1 and not documento_tem_livro_folha:
+            # É o primeiro lançamento e documento não tem livro/folha - aplicar regra pétrea
             return RegraPetreaService._definir_livro_folha_documento(lancamento)
         else:
-            # Não é o primeiro lançamento - não aplicar regra pétrea
+            # Não é o primeiro lançamento ou documento já tem livro/folha - não aplicar regra pétrea
             return False
     
     @staticmethod
@@ -51,27 +54,27 @@ class RegraPetreaService:
         livro_lancamento = None
         folha_lancamento = None
         
-        # Verificar campos de origem do lançamento
-        if lancamento.livro_origem:
-            livro_lancamento = lancamento.livro_origem
-        if lancamento.folha_origem:
-            folha_lancamento = lancamento.folha_origem
+        # Verificar campos de origem do lançamento (prioridade 1)
+        if lancamento.livro_origem and lancamento.livro_origem.strip():
+            livro_lancamento = lancamento.livro_origem.strip()
+        if lancamento.folha_origem and lancamento.folha_origem.strip():
+            folha_lancamento = lancamento.folha_origem.strip()
         
-        # Se não encontrou nos campos de origem, verificar campos de transação
-        if not livro_lancamento and lancamento.livro_transacao:
-            livro_lancamento = lancamento.livro_transacao
-        if not folha_lancamento and lancamento.folha_transacao:
-            folha_lancamento = lancamento.folha_transacao
+        # Se não encontrou nos campos de origem, verificar campos de transação (prioridade 2)
+        if not livro_lancamento and lancamento.livro_transacao and lancamento.livro_transacao.strip():
+            livro_lancamento = lancamento.livro_transacao.strip()
+        if not folha_lancamento and lancamento.folha_transacao and lancamento.folha_transacao.strip():
+            folha_lancamento = lancamento.folha_transacao.strip()
         
-        # Se ainda não encontrou, verificar campos básicos do formulário
+        # Se ainda não encontrou, verificar campos básicos do formulário (prioridade 3)
         # Estes dados vêm do processamento do formulário no LancamentoFormService
         if not livro_lancamento and hasattr(lancamento, 'livro_origem'):
             # O campo livro_origem do lançamento pode conter o livro básico
-            livro_lancamento = lancamento.livro_origem
+            livro_lancamento = lancamento.livro_origem.strip() if lancamento.livro_origem else None
         
         if not folha_lancamento and hasattr(lancamento, 'folha_origem'):
             # O campo folha_origem do lançamento pode conter a folha básica
-            folha_lancamento = lancamento.folha_origem
+            folha_lancamento = lancamento.folha_origem.strip() if lancamento.folha_origem else None
         
         # Atualizar documento se encontrou livro e folha
         if livro_lancamento or folha_lancamento:
