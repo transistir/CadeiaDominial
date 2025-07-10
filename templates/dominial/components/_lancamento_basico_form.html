@@ -1,5 +1,5 @@
 <div class="field-group">
-    <h4>Informações Básicas da Matrícula/Transcrição</h4>
+    <h4>Informações do Documento</h4>
     
     {% if is_primeiro_lancamento %}
     <!-- Cartório da Matrícula para Primeiro Lançamento -->
@@ -7,7 +7,6 @@
         <label>Cartório da Matrícula</label>
         <div class="cartorio-display">
             <span class="cartorio-nome">{{ cartorio_matricula_nome }}</span>
-
         </div>
         <input type="hidden" name="cartorio" id="cartorio" value="{{ cartorio_matricula.id }}">
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ cartorio_matricula_nome }}">
@@ -69,17 +68,19 @@
 
     <div class="grid-3">
         <div class="form-group">
-            <label for="livro">Livro *</label>
-            <input type="text" name="livro" id="livro" required
-                   value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro }}{% endif %}"
+            <label for="livro_documento">Livro do Documento *</label>
+            <input type="text" name="livro_documento" id="livro_documento" required
+                   value="{% if modo_edicao %}{{ lancamento.documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
+            <small class="form-text text-muted">Livro do documento atual (será aplicado ao documento)</small>
         </div>
         
         <div class="form-group">
-            <label for="folha">Folha *</label>
-            <input type="text" name="folha" id="folha" required
-                   value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha }}{% endif %}"
+            <label for="folha_documento">Folha do Documento *</label>
+            <input type="text" name="folha_documento" id="folha_documento" required
+                   value="{% if modo_edicao %}{{ lancamento.documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
+            <small class="form-text text-muted">Folha do documento atual (será aplicada ao documento)</small>
         </div>
         
         <div class="form-group">
@@ -88,4 +89,40 @@
                    value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
         </div>
     </div>
-</div> 
+</div>
+
+<!-- Seção de Informações de Origem (apenas para início de matrícula) -->
+{% if not is_primeiro_lancamento %}
+<div class="field-group" id="informacoes-origem">
+    <h4>Informações de Origem</h4>
+    <small class="form-text text-muted">
+        <strong>💡 Dica:</strong> Estas informações são sobre outros documentos que originaram este lançamento.
+        Elas são diferentes dos campos "Livro/Folha do Documento" acima.
+    </small>
+    
+    <div class="grid-3">
+        <div class="form-group">
+            <label for="livro_origem">Livro da Origem</label>
+            <input type="text" name="livro_origem" id="livro_origem"
+                   value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem }}{% endif %}"
+                   placeholder="Ex: 1, 2, A, etc.">
+            <small class="form-text text-muted">Livro do documento de origem</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="folha_origem">Folha da Origem</label>
+            <input type="text" name="folha_origem" id="folha_origem"
+                   value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem }}{% endif %}"
+                   placeholder="Ex: 1, 2, A, etc.">
+            <small class="form-text text-muted">Folha do documento de origem</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="data_origem">Data da Origem</label>
+            <input type="date" name="data_origem" id="data_origem"
+                   value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem }}{% endif %}">
+            <small class="form-text text-muted">Data do documento de origem</small>
+        </div>
+    </div>
+</div>
+{% endif %} 

@@ -37,18 +37,26 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         return []
 
     tronco_principal = []
-    # CORREÇÃO: Começar pela matrícula atual (maior número) em vez da mais antiga
-    matriculas = documentos.filter(tipo__tipo='matricula')
-    if matriculas.exists():
-        # Pegar a matrícula com maior número (matrícula atual)
-        documento_atual = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
-    else:
-        # Se não há matrículas, pegar a transcrição com maior número
-        transcricoes = documentos.filter(tipo__tipo='transcricao')
-        if transcricoes.exists():
-            documento_atual = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
+    # CORREÇÃO: Começar pela matrícula atual (que foi convertida em documento durante o cadastro do imóvel)
+    # Primeiro, tentar encontrar o documento que corresponde à matrícula do imóvel
+    documento_atual = documentos.filter(
+        tipo__tipo='matricula', 
+        numero=imovel.matricula
+    ).first()
+    
+    # Se não encontrou o documento da matrícula atual, procurar por matrículas
+    if not documento_atual:
+        matriculas = documentos.filter(tipo__tipo='matricula')
+        if matriculas.exists():
+            # Se não há documento específico da matrícula do imóvel, usar a matrícula mais recente
+            documento_atual = matriculas.order_by('-data').first()
         else:
-            return []
+            # Se não há matrículas, procurar por transcrições
+            transcricoes = documentos.filter(tipo__tipo='transcricao')
+            if transcricoes.exists():
+                documento_atual = transcricoes.order_by('-data').first()
+            else:
+                return []
 
     while documento_atual:
         tronco_principal.append(documento_atual)
@@ -78,14 +86,11 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
             proximo_documento = next((doc for doc in origens_identificadas if doc.numero == escolha_atual), None)
         
         if not proximo_documento:
-            # Se não há escolha ou escolha não encontrada, usar padrão (maior número)
-            matriculas = [doc for doc in origens_identificadas if doc.tipo.tipo == 'matricula']
-            if matriculas:
-                proximo_documento = max(matriculas, key=lambda x: int(x.numero.replace('M', '')))
-            else:
-                transcricoes = [doc for doc in origens_identificadas if doc.tipo.tipo == 'transcricao']
-                if transcricoes:
-                    proximo_documento = max(transcricoes, key=lambda x: int(x.numero.replace('T', '')))
+            # Se não há escolha ou escolha não encontrada, usar a primeira origem encontrada
+            # (respeitando a ordem das origens, não priorizando maior número)
+            if origens_identificadas:
+                # Pegar a primeira origem encontrada (ordem natural das origens)
+                proximo_documento = origens_identificadas[0]
         
         if not proximo_documento or proximo_documento in tronco_principal:
             break

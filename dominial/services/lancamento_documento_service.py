@@ -47,8 +47,8 @@ class LancamentoDocumentoService:
             numero=imovel.matricula,  # Usar o número da matrícula do imóvel
             data='2024-01-01',
             cartorio=imovel.cartorio if imovel.cartorio else None,
-            livro='',  # Vazio, será preenchido pelo primeiro lançamento
-            folha='',  # Vazio, será preenchido pelo primeiro lançamento
+            livro='0',  # Valor padrão, será atualizado pelo primeiro lançamento
+            folha='0',  # Valor padrão, será atualizado pelo primeiro lançamento
             origem='Matrícula atual do imóvel',
             observacoes='Documento de matrícula criado automaticamente para iniciar a cadeia dominial'
         )

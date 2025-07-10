@@ -79,7 +79,17 @@ class LancamentoCriacaoService:
             lancamento.save()
             print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
             
-            # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento
+            # APLICAR CAMPOS DO DOCUMENTO: aplicar livro e folha ao documento
+            print("DEBUG: Aplicando campos do documento...")
+            documento_atualizado = LancamentoCriacaoService._aplicar_campos_documento(
+                lancamento, dados_lancamento
+            )
+            if documento_atualizado:
+                print("DEBUG: Campos do documento aplicados com sucesso")
+            else:
+                print("DEBUG: Campos do documento não aplicados")
+            
+            # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento (se não aplicado acima)
             print("DEBUG: Aplicando regra pétrea...")
             regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
             if regra_aplicada:
@@ -248,6 +258,41 @@ class LancamentoCriacaoService:
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return False, f'Erro ao atualizar lançamento: {str(e)}'
+    
+    @staticmethod
+    def _aplicar_campos_documento(lancamento, dados_lancamento):
+        """
+        Aplica os campos livro e folha do documento baseado nos dados do formulário
+        
+        Args:
+            lancamento: Objeto Lancamento
+            dados_lancamento: Dict com dados do formulário
+            
+        Returns:
+            bool: True se foi aplicado, False se não foi possível
+        """
+        documento = lancamento.documento
+        
+        # Obter livro e folha do documento dos dados do formulário
+        livro_documento = dados_lancamento.get('livro_documento')
+        folha_documento = dados_lancamento.get('folha_documento')
+        
+        # Atualizar documento se os campos foram fornecidos
+        documento_atualizado = False
+        
+        if livro_documento and livro_documento.strip():
+            documento.livro = livro_documento.strip()
+            documento_atualizado = True
+        
+        if folha_documento and folha_documento.strip():
+            documento.folha = folha_documento.strip()
+            documento_atualizado = True
+        
+        if documento_atualizado:
+            documento.save()
+            return True
+        
+        return False
     
     @staticmethod
     def _criar_lancamento_basico(documento_ativo, dados_lancamento, tipo_lanc):

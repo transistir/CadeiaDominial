@@ -41,9 +41,13 @@ class LancamentoFormService:
             else:
                 data_clean = None
         
-        # Campos básicos da matrícula/transcrição
-        livro = request.POST.get('livro') if request.POST.get('livro') and request.POST.get('livro').strip() else None
-        folha = request.POST.get('folha') if request.POST.get('folha') and request.POST.get('folha').strip() else None
+        # Campos do documento (livro e folha do documento atual)
+        livro_documento = request.POST.get('livro_documento') if request.POST.get('livro_documento') and request.POST.get('livro_documento').strip() else None
+        folha_documento = request.POST.get('folha_documento') if request.POST.get('folha_documento') and request.POST.get('folha_documento').strip() else None
+        
+        # Campos de origem (livro e folha de outros documentos)
+        livro_origem = request.POST.get('livro_origem') if request.POST.get('livro_origem') and request.POST.get('livro_origem').strip() else None
+        folha_origem = request.POST.get('folha_origem') if request.POST.get('folha_origem') and request.POST.get('folha_origem').strip() else None
         cartorio_id = request.POST.get('cartorio')
         cartorio_nome = request.POST.get('cartorio_nome', '').strip()
         
@@ -100,8 +104,10 @@ class LancamentoFormService:
             'numero_lancamento': numero_lancamento,
             'data': data_clean,
             'observacoes': observacoes,
-            'livro_origem': livro,
-            'folha_origem': folha,
+            'livro_documento': livro_documento,
+            'folha_documento': folha_documento,
+            'livro_origem': livro_origem,
+            'folha_origem': folha_origem,
             'cartorio_origem': cartorio_origem,
             'forma': forma_value if forma_value else None,
             'descricao': descricao_clean,
