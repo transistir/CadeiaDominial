@@ -93,7 +93,16 @@ class CRIService:
         Returns:
             Documento: Documento criado com CRI definido
         """
-        documento = Documento.objects.create(**dados_documento)
+        # Garantir que campos obrigatórios tenham valores válidos
+        dados_limpos = dados_documento.copy()
+        
+        # Garantir que livro e folha não sejam None ou vazios
+        if not dados_limpos.get('livro') or dados_limpos.get('livro') == '':
+            dados_limpos['livro'] = '0'
+        if not dados_limpos.get('folha') or dados_limpos.get('folha') == '':
+            dados_limpos['folha'] = '0'
+        
+        documento = Documento.objects.create(**dados_limpos)
         
         # Definir CRI do documento
         CRIService.definir_cri_documento(documento, imovel, cri_origem)
