@@ -5,6 +5,7 @@ Service especializado para processamento de origens na hierarquia
 from ..models import Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from .cache_service import CacheService
+from .cri_service import CRIService
 from datetime import date
 
 
@@ -49,21 +50,22 @@ class HierarquiaOrigemService:
     def _processar_origem_individual(imovel, lancamento, origem_info):
         """
         Processa uma origem individual
+        Implementa a regra dos CRI: verifica se existe documento com CRI da origem
         """
-        # Verificar se já existe um documento com esse número e cartório
-        cartorio_destino = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+        # REGRA DOS CRI: Verificar se já existe um documento com esse número e CRI da origem
+        cartorio_origem = lancamento.documento.cartorio
         documento_existente = Documento.objects.filter(
             numero=origem_info['numero'], 
-            cartorio=cartorio_destino
+            cartorio=cartorio_origem
         ).first()
         
         if not documento_existente:
-            # Criar o documento automaticamente
+            # Criar o documento automaticamente com CRI da origem
             return HierarquiaOrigemService._criar_documento_automatico(
                 imovel, lancamento, origem_info
             )
         else:
-            # Documento já existe, adicionar como origem identificada criada
+            # Documento já existe com CRI da origem, adicionar como origem identificada criada
             return HierarquiaOrigemService._criar_origem_existente(
                 lancamento, origem_info, documento_existente
             )
@@ -72,15 +74,20 @@ class HierarquiaOrigemService:
     def _criar_documento_automatico(imovel, lancamento, origem_info):
         """
         Cria um documento automaticamente a partir de uma origem
+        Implementa a regra dos CRI: documento criado automaticamente herda o CRI da origem
         """
         try:
             tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
             
-            # Verificar se já existe um documento com esse número e cartório
-            cartorio_destino = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+            # REGRA DOS CRI: Determinar qual cartório usar
+            # Se o documento é criado automaticamente a partir de uma origem,
+            # ele deve herdar o CRI da origem (cartório do documento que originou)
+            cartorio_origem = lancamento.documento.cartorio
+            
+            # Verificar se já existe um documento com esse número e cartório da origem
             documento_existente = Documento.objects.filter(
                 numero=origem_info['numero'], 
-                cartorio=cartorio_destino
+                cartorio=cartorio_origem
             ).first()
             
             if documento_existente:
@@ -89,16 +96,21 @@ class HierarquiaOrigemService:
                     lancamento, origem_info, documento_existente.id, True
                 )
             
-            documento_criado = Documento.objects.create(
-                imovel=imovel,
-                tipo=tipo_doc,
-                numero=origem_info['numero'],
-                data=date.today(),
-                cartorio=cartorio_destino,
-                livro='1',  # Livro padrão
-                folha='1',  # Folha padrão
-                origem=f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
-                observacoes=f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
+            # Criar documento usando CRIService
+            dados_documento = {
+                'imovel': imovel,
+                'tipo': tipo_doc,
+                'numero': origem_info['numero'],
+                'data': date.today(),
+                'cartorio': cartorio_origem,  # CRI da origem
+                'livro': None,  # Será preenchido pelo primeiro lançamento
+                'folha': None,  # Será preenchido pelo primeiro lançamento
+                'origem': f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
+                'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}'
+            }
+            
+            documento_criado = CRIService.criar_documento_com_cri(
+                imovel, dados_documento, cri_origem=cartorio_origem
             )
             
             # Invalidar cache do imóvel

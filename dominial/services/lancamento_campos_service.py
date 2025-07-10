@@ -117,27 +117,27 @@ class LancamentoCamposService:
         titulo_value = request.POST.get('titulo_transacao', '').strip()
         lancamento.titulo = titulo_value if titulo_value else None
         
-        # Cartório de transação (usar campo específico)
-        cartorio_transacao_id = request.POST.get('cartorio_transacao')
-        cartorio_transacao_nome = request.POST.get('cartorio_transacao_nome', '').strip()
+        # Cartório de transmissão (usar campo específico)
+        cartorio_transmissao_id = request.POST.get('cartorio_transmissao')
+        cartorio_transmissao_nome = request.POST.get('cartorio_transmissao_nome', '').strip()
         
-        if cartorio_transacao_id and cartorio_transacao_id.strip():
-            lancamento.cartorio_transacao_id = cartorio_transacao_id
-        elif cartorio_transacao_nome:
+        if cartorio_transmissao_id and cartorio_transmissao_id.strip():
+            lancamento.cartorio_transmissao_id = cartorio_transmissao_id
+        elif cartorio_transmissao_nome:
             try:
-                cartorio = Cartorios.objects.get(nome__iexact=cartorio_transacao_nome)
-                lancamento.cartorio_transacao = cartorio
+                cartorio = Cartorios.objects.get(nome__iexact=cartorio_transmissao_nome)
+                lancamento.cartorio_transmissao = cartorio
             except Cartorios.DoesNotExist:
                 # Criar novo cartório com CNS único
                 cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
                 cartorio = Cartorios.objects.create(
-                    nome=cartorio_transacao_nome,
+                    nome=cartorio_transmissao_nome,
                     cns=cns_unico,
                     cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                 )
-                lancamento.cartorio_transacao = cartorio
+                lancamento.cartorio_transmissao = cartorio
         else:
-            lancamento.cartorio_transacao_id = None
+            lancamento.cartorio_transmissao_id = None
         
         # Livro, folha e data de transação
         lancamento.livro_transacao = request.POST.get('livro_transacao') if request.POST.get('livro_transacao') and request.POST.get('livro_transacao').strip() else None

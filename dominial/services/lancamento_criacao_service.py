@@ -9,6 +9,7 @@ from .lancamento_cartorio_service import LancamentoCartorioService
 from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_pessoa_service import LancamentoPessoaService
 from .lancamento_campos_service import LancamentoCamposService
+from .regra_petrea_service import RegraPetreaService
 
 
 class LancamentoCriacaoService:
@@ -77,6 +78,14 @@ class LancamentoCriacaoService:
             print("DEBUG: Salvando lançamento...")
             lancamento.save()
             print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
+            
+            # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento
+            print("DEBUG: Aplicando regra pétrea...")
+            regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
+            if regra_aplicada:
+                print("DEBUG: Regra pétrea aplicada - livro e folha definidos no documento")
+            else:
+                print("DEBUG: Regra pétrea não aplicada - não é o primeiro lançamento")
             
             # Processar origens para criar documentos automáticos
             print("DEBUG: Processando origens...")
@@ -190,6 +199,14 @@ class LancamentoCriacaoService:
             lancamento.save()
             print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
             
+            # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento
+            print("DEBUG: Aplicando regra pétrea...")
+            regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
+            if regra_aplicada:
+                print("DEBUG: Regra pétrea aplicada - livro e folha definidos no documento")
+            else:
+                print("DEBUG: Regra pétrea não aplicada - não é o primeiro lançamento")
+            
             # Processar origens para criar documentos automáticos
             origens_completas = request.POST.getlist('origem_completa[]')
             if origens_completas:
@@ -249,6 +266,8 @@ class LancamentoCriacaoService:
             livro_origem=dados_lancamento['livro_origem'],
             folha_origem=dados_lancamento['folha_origem'],
             cartorio_origem=dados_lancamento['cartorio_origem'],
+            cartorio_transacao=None,  # Legado - será preenchido pelo LancamentoCamposService se necessário
+            cartorio_transmissao=None,  # Novo padrão - será preenchido pelo LancamentoCamposService se necessário
             data_origem=dados_lancamento['data'],
         )
         

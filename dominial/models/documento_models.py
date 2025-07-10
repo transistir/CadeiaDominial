@@ -31,6 +31,26 @@ class Documento(models.Model):
     observacoes = models.TextField(null=True, blank=True)
     data_cadastro = models.DateField(auto_now_add=True)
     nivel_manual = models.IntegerField(null=True, blank=True, help_text="Nível manual na árvore da cadeia dominial (0-10)")
+    
+    # NOVOS CAMPOS PARA CRI
+    cri_atual = models.ForeignKey(
+        'Cartorios', 
+        on_delete=models.PROTECT, 
+        related_name='documentos_cri_atual',
+        null=True, 
+        blank=True,
+        verbose_name='CRI Atual',
+        help_text='Cartório de Registro de Imóveis atual do documento'
+    )
+    cri_origem = models.ForeignKey(
+        'Cartorios', 
+        on_delete=models.PROTECT, 
+        related_name='documentos_cri_origem',
+        null=True, 
+        blank=True,
+        verbose_name='CRI da Origem',
+        help_text='Cartório de Registro de Imóveis da origem (quando criado automaticamente)'
+    )
 
     class Meta:
         verbose_name = "Documento"

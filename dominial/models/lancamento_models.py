@@ -62,7 +62,8 @@ class Lancamento(models.Model):
     
     # Campos de cartório separados por contexto
     cartorio_origem = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_origem_lancamento', null=True, blank=True, help_text="Cartório de origem (início de matrícula)")
-    cartorio_transacao = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_transacao_lancamento', null=True, blank=True, help_text="Cartório onde foi registrada a transmissão")
+    cartorio_transacao = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_transacao_lancamento', null=True, blank=True, help_text="Cartório onde foi registrada a transmissão (legado)")
+    cartorio_transmissao = models.ForeignKey('Cartorios', on_delete=models.PROTECT, related_name='cartorio_transmissao_lancamento', null=True, blank=True, help_text="Cartório onde foi registrada a transmissão (novo padrão)")
     
     # Campos de transação (separados dos campos de origem)
     livro_transacao = models.CharField(max_length=50, null=True, blank=True, help_text="Livro da transação")
@@ -107,6 +108,14 @@ class Lancamento(models.Model):
     @property
     def adquirentes(self):
         return self.pessoas.filter(tipo='adquirente')
+    
+    @property
+    def cartorio_transmissao_compat(self):
+        """
+        Property para compatibilidade: retorna cartorio_transmissao se disponível,
+        senão retorna cartorio_transacao (legado)
+        """
+        return self.cartorio_transmissao or self.cartorio_transacao
 
 
 class LancamentoPessoa(models.Model):

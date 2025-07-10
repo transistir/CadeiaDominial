@@ -20,6 +20,11 @@ class Imovel(models.Model):
 
 
 class Cartorios(models.Model):
+    TIPO_CHOICES = [
+        ('CRI', 'Cartório de Registro de Imóveis'),
+        ('OUTRO', 'Outro'),
+    ]
+    
     nome = models.CharField(max_length=200)
     cns = models.CharField(max_length=20, unique=True)
     endereco = models.CharField(max_length=200, null=True, blank=True)
@@ -27,6 +32,12 @@ class Cartorios(models.Model):
     email = models.EmailField(null=True, blank=True)
     estado = models.CharField(max_length=2, null=True, blank=True)
     cidade = models.CharField(max_length=100, null=True, blank=True)
+    tipo = models.CharField(
+        max_length=10, 
+        choices=TIPO_CHOICES, 
+        default='CRI',
+        verbose_name='Tipo de Cartório'
+    )
 
     def __str__(self):
         return f"{self.nome} - {self.cidade}/{self.estado}" if self.cidade and self.estado else self.nome
@@ -34,7 +45,7 @@ class Cartorios(models.Model):
     class Meta:
         verbose_name = 'Cartório'
         verbose_name_plural = 'Cartórios'
-        ordering = ['estado', 'cidade', 'nome']
+        ordering = ['tipo', 'estado', 'cidade', 'nome']
 
 
 class ImportacaoCartorios(models.Model):
