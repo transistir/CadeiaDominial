@@ -102,7 +102,7 @@ create_default_types() {
     fi
     
     # Verifica se já existem tipos de documento-lançamento
-    if python manage.py shell -c "from dominial.models import DocumentoLancamento; print('Tipos documento-lançamento:', DocumentoLancamento.objects.count())" | grep -q "0"; then
+    if python manage.py shell -c "from dominial.models import DocumentoTipo, LancamentoTipo; print('Tipos documento:', DocumentoTipo.objects.count(), 'Tipos lançamento:', LancamentoTipo.objects.count())" | grep -q "0"; then
         echo "🔗 Criando tipos de documento-lançamento..."
         python manage.py criar_tipos_documento_lancamento
         echo "✅ Tipos de documento-lançamento criados!"
