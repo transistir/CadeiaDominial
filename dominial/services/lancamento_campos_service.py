@@ -184,6 +184,44 @@ class LancamentoCamposService:
             origem_value = request.POST.get('origem_completa', '').strip()
             lancamento.origem = origem_value if origem_value else None
         
+        # PROCESSAR CARTÓRIO DE ORIGEM para múltiplas origens
+        # Para início de matrícula, o cartório de origem é usado para criar documentos automáticos
+        # Usar o primeiro cartório de origem válido encontrado
+        cartorio_origem_encontrado = None
+        
+        # Tentar encontrar cartório por ID primeiro
+        for cartorio_id in cartorios_origem_ids:
+            if cartorio_id and cartorio_id.strip():
+                try:
+                    cartorio = Cartorios.objects.get(id=cartorio_id)
+                    cartorio_origem_encontrado = cartorio
+                    break
+                except Cartorios.DoesNotExist:
+                    continue
+        
+        # Se não encontrou por ID, tentar por nome
+        if not cartorio_origem_encontrado:
+            for cartorio_nome in cartorios_origem_nomes:
+                if cartorio_nome and cartorio_nome.strip():
+                    try:
+                        cartorio = Cartorios.objects.get(nome__iexact=cartorio_nome)
+                        cartorio_origem_encontrado = cartorio
+                        break
+                    except Cartorios.DoesNotExist:
+                        # Criar novo cartório se não existir
+                        cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
+                        cartorio = Cartorios.objects.create(
+                            nome=cartorio_nome,
+                            cns=cns_unico,
+                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                        )
+                        cartorio_origem_encontrado = cartorio
+                        break
+        
+        # Salvar o cartório de origem encontrado no lançamento
+        if cartorio_origem_encontrado:
+            lancamento.cartorio_origem = cartorio_origem_encontrado
+        
         # Para início de matrícula, NÃO sobrescrever o cartório da matrícula
         # O cartório da matrícula já foi definido nos campos básicos
         # O cartório da origem é apenas informativo e não deve substituir o cartório da matrícula
