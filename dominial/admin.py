@@ -52,6 +52,32 @@ class DocumentoAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('cartorio', 'imovel', 'imovel__terra_indigena_id', 'tipo')
+    
+    def save_model(self, request, obj, form, change):
+        """
+        Sobrescreve o método save para validar mudanças de cartório
+        """
+        if change and 'cartorio' in form.changed_data:
+            # Verificar se o documento tem lançamentos
+            if obj.lancamentos.exists():
+                from django.contrib import messages
+                messages.error(
+                    request, 
+                    f'❌ Não é possível alterar o cartório do documento {obj.numero} pois ele possui lançamentos. '
+                    f'Remova todos os lançamentos primeiro ou crie um novo documento.'
+                )
+                return  # Não salvar a mudança
+        
+        # Se chegou aqui, pode salvar normalmente
+        super().save_model(request, obj, form, change)
+        
+        # Se mudou o cartório e não tem lançamentos, registrar a mudança
+        if change and 'cartorio' in form.changed_data and not obj.lancamentos.exists():
+            from django.contrib import messages
+            messages.success(
+                request, 
+                f'✅ Cartório do documento {obj.numero} alterado com sucesso para {obj.cartorio.nome}.'
+            )
 
 @admin.register(Lancamento)
 class LancamentoAdmin(admin.ModelAdmin):

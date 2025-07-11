@@ -90,6 +90,32 @@ class LancamentoOrigemService:
             if not folha_origem and lancamento.folha_origem and lancamento.folha_origem.strip():
                 folha_origem = lancamento.folha_origem.strip()
             
+            # VERIFICAR SE É EDIÇÃO DE CARTÓRIO OU NOVA ORIGEM
+            # Buscar documento existente com o mesmo número (independente do cartório)
+            documento_existente_mesmo_numero = Documento.objects.filter(
+                numero=origem_info['numero'],
+                imovel=imovel
+            ).first()
+            
+            if documento_existente_mesmo_numero:
+                # Existe um documento com o mesmo número
+                if documento_existente_mesmo_numero.cartorio == cartorio_origem:
+                    # Mesmo cartório, documento já existe
+                    return None
+                else:
+                    # Cartório diferente - POSSÍVEL EDIÇÃO DE CARTÓRIO
+                    # Verificar se é uma edição válida (não é criação de nova origem)
+                    if LancamentoOrigemService._is_edicao_cartorio_valida(
+                        documento_existente_mesmo_numero, cartorio_origem, lancamento
+                    ):
+                        # É uma edição de cartório válida - atualizar o documento existente
+                        return LancamentoOrigemService._atualizar_cartorio_documento(
+                            documento_existente_mesmo_numero, cartorio_origem, lancamento
+                        )
+                    else:
+                        # É uma nova origem com cartório diferente - criar novo documento
+                        pass
+            
             # Verificar se já existe um documento com esse número e cartório
             documento_existente = Documento.objects.filter(
                 numero=origem_info['numero'], 
@@ -130,4 +156,50 @@ class LancamentoOrigemService:
         except Exception as e:
             # Log do erro mas não falhar o processo
             print(f"Erro ao criar documento automático: {e}")
+            return None
+    
+    @staticmethod
+    def _is_edicao_cartorio_valida(documento_existente, novo_cartorio, lancamento):
+        """
+        Verifica se a mudança de cartório é uma edição válida
+        Regras:
+        1. O documento existente não pode ter lançamentos
+        2. O novo cartório deve ser diferente do atual
+        3. O lançamento deve ser do tipo 'inicio_matricula' (primeiro lançamento)
+        """
+        # Verificar se o documento não tem lançamentos
+        if documento_existente.lancamentos.exists():
+            return False
+        
+        # Verificar se o cartório é realmente diferente
+        if documento_existente.cartorio == novo_cartorio:
+            return False
+        
+        # Verificar se é o primeiro lançamento (início de matrícula)
+        if lancamento.tipo.tipo != 'inicio_matricula':
+            return False
+        
+        return True
+    
+    @staticmethod
+    def _atualizar_cartorio_documento(documento, novo_cartorio, lancamento):
+        """
+        Atualiza o cartório de um documento existente
+        """
+        try:
+            # Atualizar o cartório do documento
+            documento.cartorio = novo_cartorio
+            documento.observacoes = f"{documento.observacoes or ''}\n[EDITADO] Cartório atualizado para {novo_cartorio.nome} em {date.today()}"
+            documento.save()
+            
+            # Invalidar cache do imóvel
+            CacheService.invalidate_documentos_imovel(documento.imovel.id)
+            CacheService.invalidate_tronco_principal(documento.imovel.id)
+            
+            print(f"Documento {documento.numero} atualizado: cartório alterado de {documento.cartorio} para {novo_cartorio.nome}")
+            
+            return documento
+            
+        except Exception as e:
+            print(f"Erro ao atualizar cartório do documento: {e}")
             return None 
