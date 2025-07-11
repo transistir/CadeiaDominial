@@ -12,5 +12,5 @@
     <label for="observacoes">Observações{% if observacoes_obrigatorio %} *{% endif %}</label>
     <textarea name="observacoes" id="observacoes" 
               placeholder="{% if placeholder %}{{ placeholder }}{% else %}Observações adicionais{% endif %}"
-              rows="{% if rows %}{{ rows }}{% else %}3{% endif %}">{% if modo_edicao %}{{ lancamento.observacoes }}{% elif form_data %}{{ form_data.observacoes }}{% endif %}</textarea>
+              rows="{% if rows %}{{ rows }}{% else %}3{% endif %}">{% if modo_edicao and lancamento.observacoes %}{{ lancamento.observacoes }}{% elif form_data and form_data.observacoes %}{{ form_data.observacoes }}{% endif %}</textarea>
 </div> 

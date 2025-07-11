@@ -2,7 +2,7 @@
 Service para processamento de origens automáticas dos lançamentos
 """
 from ..utils.hierarquia_utils import processar_origens_para_documentos
-from ..models import Documento, DocumentoTipo, Cartorios
+from ..models import Documento, DocumentoTipo, Cartorios, Lancamento
 from ..services.cri_service import CRIService
 from ..services.cache_service import CacheService
 from datetime import date
@@ -44,6 +44,7 @@ class LancamentoOrigemService:
         """
         Cria um documento automaticamente a partir de uma origem
         CORREÇÃO: Usa o cartório de origem do lançamento (lancamento.cartorio_origem)
+        HERANÇA: Livro e folha são herdados do primeiro lançamento do documento criado pela origem
         """
         try:
             # Obter tipo de documento
@@ -58,6 +59,36 @@ class LancamentoOrigemService:
             else:
                 # Fallback: usar cartório do documento atual
                 cartorio_origem = lancamento.documento.cartorio
+            
+            # DETERMINAR LIVRO E FOLHA: Herdar do primeiro lançamento do documento criado pela origem
+            livro_origem = None
+            folha_origem = None
+            
+            # Buscar o primeiro lançamento do documento que foi criado pela origem
+            # Este documento terá o cartório da origem e será usado para herdar livro e folha
+            documento_origem = Documento.objects.filter(
+                numero=origem_info['numero'],
+                cartorio=cartorio_origem
+            ).first()
+            
+            if documento_origem:
+                # Buscar o primeiro lançamento deste documento para herdar livro e folha
+                primeiro_lancamento_origem = Lancamento.objects.filter(
+                    documento=documento_origem
+                ).order_by('id').first()
+                
+                if primeiro_lancamento_origem:
+                    # Herdar livro e folha do primeiro lançamento da origem
+                    if primeiro_lancamento_origem.livro_origem and primeiro_lancamento_origem.livro_origem.strip():
+                        livro_origem = primeiro_lancamento_origem.livro_origem.strip()
+                    if primeiro_lancamento_origem.folha_origem and primeiro_lancamento_origem.folha_origem.strip():
+                        folha_origem = primeiro_lancamento_origem.folha_origem.strip()
+            
+            # Se não encontrou livro e folha da origem, usar os campos do lançamento atual
+            if not livro_origem and lancamento.livro_origem and lancamento.livro_origem.strip():
+                livro_origem = lancamento.livro_origem.strip()
+            if not folha_origem and lancamento.folha_origem and lancamento.folha_origem.strip():
+                folha_origem = lancamento.folha_origem.strip()
             
             # Verificar se já existe um documento com esse número e cartório
             documento_existente = Documento.objects.filter(
@@ -76,10 +107,10 @@ class LancamentoOrigemService:
                 'numero': origem_info['numero'],
                 'data': date.today(),
                 'cartorio': cartorio_origem,  # CARTÓRIO DA ORIGEM
-                'livro': '0',  # Valor padrão, será atualizado pelo primeiro lançamento
-                'folha': '0',  # Valor padrão, será atualizado pelo primeiro lançamento
+                'livro': livro_origem if livro_origem else '0',  # LIVRO HERDADO DA ORIGEM
+                'folha': folha_origem if folha_origem else '0',  # FOLHA HERDADA DA ORIGEM
                 'origem': f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
-                'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}. Cartório herdado da origem: {cartorio_origem.nome}'
+                'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}. Cartório herdado da origem: {cartorio_origem.nome}. Livro: {livro_origem or "não informado"}, Folha: {folha_origem or "não informada"}'
             }
             
             # Criar documento usando CRIService com CRI da origem

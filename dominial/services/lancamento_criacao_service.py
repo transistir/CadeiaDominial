@@ -88,6 +88,17 @@ class LancamentoCriacaoService:
                 print("DEBUG: Campos do documento aplicados com sucesso")
             else:
                 print("DEBUG: Campos do documento não aplicados")
+                
+            # VALIDAR CAMPOS OBRIGATÓRIOS NO PRIMEIRO LANÇAMENTO
+            print("DEBUG: Validando campos obrigatórios no primeiro lançamento...")
+            is_primeiro_lancamento = lancamento.documento.lancamentos.count() == 1
+            
+            if is_primeiro_lancamento:
+                # Se é o primeiro lançamento, verificar se livro e folha foram definidos
+                if not lancamento.documento.livro or lancamento.documento.livro == '0':
+                    print("DEBUG: AVISO - Primeiro lançamento sem livro definido")
+                if not lancamento.documento.folha or lancamento.documento.folha == '0':
+                    print("DEBUG: AVISO - Primeiro lançamento sem folha definida")
             
             # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento (se não aplicado acima)
             print("DEBUG: Aplicando regra pétrea...")
@@ -263,6 +274,8 @@ class LancamentoCriacaoService:
     def _aplicar_campos_documento(lancamento, dados_lancamento):
         """
         Aplica os campos livro e folha do documento baseado nos dados do formulário
+        HERANÇA: Se os campos livro_origem e folha_origem estiverem preenchidos,
+        eles são convertidos em livro e folha do documento
         
         Args:
             lancamento: Objeto Lancamento
@@ -277,19 +290,41 @@ class LancamentoCriacaoService:
         livro_documento = dados_lancamento.get('livro_documento')
         folha_documento = dados_lancamento.get('folha_documento')
         
-        # Atualizar documento se os campos foram fornecidos
-        documento_atualizado = False
+        # HERANÇA: Se os campos de origem estiverem preenchidos, usar eles
+        livro_origem = dados_lancamento.get('livro_origem')
+        folha_origem = dados_lancamento.get('folha_origem')
         
+        # Priorizar campos do formulário, depois campos de origem
+        livro_final = None
+        folha_final = None
+        
+        # Se os campos do documento foram fornecidos no formulário, usar eles
         if livro_documento and livro_documento.strip():
-            documento.livro = livro_documento.strip()
-            documento_atualizado = True
+            livro_final = livro_documento.strip()
+        elif livro_origem and livro_origem.strip():
+            # Herdar do campo de origem
+            livro_final = livro_origem.strip()
         
         if folha_documento and folha_documento.strip():
-            documento.folha = folha_documento.strip()
+            folha_final = folha_documento.strip()
+        elif folha_origem and folha_origem.strip():
+            # Herdar do campo de origem
+            folha_final = folha_origem.strip()
+        
+        # Atualizar documento se algum campo foi definido
+        documento_atualizado = False
+        
+        if livro_final:
+            documento.livro = livro_final
+            documento_atualizado = True
+        
+        if folha_final:
+            documento.folha = folha_final
             documento_atualizado = True
         
         if documento_atualizado:
             documento.save()
+            print(f"DEBUG: Campos do documento aplicados - Livro: {livro_final}, Folha: {folha_final}")
             return True
         
         return False

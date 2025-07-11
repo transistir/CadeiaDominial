@@ -56,7 +56,7 @@
                 <div class="form-group">
                     <label for="titulo_transacao">Título</label>
                     <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro"
-                           value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.titulo %}{{ lancamento.titulo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="cartorio_transmissao_nome">Cartório</label>
@@ -75,17 +75,17 @@
                 <div class="form-group">
                     <label for="livro_transacao">Livro</label>
                     <input type="text" name="livro_transacao" id="livro_transacao" 
-                           value="{% if modo_edicao %}{{ lancamento.livro_transacao }}{% elif form_data %}{{ form_data.livro_transacao }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.livro_transacao %}{{ lancamento.livro_transacao }}{% elif form_data and form_data.livro_transacao %}{{ form_data.livro_transacao }}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="folha_transacao">Folha</label>
                     <input type="text" name="folha_transacao" id="folha_transacao" 
-                           value="{% if modo_edicao %}{{ lancamento.folha_transacao }}{% elif form_data %}{{ form_data.folha_transacao }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.folha_transacao %}{{ lancamento.folha_transacao }}{% elif form_data and form_data.folha_transacao %}{{ form_data.folha_transacao }}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="data_transacao">Data</label>
                     <input type="date" name="data_transacao" id="data_transacao" 
-                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_transacao }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao %}{{ form_data.data_transacao }}{% endif %}">
                 </div>
             </div>
         </div>

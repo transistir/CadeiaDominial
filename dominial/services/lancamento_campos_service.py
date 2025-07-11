@@ -165,11 +165,14 @@ class LancamentoCamposService:
     def _processar_campos_inicio_matricula(request, lancamento):
         """
         Processa campos específicos para lançamentos do tipo início de matrícula
+        HERANÇA: Livro e folha são herdados do primeiro lançamento do documento criado pela origem
         """
         # Processar múltiplas origens
         origens_completas = request.POST.getlist('origem_completa[]')
         cartorios_origem_ids = request.POST.getlist('cartorio_origem[]')
         cartorios_origem_nomes = request.POST.getlist('cartorio_origem_nome[]')
+        livros_origem = request.POST.getlist('livro_origem[]')
+        folhas_origem = request.POST.getlist('folha_origem[]')
         
         # Se há múltiplas origens, concatenar com ponto e vírgula
         if origens_completas:
@@ -177,12 +180,6 @@ class LancamentoCamposService:
             origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
             if origens_validas:
                 lancamento.origem = '; '.join(origens_validas)
-            else:
-                lancamento.origem = None
-        else:
-            # Fallback para campo único (compatibilidade)
-            origem_value = request.POST.get('origem_completa', '').strip()
-            lancamento.origem = origem_value if origem_value else None
         
         # PROCESSAR CARTÓRIO DE ORIGEM para múltiplas origens
         # Para início de matrícula, o cartório de origem é usado para criar documentos automáticos
@@ -222,6 +219,62 @@ class LancamentoCamposService:
         if cartorio_origem_encontrado:
             lancamento.cartorio_origem = cartorio_origem_encontrado
         
+        # PROCESSAR LIVRO E FOLHA DE ORIGEM para múltiplas origens
+        # HERANÇA: Buscar livro e folha do primeiro lançamento do documento criado pela origem
+        livro_origem_encontrado = None
+        folha_origem_encontrada = None
+        
+        # Primeiro, tentar herdar do primeiro lançamento do documento da origem
+        if cartorio_origem_encontrado and origens_validas:
+            # Buscar documento da origem (primeira origem válida)
+            primeira_origem = origens_validas[0]
+            # Extrair número da origem (assumindo que é o primeiro número encontrado)
+            import re
+            numero_match = re.search(r'\d+', primeira_origem)
+            if numero_match:
+                numero_origem = numero_match.group()
+                
+                # Buscar documento da origem
+                from ..models import Documento
+                documento_origem = Documento.objects.filter(
+                    numero=numero_origem,
+                    cartorio=cartorio_origem_encontrado
+                ).first()
+                
+                if documento_origem:
+                    # Buscar primeiro lançamento deste documento
+                    from ..models import Lancamento
+                    primeiro_lancamento_origem = Lancamento.objects.filter(
+                        documento=documento_origem
+                    ).order_by('id').first()
+                    
+                    if primeiro_lancamento_origem:
+                        # Herdar livro e folha do primeiro lançamento da origem
+                        if primeiro_lancamento_origem.livro_origem and primeiro_lancamento_origem.livro_origem.strip():
+                            livro_origem_encontrado = primeiro_lancamento_origem.livro_origem.strip()
+                        if primeiro_lancamento_origem.folha_origem and primeiro_lancamento_origem.folha_origem.strip():
+                            folha_origem_encontrada = primeiro_lancamento_origem.folha_origem.strip()
+        
+        # Se não encontrou por herança, usar os campos do formulário
+        if not livro_origem_encontrado:
+            for livro in livros_origem:
+                if livro and livro.strip():
+                    livro_origem_encontrado = livro.strip()
+                    break
+        
+        if not folha_origem_encontrada:
+            for folha in folhas_origem:
+                if folha and folha.strip():
+                    folha_origem_encontrada = folha.strip()
+                    break
+        
+        # Salvar livro e folha de origem encontrados no lançamento
+        if livro_origem_encontrado:
+            lancamento.livro_origem = livro_origem_encontrado
+        
+        if folha_origem_encontrada:
+            lancamento.folha_origem = folha_origem_encontrada
+        
         # Para início de matrícula, NÃO sobrescrever o cartório da matrícula
         # O cartório da matrícula já foi definido nos campos básicos
         # O cartório da origem é apenas informativo e não deve substituir o cartório da matrícula
@@ -230,7 +283,7 @@ class LancamentoCamposService:
         area_value = request.POST.get('area', '').strip()
         lancamento.area = float(area_value) if area_value else None
         
-        # Processar data de origem com validação
+        # Processar data de origem
         data_origem_value = request.POST.get('data_origem', '').strip()
         if data_origem_value:
             try:
@@ -239,11 +292,4 @@ class LancamentoCamposService:
             except ValueError:
                 lancamento.data_origem = None
         else:
-            lancamento.data_origem = None
-        
-        # Processar livro e folha de origem
-        livro_origem_value = request.POST.get('livro_origem', '').strip()
-        lancamento.livro_origem = livro_origem_value if livro_origem_value else None
-        
-        folha_origem_value = request.POST.get('folha_origem', '').strip()
-        lancamento.folha_origem = folha_origem_value if folha_origem_value else None 
+            lancamento.data_origem = None 

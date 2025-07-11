@@ -3,6 +3,36 @@
    ======================================== */
 
 /* ========================================
+   BLOCO DE INFORMAÇÕES DO DOCUMENTO
+   ======================================== */
+.field-group h4 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent-color);
+    padding-bottom: 5px;
+}
+
+/* Informações do Documento (herdadas) */
+.field-group:has(h4:contains("Informações do Documento")) {
+    background: #f8f9fa;
+    border-left: 4px solid var(--primary-color);
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+/* Informações do Lançamento (adicionadas pelo usuário) */
+.field-group:has(h4:contains("Informações do Lançamento")) {
+    background: #fff3cd;
+    border-left: 4px solid var(--warning-color);
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+/* ========================================
    CAMPOS CONDICIONAIS
    ======================================== */
 .field-group.hidden {
@@ -194,6 +224,39 @@
     flex: 1;
 }
 
+/* Campos específicos de origem */
+.origem-field {
+    flex: 2; /* Origem tem mais espaço */
+}
+
+.cartorio-field {
+    flex: 2; /* Cartório tem mais espaço */
+}
+
+.livro-field {
+    flex: 1; /* Livro tem espaço médio */
+}
+
+.folha-field {
+    flex: 1; /* Folha tem espaço médio */
+}
+
+.livro-origem,
+.folha-origem {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.livro-origem:focus,
+.folha-origem:focus {
+    border-color: var(--accent-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
 .remove-origem {
     padding: 4px 8px;
     background: var(--danger-color);
@@ -364,4 +427,28 @@
     color: #495057;
     display: block;
     margin-bottom: 5px;
+}
+
+/* ========================================
+   CAMPOS DE DISPLAY (LABELS)
+   ======================================== */
+.field-display {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+.field-value {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.field-display .field-value:empty::before {
+    content: "Não informado";
+    color: #6c757d;
+    font-style: italic;
 } 

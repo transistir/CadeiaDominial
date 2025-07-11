@@ -1,3 +1,4 @@
+<!-- Informações do Documento (herdadas da origem) -->
 <div class="field-group">
     <h4>Informações do Documento</h4>
     
@@ -26,6 +27,36 @@
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ documento.cartorio.nome }}">
     </div>
     {% endif %}
+    
+    <div class="grid-3">
+        <div class="form-group">
+            <label for="livro_documento">Livro do Documento *</label>
+            <input type="text" name="livro_documento" id="livro_documento" required
+                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif modo_edicao and lancamento.livro_origem %}{{ lancamento.livro_origem }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
+                   placeholder="Ex: 1, 2, A, etc.">
+            <small class="form-text text-muted">Livro do documento atual (herdado da origem)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="folha_documento">Folha do Documento *</label>
+            <input type="text" name="folha_documento" id="folha_documento" required
+                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif modo_edicao and lancamento.folha_origem %}{{ lancamento.folha_origem }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
+                   placeholder="Ex: 1, 2, A, etc.">
+            <small class="form-text text-muted">Folha do documento atual (herdada da origem)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="sigla_documento">Sigla do Documento</label>
+            <input type="text" name="sigla_documento" id="sigla_documento" readonly
+                   value="{{ documento.numero }}" style="background-color: #f8f9fa;">
+            <small class="form-text text-muted">Sigla do documento (herdada da origem)</small>
+        </div>
+    </div>
+</div>
+
+<!-- Informações do Lançamento (adicionadas pelo usuário) -->
+<div class="field-group">
+    <h4>Informações do Lançamento</h4>
     
     <div class="form-group">
         <label for="tipo_lancamento">Tipo de Lançamento *</label>
@@ -66,63 +97,10 @@
         <input type="hidden" name="documento_id" value="{{ documento.id }}">
     </div>
 
-    <div class="grid-3">
-        <div class="form-group">
-            <label for="livro_documento">Livro do Documento *</label>
-            <input type="text" name="livro_documento" id="livro_documento" required
-                   value="{% if modo_edicao %}{{ lancamento.documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
-                   placeholder="Ex: 1, 2, A, etc.">
-            <small class="form-text text-muted">Livro do documento atual (será aplicado ao documento)</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="folha_documento">Folha do Documento *</label>
-            <input type="text" name="folha_documento" id="folha_documento" required
-                   value="{% if modo_edicao %}{{ lancamento.documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
-                   placeholder="Ex: 1, 2, A, etc.">
-            <small class="form-text text-muted">Folha do documento atual (será aplicada ao documento)</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="data">Data *</label>
-            <input type="date" name="data" id="data" required
-                   value="{% if modo_edicao %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
-        </div>
+    <div class="form-group">
+        <label for="data">Data do Lançamento *</label>
+        <input type="date" name="data" id="data" required
+               value="{% if modo_edicao and lancamento.data %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
+        <small class="form-text text-muted">Data do lançamento atual</small>
     </div>
-</div>
-
-<!-- Seção de Informações de Origem (apenas para início de matrícula) -->
-{% if not is_primeiro_lancamento %}
-<div class="field-group" id="informacoes-origem">
-    <h4>Informações de Origem</h4>
-    <small class="form-text text-muted">
-        <strong>💡 Dica:</strong> Estas informações são sobre outros documentos que originaram este lançamento.
-        Elas são diferentes dos campos "Livro/Folha do Documento" acima.
-    </small>
-    
-    <div class="grid-3">
-        <div class="form-group">
-            <label for="livro_origem">Livro da Origem</label>
-            <input type="text" name="livro_origem" id="livro_origem"
-                   value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem }}{% endif %}"
-                   placeholder="Ex: 1, 2, A, etc.">
-            <small class="form-text text-muted">Livro do documento de origem</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="folha_origem">Folha da Origem</label>
-            <input type="text" name="folha_origem" id="folha_origem"
-                   value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem }}{% endif %}"
-                   placeholder="Ex: 1, 2, A, etc.">
-            <small class="form-text text-muted">Folha do documento de origem</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="data_origem">Data da Origem</label>
-            <input type="date" name="data_origem" id="data_origem"
-                   value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data_origem }}{% endif %}">
-            <small class="form-text text-muted">Data do documento de origem</small>
-        </div>
-    </div>
-</div>
-{% endif %} 
+</div> 

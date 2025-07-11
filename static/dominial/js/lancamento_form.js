@@ -502,6 +502,14 @@ function adicionarOrigem() {
                 <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
             </div>
         </div>
+        <div class="form-group livro-field">
+            <input type="text" name="livro_origem[]" id="livro_origem_${newIndex}" class="livro-origem" 
+                   placeholder="Ex: 1, 2, A, etc.">
+        </div>
+        <div class="form-group folha-field">
+            <input type="text" name="folha_origem[]" id="folha_origem_${newIndex}" class="folha-origem" 
+                   placeholder="Ex: 1, 2, A, etc.">
+        </div>
         <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
     `;
     container.appendChild(origemDiv);
