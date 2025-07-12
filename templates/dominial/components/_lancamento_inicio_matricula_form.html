@@ -2,6 +2,11 @@
     <h4>Campos Específicos - Início de Matrícula</h4>
     
     <div class="form-group">
+        <label>Transmitente(s)</label>
+        {% include "dominial/components/_pessoa_form.html" with tipo="transmitente" label="Transmitente(s)" container_id="transmitentes-container-inicio" sugestao_class="transmitente-suggestions" pessoas=transmitentes %}
+    </div>
+    
+    <div class="form-group">
         <label>Adquirente(s)</label>
         {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container-inicio" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
     </div>
