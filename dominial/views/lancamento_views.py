@@ -137,6 +137,8 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'pessoas': pessoas,
         'cartorios': cartorios,
         'tipos_lancamento': tipos_lancamento,
+        'transmitentes': [],
+        'adquirentes': [],
     }
     
     # Verificar se é o primeiro lançamento do documento

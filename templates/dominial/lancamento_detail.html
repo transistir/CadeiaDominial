@@ -427,7 +427,7 @@
                         <h3>👥 Pessoas Envolvidas</h3>
                     </div>
                     <div class="card-content">
-                        {% if lancamento.tipo.tipo == 'registro' %}
+                        {% if lancamento.tipo.tipo == 'registro' or lancamento.tipo.tipo == 'averbacao' %}
                             {% if transmitentes %}
                             <div class="pessoas-section">
                                 <h4 class="pessoas-title transmitentes">📤 Transmitentes</h4>

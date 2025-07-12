@@ -222,8 +222,8 @@
                             {% endif %}
                         </td>
                         <td class="td-pessoas">
-                            {% if lancamento.tipo.tipo == 'registro' %}
-                                <!-- PESSOAS ESPECÍFICAS PARA REGISTRO -->
+                            {% if lancamento.tipo.tipo == 'registro' or lancamento.tipo.tipo == 'averbacao' %}
+                                <!-- PESSOAS ESPECÍFICAS PARA REGISTRO E AVERBAÇÃO -->
                                 <div class="pessoas-registro">
                                     {% with transmitentes=lancamento.pessoas.all|slice:":2" %}
                                         {% if transmitentes %}
