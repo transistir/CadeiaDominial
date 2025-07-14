@@ -167,10 +167,6 @@ class LancamentoCamposService:
         Processa campos específicos para lançamentos do tipo início de matrícula
         HERANÇA: Livro e folha são herdados do primeiro lançamento do documento criado pela origem
         """
-        # Processar pessoas (transmitentes e adquirentes)
-        from ..services.lancamento_pessoa_service import LancamentoPessoaService
-        LancamentoPessoaService.processar_pessoas(request, lancamento)
-        
         # Processar múltiplas origens
         origens_completas = request.POST.getlist('origem_completa[]')
         cartorios_origem_ids = request.POST.getlist('cartorio_origem[]')
