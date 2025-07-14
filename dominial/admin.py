@@ -6,6 +6,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction
+from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
@@ -28,12 +29,31 @@ admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
 
+class NumeroDocumentoFilter(admin.SimpleListFilter):
+    title = 'Número do Documento'
+    parameter_name = 'numero'
+
+    def lookups(self, request, model_admin):
+        # Buscar números únicos que aparecem mais de uma vez
+        from django.db.models import Count
+        numeros_duplicados = Documento.objects.values('numero').annotate(
+            count=Count('id')
+        ).filter(count__gt=1).order_by('numero')
+        
+        return [(doc['numero'], f"{doc['numero']} ({doc['count']} docs)") for doc in numeros_duplicados]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(numero=self.value())
+        return queryset
+
 @admin.register(Documento)
 class DocumentoAdmin(admin.ModelAdmin):
-    list_display = ['numero', 'tipo', 'data', 'cartorio', 'imovel', 'livro', 'folha']
-    list_filter = ['tipo', 'data', 'cartorio', 'imovel__terra_indigena_id']
+    list_display = ['numero', 'tipo', 'data', 'cartorio', 'imovel', 'livro', 'folha', 'contagem_lancamentos']
+    list_filter = ['tipo', 'data', NumeroDocumentoFilter]
     search_fields = ['numero', 'cartorio__nome', 'imovel__matricula', 'imovel__terra_indigena_id__nome']
     date_hierarchy = 'data'
+    list_per_page = 50  # Mostrar mais itens por página
     
     fieldsets = (
         ('Informações Básicas', {
@@ -51,7 +71,17 @@ class DocumentoAdmin(admin.ModelAdmin):
     )
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('cartorio', 'imovel', 'imovel__terra_indigena_id', 'tipo')
+        return super().get_queryset(request).select_related(
+            'cartorio', 'imovel', 'imovel__terra_indigena_id', 'tipo'
+        ).prefetch_related('lancamentos')
+    
+    def contagem_lancamentos(self, obj):
+        """
+        Retorna a contagem de lançamentos
+        """
+        return obj.lancamentos.count()
+    contagem_lancamentos.short_description = 'Lançamentos'
+    contagem_lancamentos.admin_order_field = 'lancamentos__count'
     
     def save_model(self, request, obj, form, change):
         """
@@ -78,6 +108,43 @@ class DocumentoAdmin(admin.ModelAdmin):
                 request, 
                 f'✅ Cartório do documento {obj.numero} alterado com sucesso para {obj.cartorio.nome}.'
             )
+    
+    actions = ['investigar_duplicatas']
+    
+    def investigar_duplicatas(self, request, queryset):
+        """
+        Ação para investigar documentos com mesmo número mesmo em cartórios diferentes
+        """
+        from django.contrib import messages
+        from django.db.models import Count
+        
+        # Se há documentos selecionados, buscar números desses documentos
+        if queryset.exists():
+            numeros_selecionados = queryset.values_list('numero', flat=True).distinct()
+            
+            # Buscar TODOS os documentos com esses números (não apenas os selecionados)
+            duplicatas = Documento.objects.filter(numero__in=numeros_selecionados).values('numero').annotate(
+                count=Count('id')
+            ).filter(count__gt=1)
+        else:
+            # Se nenhum documento selecionado, buscar todos os duplicados
+            duplicatas = Documento.objects.values('numero').annotate(
+                count=Count('id')
+            ).filter(count__gt=1)
+        
+        if duplicatas:
+            mensagem = "🔍 Documentos com mesmo número encontrados:\n"
+            for dup in duplicatas:
+                numero = dup['numero']
+                documentos = Documento.objects.filter(numero=numero).select_related('cartorio').order_by('cartorio__nome')
+                mensagem += f"\n📋 Número: {numero} ({dup['count']} documentos):\n"
+                for doc in documentos:
+                    mensagem += f"  - ID: {doc.id}, Cartório: {doc.cartorio.nome}, Data: {doc.data}\n"
+            messages.warning(request, mensagem)
+        else:
+            messages.success(request, "✅ Nenhum documento com mesmo número encontrado.")
+    
+    investigar_duplicatas.short_description = "🔍 Investigar documentos com mesmo número"
 
 @admin.register(Lancamento)
 class LancamentoAdmin(admin.ModelAdmin):
