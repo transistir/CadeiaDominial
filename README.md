@@ -2,16 +2,18 @@
 
 Sistema web para gestão e visualização de cadeias dominiais de terras indígenas, desenvolvido em Django.
 
-## 📚 Documentação
+![Sistema de Cadeia Dominial](printpage.png)
+
+## Documentação
 
 Toda a documentação está organizada na pasta [`docs/`](docs/README.md):
 
-- **🚀 Deploy e Produção**: Checklists, guias de deploy e configuração
-- **🔧 Refatoração**: Documentação das melhorias implementadas
-- **🏛️ Cartórios**: Análise e planejamento da estrutura de cartórios
-- **📋 Planejamento**: Prioridades e estratégias de implementação
+- **Deploy e Produção**: Checklists, guias de deploy e configuração
+- **Refatoração**: Documentação das melhorias implementadas
+- **Cartórios**: Análise e planejamento da estrutura de cartórios
+- **Planejamento**: Prioridades e estratégias de implementação
 
-## 🧪 Scripts de Teste
+## Scripts de Teste
 
 Scripts de teste e análise estão na pasta [`tests_scripts/`](tests_scripts/):
 
@@ -19,13 +21,13 @@ Scripts de teste e análise estão na pasta [`tests_scripts/`](tests_scripts/):
 - Análise de estrutura de cartórios
 - Testes de integração
 
-## 🚀 Versão Beta v1.0.0
+## Versão Beta v1.0.0
 
 Esta é a primeira versão beta do sistema, disponível para testes com clientes.
 
 ### Funcionalidades Implementadas
 
-#### 📋 Gestão de Dados
+#### Gestão de Dados
 - **TIs (Terras Indígenas)**: Cadastro e gestão de terras indígenas
 - **Imóveis**: Registro de imóveis com matrícula, SNCR e SIGEF
 - **Cartórios**: Base de dados de cartórios brasileiros
@@ -33,25 +35,25 @@ Esta é a primeira versão beta do sistema, disponível para testes com clientes
 - **Documentos**: Gestão de matrículas e transcrições
 - **Lançamentos**: Registro de averbações, registros e alterações
 
-#### 🌳 Visualização em Árvore
+#### Visualização em Árvore
 - **Diagrama Interativo**: Visualização da cadeia dominial em formato de árvore
 - **Zoom e Pan**: Navegação fluida com controles de zoom
 - **Cards Dinâmicos**: Tamanho ajustável baseado na quantidade de documentos
 - **Conexões Visuais**: Linhas conectando documentos relacionados
 - **Origens Identificadas**: Detecção automática de documentos de origem
 
-#### 🎨 Interface Moderna
+#### Interface Moderna
 - **Design Responsivo**: Adaptável a diferentes tamanhos de tela
 - **Tema Consistente**: Interface unificada e profissional
 - **Navegação Intuitiva**: Menu e botões organizados logicamente
 - **Feedback Visual**: Efeitos de hover e transições suaves
 
-#### 🔐 Segurança
+#### Segurança
 - **Autenticação**: Sistema de login/logout
 - **Autorização**: Controle de acesso baseado em permissões
 - **Validação**: Verificação de dados e integridade
 
-## 🛠️ Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
 - **Backend**: Django 5.2.1
 - **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
@@ -59,7 +61,7 @@ Esta é a primeira versão beta do sistema, disponível para testes com clientes
 - **Geolocalização**: GeoDjango (PostGIS)
 - **Autocomplete**: Django Autocomplete Light
 
-## 📦 Instalação
+## Instalação
 
 ### Pré-requisitos
 - Python 3.8+
@@ -108,7 +110,7 @@ python manage.py criar_tipos_lancamento
 python manage.py runserver
 ```
 
-## 🎯 Como Usar
+## Como Usar
 
 ### Acesso ao Sistema
 - URL: `http://localhost:8000`
@@ -128,7 +130,7 @@ python manage.py runserver
 - Clique nos cards para ver detalhes
 - Arraste para mover a visualização
 
-## 🔄 Estratégia de Versionamento
+## Estratégia de Versionamento
 
 ### Branches
 - **`main`**: Código estável e testado
@@ -141,7 +143,7 @@ python manage.py runserver
 - **`v1.0.0`**: Versão estável (futuro)
 - **`v1.1.0`**: Novas funcionalidades (futuro)
 
-## 📝 Próximas Versões
+## Próximas Versões
 
 ### v1.1.0 (Planejado)
 - [ ] Relatórios em PDF
@@ -155,7 +157,7 @@ python manage.py runserver
 - [ ] Módulo de auditoria
 - [ ] Backup automático
 
-## 🤝 Contribuição
+## Contribuição
 
 1. Faça um fork do projeto
 2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
@@ -163,16 +165,16 @@ python manage.py runserver
 4. Push para a branch (`git push origin feature/AmazingFeature`)
 5. Abra um Pull Request
 
-## 📞 Suporte
+## Suporte
 
 Para dúvidas, sugestões ou problemas:
 - Abra uma [Issue](https://github.com/transistir/CadeiaDominial/issues)
 - Entre em contato com a equipe de desenvolvimento
 
-## 📄 Licença
+## Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
 ---
 
-**Desenvolvido com ❤️ pela equipe Transistir**
+**Desenvolvido pela equipe Transistir**
