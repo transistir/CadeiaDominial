@@ -206,8 +206,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             finalizar = request.POST.get('finalizar') == 'on'
             
             if finalizar:
-                # Redirecionar para a visualização dos lançamentos do documento
-                return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
+                # Redirecionar para a visualização detalhada do documento
+                return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
             else:
                 # Redirecionar para criar um novo lançamento no mesmo documento
                 return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
@@ -246,7 +246,7 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
             numero_lancamento = lancamento.numero_lancamento or f"Lançamento {lancamento.id}"
             lancamento.delete()
             messages.success(request, f'Lançamento "{numero_lancamento}" excluído com sucesso!')
-            return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
+            return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
         except Exception as e:
             messages.error(request, f'Erro ao excluir lançamento: {str(e)}')
     

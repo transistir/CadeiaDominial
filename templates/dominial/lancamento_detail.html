@@ -18,7 +18,7 @@
             <span class="breadcrumb-separator">›</span>
             <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="breadcrumb-item">{{ imovel.matricula }}</a>
             <span class="breadcrumb-separator">›</span>
-            <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="breadcrumb-item">{{ documento.numero }}</a>
+            <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="breadcrumb-item">{{ documento.numero }}</a>
             <span class="breadcrumb-separator">›</span>
             <span class="breadcrumb-item active">{{ lancamento.numero_lancamento|default:"Lançamento" }}</span>
             </nav>
@@ -601,7 +601,7 @@
     <!-- Navegação -->
     <div class="navigation-section">
         <div class="nav-buttons">
-                <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" 
+                <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" 
                class="nav-button secondary">
                 ← Voltar aos Lançamentos
                 </a>

@@ -170,6 +170,7 @@ def selecionar_documento_lancamento(request, tis_id, imovel_id):
 def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
     """
     Cria um documento automaticamente baseado no código de origem fornecido.
+    CORREÇÃO: Não usar cartório da matrícula atual, mas determinar baseado no contexto
     """
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
@@ -196,17 +197,52 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         # Obter o tipo de documento
         tipo_doc = DocumentoTipo.objects.get(tipo=tipo_documento)
         
+        # CORREÇÃO: Determinar cartório baseado na posição na cadeia dominial
+        # Se é o primeiro documento (matrícula atual) → usar cartório do imóvel
+        # Se não é o primeiro → buscar cartório de origem do lançamento do início da matrícula
+        cartorio_documento = None
+        
+        # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
+        if codigo_origem == imovel.matricula:
+            # É o primeiro documento da cadeia dominial - usar cartório do imóvel
+            cartorio_documento = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+        else:
+            # Não é o primeiro documento - buscar cartório de origem do lançamento do início da matrícula
+            from ..models import Lancamento, LancamentoTipo
+            
+            # Buscar o primeiro lançamento do tipo 'inicio_matricula' para obter o cartório de origem
+            lancamento_inicio_matricula = Lancamento.objects.filter(
+                documento__imovel=imovel,
+                tipo__tipo='inicio_matricula'
+            ).select_related('cartorio_origem').order_by('id').first()
+            
+            if lancamento_inicio_matricula and lancamento_inicio_matricula.cartorio_origem:
+                # Usar o cartório de origem do primeiro lançamento do início da matrícula
+                cartorio_documento = lancamento_inicio_matricula.cartorio_origem
+            else:
+                # Fallback: buscar em qualquer lançamento que tenha cartório de origem
+                lancamento_com_origem = Lancamento.objects.filter(
+                    documento__imovel=imovel,
+                    cartorio_origem__isnull=False
+                ).select_related('cartorio_origem').first()
+                
+                if lancamento_com_origem and lancamento_com_origem.cartorio_origem:
+                    cartorio_documento = lancamento_com_origem.cartorio_origem
+                else:
+                    # Último fallback: usar cartório do imóvel ou primeiro cartório disponível
+                    cartorio_documento = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+        
         # Criar o documento
         documento = Documento.objects.create(
             imovel=imovel,
             tipo=tipo_doc,
             numero=codigo_origem,
             data=date.today(),
-            cartorio=imovel.cartorio if imovel.cartorio else Cartorios.objects.first(),
+            cartorio=cartorio_documento,
             livro='1',  # Livro padrão
             folha='1',  # Folha padrão
             origem=f'Criado automaticamente a partir de origem: {codigo_origem}',
-            observacoes=f'Documento criado automaticamente ao clicar no card de origem "{codigo_origem}"'
+            observacoes=f'Documento criado automaticamente ao clicar no card de origem "{codigo_origem}". Cartório determinado baseado na posição na cadeia dominial: {"primeiro documento (matrícula atual)" if codigo_origem == imovel.matricula else "documento subsequente (origem do início da matrícula)"}.'
         )
         
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -218,8 +254,8 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         
         messages.success(request, f'Documento "{codigo_origem}" criado com sucesso!')
         
-        # Redirecionar para o novo documento
-        return redirect('documento_lancamentos', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento.id)
+        # Redirecionar para a visualização detalhada do novo documento
+        return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento.id)
         
     except DocumentoTipo.DoesNotExist:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

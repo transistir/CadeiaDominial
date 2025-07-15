@@ -82,7 +82,7 @@
             <button type="submit" class="btn btn-primary">
                 {% if modo == 'editar' %}Atualizar{% else %}Criar{% endif %} Documento
             </button>
-            <a href="{% url 'documento_lancamentos' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">
+            <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">
                 Cancelar
             </a>
         </div>

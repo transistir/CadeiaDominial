@@ -212,7 +212,7 @@ function criarCardDocumento(doc) {
 
 // Abrir documento
 function abrirDocumento(documentoId) {
-    const url = `/dominial/documento/${documentoId}/lancamentos/${window.tisId}/${window.imovelId}/`;
+    const url = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${documentoId}/detalhado/`;
     window.location.href = url;
 }
 

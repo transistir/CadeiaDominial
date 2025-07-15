@@ -5,6 +5,84 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}">
+<style>
+    .lancamento-row {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    .lancamento-row:hover {
+        background-color: #f8f9fa !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .lancamento-row:active {
+        background-color: #e9ecef !important;
+    }
+    
+    /* Evitar que links dentro da linha propaguem o clique */
+    .lancamento-row a {
+        pointer-events: auto;
+    }
+    
+    /* Indicador visual de que a linha é clicável */
+    .lancamento-row::after {
+        content: "✏️";
+        position: absolute;
+        right: 10px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .lancamento-row:hover::after {
+        opacity: 0.7;
+    }
+    
+    .acoes-cell {
+        text-align: center;
+        width: 80px;
+        white-space: nowrap;
+    }
+    
+    .btn-edit-lancamento {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+    }
+    
+    .btn-edit-lancamento:hover {
+        background-color: #007bff;
+        color: white;
+    }
+    
+    .btn-delete-lancamento {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+        margin-left: 4px;
+    }
+    
+    .btn-delete-lancamento:hover {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .table-header-info {
+        margin-bottom: 10px;
+        padding: 8px 12px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        border-left: 4px solid #007bff;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -95,6 +173,9 @@
     {% if tem_lancamentos %}
         <!-- Tabela de Lançamentos -->
         <div class="cadeia-tabela-container">
+            <div class="table-header-info">
+                <small class="text-muted">💡 Dica: Clique em qualquer linha para editar o lançamento | Use os botões ✏️ para editar e 🗑️ para excluir</small>
+            </div>
             <table class="cadeia-tabela-planilha">
                 <thead>
                     <tr>
@@ -104,6 +185,7 @@
                         <th rowspan="2">Área (ha)</th>
                         <th rowspan="2">Origem</th>
                         <th rowspan="2">Observações</th>
+                        <th rowspan="2">Ações</th>
                     </tr>
                     <tr>
                         <!-- Matrícula -->
@@ -126,7 +208,9 @@
                 </thead>
                 <tbody>
                     {% for lancamento in lancamentos %}
-                    <tr class="planilha-row {% cycle 'linha-par' 'linha-impar' %}">
+                    <tr class="planilha-row {% cycle 'linha-par' 'linha-impar' %} lancamento-row" 
+                        data-lancamento-id="{{ lancamento.id }}"
+                        onclick="editarLancamento({{ lancamento.id }})">
                         <!-- Matrícula -->
                         <td>{{ lancamento.numero_lancamento }}</td>
                         <td>{{ documento.livro|default_if_none:"-" }}</td>
@@ -182,6 +266,14 @@
                         <td>{{ lancamento.area|default_if_none:"-" }}</td>
                         <td>{{ lancamento.origem|default_if_none:"-" }}</td>
                         <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                        <td class="acoes-cell">
+                            <button class="btn-edit-lancamento" onclick="event.stopPropagation(); editarLancamento({{ lancamento.id }})" title="Editar lançamento">
+                                ✏️
+                            </button>
+                            <button class="btn-delete-lancamento" onclick="event.stopPropagation(); excluirLancamento({{ lancamento.id }}, '{{ lancamento.numero_lancamento }}')" title="Excluir lançamento">
+                                🗑️
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -204,4 +296,43 @@
         </a>
     </div>
 </div>
+
+<script>
+    function editarLancamento(lancamentoId) {
+        // Verificar se o clique foi em um link (como "Ler mais")
+        if (event.target.tagName === 'A' || event.target.closest('a')) {
+            return; // Não redirecionar se clicou em um link
+        }
+        
+        // Redirecionar para a página de edição do lançamento
+        const url = `/dominial/tis/{{ tis.id }}/imovel/{{ imovel.id }}/lancamento/${lancamentoId}/editar/`;
+        window.location.href = url;
+    }
+    
+    function excluirLancamento(lancamentoId, numeroLancamento) {
+        // Confirmar exclusão
+        if (!confirm(`Tem certeza que deseja excluir o lançamento "${numeroLancamento}"?\n\nEsta ação não pode ser desfeita.`)) {
+            return;
+        }
+        
+        // Redirecionar para a página de exclusão do lançamento
+        const url = `/dominial/tis/{{ tis.id }}/imovel/{{ imovel.id }}/lancamento/${lancamentoId}/excluir/`;
+        window.location.href = url;
+    }
+    
+    function toggleDescricao(element) {
+        const descricaoCurta = element.previousElementSibling.previousElementSibling;
+        const descricaoCompleta = element.previousElementSibling;
+        
+        if (descricaoCompleta.style.display === 'none') {
+            descricaoCurta.style.display = 'none';
+            descricaoCompleta.style.display = 'inline';
+            element.textContent = 'Ler menos';
+        } else {
+            descricaoCurta.style.display = 'inline';
+            descricaoCompleta.style.display = 'none';
+            element.textContent = 'Ler mais';
+        }
+    }
+</script>
 {% endblock %} 
