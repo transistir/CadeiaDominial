@@ -231,6 +231,36 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'modo_edicao': True
     }
     
+    # Preparar dados para o template
+    if context['modo_edicao'] and lancamento.origem:
+        # Separar múltiplas origens para o template
+        origens_separadas = []
+        if ';' in lancamento.origem:
+            origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+            for i, origem in enumerate(origens_list):
+                origens_separadas.append({
+                    'texto': origem,
+                    'index': i,
+                    'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                    'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                    'livro': lancamento.livro_origem,
+                    'folha': lancamento.folha_origem
+                })
+        else:
+            # Uma única origem
+            origens_separadas.append({
+                'texto': lancamento.origem,
+                'index': 0,
+                'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                'livro': lancamento.livro_origem,
+                'folha': lancamento.folha_origem
+            })
+    else:
+        origens_separadas = []
+    
+    context['origens_separadas'] = origens_separadas
+    
     return render(request, 'dominial/lancamento_form.html', context)
 
 @login_required

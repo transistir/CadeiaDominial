@@ -529,11 +529,31 @@ function adicionarOrigem() {
 
 // Função para configurar autocomplete geral de origens
 function setupOrigemAutocomplete() {
-    const cartorioOrigemInput = document.getElementById('cartorio_origem_nome');
-    const cartorioOrigemHidden = document.getElementById('cartorio_origem');
-    const cartorioOrigemSuggestions = document.querySelector('.cartorio-origem-suggestions');
+    console.log('Configurando autocomplete para origens...');
     
-    if (cartorioOrigemInput && cartorioOrigemHidden && cartorioOrigemSuggestions) {
-        setupCartorioAutocomplete(cartorioOrigemInput, cartorioOrigemHidden, cartorioOrigemSuggestions);
-    }
+    // Configurar autocomplete para todos os campos de cartório de origem
+    const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
+    console.log('Encontrados', cartorioOrigemInputs.length, 'campos de cartório de origem');
+    
+    cartorioOrigemInputs.forEach((input, index) => {
+        console.log(`Configurando campo ${index}:`, input.id);
+        
+        // Buscar o campo hidden correspondente
+        const hidden = input.closest('.autocomplete-container').querySelector('.cartorio-origem-id');
+        const suggestions = input.closest('.autocomplete-container').querySelector('.cartorio-origem-suggestions');
+        
+        console.log('Hidden field:', hidden ? hidden.id : 'não encontrado');
+        console.log('Suggestions:', suggestions ? 'encontrado' : 'não encontrado');
+        
+        if (input && hidden && suggestions) {
+            setupCartorioAutocomplete(input, hidden, suggestions);
+            console.log(`Autocomplete configurado para campo ${index}`);
+        } else {
+            console.error(`Erro ao configurar autocomplete para campo ${index}:`, {
+                input: !!input,
+                hidden: !!hidden,
+                suggestions: !!suggestions
+            });
+        }
+    });
 } 

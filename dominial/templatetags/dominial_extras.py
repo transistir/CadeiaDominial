@@ -16,4 +16,18 @@ def format_status(status):
     # Converter para lowercase e remover espaços para usar como classe CSS
     return status.lower().replace(' ', '-').replace('ã', 'a').replace('ç', 'c')
 
+@register.filter
+def split(value, arg):
+    """Template filter para dividir uma string por um separador"""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(arg) if item.strip()]
+
+@register.filter
+def strip(value):
+    """Template filter para remover espaços em branco"""
+    if not value:
+        return ''
+    return value.strip()
+
  

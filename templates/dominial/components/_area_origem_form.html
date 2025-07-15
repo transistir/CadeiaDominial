@@ -29,40 +29,62 @@
             <label>Folha da Origem</label>
         </div>
         {% if modo_edicao %}
-            <div class="origem-item">
-                <div class="form-group origem-field">
-                    <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
-                           placeholder="Ex: Número do registro anterior, descrição, etc." 
-                           value="{{ lancamento.origem }}">
-                </div>
-                <div class="form-group cartorio-field">
-                    <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off" 
-                               value="{% if lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% endif %}">
-                        <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id" 
-                               value="{% if lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% endif %}">
-                        <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+            {% if origens_separadas %}
+                {% for origem in origens_separadas %}
+                <div class="origem-item">
+                    <div class="form-group origem-field">
+                        <input type="text" name="origem_completa[]" id="origem_completa_{{ origem.index }}" class="origem-texto" 
+                               placeholder="Ex: Número do registro anterior, descrição, etc." 
+                               value="{{ origem.texto }}">
                     </div>
-                </div>
-                <div class="form-group livro-field">
-                    <label>Livro da Origem</label>
-                    <div class="field-display">
-                        <span class="field-value">{{ lancamento.livro_origem|default:"Não informado" }}</span>
+                    <div class="form-group cartorio-field">
+                        <div class="autocomplete-container">
+                            <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_{{ origem.index }}" class="cartorio-origem-nome" 
+                                   placeholder="Digite o nome do cartório" autocomplete="off" 
+                                   value="{{ origem.cartorio_nome }}">
+                            <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_{{ origem.index }}" class="cartorio-origem-id" 
+                                   value="{{ origem.cartorio_id }}">
+                            <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+                        </div>
                     </div>
-                    <input type="hidden" name="livro_origem[]" id="livro_origem" class="livro-origem" 
-                           value="{% if lancamento.livro_origem %}{{ lancamento.livro_origem }}{% endif %}">
-                </div>
-                <div class="form-group folha-field">
-                    <label>Folha da Origem</label>
-                    <div class="field-display">
-                        <span class="field-value">{{ lancamento.folha_origem|default:"Não informado" }}</span>
+                    <div class="form-group livro-field">
+                        <input type="text" name="livro_origem[]" id="livro_origem_{{ origem.index }}" class="livro-origem" 
+                               placeholder="Ex: 1, 2, A, etc." 
+                               value="{{ origem.livro }}">
                     </div>
-                    <input type="hidden" name="folha_origem[]" id="folha_origem" class="folha-origem" 
-                           value="{% if lancamento.folha_origem %}{{ lancamento.folha_origem }}{% endif %}">
+                    <div class="form-group folha-field">
+                        <input type="text" name="folha_origem[]" id="folha_origem_{{ origem.index }}" class="folha-origem" 
+                               placeholder="Ex: 1, 2, A, etc." 
+                               value="{{ origem.folha }}">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
                 </div>
-                <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
-            </div>
+                {% endfor %}
+            {% else %}
+                <div class="origem-item">
+                    <div class="form-group origem-field">
+                        <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
+                               placeholder="Ex: Número do registro anterior, descrição, etc.">
+                    </div>
+                    <div class="form-group cartorio-field">
+                        <div class="autocomplete-container">
+                            <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                                   placeholder="Digite o nome do cartório" autocomplete="off">
+                            <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id">
+                            <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+                        </div>
+                    </div>
+                    <div class="form-group livro-field">
+                        <input type="text" name="livro_origem[]" id="livro_origem" class="livro-origem" 
+                               placeholder="Ex: 1, 2, A, etc.">
+                    </div>
+                    <div class="form-group folha-field">
+                        <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
+                               placeholder="Ex: 1, 2, A, etc.">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+                </div>
+            {% endif %}
         {% else %}
             <div class="origem-item">
                 <div class="form-group origem-field">

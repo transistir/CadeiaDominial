@@ -182,42 +182,73 @@ class LancamentoCamposService:
                 lancamento.origem = '; '.join(origens_validas)
         
         # PROCESSAR CARTÓRIO DE ORIGEM para múltiplas origens
+        # CORREÇÃO: Associar cada origem com seu respectivo cartório
         # Para início de matrícula, o cartório de origem é usado para criar documentos automáticos
-        # Usar o primeiro cartório de origem válido encontrado
         cartorio_origem_encontrado = None
         
-        # Tentar encontrar cartório por ID primeiro
-        for cartorio_id in cartorios_origem_ids:
-            if cartorio_id and cartorio_id.strip():
-                try:
-                    cartorio = Cartorios.objects.get(id=cartorio_id)
-                    cartorio_origem_encontrado = cartorio
-                    break
-                except Cartorios.DoesNotExist:
-                    continue
+        # Criar mapeamento de origens com seus respectivos cartórios
+        origens_com_cartorios = []
         
-        # Se não encontrou por ID, tentar por nome
-        if not cartorio_origem_encontrado:
-            for cartorio_nome in cartorios_origem_nomes:
-                if cartorio_nome and cartorio_nome.strip():
+        for i, origem in enumerate(origens_completas):
+            if origem and origem.strip():
+                cartorio_origem = None
+                
+                # Tentar encontrar cartório por ID primeiro
+                if i < len(cartorios_origem_ids) and cartorios_origem_ids[i] and cartorios_origem_ids[i].strip():
                     try:
-                        cartorio = Cartorios.objects.get(nome__iexact=cartorio_nome)
-                        cartorio_origem_encontrado = cartorio
-                        break
+                        cartorio_origem = Cartorios.objects.get(id=cartorios_origem_ids[i])
+                    except Cartorios.DoesNotExist:
+                        pass
+                
+                # Se não encontrou por ID, tentar por nome
+                if not cartorio_origem and i < len(cartorios_origem_nomes) and cartorios_origem_nomes[i] and cartorios_origem_nomes[i].strip():
+                    try:
+                        cartorio_origem = Cartorios.objects.get(nome__iexact=cartorios_origem_nomes[i])
                     except Cartorios.DoesNotExist:
                         # Criar novo cartório se não existir
                         cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                        cartorio = Cartorios.objects.create(
-                            nome=cartorio_nome,
+                        cartorio_origem = Cartorios.objects.create(
+                            nome=cartorios_origem_nomes[i],
                             cns=cns_unico,
                             cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                         )
-                        cartorio_origem_encontrado = cartorio
-                        break
+                
+                # Adicionar origem com seu cartório ao mapeamento
+                if cartorio_origem:
+                    origens_com_cartorios.append({
+                        'origem': origem.strip(),
+                        'cartorio': cartorio_origem,
+                        'livro': livros_origem[i] if i < len(livros_origem) else None,
+                        'folha': folhas_origem[i] if i < len(folhas_origem) else None
+                    })
+                    
+                    # Usar o primeiro cartório válido encontrado como cartório de origem do lançamento
+                    if not cartorio_origem_encontrado:
+                        cartorio_origem_encontrado = cartorio_origem
         
-        # Salvar o cartório de origem encontrado no lançamento
-        if cartorio_origem_encontrado:
+        # Salvar o mapeamento de origens com cartórios no lançamento
+        # CORREÇÃO: Não usar campo observações para evitar interferir com dados do usuário
+        if origens_com_cartorios:
+            lancamento.origem = '; '.join([item['origem'] for item in origens_com_cartorios])
+            
+            # Armazenar mapeamento em uma variável de sessão ou cache temporário
+            # Por enquanto, usar apenas o primeiro cartório como cartório de origem do lançamento
+            # TODO: Implementar sistema de mapeamento mais robusto (ex: campo JSON no modelo)
             lancamento.cartorio_origem = cartorio_origem_encontrado
+            
+            # Armazenar mapeamento em cache temporário para uso posterior
+            from django.core.cache import cache
+            cache_key = f"mapeamento_origens_lancamento_{lancamento.id if lancamento.id else 'novo'}"
+            mapeamento_origens = []
+            for item in origens_com_cartorios:
+                mapeamento_origens.append({
+                    'origem': item['origem'],
+                    'cartorio_id': item['cartorio'].id,
+                    'cartorio_nome': item['cartorio'].nome,
+                    'livro': item['livro'],
+                    'folha': item['folha']
+                })
+            cache.set(cache_key, mapeamento_origens, timeout=3600)  # 1 hora
         
         # PROCESSAR LIVRO E FOLHA DE ORIGEM para múltiplas origens
         # HERANÇA: Buscar livro e folha do primeiro lançamento do documento criado pela origem
