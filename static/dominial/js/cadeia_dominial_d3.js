@@ -15,9 +15,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Comportamento de zoom/pan
     const zoom = d3.zoom()
-        .scaleExtent([0.3, 2.5])
+        .scaleExtent([0.2, 3.0]) // Limites mais amplos para zoom
+        .wheelDelta(event => -event.deltaY * 0.002) // Velocidade do scroll
         .on('zoom', (event) => {
             zoomGroup.attr('transform', event.transform);
+            // Atualizar transformação global
+            window._zoomTransform = event.transform;
         });
     svg.call(zoom);
 
@@ -26,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window._d3svg = svg;
     window._zoomGroup = zoomGroup;
     window._zoomTransform = d3.zoomIdentity;
-    svg.on('wheel.zoom', null); // Desabilitar zoom na roda do mouse se quiser
+    // Removido: svg.on('wheel.zoom', null); // Desabilitar zoom na roda do mouse se quiser
 
     // Buscar dados da árvore (corrigido)
     fetch(`/dominial/cadeia-dominial/${window.tisId}/${window.imovelId}/arvore/`)
@@ -305,6 +308,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
                 .attr('stroke-width', 2)
                 .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))')
                 .attr('transform', 'scale(1)');
+        })
+        .on('click', (event, d) => {
+            event.stopPropagation();
+            window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
         });
 
     // Número do documento
@@ -330,30 +337,30 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('class', 'card-buttons')
         .attr('transform', 'translate(0,35)');
 
-    // 👁️ Ver lançamentos
+    // ➕ Novo lançamento - Centralizado e com melhor contraste
     btnGroup.append('text')
-        .attr('x', -25)
+        .attr('x', 0)
         .attr('y', 0)
-        .attr('font-size', 18)
+        .attr('font-size', 16)
         .attr('cursor', 'pointer')
-        .attr('opacity', 0.85)
-        .text('👁️')
-        .on('click', (event, d) => {
-            event.stopPropagation();
-            window.location.href = `/dominial/documento/${d.data.id}/lancamentos/${window.tisId}/${window.imovelId}/`;
-        });
-
-    // ➕ Novo lançamento
-    btnGroup.append('text')
-        .attr('x', 25)
-        .attr('y', 0)
-        .attr('font-size', 18)
-        .attr('cursor', 'pointer')
-        .attr('opacity', 0.85)
+        .attr('opacity', 0.9)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'white')
+        .attr('font-weight', 'bold')
         .text('➕')
         .on('click', (event, d) => {
             event.stopPropagation();
             window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/novo-lancamento/${d.data.id}/`;
+        })
+        .on('mouseover', function() {
+            d3.select(this)
+                .attr('opacity', 1)
+                .attr('font-size', 18);
+        })
+        .on('mouseout', function() {
+            d3.select(this)
+                .attr('opacity', 0.9)
+                .attr('font-size', 16);
         });
 }
 

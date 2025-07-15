@@ -191,3 +191,29 @@ def cadeia_dominial_d3(request, tis_id, imovel_id):
         'tem_lancamentos': tem_lancamentos,
     }
     return render(request, 'dominial/cadeia_dominial_d3.html', context) 
+
+@login_required
+def documento_detalhado(request, tis_id, imovel_id, documento_id):
+    """
+    View para visualização detalhada de um documento específico
+    Baseada na cadeia dominial tabela, mas mostra apenas um documento
+    """
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    
+    # Carregar lançamentos do documento
+    lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
+        'pessoas__pessoa'
+    ).order_by('id')
+    
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento,
+        'lancamentos': lancamentos,
+        'tipo_visualizacao': 'documento_unico',
+        'tem_lancamentos': lancamentos.exists(),
+    }
+    
+    return render(request, 'dominial/documento_detalhado.html', context) 
