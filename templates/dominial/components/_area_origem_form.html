@@ -31,23 +31,23 @@
         {% if modo_edicao %}
             {% if origens_separadas %}
                 {% for origem in origens_separadas %}
-                <div class="origem-item">
-                    <div class="form-group origem-field">
+            <div class="origem-item">
+                <div class="form-group origem-field">
                         <input type="text" name="origem_completa[]" id="origem_completa_{{ origem.index }}" class="origem-texto" 
-                               placeholder="Ex: Número do registro anterior, descrição, etc." 
+                           placeholder="Ex: Número do registro anterior, descrição, etc." 
                                value="{{ origem.texto }}">
-                    </div>
-                    <div class="form-group cartorio-field">
-                        <div class="autocomplete-container">
+                </div>
+                <div class="form-group cartorio-field">
+                    <div class="autocomplete-container">
                             <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_{{ origem.index }}" class="cartorio-origem-nome" 
-                                   placeholder="Digite o nome do cartório" autocomplete="off" 
+                               placeholder="Digite o nome do cartório" autocomplete="off" 
                                    value="{{ origem.cartorio_nome }}">
                             <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_{{ origem.index }}" class="cartorio-origem-id" 
                                    value="{{ origem.cartorio_id }}">
-                            <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
-                        </div>
+                        <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
-                    <div class="form-group livro-field">
+                </div>
+                <div class="form-group livro-field">
                         <input type="text" name="livro_origem[]" id="livro_origem_{{ origem.index }}" class="livro-origem" 
                                placeholder="Ex: 1, 2, A, etc." 
                                value="{{ origem.livro }}">
@@ -81,9 +81,9 @@
                     <div class="form-group folha-field">
                         <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
                                placeholder="Ex: 1, 2, A, etc.">
-                    </div>
-                    <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
                 </div>
+                <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+            </div>
             {% endif %}
         {% else %}
             <div class="origem-item">

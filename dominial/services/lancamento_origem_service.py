@@ -36,18 +36,18 @@ class LancamentoOrigemService:
         else:
             # Processamento original para uma única origem
             documentos_criados = []
-            
-            for origem_info in origens_processadas:
-                documento_criado = LancamentoOrigemService._criar_documento_automatico(
-                    imovel, lancamento, origem_info
-                )
-                if documento_criado:
-                    documentos_criados.append(documento_criado)
-            
-            if documentos_criados:
-                return f'Foram criados {len(documentos_criados)} documento(s) automaticamente a partir das origens identificadas.'
-            
-            return f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.'
+        
+        for origem_info in origens_processadas:
+            documento_criado = LancamentoOrigemService._criar_documento_automatico(
+                imovel, lancamento, origem_info
+            )
+            if documento_criado:
+                documentos_criados.append(documento_criado)
+        
+        if documentos_criados:
+            return f'Foram criados {len(documentos_criados)} documento(s) automaticamente a partir das origens identificadas.'
+        
+        return f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.'
     
     @staticmethod
     def _processar_multiplas_origens(lancamento, origens_individuals, imovel):

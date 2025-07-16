@@ -541,7 +541,7 @@ function setupOrigemAutocomplete() {
         // Buscar o campo hidden correspondente
         const hidden = input.closest('.autocomplete-container').querySelector('.cartorio-origem-id');
         const suggestions = input.closest('.autocomplete-container').querySelector('.cartorio-origem-suggestions');
-        
+    
         console.log('Hidden field:', hidden ? hidden.id : 'não encontrado');
         console.log('Suggestions:', suggestions ? 'encontrado' : 'não encontrado');
         
@@ -554,6 +554,6 @@ function setupOrigemAutocomplete() {
                 hidden: !!hidden,
                 suggestions: !!suggestions
             });
-        }
+    }
     });
 } 

@@ -192,14 +192,14 @@ class LancamentoCamposService:
         for i, origem in enumerate(origens_completas):
             if origem and origem.strip():
                 cartorio_origem = None
-                
+        
                 # Tentar encontrar cartório por ID primeiro
                 if i < len(cartorios_origem_ids) and cartorios_origem_ids[i] and cartorios_origem_ids[i].strip():
                     try:
                         cartorio_origem = Cartorios.objects.get(id=cartorios_origem_ids[i])
                     except Cartorios.DoesNotExist:
                         pass
-                
+        
                 # Se não encontrou por ID, tentar por nome
                 if not cartorio_origem and i < len(cartorios_origem_nomes) and cartorios_origem_nomes[i] and cartorios_origem_nomes[i].strip():
                     try:
