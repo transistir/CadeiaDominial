@@ -197,9 +197,9 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         # Obter o tipo de documento
         tipo_doc = DocumentoTipo.objects.get(tipo=tipo_documento)
         
-        # CORREÇÃO: Determinar cartório baseado na posição na cadeia dominial
+        # CORREÇÃO: Determinar cartório baseado na origem do documento
         # Se é o primeiro documento (matrícula atual) → usar cartório do imóvel
-        # Se não é o primeiro → buscar cartório de origem do lançamento do início da matrícula
+        # Se não é o primeiro → buscar cartório de origem do lançamento que referenciou esta origem
         cartorio_documento = None
         
         # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
@@ -207,18 +207,25 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
             # É o primeiro documento da cadeia dominial - usar cartório do imóvel
             cartorio_documento = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
         else:
-            # Não é o primeiro documento - buscar cartório de origem do lançamento do início da matrícula
+            # Não é o primeiro documento - buscar cartório de origem do lançamento que referenciou esta origem
             from ..models import Lancamento, LancamentoTipo
             
-            # Buscar o primeiro lançamento do tipo 'inicio_matricula' para obter o cartório de origem
-            lancamento_inicio_matricula = Lancamento.objects.filter(
+            # Buscar lançamentos que referenciam esta origem
+            lancamentos_com_origem = Lancamento.objects.filter(
                 documento__imovel=imovel,
-                tipo__tipo='inicio_matricula'
-            ).select_related('cartorio_origem').order_by('id').first()
+                origem__icontains=codigo_origem
+            ).select_related('cartorio_origem').order_by('id')
             
-            if lancamento_inicio_matricula and lancamento_inicio_matricula.cartorio_origem:
-                # Usar o cartório de origem do primeiro lançamento do início da matrícula
-                cartorio_documento = lancamento_inicio_matricula.cartorio_origem
+            # Tentar encontrar um lançamento que tenha cartório de origem definido
+            cartorio_encontrado = None
+            for lancamento in lancamentos_com_origem:
+                if lancamento.cartorio_origem:
+                    cartorio_encontrado = lancamento.cartorio_origem
+                    break
+            
+            if cartorio_encontrado:
+                # Usar o cartório de origem encontrado
+                cartorio_documento = cartorio_encontrado
             else:
                 # Fallback: buscar em qualquer lançamento que tenha cartório de origem
                 lancamento_com_origem = Lancamento.objects.filter(

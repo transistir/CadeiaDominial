@@ -41,8 +41,12 @@ class HierarquiaService:
         return HierarquiaTroncoService.validar_hierarquia(imovel)
 
     @staticmethod
-    def construir_arvore_cadeia_dominial(imovel):
+    def construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False):
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
+        
+        Args:
+            imovel: Objeto Imovel
+            criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
         """
-        return HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel) 
+        return HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos) 

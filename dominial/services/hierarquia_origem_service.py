@@ -15,9 +15,13 @@ class HierarquiaOrigemService:
     """
     
     @staticmethod
-    def processar_origens_identificadas(imovel):
+    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False):
         """
         Processa origens identificadas de lançamentos que ainda não foram convertidas em documentos
+        
+        Args:
+            imovel: Objeto Imovel
+            criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
         """
         origens_identificadas = []
         origens_processadas = set()  # Para evitar duplicação
@@ -38,7 +42,7 @@ class HierarquiaOrigemService:
                     chave_origem = f"{origem_info['numero']}_{origem_info['tipo']}"
                     if chave_origem not in origens_processadas:
                         origem_identificada = HierarquiaOrigemService._processar_origem_individual(
-                            imovel, lancamento, origem_info
+                            imovel, lancamento, origem_info, criar_documentos_automaticos
                         )
                         if origem_identificada:
                             origens_identificadas.append(origem_identificada)
@@ -47,7 +51,7 @@ class HierarquiaOrigemService:
         return origens_identificadas
     
     @staticmethod
-    def _processar_origem_individual(imovel, lancamento, origem_info):
+    def _processar_origem_individual(imovel, lancamento, origem_info, criar_documentos_automaticos=False):
         """
         Processa uma origem individual
         Implementa a regra dos CRI: verifica se existe documento com CRI da origem
@@ -60,10 +64,16 @@ class HierarquiaOrigemService:
         ).first()
         
         if not documento_existente:
-            # Criar o documento automaticamente com CRI da origem
-            return HierarquiaOrigemService._criar_documento_automatico(
-                imovel, lancamento, origem_info
-            )
+            if criar_documentos_automaticos:
+                # Criar o documento automaticamente com CRI da origem
+                return HierarquiaOrigemService._criar_documento_automatico(
+                    imovel, lancamento, origem_info
+                )
+            else:
+                # Apenas listar como origem identificada sem criar documento
+                return HierarquiaOrigemService._criar_origem_identificada(
+                    lancamento, origem_info, None, False
+                )
         else:
             # Documento já existe com CRI da origem, adicionar como origem identificada criada
             return HierarquiaOrigemService._criar_origem_existente(

@@ -14,9 +14,13 @@ class HierarquiaArvoreService:
     """
     
     @staticmethod
-    def construir_arvore_cadeia_dominial(imovel):
+    def construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False):
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
+        
+        Args:
+            imovel: Objeto Imovel
+            criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
         """
         # Otimização: usar select_related e prefetch_related para reduzir queries
         documentos = Documento.objects.filter(imovel=imovel)\
@@ -24,8 +28,8 @@ class HierarquiaArvoreService:
             .prefetch_related('lancamentos', 'lancamentos__tipo')\
             .order_by('data')
         
-        # Processar origens identificadas de lançamentos
-        origens_identificadas = HierarquiaOrigemService.processar_origens_identificadas(imovel)
+        # Processar origens identificadas de lançamentos (só criar documentos se solicitado)
+        origens_identificadas = HierarquiaOrigemService.processar_origens_identificadas(imovel, criar_documentos_automaticos)
         
         # Estrutura para armazenar a árvore
         arvore = {
