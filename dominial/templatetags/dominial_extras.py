@@ -47,4 +47,30 @@ def origem_cartorio(lancamento):
     
     return origem
 
+@register.filter
+def origem_cartorio_especifico(lancamento, origem_texto):
+    """
+    Template filter para obter o cartório específico de uma origem
+    quando há múltiplas origens com cartórios diferentes
+    """
+    if not lancamento.origem or not origem_texto:
+        return ''
+    
+    # Tentar recuperar mapeamento do cache
+    from django.core.cache import cache
+    cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
+    mapeamento_origens = cache.get(cache_key)
+    
+    if mapeamento_origens:
+        # Buscar cartório específico para esta origem
+        for mapeamento in mapeamento_origens:
+            if mapeamento.get('origem', '').strip() == origem_texto.strip():
+                return mapeamento.get('cartorio_nome', '')
+    
+    # Fallback: usar cartório geral do lançamento
+    if lancamento.cartorio_origem:
+        return lancamento.cartorio_origem.nome
+    
+    return ''
+
  
