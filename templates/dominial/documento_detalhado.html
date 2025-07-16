@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load dominial_extras %}
 
 {% block title %}Documento Detalhado - {{ documento.numero }}{% endblock %}
 
@@ -264,7 +265,22 @@
                         {% endif %}
                         <!-- Restante -->
                         <td>{{ lancamento.area|default_if_none:"-" }}</td>
-                        <td>{{ lancamento.origem|default_if_none:"-" }}</td>
+                        <td>
+                          {% if lancamento.origem %}
+                            {% if ';' in lancamento.origem %}
+                              {% for origem in lancamento.origem|split:';' %}
+                                <div>{{ origem|strip }}</div>
+                              {% endfor %}
+                            {% else %}
+                              {{ lancamento.origem }}
+                            {% endif %}
+                            {% if lancamento.cartorio_origem %}
+                              <small class="text-muted">({{ lancamento.cartorio_origem.nome }})</small>
+                            {% endif %}
+                          {% else %}
+                            -
+                          {% endif %}
+                        </td>
                         <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
                         <td class="acoes-cell">
                             <button class="btn-edit-lancamento" onclick="event.stopPropagation(); editarLancamento({{ lancamento.id }})" title="Editar lançamento">
