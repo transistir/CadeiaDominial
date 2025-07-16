@@ -17,14 +17,22 @@
     <div class="form-group cartorio-origem-info">
         <label>Cartório da Origem</label>
         <div class="cartorio-display">
-            <span class="cartorio-nome">{{ documento.cartorio.nome }}</span>
+            <span class="cartorio-nome">
+                {% if modo_edicao and lancamento.cartorio_origem %}
+                    {{ lancamento.cartorio_origem.nome }}
+                {% else %}
+                    Cartório não definido
+                {% endif %}
+            </span>
             <small class="form-text text-muted">
                 <strong>💡 Dica:</strong> Este é o cartório da origem do documento. 
                 Para lançamentos subsequentes, o cartório é definido pela origem do documento.
             </small>
         </div>
-        <input type="hidden" name="cartorio" id="cartorio" value="{{ documento.cartorio.id }}">
-        <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ documento.cartorio.nome }}">
+        <input type="hidden" name="cartorio" id="cartorio" 
+               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% endif %}">
+        <input type="hidden" name="cartorio_nome" id="cartorio_nome" 
+               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% endif %}">
     </div>
     {% endif %}
     

@@ -1,4 +1,5 @@
 from django import template
+import re
 
 register = template.Library()
 
@@ -29,5 +30,21 @@ def strip(value):
     if not value:
         return ''
     return value.strip()
+
+@register.filter
+def origem_cartorio(lancamento):
+    """
+    Template filter para formatar origem com cartório
+    """
+    if not lancamento.origem:
+        return '-'
+    
+    origem = lancamento.origem.strip()
+    
+    # Se tem cartório de origem definido, adicionar ao lado
+    if lancamento.cartorio_origem:
+        return f"{origem} ({lancamento.cartorio_origem.nome})"
+    
+    return origem
 
  

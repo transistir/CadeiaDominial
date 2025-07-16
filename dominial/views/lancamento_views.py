@@ -145,6 +145,10 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     total_lancamentos = Lancamento.objects.filter(documento=documento_ativo).count()
     is_primeiro_lancamento = total_lancamentos == 0
     
+    # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
+    is_primeiro_documento_cadeia = (documento_ativo.tipo.tipo == 'matricula' and 
+                                   documento_ativo.numero == imovel.matricula)
+    
     if is_primeiro_lancamento:
         # Para o primeiro lançamento, pré-preencher o cartório com o cartório da matrícula
         context['is_primeiro_lancamento'] = True
@@ -161,7 +165,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         # Obter dados do primeiro lançamento para herança
         dados_primeiro = LancamentoHerancaService.obter_dados_primeiro_lancamento(documento_ativo)
         
-        if dados_primeiro:
+        if dados_primeiro and dados_primeiro['cartorio_origem']:
             # Criar um lançamento temporário com dados herdados para o template
             # HERANÇA SIMPLIFICADA: Herdar apenas cartório, livro e folha
             lancamento_herdado = Lancamento()
@@ -172,6 +176,29 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             
             context['lancamento'] = lancamento_herdado
             context['modo_edicao'] = True  # Para usar os dados herdados no template
+        else:
+            # Se não há dados para herdar ou não há cartório de origem
+            lancamento_herdado = Lancamento()
+            
+            # Definir cartório de origem baseado no contexto
+            if is_primeiro_documento_cadeia:
+                # É o primeiro documento da cadeia dominial - usar cartório do imóvel
+                lancamento_herdado.cartorio_origem = imovel.cartorio
+            elif dados_primeiro:
+                # Há dados do primeiro lançamento, mas sem cartório de origem
+                # Usar cartório do documento como fallback (apenas para exibição)
+                lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+            else:
+                # Nenhum dado disponível - deixar vazio
+                pass
+            
+            # Herdar outros dados se disponíveis
+            if dados_primeiro:
+                lancamento_herdado.livro_origem = dados_primeiro['livro_origem']
+                lancamento_herdado.folha_origem = dados_primeiro['folha_origem']
+            
+            context['lancamento'] = lancamento_herdado
+            context['modo_edicao'] = True
     
     return render(request, 'dominial/lancamento_form.html', context)
 
