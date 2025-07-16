@@ -150,14 +150,25 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                                    documento_ativo.numero == imovel.matricula)
     
     if is_primeiro_lancamento:
-        # Para o primeiro lançamento, pré-preencher o cartório com o cartório da matrícula
-        context['is_primeiro_lancamento'] = True
-        context['cartorio_matricula'] = imovel.cartorio
-        context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
-        
-        # Se não há cartório definido, mostrar aviso
-        if not imovel.cartorio:
-            messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
+        # Para o primeiro lançamento, verificar se deve usar cartório da matrícula ou do documento
+        if is_primeiro_documento_cadeia:
+            # É o primeiro documento da cadeia (matrícula atual) - usar cartório da matrícula
+            context['is_primeiro_lancamento'] = True
+            context['cartorio_matricula'] = imovel.cartorio
+            context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
+            
+            # Se não há cartório definido, mostrar aviso
+            if not imovel.cartorio:
+                messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
+        else:
+            # É um documento criado automaticamente a partir de uma origem - usar cartório do documento
+            context['is_primeiro_lancamento'] = False
+            context['modo_edicao'] = True
+            
+            # Criar um lançamento temporário com o cartório do documento
+            lancamento_herdado = Lancamento()
+            lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+            context['lancamento'] = lancamento_herdado
     else:
         # Para lançamentos subsequentes, herdar dados do primeiro lançamento
         context['is_primeiro_lancamento'] = False
