@@ -209,7 +209,7 @@
                                                     {% empty %}-{% endfor %}
                                                 </td>
                                                 <!-- Transmissão -->
-                                                {% if lancamento.tipo.tipo == 'averbacao' %}
+                                                {% if lancamento.tipo.tipo == 'averbacao' and item.documento.tipo.tipo != 'transcricao' %}
                                                     <td colspan="6">
                                                         {% if lancamento.descricao and lancamento.descricao|length > 100 %}
                                                             <span class="descricao-curta">{{ lancamento.descricao|slice:":100" }}...</span>

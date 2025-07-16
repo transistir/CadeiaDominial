@@ -45,7 +45,12 @@
 
         <!-- Campos Opcionais de Transação -->
         <div class="field-group hidden" id="campos-transacao">
-            <h4>Transmissão</h4>
+            <h4>
+                Transmissão
+                {% if documento.tipo.tipo == 'transcricao' %}
+                    <small class="text-muted">(Opcional para transcrições)</small>
+                {% endif %}
+            </h4>
             
             <div class="grid-3">
                 <div class="form-group">
@@ -102,10 +107,26 @@
 
 {% block extra_js %}
 <script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
-{% if modo_edicao %}
 <script>
+    // Variáveis para detecção de tipo de documento
+    window.isTranscricao = {% if documento.tipo.tipo == 'transcricao' %}true{% else %}false{% endif %};
+    window.documentoTipo = '{{ documento.tipo.tipo }}';
+    window.documentoNumero = '{{ documento.numero }}';
+    
+    console.log('DEBUG: Template variables:', {
+        isTranscricao: window.isTranscricao,
+        documentoTipo: window.documentoTipo,
+        documentoNumero: window.documentoNumero
+    });
+    
+    {% if modo_edicao %}
     // Adicionar classe para modo de edição
     document.body.classList.add('modo-edicao');
+    {% endif %}
+    
+    {% if documento.tipo.tipo == 'transcricao' %}
+    // Adicionar classe para documento de transcrição
+    document.body.classList.add('documento-transcricao');
+    {% endif %}
 </script>
-{% endif %}
 {% endblock %} 

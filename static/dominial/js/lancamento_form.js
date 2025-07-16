@@ -13,6 +13,30 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
         const modoEdicao = document.body.classList.contains('modo-edicao');
         
+        // Verificar se o documento é do tipo transcrição
+        // Método 1: Verificar se há uma variável global definida no template
+        const isTranscricaoGlobal = window.isTranscricao === true;
+        
+        // Método 2: Verificar pelo número do documento (fallback)
+        const documentoNumero = document.querySelector('input[name="sigla_matricula"]');
+        const isTranscricaoByNumber = documentoNumero && documentoNumero.value && (
+            documentoNumero.value.startsWith('T') || 
+            documentoNumero.value.toUpperCase().includes('TRANS')
+        );
+        
+        // Método 3: Verificar se há um elemento com classe indicando transcrição
+        const isTranscricaoByClass = document.body.classList.contains('documento-transcricao');
+        
+        const isTranscricao = isTranscricaoGlobal || isTranscricaoByNumber || isTranscricaoByClass;
+        
+        console.log('DEBUG: Detecção de transcrição:', {
+            isTranscricaoGlobal,
+            isTranscricaoByNumber,
+            isTranscricaoByClass,
+            isTranscricao,
+            documentoNumero: documentoNumero ? documentoNumero.value : 'não encontrado'
+        });
+        
         // Esconder todos os campos primeiro
         averbacaoFields.classList.add('hidden');
         registroFields.classList.add('hidden');
@@ -64,6 +88,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (selectedTipo === 'averbacao') {
             averbacaoFields.classList.remove('hidden');
             averbacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
+            
+            // Para transcrições, sempre mostrar bloco de transmissão
+            if (isTranscricao) {
+                console.log('DEBUG: Mostrando bloco de transmissão para averbação de transcrição');
+                transacaoFields.classList.remove('hidden');
+                transacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
+            }
         } else if (selectedTipo === 'registro') {
             registroFields.classList.remove('hidden');
             transacaoFields.classList.remove('hidden');
@@ -72,7 +103,15 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (selectedTipo === 'inicio_matricula') {
             inicioMatriculaFields.classList.remove('hidden');
             inicioMatriculaFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
-            // Não exibir bloco de transação para início de matrícula
+            
+            // Para transcrições, sempre mostrar bloco de transmissão
+            if (isTranscricao) {
+                console.log('DEBUG: Mostrando bloco de transmissão para início de matrícula de transcrição');
+                transacaoFields.classList.remove('hidden');
+                transacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
+            }
+            
+            // Não exibir bloco de transação para início de matrícula de matrícula
             // Aplicar automaticamente a sigla da matrícula
             if (typeof gerarNumeroLancamento === 'function') {
                 gerarNumeroLancamento();
@@ -98,10 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (siglaMatriculaInput && numeroCompletoInput && !numeroCompletoInput.value) {
             let siglaMatricula = siglaMatriculaInput.value;
-            // Garantir que a sigla tenha o prefixo M se não tiver
-            if (siglaMatricula && !siglaMatricula.startsWith('M')) {
-                siglaMatricula = 'M' + siglaMatricula;
-            }
+            // Não adicionar prefixo automaticamente - usar o que já está no documento
             numeroCompletoInput.value = siglaMatricula;
         }
         
@@ -161,10 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const siglaMatriculaInput = document.querySelector('input[name="sigla_matricula"]');
             let siglaMatricula = siglaMatriculaInput ? siglaMatriculaInput.value : '';
             
-            // Garantir que a sigla tenha o prefixo M se não tiver
-            if (siglaMatricula && !siglaMatricula.startsWith('M')) {
-                siglaMatricula = 'M' + siglaMatricula;
-            }
+            // Usar a sigla como está no documento (não adicionar prefixo automaticamente)
             
             if (selectedTipo === 'inicio_matricula') {
                 // Para início de matrícula, aplicar automaticamente a sigla da matrícula

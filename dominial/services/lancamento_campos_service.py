@@ -16,15 +16,23 @@ class LancamentoCamposService:
         """
         Processa campos específicos baseado no tipo de lançamento
         """
+        # Verificar se o documento é uma transcrição
+        is_transcricao = lancamento.documento.tipo.tipo == 'transcricao'
+        
         if lancamento.tipo.tipo == 'averbacao':
             LancamentoCamposService._processar_campos_averbacao(request, lancamento)
+            # Para transcrições, sempre processar campos de transação
+            if is_transcricao:
+                LancamentoCamposService._processar_campos_transacao(request, lancamento)
         elif lancamento.tipo.tipo == 'registro':
             LancamentoCamposService._processar_campos_registro(request, lancamento)
             # Para registro, também processar campos de transação
             LancamentoCamposService._processar_campos_transacao(request, lancamento)
         elif lancamento.tipo.tipo == 'inicio_matricula':
             LancamentoCamposService._processar_campos_inicio_matricula(request, lancamento)
-            # Não processar campos de transação para início de matrícula
+            # Para transcrições, sempre processar campos de transação
+            if is_transcricao:
+                LancamentoCamposService._processar_campos_transacao(request, lancamento)
     
     @staticmethod
     def _processar_campos_averbacao(request, lancamento):
