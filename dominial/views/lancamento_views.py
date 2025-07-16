@@ -253,17 +253,38 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     if context['modo_edicao'] and lancamento.origem:
         # Separar múltiplas origens para o template
         origens_separadas = []
+        
+        # Tentar recuperar mapeamento de origens e cartórios do cache
+        from django.core.cache import cache
+        cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
+        mapeamento_origens = cache.get(cache_key)
+        
         if ';' in lancamento.origem:
             origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-            for i, origem in enumerate(origens_list):
-                origens_separadas.append({
-                    'texto': origem,
-                    'index': i,
-                    'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
-                    'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
-                    'livro': lancamento.livro_origem,
-                    'folha': lancamento.folha_origem
-                })
+            
+            if mapeamento_origens and len(mapeamento_origens) == len(origens_list):
+                # Usar mapeamento do cache se disponível
+                for i, origem in enumerate(origens_list):
+                    mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
+                    origens_separadas.append({
+                        'texto': origem,
+                        'index': i,
+                        'cartorio_nome': mapeamento.get('cartorio_nome', ''),
+                        'cartorio_id': mapeamento.get('cartorio_id', ''),
+                        'livro': mapeamento.get('livro', ''),
+                        'folha': mapeamento.get('folha', '')
+                    })
+            else:
+                # Fallback: usar cartório geral do lançamento para todas as origens
+                for i, origem in enumerate(origens_list):
+                    origens_separadas.append({
+                        'texto': origem,
+                        'index': i,
+                        'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                        'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                        'livro': lancamento.livro_origem,
+                        'folha': lancamento.folha_origem
+                    })
         else:
             # Uma única origem
             origens_separadas.append({
