@@ -157,18 +157,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (selectedTipo === 'averbacao' && siglaCompleta.startsWith('AV')) {
                         // Para averbação: AV + número + sigla_matricula
                         numero = siglaCompleta.substring(2);
-                        // Remover a sigla da matrícula do final (assumindo que começa com M)
+                        // Remover a sigla da matrícula/transcrição do final (pode começar com M ou T)
                         const indexM = numero.indexOf('M');
-                        if (indexM > 0) {
+                        const indexT = numero.indexOf('T');
+                        if (indexM > 0 && (indexT === -1 || indexM < indexT)) {
                             numero = numero.substring(0, indexM);
+                        } else if (indexT > 0 && (indexM === -1 || indexT < indexM)) {
+                            numero = numero.substring(0, indexT);
                         }
                     } else if (selectedTipo === 'registro' && siglaCompleta.startsWith('R')) {
                         // Para registro: R + número + sigla_matricula
                         numero = siglaCompleta.substring(1);
-                        // Remover a sigla da matrícula do final (assumindo que começa com M)
+                        // Remover a sigla da matrícula/transcrição do final (pode começar com M ou T)
                         const indexM = numero.indexOf('M');
-                        if (indexM > 0) {
+                        const indexT = numero.indexOf('T');
+                        if (indexM > 0 && (indexT === -1 || indexM < indexT)) {
                             numero = numero.substring(0, indexM);
+                        } else if (indexT > 0 && (indexM === -1 || indexT < indexM)) {
+                            numero = numero.substring(0, indexT);
                         }
                     }
                     numeroSimplesInput.value = numero;
