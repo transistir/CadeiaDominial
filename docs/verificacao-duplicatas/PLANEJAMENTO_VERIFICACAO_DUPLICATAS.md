@@ -1,9 +1,9 @@
-# 📋 PLANEJAMENTO DE DESENVOLVIMENTO - VERIFICAÇÃO DE DUPLICATAS
+# PLANEJAMENTO DE DESENVOLVIMENTO - VERIFICAÇÃO DE DUPLICATAS
 
-## 🎯 **Objetivo**
+## **Objetivo**
 Implementar uma funcionalidade que detecta quando uma origem/cartório já existe em outra cadeia dominial e oferece ao usuário a opção de importar automaticamente o trecho da cadeia correspondente, mantendo total retrocompatibilidade com dados existentes.
 
-## ⚠️ **Validação Obrigatória - Prevenção de Duplicatas**
+## **Validação Obrigatória - Prevenção de Duplicatas**
 
 ### **Regra Fundamental**
 O sistema **DEVE IMPEDIR** a criação de lançamentos com origem/cartório duplicados. Não é uma opção - é uma validação obrigatória.
@@ -20,7 +20,7 @@ O sistema **DEVE IMPEDIR** a criação de lançamentos com origem/cartório dupl
    - **Usuário obrigado** a modificar origem ou cartório
 4. **Única saída**: Importar a cadeia ou usar dados diferentes
 
-## 🔄 **Retrocompatibilidade - Plano de Produção**
+## **Retrocompatibilidade - Plano de Produção**
 
 ### **1. Análise de Impacto**
 - **Dados existentes**: Sistema em produção com dados históricos
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_documentoimportado_imovel_origem ON dominial_docu
 DUPLICATA_VERIFICACAO_ENABLED = os.getenv('DUPLICATA_VERIFICACAO_ENABLED', 'false').lower() == 'true'
 ```
 
-## 🏗️ **Estratégia de Desenvolvimento em Fases Incrementais**
+## **Estratégia de Desenvolvimento em Fases Incrementais**
 
 ### **FASE 1: Estrutura Base e Testes (Sem Modificar Funcionalidades Existentes)**
 
@@ -170,7 +170,7 @@ DUPLICATA_VERIFICACAO_ENABLED = os.getenv('DUPLICATA_VERIFICACAO_ENABLED', 'fals
 - **Undo**: Possibilidade de desfazer importação
 - **Histórico**: Log de todas as importações realizadas
 
-## 🔧 **Implementação Técnica Detalhada**
+## **Implementação Técnica Detalhada**
 
 ### **1. Estrutura de Dados**
 
@@ -636,45 +636,45 @@ class DuplicataVerificacaoTestCase(TestCase):
 - Cache de consultas
 - Otimização de queries
 
-## 📝 **Cronograma de Desenvolvimento**
+## **Cronograma de Desenvolvimento**
 
-### **Semana 1: Fase 1**
+### **Fase 1**
 - Criar estrutura base
 - Implementar services
 - Criar testes unitários
 - **Deploy**: Estruturas de dados (sem ativar funcionalidade)
 
-### **Semana 2: Fase 2**
+### **Fase 2**
 - Implementar APIs
 - Criar endpoints
 - Testar integração
 - **Deploy**: APIs (com feature flag desabilitado)
 
-### **Semana 3: Fase 3**
+### **Fase 3**
 - Desenvolver interface
 - Implementar modal
 - Criar JavaScript
 - **Deploy**: Interface (com feature flag desabilitado)
 
-### **Semana 4: Fase 4**
+### **Fase 4**
 - Integrar com formulário
 - Testar fluxo completo
 - Ajustes e correções
 - **Deploy**: Integração completa (com feature flag desabilitado)
 
-### **Semana 5: Fase 5**
+### **Fase 5**
 - Modificar visualizações
 - Implementar indicadores
 - Testar interface
 - **Deploy**: Visualizações (com feature flag desabilitado)
 
-### **Semana 6: Fase 6**
+### **Fase 6**
 - Otimizações
 - Melhorias de UX
 - Documentação
 - **Deploy**: Ativação gradual da funcionalidade
 
-## 🎯 **Critérios de Sucesso**
+## **Critérios de Sucesso**
 
 1. **Funcionalidade**: Sistema detecta duplicatas corretamente
 2. **Performance**: Verificação rápida (< 2 segundos)
@@ -684,7 +684,7 @@ class DuplicataVerificacaoTestCase(TestCase):
 6. **Compatibilidade**: Não interfere com funcionalidades existentes
 7. **Retrocompatibilidade**: Funciona com dados existentes sem quebrar
 
-## 🔄 **Fluxo de Desenvolvimento Git**
+## **Fluxo de Desenvolvimento Git**
 
 1. **Branch principal**: `main` (sempre estável)
 2. **Branch de desenvolvimento**: `develop`
@@ -693,7 +693,7 @@ class DuplicataVerificacaoTestCase(TestCase):
 5. **Pull Requests**: Revisão obrigatória antes do merge
 6. **Testes**: Todos os testes devem passar antes do merge
 
-## 🚀 **Plano de Deploy em Produção**
+## **Plano de Deploy em Produção**
 
 ### **Deploy Fase 1 (Estruturas)**
 ```bash
@@ -738,7 +738,7 @@ tail -f /var/log/duplicata_verificacao.log
 # (após validação dos testes)
 ```
 
-## 📊 **Métricas de Monitoramento**
+## **Métricas de Monitoramento**
 
 ### **Performance**
 - Tempo de resposta da verificação de duplicatas
