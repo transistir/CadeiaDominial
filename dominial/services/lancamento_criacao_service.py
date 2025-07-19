@@ -10,6 +10,7 @@ from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_pessoa_service import LancamentoPessoaService
 from .lancamento_campos_service import LancamentoCamposService
 from .regra_petrea_service import RegraPetreaService
+from .lancamento_duplicata_service import LancamentoDuplicataService
 
 
 class LancamentoCriacaoService:
@@ -49,6 +50,28 @@ class LancamentoCriacaoService:
         print("DEBUG: Processando dados do lançamento...")
         dados_lancamento = LancamentoFormService.processar_dados_lancamento(request, tipo_lanc)
         print(f"DEBUG: Dados processados: {dados_lancamento}")
+        
+        # Verificar duplicatas antes de criar o lançamento
+        print("DEBUG: Verificando duplicatas...")
+        print("DEBUG: Importando LancamentoDuplicataService...")
+        try:
+            duplicata_resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
+                request, documento_ativo
+            )
+            print("DEBUG: Verificação de duplicata executada com sucesso")
+        except Exception as e:
+            print(f"DEBUG: Erro na verificação de duplicata: {str(e)}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            duplicata_resultado = {'tem_duplicata': False, 'mensagem': f'Erro na verificação: {str(e)}'}
+        print(f"DEBUG: Resultado verificação duplicata: {duplicata_resultado}")
+        
+        if duplicata_resultado['tem_duplicata']:
+            print(f"DEBUG: Duplicata encontrada: {duplicata_resultado['mensagem']}")
+            return {
+                'tipo': 'duplicata_encontrada',
+                'duplicata_info': duplicata_resultado
+            }, duplicata_resultado['mensagem']
         
         # Validar número do lançamento
         print("DEBUG: Validando número do lançamento...")

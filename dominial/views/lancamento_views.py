@@ -9,6 +9,7 @@ from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
+from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
@@ -38,26 +39,81 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     if request.method == 'POST':
         try:
             # Usar o service para criar o lançamento completo
-            sucesso, mensagem_origens = LancamentoService.criar_lancamento_completo(
+            resultado = LancamentoService.criar_lancamento_completo(
                 request, tis, imovel, documento_ativo
             )
             
-            if sucesso:
-                messages.success(request, '✅ Lançamento criado com sucesso!')
-                if mensagem_origens:
-                    messages.info(request, mensagem_origens)
+            print(f"DEBUG VIEW: Resultado recebido: {resultado}")
+            print(f"DEBUG VIEW: Tipo do resultado: {type(resultado)}")
+            print(f"DEBUG VIEW: É tupla: {isinstance(resultado, tuple)}")
+            if isinstance(resultado, tuple):
+                print(f"DEBUG VIEW: Tamanho da tupla: {len(resultado)}")
+            
+            # Verificar se é resultado de duplicata
+            if isinstance(resultado, tuple) and len(resultado) == 2:
+                primeiro_elemento, segundo_elemento = resultado
                 
-                # Verificar se o usuário marcou "finalizar"
-                finalizar = request.POST.get('finalizar') == 'on'
-                
-                if finalizar:
-                    # Redirecionar para a visualização dos lançamentos do documento
-                    return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+                # Verificar se é resultado de duplicata (primeiro elemento é dict com 'tipo')
+                if isinstance(primeiro_elemento, dict) and primeiro_elemento.get('tipo') == 'duplicata_encontrada':
+                    # Resultado de duplicata encontrada
+                    duplicata_info = primeiro_elemento
+                    
+                    # Preparar dados para o template de duplicata
+                    dados_template = LancamentoDuplicataService.obter_dados_duplicata_para_template(
+                        duplicata_info['duplicata_info']
+                    )
+                    
+                    # Renderizar template de duplicata
+                    context = {
+                        'tis': tis,
+                        'imovel': imovel,
+                        'documento': documento_ativo,
+                        'duplicata_info': dados_template,
+                        'form_data': request.POST,
+                        'modo_duplicata': True
+                    }
+                    
+                    return render(request, 'dominial/duplicata_importacao.html', context)
                 else:
-                    # Redirecionar para criar um novo lançamento no mesmo documento
-                    return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+                    # Resultado normal (sucesso, mensagem)
+                    sucesso, mensagem_origens = resultado
+                    
+                    if sucesso:
+                        messages.success(request, '✅ Lançamento criado com sucesso!')
+                        if mensagem_origens:
+                            messages.info(request, mensagem_origens)
+                        
+                        # Verificar se o usuário marcou "finalizar"
+                        finalizar = request.POST.get('finalizar') == 'on'
+                        
+                        if finalizar:
+                            # Redirecionar para a visualização dos lançamentos do documento
+                            return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+                        else:
+                            # Redirecionar para criar um novo lançamento no mesmo documento
+                            return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+                    else:
+                        messages.error(request, mensagem_origens)
             else:
-                messages.error(request, mensagem_origens)
+                # Resultado de duplicata encontrada (formato antigo)
+                duplicata_info = resultado
+                
+                # Preparar dados para o template de duplicata
+                dados_template = LancamentoDuplicataService.obter_dados_duplicata_para_template(
+                    duplicata_info['duplicata_info']
+                )
+                
+                # Renderizar template de duplicata
+                context = {
+                    'tis': tis,
+                    'imovel': imovel,
+                    'documento': documento_ativo,
+                    'duplicata_info': dados_template,
+                    'form_data': request.POST,
+                    'modo_duplicata': True
+                }
+                
+                return render(request, 'dominial/duplicata_importacao.html', context)
                 
         except Exception as e:
             # Capturar exceções para debug

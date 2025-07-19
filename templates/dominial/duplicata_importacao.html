@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Duplicata Encontrada - {{ imovel.nome }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .duplicata-container {
+        background: #f8f9fa;
+        border: 2px solid #28a745;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+    }
+    
+    .duplicata-header {
+        background: #28a745;
+        color: white;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+    }
+    
+    .duplicata-info {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .documento-origem {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .documentos-importaveis {
+        background: #f3e5f5;
+        border-left: 4px solid #9c27b0;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .cadeia-dominial {
+        background: #fff3e0;
+        border-left: 4px solid #ff9800;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .lancamento-item {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        margin: 5px 0;
+    }
+    
+
+    
+    .btn-importar {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+    
+    .btn-cancelar {
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+    
+    .btn-importar:hover {
+        background: #218838;
+    }
+    
+    .btn-cancelar:hover {
+        background: #5a6268;
+    }
+    
+    .warning-message {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        color: #856404;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+    }
+    
+    .alert {
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+    }
+    
+    .alert-info {
+        background: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+    }
+    
+    .alert i {
+        margin-right: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="duplicata-container">
+        <div class="duplicata-header">
+            <h2><i class="fas fa-exclamation-triangle"></i> Duplicata Encontrada</h2>
+            <p>Foi encontrada uma cadeia dominial com origem e cartório idênticos aos informados.</p>
+        </div>
+        
+        <div class="warning-message">
+            <strong>⚠️ Atenção:</strong> Verifique se digitou corretamente origem e Cartório. Caso digitou errado clique em cancelar e altere os dados.
+        </div>
+        
+        <!-- Documento de Origem -->
+        <div class="documento-origem">
+            <h4><i class="fas fa-file-alt"></i> Documento de Origem Encontrado</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Número:</strong> {{ duplicata_info.documento_origem.numero }}</p>
+                    <p><strong>Tipo:</strong> {{ duplicata_info.documento_origem.tipo }}</p>
+                    <p><strong>Imóvel:</strong> {{ duplicata_info.documento_origem.imovel_nome }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Cartório:</strong> {{ duplicata_info.documento_origem.cartorio }}</p>
+                    <p><strong>Livro:</strong> {{ duplicata_info.documento_origem.livro }}</p>
+                    <p><strong>Folha:</strong> {{ duplicata_info.documento_origem.folha }}</p>
+                    <p><strong>Total de Lançamentos:</strong> {{ duplicata_info.documento_origem.total_lancamentos }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Documentos Importáveis -->
+        <div class="documentos-importaveis">
+            <h4><i class="fas fa-download"></i> Importação da Cadeia Dominial</h4>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Importante:</strong> Antes de importar a cadeia dominial, verifique se os documentos abaixo estão coerentes..
+            </div>
+            
+            <form method="post" action="{% url 'importar_duplicata' tis.id imovel.id documento.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="documento_origem_id" value="{{ duplicata_info.documento_origem.id }}">
+                
+                <!-- Enviar todos os documentos da cadeia -->
+                {% for item in duplicata_info.cadeia_dominial %}
+                <input type="hidden" name="documentos_importaveis[]" value="{{ item.documento.id }}">
+                {% endfor %}
+                
+                <div class="mt-3">
+                    <button type="submit" class="btn-importar">
+                        <i class="fas fa-download"></i> Importar Cadeia Dominial Completa
+                    </button>
+                    <a href="{% url 'cancelar_importacao_duplicata' tis.id imovel.id documento.id %}" 
+                       class="btn-cancelar">
+                        <i class="fas fa-times"></i> Cancelar Importação
+                    </a>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Cadeia Dominial -->
+        <div class="cadeia-dominial">
+            <h4><i class="fas fa-sitemap"></i> Cadeia Dominial Completa</h4>
+            <p>Visualize a estrutura completa da cadeia dominial que será importada:</p>
+            
+            {% for item in duplicata_info.cadeia_dominial %}
+            <div class="lancamento-item">
+                <h6><strong>{{ item.documento.numero }}</strong> - {{ item.documento.tipo }}</h6>
+                <p><small>Livro: {{ item.documento.livro }}, Folha: {{ item.documento.folha }}</small></p>
+                
+                {% if item.lancamentos %}
+                <div class="ml-3">
+                    <strong>Lançamentos:</strong>
+                    {% for lanc in item.lancamentos %}
+                    <div class="small">
+                        • {{ lanc.numero }} - {{ lanc.tipo }} 
+                        ({{ lanc.data }}) - {{ lanc.observacoes }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Informações do Imóvel Atual -->
+        <div class="duplicata-info">
+            <h4><i class="fas fa-info-circle"></i> Informações do Imóvel Atual</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Nome:</strong> {{ imovel.nome }}</p>
+                    <p><strong>Matrícula:</strong> {{ imovel.matricula }}</p>
+                    <p><strong>TIs:</strong> {{ tis.nome }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Documento Ativo:</strong> {{ documento.numero }} - {{ documento.tipo.get_tipo_display }}</p>
+                    <p><strong>Cartório:</strong> {% if documento.cartorio %}{{ documento.cartorio.nome }}{% else %}Não informado{% endif %}</p>
+                    <p><strong>Total de Lançamentos Atuais:</strong> {{ documento.lancamentos.count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Confirmar antes de importar
+    const importForm = document.querySelector('form');
+    importForm.addEventListener('submit', function(e) {
+        if (!confirm('Tem certeza que deseja importar toda a cadeia dominial? Esta ação não pode ser desfeita.')) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %} 
