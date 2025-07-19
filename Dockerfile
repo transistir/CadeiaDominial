@@ -36,17 +36,15 @@ RUN mkdir -p /var/log/cadeia_dominial \
 RUN mkdir -p /app/staticfiles \
     && chown -R appuser:appuser /app/staticfiles
 
+# Copiar script de inicialização e dar permissão (como root)
+COPY scripts/init.sh /app/init.sh
+RUN chmod +x /app/init.sh
+
 # Mudar para usuário appuser
 USER appuser
 
 # Coletar arquivos estáticos como appuser
 RUN python manage.py collectstatic --noinput
-
-# Copiar script de inicialização e dar permissão
-COPY scripts/init.sh /app/init.sh
-RUN chmod +x /app/init.sh
-
-USER appuser
 
 # Expor porta
 EXPOSE 8000
