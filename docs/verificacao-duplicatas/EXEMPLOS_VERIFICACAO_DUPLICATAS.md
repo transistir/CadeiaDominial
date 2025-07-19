@@ -1,6 +1,6 @@
-# 📝 EXEMPLOS PRÁTICOS - VERIFICAÇÃO DE DUPLICATAS
+# EXEMPLOS PRÁTICOS - VERIFICAÇÃO DE DUPLICATAS E IMPORTAÇÃO
 
-## 🎯 **Cenários de Uso**
+## **Cenários de Uso**
 
 ### **Cenário 1: Usuário Descobre Duplicata Durante Lançamento**
 
@@ -13,7 +13,7 @@
 1. **Detecção**: Sistema verifica automaticamente
 2. **Modal**: Aparece modal informando:
    ```
-   📋 Duplicata Encontrada
+   Duplicata Encontrada
    
    Origem encontrada: 12345
    Cartório: Cartório Central
@@ -62,7 +62,7 @@
    - **Usuário deve** escolher uma origem diferente ou um cartório diferente
 4. **Ação obrigatória**: Usuário precisa modificar origem ou cartório para prosseguir
 
-## 🔧 **Exemplos de Código**
+## **Ideias iniciais de Código**
 
 ### **1. Verificação de Duplicata**
 
