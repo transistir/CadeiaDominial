@@ -26,18 +26,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Criar usuário não-root para segurança
-RUN adduser --disabled-password --gecos '' appuser \
-    && chown -R appuser:appuser /app
+RUN adduser --disabled-password --gecos '' appuser
 
 # Criar diretório de logs
 RUN mkdir -p /var/log/cadeia_dominial \
     && chown -R appuser:appuser /var/log/cadeia_dominial
 
-# Coletar arquivos estáticos como root primeiro
-RUN python manage.py collectstatic --noinput
+# Criar diretório staticfiles e dar permissões
+RUN mkdir -p /app/staticfiles \
+    && chown -R appuser:appuser /app/staticfiles
 
-# Mudar permissões dos arquivos estáticos
-RUN chown -R appuser:appuser /app/staticfiles
+# Mudar para usuário appuser
+USER appuser
+
+# Coletar arquivos estáticos como appuser
+RUN python manage.py collectstatic --noinput
 
 # Copiar script de inicialização e dar permissão
 COPY scripts/init.sh /app/init.sh
