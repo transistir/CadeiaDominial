@@ -33,16 +33,25 @@ def imovel_form(request, tis_id, imovel_id=None):
                     messages.warning(request, f'O nome do proprietário foi truncado para {len(nome_truncado)} caracteres.')
                 
                 # Criar ou buscar proprietário
-                proprietario, created = Pessoas.objects.get_or_create(
-                    nome=nome_truncado,
-                    defaults={
-                        'nome': nome_truncado,
-                        'cpf': None,  # CPF é opcional, usar None em vez de string vazia
-                        'rg': '',
-                        'email': '',
-                        'telefone': ''
-                    }
-                )
+                # Primeiro verificar se já existe uma pessoa com este nome
+                pessoas_existentes = Pessoas.objects.filter(nome=nome_truncado)
+                
+                if pessoas_existentes.exists():
+                    # Se existem múltiplas pessoas com o mesmo nome, usar a primeira
+                    if pessoas_existentes.count() > 1:
+                        messages.warning(request, f'Encontradas {pessoas_existentes.count()} pessoas com o nome "{nome_truncado}". Usando a primeira encontrada.')
+                    proprietario = pessoas_existentes.first()
+                    created = False
+                else:
+                    # Criar nova pessoa
+                    proprietario = Pessoas.objects.create(
+                        nome=nome_truncado,
+                        cpf=None,  # CPF é opcional, usar None em vez de string vazia
+                        rg='',
+                        email='',
+                        telefone=''
+                    )
+                    created = True
                 imovel.proprietario = proprietario
             else:
                 messages.error(request, 'Nome do proprietário é obrigatório.')

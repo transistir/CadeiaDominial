@@ -17,7 +17,16 @@ CSRF_TRUSTED_ORIGINS = [
     'https://46.62.152.252',
     'http://cadeiadominial.com.br',
     'https://cadeiadominial.com.br',
+    'http://leiadominial.com.br',
+    'https://leiadominial.com.br',
 ]
+
+# Configurações adicionais de CSRF para resolver problemas de login/logout
+CSRF_COOKIE_DOMAIN = None
+CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_HTTPONLY = False
+CSRF_USE_SESSIONS = True
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Configurações do Banco de Dados PostgreSQL
 DATABASES = {
