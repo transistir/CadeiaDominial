@@ -74,6 +74,10 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
             try:
                 from ..services.lancamento_criacao_service import LancamentoCriacaoService
                 
+                # Marcar que estamos criando após importação para pular verificação de duplicatas
+                request.POST = request.POST.copy()
+                request.POST['apos_importacao'] = 'true'
+                
                 # Criar o lançamento original usando os dados do POST
                 lancamento_criado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
                     request=request,
@@ -90,11 +94,10 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
             except Exception as e:
                 messages.warning(request, f"⚠️ Importação realizada, mas erro na criação do lançamento: {str(e)}")
             
-            # Redirecionar para a visualização dos lançamentos do documento
-            return redirect('documento_lancamentos', 
+            # Redirecionar para a visualização de tabela da cadeia dominial
+            return redirect('cadeia_dominial_tabela', 
                           tis_id=tis.id, 
-                          imovel_id=imovel.id, 
-                          documento_id=documento_ativo.id)
+                          imovel_id=imovel.id)
         else:
             messages.error(request, f"❌ {resultado['mensagem']}")
             

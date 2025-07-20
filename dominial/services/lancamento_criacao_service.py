@@ -51,27 +51,32 @@ class LancamentoCriacaoService:
         dados_lancamento = LancamentoFormService.processar_dados_lancamento(request, tipo_lanc)
         print(f"DEBUG: Dados processados: {dados_lancamento}")
         
-        # Verificar duplicatas antes de criar o lançamento
-        print("DEBUG: Verificando duplicatas...")
-        print("DEBUG: Importando LancamentoDuplicataService...")
-        try:
-            duplicata_resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
-                request, documento_ativo
-            )
-            print("DEBUG: Verificação de duplicata executada com sucesso")
-        except Exception as e:
-            print(f"DEBUG: Erro na verificação de duplicata: {str(e)}")
-            import traceback
-            print(f"DEBUG: Traceback: {traceback.format_exc()}")
-            duplicata_resultado = {'tem_duplicata': False, 'mensagem': f'Erro na verificação: {str(e)}'}
-        print(f"DEBUG: Resultado verificação duplicata: {duplicata_resultado}")
+        # Verificar duplicatas antes de criar o lançamento (pular se após importação)
+        apos_importacao = request.POST.get('apos_importacao') == 'true'
         
-        if duplicata_resultado['tem_duplicata']:
-            print(f"DEBUG: Duplicata encontrada: {duplicata_resultado['mensagem']}")
-            return {
-                'tipo': 'duplicata_encontrada',
-                'duplicata_info': duplicata_resultado
-            }, duplicata_resultado['mensagem']
+        if not apos_importacao:
+            print("DEBUG: Verificando duplicatas...")
+            print("DEBUG: Importando LancamentoDuplicataService...")
+            try:
+                duplicata_resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
+                    request, documento_ativo
+                )
+                print("DEBUG: Verificação de duplicata executada com sucesso")
+            except Exception as e:
+                print(f"DEBUG: Erro na verificação de duplicata: {str(e)}")
+                import traceback
+                print(f"DEBUG: Traceback: {traceback.format_exc()}")
+                duplicata_resultado = {'tem_duplicata': False, 'mensagem': f'Erro na verificação: {str(e)}'}
+            print(f"DEBUG: Resultado verificação duplicata: {duplicata_resultado}")
+            
+            if duplicata_resultado['tem_duplicata']:
+                print(f"DEBUG: Duplicata encontrada: {duplicata_resultado['mensagem']}")
+                return {
+                    'tipo': 'duplicata_encontrada',
+                    'duplicata_info': duplicata_resultado
+                }, duplicata_resultado['mensagem']
+        else:
+            print("DEBUG: Pulando verificação de duplicatas (após importação)")
         
         # Validar número do lançamento
         print("DEBUG: Validando número do lançamento...")

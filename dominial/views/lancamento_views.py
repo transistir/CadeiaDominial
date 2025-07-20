@@ -63,13 +63,39 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         duplicata_info['duplicata_info']
                     )
                     
+                    # Preparar dados do formulário para preservação
+                    form_data = {
+                        'tipo_lancamento': request.POST.get('tipo_lancamento'),
+                        'numero_lancamento': request.POST.get('numero_lancamento'),
+                        'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
+                        'data': request.POST.get('data'),
+                        'observacoes': request.POST.get('observacoes'),
+                        'livro_documento': request.POST.get('livro_documento'),
+                        'folha_documento': request.POST.get('folha_documento'),
+                        'cartorio': request.POST.get('cartorio'),
+                        'cartorio_nome': request.POST.get('cartorio_nome'),
+                        'area': request.POST.get('area'),
+                        'forma': request.POST.get('forma'),
+                        'descricao': request.POST.get('descricao'),
+                        'titulo': request.POST.get('titulo'),
+                        'origem_completa': request.POST.getlist('origem_completa[]'),
+                        'cartorio_origem': request.POST.getlist('cartorio_origem[]'),
+                        'cartorio_origem_nome': request.POST.getlist('cartorio_origem_nome[]'),
+                        'livro_origem': request.POST.getlist('livro_origem[]'),
+                        'folha_origem': request.POST.getlist('folha_origem[]'),
+                        'transmitente': request.POST.getlist('transmitente[]'),
+                        'transmitente_nome': request.POST.getlist('transmitente_nome[]'),
+                        'adquirente': request.POST.getlist('adquirente[]'),
+                        'adquirente_nome': request.POST.getlist('adquirente_nome[]'),
+                    }
+                    
                     # Renderizar template de duplicata
                     context = {
                         'tis': tis,
                         'imovel': imovel,
                         'documento': documento_ativo,
                         'duplicata_info': dados_template,
-                        'form_data': request.POST,
+                        'form_data': form_data,
                         'modo_duplicata': True
                     }
                     
@@ -103,13 +129,39 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     duplicata_info['duplicata_info']
                 )
                 
+                # Preparar dados do formulário para preservação
+                form_data = {
+                    'tipo_lancamento': request.POST.get('tipo_lancamento'),
+                    'numero_lancamento': request.POST.get('numero_lancamento'),
+                    'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
+                    'data': request.POST.get('data'),
+                    'observacoes': request.POST.get('observacoes'),
+                    'livro_documento': request.POST.get('livro_documento'),
+                    'folha_documento': request.POST.get('folha_documento'),
+                    'cartorio': request.POST.get('cartorio'),
+                    'cartorio_nome': request.POST.get('cartorio_nome'),
+                    'area': request.POST.get('area'),
+                    'forma': request.POST.get('forma'),
+                    'descricao': request.POST.get('descricao'),
+                    'titulo': request.POST.get('titulo'),
+                    'origem_completa': request.POST.getlist('origem_completa[]'),
+                    'cartorio_origem': request.POST.getlist('cartorio_origem[]'),
+                    'cartorio_origem_nome': request.POST.getlist('cartorio_origem_nome[]'),
+                    'livro_origem': request.POST.getlist('livro_origem[]'),
+                    'folha_origem': request.POST.getlist('folha_origem[]'),
+                    'transmitente': request.POST.getlist('transmitente[]'),
+                    'transmitente_nome': request.POST.getlist('transmitente_nome[]'),
+                    'adquirente': request.POST.getlist('adquirente[]'),
+                    'adquirente_nome': request.POST.getlist('adquirente_nome[]'),
+                }
+                
                 # Renderizar template de duplicata
                 context = {
                     'tis': tis,
                     'imovel': imovel,
                     'documento': documento_ativo,
                     'duplicata_info': dados_template,
-                    'form_data': request.POST,
+                    'form_data': form_data,
                     'modo_duplicata': True
                 }
                 

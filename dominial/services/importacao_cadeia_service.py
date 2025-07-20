@@ -79,16 +79,29 @@ class ImportacaoCadeiaService:
                     except Exception as e:
                         erros.append(f"Erro ao importar documento {doc_id}: {str(e)}")
                 
-                return {
-                    'sucesso': len(erros) == 0,
-                    'documentos_importados': documentos_importados,
-                    'total_importados': len(documentos_importados),
-                    'erros': erros,
-                    'imovel_destino': {
-                        'id': imovel_destino.id,
-                        'matricula': imovel_destino.matricula
+                # Se todos os documentos já foram importados, considerar como sucesso
+                if len(documentos_importados) == 0 and len(erros) > 0 and all('já foi importado' in erro for erro in erros):
+                    return {
+                        'sucesso': True,
+                        'documentos_importados': documentos_importados,
+                        'total_importados': len(documentos_importados),
+                        'mensagem': 'Todos os documentos já foram importados anteriormente',
+                        'imovel_destino': {
+                            'id': imovel_destino.id,
+                            'matricula': imovel_destino.matricula
+                        }
                     }
-                }
+                else:
+                    return {
+                        'sucesso': len(erros) == 0,
+                        'documentos_importados': documentos_importados,
+                        'total_importados': len(documentos_importados),
+                        'erros': erros,
+                        'imovel_destino': {
+                            'id': imovel_destino.id,
+                            'matricula': imovel_destino.matricula
+                        }
+                    }
                 
         except Imovel.DoesNotExist:
             return {

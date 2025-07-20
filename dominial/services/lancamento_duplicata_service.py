@@ -128,12 +128,19 @@ class LancamentoDuplicataService:
         
         # Realizar importação
         try:
+            print(f"DEBUG IMPORTACAO: Iniciando importação para imóvel {documento_ativo.imovel.id}")
+            print(f"DEBUG IMPORTACAO: Documento origem ID: {documento_origem.id}")
+            print(f"DEBUG IMPORTACAO: Documentos importáveis IDs: {documentos_importaveis_ids}")
+            print(f"DEBUG IMPORTACAO: Usuário ID: {usuario.id}")
+            
             resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
                 imovel_destino_id=documento_ativo.imovel.id,
                 documento_origem_id=documento_origem.id,
                 documentos_importaveis_ids=documentos_importaveis_ids,
                 usuario_id=usuario.id
             )
+            
+            print(f"DEBUG IMPORTACAO: Resultado recebido: {resultado}")
             
             if resultado['sucesso']:
                 return {
@@ -142,12 +149,17 @@ class LancamentoDuplicataService:
                     'documentos_importados': resultado['documentos_importados']
                 }
             else:
+                erro_msg = resultado.get('erro', resultado.get('mensagem', 'Erro desconhecido na importação'))
+                print(f"DEBUG IMPORTACAO: Erro na importação: {erro_msg}")
                 return {
                     'sucesso': False,
-                    'mensagem': resultado['mensagem']
+                    'mensagem': erro_msg
                 }
                 
         except Exception as e:
+            print(f"DEBUG IMPORTACAO: Exceção durante importação: {str(e)}")
+            import traceback
+            print(f"DEBUG IMPORTACAO: Traceback: {traceback.format_exc()}")
             return {
                 'sucesso': False,
                 'mensagem': f'Erro durante importação: {str(e)}'

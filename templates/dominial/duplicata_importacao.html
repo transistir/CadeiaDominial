@@ -164,6 +164,59 @@
                 <input type="hidden" name="documentos_importaveis[]" value="{{ item.documento.id }}">
                 {% endfor %}
                 
+                <!-- Preservar dados do formulário original -->
+                {% if form_data %}
+                <input type="hidden" name="tipo_lancamento" value="{{ form_data.tipo_lancamento }}">
+                <input type="hidden" name="numero_lancamento" value="{{ form_data.numero_lancamento }}">
+                <input type="hidden" name="numero_lancamento_simples" value="{{ form_data.numero_lancamento_simples }}">
+                <input type="hidden" name="data" value="{{ form_data.data }}">
+                <input type="hidden" name="observacoes" value="{{ form_data.observacoes }}">
+                <input type="hidden" name="livro_documento" value="{{ form_data.livro_documento }}">
+                <input type="hidden" name="folha_documento" value="{{ form_data.folha_documento }}">
+                <input type="hidden" name="cartorio" value="{{ form_data.cartorio }}">
+                <input type="hidden" name="cartorio_nome" value="{{ form_data.cartorio_nome }}">
+                <input type="hidden" name="area" value="{{ form_data.area }}">
+                <input type="hidden" name="forma" value="{{ form_data.forma }}">
+                <input type="hidden" name="descricao" value="{{ form_data.descricao }}">
+                <input type="hidden" name="titulo" value="{{ form_data.titulo }}">
+                
+                <!-- Preservar origens -->
+                {% for origem in form_data.origem_completa %}
+                <input type="hidden" name="origem_completa[]" value="{{ origem }}">
+                {% endfor %}
+                
+                <!-- Preservar cartórios de origem -->
+                {% for cartorio in form_data.cartorio_origem %}
+                <input type="hidden" name="cartorio_origem[]" value="{{ cartorio }}">
+                {% endfor %}
+                
+                <!-- Preservar livros de origem -->
+                {% for livro in form_data.livro_origem %}
+                <input type="hidden" name="livro_origem[]" value="{{ livro }}">
+                {% endfor %}
+                
+                <!-- Preservar folhas de origem -->
+                {% for folha in form_data.folha_origem %}
+                <input type="hidden" name="folha_origem[]" value="{{ folha }}">
+                {% endfor %}
+                
+                <!-- Preservar transmitentes -->
+                {% for transmitente in form_data.transmitente %}
+                <input type="hidden" name="transmitente[]" value="{{ transmitente }}">
+                {% endfor %}
+                {% for transmitente_nome in form_data.transmitente_nome %}
+                <input type="hidden" name="transmitente_nome[]" value="{{ transmitente_nome }}">
+                {% endfor %}
+                
+                <!-- Preservar adquirentes -->
+                {% for adquirente in form_data.adquirente %}
+                <input type="hidden" name="adquirente[]" value="{{ adquirente }}">
+                {% endfor %}
+                {% for adquirente_nome in form_data.adquirente_nome %}
+                <input type="hidden" name="adquirente_nome[]" value="{{ adquirente_nome }}">
+                {% endfor %}
+                {% endif %}
+                
                 <div class="mt-3">
                     <button type="submit" class="btn-importar">
                         <i class="fas fa-download"></i> Importar Cadeia Dominial Completa
