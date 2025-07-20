@@ -4,6 +4,7 @@ Service especializado para construção da árvore de hierarquia
 
 from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
+from .documento_importado_service import DocumentoImportadoService
 import re
 from collections import deque
 
@@ -27,6 +28,12 @@ class HierarquiaArvoreService:
             .select_related('cartorio', 'tipo')\
             .prefetch_related('lancamentos', 'lancamentos__tipo')\
             .order_by('data')
+        
+        # Buscar documentos importados que são referenciados pelos lançamentos deste imóvel
+        documentos_importados = HierarquiaArvoreService._buscar_documentos_importados(imovel)
+        
+        # Adicionar documentos importados à lista
+        documentos = list(documentos) + documentos_importados
         
         # Processar origens identificadas de lançamentos (só criar documentos se solicitado)
         origens_identificadas = HierarquiaOrigemService.processar_origens_identificadas(imovel, criar_documentos_automaticos)
@@ -70,10 +77,183 @@ class HierarquiaArvoreService:
         return arvore
     
     @staticmethod
+    def _buscar_documentos_importados(imovel):
+        """
+        Busca documentos importados que são referenciados pelos lançamentos deste imóvel
+        E também toda a cadeia dominial desses documentos importados
+        
+        Args:
+            imovel: Objeto Imovel
+            
+        Returns:
+            List: Lista de documentos importados e sua cadeia dominial
+        """
+        documentos_importados = []
+        documentos_processados = set()
+        
+        # Buscar todos os lançamentos deste imóvel
+        from ..models import Lancamento
+        lancamentos = Lancamento.objects.filter(
+            documento__imovel=imovel,
+            origem__isnull=False
+        ).exclude(origem='')
+        
+        # Para cada lançamento, verificar se a origem é um documento importado
+        for lancamento in lancamentos:
+            origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+            
+            for origem_numero in origens:
+                # Buscar documento com este número que foi importado para este imóvel
+                from ..models import DocumentoImportado
+                doc_importado = DocumentoImportado.objects.filter(
+                    documento__numero=origem_numero,
+                    documento__imovel__isnull=False
+                ).exclude(
+                    documento__imovel=imovel
+                ).select_related('documento', 'documento__cartorio', 'documento__tipo').first()
+                
+                if doc_importado:
+                    doc_importado = doc_importado.documento
+                
+                if doc_importado and doc_importado.id not in documentos_processados:
+                    documentos_importados.append(doc_importado)
+                    documentos_processados.add(doc_importado.id)
+                    
+                    # Buscar toda a cadeia dominial deste documento importado
+                    cadeia_dominial = HierarquiaArvoreService._buscar_cadeia_dominial_documento(doc_importado)
+                    for doc_cadeia in cadeia_dominial:
+                        if doc_cadeia.id not in documentos_processados:
+                            documentos_importados.append(doc_cadeia)
+                            documentos_processados.add(doc_cadeia.id)
+        
+        return documentos_importados
+    
+    @staticmethod
+    def _buscar_cadeia_dominial_documento(documento):
+        """
+        Busca toda a cadeia dominial de um documento (documentos que são origem dele)
+        
+        Args:
+            documento: Documento para buscar a cadeia dominial
+            
+        Returns:
+            List: Lista de documentos da cadeia dominial
+        """
+        from ..models import Lancamento, Documento
+        from ..services.hierarquia_service import HierarquiaService
+        
+        # Usar o service que busca toda a cadeia dominial
+        try:
+            # Buscar o imóvel do documento
+            imovel_documento = documento.imovel
+            
+            # Buscar TODOS os documentos do imóvel (não apenas o tronco principal)
+            todos_documentos = Documento.objects.filter(imovel=imovel_documento)\
+                .select_related('cartorio', 'tipo')\
+                .prefetch_related('lancamentos')\
+                .order_by('data')
+            
+            # Filtrar apenas documentos que são parte da cadeia deste documento específico
+            cadeia_documento = []
+            for doc_imovel in todos_documentos:
+                # Verificar se este documento é parte da cadeia do documento original
+                if HierarquiaArvoreService._documento_pertence_cadeia(doc_imovel, documento):
+                    cadeia_documento.append(doc_imovel)
+            
+            return cadeia_documento
+            
+        except Exception as e:
+            print(f"Erro ao buscar cadeia dominial do documento {documento.numero}: {str(e)}")
+            return []
+    
+    @staticmethod
+    def _documento_pertence_cadeia(documento_candidato, documento_origem, documentos_processados=None):
+        """
+        Verifica se um documento candidato pertence à cadeia dominial de um documento origem
+        Faz busca recursiva para encontrar toda a cadeia
+        
+        Args:
+            documento_candidato: Documento a verificar
+            documento_origem: Documento origem da cadeia
+            documentos_processados: Set de IDs já processados (para evitar loops)
+            
+        Returns:
+            bool: True se pertence à cadeia
+        """
+        if documentos_processados is None:
+            documentos_processados = set()
+        
+        # Se é o próprio documento origem, pertence
+        if documento_candidato.id == documento_origem.id:
+            return True
+        
+        # Evitar loops infinitos
+        if documento_origem.id in documentos_processados:
+            return False
+        
+        documentos_processados.add(documento_origem.id)
+        
+        # Verificar se o documento candidato é referenciado como origem do documento origem
+        from ..models import Lancamento
+        
+        # Verificar origens dos lançamentos do documento origem
+        lancamentos_origem = Lancamento.objects.filter(documento=documento_origem)
+        for lancamento in lancamentos_origem:
+            if lancamento.origem:
+                origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                if documento_candidato.numero in origens:
+                    return True
+                
+                # Buscar recursivamente nos documentos de origem
+                for origem_numero in origens:
+                    try:
+                        doc_origem = Documento.objects.get(
+                            numero=origem_numero,
+                            imovel=documento_origem.imovel
+                        )
+                        if HierarquiaArvoreService._documento_pertence_cadeia(
+                            documento_candidato, doc_origem, documentos_processados
+                        ):
+                            return True
+                    except Documento.DoesNotExist:
+                        continue
+        
+        # Verificar origem do próprio documento origem
+        if documento_origem.origem:
+            origens = [o.strip() for o in documento_origem.origem.split(';') if o.strip()]
+            if documento_candidato.numero in origens:
+                return True
+            
+            # Buscar recursivamente nos documentos de origem
+            for origem_numero in origens:
+                try:
+                    doc_origem = Documento.objects.get(
+                        numero=origem_numero,
+                        imovel=documento_origem.imovel
+                    )
+                    if HierarquiaArvoreService._documento_pertence_cadeia(
+                        documento_candidato, doc_origem, documentos_processados
+                    ):
+                        return True
+                except Documento.DoesNotExist:
+                    continue
+        
+        return False
+    
+    @staticmethod
     def _criar_no_documento(documento):
         """
         Cria um nó de documento para a árvore
         """
+        # Verificar se documento foi importado
+        is_importado = DocumentoImportadoService.is_documento_importado(documento)
+        info_importacao = None
+        tooltip_importacao = None
+        
+        if is_importado:
+            info_importacao = DocumentoImportadoService.get_info_importacao(documento)
+            tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
+        
         return {
             'id': documento.id,
             'numero': documento.numero,
@@ -89,7 +269,10 @@ class HierarquiaArvoreService:
             'x': 0,  # Posição X (será calculada pelo frontend)
             'y': 0,  # Posição Y (será calculada pelo frontend)
             'nivel': 0,  # Nível na árvore (será calculado)
-            'nivel_manual': documento.nivel_manual  # Nível manual definido pelo usuário
+            'nivel_manual': documento.nivel_manual,  # Nível manual definido pelo usuário
+            'is_importado': is_importado,
+            'info_importacao': info_importacao,
+            'tooltip_importacao': tooltip_importacao
         }
     
     @staticmethod

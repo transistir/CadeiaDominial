@@ -92,6 +92,6 @@ Documentação sobre investigações e análises de dados.
 
 ---
 
-**💡 Dica:** Use Ctrl+F para buscar rapidamente por termos específicos nesta documentação.
+**💡 Dica:** Use Ctrl+F para buscar rapidamente por termos específicos nesta documentação. 
 
 **📁 Estrutura:** A documentação agora está organizada por assuntos para facilitar a navegação e manutenção. 

@@ -126,7 +126,12 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
         imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
         documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
         
-        messages.info(request, "ℹ️ Importação cancelada. Você pode continuar criando o lançamento normalmente.")
+        # Marcar na sessão que o usuário cancelou uma duplicata
+        request.session['duplicata_cancelada'] = True
+        request.session['duplicata_origem'] = request.GET.get('origem', '')
+        request.session['duplicata_cartorio'] = request.GET.get('cartorio', '')
+        
+        messages.error(request, "❌ Origem/cartório já existe. Altere a origem ou o cartório para continuar.")
         
         # Redirecionar para o formulário de lançamento
         return redirect('novo_lancamento_documento', 

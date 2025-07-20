@@ -221,9 +221,9 @@
                     <button type="submit" class="btn-importar">
                         <i class="fas fa-download"></i> Importar Cadeia Dominial Completa
                     </button>
-                    <a href="{% url 'cancelar_importacao_duplicata' tis.id imovel.id documento.id %}" 
+                    <a href="{% url 'cancelar_importacao_duplicata' tis.id imovel.id documento.id %}?origem={{ form_data.origem_completa.0|default:'' }}&cartorio={{ form_data.cartorio|default:'' }}" 
                        class="btn-cancelar">
-                        <i class="fas fa-times"></i> Cancelar Importação
+                        <i class="fas fa-times"></i> Cancelar e Alterar Dados
                     </a>
                 </div>
             </form>

@@ -33,28 +33,32 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         escolhas_origem = {}
     
     documentos = Documento.objects.filter(imovel=imovel).order_by('data')
-    if not documentos.exists():
+    
+    # Buscar documentos importados que são referenciados pelos lançamentos deste imóvel
+    documentos_importados = identificar_documentos_importados(imovel)
+    
+    # Adicionar documentos importados à lista
+    documentos = list(documentos) + documentos_importados
+    
+    if not documentos:
         return []
 
     tronco_principal = []
     # CORREÇÃO: Começar pela matrícula atual (que foi convertida em documento durante o cadastro do imóvel)
     # Primeiro, tentar encontrar o documento que corresponde à matrícula do imóvel
-    documento_atual = documentos.filter(
-        tipo__tipo='matricula', 
-        numero=imovel.matricula
-    ).first()
+    documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula), None)
     
     # Se não encontrou o documento da matrícula atual, procurar por matrículas
     if not documento_atual:
-        matriculas = documentos.filter(tipo__tipo='matricula')
-        if matriculas.exists():
+        matriculas = [doc for doc in documentos if doc.tipo.tipo == 'matricula']
+        if matriculas:
             # Se não há documento específico da matrícula do imóvel, usar a matrícula mais recente
-            documento_atual = matriculas.order_by('-data').first()
+            documento_atual = max(matriculas, key=lambda x: x.data)
         else:
             # Se não há matrículas, procurar por transcrições
-            transcricoes = documentos.filter(tipo__tipo='transcricao')
-            if transcricoes.exists():
-                documento_atual = transcricoes.order_by('-data').first()
+            transcricoes = [doc for doc in documentos if doc.tipo.tipo == 'transcricao']
+            if transcricoes:
+                documento_atual = max(transcricoes, key=lambda x: x.data)
             else:
                 return []
 
@@ -74,7 +78,7 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
             if lancamento.origem:
                 codigos = re.findall(r'[MT]\d+', lancamento.origem)
                 for codigo in codigos:
-                    doc_existente = Documento.objects.filter(imovel=imovel, numero=codigo).first()
+                    doc_existente = next((doc for doc in documentos if doc.numero == codigo), None)
                     if doc_existente:
                         origens_identificadas.append(doc_existente)
         
@@ -105,6 +109,44 @@ def identificar_troncos_secundarios(imovel, tronco_principal):
     # TODO: Implementar lógica de identificação dos troncos secundários
     # Esta função será implementada na Fase 2
     pass
+
+
+def identificar_documentos_importados(imovel):
+    """
+    Identifica documentos importados que são referenciados pelos lançamentos deste imóvel
+    
+    Args:
+        imovel: Objeto Imovel
+        
+    Returns:
+        list: Lista de documentos importados
+    """
+    from ..models import Lancamento, Documento
+    
+    documentos_importados = []
+    
+    # Buscar todos os lançamentos deste imóvel
+    lancamentos = Lancamento.objects.filter(
+        documento__imovel=imovel,
+        origem__isnull=False
+    ).exclude(origem='')
+    
+    # Para cada lançamento, verificar se a origem é um documento de outro imóvel
+    for lancamento in lancamentos:
+        origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+        
+        for origem_numero in origens:
+            # Buscar documento com este número que está em outro imóvel
+            doc_importado = Documento.objects.filter(
+                numero=origem_numero
+            ).exclude(
+                imovel=imovel
+            ).select_related('cartorio', 'tipo').first()
+            
+            if doc_importado and doc_importado not in documentos_importados:
+                documentos_importados.append(doc_importado)
+    
+    return documentos_importados
 
 
 def processar_origens_para_documentos(origem_texto, imovel, lancamento):

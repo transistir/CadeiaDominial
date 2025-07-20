@@ -92,11 +92,16 @@ class ImportacaoCadeiaService:
                         }
                     }
                 else:
+                    # Considerar sucesso se pelo menos um documento foi importado
+                    # ou se todos os erros são apenas "já foi importado"
+                    sucesso = len(documentos_importados) > 0 or all('já foi importado' in erro for erro in erros)
+                    
                     return {
-                        'sucesso': len(erros) == 0,
+                        'sucesso': sucesso,
                         'documentos_importados': documentos_importados,
                         'total_importados': len(documentos_importados),
                         'erros': erros,
+                        'mensagem': f'Importação concluída: {len(documentos_importados)} documentos importados' if sucesso else 'Falha na importação',
                         'imovel_destino': {
                             'id': imovel_destino.id,
                             'matricula': imovel_destino.matricula

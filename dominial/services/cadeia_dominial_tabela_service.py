@@ -6,6 +6,7 @@ import re
 from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento
 from ..services.hierarquia_service import HierarquiaService
+from ..services.documento_importado_service import DocumentoImportadoService
 
 
 class CadeiaDominialTabelaService:
@@ -33,6 +34,9 @@ class CadeiaDominialTabelaService:
         
         # Obter tronco principal considerando escolhas
         tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel, escolhas_origem)
+        
+        # Obter IDs de documentos importados para otimização
+        documentos_importados_ids = DocumentoImportadoService.get_documentos_importados_ids(imovel)
         
         # Processar cada documento (manter ordem por data)
         cadeia_processada = []
@@ -66,12 +70,24 @@ class CadeiaDominialTabelaService:
                     'escolhida': is_escolhida
                 })
             
+            # Verificar se documento foi importado
+            is_importado = documento.id in documentos_importados_ids
+            info_importacao = None
+            tooltip_importacao = None
+            
+            if is_importado:
+                info_importacao = DocumentoImportadoService.get_info_importacao(documento)
+                tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
+            
             cadeia_processada.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'origens_disponiveis': origens_formatadas,
                 'tem_multiplas_origens': tem_multiplas_origens,
-                'escolha_atual': escolha_atual
+                'escolha_atual': escolha_atual,
+                'is_importado': is_importado,
+                'info_importacao': info_importacao,
+                'tooltip_importacao': tooltip_importacao
             })
         
         result = {
@@ -176,6 +192,9 @@ class CadeiaDominialTabelaService:
         from .hierarquia_service import HierarquiaService
         tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
         
+        # Obter IDs de documentos importados para otimização
+        documentos_importados_ids = DocumentoImportadoService.get_documentos_importados_ids(imovel)
+        
         cadeia_completa = []
         for documento in tronco_principal:
             # Carregar lançamentos com pessoas
@@ -213,12 +232,24 @@ class CadeiaDominialTabelaService:
                     'escolhida': is_escolhida
                 })
             
+            # Verificar se documento foi importado
+            is_importado = documento.id in documentos_importados_ids
+            info_importacao = None
+            tooltip_importacao = None
+            
+            if is_importado:
+                info_importacao = DocumentoImportadoService.get_info_importacao(documento)
+                tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
+            
             cadeia_completa.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'origens_disponiveis': origens_formatadas,
-                'escolha_atual': escolha_atual
+                'escolha_atual': escolha_atual,
+                'is_importado': is_importado,
+                'info_importacao': info_importacao,
+                'tooltip_importacao': tooltip_importacao
             })
         
         return cadeia_completa

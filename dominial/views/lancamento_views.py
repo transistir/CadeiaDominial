@@ -103,69 +103,23 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 else:
                     # Resultado normal (sucesso, mensagem)
                     sucesso, mensagem_origens = resultado
-                    
-                    if sucesso:
-                        messages.success(request, '✅ Lançamento criado com sucesso!')
-                        if mensagem_origens:
-                            messages.info(request, mensagem_origens)
-                        
-                        # Verificar se o usuário marcou "finalizar"
-                        finalizar = request.POST.get('finalizar') == 'on'
-                        
-                        if finalizar:
-                            # Redirecionar para a visualização dos lançamentos do documento
-                            return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
-                        else:
-                            # Redirecionar para criar um novo lançamento no mesmo documento
-                            return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
-                    else:
-                        messages.error(request, mensagem_origens)
+            
+            if sucesso:
+                messages.success(request, '✅ Lançamento criado com sucesso!')
+                if mensagem_origens:
+                    messages.info(request, mensagem_origens)
+                
+                # Verificar se o usuário marcou "finalizar"
+                finalizar = request.POST.get('finalizar') == 'on'
+                
+                if finalizar:
+                    # Redirecionar para a visualização dos lançamentos do documento
+                    return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+                else:
+                    # Redirecionar para criar um novo lançamento no mesmo documento
+                    return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
             else:
-                # Resultado de duplicata encontrada (formato antigo)
-                duplicata_info = resultado
-                
-                # Preparar dados para o template de duplicata
-                dados_template = LancamentoDuplicataService.obter_dados_duplicata_para_template(
-                    duplicata_info['duplicata_info']
-                )
-                
-                # Preparar dados do formulário para preservação
-                form_data = {
-                    'tipo_lancamento': request.POST.get('tipo_lancamento'),
-                    'numero_lancamento': request.POST.get('numero_lancamento'),
-                    'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
-                    'data': request.POST.get('data'),
-                    'observacoes': request.POST.get('observacoes'),
-                    'livro_documento': request.POST.get('livro_documento'),
-                    'folha_documento': request.POST.get('folha_documento'),
-                    'cartorio': request.POST.get('cartorio'),
-                    'cartorio_nome': request.POST.get('cartorio_nome'),
-                    'area': request.POST.get('area'),
-                    'forma': request.POST.get('forma'),
-                    'descricao': request.POST.get('descricao'),
-                    'titulo': request.POST.get('titulo'),
-                    'origem_completa': request.POST.getlist('origem_completa[]'),
-                    'cartorio_origem': request.POST.getlist('cartorio_origem[]'),
-                    'cartorio_origem_nome': request.POST.getlist('cartorio_origem_nome[]'),
-                    'livro_origem': request.POST.getlist('livro_origem[]'),
-                    'folha_origem': request.POST.getlist('folha_origem[]'),
-                    'transmitente': request.POST.getlist('transmitente[]'),
-                    'transmitente_nome': request.POST.getlist('transmitente_nome[]'),
-                    'adquirente': request.POST.getlist('adquirente[]'),
-                    'adquirente_nome': request.POST.getlist('adquirente_nome[]'),
-                }
-                
-                # Renderizar template de duplicata
-                context = {
-                    'tis': tis,
-                    'imovel': imovel,
-                    'documento': documento_ativo,
-                    'duplicata_info': dados_template,
-                    'form_data': form_data,
-                    'modo_duplicata': True
-                }
-                
-                return render(request, 'dominial/duplicata_importacao.html', context)
+                messages.error(request, mensagem_origens)
                 
         except Exception as e:
             # Capturar exceções para debug
@@ -238,12 +192,26 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             return render(request, 'dominial/lancamento_form.html', context)
     
     # GET - mostrar formulário
+    # Verificar se há duplicata cancelada na sessão
+    duplicata_cancelada = request.session.get('duplicata_cancelada', False)
+    duplicata_origem = request.session.get('duplicata_origem', '')
+    duplicata_cartorio = request.session.get('duplicata_cartorio', '')
+    
+    # Limpar a sessão se não há duplicata cancelada
+    if not duplicata_cancelada:
+        request.session.pop('duplicata_cancelada', None)
+        request.session.pop('duplicata_origem', None)
+        request.session.pop('duplicata_cartorio', None)
+    
     context = {
         'tis': tis,
         'imovel': imovel,
         'documento': documento_ativo,
         'pessoas': pessoas,
         'cartorios': cartorios,
+        'duplicata_cancelada': duplicata_cancelada,
+        'duplicata_origem': duplicata_origem,
+        'duplicata_cartorio': duplicata_cartorio,
         'tipos_lancamento': tipos_lancamento,
         'transmitentes': [],
         'adquirentes': [],

@@ -292,8 +292,14 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('y', -40)
         .attr('rx', 12)
         .attr('fill', d => d.data.tipo === 'transcricao' ? '#6f42c1' : '#007bff')
-        .attr('stroke', d => d.data.tipo === 'transcricao' ? '#5a32a3' : '#0056b3')
-        .attr('stroke-width', 2)
+        .attr('stroke', d => {
+            // Documentos importados têm borda verde
+            if (d.data.is_importado) {
+                return '#28a745';
+            }
+            return d.data.tipo === 'transcricao' ? '#5a32a3' : '#0056b3';
+        })
+        .attr('stroke-width', d => d.data.is_importado ? 3 : 2)
         .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))')
         .on('mouseover', function() {
             d3.select(this)
@@ -331,6 +337,29 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('font-size', 11)
         .attr('opacity', 0.7)
         .text(d => d.data.total_lancamentos !== undefined ? `${d.data.total_lancamentos} lançamentos` : '');
+
+    // Badge de documento importado
+    node.filter(d => d.data.is_importado)
+        .append('circle')
+        .attr('cx', 55)
+        .attr('cy', -25)
+        .attr('r', 8)
+        .attr('fill', '#28a745')
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2)
+        .attr('title', d => d.data.tooltip_importacao || 'Documento importado');
+
+    // Ícone de check para documentos importados
+    node.filter(d => d.data.is_importado)
+        .append('text')
+        .attr('x', 55)
+        .attr('y', -21)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'white')
+        .attr('font-size', 10)
+        .attr('font-weight', 'bold')
+        .text('✓')
+        .attr('title', d => d.data.tooltip_importacao || 'Documento importado');
 
     // Botões SVG
     const btnGroup = node.append('g')

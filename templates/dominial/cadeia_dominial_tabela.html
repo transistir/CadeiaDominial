@@ -120,13 +120,21 @@
                     </thead>
                     <tbody>
                         {% for item in cadeia %}
-                        <tr class="documento-row" data-documento-id="{{ item.documento.id }}">
+                        <tr class="documento-row {% if item.is_importado %}documento-importado{% endif %}" data-documento-id="{{ item.documento.id }}">
                             <td>
                                 <button class="expand-btn" data-documento-id="{{ item.documento.id }}">
                                     <svg class="expand-icon expanded" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
+                                    {% if item.is_importado %}
+                                        <span class="importado-badge" title="{{ item.tooltip_importacao }}">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                            Importado
+                                        </span>
+                                    {% endif %}
                                 </button>
                             </td>
                             <td>{{ item.documento.data|date:"d/m/Y" }}</td>
