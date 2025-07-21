@@ -103,17 +103,13 @@ class HierarquiaArvoreService:
             origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
             
             for origem_numero in origens:
-                # Buscar documento com este número que foi importado para este imóvel
-                from ..models import DocumentoImportado
-                doc_importado = DocumentoImportado.objects.filter(
-                    documento__numero=origem_numero,
-                    documento__imovel__isnull=False
+                # Buscar documento com este número que está em outro imóvel
+                from ..models import Documento
+                doc_importado = Documento.objects.filter(
+                    numero=origem_numero
                 ).exclude(
-                    documento__imovel=imovel
-                ).select_related('documento', 'documento__cartorio', 'documento__tipo').first()
-                
-                if doc_importado:
-                    doc_importado = doc_importado.documento
+                    imovel=imovel
+                ).select_related('cartorio', 'tipo').first()
                 
                 if doc_importado and doc_importado.id not in documentos_processados:
                     documentos_importados.append(doc_importado)
@@ -194,7 +190,7 @@ class HierarquiaArvoreService:
         documentos_processados.add(documento_origem.id)
         
         # Verificar se o documento candidato é referenciado como origem do documento origem
-        from ..models import Lancamento
+        from ..models import Lancamento, Documento
         
         # Verificar origens dos lançamentos do documento origem
         lancamentos_origem = Lancamento.objects.filter(documento=documento_origem)
@@ -249,10 +245,23 @@ class HierarquiaArvoreService:
         is_importado = DocumentoImportadoService.is_documento_importado(documento)
         info_importacao = None
         tooltip_importacao = None
+        cadeias_dominiais = []
         
         if is_importado:
             info_importacao = DocumentoImportadoService.get_info_importacao(documento)
             tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
+            
+            # Buscar todas as cadeias dominiais onde este documento aparece
+            from ..models import DocumentoImportado
+            importacoes = DocumentoImportado.objects.filter(documento=documento)
+            for importacao in importacoes:
+                cadeias_dominiais.append({
+                    'imovel_id': importacao.imovel_origem.id,
+                    'imovel_matricula': importacao.imovel_origem.matricula,
+                    'imovel_nome': importacao.imovel_origem.nome,
+                    'data_importacao': importacao.data_importacao.strftime('%d/%m/%Y'),
+                    'importado_por': importacao.importado_por.username if importacao.importado_por else 'Sistema'
+                })
         
         return {
             'id': documento.id,
@@ -272,7 +281,9 @@ class HierarquiaArvoreService:
             'nivel_manual': documento.nivel_manual,  # Nível manual definido pelo usuário
             'is_importado': is_importado,
             'info_importacao': info_importacao,
-            'tooltip_importacao': tooltip_importacao
+            'tooltip_importacao': tooltip_importacao,
+            'cadeias_dominiais': cadeias_dominiais,
+            'total_cadeias': len(cadeias_dominiais)
         }
     
     @staticmethod

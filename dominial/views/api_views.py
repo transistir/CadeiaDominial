@@ -252,6 +252,8 @@ def escolher_origem_documento(request):
             'error': str(e)
         }, status=500)
 
+
+
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -310,53 +312,74 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         # Serializar dados para JSON
         cadeia_serializada = []
         for item in cadeia_data['cadeia']:
-            documento_serializado = {
-                'id': item['documento'].id,
-                'numero': item['documento'].numero,
-                'data': item['documento'].data.strftime('%d/%m/%Y'),
-                'tipo_display': item['documento'].tipo.get_tipo_display(),
-                'cartorio_nome': item['documento'].cartorio.nome if item['documento'].cartorio else '',
-                'livro': item['documento'].livro,
-                'folha': item['documento'].folha
-            }
+            documento = item['documento']
+            
+            # Verificar se o documento tem todos os campos necessários
+            try:
+                documento_serializado = {
+                    'id': documento.id,
+                    'numero': documento.numero,
+                    'data': documento.data.strftime('%d/%m/%Y') if documento.data else '',
+                    'tipo_display': documento.tipo.get_tipo_display() if documento.tipo else '',
+                    'cartorio_nome': documento.cartorio.nome if documento.cartorio else '',
+                    'livro': documento.livro,
+                    'folha': documento.folha,
+                    'is_importado': item.get('is_importado', False),
+                    'grupo_importacao': item.get('grupo_importacao') is not None,
+                    'is_primeiro_grupo': item.get('is_primeiro_grupo', False)
+                }
+            except Exception as e:
+                # Se houver erro ao serializar o documento, pular
+                continue
             
             lancamentos_serializados = []
-            for lancamento in item['lancamentos']:
-                lancamento_serializado = {
-                    'id': lancamento.id,
-                    'tipo': lancamento.tipo.tipo,
-                    'tipo_tipo': lancamento.tipo.tipo,  # Adicionar para compatibilidade
-                    'tipo_display': lancamento.tipo.get_tipo_display(),
-                    'numero_lancamento': lancamento.numero_lancamento,
-                    'data': lancamento.data.strftime('%d/%m/%Y'),
-                    'forma': lancamento.forma,
-                    'titulo': lancamento.titulo,
-                    'descricao': lancamento.descricao,
-                    'area': lancamento.area,
-                    'origem': lancamento.origem,
-                    'observacoes': lancamento.observacoes,
-                    'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,
-                    'livro_transacao': lancamento.livro_transacao,
-                    'folha_transacao': lancamento.folha_transacao,
-                    'data_transacao': lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else None,
-                    'pessoas': []
-                }
-                
-                # Serializar pessoas
-                for lancamento_pessoa in lancamento.pessoas.all():
-                    lancamento_serializado['pessoas'].append({
-                        'pessoa_nome': lancamento_pessoa.pessoa.nome,
-                        'tipo': lancamento_pessoa.tipo
-                    })
-                
-                lancamentos_serializados.append(lancamento_serializado)
+            try:
+                for lancamento in item['lancamentos']:
+                    lancamento_serializado = {
+                        'id': lancamento.id,
+                        'tipo': lancamento.tipo.tipo if lancamento.tipo else '',
+                        'tipo_tipo': lancamento.tipo.tipo if lancamento.tipo else '',  # Adicionar para compatibilidade
+                        'tipo_display': lancamento.tipo.get_tipo_display() if lancamento.tipo else '',
+                        'numero_lancamento': lancamento.numero_lancamento,
+                        'data': lancamento.data.strftime('%d/%m/%Y') if lancamento.data else '',
+                        'forma': lancamento.forma,
+                        'titulo': lancamento.titulo,
+                        'descricao': lancamento.descricao,
+                        'area': lancamento.area,
+                        'origem': lancamento.origem,
+                        'observacoes': lancamento.observacoes,
+                        'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,
+                        'livro_transacao': lancamento.livro_transacao,
+                        'folha_transacao': lancamento.folha_transacao,
+                        'data_transacao': lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else None,
+                        'pessoas': []
+                    }
+                    
+                    # Serializar pessoas
+                    try:
+                        for lancamento_pessoa in lancamento.pessoas.all():
+                            lancamento_serializado['pessoas'].append({
+                                'pessoa_nome': lancamento_pessoa.pessoa.nome,
+                                'tipo': lancamento_pessoa.tipo
+                            })
+                    except Exception as e:
+                        # Se houver erro ao serializar pessoas, continuar sem pessoas
+                        pass
+                    
+                    lancamentos_serializados.append(lancamento_serializado)
+            except Exception as e:
+                # Se houver erro ao serializar lançamentos, continuar sem lançamentos
+                pass
             
             item_serializado = {
                 'documento': documento_serializado,
                 'lancamentos': lancamentos_serializados,
-                'origens_disponiveis': item['origens_disponiveis'],
-                'tem_multiplas_origens': item['tem_multiplas_origens'],
-                'escolha_atual': item['escolha_atual']
+                'origens_disponiveis': item.get('origens_disponiveis', []),
+                'tem_multiplas_origens': item.get('tem_multiplas_origens', False),
+                'escolha_atual': item.get('escolha_atual'),
+                'is_importado': item.get('is_importado', False),
+                'grupo_importacao': item.get('grupo_importacao'),
+                'is_primeiro_grupo': item.get('is_primeiro_grupo', False)
             }
             
             cadeia_serializada.append(item_serializado)
@@ -367,9 +390,42 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
 
- 
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def limpar_escolhas_origem(request):
+    """
+    API para limpar todas as escolhas de origem da sessão
+    """
+    try:
+        # Limpar todas as chaves de origem da sessão
+        keys_to_remove = []
+        for key in request.session.keys():
+            if key.startswith('origem_documento_'):
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del request.session[key]
+        
+        # Salvar a sessão
+        request.session.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Escolhas de origem limpas com sucesso'
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

@@ -4,9 +4,8 @@ Service para visualização de tabela da cadeia dominial
 
 import re
 from django.shortcuts import get_object_or_404
-from ..models import TIs, Imovel, Documento, Lancamento
+from ..models import TIs, Imovel, Documento, Lancamento, DocumentoImportado
 from ..services.hierarquia_service import HierarquiaService
-from ..services.documento_importado_service import DocumentoImportadoService
 
 
 class CadeiaDominialTabelaService:
@@ -35,12 +34,12 @@ class CadeiaDominialTabelaService:
         # Obter tronco principal considerando escolhas
         tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel, escolhas_origem)
         
-        # Obter IDs de documentos importados para otimização
-        documentos_importados_ids = DocumentoImportadoService.get_documentos_importados_ids(imovel)
+        # Expandir tronco principal com documentos importados referenciados
+        tronco_expandido = self._expandir_tronco_com_importados(imovel, tronco_principal, escolhas_origem)
         
-        # Processar cada documento (manter ordem por data)
+        # Processar cada documento (manter ordem hierárquica)
         cadeia_processada = []
-        documentos_ordenados = sorted(tronco_principal, key=lambda x: x.data)
+        documentos_ordenados = tronco_expandido
         for documento in documentos_ordenados:
             # Carregar lançamentos
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
@@ -62,22 +61,15 @@ class CadeiaDominialTabelaService:
             # Formatar origens para o template (ordenadas do maior para o menor)
             origens_formatadas = []
             for i, origem in enumerate(origens_disponiveis):
-                # Se não há escolha na sessão, a primeira origem (maior número) é escolhida por padrão
-                # Se há escolha na sessão, usar a escolha
+                # Sempre usar a primeira origem (maior número) como padrão se não há escolha na sessão
                 is_escolhida = (origem == escolha_atual) if escolha_atual else (i == 0)
                 origens_formatadas.append({
                     'numero': origem,
                     'escolhida': is_escolhida
                 })
             
-            # Verificar se documento foi importado
-            is_importado = documento.id in documentos_importados_ids
-            info_importacao = None
-            tooltip_importacao = None
-            
-            if is_importado:
-                info_importacao = DocumentoImportadoService.get_info_importacao(documento)
-                tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
+            # Verificar se documento foi importado (está em outro imóvel)
+            is_importado = documento.imovel != imovel
             
             cadeia_processada.append({
                 'documento': documento,
@@ -85,9 +77,7 @@ class CadeiaDominialTabelaService:
                 'origens_disponiveis': origens_formatadas,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'escolha_atual': escolha_atual,
-                'is_importado': is_importado,
-                'info_importacao': info_importacao,
-                'tooltip_importacao': tooltip_importacao
+                'is_importado': is_importado
             })
         
         result = {
@@ -192,9 +182,6 @@ class CadeiaDominialTabelaService:
         from .hierarquia_service import HierarquiaService
         tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
         
-        # Obter IDs de documentos importados para otimização
-        documentos_importados_ids = DocumentoImportadoService.get_documentos_importados_ids(imovel)
-        
         cadeia_completa = []
         for documento in tronco_principal:
             # Carregar lançamentos com pessoas
@@ -232,24 +219,12 @@ class CadeiaDominialTabelaService:
                     'escolhida': is_escolhida
                 })
             
-            # Verificar se documento foi importado
-            is_importado = documento.id in documentos_importados_ids
-            info_importacao = None
-            tooltip_importacao = None
-            
-            if is_importado:
-                info_importacao = DocumentoImportadoService.get_info_importacao(documento)
-                tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
-            
             cadeia_completa.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'origens_disponiveis': origens_formatadas,
-                'escolha_atual': escolha_atual,
-                'is_importado': is_importado,
-                'info_importacao': info_importacao,
-                'tooltip_importacao': tooltip_importacao
+                'escolha_atual': escolha_atual
             })
         
         return cadeia_completa
@@ -296,3 +271,157 @@ class CadeiaDominialTabelaService:
                 return sorted(origens, key=lambda x: x['numero'], reverse=True)
         
         return origens 
+    
+    def _expandir_tronco_com_importados(self, imovel, tronco_principal, escolhas_origem=None):
+        """
+        Expande o tronco principal incluindo documentos importados na posição correta
+        """
+        tronco_expandido = []
+        documentos_processados = set()
+        
+        for documento in tronco_principal:
+            # Adicionar o documento atual
+            if documento.id not in documentos_processados:
+                tronco_expandido.append(documento)
+                documentos_processados.add(documento.id)
+            
+            # Verificar se este documento tem lançamentos com origens importadas
+            lancamentos = documento.lancamentos.filter(
+                origem__isnull=False
+            ).exclude(origem='')
+            
+            # Lista temporária para documentos importados deste documento
+            docs_importados_temp = []
+            
+            for lancamento in lancamentos:
+                origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                
+                for origem_numero in origens:
+                    # Buscar documento importado com este número
+                    doc_importado = Documento.objects.filter(
+                        numero=origem_numero
+                    ).exclude(
+                        imovel=imovel
+                    ).select_related('cartorio', 'tipo').first()
+                    
+                    if doc_importado and doc_importado.id not in documentos_processados:
+                        docs_importados_temp.append(doc_importado)
+                        documentos_processados.add(doc_importado.id)
+            
+            # Adicionar documentos importados após o documento atual
+            tronco_expandido.extend(docs_importados_temp)
+            
+            # Expandir recursivamente a cadeia de cada documento importado
+            for doc_importado in docs_importados_temp:
+                # Verificar se há uma escolha específica para este documento
+                escolha_especifica = None
+                if escolhas_origem:
+                    escolha_especifica = escolhas_origem.get(str(doc_importado.id))
+                
+                if escolha_especifica:
+                    # Usar a escolha específica da sessão
+                    doc_origem_escolhido = Documento.objects.filter(
+                        numero=escolha_especifica
+                    ).select_related('cartorio', 'tipo').first()
+                    
+                    if doc_origem_escolhido and doc_origem_escolhido.id not in documentos_processados:
+                        tronco_expandido.append(doc_origem_escolhido)
+                        documentos_processados.add(doc_origem_escolhido.id)
+                        
+                        # Expandir recursivamente a cadeia completa abaixo da origem escolhida
+                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_escolhido, documentos_processados, escolhas_origem)
+                        tronco_expandido.extend(cadeia_abaixo)
+                else:
+                    # Usar o documento de origem de nível mais alto (comportamento padrão)
+                    doc_origem_mais_alto = self._obter_documento_origem_mais_alto(doc_importado)
+                    
+                    if doc_origem_mais_alto and doc_origem_mais_alto.id not in documentos_processados:
+                        tronco_expandido.append(doc_origem_mais_alto)
+                        documentos_processados.add(doc_origem_mais_alto.id)
+                        
+                        # Expandir recursivamente a cadeia completa abaixo da origem mais alta
+                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_mais_alto, documentos_processados, escolhas_origem)
+                        tronco_expandido.extend(cadeia_abaixo)
+        
+        return tronco_expandido
+    
+    def _obter_documento_origem_mais_alto(self, documento):
+        """
+        Obtém o documento de origem de nível mais alto (maior número) de um documento
+        """
+        # Buscar lançamentos com origens
+        lancamentos = documento.lancamentos.filter(
+            origem__isnull=False
+        ).exclude(origem='')
+        
+        origens_encontradas = []
+        
+        for lancamento in lancamentos:
+            origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+            
+            for origem_numero in origens:
+                # Buscar documento de origem
+                doc_origem = Documento.objects.filter(
+                    numero=origem_numero
+                ).select_related('cartorio', 'tipo').first()
+                
+                if doc_origem:
+                    origens_encontradas.append(doc_origem)
+        
+        # Retornar o documento com maior número (nível mais alto)
+        if origens_encontradas:
+            return max(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
+        
+        return None
+    
+    def _expandir_cadeia_recursiva(self, documento, documentos_processados, escolhas_origem=None):
+        """
+        Expande recursivamente apenas a subcadeia da origem escolhida (ou padrão) de um documento,
+        seguindo a ordem: matrículas maiores, depois transcrições maiores, ambos do maior para o menor.
+        """
+        cadeia_expandida = []
+        
+        # Buscar lançamentos com origens
+        lancamentos = documento.lancamentos.filter(
+            origem__isnull=False
+        ).exclude(origem='')
+        
+        # Coletar todas as origens possíveis
+        origens = set()
+        for lancamento in lancamentos:
+            origens_lanc = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+            origens.update(origens_lanc)
+        origens = list(origens)
+
+        # Função de ordenação: matrículas maiores primeiro, depois transcrições maiores
+        def origem_sort_key(origem):
+            if origem.startswith('M'):
+                return (0, -int(origem.replace('M', '')))
+            if origem.startswith('T'):
+                return (1, -int(origem.replace('T', '')))
+            return (2, origem)
+        origens.sort(key=origem_sort_key)
+
+        # Determinar origem escolhida
+        escolha_especifica = None
+        if escolhas_origem:
+            escolha_especifica = escolhas_origem.get(str(documento.id))
+        if escolha_especifica and escolha_especifica in origens:
+            origem_escolhida = escolha_especifica
+        elif origens:
+            origem_escolhida = origens[0]  # padrão: maior matrícula, depois maior transcrição
+        else:
+            origem_escolhida = None
+
+        # Só expandir a subcadeia da origem escolhida
+        if origem_escolhida:
+            doc_origem = Documento.objects.filter(
+                numero=origem_escolhida
+            ).select_related('cartorio', 'tipo').first()
+            if doc_origem and doc_origem.id not in documentos_processados:
+                cadeia_expandida.append(doc_origem)
+                documentos_processados.add(doc_origem.id)
+                # Recursão: expandir apenas a subcadeia da origem escolhida
+                sub_cadeia = self._expandir_cadeia_recursiva(doc_origem, documentos_processados, escolhas_origem)
+                cadeia_expandida.extend(sub_cadeia)
+        return cadeia_expandida

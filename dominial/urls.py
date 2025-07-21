@@ -10,7 +10,7 @@ from .views.documento_views import novo_documento, documento_lancamentos, seleci
 from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail
 from .views.duplicata_views import verificar_duplicata_ajax, importar_duplicata, cancelar_importacao_duplicata
 from .views.cadeia_dominial_views import cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela, cadeia_dominial_d3, documento_detalhado
-from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos, escolher_origem_documento, escolher_origem_lancamento, get_cadeia_dominial_atualizada
+from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos, escolher_origem_documento, escolher_origem_lancamento, get_cadeia_dominial_atualizada, limpar_escolhas_origem
 from .views.autocomplete_views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
 
 urlpatterns = [
@@ -85,4 +85,5 @@ urlpatterns = [
     path('api/escolher-origem-documento/', views.escolher_origem_documento, name='escolher_origem_documento'),
     path('api/escolher-origem-lancamento/', views.escolher_origem_lancamento, name='escolher_origem_lancamento'),
     path('api/cadeia-dominial-atualizada/<int:tis_id>/<int:imovel_id>/', views.get_cadeia_dominial_atualizada, name='get_cadeia_dominial_atualizada'),
+    path('api/limpar-escolhas-origem/', limpar_escolhas_origem, name='limpar_escolhas_origem'),
 ]

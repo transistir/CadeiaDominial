@@ -64,13 +64,22 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
 
     while documento_atual:
         tronco_principal.append(documento_atual)
-        # Buscar lançamentos do documento atual que têm origens
-        lancamentos_com_origem = documento_atual.lancamentos.filter(origem__isnull=False).exclude(origem='')
-        if not lancamentos_com_origem.exists():
-            break
         
         # Verificar se há escolha de origem para este documento
         escolha_atual = escolhas_origem.get(str(documento_atual.id))
+        
+        # Buscar lançamentos do documento atual que têm origens
+        lancamentos_com_origem = documento_atual.lancamentos.filter(origem__isnull=False).exclude(origem='')
+        
+        # Se não há lançamentos com origens, verificar se há uma escolha de origem
+        if not lancamentos_com_origem.exists():
+            if escolha_atual:
+                # Se há escolha mas não há lançamentos com origens, buscar o documento escolhido
+                proximo_documento = next((doc for doc in documentos if doc.numero == escolha_atual), None)
+                if proximo_documento and proximo_documento not in tronco_principal:
+                    documento_atual = proximo_documento
+                    continue
+            break
         
         # Extrair códigos de origem dos lançamentos
         origens_identificadas = []
@@ -121,32 +130,14 @@ def identificar_documentos_importados(imovel):
     Returns:
         list: Lista de documentos importados
     """
-    from ..models import Lancamento, Documento
+    from ..models import DocumentoImportado
     
-    documentos_importados = []
+    # Buscar apenas documentos que foram realmente importados para este imóvel
+    documentos_importados = DocumentoImportado.objects.filter(
+        documento__imovel=imovel
+    ).select_related('documento', 'documento__cartorio', 'documento__tipo', 'imovel_origem')
     
-    # Buscar todos os lançamentos deste imóvel
-    lancamentos = Lancamento.objects.filter(
-        documento__imovel=imovel,
-        origem__isnull=False
-    ).exclude(origem='')
-    
-    # Para cada lançamento, verificar se a origem é um documento de outro imóvel
-    for lancamento in lancamentos:
-        origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-        
-        for origem_numero in origens:
-            # Buscar documento com este número que está em outro imóvel
-            doc_importado = Documento.objects.filter(
-                numero=origem_numero
-            ).exclude(
-                imovel=imovel
-            ).select_related('cartorio', 'tipo').first()
-            
-            if doc_importado and doc_importado not in documentos_importados:
-                documentos_importados.append(doc_importado)
-    
-    return documentos_importados
+    return [doc_importado.documento for doc_importado in documentos_importados]
 
 
 def processar_origens_para_documentos(origem_texto, imovel, lancamento):

@@ -347,7 +347,16 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('fill', '#28a745')
         .attr('stroke', 'white')
         .attr('stroke-width', 2)
-        .attr('title', d => d.data.tooltip_importacao || 'Documento importado');
+        .attr('title', d => {
+            let tooltip = d.data.tooltip_importacao || 'Documento importado';
+            if (d.data.cadeias_dominiais && d.data.cadeias_dominiais.length > 0) {
+                tooltip += '\n\n🌐 Presente em múltiplas cadeias dominiais:';
+                d.data.cadeias_dominiais.forEach(cadeia => {
+                    tooltip += `\n• ${cadeia.imovel_matricula} (${cadeia.imovel_nome})`;
+                });
+            }
+            return tooltip;
+        });
 
     // Ícone de check para documentos importados
     node.filter(d => d.data.is_importado)
@@ -359,7 +368,16 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('font-size', 10)
         .attr('font-weight', 'bold')
         .text('✓')
-        .attr('title', d => d.data.tooltip_importacao || 'Documento importado');
+        .attr('title', d => {
+            let tooltip = d.data.tooltip_importacao || 'Documento importado';
+            if (d.data.cadeias_dominiais && d.data.cadeias_dominiais.length > 0) {
+                tooltip += '\n\n🌐 Presente em múltiplas cadeias dominiais:';
+                d.data.cadeias_dominiais.forEach(cadeia => {
+                    tooltip += `\n• ${cadeia.imovel_matricula} (${cadeia.imovel_nome})`;
+                });
+            }
+            return tooltip;
+        });
 
     // Botões SVG
     const btnGroup = node.append('g')

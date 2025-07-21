@@ -197,10 +197,40 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     """
     View para visualização detalhada de um documento específico
     Baseada na cadeia dominial tabela, mas mostra apenas um documento
+    Suporta documentos importados de outras cadeias dominiais
     """
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+    
+    # Buscar o documento - pode estar em outro imóvel se for importado
+    documento = None
+    is_importado = False
+    cadeias_dominiais = []
+    
+    # Primeiro, tentar encontrar no imóvel atual
+    try:
+        documento = Documento.objects.get(id=documento_id, imovel=imovel)
+    except Documento.DoesNotExist:
+        # Se não encontrou no imóvel atual, pode ser um documento importado
+        try:
+            documento = Documento.objects.get(id=documento_id)
+            is_importado = True
+            
+            # Buscar informações de importação
+            from ..models import DocumentoImportado
+            importacoes = DocumentoImportado.objects.filter(documento=documento)
+            for importacao in importacoes:
+                cadeias_dominiais.append({
+                    'imovel_id': importacao.imovel_origem.id,
+                    'imovel_matricula': importacao.imovel_origem.matricula,
+                    'imovel_nome': importacao.imovel_origem.nome,
+                    'data_importacao': importacao.data_importacao.strftime('%d/%m/%Y'),
+                    'importado_por': importacao.importado_por.username if importacao.importado_por else 'Sistema'
+                })
+        except Documento.DoesNotExist:
+            # Documento não existe
+            from django.http import Http404
+            raise Http404("Documento não encontrado")
     
     # Carregar lançamentos do documento
     lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
@@ -214,6 +244,9 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
         'lancamentos': lancamentos,
         'tipo_visualizacao': 'documento_unico',
         'tem_lancamentos': lancamentos.exists(),
+        'is_importado': is_importado,
+        'cadeias_dominiais': cadeias_dominiais,
+        'total_cadeias': len(cadeias_dominiais)
     }
     
     return render(request, 'dominial/documento_detalhado.html', context) 

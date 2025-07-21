@@ -46,7 +46,33 @@
 
 .cadeia-tabela-container {
     margin: 20px 0;
+}
+
+/* Container para a tabela planilha com rolagem */
+.cadeia-tabela-planilha-container {
     overflow-x: auto;
+    /* Forçar barra de rolagem sempre visível */
+    overflow-y: hidden;
+    margin-top: 10px;
+}
+
+/* Garantir que a barra de rolagem apareça sempre */
+.cadeia-tabela-planilha-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.cadeia-tabela-planilha-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.cadeia-tabela-planilha-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.cadeia-tabela-planilha-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
 }
 
 .cadeia-tabela-principal {
@@ -66,8 +92,7 @@
 }
 
 .cadeia-tabela-principal th {
-    background: var(--primary-color);
-    color: white;
+    background: #e1edf7;
     font-weight: 600;
     position: sticky;
     top: 0;
@@ -96,14 +121,42 @@
     color: var(--accent-color);
 }
 
-.expand-icon {
-    transition: transform 0.3s ease;
-    color: var(--primary-color);
-}
-
-.expand-icon.expanded {
-    transform: rotate(90deg);
-}
+    .expand-icon {
+        transition: transform 0.3s ease;
+        color: var(--primary-color);
+    }
+    
+    .expand-icon.expanded {
+        transform: rotate(90deg);
+    }
+    
+    /* Estilos para documentos importados */
+    .documento-importado {
+        border-left: 4px solid #4CAF50;
+        background-color: #f8fff8;
+    }
+    
+    .documento-importado .expand-btn {
+        color: #2E7D32;
+    }
+    
+    .importado-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background-color: #4CAF50;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 500;
+        margin-left: 8px;
+    }
+    
+    .importado-badge svg {
+        width: 8px;
+        height: 8px;
+    }
 
 .lancamentos-table-container {
     background: #f8f9fa;
@@ -111,6 +164,30 @@
     margin: 10px 0;
     border-radius: 8px;
     border-left: 4px solid var(--primary-color);
+    overflow-x: auto;
+    /* Forçar barra de rolagem sempre visível */
+    overflow-y: hidden;
+    /* Garantir que o container tenha largura mínima para forçar rolagem */
+    min-width: 0;
+}
+
+/* Garantir que a barra de rolagem apareça sempre */
+.lancamentos-table-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.lancamentos-table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.lancamentos-table-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.lancamentos-table-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
 }
 
 .lancamentos-table-container h5 {
@@ -562,7 +639,6 @@
 }
 
 .field-group h4 {
-    background: var(--primary-color);
     color: white;
     padding: 15px 20px;
     margin: 0;
@@ -692,7 +768,7 @@
 }
 
 .cadeia-tabela-planilha th.agrupamento {
-  background: #2c3e50;
+  background: #e1edf7;
   font-weight: bold;
   font-size: 1.05em;
   text-align: center;
@@ -734,6 +810,12 @@
 
 .cadeia-tabela-planilha {
   min-width: 1400px;
+}
+
+/* Garantir que a tabela dentro do container de lançamentos tenha largura mínima */
+.lancamentos-table-container .cadeia-tabela-planilha {
+  min-width: 1400px;
+  width: 100%;
 }
 
 @media (max-width: 900px) {
@@ -799,4 +881,89 @@
   height: 10px;
   stroke: currentColor;
   stroke-width: 2;
+}
+
+.cadeias-count {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 1px 4px;
+  font-size: 0.6em;
+  margin-left: 2px;
+  font-weight: 600;
+}
+
+/* ===== ESTILOS PARA GRUPOS DE IMPORTAÇÃO ===== */
+
+/* Cabeçalho do grupo de importação */
+.grupo-importacao-header {
+  background: linear-gradient(135deg, #f8fff9 0%, #e8f5e8 100%);
+  border-left: 4px solid #28a745;
+}
+
+.grupo-importacao-header td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e8f5e8;
+}
+
+.grupo-importacao-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #155724;
+  font-size: 0.9em;
+}
+
+.grupo-importacao-info svg {
+  color: #28a745;
+  flex-shrink: 0;
+}
+
+.grupo-importacao-info span {
+  font-weight: 600;
+}
+
+.grupo-importacao-info small {
+  color: #6c757d;
+  font-size: 0.8em;
+  margin-left: auto;
+}
+
+/* Itens do grupo de importação */
+.grupo-importacao-item {
+  background-color: #f8fff9;
+  border-left: 2px solid #28a745;
+}
+
+.grupo-importacao-item:hover {
+  background-color: #e8f5e8;
+}
+
+/* Badge destacado para o primeiro documento do grupo */
+.importado-badge-destaque {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75em;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+  margin-left: 8px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.importado-badge-destaque svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.importado-badge-destaque:hover {
+  background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(40, 167, 69, 0.4);
 } 
