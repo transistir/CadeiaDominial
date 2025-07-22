@@ -293,13 +293,24 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('rx', 12)
         .attr('fill', d => d.data.tipo === 'transcricao' ? '#6f42c1' : '#007bff')
         .attr('stroke', d => {
-            // Documentos importados têm borda verde
+            // Documentos importados têm borda laranja tracejada
             if (d.data.is_importado) {
-                return '#28a745';
+                return '#ff8c00'; // Laranja
+            }
+            // Documentos compartilhados têm borda verde tracejada
+            if (d.data.is_compartilhado) {
+                return '#28a745'; // Verde
             }
             return d.data.tipo === 'transcricao' ? '#5a32a3' : '#0056b3';
         })
-        .attr('stroke-width', d => d.data.is_importado ? 3 : 2)
+        .attr('stroke-width', d => (d.data.is_importado || d.data.is_compartilhado) ? 3 : 2)
+        .attr('stroke-dasharray', d => {
+            // Bordas tracejadas para documentos importados e compartilhados
+            if (d.data.is_importado || d.data.is_compartilhado) {
+                return '5,5'; // Padrão tracejado
+            }
+            return 'none'; // Linha sólida
+        })
         .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))')
         .on('mouseover', function() {
             d3.select(this)
@@ -338,13 +349,13 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('opacity', 0.7)
         .text(d => d.data.total_lancamentos !== undefined ? `${d.data.total_lancamentos} lançamentos` : '');
 
-    // Badge de documento importado
+    // Badge de documento importado (laranja)
     node.filter(d => d.data.is_importado)
         .append('circle')
         .attr('cx', 55)
         .attr('cy', -25)
         .attr('r', 8)
-        .attr('fill', '#28a745')
+        .attr('fill', '#ff8c00') // Laranja
         .attr('stroke', 'white')
         .attr('stroke-width', 2)
         .attr('title', d => {
@@ -376,6 +387,35 @@ function renderArvoreD3(data, svgGroup, width, height) {
                     tooltip += `\n• ${cadeia.imovel_matricula} (${cadeia.imovel_nome})`;
                 });
             }
+            return tooltip;
+        });
+
+    // Badge de documento compartilhado (verde)
+    node.filter(d => d.data.is_compartilhado && !d.data.is_importado)
+        .append('circle')
+        .attr('cx', 55)
+        .attr('cy', -25)
+        .attr('r', 8)
+        .attr('fill', '#28a745') // Verde
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2)
+        .attr('title', d => {
+            let tooltip = `Documento compartilhado\nCompartilhado em: ${d.data.imoveis_compartilhando.join(', ')}`;
+            return tooltip;
+        });
+
+    // Ícone de compartilhamento para documentos compartilhados
+    node.filter(d => d.data.is_compartilhado && !d.data.is_importado)
+        .append('text')
+        .attr('x', 55)
+        .attr('y', -21)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'white')
+        .attr('font-size', 10)
+        .attr('font-weight', 'bold')
+        .text('↔')
+        .attr('title', d => {
+            let tooltip = `Documento compartilhado\nCompartilhado em: ${d.data.imoveis_compartilhando.join(', ')}`;
             return tooltip;
         });
 

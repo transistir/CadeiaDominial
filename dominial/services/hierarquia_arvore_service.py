@@ -56,7 +56,7 @@ class HierarquiaArvoreService:
         
         # Processar cada documento
         for documento in documentos:
-            doc_node = HierarquiaArvoreService._criar_no_documento(documento)
+            doc_node = HierarquiaArvoreService._criar_no_documento(documento, imovel)
             documentos_por_numero[documento.numero] = doc_node
             arvore['documentos'].append(doc_node)
         
@@ -237,12 +237,26 @@ class HierarquiaArvoreService:
         return False
     
     @staticmethod
-    def _criar_no_documento(documento):
+    def _criar_no_documento(documento, imovel=None):
         """
         Cria um nó de documento para a árvore
         """
-        # Verificar se documento foi importado
-        is_importado = DocumentoImportadoService.is_documento_importado(documento)
+        # Verificar se documento foi importado (está na tabela DocumentoImportado)
+        # Um documento só é "importado" no imóvel que o importou, não no imóvel de origem
+        is_importado = False
+        if imovel:
+            # Verificar se este documento foi importado PARA este imóvel específico
+            # Ou seja, se existe um registro onde este documento foi importado de outro imóvel para este imóvel
+            from ..models import DocumentoImportado
+            is_importado = DocumentoImportado.objects.filter(
+                documento=documento,
+                documento__imovel=imovel  # O documento pertence ao imóvel atual
+            ).exists()
+            
+            # Se o documento não pertence ao imóvel atual mas aparece na árvore,
+            # significa que foi importado por referência
+            if not is_importado and documento.imovel != imovel:
+                is_importado = True
         info_importacao = None
         tooltip_importacao = None
         cadeias_dominiais = []
@@ -263,6 +277,25 @@ class HierarquiaArvoreService:
                     'importado_por': importacao.importado_por.username if importacao.importado_por else 'Sistema'
                 })
         
+        # Verificar se documento está sendo compartilhado (referenciado em outros imóveis)
+        is_compartilhado = False
+        imoveis_compartilhando = []
+        
+        if imovel:
+            # Verificar se este documento está sendo referenciado em outros imóveis
+            from ..models import Lancamento
+            lancamentos_compartilhando = Lancamento.objects.filter(
+                origem__icontains=documento.numero
+            ).exclude(
+                documento__imovel=documento.imovel
+            ).select_related('documento__imovel')
+            
+            if lancamentos_compartilhando.exists():
+                is_compartilhado = True
+                imoveis_compartilhando = sorted(list(set(
+                    lanc.documento.imovel.matricula for lanc in lancamentos_compartilhando
+                )))
+        
         return {
             'id': documento.id,
             'numero': documento.numero,
@@ -280,6 +313,8 @@ class HierarquiaArvoreService:
             'nivel': 0,  # Nível na árvore (será calculado)
             'nivel_manual': documento.nivel_manual,  # Nível manual definido pelo usuário
             'is_importado': is_importado,
+            'is_compartilhado': is_compartilhado,
+            'imoveis_compartilhando': imoveis_compartilhando,
             'info_importacao': info_importacao,
             'tooltip_importacao': tooltip_importacao,
             'cadeias_dominiais': cadeias_dominiais,

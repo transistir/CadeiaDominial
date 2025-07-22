@@ -63,55 +63,68 @@ class DuplicataVerificacaoService:
     def calcular_documentos_importaveis(documento_origem: Documento) -> List[Documento]:
         """
         Calcula quais documentos podem ser importados a partir de um documento origem.
-        Busca documentos que são origem deste documento (cadeia dominial anterior).
+        Busca recursivamente toda a cadeia dominial (documentos que são origem deste documento).
         
         Args:
             documento_origem: Documento de origem para calcular importáveis
             
         Returns:
-            Lista de documentos que podem ser importados
+            Lista de documentos que podem ser importados (incluindo toda a cadeia dominial)
         """
         documentos_importaveis = []
+        documentos_processados = set()  # Para evitar loops infinitos
         
-        # Buscar lançamentos deste documento para encontrar suas origens
-        from ..models import Lancamento
-        
-        lancamentos_do_documento = Lancamento.objects.filter(
-            documento=documento_origem
-        )
-        
-        for lancamento in lancamentos_do_documento:
-            print(f"DEBUG CADEIA: Lançamento {lancamento.id} - Origem: '{lancamento.origem}' - Cartório Origem: {lancamento.cartorio_origem}")
+        def buscar_cadeia_recursiva(documento):
+            if documento.id in documentos_processados:
+                return
             
-            if lancamento.origem:
-                # Separar múltiplas origens (separadas por ;)
-                origens = [o.strip() for o in lancamento.origem.split(';')]
-                print(f"DEBUG CADEIA: Origens separadas: {origens}")
+            documentos_processados.add(documento.id)
+            
+            # Buscar lançamentos deste documento para encontrar suas origens
+            from ..models import Lancamento
+            
+            lancamentos_do_documento = Lancamento.objects.filter(
+                documento=documento
+            )
+            
+            for lancamento in lancamentos_do_documento:
+                print(f"DEBUG CADEIA: Lançamento {lancamento.id} - Origem: '{lancamento.origem}' - Cartório Origem: {lancamento.cartorio_origem}")
                 
-                for origem_numero in origens:
-                    if origem_numero:
-                        print(f"DEBUG CADEIA: Buscando documento {origem_numero} no cartório {lancamento.cartorio_origem}")
-                        
-                        # Buscar documento com este número (independente do cartório)
-                        documento_anterior = Documento.objects.filter(
-                            numero=origem_numero
-                        ).first()
-                        
-                        if documento_anterior:
-                            print(f"DEBUG CADEIA: Documento encontrado: {documento_anterior.numero} - {documento_anterior.imovel.nome}")
+                if lancamento.origem:
+                    # Separar múltiplas origens (separadas por ;)
+                    origens = [o.strip() for o in lancamento.origem.split(';')]
+                    print(f"DEBUG CADEIA: Origens separadas: {origens}")
+                    
+                    for origem_numero in origens:
+                        if origem_numero:
+                            print(f"DEBUG CADEIA: Buscando documento {origem_numero} no cartório {lancamento.cartorio_origem}")
                             
-                            # Verificar se já não foi importado
-                            if not DocumentoImportado.objects.filter(
-                                documento=documento_anterior,
-                                imovel_origem=documento_origem.imovel
-                            ).exists():
+                            # Buscar documento com este número (independente do cartório)
+                            documento_anterior = Documento.objects.filter(
+                                numero=origem_numero
+                            ).first()
+                            
+                            if documento_anterior:
+                                print(f"DEBUG CADEIA: Documento encontrado: {documento_anterior.numero} - {documento_anterior.imovel.nome}")
                                 
-                                documentos_importaveis.append(documento_anterior)
-                                print(f"DEBUG CADEIA: Documento adicionado à lista de importáveis")
+                                # Verificar se já não foi importado
+                                if not DocumentoImportado.objects.filter(
+                                    documento=documento_anterior,
+                                    imovel_origem=documento_origem.imovel
+                                ).exists():
+                                    
+                                    documentos_importaveis.append(documento_anterior)
+                                    print(f"DEBUG CADEIA: Documento adicionado à lista de importáveis")
+                                    
+                                    # Buscar recursivamente as origens deste documento
+                                    buscar_cadeia_recursiva(documento_anterior)
+                                else:
+                                    print(f"DEBUG CADEIA: Documento já foi importado")
                             else:
-                                print(f"DEBUG CADEIA: Documento já foi importado")
-                        else:
-                            print(f"DEBUG CADEIA: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem}")
+                                print(f"DEBUG CADEIA: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem}")
+        
+        # Iniciar busca recursiva a partir do documento origem
+        buscar_cadeia_recursiva(documento_origem)
         
         return documentos_importaveis
     
