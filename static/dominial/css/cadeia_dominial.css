@@ -85,6 +85,8 @@
     margin-left: 20px;
 }
 
+/* Container para tabela planilha com rolagem - REMOVIDO - conflitante */
+
 .lancamento-node {
     margin: 10px 0;
     padding: 10px;

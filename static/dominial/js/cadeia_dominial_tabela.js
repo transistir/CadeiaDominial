@@ -675,3 +675,203 @@ function limparEscolhas() {
         isLoading = false;
     });
 } 
+
+// ===== MELHORIAS DE UX PARA ROLAGEM HORIZONTAL =====
+
+function initTableScrollEnhancements() {
+    const tableContainers = document.querySelectorAll('.cadeia-tabela-planilha-container, .lancamentos-table-container');
+    
+    tableContainers.forEach(container => {
+        // Verificar se há overflow horizontal
+        function checkOverflow() {
+            const hasOverflow = container.scrollWidth > container.clientWidth;
+            container.classList.toggle('has-overflow', hasOverflow);
+            
+            // Adicionar indicador visual se necessário
+            if (hasOverflow && !container.querySelector('.scroll-indicator')) {
+                const indicator = document.createElement('div');
+                indicator.className = 'scroll-indicator';
+                container.appendChild(indicator);
+                updateScrollIndicator(container);
+            }
+        }
+        
+        // Atualizar indicador de rolagem
+        function updateScrollIndicator() {
+            const indicator = container.querySelector('.scroll-indicator');
+            if (indicator) {
+                const scrollPercent = (container.scrollLeft / (container.scrollWidth - container.clientWidth)) * 100;
+                indicator.style.width = scrollPercent + '%';
+            }
+        }
+        
+        // Adicionar botões de navegação se necessário
+        function addNavigationButtons() {
+            if (container.scrollWidth > container.clientWidth && !container.querySelector('.table-nav-buttons')) {
+                const navButtons = document.createElement('div');
+                navButtons.className = 'table-nav-buttons';
+                navButtons.innerHTML = `
+                    <button class="table-nav-btn" onclick="scrollTable('${container.id || 'table-' + Math.random()}', 'left')">
+                        ← Anterior
+                    </button>
+                    <button class="table-nav-btn" onclick="scrollTable('${container.id || 'table-' + Math.random()}', 'right')">
+                        Próximo →
+                    </button>
+                `;
+                container.parentNode.insertBefore(navButtons, container);
+            }
+        }
+        
+        // Event listeners
+        container.addEventListener('scroll', updateScrollIndicator);
+        container.addEventListener('resize', checkOverflow);
+        
+        // Verificação inicial
+        checkOverflow();
+        addNavigationButtons();
+        
+        // Verificar periodicamente para mudanças de conteúdo
+        const observer = new MutationObserver(checkOverflow);
+        observer.observe(container, { childList: true, subtree: true });
+    });
+}
+
+// Função global para rolagem programática
+function scrollTable(containerId, direction) {
+    const container = document.getElementById(containerId) || 
+                     document.querySelector('.cadeia-tabela-planilha-container') ||
+                     document.querySelector('.lancamentos-table-container');
+    
+    if (container) {
+        const scrollAmount = container.clientWidth * 0.8; // 80% da largura visível
+        const currentScroll = container.scrollLeft;
+        
+        if (direction === 'left') {
+            container.scrollTo({
+                left: Math.max(0, currentScroll - scrollAmount),
+                behavior: 'smooth'
+            });
+        } else {
+            container.scrollTo({
+                left: Math.min(container.scrollWidth - container.clientWidth, currentScroll + scrollAmount),
+                behavior: 'smooth'
+            });
+        }
+    }
+}
+
+// Adicionar tooltips informativos
+function addTableTooltips() {
+    const tableHeaders = document.querySelectorAll('.cadeia-tabela-planilha th');
+    
+    tableHeaders.forEach(header => {
+        if (!header.title) {
+            const text = header.textContent.trim();
+            let tooltip = '';
+            
+            // Tooltips específicos para cada coluna
+            switch(text) {
+                case 'Nº':
+                    tooltip = 'Número do lançamento';
+                    break;
+                case 'L':
+                    tooltip = 'Livro do registro';
+                    break;
+                case 'Fls.':
+                    tooltip = 'Folhas do registro';
+                    break;
+                case 'Cartório':
+                    tooltip = 'Cartório responsável';
+                    break;
+                case 'Data':
+                    tooltip = 'Data do lançamento';
+                    break;
+                case 'Transmitente':
+                    tooltip = 'Pessoa que transmite o imóvel';
+                    break;
+                case 'Adquirente':
+                    tooltip = 'Pessoa que adquire o imóvel';
+                    break;
+                case 'Forma':
+                    tooltip = 'Forma de transmissão';
+                    break;
+                case 'Título':
+                    tooltip = 'Título do documento';
+                    break;
+                case 'Área (ha)':
+                    tooltip = 'Área em hectares';
+                    break;
+                case 'Origem':
+                    tooltip = 'Origem do documento';
+                    break;
+                case 'Observações':
+                    tooltip = 'Observações adicionais';
+                    break;
+                default:
+                    tooltip = text;
+            }
+            
+            header.title = tooltip;
+        }
+    });
+}
+
+// Melhorar acessibilidade com navegação por teclado
+function enhanceTableAccessibility() {
+    const tables = document.querySelectorAll('.cadeia-tabela-planilha');
+    
+    tables.forEach(table => {
+        const cells = table.querySelectorAll('td, th');
+        
+        cells.forEach((cell, index) => {
+            cell.setAttribute('tabindex', '0');
+            
+            cell.addEventListener('keydown', (e) => {
+                const row = cell.parentElement;
+                const rows = Array.from(table.querySelectorAll('tr'));
+                const rowIndex = rows.indexOf(row);
+                const cellIndex = Array.from(row.children).indexOf(cell);
+                
+                let nextCell = null;
+                
+                switch(e.key) {
+                    case 'ArrowRight':
+                        nextCell = row.children[cellIndex + 1];
+                        break;
+                    case 'ArrowLeft':
+                        nextCell = row.children[cellIndex - 1];
+                        break;
+                    case 'ArrowDown':
+                        nextCell = rows[rowIndex + 1]?.children[cellIndex];
+                        break;
+                    case 'ArrowUp':
+                        nextCell = rows[rowIndex - 1]?.children[cellIndex];
+                        break;
+                }
+                
+                if (nextCell) {
+                    e.preventDefault();
+                    nextCell.focus();
+                }
+            });
+        });
+    });
+}
+
+// Inicializar todas as melhorias quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', function() {
+    initTableScrollEnhancements();
+    addTableTooltips();
+    enhanceTableAccessibility();
+    
+    // Re-inicializar quando houver mudanças dinâmicas
+    const observer = new MutationObserver(() => {
+        setTimeout(() => {
+            initTableScrollEnhancements();
+            addTableTooltips();
+            enhanceTableAccessibility();
+        }, 100);
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+}); 

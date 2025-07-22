@@ -70,7 +70,15 @@
                             
                             {% if documento.lancamentos.exists %}
                             <div class="lancamentos-list">
-                                <table class="cadeia-tabela-planilha">
+                                <div class="cadeia-tabela-planilha-container">
+                                    <div class="table-scroll-hint">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M7 13l5 5 5-5"/>
+                                            <path d="M7 6l5 5 5-5"/>
+                                        </svg>
+                                        <span>Role horizontalmente para ver mais colunas</span>
+                                    </div>
+                                    <table class="cadeia-tabela-planilha">
                                     <thead>
                                         <tr>
                                             <th colspan="5" class="agrupamento">MATRÍCULA</th>
@@ -153,6 +161,7 @@
                                         {% endfor %}
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                             {% else %}
                             <div class="no-lancamentos">
