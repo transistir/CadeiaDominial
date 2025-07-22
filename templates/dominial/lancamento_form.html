@@ -90,7 +90,7 @@
                 <div class="form-group">
                     <label for="data_transacao">Data</label>
                     <input type="date" name="data_transacao" id="data_transacao" 
-                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao %}{{ form_data.data_transacao }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao and form_data.data_transacao != 'None' %}{{ form_data.data_transacao }}{% endif %}">
                 </div>
             </div>
         </div>
@@ -113,11 +113,7 @@
     window.documentoTipo = '{{ documento.tipo.tipo }}';
     window.documentoNumero = '{{ documento.numero }}';
     
-    console.log('DEBUG: Template variables:', {
-        isTranscricao: window.isTranscricao,
-        documentoTipo: window.documentoTipo,
-        documentoNumero: window.documentoNumero
-    });
+
     
     {% if modo_edicao %}
     // Adicionar classe para modo de edição

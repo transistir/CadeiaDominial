@@ -85,7 +85,7 @@
     <div class="form-group">
         <label for="data_origem_{{ prefix }}">Data{% if data_obrigatorio %} *{% endif %}</label>
         <input type="date" name="data_origem_{{ prefix }}" id="data_origem_{{ prefix }}" 
-               value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data and form_data.data_origem_prefix %}{{ form_data.data_origem_prefix }}{% endif %}">
+               value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data and form_data.data_origem_prefix and form_data.data_origem_prefix != 'None' %}{{ form_data.data_origem_prefix }}{% endif %}">
     </div>
     {% if titulo_obrigatorio %}
     <div class="form-group">
