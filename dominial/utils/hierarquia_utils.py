@@ -99,11 +99,13 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
             proximo_documento = next((doc for doc in origens_identificadas if doc.numero == escolha_atual), None)
         
         if not proximo_documento:
-            # Se não há escolha ou escolha não encontrada, usar a primeira origem encontrada
-            # (respeitando a ordem das origens, não priorizando maior número)
+            # Se não há escolha ou escolha não encontrada, usar a origem com maior número
             if origens_identificadas:
-                # Pegar a primeira origem encontrada (ordem natural das origens)
-                proximo_documento = origens_identificadas[0]
+                # Ordenar por número (maior primeiro) e pegar a primeira
+                origens_ordenadas = sorted(origens_identificadas, 
+                    key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')), 
+                    reverse=True)
+                proximo_documento = origens_ordenadas[0]
         
         if not proximo_documento or proximo_documento in tronco_principal:
             break
