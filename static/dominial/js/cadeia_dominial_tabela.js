@@ -185,6 +185,9 @@ function escolherOrigem(documentoId, origemNumero) {
 }
 
 function atualizarTabelaCadeia(cadeia) {
+    console.log('=== DEBUG: Dados recebidos na atualizarTabelaCadeia ===');
+    console.log('Cadeia:', cadeia);
+    
     const tbody = document.querySelector('.cadeia-tabela-principal tbody');
     if (!tbody) {
         console.error('Tbody não encontrado');
@@ -196,10 +199,32 @@ function atualizarTabelaCadeia(cadeia) {
     
     // Reconstruir a tabela com os novos dados
     cadeia.forEach(item => {
+        console.log('Processando item:', item.documento.numero, 'com', item.lancamentos.length, 'lançamentos');
+        
         // Criar linha do documento
         const documentoRow = document.createElement('tr');
-        documentoRow.className = 'documento-row';
+        let rowClasses = 'documento-row';
+        
+        // Adicionar classe para documentos importados
+        if (item.is_importado) {
+            rowClasses += ' documento-importado';
+        }
+        
+        documentoRow.className = rowClasses;
         documentoRow.setAttribute('data-documento-id', item.documento.id);
+        
+        // Criar badge de importado se necessário
+        let importadoBadge = '';
+        if (item.is_importado) {
+            importadoBadge = `
+                <span class="importado-badge" title="Documento importado">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Importado
+                </span>
+            `;
+        }
         
         documentoRow.innerHTML = `
             <td>
@@ -208,6 +233,7 @@ function atualizarTabelaCadeia(cadeia) {
                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     ${item.documento.tipo_display}: ${item.documento.numero}
+                    ${importadoBadge}
                 </button>
             </td>
             <td>${item.documento.data}</td>
@@ -303,7 +329,7 @@ function criarConteudoLancamentos(item) {
                     <span class="origem-label">Escolher origem:</span>
         `;
         
-        item.origens_disponiveis.forEach(origem => {
+        item.origens_disponiveis.forEach((origem, index) => {
             const ativoClass = origem.escolhida ? 'ativo' : '';
             lancamentosHtml += `
                 <button class="origem-btn ${ativoClass}" 
@@ -583,4 +609,269 @@ style.textContent = `
         transition: transform 0.3s ease;
     }
 `;
-document.head.appendChild(style); 
+document.head.appendChild(style);
+
+function limparEscolhas() {
+    if (isLoading) {
+        return;
+    }
+    
+    // Verificar se os IDs são válidos
+    if (!tisId || !imovelId || isNaN(tisId) || isNaN(imovelId)) {
+        console.error('IDs inválidos para fazer a requisição:', { tisId, imovelId });
+        mostrarNotificacao('Erro: IDs inválidos', 'error');
+        return;
+    }
+    
+    isLoading = true;
+    
+    // Fazer chamada AJAX para limpar as escolhas
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    fetch('/dominial/api/limpar-escolhas-origem/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({
+            tis_id: tisId,
+            imovel_id: imovelId
+        })
+    })
+    .then(response => {
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensagem de sucesso
+            mostrarNotificacao('Escolhas limpas com sucesso!', 'success');
+            
+            // Fazer nova requisição para obter a cadeia atualizada
+            return fetch(`/dominial/api/cadeia-dominial-atualizada/${tisId}/${imovelId}/`);
+        } else {
+            throw new Error(data.error || 'Erro ao limpar escolhas');
+        }
+    })
+    .then(response => {
+        if (response) {
+            return response.json();
+        }
+    })
+    .then(cadeiaData => {
+        if (cadeiaData && cadeiaData.success && cadeiaData.cadeia) {
+            // Atualizar a tabela com os novos dados (sempre expandido)
+            atualizarTabelaCadeia(cadeiaData.cadeia);
+            
+            // Mostrar mensagem de sucesso
+            mostrarNotificacao('Cadeia atualizada com sucesso!', 'success');
+        }
+    })
+    .catch(error => {
+        console.error('Erro na requisição:', error);
+        mostrarNotificacao('Erro ao limpar escolhas: ' + error.message, 'error');
+    })
+    .finally(() => {
+        isLoading = false;
+    });
+} 
+
+// ===== MELHORIAS DE UX PARA ROLAGEM HORIZONTAL =====
+
+function initTableScrollEnhancements() {
+    const tableContainers = document.querySelectorAll('.cadeia-tabela-planilha-container, .lancamentos-table-container');
+    
+    tableContainers.forEach(container => {
+        // Verificar se há overflow horizontal
+        function checkOverflow() {
+            const hasOverflow = container.scrollWidth > container.clientWidth;
+            container.classList.toggle('has-overflow', hasOverflow);
+            
+            // Adicionar indicador visual se necessário
+            if (hasOverflow && !container.querySelector('.scroll-indicator')) {
+                const indicator = document.createElement('div');
+                indicator.className = 'scroll-indicator';
+                container.appendChild(indicator);
+                updateScrollIndicator(container);
+            }
+        }
+        
+        // Atualizar indicador de rolagem
+        function updateScrollIndicator() {
+            const indicator = container.querySelector('.scroll-indicator');
+            if (indicator) {
+                const scrollPercent = (container.scrollLeft / (container.scrollWidth - container.clientWidth)) * 100;
+                indicator.style.width = scrollPercent + '%';
+            }
+        }
+        
+        // Adicionar botões de navegação se necessário
+        function addNavigationButtons() {
+            if (container.scrollWidth > container.clientWidth && !container.querySelector('.table-nav-buttons')) {
+                const navButtons = document.createElement('div');
+                navButtons.className = 'table-nav-buttons';
+                navButtons.innerHTML = `
+                    <button class="table-nav-btn" onclick="scrollTable('${container.id || 'table-' + Math.random()}', 'left')">
+                        ← Anterior
+                    </button>
+                    <button class="table-nav-btn" onclick="scrollTable('${container.id || 'table-' + Math.random()}', 'right')">
+                        Próximo →
+                    </button>
+                `;
+                container.parentNode.insertBefore(navButtons, container);
+            }
+        }
+        
+        // Event listeners
+        container.addEventListener('scroll', updateScrollIndicator);
+        container.addEventListener('resize', checkOverflow);
+        
+        // Verificação inicial
+        checkOverflow();
+        addNavigationButtons();
+        
+        // Verificar periodicamente para mudanças de conteúdo
+        const observer = new MutationObserver(checkOverflow);
+        observer.observe(container, { childList: true, subtree: true });
+    });
+}
+
+// Função global para rolagem programática
+function scrollTable(containerId, direction) {
+    const container = document.getElementById(containerId) || 
+                     document.querySelector('.cadeia-tabela-planilha-container') ||
+                     document.querySelector('.lancamentos-table-container');
+    
+    if (container) {
+        const scrollAmount = container.clientWidth * 0.8; // 80% da largura visível
+        const currentScroll = container.scrollLeft;
+        
+        if (direction === 'left') {
+            container.scrollTo({
+                left: Math.max(0, currentScroll - scrollAmount),
+                behavior: 'smooth'
+            });
+        } else {
+            container.scrollTo({
+                left: Math.min(container.scrollWidth - container.clientWidth, currentScroll + scrollAmount),
+                behavior: 'smooth'
+            });
+        }
+    }
+}
+
+// Adicionar tooltips informativos
+function addTableTooltips() {
+    const tableHeaders = document.querySelectorAll('.cadeia-tabela-planilha th');
+    
+    tableHeaders.forEach(header => {
+        if (!header.title) {
+            const text = header.textContent.trim();
+            let tooltip = '';
+            
+            // Tooltips específicos para cada coluna
+            switch(text) {
+                case 'Nº':
+                    tooltip = 'Número do lançamento';
+                    break;
+                case 'L':
+                    tooltip = 'Livro do registro';
+                    break;
+                case 'Fls.':
+                    tooltip = 'Folhas do registro';
+                    break;
+                case 'Cartório':
+                    tooltip = 'Cartório responsável';
+                    break;
+                case 'Data':
+                    tooltip = 'Data do lançamento';
+                    break;
+                case 'Transmitente':
+                    tooltip = 'Pessoa que transmite o imóvel';
+                    break;
+                case 'Adquirente':
+                    tooltip = 'Pessoa que adquire o imóvel';
+                    break;
+                case 'Forma':
+                    tooltip = 'Forma de transmissão';
+                    break;
+                case 'Título':
+                    tooltip = 'Título do documento';
+                    break;
+                case 'Área (ha)':
+                    tooltip = 'Área em hectares';
+                    break;
+                case 'Origem':
+                    tooltip = 'Origem do documento';
+                    break;
+                case 'Observações':
+                    tooltip = 'Observações adicionais';
+                    break;
+                default:
+                    tooltip = text;
+            }
+            
+            header.title = tooltip;
+        }
+    });
+}
+
+// Melhorar acessibilidade com navegação por teclado
+function enhanceTableAccessibility() {
+    const tables = document.querySelectorAll('.cadeia-tabela-planilha');
+    
+    tables.forEach(table => {
+        const cells = table.querySelectorAll('td, th');
+        
+        cells.forEach((cell, index) => {
+            cell.setAttribute('tabindex', '0');
+            
+            cell.addEventListener('keydown', (e) => {
+                const row = cell.parentElement;
+                const rows = Array.from(table.querySelectorAll('tr'));
+                const rowIndex = rows.indexOf(row);
+                const cellIndex = Array.from(row.children).indexOf(cell);
+                
+                let nextCell = null;
+                
+                switch(e.key) {
+                    case 'ArrowRight':
+                        nextCell = row.children[cellIndex + 1];
+                        break;
+                    case 'ArrowLeft':
+                        nextCell = row.children[cellIndex - 1];
+                        break;
+                    case 'ArrowDown':
+                        nextCell = rows[rowIndex + 1]?.children[cellIndex];
+                        break;
+                    case 'ArrowUp':
+                        nextCell = rows[rowIndex - 1]?.children[cellIndex];
+                        break;
+                }
+                
+                if (nextCell) {
+                    e.preventDefault();
+                    nextCell.focus();
+                }
+            });
+        });
+    });
+}
+
+// Inicializar todas as melhorias quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', function() {
+    initTableScrollEnhancements();
+    addTableTooltips();
+    enhanceTableAccessibility();
+    
+    // Re-inicializar quando houver mudanças dinâmicas
+    const observer = new MutationObserver(() => {
+        setTimeout(() => {
+            initTableScrollEnhancements();
+            addTableTooltips();
+            enhanceTableAccessibility();
+        }, 100);
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+}); 

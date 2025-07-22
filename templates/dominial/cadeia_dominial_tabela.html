@@ -5,7 +5,7 @@
 {% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}?v=9">
 {% endblock %}
 
 {% block content %}
@@ -120,13 +120,36 @@
                     </thead>
                     <tbody>
                         {% for item in cadeia %}
-                        <tr class="documento-row" data-documento-id="{{ item.documento.id }}">
+                        {% if item.is_importado and item.is_primeiro_grupo %}
+                        <!-- Início do grupo de importação -->
+                        <tr class="grupo-importacao-header">
+                            <td colspan="5">
+                                <div class="grupo-importacao-info">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Documentos importados de {{ item.grupo_importacao.imovel_origem.matricula }} ({{ item.grupo_importacao.imovel_origem.nome }})</span>
+                                    <small>Importado em {{ item.grupo_importacao.data_importacao|date:"d/m/Y" }} por {{ item.grupo_importacao.importado_por.username|default:"Sistema" }}</small>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        
+                        <tr class="documento-row {% if item.is_importado %}documento-importado{% endif %} {% if item.is_importado %}grupo-importacao-item{% endif %}" data-documento-id="{{ item.documento.id }}">
                             <td>
                                 <button class="expand-btn" data-documento-id="{{ item.documento.id }}">
                                     <svg class="expand-icon expanded" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
+                                    {% if item.is_importado %}
+                                        <span class="importado-badge" title="Documento importado">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                            Importado
+                                        </span>
+                                    {% endif %}
                                 </button>
                             </td>
                             <td>{{ item.documento.data|date:"d/m/Y" }}</td>
@@ -137,7 +160,7 @@
                             </td>
                         </tr>
                         <!-- Linha expandível com tabela de lançamentos -->
-                        <tr class="lancamentos-row show" id="lancamentos-{{ item.documento.id }}">
+                        <tr class="lancamentos-row show {% if item.is_importado %}grupo-importacao-item{% endif %}" id="lancamentos-{{ item.documento.id }}">
                             <td colspan="5">
                                 <div class="lancamentos-table-container">
                                     <h5>
@@ -302,7 +325,13 @@
                 </svg>
                 Novo Lançamento
             </a>
-
+            <button class="btn btn-secondary" onclick="limparEscolhas()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 6H5H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Limpar Escolhas
+            </button>
         </div>
         {% endif %}
     </div>

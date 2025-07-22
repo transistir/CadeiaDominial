@@ -90,7 +90,7 @@
                 <div class="form-group">
                     <label for="data_transacao">Data</label>
                     <input type="date" name="data_transacao" id="data_transacao" 
-                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao %}{{ form_data.data_transacao }}{% endif %}">
+                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao and form_data.data_transacao != 'None' %}{{ form_data.data_transacao }}{% endif %}">
                 </div>
             </div>
         </div>
@@ -113,11 +113,7 @@
     window.documentoTipo = '{{ documento.tipo.tipo }}';
     window.documentoNumero = '{{ documento.numero }}';
     
-    console.log('DEBUG: Template variables:', {
-        isTranscricao: window.isTranscricao,
-        documentoTipo: window.documentoTipo,
-        documentoNumero: window.documentoNumero
-    });
+
     
     {% if modo_edicao %}
     // Adicionar classe para modo de edição
@@ -127,6 +123,101 @@
     {% if documento.tipo.tipo == 'transcricao' %}
     // Adicionar classe para documento de transcrição
     document.body.classList.add('documento-transcricao');
+    {% endif %}
+    
+    // Bloqueio de duplicata cancelada
+    {% if duplicata_cancelada %}
+    document.addEventListener('DOMContentLoaded', function() {
+        // Marcar campos de origem e cartório como inválidos
+        const origemInputs = document.querySelectorAll('input[name*="origem"]');
+        const cartorioInputs = document.querySelectorAll('input[name*="cartorio"]');
+        
+        origemInputs.forEach(input => {
+            input.classList.add('is-invalid');
+            input.style.borderColor = '#dc3545';
+        });
+        
+        cartorioInputs.forEach(input => {
+            input.classList.add('is-invalid');
+            input.style.borderColor = '#dc3545';
+        });
+        
+        // Desabilitar botão de salvar
+        const submitBtn = document.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '❌ Altere origem/cartório para continuar';
+            submitBtn.classList.remove('btn-success');
+            submitBtn.classList.add('btn-danger');
+        }
+        
+        // Adicionar mensagem de erro
+        const form = document.getElementById('lancamento-form');
+        if (form) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger mt-3';
+            errorDiv.innerHTML = `
+                <strong>❌ Origem/cartório já existe!</strong><br>
+                Você cancelou a importação de uma duplicata. Para continuar, altere a origem ou o cartório.
+                <br><small>Origem duplicada: <strong>${'{{ duplicata_origem }}'}</strong> | Cartório: <strong>${'{{ duplicata_cartorio }}'}</strong></small>
+            `;
+            form.insertBefore(errorDiv, form.firstChild);
+        }
+        
+        // Habilitar botão quando campos são alterados
+        function checkFieldsChanged() {
+            let origemChanged = false;
+            let cartorioChanged = false;
+            
+            origemInputs.forEach(input => {
+                if (input.value !== '{{ duplicata_origem }}') {
+                    origemChanged = true;
+                }
+            });
+            
+            cartorioInputs.forEach(input => {
+                if (input.value !== '{{ duplicata_cartorio }}') {
+                    cartorioChanged = true;
+                }
+            });
+            
+            if (origemChanged || cartorioChanged) {
+                // Remover classes de erro
+                origemInputs.forEach(input => {
+                    input.classList.remove('is-invalid');
+                    input.style.borderColor = '';
+                });
+                
+                cartorioInputs.forEach(input => {
+                    input.classList.remove('is-invalid');
+                    input.style.borderColor = '';
+                });
+                
+                // Habilitar botão
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Salvar Lançamento';
+                    submitBtn.classList.remove('btn-danger');
+                    submitBtn.classList.add('btn-success');
+                }
+                
+                // Remover mensagem de erro
+                const errorDiv = document.querySelector('.alert-danger');
+                if (errorDiv) {
+                    errorDiv.remove();
+                }
+            }
+        }
+        
+        // Adicionar listeners para mudanças nos campos
+        origemInputs.forEach(input => {
+            input.addEventListener('input', checkFieldsChanged);
+        });
+        
+        cartorioInputs.forEach(input => {
+            input.addEventListener('input', checkFieldsChanged);
+        });
+    });
     {% endif %}
 </script>
 {% endblock %} 

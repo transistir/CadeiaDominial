@@ -9,6 +9,7 @@ from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
+from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
@@ -38,9 +39,70 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     if request.method == 'POST':
         try:
             # Usar o service para criar o lançamento completo
-            sucesso, mensagem_origens = LancamentoService.criar_lancamento_completo(
+            resultado = LancamentoService.criar_lancamento_completo(
                 request, tis, imovel, documento_ativo
             )
+            
+            print(f"DEBUG VIEW: Resultado recebido: {resultado}")
+            print(f"DEBUG VIEW: Tipo do resultado: {type(resultado)}")
+            print(f"DEBUG VIEW: É tupla: {isinstance(resultado, tuple)}")
+            if isinstance(resultado, tuple):
+                print(f"DEBUG VIEW: Tamanho da tupla: {len(resultado)}")
+            
+            # Verificar se é resultado de duplicata
+            if isinstance(resultado, tuple) and len(resultado) == 2:
+                primeiro_elemento, segundo_elemento = resultado
+                
+                # Verificar se é resultado de duplicata (primeiro elemento é dict com 'tipo')
+                if isinstance(primeiro_elemento, dict) and primeiro_elemento.get('tipo') == 'duplicata_encontrada':
+                    # Resultado de duplicata encontrada
+                    duplicata_info = primeiro_elemento
+                    
+                    # Preparar dados para o template de duplicata
+                    dados_template = LancamentoDuplicataService.obter_dados_duplicata_para_template(
+                        duplicata_info['duplicata_info']
+                    )
+                    
+                    # Preparar dados do formulário para preservação
+                    form_data = {
+                        'tipo_lancamento': request.POST.get('tipo_lancamento'),
+                        'numero_lancamento': request.POST.get('numero_lancamento'),
+                        'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
+                        'data': request.POST.get('data'),
+                        'observacoes': request.POST.get('observacoes'),
+                        'livro_documento': request.POST.get('livro_documento'),
+                        'folha_documento': request.POST.get('folha_documento'),
+                        'cartorio': request.POST.get('cartorio'),
+                        'cartorio_nome': request.POST.get('cartorio_nome'),
+                        'area': request.POST.get('area'),
+                        'forma': request.POST.get('forma'),
+                        'descricao': request.POST.get('descricao'),
+                        'titulo': request.POST.get('titulo'),
+                        'origem_completa': request.POST.getlist('origem_completa[]'),
+                        'cartorio_origem': request.POST.getlist('cartorio_origem[]'),
+                        'cartorio_origem_nome': request.POST.getlist('cartorio_origem_nome[]'),
+                        'livro_origem': request.POST.getlist('livro_origem[]'),
+                        'folha_origem': request.POST.getlist('folha_origem[]'),
+                        'transmitente': request.POST.getlist('transmitente[]'),
+                        'transmitente_nome': request.POST.getlist('transmitente_nome[]'),
+                        'adquirente': request.POST.getlist('adquirente[]'),
+                        'adquirente_nome': request.POST.getlist('adquirente_nome[]'),
+                    }
+                    
+                    # Renderizar template de duplicata
+                    context = {
+                        'tis': tis,
+                        'imovel': imovel,
+                        'documento': documento_ativo,
+                        'duplicata_info': dados_template,
+                        'form_data': form_data,
+                        'modo_duplicata': True
+                    }
+                    
+                    return render(request, 'dominial/duplicata_importacao.html', context)
+                else:
+                    # Resultado normal (sucesso, mensagem)
+                    sucesso, mensagem_origens = resultado
             
             if sucesso:
                 messages.success(request, '✅ Lançamento criado com sucesso!')
@@ -130,12 +192,24 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             return render(request, 'dominial/lancamento_form.html', context)
     
     # GET - mostrar formulário
+    # Limpar dados de duplicata cancelada da sessão sempre
+    request.session.pop('duplicata_cancelada', None)
+    request.session.pop('duplicata_origem', None)
+    request.session.pop('duplicata_cartorio', None)
+    
+    duplicata_cancelada = False
+    duplicata_origem = ''
+    duplicata_cartorio = ''
+    
     context = {
         'tis': tis,
         'imovel': imovel,
         'documento': documento_ativo,
         'pessoas': pessoas,
         'cartorios': cartorios,
+        'duplicata_cancelada': duplicata_cancelada,
+        'duplicata_origem': duplicata_origem,
+        'duplicata_cartorio': duplicata_cartorio,
         'tipos_lancamento': tipos_lancamento,
         'transmitentes': [],
         'adquirentes': [],

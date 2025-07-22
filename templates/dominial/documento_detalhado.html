@@ -6,84 +6,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}">
-<style>
-    .lancamento-row {
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-    }
-    
-    .lancamento-row:hover {
-        background-color: #f8f9fa !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .lancamento-row:active {
-        background-color: #e9ecef !important;
-    }
-    
-    /* Evitar que links dentro da linha propaguem o clique */
-    .lancamento-row a {
-        pointer-events: auto;
-    }
-    
-    /* Indicador visual de que a linha é clicável */
-    .lancamento-row::after {
-        content: "✏️";
-        position: absolute;
-        right: 10px;
-        opacity: 0;
-        transition: opacity 0.2s ease;
-    }
-    
-    .lancamento-row:hover::after {
-        opacity: 0.7;
-    }
-    
-    .acoes-cell {
-        text-align: center;
-        width: 80px;
-        white-space: nowrap;
-    }
-    
-    .btn-edit-lancamento {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        padding: 4px 8px;
-        border-radius: 4px;
-        transition: background-color 0.2s ease;
-    }
-    
-    .btn-edit-lancamento:hover {
-        background-color: #007bff;
-        color: white;
-    }
-    
-    .btn-delete-lancamento {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        padding: 4px 8px;
-        border-radius: 4px;
-        transition: background-color 0.2s ease;
-        margin-left: 4px;
-    }
-    
-    .btn-delete-lancamento:hover {
-        background-color: #dc3545;
-        color: white;
-    }
-    
-    .table-header-info {
-        margin-bottom: 10px;
-        padding: 8px 12px;
-        background-color: #f8f9fa;
-        border-radius: 4px;
-        border-left: 4px solid #007bff;
-    }
-</style>
+<link rel="stylesheet" href="{% static 'dominial/css/documento_detalhado.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -128,7 +51,9 @@
         </div>
     </div>
 
-    <div class="field-group">
+    
+
+    <div class="field-group {% if is_importado %}documento-importado-header{% endif %}">
         <h4>
             <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -139,8 +64,36 @@
                 <path d="M3 18H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
+            {% if is_importado %}
+                <span class="importado-badge-detalhado" style="margin-left: 10px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Importado
+                </span>
+            {% endif %}
         </h4>
-        
+        {% if is_importado %}
+    <div class="alert alert-info" role="alert">
+        <div class="d-flex align-items-center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
+                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div>
+                <strong>Documento Importado</strong><br>
+                Este documento faz parte de <strong>{{ total_cadeias }} cadeia{{ total_cadeias|pluralize:"s" }} dominial{{ total_cadeias|pluralize:"is" }}</strong>:
+                <ul class="mb-0 mt-2">
+                    {% for cadeia in cadeias_dominiais %}
+                    <li>
+                        <strong>{{ cadeia.imovel_matricula }}</strong> ({{ cadeia.imovel_nome }}) 
+                        - Importado em {{ cadeia.data_importacao }} por {{ cadeia.importado_por }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
         <div class="documento-info">
             <div class="info-grid">
                 <div class="info-item">

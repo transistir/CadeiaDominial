@@ -7,6 +7,7 @@ from .imovel_models import Imovel, Cartorios, ImportacaoCartorios
 from .documento_models import Documento, DocumentoTipo
 from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa
 from .alteracao_models import Alteracoes, AlteracoesTipo, RegistroTipo, AverbacoesTipo
+from .documento_importado_models import DocumentoImportado
 
 # Exportar todos os models para uso externo
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     'Documento', 'DocumentoTipo',
     'Lancamento', 'LancamentoTipo', 'LancamentoPessoa',
     'Alteracoes', 'AlteracoesTipo', 'RegistroTipo', 'AverbacoesTipo',
+    'DocumentoImportado',
 ] 

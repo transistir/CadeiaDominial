@@ -130,30 +130,30 @@
 - [ ] Teste: importação durante criação
 - [ ] Teste: funcionalidades existentes não quebradas
 
-## 📋 **FASE 5: Visualização e Indicadores**
+## 📋 **FASE 5: Visualização e Indicadores** ✅
 
-### **5.1 Árvore da Cadeia Dominial**
-- [ ] Modificar `static/dominial/js/cadeia_dominial_d3.js`
-- [ ] **Adicionar borda verde para documentos importados**
-- [ ] Preservar cores originais de transcrições/matrículas
-- [ ] Tooltip indicando origem do documento
-- [ ] Testar visualização
+### **5.1 Árvore da Cadeia Dominial** ✅
+- [x] Modificar `static/dominial/js/cadeia_dominial_d3.js`
+- [x] **Adicionar borda verde para documentos importados**
+- [x] Preservar cores originais de transcrições/matrículas
+- [x] Tooltip indicando origem do documento
+- [x] Testar visualização
 
-### **5.2 Tabela da Cadeia Dominial**
-- [ ] Modificar `templates/dominial/cadeia_dominial_tabela.html`
-- [ ] **Borda verde para documentos importados**
-- [ ] Coluna adicional com informação de origem
-- [ ] Testar tabela
+### **5.2 Tabela da Cadeia Dominial** ✅
+- [x] Modificar `templates/dominial/cadeia_dominial_tabela.html`
+- [x] **Borda verde para documentos importados**
+- [x] Coluna adicional com informação de origem
+- [x] Testar tabela
 
-### **5.3 Service de Tabela**
-- [ ] Modificar `dominial/services/cadeia_dominial_tabela_service.py`
-- [ ] Adicionar informação de documentos importados
-- [ ] Testar service
+### **5.3 Service de Tabela** ✅
+- [x] Modificar `dominial/services/cadeia_dominial_tabela_service.py`
+- [x] Adicionar informação de documentos importados
+- [x] Testar service
 
-### **5.4 Testes de Visualização**
-- [ ] Teste: árvore com documentos importados
-- [ ] Teste: tabela com documentos importados
-- [ ] Teste: indicadores visuais corretos
+### **5.4 Testes de Visualização** ✅
+- [x] Teste: árvore com documentos importados
+- [x] Teste: tabela com documentos importados
+- [x] Teste: indicadores visuais corretos
 
 ## 📋 **FASE 6: Otimizações e Melhorias**
 
@@ -242,6 +242,6 @@
 
 ---
 
-**Status Geral**: ⏳ Em desenvolvimento  
-**Última atualização**: [Data]  
-**Próxima revisão**: [Data] 
+**Status Geral**: ✅ Fases 1-5 COMPLETAS  
+**Última atualização**: 20/07/2025  
+**Próxima revisão**: FASE 6 - Otimizações 

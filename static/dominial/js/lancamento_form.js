@@ -29,13 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const isTranscricao = isTranscricaoGlobal || isTranscricaoByNumber || isTranscricaoByClass;
         
-        console.log('DEBUG: Detecção de transcrição:', {
-            isTranscricaoGlobal,
-            isTranscricaoByNumber,
-            isTranscricaoByClass,
-            isTranscricao,
-            documentoNumero: documentoNumero ? documentoNumero.value : 'não encontrado'
-        });
+
         
         // Esconder todos os campos primeiro
         averbacaoFields.classList.add('hidden');
@@ -91,7 +85,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Para transcrições, sempre mostrar bloco de transmissão
             if (isTranscricao) {
-                console.log('DEBUG: Mostrando bloco de transmissão para averbação de transcrição');
                 transacaoFields.classList.remove('hidden');
                 transacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
             }
@@ -106,7 +99,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Para transcrições, sempre mostrar bloco de transmissão
             if (isTranscricao) {
-                console.log('DEBUG: Mostrando bloco de transmissão para início de matrícula de transcrição');
                 transacaoFields.classList.remove('hidden');
                 transacaoFields.querySelectorAll('input, select, textarea').forEach(field => field.disabled = false);
             }
@@ -266,24 +258,16 @@ document.addEventListener('DOMContentLoaded', function() {
         setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions);
     }
     
-    // Debug: Adicionar listener para capturar envio do formulário
+    // Adicionar listener para capturar envio do formulário
     const form = document.getElementById('lancamento-form');
     if (form) {
         form.addEventListener('submit', function(e) {
-            console.log('Formulário sendo enviado...');
-            console.log('Tipo selecionado:', tipoSelect.value);
-            console.log('Número do lançamento:', document.getElementById('numero_lancamento').value);
-            console.log('Data:', document.getElementById('data').value);
-            console.log('Cartório:', document.getElementById('cartorio').value);
-            console.log('Cartório nome:', document.getElementById('cartorio_nome').value);
-            
             // Verificar se todos os campos obrigatórios estão preenchidos
             const requiredFields = form.querySelectorAll('[required]');
             let hasError = false;
             
             requiredFields.forEach(field => {
                 if (!field.value.trim()) {
-                    console.error('Campo obrigatório vazio:', field.name);
                     hasError = true;
                 }
             });
@@ -294,7 +278,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const numeroSimplesValue = numeroSimplesInput ? numeroSimplesInput.value.trim() : '';
             
             if ((selectedTipo === 'registro' || selectedTipo === 'averbacao') && !numeroSimplesValue) {
-                console.error('Número simples é obrigatório para registro e averbação');
                 hasError = true;
                 
                 // Mostrar mensagem de erro
@@ -311,12 +294,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             if (hasError) {
-                console.error('Formulário tem campos obrigatórios vazios!');
                 e.preventDefault();
                 return false;
             }
-            
-            console.log('Formulário válido, enviando...');
         });
     }
 });
@@ -331,17 +311,23 @@ function removePessoa(button) {
 
 // Função para adicionar transmitente
 function adicionarTransmitente() {
-    // Tentar encontrar o container correto baseado no contexto
-    let container = document.getElementById('transmitentes-container-registro');
-    if (!container) {
-        container = document.getElementById('transmitentes-container-averbacao');
+    // Procurar por todos os containers possíveis e usar o primeiro que estiver visível
+    const containers = [
+        'transmitentes-container-registro',
+        'transmitentes-container-averbacao', 
+        'transmitentes-container-inicio',
+        'transmitentes-container'
+    ];
+    
+    let container = null;
+    for (const containerId of containers) {
+        const element = document.getElementById(containerId);
+        if (element && !element.closest('.hidden')) {
+            container = element;
+            break;
+        }
     }
-    if (!container) {
-        container = document.getElementById('transmitentes-container-inicio');
-    }
-    if (!container) {
-        container = document.getElementById('transmitentes-container');
-    }
+    
     if (!container) {
         return;
     }
@@ -368,17 +354,23 @@ function adicionarTransmitente() {
 
 // Função para adicionar adquirente
 function adicionarAdquirente() {
-    // Tentar encontrar o container correto baseado no contexto
-    let container = document.getElementById('adquirentes-container-registro');
-    if (!container) {
-        container = document.getElementById('adquirentes-container-averbacao');
+    // Procurar por todos os containers possíveis e usar o primeiro que estiver visível
+    const containers = [
+        'adquirentes-container-registro',
+        'adquirentes-container-averbacao', 
+        'adquirentes-container-inicio',
+        'adquirentes-container'
+    ];
+    
+    let container = null;
+    for (const containerId of containers) {
+        const element = document.getElementById(containerId);
+        if (element && !element.closest('.hidden')) {
+            container = element;
+            break;
+        }
     }
-    if (!container) {
-        container = document.getElementById('adquirentes-container-inicio');
-    }
-    if (!container) {
-        container = document.getElementById('adquirentes-container');
-    }
+    
     if (!container) {
         return;
     }
@@ -568,31 +560,16 @@ function adicionarOrigem() {
 
 // Função para configurar autocomplete geral de origens
 function setupOrigemAutocomplete() {
-    console.log('Configurando autocomplete para origens...');
-    
     // Configurar autocomplete para todos os campos de cartório de origem
     const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
-    console.log('Encontrados', cartorioOrigemInputs.length, 'campos de cartório de origem');
     
     cartorioOrigemInputs.forEach((input, index) => {
-        console.log(`Configurando campo ${index}:`, input.id);
-        
         // Buscar o campo hidden correspondente
         const hidden = input.closest('.autocomplete-container').querySelector('.cartorio-origem-id');
         const suggestions = input.closest('.autocomplete-container').querySelector('.cartorio-origem-suggestions');
-    
-        console.log('Hidden field:', hidden ? hidden.id : 'não encontrado');
-        console.log('Suggestions:', suggestions ? 'encontrado' : 'não encontrado');
         
         if (input && hidden && suggestions) {
             setupCartorioAutocomplete(input, hidden, suggestions);
-            console.log(`Autocomplete configurado para campo ${index}`);
-        } else {
-            console.error(`Erro ao configurar autocomplete para campo ${index}:`, {
-                input: !!input,
-                hidden: !!hidden,
-                suggestions: !!suggestions
-            });
-    }
+        }
     });
 } 
