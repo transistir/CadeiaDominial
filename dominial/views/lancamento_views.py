@@ -192,16 +192,14 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             return render(request, 'dominial/lancamento_form.html', context)
     
     # GET - mostrar formulário
-    # Verificar se há duplicata cancelada na sessão
-    duplicata_cancelada = request.session.get('duplicata_cancelada', False)
-    duplicata_origem = request.session.get('duplicata_origem', '')
-    duplicata_cartorio = request.session.get('duplicata_cartorio', '')
+    # Limpar dados de duplicata cancelada da sessão sempre
+    request.session.pop('duplicata_cancelada', None)
+    request.session.pop('duplicata_origem', None)
+    request.session.pop('duplicata_cartorio', None)
     
-    # Limpar a sessão se não há duplicata cancelada
-    if not duplicata_cancelada:
-        request.session.pop('duplicata_cancelada', None)
-        request.session.pop('duplicata_origem', None)
-        request.session.pop('duplicata_cartorio', None)
+    duplicata_cancelada = False
+    duplicata_origem = ''
+    duplicata_cartorio = ''
     
     context = {
         'tis': tis,
