@@ -49,6 +49,27 @@ class LancamentoHerancaService:
         }
     
     @staticmethod
+    def obter_cartorio_origem_documento(documento):
+        """
+        Obtém o cartório de origem do primeiro lançamento que criou o documento
+        
+        Args:
+            documento: Objeto Documento
+            
+        Returns:
+            Cartorios: Cartório de origem ou cartório do documento como fallback
+        """
+        primeiro_lancamento = Lancamento.objects.filter(
+            documento=documento
+        ).order_by('id').first()
+        
+        if primeiro_lancamento and primeiro_lancamento.cartorio_origem:
+            return primeiro_lancamento.cartorio_origem
+        
+        # Fallback: usar cartório do documento
+        return documento.cartorio
+    
+    @staticmethod
     def herdar_dados_para_novo_lancamento(documento, lancamento):
         """
         Herda dados do primeiro lançamento para um novo lançamento
