@@ -169,15 +169,7 @@
                         <td>{{ lancamento.numero_lancamento }}</td>
                         <td>{{ documento.livro|default_if_none:"-" }}</td>
                         <td>{{ documento.folha|default_if_none:"-" }}</td>
-                        <td>
-                            {% if documento.cri_origem %}
-                                {{ documento.cri_origem.nome }}
-                            {% elif documento.cri_atual %}
-                                {{ documento.cri_atual.nome }}
-                            {% else %}
-                                {{ documento.cartorio.nome }}
-                            {% endif %}
-                        </td>
+                        <td>{{ documento.cartorio.nome }}</td>
                         <td>{{ lancamento.data|date:'d/m/Y' }}</td>
                         <!-- Transmitente -->
                         <td>
