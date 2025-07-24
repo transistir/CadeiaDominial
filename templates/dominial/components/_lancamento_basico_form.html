@@ -18,8 +18,12 @@
         <label>Cartório da Origem</label>
         <div class="cartorio-display">
             <span class="cartorio-nome">
-                {% if modo_edicao and lancamento.cartorio_origem %}
-                    {{ lancamento.cartorio_origem.nome }}
+                {% if modo_edicao %}
+                    {% if cartorio_origem_correto %}
+                        {{ cartorio_origem_correto.nome }}
+                    {% else %}
+                        Cartório não definido
+                    {% endif %}
                 {% else %}
                     Cartório não definido
                 {% endif %}
@@ -30,9 +34,9 @@
             </small>
         </div>
         <input type="hidden" name="cartorio" id="cartorio" 
-               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% endif %}">
+               value="{% if modo_edicao and cartorio_origem_correto %}{{ cartorio_origem_correto.id }}{% endif %}">
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" 
-               value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% endif %}">
+               value="{% if modo_edicao and cartorio_origem_correto %}{{ cartorio_origem_correto.nome }}{% endif %}">
     </div>
     {% endif %}
     

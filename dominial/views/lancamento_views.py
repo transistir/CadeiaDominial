@@ -310,6 +310,10 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
     adquirentes = lancamento.pessoas.filter(tipo='adquirente')
     
+    # CORREÇÃO: Para o formulário de edição, usar o cartório do documento atual
+    # O cartório de origem deve ser o cartório do próprio documento (que foi definido quando ele foi criado)
+    cartorio_origem_correto = lancamento.documento.cartorio
+    
     context = {
         'tis': tis,
         'imovel': imovel,
@@ -320,7 +324,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'tipos_lancamento': tipos_lancamento,
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
-        'modo_edicao': True
+        'modo_edicao': True,
+        'cartorio_origem_correto': cartorio_origem_correto
     }
     
     # Preparar dados para o template
