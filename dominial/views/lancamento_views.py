@@ -250,12 +250,20 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         # Obter dados do primeiro lançamento para herança
         dados_primeiro = LancamentoHerancaService.obter_dados_primeiro_lancamento(documento_ativo)
         
-        # Para lançamentos subsequentes, usar o cartório do documento atual
+        # Para lançamentos subsequentes, buscar o cartório de origem do primeiro lançamento
         lancamento_herdado = Lancamento()
         
-        # CORREÇÃO: Usar o cartório do documento atual, não do primeiro lançamento
-        # O cartório de origem deve ser o cartório do documento atual
-        lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+        # CORREÇÃO: Usar o cartório de origem do primeiro lançamento que criou este documento
+        primeiro_lancamento = Lancamento.objects.filter(
+            documento=documento_ativo
+        ).order_by('id').first()
+        
+        if primeiro_lancamento and primeiro_lancamento.cartorio_origem:
+            # Usar o cartório de origem do primeiro lançamento (que criou o documento)
+            lancamento_herdado.cartorio_origem = primeiro_lancamento.cartorio_origem
+        else:
+            # Fallback: usar cartório do documento atual
+            lancamento_herdado.cartorio_origem = documento_ativo.cartorio
         
         # Herdar livro e folha do primeiro lançamento se disponíveis
         if dados_primeiro:
