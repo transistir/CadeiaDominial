@@ -88,30 +88,7 @@ class CadeiaDominialTabelaService:
         }
         return result
     
-    @staticmethod
-    def _calcular_cartorio_documento(documento, imovel, lancamentos):
-        """
-        Calcula o cartório correto de um documento baseado na hierarquia
-        
-        Regras:
-        1. Para o primeiro documento (matrícula atual): usar cartório do imóvel
-        2. Para documentos criados automaticamente: usar cartório da origem
-        3. Para documentos manuais: usar cartório do documento
-        """
-        # Se é o documento da matrícula atual, usar cartório do imóvel
-        if documento.tipo.tipo == 'matricula' and documento.numero == imovel.matricula:
-            return imovel.cartorio
-        
-        # Verificar se o documento foi criado automaticamente (tem CRI da origem)
-        if documento.cri_origem:
-            return documento.cri_origem
-        
-        # Verificar se tem CRI atual definido
-        if documento.cri_atual:
-            return documento.cri_atual
-        
-        # Fallback: usar cartório do documento
-        return documento.cartorio
+
     
     def _obter_origens_documento(self, documento, lancamentos):
         """
