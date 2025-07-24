@@ -213,6 +213,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'tipos_lancamento': tipos_lancamento,
         'transmitentes': [],
         'adquirentes': [],
+        'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
     }
     
     # Verificar se é o primeiro lançamento do documento
@@ -264,6 +265,9 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         
         context['lancamento'] = lancamento_herdado
         context['modo_edicao'] = True  # Para usar os dados herdados no template
+        
+        # CORREÇÃO: Adicionar cartorio_origem_correto para o template usar
+        context['cartorio_origem_correto'] = documento_ativo.cartorio
     
     return render(request, 'dominial/lancamento_form.html', context)
 
