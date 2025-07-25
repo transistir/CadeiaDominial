@@ -52,7 +52,7 @@
     padding: 20px;
     margin-bottom: 20px;
     position: relative;
-    overflow: hidden;
+    overflow: visible; /* Permitir que a árvore extrapole */
 }
 
 /* Indicador de zoom com scroll */
@@ -205,6 +205,7 @@
     height: 600px;
     background: #f8f9fa;
     border-radius: 4px;
+    overflow: hidden; /* Permitir que o conteúdo extrapole */
 }
 
 /* Links da árvore */

@@ -68,7 +68,8 @@ window.expandirArvore = debounce(function() {
 
 document.addEventListener('DOMContentLoaded', function() {
     const svg = d3.select('#arvore-d3-svg');
-    const width = document.getElementById('arvore-d3-svg').clientWidth || 1000;
+    const containerWidth = document.getElementById('arvore-d3-svg').clientWidth || 1000;
+    const width = Math.max(containerWidth, 2000); // Permitir largura maior para árvores extensas
     const height = 600;
     svg.attr('width', width).attr('height', height);
 
@@ -267,7 +268,14 @@ function centralizarArvoreInteligente(root, height) {
         node.x += offset;
     });
     
-    console.log(`DEBUG: Árvore centralizada - centro: ${centroArvore} -> ${centroDesejado} (offset: ${offset}px)`);
+    console.log(`DEBUG: Centralização - minX: ${minX}, maxX: ${maxX}, centro: ${centroArvore} -> ${centroDesejado} (offset: ${offset}px)`);
+    console.log(`DEBUG: Altura do container: ${height}px`);
+    
+    // Verificar alguns nós após centralização
+    const primeirosNos = nodes.slice(0, 3);
+    primeirosNos.forEach((node, i) => {
+        console.log(`DEBUG: Nó ${i + 1} após centralização - x: ${node.x}, y: ${node.y}`);
+    });
 }
 
 // Calcular espaçamento adaptativo baseado na quantidade de nós
@@ -344,7 +352,18 @@ function corrigirSobreposicoes(root) {
             
             const alturaCard = 80;
             const margemMinima = 40;
-            const espacamentoMinimo = alturaCard + margemMinima;
+            
+            // Verificar se há documentos importados no nível
+            const importadosNivel = nosNivel.filter(node => node.data.is_importado).length;
+            let margemAjustada = margemMinima;
+            
+            // Aumentar margem se há documentos importados
+            if (importadosNivel > 0) {
+                margemAjustada = margemMinima * 1.2; // 20% mais margem vertical
+                console.log(`DEBUG: Nível ${depth} - Aumentando margem vertical de ${margemMinima} para ${margemAjustada} devido a ${importadosNivel} documentos importados`);
+            }
+            
+            const espacamentoMinimo = alturaCard + margemAjustada;
             
             // Verificar se há sobreposições
             let temSobreposicao = false;
@@ -389,7 +408,15 @@ function aplicarEspacamentoAdicional(root) {
             // Ordenar por posição X (vertical no layout horizontal)
             nosNivel.sort((a, b) => a.x - b.x);
             
-            const espacamentoMinimo = 120; // espaçamento equilibrado
+            // Verificar se há documentos importados no nível
+            const importadosNivel = nosNivel.filter(node => node.data.is_importado).length;
+            let espacamentoMinimo = 120; // espaçamento base
+            
+            // Aumentar espaçamento se há documentos importados
+            if (importadosNivel > 0) {
+                espacamentoMinimo = 150; // 25% mais espaçamento vertical
+                console.log(`DEBUG: Nível ${depth} - Aumentando espaçamento vertical adicional de 120 para ${espacamentoMinimo} devido a ${importadosNivel} documentos importados`);
+            }
             
             // Verificar se o espaçamento atual é suficiente
             let espacamentoAtual = 0;
@@ -419,26 +446,71 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Converter para d3.hierarchy
     const root = d3.hierarchy(data);
     
+    // DEBUG: Analisar estrutura da árvore para documentos importados
+    const totalNos = root.descendants().length;
+    const documentosImportados = root.descendants().filter(node => node.data.is_importado).length;
+    const documentosCompartilhados = root.descendants().filter(node => node.data.is_compartilhado).length;
+    
+    console.log(`DEBUG: Estrutura da árvore - Total: ${totalNos}, Importados: ${documentosImportados}, Compartilhados: ${documentosCompartilhados}`);
+    
+    // DEBUG: Verificar dados dos documentos importados
+    const docsImportados = root.descendants().filter(node => node.data.is_importado);
+    docsImportados.forEach((node, index) => {
+        console.log(`DEBUG: Documento importado ${index + 1}: ${node.data.numero} (nível ${node.depth})`);
+    });
+    
+    // Analisar distribuição por níveis
+    const niveis = {};
+    root.descendants().forEach(node => {
+        if (!niveis[node.depth]) niveis[node.depth] = [];
+        niveis[node.depth].push(node);
+    });
+    
+    Object.keys(niveis).forEach(depth => {
+        const nosNivel = niveis[depth];
+        const importadosNivel = nosNivel.filter(node => node.data.is_importado).length;
+        console.log(`DEBUG: Nível ${depth} - Total: ${nosNivel.length}, Importados: ${importadosNivel}`);
+    });
+    
     // Calcular espaçamento adaptativo
     const espacamentoHorizontal = calcularEspacamentoAdaptativo(root);
     
     // Configurar layout da árvore para layout horizontal correto
     const treeLayout = d3.tree()
-        .size([height, width - 100]) // Aumentar largura disponível para mais espaço horizontal
+        .size([height, width - 20]) // Reduzir ao máximo a margem para mais espaço horizontal
         .separation((a, b) => {
-            // Separação baseada na quantidade de irmãos - ULTRA AUMENTADA
+            // Separação baseada na quantidade de irmãos - AUMENTADA
             const irmaos = a.parent ? a.parent.children.length : 1;
-            if (irmaos > 15) return 4.0;
-            if (irmaos > 10) return 3.5;
-            if (irmaos > 6) return 3.0;
-            if (irmaos > 3) return 2.5;
-            return 2.0;
+            
+            // DEBUG: Verificar se há documentos importados no nível
+            const nivel = a.depth;
+            const nosNivel = a.parent ? a.parent.children : [a];
+            const importadosNivel = nosNivel.filter(node => node.data.is_importado).length;
+            
+            if (importadosNivel > 0) {
+                console.log(`DEBUG: Nível ${nivel} tem ${importadosNivel} documentos importados de ${nosNivel.length} total`);
+            }
+            
+            // Aumentar separação se há muitos documentos importados
+            let separacaoBase = 2.0; // Base aumentada
+            if (irmaos > 15) separacaoBase = 4.0;
+            else if (irmaos > 10) separacaoBase = 3.5;
+            else if (irmaos > 6) separacaoBase = 3.0;
+            else if (irmaos > 3) separacaoBase = 2.5;
+            
+            // Aumentar separação horizontal para níveis com documentos importados
+            if (importadosNivel > 0) {
+                // Ser muito mais agressivo no espaçamento horizontal para ver as linhas
+                if (irmaos > 6) separacaoBase = 8.0; // Separação muito maior para muitos irmãos
+                else if (irmaos > 3) separacaoBase = 6.0;
+                else separacaoBase = 5.0;
+                console.log(`DEBUG: Aumentando separação horizontal para ${separacaoBase} devido a documentos importados`);
+            }
+            
+            return separacaoBase;
         });
     
     treeLayout(root);
-    
-    // Centralizar a árvore baseada no bounding box real
-    centralizarArvoreInteligente(root, height);
     
     // Aplicar correção de sobreposições melhorada
     corrigirSobreposicoes(root);
@@ -761,7 +833,95 @@ window.zoomOut = function() {
 
 window.resetZoom = function() {
     const svg = window._d3svg;
-    centralizarArvore(svg.attr('width'), svg.attr('height'));
+    const zoomGroup = window._zoomGroup;
+    const width = +svg.attr('width');
+    const height = +svg.attr('height');
+    
+    // Pegar o bounding box do grupo de nós
+    const nodes = zoomGroup.selectAll('.node');
+    if (nodes.size() === 0) return;
+    
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.each(function() {
+        const bbox = this.getBBox();
+        const x = +this.getAttribute('transform').split('(')[1].split(',')[0];
+        const y = +this.getAttribute('transform').split(',')[1].split(')')[0];
+        minX = Math.min(minX, x + bbox.x);
+        maxX = Math.max(maxX, x + bbox.x + bbox.width);
+        minY = Math.min(minY, y + bbox.y);
+        maxY = Math.max(maxY, y + bbox.y + bbox.height);
+    });
+    
+    // Adicionar margem extra para os cards
+    minX -= 70;
+    maxX += 70;
+    minY -= 40;
+    maxY += 40;
+    
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+    
+    // Calcular escala para caber TUDO na div com margem
+    const scaleX = (width - 100) / treeWidth;
+    const scaleY = (height - 100) / treeHeight;
+    const finalScale = Math.min(scaleX, scaleY, 1); // Não aumentar além do tamanho original
+    
+    // Posicionar o primeiro card na extrema esquerda da div
+    const tx = 50 - minX * finalScale; // Margem de 50px da esquerda
+    const ty = (height - treeHeight * finalScale) / 2 - minY * finalScale; // Centralizar verticalmente
+    
+    console.log(`DEBUG: Reset - Árvore: ${treeWidth}x${treeHeight}, Container: ${width}x${height}, Escala: ${finalScale}`);
+    
+    const t = d3.zoomIdentity.translate(tx, ty).scale(finalScale);
+    svg.transition().duration(400).call(window._d3zoom.transform, t);
+    window._zoomTransform = t;
+    currentZoom = 1;
+}
+
+window.fimDaArvore = function() {
+    const svg = window._d3svg;
+    const zoomGroup = window._zoomGroup;
+    const width = +svg.attr('width');
+    const height = +svg.attr('height');
+    
+    // Pegar o bounding box do grupo de nós
+    const nodes = zoomGroup.selectAll('.node');
+    if (nodes.size() === 0) return;
+    
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.each(function() {
+        const bbox = this.getBBox();
+        const x = +this.getAttribute('transform').split('(')[1].split(',')[0];
+        const y = +this.getAttribute('transform').split(',')[1].split(')')[0];
+        minX = Math.min(minX, x + bbox.x);
+        maxX = Math.max(maxX, x + bbox.x + bbox.width);
+        minY = Math.min(minY, y + bbox.y);
+        maxY = Math.max(maxY, y + bbox.y + bbox.height);
+    });
+    
+    // Adicionar margem extra para os cards
+    minX -= 70;
+    maxX += 70;
+    minY -= 40;
+    maxY += 40;
+    
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+    
+    // Calcular escala para focar no último nível (mais à direita)
+    const ultimoNivelWidth = 300; // Largura estimada do último nível
+    const finalScale = Math.min((width - 100) / ultimoNivelWidth, (height - 100) / treeHeight, 2.0); // Escala maior para zoom
+    
+    // Posicionar o último nível no centro da div
+    const centroUltimoNivel = maxX - (ultimoNivelWidth / 2);
+    const tx = (width / 2) - centroUltimoNivel * finalScale;
+    const ty = (height - treeHeight * finalScale) / 2 - minY * finalScale; // Centralizar verticalmente
+    
+    console.log(`DEBUG: Fim da Árvore - Último nível no centro, Escala: ${finalScale}`);
+    
+    const t = d3.zoomIdentity.translate(tx, ty).scale(finalScale);
+    svg.transition().duration(400).call(window._d3zoom.transform, t);
+    window._zoomTransform = t;
     currentZoom = 1;
 }
 
@@ -791,13 +951,30 @@ function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
     const treeWidth = maxX - minX;
     const treeHeight = maxY - minY;
     
+    console.log(`DEBUG: Enquadramento - Árvore: ${treeWidth}x${treeHeight}, Container: ${width}x${height}`);
+    console.log(`DEBUG: Enquadramento - minY: ${minY}, maxY: ${maxY}, centro Y: ${(minY + maxY) / 2}`);
+    
     // Calcular escala para caber tudo com margem extra
+    // Se a árvore for muito grande, não forçar o enquadramento completo
     const scale = Math.min((width - 120) / treeWidth, (height - 120) / treeHeight, 1);
     
-    // Centralizar com margem extra
-    const tx = (width - treeWidth * scale) / 2 - minX * scale;
-    const ty = (height - treeHeight * scale) / 2 - minY * scale;
-    const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
+    // Para árvores muito grandes, usar uma escala mínima para não ficar muito pequena
+    const finalScale = Math.max(scale, 0.3);
+    
+    // Centralizar a árvore verticalmente na div (não apenas o centro)
+    const centroDivX = width / 2;
+    const centroDivY = height / 2;
+    
+    // Calcular translação para centralizar toda a árvore na div
+    const tx = centroDivX - (minX + treeWidth / 2) * finalScale;
+    const ty = centroDivY - (minY + treeHeight / 2) * finalScale;
+    
+    console.log(`DEBUG: Centralizando centro da árvore - Centro árvore: (${centroArvoreX}, ${centroArvoreY}) -> Centro div: (${centroDivX}, ${centroDivY})`);
+    console.log(`DEBUG: Translação calculada - tx: ${tx}, ty: ${ty}, escala: ${finalScale}`);
+    
+    console.log(`DEBUG: Enquadramento - Escala: ${finalScale}, tx: ${tx}, ty: ${ty}`);
+    
+    const t = d3.zoomIdentity.translate(tx, ty).scale(finalScale);
     svg.transition().duration(400).call(window._d3zoom.transform, t);
     window._zoomTransform = t;
 } 
