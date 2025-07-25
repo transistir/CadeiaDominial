@@ -204,21 +204,21 @@ function calcularEspacamentoAdaptativo(root) {
     
     // Calcular espaçamento baseado na quantidade máxima de nós
     // Considerando que cada card tem 140px de largura e 80px de altura
-    let espacamentoHorizontal = 200; // padrão
+    let espacamentoHorizontal = 200; // padrão equilibrado
     if (maxNos > 20) {
-        espacamentoHorizontal = 400; // muito espaçado para muitos nós
+        espacamentoHorizontal = 350; // bem espaçado para muitos nós
     } else if (maxNos > 15) {
-        espacamentoHorizontal = 350; // muito espaçado para muitos nós
+        espacamentoHorizontal = 300; // bem espaçado para muitos nós
     } else if (maxNos > 10) {
-        espacamentoHorizontal = 300; // espaçado para muitos nós
+        espacamentoHorizontal = 250; // espaçado para muitos nós
     } else if (maxNos > 6) {
-        espacamentoHorizontal = 250; // moderadamente espaçado
+        espacamentoHorizontal = 220; // moderadamente espaçado
     }
     
     return espacamentoHorizontal;
 }
 
-// Corrigir sobreposições pós-processamento - VERSÃO AGRESSIVA
+// Corrigir sobreposições pós-processamento - VERSÃO INTELIGENTE
 function corrigirSobreposicoes(root) {
     // Agrupar nós por profundidade (nível)
     const niveis = {};
@@ -227,30 +227,41 @@ function corrigirSobreposicoes(root) {
         niveis[node.depth].push(node);
     });
     
-    // Para cada nível, FORÇAR espaçamento mínimo
+    // Para cada nível, verificar e corrigir sobreposições
     Object.keys(niveis).forEach(depth => {
         const nosNivel = niveis[depth];
         if (nosNivel.length > 1) {
             // Ordenar por posição X (vertical no layout horizontal)
             nosNivel.sort((a, b) => a.x - b.x);
             
-            // ESPAÇAMENTO MÍNIMO AGRESSIVO
             const alturaCard = 80; // altura do card
-            const margemVertical = 60; // margem aumentada entre cards
+            const margemVertical = 40; // margem entre cards
             const espacamentoMinimo = alturaCard + margemVertical;
             
-            // SEMPRE redistribuir os nós para garantir espaçamento
-            const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-            const inicio = nosNivel[0].x - (larguraTotal / 2);
+            // Verificar se há sobreposições
+            let temSobreposicao = false;
+            for (let i = 0; i < nosNivel.length - 1; i++) {
+                const distancia = nosNivel[i + 1].x - nosNivel[i].x;
+                if (distancia < espacamentoMinimo) {
+                    temSobreposicao = true;
+                    break;
+                }
+            }
             
-            nosNivel.forEach((node, index) => {
-                node.x = inicio + (index * espacamentoMinimo);
-            });
+            // Só redistribuir se houver sobreposição
+            if (temSobreposicao) {
+                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+                const inicio = nosNivel[0].x - (larguraTotal / 2);
+                
+                nosNivel.forEach((node, index) => {
+                    node.x = inicio + (index * espacamentoMinimo);
+                });
+            }
         }
     });
 }
 
-// NOVA FUNÇÃO: Aplicar espaçamento adicional para evitar sobreposições - VERSÃO AGRESSIVA
+// NOVA FUNÇÃO: Aplicar espaçamento adicional para evitar sobreposições - VERSÃO INTELIGENTE
 function aplicarEspacamentoAdicional(root) {
     // Agrupar nós por profundidade
     const niveis = {};
@@ -259,23 +270,31 @@ function aplicarEspacamentoAdicional(root) {
         niveis[node.depth].push(node);
     });
     
-    // Para cada nível, FORÇAR espaçamento mínimo
+    // Para cada nível, aplicar espaçamento adicional se necessário
     Object.keys(niveis).forEach(depth => {
         const nosNivel = niveis[depth];
         if (nosNivel.length > 1) {
             // Ordenar por posição X (vertical no layout horizontal)
             nosNivel.sort((a, b) => a.x - b.x);
             
-            // ESPAÇAMENTO MÍNIMO AGRESSIVO
-            const espacamentoMinimo = 150; // aumentado para 150px
+            const espacamentoMinimo = 120; // espaçamento equilibrado
             
-            // SEMPRE aplicar espaçamento mínimo
-            const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-            const inicio = nosNivel[0].x - (larguraTotal / 2);
+            // Verificar se o espaçamento atual é suficiente
+            let espacamentoAtual = 0;
+            for (let i = 0; i < nosNivel.length - 1; i++) {
+                espacamentoAtual += nosNivel[i + 1].x - nosNivel[i].x;
+            }
+            espacamentoAtual = espacamentoAtual / (nosNivel.length - 1);
             
-            nosNivel.forEach((node, index) => {
-                node.x = inicio + (index * espacamentoMinimo);
-            });
+            // Só aplicar espaçamento adicional se o atual for muito pequeno
+            if (espacamentoAtual < espacamentoMinimo) {
+                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+                const inicio = nosNivel[0].x - (larguraTotal / 2);
+                
+                nosNivel.forEach((node, index) => {
+                    node.x = inicio + (index * espacamentoMinimo);
+                });
+            }
         }
     });
 }
@@ -289,22 +308,22 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Calcular espaçamento adaptativo
     const espacamentoHorizontal = calcularEspacamentoAdaptativo(root);
     
-    // Configurar layout da árvore com espaçamento adaptativo AGRESSIVO
+    // Configurar layout da árvore com espaçamento equilibrado
     const treeLayout = d3.tree()
-        .size([height * 2.5, width - 300]) // Aumentar ainda mais a altura disponível
+        .size([height * 2.0, width - 300]) // Altura moderada para manter estrutura
         .separation((a, b) => {
             // Aumentar separação entre nós irmãos quando há muitos
             const irmaos = a.parent ? a.parent.children.length : 1;
             if (irmaos > 20) {
-                return 4.0; // Quadruplicar a separação para muitos nós
+                return 3.0; // Triplicar a separação para muitos nós
             } else if (irmaos > 15) {
-                return 3.0; // Triplicar a separação
-            } else if (irmaos > 10) {
                 return 2.5; // Aumentar 150%
-            } else if (irmaos > 6) {
+            } else if (irmaos > 10) {
                 return 2.0; // Dobrar a separação
+            } else if (irmaos > 6) {
+                return 1.5; // Aumentar 50%
             }
-            return 1.5; // Aumentar 50% mesmo para poucos nós
+            return 1.2; // Aumentar 20% para poucos nós
         });
     
     treeLayout(root);
