@@ -203,15 +203,18 @@ class HierarquiaArvoreService:
                 # Buscar recursivamente nos documentos de origem
                 for origem_numero in origens:
                     try:
-                        doc_origem = Documento.objects.get(
+                        # Usar filter().first() em vez de get() para evitar erro de múltiplos objetos
+                        doc_origem = Documento.objects.filter(
                             numero=origem_numero,
                             imovel=documento_origem.imovel
-                        )
-                        if HierarquiaArvoreService._documento_pertence_cadeia(
+                        ).first()
+                        
+                        if doc_origem and HierarquiaArvoreService._documento_pertence_cadeia(
                             documento_candidato, doc_origem, documentos_processados
                         ):
                             return True
-                    except Documento.DoesNotExist:
+                    except Exception as e:
+                        print(f"Erro ao buscar documento origem {origem_numero}: {e}")
                         continue
         
         # Verificar origem do próprio documento origem
@@ -223,15 +226,18 @@ class HierarquiaArvoreService:
             # Buscar recursivamente nos documentos de origem
             for origem_numero in origens:
                 try:
-                    doc_origem = Documento.objects.get(
+                    # Usar filter().first() em vez de get() para evitar erro de múltiplos objetos
+                    doc_origem = Documento.objects.filter(
                         numero=origem_numero,
                         imovel=documento_origem.imovel
-                    )
-                    if HierarquiaArvoreService._documento_pertence_cadeia(
+                    ).first()
+                    
+                    if doc_origem and HierarquiaArvoreService._documento_pertence_cadeia(
                         documento_candidato, doc_origem, documentos_processados
                     ):
                         return True
-                except Documento.DoesNotExist:
+                except Exception as e:
+                    print(f"Erro ao buscar documento origem {origem_numero}: {e}")
                     continue
         
         return False
