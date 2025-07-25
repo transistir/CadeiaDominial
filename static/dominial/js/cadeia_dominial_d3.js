@@ -244,52 +244,7 @@ function aplicarEspacamentoAdicional(root) {
     });
 }
 
-// NOVA FUNÇÃO: Expandir árvore para melhor visualização
-function expandirArvore() {
-    const svg = window._d3svg;
-    const zoomGroup = window._zoomGroup;
-    const width = svg.attr('width');
-    const height = svg.attr('height');
-    
-    // Pegar todos os nós
-    const nodes = zoomGroup.selectAll('.node');
-    if (nodes.size() === 0) return;
-    
-    // Calcular bounding box atual
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    nodes.each(function() {
-        const transform = this.getAttribute('transform');
-        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
-        if (match) {
-            const x = parseFloat(match[1]);
-            const y = parseFloat(match[2]);
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
-        }
-    });
-    
-    // Adicionar margem para os cards (140x80)
-    minX -= 70; // metade da largura do card
-    maxX += 70;
-    minY -= 40; // metade da altura do card
-    maxY += 40;
-    
-    const treeWidth = maxX - minX;
-    const treeHeight = maxY - minY;
-    
-    // Calcular escala para caber tudo com margem extra
-    const scale = Math.min((width - 120) / treeWidth, (height - 120) / treeHeight, 1);
-    
-    // Centralizar com margem extra
-    const tx = (width - treeWidth * scale) / 2 - minX * scale;
-    const ty = (height - treeHeight * scale) / 2 - minY * scale;
-    
-    const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
-    svg.transition().duration(600).call(window._d3zoom.transform, t);
-    window._zoomTransform = t;
-}
+
 
 function renderArvoreD3(data, svgGroup, width, height) {
     // Converter para d3.hierarchy
@@ -585,7 +540,49 @@ window.resetZoom = function() {
 
 // NOVA FUNÇÃO: Expandir árvore para melhor visualização
 window.expandirArvore = function() {
-    expandirArvore();
+    const svg = window._d3svg;
+    const zoomGroup = window._zoomGroup;
+    const width = svg.attr('width');
+    const height = svg.attr('height');
+    
+    // Pegar todos os nós
+    const nodes = zoomGroup.selectAll('.node');
+    if (nodes.size() === 0) return;
+    
+    // Calcular bounding box atual
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.each(function() {
+        const transform = this.getAttribute('transform');
+        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+        if (match) {
+            const x = parseFloat(match[1]);
+            const y = parseFloat(match[2]);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+    });
+    
+    // Adicionar margem para os cards (140x80)
+    minX -= 70; // metade da largura do card
+    maxX += 70;
+    minY -= 40; // metade da altura do card
+    maxY += 40;
+    
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+    
+    // Calcular escala para caber tudo com margem extra
+    const scale = Math.min((width - 120) / treeWidth, (height - 120) / treeHeight, 1);
+    
+    // Centralizar com margem extra
+    const tx = (width - treeWidth * scale) / 2 - minX * scale;
+    const ty = (height - treeHeight * scale) / 2 - minY * scale;
+    
+    const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
+    svg.transition().duration(600).call(window._d3zoom.transform, t);
+    window._zoomTransform = t;
 }
 
 function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
