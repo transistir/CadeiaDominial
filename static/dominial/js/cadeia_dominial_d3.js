@@ -235,28 +235,16 @@ function corrigirSobreposicoes(root) {
             nosNivel.sort((a, b) => a.x - b.x);
             
             const alturaCard = 80; // altura do card
-            const margemVertical = 40; // margem entre cards
+            const margemVertical = 120; // margem entre cards (aumentada para evitar sobreposições)
             const espacamentoMinimo = alturaCard + margemVertical;
             
-            // Verificar se há sobreposições
-            let temSobreposicao = false;
-            for (let i = 0; i < nosNivel.length - 1; i++) {
-                const distancia = nosNivel[i + 1].x - nosNivel[i].x;
-                if (distancia < espacamentoMinimo) {
-                    temSobreposicao = true;
-                    break;
-                }
-            }
+            // Sempre aplicar espaçamento mínimo para garantir distribuição homogênea
+            const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+            const inicio = nosNivel[0].x - (larguraTotal / 2);
             
-            // Só redistribuir se houver sobreposição
-            if (temSobreposicao) {
-                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-                const inicio = nosNivel[0].x - (larguraTotal / 2);
-                
-                nosNivel.forEach((node, index) => {
-                    node.x = inicio + (index * espacamentoMinimo);
-                });
-            }
+            nosNivel.forEach((node, index) => {
+                node.x = inicio + (index * espacamentoMinimo);
+            });
         }
     });
 }
@@ -310,7 +298,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     
     // Configurar layout da árvore com espaçamento equilibrado
     const treeLayout = d3.tree()
-        .size([height * 2.0, width - 300]) // Altura moderada para manter estrutura
+        .size([height * 3.0, width - 300]) // Aumentar altura para acomodar maior espaçamento
         .separation((a, b) => {
             // Aumentar separação entre nós irmãos quando há muitos
             const irmaos = a.parent ? a.parent.children.length : 1;
