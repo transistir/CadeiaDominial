@@ -12,8 +12,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"  # REMOVIDO POR SEGURANÇA - BLOQUEIA ACESSO EXTERNO AO BANCO
     networks:
       - cadeia_network
     restart: unless-stopped
