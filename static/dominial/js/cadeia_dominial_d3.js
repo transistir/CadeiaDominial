@@ -1,8 +1,21 @@
 // JS para visualização D3 da cadeia dominial
 // Busca os dados da árvore e renderiza usando d3.tree()
 
+// Função de debouncing para melhorar performance
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
 // Definir função expandirArvore globalmente imediatamente
-window.expandirArvore = function() {
+window.expandirArvore = debounce(function() {
     const svg = window._d3svg;
     const zoomGroup = window._zoomGroup;
     if (!svg || !zoomGroup) {
@@ -51,7 +64,7 @@ window.expandirArvore = function() {
     const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
     svg.transition().duration(600).call(window._d3zoom.transform, t);
     window._zoomTransform = t;
-};
+}, 300); // Debounce de 300ms
 
 document.addEventListener('DOMContentLoaded', function() {
     const svg = d3.select('#arvore-d3-svg');
@@ -83,23 +96,69 @@ document.addEventListener('DOMContentLoaded', function() {
     window._zoomTransform = d3.zoomIdentity;
     // Removido: svg.on('wheel.zoom', null); // Desabilitar zoom na roda do mouse se quiser
 
+    // Adicionar indicador de carregamento
+    const loadingIndicator = svg.append('text')
+        .attr('x', width/2)
+        .attr('y', height/2)
+        .attr('text-anchor', 'middle')
+        .style('fill', '#6c757d')
+        .style('font-size', '16px')
+        .text('Carregando árvore...');
+
     // Buscar dados da árvore (corrigido)
     fetch(`/dominial/cadeia-dominial/${window.tisId}/${window.imovelId}/arvore/`)
         .then(response => response.json())
         .then(data => {
+            // Remover indicador de carregamento
+            loadingIndicator.remove();
+            
+            // Adicionar indicador de processamento
+            const processingIndicator = svg.append('text')
+                .attr('x', width/2)
+                .attr('y', height/2)
+                .attr('text-anchor', 'middle')
+                .style('fill', '#17a2b8')
+                .style('font-size', '14px')
+                .text('Processando dados...');
+            
             // Converter para formato de árvore
             const arvore = converterParaArvoreD3(data);
+            
+            // Remover indicador de processamento
+            processingIndicator.remove();
+            
             renderArvoreD3(arvore, zoomGroup, width, height);
+            
+            // Adicionar indicador de sucesso temporário
+            const successIndicator = svg.append('text')
+                .attr('x', 20)
+                .attr('y', 30)
+                .attr('text-anchor', 'start')
+                .style('fill', '#28a745')
+                .style('font-size', '12px')
+                .style('opacity', '0')
+                .text('✓ Árvore carregada com sucesso');
+            
+            successIndicator.transition()
+                .duration(500)
+                .style('opacity', '1')
+                .transition()
+                .delay(2000)
+                .duration(500)
+                .style('opacity', '0')
+                .remove();
+            
             // Enquadrar após renderizar
             setTimeout(() => enquadrarArvoreNoSVG(svg, zoomGroup, width, height), 100);
         })
         .catch(err => {
+            loadingIndicator.remove();
             svg.append('text')
                 .attr('x', width/2)
                 .attr('y', height/2)
                 .attr('text-anchor', 'middle')
-                .attr('fill', 'red')
-                .text('Erro ao carregar dados da árvore');
+                .style('fill', '#dc3545')
+                .text('Erro ao carregar árvore: ' + err.message);
         });
 });
 
@@ -243,6 +302,28 @@ function calcularEspacamentoAdaptativo(root) {
     return espacamentoHorizontal;
 }
 
+function aplicarLayoutResponsivo(root, width, height) {
+    // Aplicar layout responsivo baseado na quantidade de nós
+    const totalNos = root.descendants().length;
+    const maxNosPorNivel = Math.max(...Object.values(
+        root.descendants().reduce((acc, node) => {
+            acc[node.depth] = (acc[node.depth] || 0) + 1;
+            return acc;
+        }, {})
+    ));
+    
+    // Configurações responsivas
+    const config = {
+        alturaMultiplicador: totalNos > 50 ? 4.0 : totalNos > 30 ? 3.5 : totalNos > 15 ? 3.0 : 2.5,
+        separacaoBase: maxNosPorNivel > 20 ? 3.5 : maxNosPorNivel > 15 ? 3.0 : maxNosPorNivel > 10 ? 2.5 : 2.0,
+        margemVertical: maxNosPorNivel > 15 ? 150 : maxNosPorNivel > 10 ? 120 : 100
+    };
+    
+    console.log(`DEBUG: Layout responsivo - Total: ${totalNos}, Máximo/ nível: ${maxNosPorNivel}, Altura: ${config.alturaMultiplicador}x, Separação: ${config.separacaoBase}x`);
+    
+    return config;
+}
+
 // Corrigir sobreposições pós-processamento - VERSÃO INTELIGENTE
 function corrigirSobreposicoes(root) {
     // Agrupar nós por profundidade (nível)
@@ -363,15 +444,33 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Aplicar espaçamento adicional se necessário
     aplicarEspacamentoAdicional(root);
 
-    // Desenhar links da árvore principal
-    svgGroup.selectAll('path.link')
-        .data(root.links())
-        .enter()
-        .append('path')
+    // Desenhar links da árvore principal com animações suaves
+    const links = svgGroup.selectAll('path.link')
+        .data(root.links(), d => d.target.id)
+        .join('path')
         .attr('class', 'link')
         .attr('fill', 'none')
         .attr('stroke', '#28a745')
         .attr('stroke-width', 2)
+        .attr('stroke-linecap', 'round')
+        .style('opacity', '0.8')
+        .on('mouseover', function(event, d) {
+            d3.select(this)
+                .transition().duration(200)
+                .style('stroke-width', '4')
+                .style('opacity', '1');
+        })
+        .on('mouseout', function(event, d) {
+            d3.select(this)
+                .transition().duration(200)
+                .style('stroke-width', '2')
+                .style('opacity', '0.8');
+        });
+
+    // Aplicar transições suaves para links
+    links.transition()
+        .duration(800)
+        .ease(d3.easeQuadInOut)
         .attr('d', d3.linkHorizontal()
             .x(d => d.y + 120)
             .y(d => d.x + 20)
@@ -391,16 +490,34 @@ function renderArvoreD3(data, svgGroup, width, height) {
             return fromNode && toNode;
         });
         
-        // Desenhar conexões extras com estilo diferente
-        svgGroup.selectAll('path.link-extra')
-            .data(conexoesExtras)
-            .enter()
-            .append('path')
+        // Desenhar conexões extras com estilo diferente e animações
+        const linksExtras = svgGroup.selectAll('path.link-extra')
+            .data(conexoesExtras, d => `${d.from}-${d.to}`)
+            .join('path')
             .attr('class', 'link-extra')
             .attr('fill', 'none')
-            .attr('stroke', '#28a745') // Mesma cor verde das conexões principais
-            .attr('stroke-width', 2) // Mesma espessura
-            .attr('stroke-dasharray', '5,5') // Linha tracejada para distinguir
+            .attr('stroke', '#6c757d') // Cor cinza para distinguir
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '5,5')
+            .attr('stroke-linecap', 'round')
+            .style('opacity', '0.6')
+            .on('mouseover', function(event, d) {
+                d3.select(this)
+                    .transition().duration(200)
+                    .style('stroke-width', '3')
+                    .style('opacity', '1');
+            })
+            .on('mouseout', function(event, d) {
+                d3.select(this)
+                    .transition().duration(200)
+                    .style('stroke-width', '2')
+                    .style('opacity', '0.6');
+            });
+
+        // Aplicar transições suaves para links extras
+        linksExtras.transition()
+            .duration(800)
+            .ease(d3.easeQuadInOut)
             .attr('d', d => {
                 const fromNode = nodesMap.get(d.from);
                 const toNode = nodesMap.get(d.to);
@@ -415,14 +532,34 @@ function renderArvoreD3(data, svgGroup, width, height) {
             });
     }
 
-    // Desenhar nós (cards)
+    // Desenhar nós (cards) com animações suaves
     const node = svgGroup.selectAll('g.node')
-        .data(root.descendants())
-        .enter()
-        .append('g')
+        .data(root.descendants(), d => d.id)
+        .join('g')
         .attr('class', 'node')
-        .attr('transform', d => `translate(${d.y + 120},${d.x + 20})`)
-        .style('cursor', 'pointer');
+        .style('cursor', 'pointer')
+        .style('opacity', '0') // Começar invisível para animação de entrada
+        .on('mouseover', function(event, d) {
+            // Destacar o nó atual
+            d3.select(this).select('rect')
+                .transition().duration(200)
+                .attr('stroke-width', 4)
+                .attr('filter', 'drop-shadow(0 8px 25px rgba(0,0,0,0.3))');
+        })
+        .on('mouseout', function(event, d) {
+            // Restaurar o nó
+            d3.select(this).select('rect')
+                .transition().duration(200)
+                .attr('stroke-width', d => (d.data.is_importado || d.data.is_compartilhado) ? 3 : 2)
+                .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))');
+        });
+
+    // Aplicar transições suaves para posicionamento dos nós
+    node.transition()
+        .duration(800)
+        .ease(d3.easeQuadInOut)
+        .style('opacity', '1')
+        .attr('transform', d => `translate(${d.y + 120},${d.x + 20})`);
 
     // Card base
     node.append('rect')
