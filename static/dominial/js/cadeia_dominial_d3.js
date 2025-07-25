@@ -151,19 +151,22 @@ function calcularEspacamentoAdaptativo(root) {
     });
     
     // Calcular espaçamento baseado na quantidade máxima de nós
+    // Considerando que cada card tem 140px de largura e 80px de altura
     let espacamentoHorizontal = 200; // padrão
-    if (maxNos > 15) {
-        espacamentoHorizontal = 300; // muito espaçado para muitos nós
+    if (maxNos > 20) {
+        espacamentoHorizontal = 400; // muito espaçado para muitos nós
+    } else if (maxNos > 15) {
+        espacamentoHorizontal = 350; // muito espaçado para muitos nós
     } else if (maxNos > 10) {
-        espacamentoHorizontal = 250; // espaçado para muitos nós
+        espacamentoHorizontal = 300; // espaçado para muitos nós
     } else if (maxNos > 6) {
-        espacamentoHorizontal = 220; // moderadamente espaçado
+        espacamentoHorizontal = 250; // moderadamente espaçado
     }
     
     return espacamentoHorizontal;
 }
 
-// Corrigir sobreposições pós-processamento
+// Corrigir sobreposições pós-processamento - VERSÃO MELHORADA
 function corrigirSobreposicoes(root) {
     // Agrupar nós por profundidade (nível)
     const niveis = {};
@@ -179,13 +182,23 @@ function corrigirSobreposicoes(root) {
             // Ordenar por posição Y
             nosNivel.sort((a, b) => a.x - b.x);
             
-            // Calcular espaçamento mínimo necessário
-            const espacamentoMinimo = 120; // altura do card + margem
-            const espacamentoAtual = nosNivel.length > 1 ? 
-                (nosNivel[nosNivel.length - 1].x - nosNivel[0].x) / (nosNivel.length - 1) : 0;
+            // Calcular espaçamento mínimo necessário baseado no tamanho real dos cards
+            const alturaCard = 80; // altura do card
+            const margemVertical = 40; // margem entre cards
+            const espacamentoMinimo = alturaCard + margemVertical;
             
-            // Se o espaçamento atual é menor que o mínimo, redistribuir
-            if (espacamentoAtual < espacamentoMinimo) {
+            // Verificar se há sobreposição
+            let temSobreposicao = false;
+            for (let i = 0; i < nosNivel.length - 1; i++) {
+                const distancia = nosNivel[i + 1].x - nosNivel[i].x;
+                if (distancia < espacamentoMinimo) {
+                    temSobreposicao = true;
+                    break;
+                }
+            }
+            
+            // Se há sobreposição, redistribuir os nós
+            if (temSobreposicao) {
                 const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
                 const inicio = nosNivel[0].x - (larguraTotal / 2);
                 
@@ -197,6 +210,87 @@ function corrigirSobreposicoes(root) {
     });
 }
 
+// NOVA FUNÇÃO: Aplicar espaçamento adicional para evitar sobreposições
+function aplicarEspacamentoAdicional(root) {
+    // Agrupar nós por profundidade
+    const niveis = {};
+    root.descendants().forEach(node => {
+        if (!niveis[node.depth]) niveis[node.depth] = [];
+        niveis[node.depth].push(node);
+    });
+    
+    // Para cada nível, verificar se precisa de mais espaçamento
+    Object.keys(niveis).forEach(depth => {
+        const nosNivel = niveis[depth];
+        if (nosNivel.length > 1) {
+            // Ordenar por posição X
+            nosNivel.sort((a, b) => a.x - b.x);
+            
+            // Calcular espaçamento atual
+            const espacamentoAtual = (nosNivel[nosNivel.length - 1].x - nosNivel[0].x) / (nosNivel.length - 1);
+            const espacamentoMinimo = 120; // altura do card + margem
+            
+            // Se o espaçamento atual é muito pequeno, expandir
+            if (espacamentoAtual < espacamentoMinimo) {
+                const fatorExpansao = espacamentoMinimo / espacamentoAtual;
+                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+                const inicio = nosNivel[0].x - (larguraTotal / 2);
+                
+                nosNivel.forEach((node, index) => {
+                    node.x = inicio + (index * espacamentoMinimo);
+                });
+            }
+        }
+    });
+}
+
+// NOVA FUNÇÃO: Expandir árvore para melhor visualização
+function expandirArvore() {
+    const svg = window._d3svg;
+    const zoomGroup = window._zoomGroup;
+    const width = svg.attr('width');
+    const height = svg.attr('height');
+    
+    // Pegar todos os nós
+    const nodes = zoomGroup.selectAll('.node');
+    if (nodes.size() === 0) return;
+    
+    // Calcular bounding box atual
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.each(function() {
+        const transform = this.getAttribute('transform');
+        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+        if (match) {
+            const x = parseFloat(match[1]);
+            const y = parseFloat(match[2]);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+    });
+    
+    // Adicionar margem para os cards (140x80)
+    minX -= 70; // metade da largura do card
+    maxX += 70;
+    minY -= 40; // metade da altura do card
+    maxY += 40;
+    
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+    
+    // Calcular escala para caber tudo com margem extra
+    const scale = Math.min((width - 120) / treeWidth, (height - 120) / treeHeight, 1);
+    
+    // Centralizar com margem extra
+    const tx = (width - treeWidth * scale) / 2 - minX * scale;
+    const ty = (height - treeHeight * scale) / 2 - minY * scale;
+    
+    const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
+    svg.transition().duration(600).call(window._d3zoom.transform, t);
+    window._zoomTransform = t;
+}
+
 function renderArvoreD3(data, svgGroup, width, height) {
     // Converter para d3.hierarchy
     const root = d3.hierarchy(data);
@@ -204,13 +298,15 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Calcular espaçamento adaptativo
     const espacamentoHorizontal = calcularEspacamentoAdaptativo(root);
     
-    // Configurar layout da árvore com espaçamento adaptativo
+    // Configurar layout da árvore com espaçamento adaptativo melhorado
     const treeLayout = d3.tree()
-        .size([height * 1.8, width - 240])
+        .size([height * 2.0, width - 280]) // Aumentar altura disponível
         .separation((a, b) => {
             // Aumentar separação entre nós irmãos quando há muitos
             const irmaos = a.parent ? a.parent.children.length : 1;
-            if (irmaos > 10) {
+            if (irmaos > 15) {
+                return 3.0; // Triplicar a separação para muitos nós
+            } else if (irmaos > 10) {
                 return 2.0; // Dobrar a separação
             } else if (irmaos > 6) {
                 return 1.5; // Aumentar 50%
@@ -220,8 +316,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
     
     treeLayout(root);
     
-    // Aplicar correção de sobreposições
+    // Aplicar correção de sobreposições melhorada
     corrigirSobreposicoes(root);
+    
+    // Aplicar espaçamento adicional se necessário
+    aplicarEspacamentoAdicional(root);
 
     // Desenhar links da árvore principal
     svgGroup.selectAll('path.link')
@@ -484,6 +583,11 @@ window.resetZoom = function() {
     currentZoom = 1;
 }
 
+// NOVA FUNÇÃO: Expandir árvore para melhor visualização
+window.expandirArvore = function() {
+    expandirArvore();
+}
+
 function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
     // Pega o bounding box do grupo de nós
     const nodes = zoomGroup.selectAll('.node');
@@ -498,11 +602,20 @@ function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
         minY = Math.min(minY, y + bbox.y);
         maxY = Math.max(maxY, y + bbox.y + bbox.height);
     });
+    
+    // Adicionar margem extra para os cards
+    minX -= 70; // metade da largura do card
+    maxX += 70;
+    minY -= 40; // metade da altura do card
+    maxY += 40;
+    
     const treeWidth = maxX - minX;
     const treeHeight = maxY - minY;
-    // Calcular escala para caber tudo
-    const scale = Math.min((width - 60) / treeWidth, (height - 60) / treeHeight, 1);
-    // Centralizar
+    
+    // Calcular escala para caber tudo com margem extra
+    const scale = Math.min((width - 120) / treeWidth, (height - 120) / treeHeight, 1);
+    
+    // Centralizar com margem extra
     const tx = (width - treeWidth * scale) / 2 - minX * scale;
     const ty = (height - treeHeight * scale) / 2 - minY * scale;
     const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
