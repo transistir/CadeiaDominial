@@ -424,15 +424,15 @@ function renderArvoreD3(data, svgGroup, width, height) {
     
     // Configurar layout da árvore para layout horizontal correto
     const treeLayout = d3.tree()
-        .size([height, width - 300]) // [height, width] para layout horizontal
+        .size([height, width - 100]) // Aumentar largura disponível para mais espaço horizontal
         .separation((a, b) => {
-            // Separação baseada na quantidade de irmãos
+            // Separação baseada na quantidade de irmãos - ULTRA AUMENTADA
             const irmaos = a.parent ? a.parent.children.length : 1;
-            if (irmaos > 15) return 2.0;
-            if (irmaos > 10) return 1.8;
-            if (irmaos > 6) return 1.5;
-            if (irmaos > 3) return 1.3;
-            return 1.2;
+            if (irmaos > 15) return 4.0;
+            if (irmaos > 10) return 3.5;
+            if (irmaos > 6) return 3.0;
+            if (irmaos > 3) return 2.5;
+            return 2.0;
         });
     
     treeLayout(root);
@@ -455,7 +455,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('stroke', '#28a745')
         .attr('stroke-width', 2)
         .attr('stroke-linecap', 'round')
-        .style('opacity', '0.8')
+        .style('opacity', '0')
+        .attr('d', d3.linkHorizontal()
+            .x(d => d.y + 120)
+            .y(d => d.x + 20)
+        )
         .on('mouseover', function(event, d) {
             d3.select(this)
                 .transition().duration(200)
@@ -469,14 +473,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
                 .style('opacity', '0.8');
         });
 
-    // Aplicar transições suaves para links
+    // Aplicar apenas transição de opacidade para links (sem mover posição)
     links.transition()
-        .duration(800)
+        .duration(600)
         .ease(d3.easeQuadInOut)
-        .attr('d', d3.linkHorizontal()
-            .x(d => d.y + 120)
-            .y(d => d.x + 20)
-        );
+        .style('opacity', '0.8');
     
     // CORREÇÃO: Desenhar conexões extras (múltiplas conexões para o mesmo documento)
     if (data.conexoesExtras) {
@@ -502,7 +503,19 @@ function renderArvoreD3(data, svgGroup, width, height) {
             .attr('stroke-width', 2)
             .attr('stroke-dasharray', '5,5')
             .attr('stroke-linecap', 'round')
-            .style('opacity', '0.6')
+            .style('opacity', '0')
+            .attr('d', d => {
+                const fromNode = nodesMap.get(d.from);
+                const toNode = nodesMap.get(d.to);
+                if (fromNode && toNode) {
+                    return d3.linkHorizontal()
+                        .x(d => d.y + 120)
+                        .y(d => d.x + 20)
+                        .source(() => fromNode)
+                        .target(() => toNode)();
+                }
+                return '';
+            })
             .on('mouseover', function(event, d) {
                 d3.select(this)
                     .transition().duration(200)
@@ -516,22 +529,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
                     .style('opacity', '0.6');
             });
 
-        // Aplicar transições suaves para links extras
+        // Aplicar apenas transição de opacidade para links extras (sem mover posição)
         linksExtras.transition()
-            .duration(800)
+            .duration(600)
             .ease(d3.easeQuadInOut)
-            .attr('d', d => {
-                const fromNode = nodesMap.get(d.from);
-                const toNode = nodesMap.get(d.to);
-                if (fromNode && toNode) {
-                    return d3.linkHorizontal()
-                        .x(d => d.y + 120)
-                        .y(d => d.x + 20)
-                        .source(() => fromNode)
-                        .target(() => toNode)();
-                }
-                return '';
-            });
+            .style('opacity', '0.6');
     }
 
     // Desenhar nós (cards) com animações suaves
@@ -540,6 +542,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .join('g')
         .attr('class', 'node')
         .style('cursor', 'pointer')
+        .attr('transform', d => `translate(${d.y + 120},${d.x + 20})`) // Posicionar imediatamente
         .style('opacity', '0') // Começar invisível para animação de entrada
         .on('mouseover', function(event, d) {
             // Destacar o nó atual
@@ -556,12 +559,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
                 .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))');
         });
 
-    // Aplicar transições suaves para posicionamento dos nós
+    // Aplicar apenas transição de opacidade (sem mover posição)
     node.transition()
-        .duration(800)
+        .duration(600)
         .ease(d3.easeQuadInOut)
-        .style('opacity', '1')
-        .attr('transform', d => `translate(${d.y + 120},${d.x + 20})`);
+        .style('opacity', '1');
 
     // Card base
     node.append('rect')
