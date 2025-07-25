@@ -218,7 +218,7 @@ function calcularEspacamentoAdaptativo(root) {
     return espacamentoHorizontal;
 }
 
-// Corrigir sobreposições pós-processamento - VERSÃO MELHORADA
+// Corrigir sobreposições pós-processamento - VERSÃO AGRESSIVA
 function corrigirSobreposicoes(root) {
     // Agrupar nós por profundidade (nível)
     const niveis = {};
@@ -227,42 +227,30 @@ function corrigirSobreposicoes(root) {
         niveis[node.depth].push(node);
     });
     
-    // Para cada nível, ajustar posições se necessário
+    // Para cada nível, FORÇAR espaçamento mínimo
     Object.keys(niveis).forEach(depth => {
         const nosNivel = niveis[depth];
         if (nosNivel.length > 1) {
-            // Ordenar por posição Y
+            // Ordenar por posição X (vertical no layout horizontal)
             nosNivel.sort((a, b) => a.x - b.x);
             
-            // Calcular espaçamento mínimo necessário baseado no tamanho real dos cards
+            // ESPAÇAMENTO MÍNIMO AGRESSIVO
             const alturaCard = 80; // altura do card
-            const margemVertical = 40; // margem entre cards
+            const margemVertical = 60; // margem aumentada entre cards
             const espacamentoMinimo = alturaCard + margemVertical;
             
-            // Verificar se há sobreposição
-            let temSobreposicao = false;
-            for (let i = 0; i < nosNivel.length - 1; i++) {
-                const distancia = nosNivel[i + 1].x - nosNivel[i].x;
-                if (distancia < espacamentoMinimo) {
-                    temSobreposicao = true;
-                    break;
-                }
-            }
+            // SEMPRE redistribuir os nós para garantir espaçamento
+            const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+            const inicio = nosNivel[0].x - (larguraTotal / 2);
             
-            // Se há sobreposição, redistribuir os nós
-            if (temSobreposicao) {
-                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-                const inicio = nosNivel[0].x - (larguraTotal / 2);
-                
-                nosNivel.forEach((node, index) => {
-                    node.x = inicio + (index * espacamentoMinimo);
-                });
-            }
+            nosNivel.forEach((node, index) => {
+                node.x = inicio + (index * espacamentoMinimo);
+            });
         }
     });
 }
 
-// NOVA FUNÇÃO: Aplicar espaçamento adicional para evitar sobreposições
+// NOVA FUNÇÃO: Aplicar espaçamento adicional para evitar sobreposições - VERSÃO AGRESSIVA
 function aplicarEspacamentoAdicional(root) {
     // Agrupar nós por profundidade
     const niveis = {};
@@ -271,27 +259,23 @@ function aplicarEspacamentoAdicional(root) {
         niveis[node.depth].push(node);
     });
     
-    // Para cada nível, verificar se precisa de mais espaçamento
+    // Para cada nível, FORÇAR espaçamento mínimo
     Object.keys(niveis).forEach(depth => {
         const nosNivel = niveis[depth];
         if (nosNivel.length > 1) {
-            // Ordenar por posição X
+            // Ordenar por posição X (vertical no layout horizontal)
             nosNivel.sort((a, b) => a.x - b.x);
             
-            // Calcular espaçamento atual
-            const espacamentoAtual = (nosNivel[nosNivel.length - 1].x - nosNivel[0].x) / (nosNivel.length - 1);
-            const espacamentoMinimo = 120; // altura do card + margem
+            // ESPAÇAMENTO MÍNIMO AGRESSIVO
+            const espacamentoMinimo = 150; // aumentado para 150px
             
-            // Se o espaçamento atual é muito pequeno, expandir
-            if (espacamentoAtual < espacamentoMinimo) {
-                const fatorExpansao = espacamentoMinimo / espacamentoAtual;
-                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-                const inicio = nosNivel[0].x - (larguraTotal / 2);
-                
-                nosNivel.forEach((node, index) => {
-                    node.x = inicio + (index * espacamentoMinimo);
-                });
-            }
+            // SEMPRE aplicar espaçamento mínimo
+            const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+            const inicio = nosNivel[0].x - (larguraTotal / 2);
+            
+            nosNivel.forEach((node, index) => {
+                node.x = inicio + (index * espacamentoMinimo);
+            });
         }
     });
 }
@@ -305,20 +289,22 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Calcular espaçamento adaptativo
     const espacamentoHorizontal = calcularEspacamentoAdaptativo(root);
     
-    // Configurar layout da árvore com espaçamento adaptativo melhorado
+    // Configurar layout da árvore com espaçamento adaptativo AGRESSIVO
     const treeLayout = d3.tree()
-        .size([height * 2.0, width - 280]) // Aumentar altura disponível
+        .size([height * 2.5, width - 300]) // Aumentar ainda mais a altura disponível
         .separation((a, b) => {
             // Aumentar separação entre nós irmãos quando há muitos
             const irmaos = a.parent ? a.parent.children.length : 1;
-            if (irmaos > 15) {
-                return 3.0; // Triplicar a separação para muitos nós
+            if (irmaos > 20) {
+                return 4.0; // Quadruplicar a separação para muitos nós
+            } else if (irmaos > 15) {
+                return 3.0; // Triplicar a separação
             } else if (irmaos > 10) {
-                return 2.0; // Dobrar a separação
+                return 2.5; // Aumentar 150%
             } else if (irmaos > 6) {
-                return 1.5; // Aumentar 50%
+                return 2.0; // Dobrar a separação
             }
-            return 1.0; // Separação padrão
+            return 1.5; // Aumentar 50% mesmo para poucos nós
         });
     
     treeLayout(root);
