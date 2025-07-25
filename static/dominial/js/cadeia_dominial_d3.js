@@ -186,6 +186,31 @@ function centralizarArvore(width, height) {
     window._zoomTransform = t;
 }
 
+function centralizarArvoreInteligente(root, height) {
+    // Centralizar baseado no bounding box real da árvore
+    const nodes = root.descendants();
+    if (nodes.length === 0) return;
+    
+    // Calcular bounding box real
+    let minX = Infinity, maxX = -Infinity;
+    nodes.forEach(node => {
+        minX = Math.min(minX, node.x);
+        maxX = Math.max(maxX, node.x);
+    });
+    
+    // Calcular centro da árvore e centro desejado
+    const centroArvore = (minX + maxX) / 2;
+    const centroDesejado = height / 2;
+    
+    // Aplicar translação para centralizar
+    const offset = centroDesejado - centroArvore;
+    nodes.forEach(node => {
+        node.x += offset;
+    });
+    
+    console.log(`DEBUG: Árvore centralizada - centro: ${centroArvore} -> ${centroDesejado} (offset: ${offset}px)`);
+}
+
 // Calcular espaçamento adaptativo baseado na quantidade de nós
 function calcularEspacamentoAdaptativo(root) {
     // Encontrar o nível com mais nós
@@ -227,7 +252,9 @@ function corrigirSobreposicoes(root) {
         niveis[node.depth].push(node);
     });
     
-    // Para cada nível, verificar e corrigir sobreposições
+    console.log(`DEBUG: Aplicando correção de sobreposições para ${Object.keys(niveis).length} níveis`);
+    
+    // Para cada nível, aplicar espaçamento homogêneo
     Object.keys(niveis).forEach(depth => {
         const nosNivel = niveis[depth];
         if (nosNivel.length > 1) {
@@ -245,11 +272,13 @@ function corrigirSobreposicoes(root) {
             nosNivel.forEach((node, index) => {
                 node.x = inicio + (index * espacamentoMinimo);
             });
+            
+            console.log(`DEBUG: Nível ${depth} - ${nosNivel.length} nós redistribuídos com espaçamento de ${espacamentoMinimo}px`);
         }
     });
 }
 
-// NOVA FUNÇÃO: Aplicar espaçamento adicional para evitar sobreposições - VERSÃO INTELIGENTE
+// Função otimizada: Aplicar espaçamento adicional para evitar sobreposições
 function aplicarEspacamentoAdicional(root) {
     // Agrupar nós por profundidade
     const niveis = {};
@@ -257,6 +286,8 @@ function aplicarEspacamentoAdicional(root) {
         if (!niveis[node.depth]) niveis[node.depth] = [];
         niveis[node.depth].push(node);
     });
+    
+    console.log(`DEBUG: Verificando espaçamento adicional para ${Object.keys(niveis).length} níveis`);
     
     // Para cada nível, aplicar espaçamento adicional se necessário
     Object.keys(niveis).forEach(depth => {
@@ -282,6 +313,8 @@ function aplicarEspacamentoAdicional(root) {
                 nosNivel.forEach((node, index) => {
                     node.x = inicio + (index * espacamentoMinimo);
                 });
+                
+                console.log(`DEBUG: Nível ${depth} - Espaçamento adicional aplicado (atual: ${espacamentoAtual.toFixed(1)}px -> mínimo: ${espacamentoMinimo}px)`);
             }
         }
     });
@@ -300,21 +333,29 @@ function renderArvoreD3(data, svgGroup, width, height) {
     const treeLayout = d3.tree()
         .size([height * 3.0, width - 300]) // Aumentar altura para acomodar maior espaçamento
         .separation((a, b) => {
-            // Aumentar separação entre nós irmãos quando há muitos
+            // Separação adaptativa baseada na quantidade de irmãos
             const irmaos = a.parent ? a.parent.children.length : 1;
+            const baseSeparation = 1.0;
+            
+            // Aumentar separação conforme quantidade de irmãos
             if (irmaos > 20) {
-                return 3.0; // Triplicar a separação para muitos nós
+                return baseSeparation * 3.5; // Ultra separação para muitos nós
             } else if (irmaos > 15) {
-                return 2.5; // Aumentar 150%
+                return baseSeparation * 3.0; // Triplicar a separação
             } else if (irmaos > 10) {
-                return 2.0; // Dobrar a separação
+                return baseSeparation * 2.5; // Aumentar 150%
             } else if (irmaos > 6) {
-                return 1.5; // Aumentar 50%
+                return baseSeparation * 2.0; // Dobrar a separação
+            } else if (irmaos > 3) {
+                return baseSeparation * 1.5; // Aumentar 50%
             }
-            return 1.2; // Aumentar 20% para poucos nós
+            return baseSeparation * 1.2; // Aumentar 20% para poucos nós
         });
     
     treeLayout(root);
+    
+    // Centralizar a árvore baseada no bounding box real
+    centralizarArvoreInteligente(root, height);
     
     // Aplicar correção de sobreposições melhorada
     corrigirSobreposicoes(root);
