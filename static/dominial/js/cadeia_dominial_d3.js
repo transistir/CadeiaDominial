@@ -324,7 +324,7 @@ function aplicarLayoutResponsivo(root, width, height) {
     return config;
 }
 
-// Corrigir sobreposições pós-processamento - VERSÃO INTELIGENTE
+// Corrigir sobreposições mantendo o layout natural da D3
 function corrigirSobreposicoes(root) {
     // Agrupar nós por profundidade (nível)
     const niveis = {};
@@ -333,28 +333,40 @@ function corrigirSobreposicoes(root) {
         niveis[node.depth].push(node);
     });
     
-    console.log(`DEBUG: Aplicando correção de sobreposições para ${Object.keys(niveis).length} níveis`);
+    console.log(`DEBUG: Verificando sobreposições em ${Object.keys(niveis).length} níveis`);
     
-    // Para cada nível, aplicar espaçamento homogêneo
+    // Para cada nível, verificar e corrigir apenas sobreposições
     Object.keys(niveis).forEach(depth => {
         const nosNivel = niveis[depth];
         if (nosNivel.length > 1) {
             // Ordenar por posição X (vertical no layout horizontal)
             nosNivel.sort((a, b) => a.x - b.x);
             
-            const alturaCard = 80; // altura do card
-            const margemVertical = 120; // margem entre cards (aumentada para evitar sobreposições)
-            const espacamentoMinimo = alturaCard + margemVertical;
+            const alturaCard = 80;
+            const margemMinima = 40;
+            const espacamentoMinimo = alturaCard + margemMinima;
             
-            // Sempre aplicar espaçamento mínimo para garantir distribuição homogênea
-            const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-            const inicio = nosNivel[0].x - (larguraTotal / 2);
+            // Verificar se há sobreposições
+            let temSobreposicao = false;
+            for (let i = 0; i < nosNivel.length - 1; i++) {
+                const distancia = Math.abs(nosNivel[i + 1].x - nosNivel[i].x);
+                if (distancia < espacamentoMinimo) {
+                    temSobreposicao = true;
+                    break;
+                }
+            }
             
-            nosNivel.forEach((node, index) => {
-                node.x = inicio + (index * espacamentoMinimo);
-            });
-            
-            console.log(`DEBUG: Nível ${depth} - ${nosNivel.length} nós redistribuídos com espaçamento de ${espacamentoMinimo}px`);
+            // Só corrigir se houver sobreposição
+            if (temSobreposicao) {
+                const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
+                const inicio = nosNivel[0].x - (larguraTotal / 2);
+                
+                nosNivel.forEach((node, index) => {
+                    node.x = inicio + (index * espacamentoMinimo);
+                });
+                
+                console.log(`DEBUG: Nível ${depth} - Corrigidas sobreposições para ${nosNivel.length} nós`);
+            }
         }
     });
 }
@@ -410,27 +422,17 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Calcular espaçamento adaptativo
     const espacamentoHorizontal = calcularEspacamentoAdaptativo(root);
     
-    // Configurar layout da árvore com espaçamento equilibrado
+    // Configurar layout da árvore para layout horizontal correto
     const treeLayout = d3.tree()
-        .size([height * 3.0, width - 300]) // Aumentar altura para acomodar maior espaçamento
+        .size([height, width - 300]) // [height, width] para layout horizontal
         .separation((a, b) => {
-            // Separação adaptativa baseada na quantidade de irmãos
+            // Separação baseada na quantidade de irmãos
             const irmaos = a.parent ? a.parent.children.length : 1;
-            const baseSeparation = 1.0;
-            
-            // Aumentar separação conforme quantidade de irmãos
-            if (irmaos > 20) {
-                return baseSeparation * 3.5; // Ultra separação para muitos nós
-            } else if (irmaos > 15) {
-                return baseSeparation * 3.0; // Triplicar a separação
-            } else if (irmaos > 10) {
-                return baseSeparation * 2.5; // Aumentar 150%
-            } else if (irmaos > 6) {
-                return baseSeparation * 2.0; // Dobrar a separação
-            } else if (irmaos > 3) {
-                return baseSeparation * 1.5; // Aumentar 50%
-            }
-            return baseSeparation * 1.2; // Aumentar 20% para poucos nós
+            if (irmaos > 15) return 2.0;
+            if (irmaos > 10) return 1.8;
+            if (irmaos > 6) return 1.5;
+            if (irmaos > 3) return 1.3;
+            return 1.2;
         });
     
     treeLayout(root);
