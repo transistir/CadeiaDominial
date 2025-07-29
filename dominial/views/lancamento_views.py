@@ -10,6 +10,7 @@ from datetime import date
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
+from ..services.documento_compartilhado_service import DocumentoCompartilhadoService
 
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
@@ -20,9 +21,16 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    # Determinar documento ativo
+    # Determinar documento ativo - MODIFICAÇÃO PARA SUPORTAR DOCUMENTOS IMPORTADOS
+    documento_ativo = None
+    
     if documento_id:
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        # Usar o novo service para verificar acesso ao documento
+        documento_ativo = DocumentoCompartilhadoService.obter_documento_com_acesso(documento_id, imovel)
+        
+        if not documento_ativo:
+            messages.error(request, '❌ Documento não encontrado ou não importado para este imóvel.')
+            return redirect('imoveis', tis_id=tis.id)
     else:
         # Buscar documento ativo do imóvel (primeiro documento)
         documento_ativo = imovel.documentos.first()
@@ -213,6 +221,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'tipos_lancamento': tipos_lancamento,
         'transmitentes': [],
         'adquirentes': [],
+        'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
         'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
     }
     

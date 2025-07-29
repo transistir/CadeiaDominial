@@ -452,3 +452,79 @@
     color: #6c757d;
     font-style: italic;
 } 
+
+/* Estilos para documentos importados no formulário */
+
+.documento-importado-alert {
+    background: linear-gradient(135deg, #e8f5e8 0%, #f8fff9 100%);
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
+}
+
+.documento-importado-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    color: #155724;
+    font-size: 1.1rem;
+}
+
+.documento-importado-header i {
+    color: #28a745;
+    font-size: 1.2rem;
+}
+
+.documento-importado-info p {
+    margin-bottom: 15px;
+    line-height: 1.6;
+    color: #333;
+}
+
+.documento-importado-info strong {
+    color: #155724;
+}
+
+.documento-importado-warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    color: #856404;
+}
+
+.documento-importado-warning i {
+    color: #f39c12;
+    margin-top: 2px;
+}
+
+.documento-importado-warning strong {
+    color: #856404;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .documento-importado-alert {
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .documento-importado-header {
+        font-size: 1rem;
+    }
+    
+    .documento-importado-info p {
+        font-size: 0.9rem;
+    }
+    
+    .documento-importado-warning {
+        padding: 10px;
+        font-size: 0.9rem;
+    }
+} 

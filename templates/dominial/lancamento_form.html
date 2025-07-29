@@ -13,6 +13,35 @@
 <div class="container">
     <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
     
+    <!-- Seção de Documento Importado -->
+    {% if is_documento_importado %}
+    <div class="alert alert-info documento-importado-alert">
+        <div class="documento-importado-header">
+            <i class="fas fa-download"></i>
+            <strong>Documento Importado</strong>
+        </div>
+        <div class="documento-importado-info">
+            <p>
+                <strong>Documento:</strong> {{ documento.numero }} ({{ documento.tipo.get_tipo_display }})<br>
+                <strong>Origem:</strong> {{ documento.imovel_origem.matricula }} - {{ documento.imovel_origem.nome }}<br>
+                <strong>Importado em:</strong> {{ documento.data_importacao|date:"d/m/Y H:i" }}
+                {% if documento.tipo_importacao == 'referencia_lancamento' %}
+                    <br><em>via referência de lançamento</em>
+                {% elif documento.tipo_importacao == 'cadeia_dominial' %}
+                    <br><em>via cadeia dominial</em>
+                {% endif %}
+            </p>
+            <div class="documento-importado-warning">
+                <i class="fas fa-info-circle"></i>
+                <strong>Atenção:</strong> Este lançamento será criado no documento importado e aparecerá na cadeia dominial de ambos os imóveis.
+                {% if documento.tipo_importacao == 'cadeia_dominial' %}
+                    <br><em>Este documento faz parte da cadeia dominial de um documento já acessível.</em>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <div class="field-group">
         <h4>{{ imovel.nome }}</h4>
         <div class="grid-3">
