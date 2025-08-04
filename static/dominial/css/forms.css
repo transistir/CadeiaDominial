@@ -197,14 +197,42 @@
     gap: 10px;
     margin-bottom: 5px;
     padding: 0 12px;
+    align-items: center;
 }
 
 .origem-labels label {
-    flex: 1;
     font-size: 0.85em;
     font-weight: 500;
     color: var(--primary-color);
     margin-bottom: 0;
+    text-align: center;
+}
+
+/* Alinhar labels com os campos correspondentes */
+.origem-labels label:nth-child(1) {
+    flex: 2; /* Origem */
+}
+
+.origem-labels label:nth-child(2) {
+    flex: 2; /* Cartório */
+}
+
+.origem-labels label:nth-child(3) {
+    flex: 1; /* Livro */
+}
+
+.origem-labels label:nth-child(4) {
+    flex: 1; /* Folha */
+}
+
+.origem-labels label:nth-child(5) {
+    flex: 0 0 40px; /* Fim de Cadeia - largura fixa */
+    text-align: center;
+}
+
+.origem-labels label:nth-child(6) {
+    flex: 0 0 32px; /* Botão de remover - largura fixa */
+    text-align: center;
 }
 
 .origem-item {
@@ -270,6 +298,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex: 0 0 32px;
     flex-shrink: 0;
     margin-left: auto;
     position: relative;
@@ -526,5 +555,144 @@
     .documento-importado-warning {
         padding: 10px;
         font-size: 0.9rem;
+    }
+}
+
+/* ========================================
+   CAMPOS DE FIM DE CADEIA POR ORIGEM
+   ======================================== */
+
+/* Campo de fim de cadeia na linha de origem */
+.fim-cadeia-field {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 40px;
+    min-width: 40px;
+}
+
+.fim-cadeia-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fim-cadeia-toggle {
+    display: none; /* Esconder checkbox padrão */
+}
+
+.fim-cadeia-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background-color: #ffffff;
+    border: 2px solid #dee2e6;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.fim-cadeia-label:hover {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.fim-cadeia-toggle:checked + .fim-cadeia-label {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.fim-cadeia-toggle:checked + .fim-cadeia-label::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+    line-height: 1;
+}
+
+/* Container dos campos de fim de cadeia por origem */
+.fim-cadeia-origem-container {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+}
+
+.fim-cadeia-origem-container .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.fim-cadeia-origem-container .form-group {
+    margin-bottom: 0;
+}
+
+.fim-cadeia-origem-container label {
+    font-weight: 600;
+    color: #856404;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.fim-cadeia-origem-container select,
+.fim-cadeia-origem-container textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+}
+
+.fim-cadeia-origem-container select:focus,
+.fim-cadeia-origem-container textarea:focus {
+    outline: none;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+}
+
+.especificacao-fim-cadeia {
+    width: 100%;
+    min-height: 80px;
+    padding: 8px 12px;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    font-size: 14px;
+    resize: vertical;
+    background-color: white;
+}
+
+.especificacao-fim-cadeia:focus {
+    outline: none;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .fim-cadeia-origem-container .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .fim-cadeia-label {
+        width: 18px;
+        height: 18px;
+    }
+    
+    .fim-cadeia-toggle:checked + .fim-cadeia-label::after {
+        font-size: 10px;
     }
 } 

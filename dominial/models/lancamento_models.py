@@ -80,6 +80,9 @@ class Lancamento(models.Model):
     
     # Campo para link com documento de origem (para cadeia dominial)
     documento_origem = models.ForeignKey('Documento', on_delete=models.PROTECT, related_name='lancamentos_origem', null=True, blank=True)
+    
+
+
 
     class Meta:
         verbose_name = "Lançamento"
@@ -98,8 +101,14 @@ class Lancamento(models.Model):
                 raise ValidationError("Título é obrigatório para este tipo de lançamento")
             if self.tipo.requer_descricao and not self.descricao:
                 raise ValidationError("Descrição é obrigatória para este tipo de lançamento")
-            if self.tipo.requer_forma and not self.forma:
-                raise ValidationError("Forma é obrigatória para este tipo de lançamento")
+        
+        # Validações para início de matrícula
+        if self.tipo and self.tipo.tipo == 'inicio_matricula':
+            # Para início de matrícula, cartório de origem é obrigatório
+            if not self.cartorio_origem:
+                raise ValidationError("Cartório de origem é obrigatório para início de matrícula")
+    
+
 
     @property
     def transmitentes(self):
@@ -137,3 +146,56 @@ class LancamentoPessoa(models.Model):
 
     def __str__(self):
         return f"{self.pessoa.nome} ({self.get_tipo_display()})" 
+
+
+class OrigemFimCadeia(models.Model):
+    """
+    Modelo para armazenar informações de fim de cadeia por origem individual
+    """
+    lancamento = models.ForeignKey(Lancamento, on_delete=models.CASCADE, related_name='origens_fim_cadeia')
+    indice_origem = models.IntegerField(help_text="Índice da origem no array de origens (0, 1, 2, ...)")
+    fim_cadeia = models.BooleanField(default=False, help_text="Indica se esta origem marca o fim da cadeia")
+    tipo_fim_cadeia = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True,
+        choices=[
+            ('destacamento_publico', 'Destacamento do Patrimônio Público'),
+            ('outra', 'Outra'),
+            ('sem_origem', 'Sem Origem'),
+        ],
+        help_text="Tipo do fim de cadeia para esta origem"
+    )
+    especificacao_fim_cadeia = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Especificação quando o tipo é 'Outra' para esta origem"
+    )
+    classificacao_fim_cadeia = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        choices=[
+            ('origem_lidima', 'Imóvel com Origem Lídima'),
+            ('sem_origem', 'Imóvel sem Origem'),
+            ('inconclusa', 'Situação Inconclusa'),
+        ],
+        help_text="Classificação do imóvel quando a cadeia termina nesta origem"
+    )
+
+    class Meta:
+        unique_together = ['lancamento', 'indice_origem']
+        verbose_name = "Origem Fim de Cadeia"
+        verbose_name_plural = "Origens Fim de Cadeia"
+
+    def __str__(self):
+        return f"Origem {self.indice_origem} - Fim Cadeia: {self.fim_cadeia}"
+
+    def clean(self):
+        if self.fim_cadeia:
+            if not self.tipo_fim_cadeia:
+                raise ValidationError("Tipo do fim de cadeia é obrigatório quando 'Fim de Cadeia' está ativo")
+            if not self.classificacao_fim_cadeia:
+                raise ValidationError("Classificação do fim de cadeia é obrigatória quando 'Fim de Cadeia' está ativo")
+            if self.tipo_fim_cadeia == 'outra' and not self.especificacao_fim_cadeia:
+                raise ValidationError("Especificação é obrigatória quando o tipo é 'Outra'") 

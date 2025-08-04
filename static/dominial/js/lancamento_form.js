@@ -508,8 +508,15 @@ function setupPessoaAutocomplete() {
 // Função para remover origem
 function removeOrigem(button) {
     const origemItem = button.closest('.origem-item');
-    if (origemItem) {
-        origemItem.remove();
+    const origemIndex = origemItem.getAttribute('data-origem-index');
+    const fimCadeiaContainer = document.getElementById(`fim-cadeia-origem-container_${origemIndex}`);
+    
+    // Remover o item de origem
+    origemItem.remove();
+    
+    // Remover o container de fim de cadeia se existir
+    if (fimCadeiaContainer) {
+        fimCadeiaContainer.remove();
     }
 }
 
@@ -547,15 +554,70 @@ function adicionarOrigem() {
             <input type="text" name="folha_origem[]" id="folha_origem_${newIndex}" class="folha-origem" 
                    placeholder="Ex: 1, 2, A, etc.">
         </div>
+        <div class="form-group fim-cadeia-field">
+            <div class="fim-cadeia-toggle-container">
+                <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_${newIndex}" 
+                       class="fim-cadeia-toggle" value="${newIndex}">
+                <label for="fim_cadeia_${newIndex}" class="fim-cadeia-label">
+                </label>
+            </div>
+        </div>
         <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
     `;
     container.appendChild(origemDiv);
+    
+    // Adicionar container de fim de cadeia para esta origem
+    const fimCadeiaContainer = document.createElement('div');
+    fimCadeiaContainer.className = 'fim-cadeia-origem-container';
+    fimCadeiaContainer.id = `fim-cadeia-origem-container_${newIndex}`;
+    fimCadeiaContainer.style.display = 'none';
+    
+    fimCadeiaContainer.innerHTML = `
+        <div class="grid-2">
+            <div class="form-group">
+                <label for="tipo_fim_cadeia_${newIndex}">Tipo do Fim de Cadeia *</label>
+                <select name="tipo_fim_cadeia[]" id="tipo_fim_cadeia_${newIndex}" class="form-control tipo-fim-cadeia-select">
+                    <option value="">Selecione o tipo...</option>
+                    <option value="destacamento_publico">Destacamento do Patrimônio Público</option>
+                    <option value="outra">Outra</option>
+                    <option value="sem_origem">Sem Origem</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="classificacao_fim_cadeia_${newIndex}">Classificação do Fim de Cadeia *</label>
+                <select name="classificacao_fim_cadeia[]" id="classificacao_fim_cadeia_${newIndex}" class="form-control classificacao-fim-cadeia-select">
+                    <option value="">Selecione a classificação...</option>
+                    <option value="origem_lidima">Imóvel com Origem Lídima</option>
+                    <option value="sem_origem">Imóvel sem Origem</option>
+                    <option value="inconclusa">Situação Inconclusa</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Campo de especificação (aparece quando tipo = 'outra') -->
+        <div class="form-group especificacao-container" id="especificacao-container_${newIndex}" style="display: none;">
+            <label for="especificacao_fim_cadeia_${newIndex}">Especificação *</label>
+            <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_${newIndex}" class="form-control especificacao-fim-cadeia" 
+                      placeholder="Detalhe a especificação..."></textarea>
+        </div>
+    `;
+    
+    container.appendChild(fimCadeiaContainer);
     
     // Configurar autocomplete para o novo campo de cartório
     const newInput = origemDiv.querySelector(`#cartorio_origem_nome_${newIndex}`);
     const newHidden = origemDiv.querySelector(`#cartorio_origem_${newIndex}`);
     const newSuggestions = origemDiv.querySelector('.cartorio-origem-suggestions');
     setupCartorioAutocomplete(newInput, newHidden, newSuggestions);
+    
+    // Configurar toggle de fim de cadeia para a nova origem
+    const newToggle = origemDiv.querySelector(`#fim_cadeia_${newIndex}`);
+    setupFimCadeiaTogglePorOrigem(newToggle);
+    
+    // Configurar select de tipo para a nova origem
+    const newTipoSelect = fimCadeiaContainer.querySelector(`#tipo_fim_cadeia_${newIndex}`);
+    setupTipoFimCadeiaSelectPorOrigem(newTipoSelect);
 }
 
 // Função para configurar autocomplete geral de origens
@@ -572,4 +634,125 @@ function setupOrigemAutocomplete() {
             setupCartorioAutocomplete(input, hidden, suggestions);
         }
     });
+}
+
+// ========================================
+// FUNÇÕES PARA CAMPOS DE FIM DE CADEIA
+// ========================================
+
+// Função para controlar a visibilidade dos campos de fim de cadeia
+function setupFimCadeiaToggle() {
+    const fimCadeiaToggle = document.getElementById('fim_cadeia');
+    const fimCadeiaContainer = document.getElementById('fim-cadeia-container');
+    
+    if (fimCadeiaToggle && fimCadeiaContainer) {
+        // Função para alternar visibilidade
+        function toggleFimCadeiaFields() {
+            if (fimCadeiaToggle.checked) {
+                fimCadeiaContainer.style.display = 'block';
+            } else {
+                fimCadeiaContainer.style.display = 'none';
+            }
+        }
+        
+        // Adicionar listener
+        fimCadeiaToggle.addEventListener('change', toggleFimCadeiaFields);
+        
+        // Executar uma vez para definir estado inicial
+        toggleFimCadeiaFields();
+    }
+}
+
+// Função para controlar a visibilidade do campo de especificação
+function setupTipoFimCadeiaSelect() {
+    const tipoFimCadeiaSelect = document.getElementById('tipo_fim_cadeia');
+    const especificacaoContainer = document.getElementById('especificacao-container');
+    
+    if (tipoFimCadeiaSelect && especificacaoContainer) {
+        // Função para alternar visibilidade
+        function toggleEspecificacaoField() {
+            if (tipoFimCadeiaSelect.value === 'outra') {
+                especificacaoContainer.style.display = 'block';
+            } else {
+                especificacaoContainer.style.display = 'none';
+            }
+        }
+        
+        // Adicionar listener
+        tipoFimCadeiaSelect.addEventListener('change', toggleEspecificacaoField);
+        
+        // Executar uma vez para definir estado inicial
+        toggleEspecificacaoField();
+    }
+}
+
+// Inicializar campos de fim de cadeia quando a página carregar
+document.addEventListener('DOMContentLoaded', function() {
+    setupFimCadeiaToggle();
+    setupTipoFimCadeiaSelect();
+    setupFimCadeiaPorOrigem(); // Nova função para toggles por origem
+});
+
+// ========================================
+// FUNÇÕES PARA CAMPOS DE FIM DE CADEIA POR ORIGEM
+// ========================================
+
+// Função para configurar toggles de fim de cadeia por origem
+function setupFimCadeiaPorOrigem() {
+    // Configurar todos os toggles existentes
+    const toggles = document.querySelectorAll('.fim-cadeia-toggle');
+    toggles.forEach(toggle => {
+        setupFimCadeiaTogglePorOrigem(toggle);
+    });
+}
+
+// Função para configurar um toggle específico por origem
+function setupFimCadeiaTogglePorOrigem(toggle) {
+    const origemIndex = toggle.value;
+    const container = document.getElementById(`fim-cadeia-origem-container_${origemIndex}`);
+    
+    if (toggle && container) {
+        function toggleFimCadeiaFields() {
+            if (toggle.checked) {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+                // Limpar campos quando desmarcar
+                const tipoSelect = container.querySelector('.tipo-fim-cadeia-select');
+                const classificacaoSelect = container.querySelector('.classificacao-fim-cadeia-select');
+                const especificacaoContainer = container.querySelector('.especificacao-container');
+                const especificacaoTextarea = container.querySelector('.especificacao-fim-cadeia');
+                
+                if (tipoSelect) tipoSelect.value = '';
+                if (classificacaoSelect) classificacaoSelect.value = '';
+                if (especificacaoContainer) especificacaoContainer.style.display = 'none';
+                if (especificacaoTextarea) especificacaoTextarea.value = '';
+            }
+        }
+        
+        toggle.addEventListener('change', toggleFimCadeiaFields);
+        toggleFimCadeiaFields(); // Estado inicial
+    }
+}
+
+// Função para configurar selects de tipo de fim de cadeia por origem
+function setupTipoFimCadeiaSelectPorOrigem(select) {
+    const origemIndex = select.id.replace('tipo_fim_cadeia_', '');
+    const especificacaoContainer = document.getElementById(`especificacao-container_${origemIndex}`);
+    
+    if (select && especificacaoContainer) {
+        function toggleEspecificacaoField() {
+            if (select.value === 'outra') {
+                especificacaoContainer.style.display = 'block';
+            } else {
+                especificacaoContainer.style.display = 'none';
+                // Limpar especificação quando não for 'outra'
+                const especificacaoTextarea = especificacaoContainer.querySelector('.especificacao-fim-cadeia');
+                if (especificacaoTextarea) especificacaoTextarea.value = '';
+            }
+        }
+        
+        select.addEventListener('change', toggleEspecificacaoField);
+        toggleEspecificacaoField(); // Estado inicial
+    }
 } 

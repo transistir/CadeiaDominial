@@ -5,7 +5,7 @@ from .tis_models import TIs, TerraIndigenaReferencia, TIs_Imovel
 from .pessoa_models import Pessoas
 from .imovel_models import Imovel, Cartorios, ImportacaoCartorios
 from .documento_models import Documento, DocumentoTipo
-from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa
+from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa, OrigemFimCadeia
 from .alteracao_models import Alteracoes, AlteracoesTipo, RegistroTipo, AverbacoesTipo
 from .documento_importado_models import DocumentoImportado
 
@@ -15,7 +15,7 @@ __all__ = [
     'Pessoas',
     'Imovel', 'Cartorios', 'ImportacaoCartorios',
     'Documento', 'DocumentoTipo',
-    'Lancamento', 'LancamentoTipo', 'LancamentoPessoa',
+    'Lancamento', 'LancamentoTipo', 'LancamentoPessoa', 'OrigemFimCadeia',
     'Alteracoes', 'AlteracoesTipo', 'RegistroTipo', 'AverbacoesTipo',
     'DocumentoImportado',
 ] 

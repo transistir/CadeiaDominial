@@ -15,7 +15,7 @@
         <div class="form-group">
             <label for="area">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
             <input type="number" name="area" id="area" step="0.0001" min="0" 
-                   value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}"
+                   value="{% if modo_edicao and lancamento.area %}{{ lancamento.area }}{% elif form_data and form_data.area %}{{ form_data.area }}{% endif %}"
                    placeholder="Ex: 150.5000">
             <small>Área em hectares com 4 casas decimais</small>
         </div>
@@ -24,14 +24,16 @@
     <div id="{{ container_id|default:'origens-container' }}">
         <div class="origem-labels">
             <label>Origem{% if origem_obrigatorio %} *{% endif %}</label>
-            <label>Cartório de Registro da Origem{% if origem_obrigatorio %} *{% endif %}</label>
+            <label>CRI da Origem{% if origem_obrigatorio %} *{% endif %}</label>
             <label>Livro da Origem</label>
             <label>Folha da Origem</label>
+            <label>Fim de Cadeia</label>
+            <label></label>
         </div>
         {% if modo_edicao %}
             {% if origens_separadas %}
                 {% for origem in origens_separadas %}
-            <div class="origem-item">
+            <div class="origem-item" data-origem-index="{{ origem.index }}">
                 <div class="form-group origem-field">
                         <input type="text" name="origem_completa[]" id="origem_completa_{{ origem.index }}" class="origem-texto" 
                            placeholder="Ex: Número do registro anterior, descrição, etc." 
@@ -57,11 +59,54 @@
                                placeholder="Ex: 1, 2, A, etc." 
                                value="{{ origem.folha }}">
                     </div>
+                    <div class="form-group fim-cadeia-field">
+                        <div class="fim-cadeia-toggle-container">
+                            <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_{{ origem.index }}" 
+                                   class="fim-cadeia-toggle" value="{{ origem.index }}"
+                                   {% if origem.fim_cadeia %}checked{% endif %}>
+                            <label for="fim_cadeia_{{ origem.index }}" class="fim-cadeia-label">
+                            </label>
+                        </div>
+                    </div>
                     <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+                </div>
+                
+                <!-- Campos de fim de cadeia para esta origem específica -->
+                <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_{{ origem.index }}" 
+                     style="display: {% if origem.fim_cadeia %}block{% else %}none{% endif %};">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="tipo_fim_cadeia_{{ origem.index }}">Tipo do Fim de Cadeia *</label>
+                            <select name="tipo_fim_cadeia[]" id="tipo_fim_cadeia_{{ origem.index }}" class="form-control tipo-fim-cadeia-select">
+                                <option value="">Selecione o tipo...</option>
+                                <option value="destacamento_publico" {% if origem.tipo_fim_cadeia == 'destacamento_publico' %}selected{% endif %}>Destacamento do Patrimônio Público</option>
+                                <option value="outra" {% if origem.tipo_fim_cadeia == 'outra' %}selected{% endif %}>Outra</option>
+                                <option value="sem_origem" {% if origem.tipo_fim_cadeia == 'sem_origem' %}selected{% endif %}>Sem Origem</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="classificacao_fim_cadeia_{{ origem.index }}">Classificação do Fim de Cadeia *</label>
+                            <select name="classificacao_fim_cadeia[]" id="classificacao_fim_cadeia_{{ origem.index }}" class="form-control classificacao-fim-cadeia-select">
+                                <option value="">Selecione a classificação...</option>
+                                <option value="origem_lidima" {% if origem.classificacao_fim_cadeia == 'origem_lidima' %}selected{% endif %}>Imóvel com Origem Lídima</option>
+                                <option value="sem_origem" {% if origem.classificacao_fim_cadeia == 'sem_origem' %}selected{% endif %}>Imóvel sem Origem</option>
+                                <option value="inconclusa" {% if origem.classificacao_fim_cadeia == 'inconclusa' %}selected{% endif %}>Situação Inconclusa</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Campo de especificação (aparece quando tipo = 'outra') -->
+                    <div class="form-group especificacao-container" id="especificacao-container_{{ origem.index }}" 
+                         style="display: {% if origem.tipo_fim_cadeia == 'outra' %}block{% else %}none{% endif %};">
+                        <label for="especificacao_fim_cadeia_{{ origem.index }}">Especificação *</label>
+                        <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_{{ origem.index }}" class="form-control especificacao-fim-cadeia" 
+                                  placeholder="Detalhe a especificação...">{% if origem.especificacao_fim_cadeia %}{{ origem.especificacao_fim_cadeia }}{% endif %}</textarea>
+                    </div>
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="origem-item">
+                <div class="origem-item" data-origem-index="0">
                     <div class="form-group origem-field">
                         <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
                                placeholder="Ex: Número do registro anterior, descrição, etc.">
@@ -81,12 +126,52 @@
                     <div class="form-group folha-field">
                         <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
                                placeholder="Ex: 1, 2, A, etc.">
+                    </div>
+                    <div class="form-group fim-cadeia-field">
+                        <div class="fim-cadeia-toggle-container">
+                            <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_0" 
+                                   class="fim-cadeia-toggle" value="0">
+                            <label for="fim_cadeia_0" class="fim-cadeia-label">
+                            </label>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
                 </div>
-                <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
-            </div>
+                
+                <!-- Campos de fim de cadeia para a primeira origem -->
+                <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="tipo_fim_cadeia_0">Tipo do Fim de Cadeia *</label>
+                            <select name="tipo_fim_cadeia[]" id="tipo_fim_cadeia_0" class="form-control tipo-fim-cadeia-select">
+                                <option value="">Selecione o tipo...</option>
+                                <option value="destacamento_publico">Destacamento do Patrimônio Público</option>
+                                <option value="outra">Outra</option>
+                                <option value="sem_origem">Sem Origem</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="classificacao_fim_cadeia_0">Classificação do Fim de Cadeia *</label>
+                            <select name="classificacao_fim_cadeia[]" id="classificacao_fim_cadeia_0" class="form-control classificacao-fim-cadeia-select">
+                                <option value="">Selecione a classificação...</option>
+                                <option value="origem_lidima">Imóvel com Origem Lídima</option>
+                                <option value="sem_origem">Imóvel sem Origem</option>
+                                <option value="inconclusa">Situação Inconclusa</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Campo de especificação (aparece quando tipo = 'outra') -->
+                    <div class="form-group especificacao-container" id="especificacao-container_0" style="display: none;">
+                        <label for="especificacao_fim_cadeia_0">Especificação *</label>
+                        <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_0" class="form-control especificacao-fim-cadeia" 
+                                  placeholder="Detalhe a especificação..."></textarea>
+                    </div>
+                </div>
             {% endif %}
         {% else %}
-            <div class="origem-item">
+            <div class="origem-item" data-origem-index="0">
                 <div class="form-group origem-field">
                     <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
                            placeholder="Ex: Número do registro anterior, descrição, etc.">
@@ -107,7 +192,47 @@
                     <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
                            placeholder="Ex: 1, 2, A, etc.">
                 </div>
+                <div class="form-group fim-cadeia-field">
+                    <div class="fim-cadeia-toggle-container">
+                        <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_0" 
+                               class="fim-cadeia-toggle" value="0">
+                                                    <label for="fim_cadeia_0" class="fim-cadeia-label">
+                            </label>
+                    </div>
+                </div>
                 <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+            </div>
+            
+            <!-- Campos de fim de cadeia para a primeira origem -->
+            <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="tipo_fim_cadeia_0">Tipo do Fim de Cadeia *</label>
+                        <select name="tipo_fim_cadeia[]" id="tipo_fim_cadeia_0" class="form-control tipo-fim-cadeia-select">
+                            <option value="">Selecione o tipo...</option>
+                            <option value="destacamento_publico">Destacamento do Patrimônio Público</option>
+                            <option value="outra">Outra</option>
+                            <option value="sem_origem">Sem Origem</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="classificacao_fim_cadeia_0">Classificação do Fim de Cadeia *</label>
+                        <select name="classificacao_fim_cadeia[]" id="classificacao_fim_cadeia_0" class="form-control classificacao-fim-cadeia-select">
+                            <option value="">Selecione a classificação...</option>
+                            <option value="origem_lidima">Imóvel com Origem Lídima</option>
+                            <option value="sem_origem">Imóvel sem Origem</option>
+                            <option value="inconclusa">Situação Inconclusa</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Campo de especificação (aparece quando tipo = 'outra') -->
+                <div class="form-group especificacao-container" id="especificacao-container_0" style="display: none;">
+                    <label for="especificacao_fim_cadeia_0">Especificação *</label>
+                    <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_0" class="form-control especificacao-fim-cadeia" 
+                              placeholder="Detalhe a especificação..."></textarea>
+                </div>
             </div>
         {% endif %}
     </div>

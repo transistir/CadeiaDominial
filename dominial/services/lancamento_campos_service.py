@@ -182,66 +182,65 @@ class LancamentoCamposService:
         livros_origem = request.POST.getlist('livro_origem[]')
         folhas_origem = request.POST.getlist('folha_origem[]')
         
+        # Processar informações de fim de cadeia por origem
+        fim_cadeia_indices = request.POST.getlist('fim_cadeia[]')
+        tipos_fim_cadeia = request.POST.getlist('tipo_fim_cadeia[]')
+        especificacoes_fim_cadeia = request.POST.getlist('especificacao_fim_cadeia[]')
+        classificacoes_fim_cadeia = request.POST.getlist('classificacao_fim_cadeia[]')
+        
         # Se há múltiplas origens, concatenar com ponto e vírgula
         if origens_completas:
-            # Filtrar origens vazias
             origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
             if origens_validas:
                 lancamento.origem = '; '.join(origens_validas)
         
         # PROCESSAR CARTÓRIO DE ORIGEM para múltiplas origens
-        # CORREÇÃO: Associar cada origem com seu respectivo cartório
-        # Para início de matrícula, o cartório de origem é usado para criar documentos automáticos
         cartorio_origem_encontrado = None
-        
-        # Criar mapeamento de origens com seus respectivos cartórios
         origens_com_cartorios = []
         
         for i, origem in enumerate(origens_completas):
             if origem and origem.strip():
                 cartorio_origem = None
-        
-                # Tentar encontrar cartório por ID primeiro
-                if i < len(cartorios_origem_ids) and cartorios_origem_ids[i] and cartorios_origem_ids[i].strip():
-                    try:
-                        cartorio_origem = Cartorios.objects.get(id=cartorios_origem_ids[i])
-                    except Cartorios.DoesNotExist:
-                        pass
-        
-                # Se não encontrou por ID, tentar por nome
-                if not cartorio_origem and i < len(cartorios_origem_nomes) and cartorios_origem_nomes[i] and cartorios_origem_nomes[i].strip():
-                    try:
-                        cartorio_origem = Cartorios.objects.get(nome__iexact=cartorios_origem_nomes[i])
-                    except Cartorios.DoesNotExist:
-                        # Criar novo cartório se não existir
-                        cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                        cartorio_origem = Cartorios.objects.create(
-                            nome=cartorios_origem_nomes[i],
-                            cns=cns_unico,
-                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                        )
+                fim_cadeia_esta_origem = str(i) in fim_cadeia_indices
+                
+                # Se NÃO for fim de cadeia para esta origem, processar cartório
+                if not fim_cadeia_esta_origem:
+                    # Tentar encontrar cartório por ID primeiro
+                    if i < len(cartorios_origem_ids) and cartorios_origem_ids[i] and cartorios_origem_ids[i].strip():
+                        try:
+                            cartorio_origem = Cartorios.objects.get(id=cartorios_origem_ids[i])
+                        except Cartorios.DoesNotExist:
+                            pass
+                    
+                    # Se não encontrou por ID, tentar por nome
+                    if not cartorio_origem and i < len(cartorios_origem_nomes) and cartorios_origem_nomes[i] and cartorios_origem_nomes[i].strip():
+                        try:
+                            cartorio_origem = Cartorios.objects.get(nome__iexact=cartorios_origem_nomes[i])
+                        except Cartorios.DoesNotExist:
+                            # Criar novo cartório se não existir
+                            cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
+                            cartorio_origem = Cartorios.objects.create(
+                                nome=cartorios_origem_nomes[i],
+                                cns=cns_unico,
+                                cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                            )
                 
                 # Adicionar origem com seu cartório ao mapeamento
-                if cartorio_origem:
-                    origens_com_cartorios.append({
-                        'origem': origem.strip(),
-                        'cartorio': cartorio_origem,
-                        'livro': livros_origem[i] if i < len(livros_origem) else None,
-                        'folha': folhas_origem[i] if i < len(folhas_origem) else None
-                    })
-                    
-                    # Usar o primeiro cartório válido encontrado como cartório de origem do lançamento
-                    if not cartorio_origem_encontrado:
-                        cartorio_origem_encontrado = cartorio_origem
+                origens_com_cartorios.append({
+                    'origem': origem.strip(),
+                    'cartorio': cartorio_origem,
+                    'livro': livros_origem[i] if i < len(livros_origem) else None,
+                    'folha': folhas_origem[i] if i < len(folhas_origem) else None,
+                    'fim_cadeia': fim_cadeia_esta_origem
+                })
+                
+                # Usar o primeiro cartório válido encontrado como cartório de origem do lançamento
+                if not cartorio_origem_encontrado and cartorio_origem:
+                    cartorio_origem_encontrado = cartorio_origem
         
         # Salvar o mapeamento de origens com cartórios no lançamento
-        # CORREÇÃO: Não usar campo observações para evitar interferir com dados do usuário
         if origens_com_cartorios:
             lancamento.origem = '; '.join([item['origem'] for item in origens_com_cartorios])
-            
-            # Armazenar mapeamento em uma variável de sessão ou cache temporário
-            # Por enquanto, usar apenas o primeiro cartório como cartório de origem do lançamento
-            # TODO: Implementar sistema de mapeamento mais robusto (ex: campo JSON no modelo)
             lancamento.cartorio_origem = cartorio_origem_encontrado
             
             # Armazenar mapeamento em cache temporário para uso posterior
@@ -249,13 +248,14 @@ class LancamentoCamposService:
             cache_key = f"mapeamento_origens_lancamento_{lancamento.id if lancamento.id else 'novo'}"
             mapeamento_origens = []
             for item in origens_com_cartorios:
-                mapeamento_origens.append({
-                    'origem': item['origem'],
-                    'cartorio_id': item['cartorio'].id,
-                    'cartorio_nome': item['cartorio'].nome,
-                    'livro': item['livro'],
-                    'folha': item['folha']
-                })
+                if item['cartorio']:  # Só incluir se tiver cartório
+                    mapeamento_origens.append({
+                        'origem': item['origem'],
+                        'cartorio_id': item['cartorio'].id,
+                        'cartorio_nome': item['cartorio'].nome,
+                        'livro': item['livro'],
+                        'folha': item['folha']
+                    })
             cache.set(cache_key, mapeamento_origens, timeout=3600)  # 1 hora
         
         # PROCESSAR LIVRO E FOLHA DE ORIGEM para múltiplas origens
@@ -282,53 +282,72 @@ class LancamentoCamposService:
                 
                 if documento_origem:
                     # Buscar primeiro lançamento deste documento
-                    from ..models import Lancamento
-                    primeiro_lancamento_origem = Lancamento.objects.filter(
-                        documento=documento_origem
-                    ).order_by('id').first()
-                    
-                    if primeiro_lancamento_origem:
-                        # Herdar livro e folha do primeiro lançamento da origem
-                        if primeiro_lancamento_origem.livro_origem and primeiro_lancamento_origem.livro_origem.strip():
-                            livro_origem_encontrado = primeiro_lancamento_origem.livro_origem.strip()
-                        if primeiro_lancamento_origem.folha_origem and primeiro_lancamento_origem.folha_origem.strip():
-                            folha_origem_encontrada = primeiro_lancamento_origem.folha_origem.strip()
+                    primeiro_lancamento = documento_origem.lancamentos.order_by('id').first()
+                    if primeiro_lancamento:
+                        livro_origem_encontrado = primeiro_lancamento.livro_origem
+                        folha_origem_encontrada = primeiro_lancamento.folha_origem
         
-        # Se não encontrou por herança, usar os campos do formulário
-        if not livro_origem_encontrado:
-            for livro in livros_origem:
-                if livro and livro.strip():
-                    livro_origem_encontrado = livro.strip()
-                    break
+        # Se não encontrou por herança, usar valores do formulário
+        if not livro_origem_encontrado and livros_origem:
+            livro_origem_encontrado = livros_origem[0] if livros_origem[0] else None
         
-        if not folha_origem_encontrada:
-            for folha in folhas_origem:
-                if folha and folha.strip():
-                    folha_origem_encontrada = folha.strip()
-                    break
+        if not folha_origem_encontrada and folhas_origem:
+            folha_origem_encontrada = folhas_origem[0] if folhas_origem[0] else None
         
-        # Salvar livro e folha de origem encontrados no lançamento
-        if livro_origem_encontrado:
-            lancamento.livro_origem = livro_origem_encontrado
+        # Definir livro e folha de origem no lançamento
+        lancamento.livro_origem = livro_origem_encontrado
+        lancamento.folha_origem = folha_origem_encontrada
         
-        if folha_origem_encontrada:
-            lancamento.folha_origem = folha_origem_encontrada
+        # PROCESSAR ÁREA
+        area = request.POST.get('area', '').strip()
+        if area:
+            try:
+                lancamento.area = float(area)
+            except ValueError:
+                pass
         
-        # Para início de matrícula, NÃO sobrescrever o cartório da matrícula
-        # O cartório da matrícula já foi definido nos campos básicos
-        # O cartório da origem é apenas informativo e não deve substituir o cartório da matrícula
-        
-        # Processar área
-        area_value = request.POST.get('area', '').strip()
-        lancamento.area = float(area_value) if area_value else None
-        
-        # Processar data de origem
-        data_origem_value = request.POST.get('data_origem', '').strip()
-        if data_origem_value:
+        # PROCESSAR DATA DE ORIGEM
+        data_origem = request.POST.get('data_origem', '').strip()
+        if data_origem:
             try:
                 from datetime import datetime
-                lancamento.data_origem = datetime.strptime(data_origem_value, '%Y-%m-%d').date()
+                lancamento.data_origem = datetime.strptime(data_origem, '%Y-%m-%d').date()
             except ValueError:
-                lancamento.data_origem = None
-        else:
-            lancamento.data_origem = None 
+                pass
+        
+        # PROCESSAR INFORMAÇÕES DE FIM DE CADEIA POR ORIGEM
+        # Limpar registros existentes
+        lancamento.origens_fim_cadeia.all().delete()
+        
+        # Criar novos registros para cada origem com fim de cadeia
+        for i, origem in enumerate(origens_completas):
+            if origem and origem.strip():
+                fim_cadeia_esta_origem = str(i) in fim_cadeia_indices
+                
+                if fim_cadeia_esta_origem:
+                    # Encontrar os dados correspondentes a esta origem
+                    tipo_fim_cadeia = None
+                    especificacao_fim_cadeia = None
+                    classificacao_fim_cadeia = None
+                    
+                    # Buscar nos arrays por índice
+                    for j, indice in enumerate(fim_cadeia_indices):
+                        if indice == str(i):
+                            if j < len(tipos_fim_cadeia):
+                                tipo_fim_cadeia = tipos_fim_cadeia[j]
+                            if j < len(especificacoes_fim_cadeia):
+                                especificacao_fim_cadeia = especificacoes_fim_cadeia[j]
+                            if j < len(classificacoes_fim_cadeia):
+                                classificacao_fim_cadeia = classificacoes_fim_cadeia[j]
+                            break
+                    
+                    # Criar registro de fim de cadeia para esta origem
+                    from ..models import OrigemFimCadeia
+                    OrigemFimCadeia.objects.create(
+                        lancamento=lancamento,
+                        indice_origem=i,
+                        fim_cadeia=True,
+                        tipo_fim_cadeia=tipo_fim_cadeia,
+                        especificacao_fim_cadeia=especificacao_fim_cadeia,
+                        classificacao_fim_cadeia=classificacao_fim_cadeia
+                    ) 
