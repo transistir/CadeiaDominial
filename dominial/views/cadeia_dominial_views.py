@@ -1,12 +1,16 @@
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..services import HierarquiaService
 from ..services.cache_service import CacheService
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 from datetime import date
 import json
+from weasyprint import HTML
+from django.template.loader import render_to_string
+from django.conf import settings
+import os
 
 @login_required
 def cadeia_dominial(request, tis_id, imovel_id):
@@ -250,3 +254,55 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     }
     
     return render(request, 'dominial/documento_detalhado.html', context) 
+
+@login_required
+def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
+    """
+    Exporta a cadeia dominial em formato PDF
+    """
+    try:
+        tis = get_object_or_404(TIs, id=tis_id)
+        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        
+        # Obter dados da cadeia dominial
+        service = CadeiaDominialTabelaService()
+        context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
+        
+        # Adicionar estatísticas
+        if context['cadeia']:
+            context['estatisticas'] = service.get_estatisticas_cadeia(context['cadeia'])
+        
+        # Renderizar template HTML para PDF
+        html_string = render_to_string('dominial/cadeia_dominial_pdf.html', context)
+        
+        # Configurar CSS para PDF
+        css_path = os.path.join(settings.STATIC_ROOT, 'dominial', 'css', 'cadeia_dominial_pdf.css')
+        if not os.path.exists(css_path):
+            css_path = os.path.join(settings.STATICFILES_DIRS[0], 'dominial', 'css', 'cadeia_dominial_pdf.css')
+        
+        # Gerar PDF
+        pdf = HTML(string=html_string, base_url=request.build_absolute_uri('/')).write_pdf(
+            stylesheets=[css_path] if os.path.exists(css_path) else None
+        )
+        
+        # Configurar resposta HTTP
+        response = HttpResponse(pdf, content_type='application/pdf')
+        filename = f"cadeia_dominial_{imovel.matricula}_{date.today().strftime('%Y%m%d')}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        # Em caso de erro, retornar uma página de erro simples
+        error_html = f"""
+        <html>
+        <head><title>Erro na Geração do PDF</title></head>
+        <body>
+            <h1>Erro na Geração do PDF</h1>
+            <p>Ocorreu um erro ao gerar o PDF da cadeia dominial.</p>
+            <p>Erro: {str(e)}</p>
+            <p><a href="javascript:history.back()">Voltar</a></p>
+        </body>
+        </html>
+        """
+        return HttpResponse(error_html, content_type='text/html') 

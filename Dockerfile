@@ -16,6 +16,18 @@ RUN apt-get update \
         build-essential \
         libpq-dev \
         curl \
+        # Dependências para weasyprint
+        libpango-1.0-0 \
+        libharfbuzz0b \
+        libpangoft2-1.0-0 \
+        libffi-dev \
+        libjpeg-dev \
+        libopenjp2-7-dev \
+        libcairo2 \
+        libpango1.0-dev \
+        libgdk-pixbuf2.0-dev \
+        libffi-dev \
+        shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar dependências Python
