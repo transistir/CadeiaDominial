@@ -361,13 +361,9 @@ class HierarquiaArvoreService:
             numeros = re.findall(r'\d+', documento.origem)
             origens = numeros
         
-        # Se ainda não encontrou, verificar se há referência a outros documentos
-        if not origens and 'matrícula' in documento.origem.lower():
-            # Procurar por documentos que podem ser a matrícula atual
-            for outro_doc in documentos_por_numero.values():
-                if outro_doc['tipo'] == 'matricula' and outro_doc['numero'] != documento.numero:
-                    origens = [outro_doc['numero']]
-                    break
+        # CORREÇÃO: Remover lógica problemática que criava conexões incorretas
+        # A lógica anterior criava conexões baseadas apenas na presença da palavra "matrícula"
+        # Isso causava conexões incorretas como M9712 → M19905
         
         for origem in origens:
             # Evitar auto-referências
