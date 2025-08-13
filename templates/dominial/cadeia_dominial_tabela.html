@@ -171,7 +171,7 @@
                                             <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                             <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
-                                        Lançamentos do {{ item.documento.tipo.get_tipo_display }} {{ item.documento.numero }}
+                                        Lançamentos {{ item.documento.tipo.get_tipo_display }} {{ item.documento.numero }}
                                     </h5>
                                     <table class="cadeia-tabela-planilha">
                                         <thead>
@@ -224,7 +224,7 @@
                                                     {% empty %}-{% endfor %}
                                                 </td>
                                                 <!-- Transmissão -->
-                                                {% if lancamento.tipo.tipo == 'averbacao' and item.documento.tipo.tipo != 'transcricao' %}
+                                                {% if lancamento.tipo.tipo == 'averbacao' %}
                                                     <td colspan="6">
                                                         {% if lancamento.descricao and lancamento.descricao|length > 100 %}
                                                             <span class="descricao-curta">{{ lancamento.descricao|slice:":100" }}...</span>
