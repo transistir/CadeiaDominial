@@ -126,9 +126,9 @@ class LancamentoFormService:
         sigla_matricula = request.POST.get('sigla_matricula', '')
         
         if tipo_lanc.tipo == 'averbacao':
-            return f"AV{numero_simples}{sigla_matricula}"
+            return f"AV{numero_simples} {sigla_matricula}"
         elif tipo_lanc.tipo == 'registro':
-            return f"R{numero_simples}{sigla_matricula}"
+            return f"R{numero_simples} {sigla_matricula}"
         elif tipo_lanc.tipo == 'inicio_matricula':
             return sigla_matricula  # Repete a sigla da matrícula
         else:
