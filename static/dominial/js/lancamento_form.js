@@ -204,9 +204,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 let sigla = '';
                 
                 if (selectedTipo === 'averbacao') {
-                    sigla = `AV${numero}${siglaMatricula}`;
+                    sigla = `AV${numero} ${siglaMatricula}`;
                 } else if (selectedTipo === 'registro') {
-                    sigla = `R${numero}${siglaMatricula}`;
+                    sigla = `R${numero} ${siglaMatricula}`;
                 }
                 
                 numeroCompletoInput.value = sigla;
