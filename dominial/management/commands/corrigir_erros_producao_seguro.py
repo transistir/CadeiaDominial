@@ -50,21 +50,36 @@ class Command(BaseCommand):
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
+        # Criar diretório de backup se não existir
+        backup_dir = '/tmp/backup_cadeia_dominial'
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+        except Exception as e:
+            self.stdout.write(f"⚠️ Não foi possível criar diretório de backup: {str(e)}")
+            self.stdout.write(f"   Continuando sem backup de tabelas...")
+            return
+        
         # Backup da tabela Lancamento
         lancamentos_backup = list(Lancamento.objects.all().values())
-        with open(f'lancamentos_backup_{timestamp}.json', 'w') as f:
-            import json
-            json.dump(lancamentos_backup, f, default=str, indent=2)
+        backup_file_lancamentos = os.path.join(backup_dir, f'lancamentos_backup_{timestamp}.json')
+        try:
+            with open(backup_file_lancamentos, 'w') as f:
+                import json
+                json.dump(lancamentos_backup, f, default=str, indent=2)
+            self.stdout.write(f"✅ Backup de lançamentos criado: {backup_file_lancamentos}")
+        except Exception as e:
+            self.stdout.write(f"⚠️ Erro ao criar backup de lançamentos: {str(e)}")
         
         # Backup da tabela DocumentoImportado
         documentos_importados_backup = list(DocumentoImportado.objects.all().values())
-        with open(f'documentos_importados_backup_{timestamp}.json', 'w') as f:
-            import json
-            json.dump(documentos_importados_backup, f, default=str, indent=2)
-        
-        self.stdout.write(f"✅ Backup criado:")
-        self.stdout.write(f"   - lancamentos_backup_{timestamp}.json")
-        self.stdout.write(f"   - documentos_importados_backup_{timestamp}.json")
+        backup_file_importados = os.path.join(backup_dir, f'documentos_importados_backup_{timestamp}.json')
+        try:
+            with open(backup_file_importados, 'w') as f:
+                import json
+                json.dump(documentos_importados_backup, f, default=str, indent=2)
+            self.stdout.write(f"✅ Backup de documentos importados criado: {backup_file_importados}")
+        except Exception as e:
+            self.stdout.write(f"⚠️ Erro ao criar backup de documentos importados: {str(e)}")
 
     def corrigir_erro_conversao_string(self, dry_run=False):
         """Corrige erro de conversão de string para int"""
