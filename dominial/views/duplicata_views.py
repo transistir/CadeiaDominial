@@ -6,7 +6,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from ..models import TIs, Imovel, Documento
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 
@@ -107,12 +107,19 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
                           imovel_id=imovel.id, 
                           documento_id=documento_ativo.id)
             
+    except Http404:
+        messages.error(request, "❌ Documento não encontrado.")
+        return redirect('imoveis', tis_id=tis_id)
     except Exception as e:
         messages.error(request, f"❌ Erro inesperado: {str(e)}")
-        return redirect('novo_lancamento_documento', 
-                      tis_id=tis.id, 
-                      imovel_id=imovel.id, 
-                      documento_id=documento_ativo.id)
+        # Verificar se documento_ativo foi definido antes de usar
+        if 'documento_ativo' in locals():
+            return redirect('novo_lancamento_documento', 
+                          tis_id=tis.id, 
+                          imovel_id=imovel.id, 
+                          documento_id=documento_ativo.id)
+        else:
+            return redirect('imoveis', tis_id=tis_id)
 
 
 @login_required
@@ -139,6 +146,16 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
                       imovel_id=imovel.id, 
                       documento_id=documento_ativo.id)
         
+    except Http404:
+        messages.error(request, "❌ Documento não encontrado.")
+        return redirect('imoveis', tis_id=tis_id)
     except Exception as e:
         messages.error(request, f"❌ Erro: {str(e)}")
-        return redirect('imoveis', tis_id=tis_id) 
+        # Verificar se documento_ativo foi definido antes de usar
+        if 'documento_ativo' in locals():
+            return redirect('novo_lancamento_documento', 
+                          tis_id=tis.id, 
+                          imovel_id=imovel.id, 
+                          documento_id=documento_ativo.id)
+        else:
+            return redirect('imoveis', tis_id=tis_id) 
