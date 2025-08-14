@@ -78,7 +78,7 @@ def investigar_cadeia_m9537():
         print("Chamando CadeiaDominialTabelaService.get_cadeia_dominial_tabela...")
         
         # Precisamos do TIs ID - vamos buscar
-        tis = m9537.tis
+        tis = m9537.terra_indigena_id
         print(f"TIs ID: {tis.id}")
         
         resultado = service.get_cadeia_dominial_tabela(tis.id, m9537.id, {})
