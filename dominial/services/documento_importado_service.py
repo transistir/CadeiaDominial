@@ -36,9 +36,13 @@ class DocumentoImportadoService:
             dict: Informações da importação ou None se não foi importado
         """
         try:
+            # CORREÇÃO: Usar filter().first() em vez de get() para evitar MultipleObjectsReturned
             doc_importado = DocumentoImportado.objects.select_related(
                 'imovel_origem', 'importado_por'
-            ).get(documento=documento)
+            ).filter(documento=documento).order_by('-data_importacao').first()
+            
+            if not doc_importado:
+                return None
             
             return {
                 'imovel_origem': {
@@ -55,7 +59,9 @@ class DocumentoImportadoService:
                 'origem_info': doc_importado.get_origem_info(),
                 'importador_info': doc_importado.get_importador_info()
             }
-        except DocumentoImportado.DoesNotExist:
+        except Exception as e:
+            # Log do erro para debug
+            print(f"Erro ao obter info de importação para documento {documento.id}: {str(e)}")
             return None
     
     @staticmethod

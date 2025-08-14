@@ -372,12 +372,41 @@ class CadeiaDominialTabelaService:
 
         # Função de ordenação: matrículas maiores primeiro, depois transcrições maiores
         def origem_sort_key(origem):
-            if origem.startswith('M'):
-                return (0, -int(origem.replace('M', '')))
-            if origem.startswith('T'):
-                return (1, -int(origem.replace('T', '')))
-            return (2, origem)
-        origens.sort(key=origem_sort_key)
+            try:
+                if origem.startswith('M'):
+                    numero_part = origem.replace('M', '')
+                    if numero_part.isdigit():
+                        return (0, -int(numero_part))
+                    else:
+                        return (2, origem)  # Não é um número válido
+                if origem.startswith('T'):
+                    numero_part = origem.replace('T', '')
+                    if numero_part.isdigit():
+                        return (1, -int(numero_part))
+                    else:
+                        return (2, origem)  # Não é um número válido
+                return (2, origem)
+            except (ValueError, AttributeError):
+                # Se houver qualquer erro na conversão, tratar como string normal
+                return (2, origem)
+        
+        # Filtrar origens válidas antes de ordenar
+        origens_validas = []
+        for origem in origens:
+            try:
+                if origem.startswith(('M', 'T')):
+                    numero_part = origem[1:]  # Remove M ou T
+                    if numero_part.isdigit():
+                        origens_validas.append(origem)
+                    else:
+                        self.stdout.write(f"⚠️ Origem ignorada (não é número válido): '{origem}'")
+                else:
+                    origens_validas.append(origem)
+            except Exception as e:
+                self.stdout.write(f"⚠️ Origem ignorada (erro): '{origem}' - {str(e)}")
+        
+        origens_validas.sort(key=origem_sort_key)
+        origens = origens_validas
 
         # Determinar origem escolhida
         escolha_especifica = None
