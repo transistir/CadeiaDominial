@@ -306,7 +306,7 @@ class CadeiaDominialTabelaService:
                         documentos_processados.add(doc_origem_escolhido.id)
                         
                         # Expandir recursivamente a cadeia completa abaixo da origem escolhida
-                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_escolhido, documentos_processados, escolhas_origem)
+                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_escolhido, documentos_processados, escolhas_origem, 0)
                         tronco_expandido.extend(cadeia_abaixo)
                 else:
                     # Usar o documento de origem de nível mais alto (comportamento padrão)
@@ -317,7 +317,7 @@ class CadeiaDominialTabelaService:
                         documentos_processados.add(doc_origem_mais_alto.id)
                         
                         # Expandir recursivamente a cadeia completa abaixo da origem mais alta
-                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_mais_alto, documentos_processados, escolhas_origem)
+                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_mais_alto, documentos_processados, escolhas_origem, 0)
                         tronco_expandido.extend(cadeia_abaixo)
         
         return tronco_expandido
@@ -347,15 +347,25 @@ class CadeiaDominialTabelaService:
         
         # Retornar o documento com maior número (nível mais alto)
         if origens_encontradas:
-            return max(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
+            try:
+                return max(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
+            except (ValueError, AttributeError) as e:
+                print(f"⚠️ Erro ao ordenar documentos por número: {str(e)}")
+                # Em caso de erro, retornar o primeiro documento encontrado
+                return origens_encontradas[0] if origens_encontradas else None
         
         return None
     
-    def _expandir_cadeia_recursiva(self, documento, documentos_processados, escolhas_origem=None):
+    def _expandir_cadeia_recursiva(self, documento, documentos_processados, escolhas_origem=None, profundidade=0):
         """
         Expande recursivamente apenas a subcadeia da origem escolhida (ou padrão) de um documento,
         seguindo a ordem: matrículas maiores, depois transcrições maiores, ambos do maior para o menor.
         """
+        # Proteção contra recursão infinita
+        if profundidade > 50:  # Limite máximo de profundidade
+            print(f"⚠️ Limite de profundidade atingido para documento {documento.numero}")
+            return []
+            
         cadeia_expandida = []
         
         # Buscar lançamentos com origens
@@ -399,11 +409,11 @@ class CadeiaDominialTabelaService:
                     if numero_part.isdigit():
                         origens_validas.append(origem)
                     else:
-                        self.stdout.write(f"⚠️ Origem ignorada (não é número válido): '{origem}'")
+                        print(f"⚠️ Origem ignorada (não é número válido): '{origem}'")
                 else:
                     origens_validas.append(origem)
             except Exception as e:
-                self.stdout.write(f"⚠️ Origem ignorada (erro): '{origem}' - {str(e)}")
+                print(f"⚠️ Origem ignorada (erro): '{origem}' - {str(e)}")
         
         origens_validas.sort(key=origem_sort_key)
         origens = origens_validas
@@ -428,6 +438,6 @@ class CadeiaDominialTabelaService:
                 cadeia_expandida.append(doc_origem)
                 documentos_processados.add(doc_origem.id)
                 # Recursão: expandir apenas a subcadeia da origem escolhida
-                sub_cadeia = self._expandir_cadeia_recursiva(doc_origem, documentos_processados, escolhas_origem)
+                sub_cadeia = self._expandir_cadeia_recursiva(doc_origem, documentos_processados, escolhas_origem, profundidade + 1)
                 cadeia_expandida.extend(sub_cadeia)
         return cadeia_expandida
