@@ -89,6 +89,31 @@ class LancamentoCriacaoService:
             print(f"DEBUG: Erro na validação: {error_message}")
             return None, error_message
         
+        # CORREÇÃO: Validar cartórios das origens
+        print("DEBUG: Validando cartórios das origens...")
+        cartorios_origem_ids = request.POST.getlist('cartorio_origem[]')
+        cartorios_origem_nomes = request.POST.getlist('cartorio_origem_nome[]')
+        
+        from ..models import Cartorios
+        
+        for i, (cartorio_id, cartorio_nome) in enumerate(zip(cartorios_origem_ids, cartorios_origem_nomes)):
+            if cartorio_nome.strip():  # Se foi digitado um nome
+                if not cartorio_id.strip():  # Mas não foi selecionado da lista
+                    print(f"DEBUG: Cartório inválido na origem {i+1}: '{cartorio_nome}'")
+                    return None, f"❌ Cartório inválido na origem {i+1}: '{cartorio_nome}'. Selecione um cartório da lista. Não é possível criar novos cartórios."
+                
+                # Verificar se o cartório realmente existe
+                try:
+                    cartorio = Cartorios.objects.get(id=cartorio_id)
+                    if cartorio.nome != cartorio_nome:
+                        print(f"DEBUG: Nome do cartório não confere: '{cartorio_nome}' vs '{cartorio.nome}'")
+                        return None, f"❌ Cartório inválido na origem {i+1}: '{cartorio_nome}'. Selecione um cartório da lista."
+                except Cartorios.DoesNotExist:
+                    print(f"DEBUG: Cartório não encontrado: ID {cartorio_id}")
+                    return None, f"❌ Cartório inválido na origem {i+1}: '{cartorio_nome}'. Selecione um cartório da lista."
+        
+        print("DEBUG: Validação de cartórios das origens aprovada")
+        
         try:
             print("DEBUG: Criando lançamento básico...")
             # Criar o lançamento

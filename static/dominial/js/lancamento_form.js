@@ -272,6 +272,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             
+            // CORREÇÃO: Validar cartórios das origens
+            const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
+            const cartorioOrigemHiddens = document.querySelectorAll('.cartorio-origem-id');
+            
+            for (let i = 0; i < cartorioOrigemInputs.length; i++) {
+                const input = cartorioOrigemInputs[i];
+                const hidden = cartorioOrigemHiddens[i];
+                
+                if (input.value.trim() && !hidden.value.trim()) {
+                    // Usuário digitou um nome mas não selecionou da lista
+                    hasError = true;
+                    input.classList.add('error');
+                    input.focus();
+                    
+                    // Mostrar mensagem de erro
+                    alert(`❌ Cartório inválido na origem ${i+1}: "${input.value}". Selecione um cartório da lista. Não é possível criar novos cartórios.`);
+                    
+                    e.preventDefault();
+                    return false;
+                }
+            }
+            
             // Validação específica para número simples em registro e averbação
             const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
             const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
@@ -445,6 +467,8 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
         const query = this.value.trim();
         if (query.length < 2) {
             suggestions.style.display = 'none';
+            // Limpar campo hidden se não há seleção válida
+            hidden.value = '';
             return;
         }
         
@@ -461,18 +485,40 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
                             input.value = cartorio.nome;
                             hidden.value = cartorio.id;
                             suggestions.style.display = 'none';
+                            // Remover classe de erro se existir
+                            input.classList.remove('error');
                         });
                         suggestions.appendChild(div);
                     });
                     suggestions.style.display = 'block';
                 } else {
                     suggestions.style.display = 'none';
+                    // Mostrar mensagem de "Nenhum cartório encontrado"
+                    const noResultsDiv = document.createElement('div');
+                    noResultsDiv.className = 'autocomplete-suggestion no-results';
+                    noResultsDiv.textContent = 'Nenhum cartório encontrado. Digite para buscar...';
+                    suggestions.appendChild(noResultsDiv);
+                    suggestions.style.display = 'block';
                 }
             })
             .catch(error => {
                 console.error('Erro ao buscar cartórios:', error);
                 suggestions.style.display = 'none';
             });
+    });
+    
+    // Validar quando o usuário terminar de digitar
+    input.addEventListener('blur', function() {
+        setTimeout(() => {
+            if (this.value.trim() && !hidden.value) {
+                // Usuário digitou algo mas não selecionou da lista
+                this.classList.add('error');
+                this.setAttribute('title', 'Selecione um cartório da lista. Não é possível criar novos cartórios.');
+            } else {
+                this.classList.remove('error');
+                this.removeAttribute('title');
+            }
+        }, 200);
     });
     
     // Esconder sugestões quando clicar fora

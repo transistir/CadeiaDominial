@@ -97,6 +97,29 @@
     color: #495057;
 }
 
+/* Validação de cartório obrigatório */
+.cartorio-origem-nome.error {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+    background-color: #fff5f5 !important;
+}
+
+.cartorio-origem-nome.error::placeholder {
+    color: #dc3545 !important;
+}
+
+.autocomplete-suggestion.no-results {
+    color: #6c757d;
+    font-style: italic;
+    cursor: default;
+    padding: 8px 12px;
+    background-color: #f8f9fa;
+}
+
+.autocomplete-suggestion.no-results:hover {
+    background-color: #f8f9fa;
+}
+
 /* ========================================
    SUGESTÕES E AUTCOMPLETE
    ======================================== */

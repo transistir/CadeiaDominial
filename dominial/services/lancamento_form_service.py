@@ -51,26 +51,23 @@ class LancamentoFormService:
         cartorio_id = request.POST.get('cartorio')
         cartorio_nome = request.POST.get('cartorio_nome', '').strip()
         
-        # Processar cartório
+        # Processar cartório - CORREÇÃO: Não criar cartórios automaticamente
         cartorio_origem = None
         if cartorio_id and cartorio_id.strip():
             from ..models import Cartorios
             try:
                 cartorio_origem = Cartorios.objects.get(id=cartorio_id)
             except Cartorios.DoesNotExist:
+                # Cartório não encontrado - deixar como None
                 pass
         elif cartorio_nome:
             from ..models import Cartorios
             try:
                 cartorio_origem = Cartorios.objects.get(nome__iexact=cartorio_nome)
             except Cartorios.DoesNotExist:
-                import uuid
-                cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                cartorio_origem = Cartorios.objects.create(
-                    nome=cartorio_nome,
-                    cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                )
+                # CORREÇÃO: Não criar cartório automaticamente
+                # O usuário deve selecionar um cartório existente
+                cartorio_origem = None
         
         # Processar múltiplas origens
         origens_completas = request.POST.getlist('origem_completa[]')
@@ -114,6 +111,8 @@ class LancamentoFormService:
             'titulo': titulo_clean,
             'area': area,
             'origem': origem,
+            # Adicionar flag para indicar se cartório é válido
+            'cartorio_valido': cartorio_origem is not None,
         }
 
     @staticmethod
