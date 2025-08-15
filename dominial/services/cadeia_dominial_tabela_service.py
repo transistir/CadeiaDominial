@@ -155,12 +155,21 @@ class CadeiaDominialTabelaService:
         if escolhas_origem is None:
             escolhas_origem = {}
         
-        # Por enquanto, usar o tronco principal existente
-        from .hierarquia_service import HierarquiaService
-        tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+        # Usar o HierarquiaArvoreService para obter TODOS os documentos da cadeia
+        from .hierarquia_arvore_service import HierarquiaArvoreService
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        
+        # Extrair todos os documentos da árvore
+        todos_documentos = []
+        for doc_node in arvore['documentos']:
+            documento = doc_node['documento']
+            todos_documentos.append(documento)
+        
+        # Ordenar documentos por data para manter a ordem cronológica
+        todos_documentos.sort(key=lambda x: x.data)
         
         cadeia_completa = []
-        for documento in tronco_principal:
+        for documento in todos_documentos:
             # Carregar lançamentos com pessoas
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
                 'pessoas__pessoa'
