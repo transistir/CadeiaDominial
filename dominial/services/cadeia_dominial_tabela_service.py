@@ -162,7 +162,9 @@ class CadeiaDominialTabelaService:
         # Extrair todos os documentos da árvore
         todos_documentos = []
         for doc_node in arvore['documentos']:
-            documento = doc_node['documento']
+            # Buscar o documento pelo ID
+            from ..models import Documento
+            documento = Documento.objects.get(id=doc_node['id'])
             todos_documentos.append(documento)
         
         # Ordenar documentos por data para manter a ordem cronológica
