@@ -109,9 +109,10 @@ def investigar_arvore_cadeia():
         # Listar documentos da árvore
         print("\nDocumentos na árvore:")
         for i, doc_node in enumerate(arvore['documentos'], 1):
-            doc = doc_node['documento']
+            numero = doc_node['numero']
+            tipo = doc_node['tipo']
             is_importado = doc_node.get('is_importado', False)
-            print(f"   {i}. {doc.numero} ({doc.tipo.tipo}) - Imóvel: {doc.imovel.matricula}")
+            print(f"   {i}. {numero} ({tipo})")
             if is_importado:
                 print(f"      📥 IMPORTADO")
             
@@ -127,17 +128,15 @@ def investigar_arvore_cadeia():
         t221_encontrado = False
         
         for doc_node in arvore['documentos']:
-            doc = doc_node['documento']
-            if doc.numero == 'T220':
+            numero = doc_node['numero']
+            if numero == 'T220':
                 t220_encontrado = True
                 print(f"✅ T220 encontrado na posição {arvore['documentos'].index(doc_node) + 1}")
-                print(f"   Imóvel: {doc.imovel.matricula}")
                 print(f"   Importado: {doc_node.get('is_importado', False)}")
             
-            if doc.numero == 'T221':
+            if numero == 'T221':
                 t221_encontrado = True
                 print(f"✅ T221 encontrado na posição {arvore['documentos'].index(doc_node) + 1}")
-                print(f"   Imóvel: {doc.imovel.matricula}")
                 print(f"   Importado: {doc_node.get('is_importado', False)}")
         
         if not t220_encontrado:
