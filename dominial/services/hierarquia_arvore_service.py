@@ -143,8 +143,8 @@ class HierarquiaArvoreService:
             # Buscar o imóvel do documento
             imovel_documento = documento.imovel
             
-            # Buscar TODOS os documentos do imóvel (não apenas o tronco principal)
-            todos_documentos = Documento.objects.filter(imovel=imovel_documento)\
+            # Buscar TODOS os documentos de QUALQUER imóvel (não apenas do mesmo imóvel)
+            todos_documentos = Documento.objects.all()\
                 .select_related('cartorio', 'tipo')\
                 .prefetch_related('lancamentos')\
                 .order_by('data')
