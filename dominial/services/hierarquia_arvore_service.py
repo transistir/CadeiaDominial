@@ -204,9 +204,9 @@ class HierarquiaArvoreService:
                 for origem_numero in origens:
                     try:
                         # Usar filter().first() em vez de get() para evitar erro de múltiplos objetos
+                        # Buscar em qualquer imóvel, não apenas no mesmo imóvel
                         doc_origem = Documento.objects.filter(
-                            numero=origem_numero,
-                            imovel=documento_origem.imovel
+                            numero=origem_numero
                         ).first()
                         
                         if doc_origem and HierarquiaArvoreService._documento_pertence_cadeia(
@@ -227,9 +227,9 @@ class HierarquiaArvoreService:
             for origem_numero in origens:
                 try:
                     # Usar filter().first() em vez de get() para evitar erro de múltiplos objetos
+                    # Buscar em qualquer imóvel, não apenas no mesmo imóvel
                     doc_origem = Documento.objects.filter(
-                        numero=origem_numero,
-                        imovel=documento_origem.imovel
+                        numero=origem_numero
                     ).first()
                     
                     if doc_origem and HierarquiaArvoreService._documento_pertence_cadeia(
