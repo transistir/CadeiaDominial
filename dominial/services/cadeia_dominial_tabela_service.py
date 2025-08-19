@@ -155,17 +155,9 @@ class CadeiaDominialTabelaService:
         if escolhas_origem is None:
             escolhas_origem = {}
         
-        # Usar o HierarquiaArvoreService para obter TODOS os documentos da cadeia
-        from .hierarquia_arvore_service import HierarquiaArvoreService
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
-        
-        # Extrair todos os documentos da árvore
-        todos_documentos = []
-        for doc_node in arvore['documentos']:
-            # Buscar o documento pelo ID
-            from ..models import Documento
-            documento = Documento.objects.get(id=doc_node['id'])
-            todos_documentos.append(documento)
+        # Usar o HierarquiaService para obter apenas o TRONCO PRINCIPAL
+        from .hierarquia_service import HierarquiaService
+        todos_documentos = HierarquiaService.obter_tronco_principal(imovel, escolhas_origem)
         
         # Ordenar documentos por data para manter a ordem cronológica
         todos_documentos.sort(key=lambda x: x.data)

@@ -305,4 +305,53 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
         </body>
         </html>
         """
+        return HttpResponse(error_html, content_type='text/html')
+
+@login_required
+def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
+    """
+    Exporta a cadeia dominial COMPLETA em formato PDF
+    """
+    try:
+        tis = get_object_or_404(TIs, id=tis_id)
+        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        
+        # Obter dados da cadeia completa
+        from ..services.cadeia_completa_service import CadeiaCompletaService
+        service = CadeiaCompletaService()
+        context = service.get_cadeia_completa(tis_id, imovel_id)
+        
+        # Renderizar template HTML para PDF
+        html_string = render_to_string('dominial/cadeia_completa_pdf.html', context)
+        
+        # Configurar CSS para PDF
+        css_path = os.path.join(settings.STATIC_ROOT, 'dominial', 'css', 'cadeia_completa_pdf.css')
+        if not os.path.exists(css_path):
+            css_path = os.path.join(settings.STATICFILES_DIRS[0], 'dominial', 'css', 'cadeia_completa_pdf.css')
+        
+        # Gerar PDF
+        pdf = HTML(string=html_string, base_url=request.build_absolute_uri('/')).write_pdf(
+            stylesheets=[css_path] if os.path.exists(css_path) else None
+        )
+        
+        # Configurar resposta HTTP
+        response = HttpResponse(pdf, content_type='application/pdf')
+        filename = f"cadeia_completa_{imovel.matricula}_{date.today().strftime('%Y%m%d')}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        # Em caso de erro, retornar uma página de erro simples
+        error_html = f"""
+        <html>
+        <head><title>Erro na Geração do PDF</title></head>
+        <body>
+            <h1>Erro na Geração do PDF</h1>
+            <p>Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
+            <p>Erro: {str(e)}</p>
+            <p><a href="javascript:history.back()">Voltar</a></p>
+        </body>
+        </html>
+        """
         return HttpResponse(error_html, content_type='text/html') 
