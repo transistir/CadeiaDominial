@@ -45,20 +45,45 @@ class CadeiaCompletaService:
     def _obter_tronco_principal_completo(self, imovel):
         """
         Obtém o tronco principal expandindo TODAS as origens
-        Usa a mesma lógica do HierarquiaArvoreService para garantir que todos os documentos sejam incluídos
+        Usa a mesma lógica da página ver-cadeia-dominial para garantir a sequência correta
         """
-        # Usar a mesma lógica do HierarquiaArvoreService para obter TODOS os documentos
+        # 1. Obter o tronco principal na sequência correta (como na página ver-cadeia-dominial)
+        tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel)
+        
+        # 2. Usar HierarquiaArvoreService para obter TODOS os documentos da cadeia
         from .hierarquia_arvore_service import HierarquiaArvoreService
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
         
-        # Extrair todos os documentos da árvore
+        # 3. Extrair todos os documentos da árvore
         todos_documentos = []
         for doc_node in arvore['documentos']:
             documento = Documento.objects.get(id=doc_node['id'])
             todos_documentos.append(documento)
         
-        # Ordenar hierarquicamente: Matrículas (maior número) -> Transcrições (maior número) -> Outros
-        return self._ordenar_documentos_hierarquicamente(todos_documentos)
+        # 4. Organizar: tronco principal primeiro, depois todos os outros documentos
+        documentos_organizados = []
+        documentos_processados = set()
+        
+        # Primeiro, adicionar o tronco principal na ordem correta
+        for documento in tronco_principal:
+            if documento.id not in documentos_processados:
+                documentos_organizados.append(documento)
+                documentos_processados.add(documento.id)
+        
+        # Depois, adicionar todos os outros documentos que não estão no tronco principal
+        # Ordenar por tipo e número para manter hierarquia
+        outros_documentos = []
+        for documento in todos_documentos:
+            if documento.id not in documentos_processados:
+                outros_documentos.append(documento)
+        
+        # Ordenar outros documentos hierarquicamente
+        outros_documentos_ordenados = self._ordenar_documentos_hierarquicamente(outros_documentos)
+        
+        for documento in outros_documentos_ordenados:
+            documentos_organizados.append(documento)
+        
+        return documentos_organizados
     
     def _obter_troncos_secundarios_completos(self, imovel):
         """
@@ -67,6 +92,44 @@ class CadeiaCompletaService:
         # Por enquanto, retornar lista vazia
         # TODO: Implementar lógica de troncos secundários
         return []
+    
+    def _expandir_todas_origens_documento(self, documento, documentos_processados=None):
+        """
+        Expande TODAS as origens de um documento (não apenas uma)
+        """
+        if documentos_processados is None:
+            documentos_processados = set()
+            
+        documentos_origem = []
+        
+        # Buscar lançamentos com origens
+        lancamentos = documento.lancamentos.filter(
+            origem__isnull=False
+        ).exclude(origem='')
+        
+        for lancamento in lancamentos:
+            if lancamento.origem:
+                # Extrair todas as origens (separadas por ';')
+                origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                
+                for origem_numero in origens:
+                    # Buscar documento de origem
+                    doc_origem = Documento.objects.filter(
+                        numero=origem_numero
+                    ).select_related('cartorio', 'tipo').first()
+                    
+                    if doc_origem and doc_origem.id not in documentos_processados:
+                        documentos_origem.append(doc_origem)
+                        documentos_processados.add(doc_origem.id)
+                        
+                        # Recursivamente expandir origens deste documento
+                        sub_origens = self._expandir_todas_origens_documento(doc_origem, documentos_processados)
+                        for sub_origem in sub_origens:
+                            if sub_origem.id not in documentos_processados:
+                                documentos_origem.append(sub_origem)
+                                documentos_processados.add(sub_origem.id)
+        
+        return documentos_origem
     
 
     
