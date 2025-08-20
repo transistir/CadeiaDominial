@@ -182,6 +182,25 @@ class CadeiaCompletaService:
         
         return documentos_processados
     
+    def _processar_documento_para_template(self, documento):
+        """
+        Processa um único documento para o formato do template
+        """
+        # Carregar lançamentos
+        lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
+            'pessoas__pessoa'
+        ).order_by('id')
+        
+        # Verificar se é importado
+        is_importado = documento.imovel != self.imovel_atual if self.imovel_atual else False
+        
+        return {
+            'documento': documento,
+            'lancamentos': lancamentos,
+            'is_importado': is_importado,
+            'origens_disponiveis': self._obter_origens_documento(documento)
+        }
+    
     def _obter_origens_documento(self, documento):
         """
         Obtém as origens disponíveis para um documento
@@ -217,29 +236,118 @@ class CadeiaCompletaService:
         partes = [parte.strip() for parte in origem_string.split(';') if parte.strip()]
         return partes
     
-    def _calcular_estatisticas_completas(self, cadeia_organizada):
-        """
-        Calcula estatísticas da cadeia completa
-        """
+    def _calcular_estatisticas_completas(self, cadeia_completa):
+        """Calcula estatísticas da cadeia completa"""
         total_documentos = 0
         total_lancamentos = 0
-        total_troncos = len(cadeia_organizada)
         documentos_importados = 0
         
-        for tronco in cadeia_organizada:
-            for item in tronco['documentos']:
-                total_documentos += 1
-                total_lancamentos += len(item['lancamentos'])
-                if item['is_importado']:
-                    documentos_importados += 1
+        # Verificar se é lista (formato antigo) ou dicionário (formato novo)
+        if isinstance(cadeia_completa, list):
+            # Formato antigo: lista de troncos
+            for tronco in cadeia_completa:
+                if isinstance(tronco, dict) and 'documentos' in tronco:
+                    total_documentos += len(tronco['documentos'])
+                    for doc in tronco['documentos']:
+                        if isinstance(doc, dict):
+                            total_lancamentos += len(doc.get('lancamentos', []))
+                            if doc.get('is_importado'):
+                                documentos_importados += 1
+        else:
+            # Formato novo: dicionário com tronco_principal e troncos_secundarios
+            # Contar documentos do tronco principal
+            if cadeia_completa.get('tronco_principal'):
+                total_documentos += len(cadeia_completa['tronco_principal'])
+                for doc in cadeia_completa['tronco_principal']:
+                    total_lancamentos += len(doc.get('lancamentos', []))
+                    if doc.get('is_importado'):
+                        documentos_importados += 1
+            
+            # Contar documentos dos troncos secundários
+            if cadeia_completa.get('troncos_secundarios'):
+                for tronco in cadeia_completa['troncos_secundarios']:
+                    total_documentos += len(tronco.get('documentos', []))
+                    for doc in tronco.get('documentos', []):
+                        total_lancamentos += len(doc.get('lancamentos', []))
+                        if doc.get('is_importado'):
+                            documentos_importados += 1
         
         return {
             'total_documentos': total_documentos,
             'total_lancamentos': total_lancamentos,
-            'total_troncos': total_troncos,
-            'documentos_importados': documentos_importados,
-            'percentual_importados': (documentos_importados / total_documentos * 100) if total_documentos > 0 else 0
+            'documentos_importados': documentos_importados
         }
+
+    def get_cadeia_completa_com_sequencia_personalizada(self, tis_id, imovel_id, sequencia_ids):
+        """
+        Obtém a cadeia completa com sequência personalizada de documentos
+        
+        Args:
+            tis_id: ID da Terra Indígena
+            imovel_id: ID do Imóvel
+            sequencia_ids: String com IDs dos documentos separados por vírgula
+        """
+        try:
+            # Obter imóvel
+            imovel = Imovel.objects.get(id=imovel_id, terra_indigena_id=tis_id)
+            
+            # Converter sequência de IDs em lista
+            ids_documentos = [int(id.strip()) for id in sequencia_ids.split(',') if id.strip().isdigit()]
+            
+            if not ids_documentos:
+                # Se não há IDs válidos, usar sequência padrão
+                return self.get_cadeia_completa(tis_id, imovel_id)
+            
+            # Buscar documentos na ordem especificada
+            documentos_ordenados = []
+            documentos_por_id = {}
+            
+            # Primeiro, buscar todos os documentos
+            documentos = Documento.objects.filter(id__in=ids_documentos)\
+                .select_related('cartorio', 'tipo', 'imovel')\
+                .prefetch_related('lancamentos', 'lancamentos__tipo')
+            
+            for doc in documentos:
+                documentos_por_id[doc.id] = doc
+            
+            # Ordenar conforme a sequência especificada
+            for doc_id in ids_documentos:
+                if doc_id in documentos_por_id:
+                    doc = documentos_por_id[doc_id]
+                    documentos_ordenados.append(doc)
+            
+            # Definir imovel_atual para o processamento
+            self.imovel_atual = imovel
+            
+            # Processar documentos para o template
+            documentos_processados = []
+            for doc in documentos_ordenados:
+                doc_processado = self._processar_documento_para_template(doc)
+                documentos_processados.append(doc_processado)
+            
+            # Organizar em estrutura hierárquica para o template (formato esperado pelo cadeia_completa_pdf.html)
+            cadeia_completa = [
+                {
+                    'tipo': 'tronco_principal',
+                    'titulo': '🌳 TRONCO PRINCIPAL',
+                    'documentos': documentos_processados
+                }
+            ]
+            
+            # Calcular estatísticas
+            estatisticas = self._calcular_estatisticas_completas(cadeia_completa)
+            
+            return {
+                'tis': imovel.terra_indigena_id,
+                'imovel': imovel,
+                'cadeia_completa': cadeia_completa,
+                'estatisticas': estatisticas,
+                'sequencia_personalizada': True
+            }
+            
+        except Exception as e:
+            # Em caso de erro, usar sequência padrão
+            return self.get_cadeia_completa(tis_id, imovel_id)
     
     def _ordenar_documentos_hierarquicamente(self, documentos):
         """

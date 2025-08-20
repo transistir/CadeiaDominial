@@ -875,3 +875,273 @@ document.addEventListener('DOMContentLoaded', function() {
     
     observer.observe(document.body, { childList: true, subtree: true });
 }); 
+
+// ========================================
+// MODAL DE SELEÇÃO DE SEQUÊNCIA
+// ========================================
+
+let documentosSequencia = [];
+
+// Extrair IDs da URL atual
+function extrairIdsDaUrl() {
+    const url = window.location.pathname;
+    const matches = url.match(/\/tis\/(\d+)\/imovel\/(\d+)/);
+    if (matches) {
+        tisId = matches[1];
+        imovelId = matches[2];
+    }
+}
+
+// Abrir modal de seleção de sequência
+function abrirModalSelecaoSequencia() {
+    extrairIdsDaUrl();
+    if (!tisId || !imovelId) {
+        alert('Erro: Não foi possível identificar o imóvel.');
+        return;
+    }
+    
+    document.getElementById('modalSelecaoSequencia').style.display = 'block';
+    carregarDocumentosArvore();
+}
+
+// Fechar modal
+function fecharModalSelecaoSequencia() {
+    document.getElementById('modalSelecaoSequencia').style.display = 'none';
+    documentosSequencia = [];
+}
+
+// Carregar documentos da árvore
+function carregarDocumentosArvore() {
+    const listaContainer = document.getElementById('documentosLista');
+    listaContainer.innerHTML = `
+        <div class="loading">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 18V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4.93 4.93L7.76 7.76" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16.24 16.24L19.07 19.07" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M18 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4.93 19.07L7.76 16.24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16.24 7.76L19.07 4.93" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Carregando documentos...
+        </div>
+    `;
+    
+    fetch(`/dominial/tis/${tisId}/imovel/${imovelId}/arvore-cadeia-dominial/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                documentosSequencia = data.documentos;
+                // Armazenar informação sobre quantos documentos são do tronco principal
+                window.troncosPrincipalCount = data.tronco_principal_count || 0;
+                renderizarDocumentosLista();
+            } else {
+                listaContainer.innerHTML = `
+                    <div class="error">
+                        <p>Erro ao carregar documentos: ${data.error}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            listaContainer.innerHTML = `
+                <div class="error">
+                    <p>Erro de conexão: ${error.message}</p>
+                </div>
+            `;
+        });
+}
+
+// Renderizar lista de documentos
+function renderizarDocumentosLista() {
+    const listaContainer = document.getElementById('documentosLista');
+    
+    if (documentosSequencia.length === 0) {
+        listaContainer.innerHTML = `
+            <div class="empty-state">
+                <p>Nenhum documento encontrado.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    const troncoCount = window.troncosPrincipalCount || 0;
+    
+    documentosSequencia.forEach((doc, index) => {
+        const isImportado = doc.is_importado ? 'importado' : '';
+        const isTroncoPrincipal = index < troncoCount ? 'tronco-principal' : '';
+        const badgeImportado = doc.is_importado ? '<span class="badge-importado">Importado</span>' : '';
+        const badgeTronco = index < troncoCount ? '<span class="badge-tronco">Tronco Principal</span>' : '';
+        
+        html += `
+            <div class="documento-item ${isImportado} ${isTroncoPrincipal}" data-index="${index}" draggable="true">
+                <div class="documento-drag-handle">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M8 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M8 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 6H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 12H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 18H3.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="documento-info">
+                    <div class="documento-numero">${doc.numero}</div>
+                    <div class="documento-tipo">${doc.tipo_display}</div>
+                    <div class="documento-detalhes">
+                        ${doc.detalhes} ${badgeImportado} ${badgeTronco}
+                        <small>(${doc.lancamentos_count} lanç.)</small>
+                    </div>
+                </div>
+                <div class="documento-acoes">
+                    ${index > 0 ? `
+                        <button class="btn-mover-cima" onclick="moverDocumento(${index}, -1)" title="Mover para cima">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M18 15L12 9L6 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                    ${index < documentosSequencia.length - 1 ? `
+                        <button class="btn-mover-baixo" onclick="moverDocumento(${index}, 1)" title="Mover para baixo">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                    <button class="btn-remover" onclick="removerDocumento(${index})" title="Remover da sequência">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    listaContainer.innerHTML = html;
+    configurarDragAndDrop();
+}
+
+// Mover documento na lista
+function moverDocumento(index, direcao) {
+    const novoIndex = index + direcao;
+    if (novoIndex >= 0 && novoIndex < documentosSequencia.length) {
+        const temp = documentosSequencia[index];
+        documentosSequencia[index] = documentosSequencia[novoIndex];
+        documentosSequencia[novoIndex] = temp;
+        renderizarDocumentosLista();
+    }
+}
+
+// Remover documento da lista
+function removerDocumento(index) {
+    if (confirm('Tem certeza que deseja remover este documento da sequência?')) {
+        documentosSequencia.splice(index, 1);
+        renderizarDocumentosLista();
+    }
+}
+
+// Ordenar por hierarquia (padrão)
+function ordenarPorHierarquia() {
+    documentosSequencia.sort((a, b) => {
+        // Primeiro por nível
+        if (a.nivel !== b.nivel) {
+            return a.nivel - b.nivel;
+        }
+        
+        // Depois por número (maior primeiro)
+        const numA = parseInt(a.numero.replace('M', '').replace('T', '')) || 0;
+        const numB = parseInt(b.numero.replace('M', '').replace('T', '')) || 0;
+        return numB - numA;
+    });
+    
+    renderizarDocumentosLista();
+}
+
+// Ordenar por número
+function ordenarPorNumero() {
+    documentosSequencia.sort((a, b) => {
+        const numA = parseInt(a.numero.replace('M', '').replace('T', '')) || 0;
+        const numB = parseInt(b.numero.replace('M', '').replace('T', '')) || 0;
+        return numB - numA;
+    });
+    
+    renderizarDocumentosLista();
+}
+
+// Configurar drag and drop
+function configurarDragAndDrop() {
+    const items = document.querySelectorAll('.documento-item');
+    
+    items.forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragend', handleDragEnd);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('drop', handleDrop);
+    });
+}
+
+function handleDragStart(e) {
+    e.target.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', e.target.dataset.index);
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('dragging');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    
+    const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
+    const dropIndex = parseInt(e.currentTarget.dataset.index);
+    
+    if (draggedIndex !== dropIndex) {
+        const temp = documentosSequencia[draggedIndex];
+        documentosSequencia[draggedIndex] = documentosSequencia[dropIndex];
+        documentosSequencia[dropIndex] = temp;
+        renderizarDocumentosLista();
+    }
+}
+
+// Exportar com sequência selecionada
+function exportarComSequenciaSelecionada() {
+    if (documentosSequencia.length === 0) {
+        alert('Nenhum documento selecionado para exportação.');
+        return;
+    }
+    
+    // Criar sequência de IDs dos documentos
+    const sequenciaIds = documentosSequencia.map(doc => doc.id).join(',');
+    
+    // Debug: mostrar informações no console
+    console.log('Exportando com sequência personalizada:');
+    console.log('Documentos na sequência:', documentosSequencia.length);
+    console.log('IDs:', sequenciaIds);
+    console.log('URL:', `/dominial/tis/${tisId}/imovel/${imovelId}/cadeia-completa/pdf/?sequencia=${sequenciaIds}`);
+    
+    // Redirecionar para exportação com sequência personalizada
+    const url = `/dominial/tis/${tisId}/imovel/${imovelId}/cadeia-completa/pdf/?sequencia=${sequenciaIds}`;
+    window.open(url, '_blank');
+    
+    // Fechar modal
+    fecharModalSelecaoSequencia();
+}
+
+// Fechar modal ao clicar fora
+window.onclick = function(event) {
+    const modal = document.getElementById('modalSelecaoSequencia');
+    if (event.target === modal) {
+        fecharModalSelecaoSequencia();
+    }
+} 

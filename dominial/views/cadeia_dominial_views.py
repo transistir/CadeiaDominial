@@ -309,49 +309,217 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
 
 @login_required
 def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
-    """
-    Exporta a cadeia dominial COMPLETA em formato PDF
-    """
     try:
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
         
-        # Obter dados da cadeia completa
+        # Verificar se há sequência personalizada
+        sequencia_ids = request.GET.get('sequencia')
+        
         from ..services.cadeia_completa_service import CadeiaCompletaService
         service = CadeiaCompletaService()
-        context = service.get_cadeia_completa(tis_id, imovel_id)
         
-        # Renderizar template HTML para PDF
+        if sequencia_ids:
+            # Usar sequência personalizada
+            context = service.get_cadeia_completa_com_sequencia_personalizada(tis_id, imovel_id, sequencia_ids)
+        else:
+            # Usar sequência padrão
+            context = service.get_cadeia_completa(tis_id, imovel_id)
+        
         html_string = render_to_string('dominial/cadeia_completa_pdf.html', context)
-        
-        # Configurar CSS para PDF
         css_path = os.path.join(settings.STATIC_ROOT, 'dominial', 'css', 'cadeia_completa_pdf.css')
         if not os.path.exists(css_path):
             css_path = os.path.join(settings.STATICFILES_DIRS[0], 'dominial', 'css', 'cadeia_completa_pdf.css')
-        
-        # Gerar PDF
         pdf = HTML(string=html_string, base_url=request.build_absolute_uri('/')).write_pdf(
             stylesheets=[css_path] if os.path.exists(css_path) else None
         )
-        
-        # Configurar resposta HTTP
         response = HttpResponse(pdf, content_type='application/pdf')
         filename = f"cadeia_completa_{imovel.matricula}_{date.today().strftime('%Y%m%d')}.pdf"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
         return response
-        
     except Exception as e:
-        # Em caso de erro, retornar uma página de erro simples
         error_html = f"""
         <html>
         <head><title>Erro na Geração do PDF</title></head>
-        <body>
-            <h1>Erro na Geração do PDF</h1>
-            <p>Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
-            <p>Erro: {str(e)}</p>
-            <p><a href="javascript:history.back()">Voltar</a></p>
+        <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8f9fa;">
+            <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <h1 style="color: #dc3545; margin-bottom: 20px;">❌ Erro na Geração do PDF</h1>
+                <p style="color: #6c757d; margin-bottom: 15px;">Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; border-left: 4px solid #dc3545;">
+                    <strong>Erro:</strong> {str(e)}
+                </div>
+                <div style="margin-top: 20px;">
+                    <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">← Voltar</a>
+                </div>
+            </div>
         </body>
         </html>
         """
-        return HttpResponse(error_html, content_type='text/html') 
+        return HttpResponse(error_html, content_type='text/html')
+
+@login_required
+def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
+    """Retorna os dados da árvore da cadeia dominial para o modal de seleção de sequência"""
+    try:
+        tis = get_object_or_404(TIs, id=tis_id)
+        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        
+        # 1. Primeiro obter o tronco principal na sequência correta
+        tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+        
+        # 2. Obter todos os documentos da árvore
+        arvore = HierarquiaService.construir_arvore_cadeia_dominial(imovel)
+        
+        # 3. Organizar documentos: tronco principal primeiro, depois o resto
+        documentos_organizados = []
+        documentos_processados_ids = set()
+        
+        # Primeiro, adicionar tronco principal
+        for documento in tronco_principal:
+            documento_processado = {
+                'id': documento.id,
+                'numero': documento.numero,
+                'tipo': documento.tipo.tipo,
+                'tipo_display': documento.tipo.get_tipo_display(),
+                'data': documento.data.strftime('%d/%m/%Y'),
+                'cartorio': documento.cartorio.nome,
+                'livro': documento.livro or '',
+                'folha': documento.folha or '',
+                'origem': '',  # Tronco principal não tem origem específica
+                'nivel': 0,  # Considerar tronco principal como nível 0
+                'is_importado': documento.imovel != imovel,
+                'is_compartilhado': False,
+                'lancamentos_count': documento.lancamentos.count(),
+                'detalhes': f"{documento.data.strftime('%d/%m/%Y')} - {documento.cartorio.nome}"
+            }
+            documentos_organizados.append(documento_processado)
+            documentos_processados_ids.add(documento.id)
+        
+        # Depois, organizar outros documentos seguindo lógica hierárquica
+        outros_documentos = []
+        for doc in arvore['documentos']:
+            if doc['id'] not in documentos_processados_ids:
+                documento_processado = {
+                    'id': doc['id'],
+                    'numero': doc['numero'],
+                    'tipo': doc['tipo'],
+                    'tipo_display': doc['tipo_display'],
+                    'data': doc['data'],
+                    'cartorio': doc['cartorio'],
+                    'livro': doc['livro'],
+                    'folha': doc['folha'],
+                    'origem': doc['origem'],
+                    'nivel': doc['nivel'],
+                    'is_importado': doc.get('is_importado', False),
+                    'is_compartilhado': doc.get('is_compartilhado', False),
+                    'lancamentos_count': len(doc.get('lancamentos', [])),
+                    'detalhes': f"{doc['data']} - {doc['cartorio']}"
+                }
+                outros_documentos.append(documento_processado)
+        
+        # Organizar outros documentos seguindo lógica hierárquica
+        outros_organizados = organizar_documentos_hierarquicamente(outros_documentos, arvore)
+        
+        # Adicionar outros documentos após o tronco principal
+        documentos_organizados.extend(outros_organizados)
+        
+        response_data = {
+            'success': True,
+            'documentos': documentos_organizados,
+            'total_documentos': len(documentos_organizados),
+            'tronco_principal_count': len(tronco_principal),
+            'imovel': {
+                'id': imovel.id,
+                'nome': imovel.nome,
+                'matricula': imovel.matricula
+            }
+        }
+        
+        return JsonResponse(response_data)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+def organizar_documentos_hierarquicamente(documentos, arvore):
+    """
+    Organiza documentos seguindo lógica hierárquica:
+    1. Maior número do menor nível
+    2. Expandir origens do documento (maior número primeiro)
+    3. Repetir até incluir todos os documentos
+    """
+    if not documentos:
+        return []
+    
+    # Criar mapa de documentos por ID para facilitar busca
+    docs_por_id = {doc['id']: doc for doc in documentos}
+    
+    # Criar mapa de conexões pai-filho
+    conexoes = {}
+    for con in arvore.get('conexoes', []):
+        if con['from'] in docs_por_id and con['to'] in docs_por_id:
+            if con['to'] not in conexoes:
+                conexoes[con['to']] = []
+            conexoes[con['to']].append(con['from'])
+    
+    # Organizar documentos por nível
+    docs_por_nivel = {}
+    for doc in documentos:
+        nivel = doc['nivel']
+        if nivel not in docs_por_nivel:
+            docs_por_nivel[nivel] = []
+        docs_por_nivel[nivel].append(doc)
+    
+    # Ordenar documentos em cada nível por número (maior primeiro)
+    for nivel in docs_por_nivel:
+        docs_por_nivel[nivel].sort(key=lambda x: 
+            -int(x['numero'].replace('M', '').replace('T', '')) if x['numero'].replace('M', '').replace('T', '').isdigit() else 0
+        )
+    
+    # Algoritmo de organização hierárquica
+    documentos_organizados = []
+    visitados = set()
+    
+    # Processar por níveis, do menor para o maior
+    niveis_ordenados = sorted(docs_por_nivel.keys())
+    
+    for nivel in niveis_ordenados:
+        docs_nivel = docs_por_nivel[nivel]
+        
+        for doc in docs_nivel:
+            if doc['id'] not in visitados:
+                # Adicionar documento atual
+                documentos_organizados.append(doc)
+                visitados.add(doc['id'])
+                
+                # Expandir origens deste documento
+                expandir_origens_hierarquicamente(doc, conexoes, docs_por_id, documentos_organizados, visitados)
+    
+    return documentos_organizados
+
+def expandir_origens_hierarquicamente(documento, conexoes, docs_por_id, documentos_organizados, visitados):
+    """
+    Expande origens de um documento seguindo lógica hierárquica
+    """
+    if documento['id'] not in conexoes:
+        return
+    
+    # Obter origens do documento
+    origens_ids = conexoes[documento['id']]
+    origens = [docs_por_id[origem_id] for origem_id in origens_ids if origem_id in docs_por_id]
+    
+    # Ordenar origens por número (maior primeiro)
+    origens.sort(key=lambda x: 
+        -int(x['numero'].replace('M', '').replace('T', '')) if x['numero'].replace('M', '').replace('T', '').isdigit() else 0
+    )
+    
+    # Adicionar origens na ordem
+    for origem in origens:
+        if origem['id'] not in visitados:
+            documentos_organizados.append(origem)
+            visitados.add(origem['id'])
+            
+            # Recursivamente expandir origens desta origem
+            expandir_origens_hierarquicamente(origem, conexoes, docs_por_id, documentos_organizados, visitados) 
