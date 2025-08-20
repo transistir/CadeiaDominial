@@ -203,7 +203,7 @@
                                     <!-- Área do imóvel -->
                                     <td>{{ lancamento.area|default_if_none:"-" }}</td>
                                     <!-- Origem - pode ter múltiplas origens separadas por ';' -->
-                                    <td>
+                                    <!-- <td>
                                       {% if lancamento.origem %}
                                         {% if ';' in lancamento.origem %}
                                           {# Se tem múltiplas origens, quebra por ';' e mostra cada uma #}
@@ -217,7 +217,30 @@
                                       {% else %}
                                         -
                                       {% endif %}
-                                    </td>
+                                    </td> -->
+                                    <td>
+                                        {% if lancamento.origem %}
+                                          {% if ';' in lancamento.origem %}
+                                            {% for origem in lancamento.origem|split:';' %}
+                                              <div>
+                                                {{ origem|strip }}
+                                                {% with cartorio_nome=lancamento|origem_cartorio_especifico:origem %}
+                                                  {% if cartorio_nome %}
+                                                    <small class="text-muted">({{ cartorio_nome }})</small>
+                                                  {% endif %}
+                                                {% endwith %}
+                                              </div>
+                                            {% endfor %}
+                                          {% else %}
+                                            {{ lancamento.origem }}
+                                            {% if lancamento.cartorio_origem %}
+                                              <small class="text-muted">({{ lancamento.cartorio_origem.nome }})</small>
+                                            {% endif %}
+                                          {% endif %}
+                                        {% else %}
+                                          -
+                                        {% endif %}
+                                      </td>
                                     <!-- Observações do lançamento -->
                                     <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
                                 </tr>
