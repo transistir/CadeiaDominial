@@ -398,3 +398,356 @@
     color: #fff;
     border-color: #007bff;
 } 
+
+/* Modal de Seleção de Sequência */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 2% auto;
+    padding: 0;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 1000px;
+    max-height: 90vh;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-bottom: 1px solid #e9ecef;
+    background: linear-gradient(135deg, #2c5aa0 0%, #1e3a8a 100%);
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-header h2 svg {
+    color: #60a5fa;
+}
+
+.close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close:hover {
+    color: #fff;
+}
+
+.modal-body {
+    padding: 25px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.modal-info {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border-left: 4px solid #2c5aa0;
+}
+
+.modal-info p {
+    margin: 5px 0;
+    color: #495057;
+}
+
+.sequencia-container {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+}
+
+.sequencia-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    border-radius: 6px 6px 0 0;
+}
+
+.sequencia-header h3 {
+    margin: 0;
+    color: #2c5aa0;
+    font-size: 1.2rem;
+}
+
+.sequencia-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.875rem;
+    border-radius: 4px;
+}
+
+.documentos-lista {
+    padding: 20px;
+    min-height: 200px;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.loading svg {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.documento-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    margin-bottom: 8px;
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    cursor: move;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.documento-item:hover {
+    border-color: #2c5aa0;
+    box-shadow: 0 2px 8px rgba(44, 90, 160, 0.1);
+}
+
+.documento-item.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+.documento-item.drag-over {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.documento-drag-handle {
+    cursor: move;
+    padding: 5px;
+    margin-right: 10px;
+    color: #6c757d;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.documento-drag-handle:hover {
+    background-color: #e9ecef;
+}
+
+.documento-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.documento-numero {
+    font-weight: bold;
+    color: #2c5aa0;
+    min-width: 80px;
+}
+
+.documento-tipo {
+    background-color: #e9ecef;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #495057;
+    min-width: 80px;
+    text-align: center;
+}
+
+.documento-detalhes {
+    flex: 1;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.documento-acoes {
+    display: flex;
+    gap: 5px;
+}
+
+.documento-acoes button {
+    padding: 4px 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.documento-acoes button:hover {
+    background-color: #e9ecef;
+}
+
+.documento-acoes .btn-remover {
+    color: #dc3545;
+}
+
+.documento-acoes .btn-remover:hover {
+    background-color: #f8d7da;
+}
+
+.documento-acoes .btn-mover-cima {
+    color: #28a745;
+}
+
+.documento-acoes .btn-mover-cima:hover {
+    background-color: #d4edda;
+}
+
+.documento-acoes .btn-mover-baixo {
+    color: #007bff;
+}
+
+.documento-acoes .btn-mover-baixo:hover {
+    background-color: #d1ecf1;
+}
+
+.documento-item.importado {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.documento-item.importado .documento-tipo {
+    background-color: #ffc107;
+    color: #856404;
+}
+
+.documento-item.tronco-principal {
+    background-color: #e8f5e8;
+    border-color: #28a745;
+    border-left: 4px solid #28a745;
+}
+
+.documento-item.tronco-principal:hover {
+    border-color: #1e7e34;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+}
+
+
+
+.badge-tronco {
+    background-color: #28a745;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    margin-left: 5px;
+}
+
+.badge-importado {
+    background-color: #ffc107;
+    color: #856404;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    margin-left: 5px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 20px 25px;
+    border-top: 1px solid #e9ecef;
+    background-color: #f8f9fa;
+    border-radius: 0 0 8px 8px;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
+    }
+    
+    .modal-header {
+        padding: 15px 20px;
+    }
+    
+    .modal-header h2 {
+        font-size: 1.2rem;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .sequencia-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+    
+    .sequencia-actions {
+        justify-content: center;
+    }
+    
+    .documento-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .documento-acoes {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+    }
+} 
