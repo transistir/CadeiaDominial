@@ -58,7 +58,13 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
         # Delegar a construção da árvore para um service/utilitário
         arvore = HierarquiaService.construir_arvore_cadeia_dominial(imovel)
-        return JsonResponse(arvore, safe=False)
+        
+        # Adicionar headers para evitar cache
+        response = JsonResponse(arvore, safe=False)
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -107,7 +107,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .text('Carregando árvore...');
 
     // Buscar dados da árvore (corrigido)
-    fetch(`/dominial/cadeia-dominial/${window.tisId}/${window.imovelId}/arvore/`)
+    const timestamp = new Date().getTime();
+    fetch(`/dominial/cadeia-dominial/${window.tisId}/${window.imovelId}/arvore/?t=${timestamp}`)
         .then(response => response.json())
         .then(data => {
             // Remover indicador de carregamento
@@ -226,6 +227,15 @@ function converterParaArvoreD3(data) {
             }
         }
     }
+    
+    // Adicionar documentos isolados (que não foram conectados)
+    data.documentos.forEach(doc => {
+        if (!visitados.has(doc.numero)) {
+            // Adicionar como filho da raiz para garantir que apareça
+            if (!raiz.children) raiz.children = [];
+            raiz.children.push(doc);
+        }
+    });
     
     // Armazenar todas as conexões originais para renderização extra
     raiz.conexoesExtras = data.conexoes;
@@ -391,6 +401,15 @@ function corrigirSobreposicoes(root) {
 }
 
 // Função otimizada: Aplicar espaçamento adicional para evitar sobreposições
+function ajustarPosicoesPorNivel(root) {
+    // Ajustar posições horizontais baseado no campo 'nivel' dos dados
+    root.descendants().forEach(node => {
+        const nivel = node.data.nivel || 0;
+        // Posicionar horizontalmente baseado no nível (200px por nível)
+        node.y = nivel * 200 + 120;
+    });
+}
+
 function aplicarEspacamentoAdicional(root) {
     // Agrupar nós por profundidade
     const niveis = {};
@@ -478,6 +497,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     // Configurar layout da árvore para layout horizontal correto
     const treeLayout = d3.tree()
         .size([height, width - 20]) // Reduzir ao máximo a margem para mais espaço horizontal
+        .nodeSize([80, 200]) // [altura, largura] - 200px entre níveis
         .separation((a, b) => {
             // Separação baseada na quantidade de irmãos - AUMENTADA
             const irmaos = a.parent ? a.parent.children.length : 1;
@@ -511,6 +531,9 @@ function renderArvoreD3(data, svgGroup, width, height) {
         });
     
     treeLayout(root);
+    
+    // Ajustar posições baseado no campo 'nivel' dos dados
+    ajustarPosicoesPorNivel(root);
     
     // Aplicar correção de sobreposições melhorada
     corrigirSobreposicoes(root);

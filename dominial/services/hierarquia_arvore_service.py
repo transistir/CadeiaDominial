@@ -458,37 +458,114 @@ class HierarquiaArvoreService:
     @staticmethod
     def _calcular_niveis_conectados(arvore, niveis_hierarquicos, matricula_atual):
         """
-        Calcula níveis para documentos conectados baseado na hierarquia de lançamentos
-        Lógica simples: nível 0 (matrícula atual) → nível 1 (origens dos lançamentos do nível 0) → nível 2 (origens dos lançamentos do nível 1)
+        Calcula níveis para documentos conectados seguindo a regra:
+        - Documento origem sempre fica um nível acima do documento que o originou
+        - Quando um documento é origem de múltiplos documentos, herda o nível maior + 1
         """
         if not matricula_atual:
             return
         
-        # Usar BFS para calcular níveis corretamente
-        fila = deque([(matricula_atual, 0)])
-        visitados = set()
+        # Mapear conexões
+        origens_por_documento = {}  # documento -> [origens]
+        documentos_por_origem = {}  # origem -> [documentos que a referenciam]
         
-        while fila:
-            documento_atual, nivel_atual = fila.popleft()
+        for conexao in arvore['conexoes']:
+            origem = conexao['from']
+            destino = conexao['to']
             
-            if documento_atual in visitados:
-                continue
+            # Adicionar origem ao documento destino
+            if destino not in origens_por_documento:
+                origens_por_documento[destino] = []
+            origens_por_documento[destino].append(origem)
+            
+            # Adicionar documento destino à origem
+            if origem not in documentos_por_origem:
+                documentos_por_origem[origem] = []
+            documentos_por_origem[origem].append(destino)
+        
+        # Começar com a matrícula atual no nível 0
+        niveis_hierarquicos[matricula_atual] = 0
+        
+        # Aplicar níveis manuais primeiro
+        for doc_node in arvore['documentos']:
+            if doc_node.get('nivel_manual') is not None:
+                niveis_hierarquicos[doc_node['numero']] = doc_node['nivel_manual']
+        
+        # Calcular níveis usando algoritmo de ordenação topológica
+        # Processar documentos em múltiplas iterações até estabilizar
+        mudancas = True
+        iteracao = 0
+        max_iteracoes = 100  # Evitar loop infinito
+        
+        while mudancas and iteracao < max_iteracoes:
+            mudancas = False
+            iteracao += 1
+            
+            # Para cada documento, calcular seu nível
+            for doc_node in arvore['documentos']:
+                numero_doc = doc_node['numero']
                 
-            visitados.add(documento_atual)
-            niveis_hierarquicos[documento_atual] = nivel_atual
-            
-            # Encontrar todos os documentos que são referenciados como origem em lançamentos do documento atual
-            documentos_referenciados = set()
-            for conexao in arvore['conexoes']:
-                if conexao['to'] == documento_atual:
-                    documentos_referenciados.add(conexao['from'])
-            
-            # Adicionar documentos referenciados à fila com nível + 1
-            for doc_ref in documentos_referenciados:
-                if doc_ref not in visitados:
-                    fila.append((doc_ref, nivel_atual + 1))
+                # Pular se já tem nível manual definido ou é a matrícula atual
+                if numero_doc in niveis_hierarquicos and doc_node.get('nivel_manual') is not None:
+                    continue
+                if numero_doc == matricula_atual:
+                    continue
+                
+                # Calcular nível baseado nas origens/referenciadores
+                nivel_calculado = HierarquiaArvoreService._calcular_nivel_documento(
+                    numero_doc, origens_por_documento, documentos_por_origem, niveis_hierarquicos
+                )
+                
+                # Se o nível mudou, atualizar
+                nivel_atual = niveis_hierarquicos.get(numero_doc, 0)
+                if nivel_calculado != nivel_atual:
+                    niveis_hierarquicos[numero_doc] = nivel_calculado
+                    mudancas = True
         
-        # Para documentos que não foram visitados (isolados), atribuir nível 0
+        # Para documentos que não foram processados (isolados), atribuir nível 0
         for doc_node in arvore['documentos']:
             if doc_node['numero'] not in niveis_hierarquicos:
-                niveis_hierarquicos[doc_node['numero']] = 0 
+                niveis_hierarquicos[doc_node['numero']] = 0
+        
+        # Para documentos que não foram processados (isolados), atribuir nível 0
+        for doc_node in arvore['documentos']:
+            if doc_node['numero'] not in niveis_hierarquicos:
+                niveis_hierarquicos[doc_node['numero']] = 0
+    
+    @staticmethod
+    def _calcular_nivel_documento(numero_doc, origens_por_documento, documentos_por_origem, niveis_hierarquicos):
+        """
+        Calcula o nível de um documento específico seguindo as regras:
+        1. Se é origem de outros documentos, nível = max(níveis dos documentos que o referenciam) + 1
+        2. Se não é origem, nível = max(níveis das suas origens) + 1
+        """
+        # Verificar se este documento é origem de outros
+        if numero_doc in documentos_por_origem:
+            # Este documento é origem de outros documentos
+            documentos_referenciadores = documentos_por_origem[numero_doc]
+            
+            # Encontrar o maior nível entre os documentos que o referenciam
+            max_nivel_referenciadores = 0
+            for doc_ref in documentos_referenciadores:
+                nivel_ref = niveis_hierarquicos.get(doc_ref, 0)
+                max_nivel_referenciadores = max(max_nivel_referenciadores, nivel_ref)
+            
+            # Nível = maior nível dos referenciadores + 1
+            return max_nivel_referenciadores + 1
+        
+        # Verificar se este documento tem origens
+        elif numero_doc in origens_por_documento:
+            # Este documento tem origens
+            origens = origens_por_documento[numero_doc]
+            
+            # Encontrar o maior nível entre as origens
+            max_nivel_origens = 0
+            for origem in origens:
+                nivel_origem = niveis_hierarquicos.get(origem, 0)
+                max_nivel_origens = max(max_nivel_origens, nivel_origem)
+            
+            # Nível = maior nível das origens + 1
+            return max_nivel_origens + 1
+        
+        # Documento isolado (sem origens nem referenciadores)
+        return 0 
