@@ -3,6 +3,74 @@
    ======================================== */
 
 /* ========================================
+   AUTOCOMPLETE COM SUGESTÕES
+   ======================================== */
+.autocomplete-suggestion-title {
+    background: #e3f2fd;
+    color: #1976d2;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    border-bottom: 1px solid #bbdefb;
+    margin: 0;
+}
+
+.autocomplete-suggestion.sugestao {
+    background: #f3e5f5;
+    border-left: 3px solid #9c27b0;
+    position: relative;
+}
+
+.autocomplete-suggestion.sugestao:hover {
+    background: #e1bee7;
+}
+
+.autocomplete-suggestion.sugestao .cartorio-nome {
+    font-weight: 600;
+    color: #4a148c;
+    display: block;
+}
+
+.autocomplete-suggestion.sugestao .cartorio-info {
+    font-size: 0.8rem;
+    color: #666;
+    display: block;
+    margin-top: 2px;
+}
+
+/* Campo com sugestões ativas */
+.cartorio-origem-nome.sugestoes-ativas {
+    border-color: #9c27b0;
+    box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.2);
+}
+
+/* Garantir que as sugestões tenham prioridade visual */
+.autocomplete-suggestions {
+    z-index: 9999 !important;
+    position: relative !important;
+}
+
+.autocomplete-suggestions.sugestoes-ativas {
+    z-index: 9999 !important;
+}
+
+/* Opção "Adicionar novo cartório" */
+.autocomplete-suggestion.adicionar-cartorio {
+    background: #e8f5e8;
+    border-left: 3px solid #28a745;
+    border-top: 1px solid #d4edda;
+}
+
+.autocomplete-suggestion.adicionar-cartorio:hover {
+    background: #d1ecf1;
+}
+
+.autocomplete-suggestion.adicionar-cartorio .cartorio-nome {
+    color: #155724;
+    font-weight: 600;
+}
+
+/* ========================================
    BLOCO DE INFORMAÇÕES DO DOCUMENTO
    ======================================== */
 .field-group h4 {

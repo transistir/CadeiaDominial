@@ -108,6 +108,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof gerarNumeroLancamento === 'function') {
                 gerarNumeroLancamento();
             }
+            
+            // Ativar sugestões inteligentes para cartório da origem
+            ativarSugestoesCartorioOrigem();
+        } else {
+            // Desativar sugestões quando não for início de matrícula
+            desativarSugestoesCartorioOrigem();
         }
     }
     
@@ -680,6 +686,361 @@ function setupOrigemAutocomplete() {
             setupCartorioAutocomplete(input, hidden, suggestions);
         }
     });
+}
+
+// Função para ativar sugestões inteligentes do cartório da origem
+function ativarSugestoesCartorioOrigem() {
+    console.log('Ativando sugestões do cartório da origem...');
+    const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
+    console.log('Campos de cartório encontrados:', cartorioOrigemInputs.length);
+    
+    cartorioOrigemInputs.forEach((input, index) => {
+        const hidden = input.closest('.autocomplete-container').querySelector('.cartorio-origem-id');
+        const suggestions = input.closest('.autocomplete-container').querySelector('.cartorio-origem-suggestions');
+        
+        console.log(`Campo ${index}:`, { input: !!input, hidden: !!hidden, suggestions: !!suggestions });
+        
+        if (input && hidden && suggestions) {
+            // Adicionar classe para identificar que está em modo sugestões
+            input.classList.add('sugestoes-ativas');
+            
+            // Mostrar sugestões quando o campo recebe foco (se estiver vazio)
+            input.addEventListener('focus', function() {
+                console.log('Campo de cartório recebeu foco, valor:', this.value);
+                if (!this.value.trim()) {
+                    console.log('Mostrando sugestões...');
+                    // Usar setTimeout para evitar conflitos com outros scripts
+                    setTimeout(() => {
+                        mostrarSugestoesCartorioOrigem(this, hidden, suggestions);
+                    }, 100);
+                }
+            });
+            
+            // Também mostrar sugestões no clique
+            input.addEventListener('click', function() {
+                console.log('Campo de cartório clicado, valor:', this.value);
+                if (!this.value.trim()) {
+                    console.log('Mostrando sugestões no clique...');
+                    setTimeout(() => {
+                        mostrarSugestoesCartorioOrigem(this, hidden, suggestions);
+                    }, 100);
+                }
+            });
+            
+            // Buscar cartórios quando o usuário digita
+            input.addEventListener('input', function() {
+                const query = this.value.trim();
+                console.log('Usuário digitando:', query);
+                
+                if (query.length >= 2) {
+                    console.log('Buscando cartórios para:', query);
+                    buscarCartoriosOrigem(this, hidden, suggestions, query);
+                } else if (query.length === 0) {
+                    // Se o campo estiver vazio, mostrar sugestões
+                    console.log('Campo vazio, mostrando sugestões...');
+                    setTimeout(() => {
+                        mostrarSugestoesCartorioOrigem(this, hidden, suggestions);
+                    }, 100);
+                } else {
+                    // Limpar sugestões se a query for muito curta
+                    suggestions.style.display = 'none';
+                }
+            });
+            
+            // Modificar o placeholder para indicar sugestões
+            input.placeholder = 'Digite o nome do cartório ou clique para ver sugestões';
+            console.log('Sugestões ativadas para campo', index);
+        }
+    });
+}
+
+// Função para desativar sugestões inteligentes do cartório da origem
+function desativarSugestoesCartorioOrigem() {
+    const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
+    
+    cartorioOrigemInputs.forEach((input) => {
+        // Remover classe de sugestões ativas
+        input.classList.remove('sugestoes-ativas');
+        
+        // Restaurar placeholder original
+        input.placeholder = 'Digite o nome do cartório';
+        
+        // Remover event listeners de sugestões (se existirem)
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+    });
+}
+
+// Função auxiliar para obter ID do imóvel da URL
+function obterImovelIdDaUrl() {
+    const url = window.location.pathname;
+    const match = url.match(/imovel\/(\d+)/);
+    return match ? match[1] : null;
+}
+
+// Função para buscar cartórios da origem (busca normal)
+function buscarCartoriosOrigem(input, hidden, suggestions, query) {
+    console.log('Fazendo busca por cartórios de imóveis:', query);
+    
+    // Fazer requisição para buscar cartórios de imóveis (filtrados)
+    fetch(`/dominial/cartorio-imoveis-autocomplete/?q=${encodeURIComponent(query)}`)
+        .then(response => {
+            console.log('Resposta da busca recebida:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados da busca recebidos:', data);
+            suggestions.innerHTML = '';
+
+            if (data && data.length > 0) {
+                console.log('Criando resultados da busca:', data.length);
+                
+                data.forEach(cartorio => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-suggestion';
+                    div.innerHTML = `
+                        <span class="cartorio-nome">${cartorio.nome}</span>
+                        <span class="cartorio-info">${cartorio.cidade || ''}</span>
+                    `;
+                    div.addEventListener('click', function() {
+                        input.value = cartorio.nome;
+                        hidden.value = cartorio.id;
+                        suggestions.style.display = 'none';
+                        input.classList.remove('error');
+                    });
+                    suggestions.appendChild(div);
+                });
+
+                // Adicionar opção "Adicionar novo cartório"
+                const adicionarDiv = document.createElement('div');
+                adicionarDiv.className = 'autocomplete-suggestion adicionar-cartorio';
+                adicionarDiv.innerHTML = `
+                    <span class="cartorio-nome">➕ Adicionar novo cartório</span>
+                `;
+                adicionarDiv.addEventListener('click', function() {
+                    abrirModalNovoCartorio(input, hidden, suggestions);
+                });
+                suggestions.appendChild(adicionarDiv);
+
+                suggestions.style.display = 'block';
+                suggestions.style.zIndex = '9999';
+                console.log('Resultados da busca exibidos');
+            } else {
+                console.log('Nenhum cartório de imóveis encontrado na busca');
+                suggestions.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao buscar cartórios de imóveis:', error);
+        });
+}
+
+// Função para abrir modal de novo cartório
+function abrirModalNovoCartorio(input, hidden, suggestions) {
+    console.log('Abrindo modal de novo cartório');
+    
+    // Fechar sugestões
+    suggestions.style.display = 'none';
+    
+    // Criar modal se não existir
+    let modal = document.getElementById('modal-novo-cartorio-lancamento');
+    if (!modal) {
+        modal = criarModalNovoCartorio();
+        document.body.appendChild(modal);
+    }
+    
+    // Mostrar modal
+    modal.style.display = 'flex';
+    
+    // Configurar callback para quando o cartório for criado
+    modal._callback = function(cartorio) {
+        console.log('Cartório criado:', cartorio);
+        input.value = cartorio.nome;
+        hidden.value = cartorio.id;
+        input.classList.remove('error');
+    };
+}
+
+// Função para criar o modal de novo cartório
+function criarModalNovoCartorio() {
+    const modal = document.createElement('div');
+    modal.id = 'modal-novo-cartorio-lancamento';
+    modal.className = 'modal';
+    modal.style.display = 'none';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Adicionar Novo Cartório</h3>
+                <span class="close" id="fechar-modal-cartorio-lancamento">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="form-novo-cartorio-lancamento">
+                    <div class="form-group">
+                        <label for="novo-cartorio-nome-lancamento">Nome do Cartório:</label>
+                        <input type="text" id="novo-cartorio-nome-lancamento" name="nome" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="novo-cartorio-cns-lancamento">CNS:</label>
+                        <input type="text" id="novo-cartorio-cns-lancamento" name="cns" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="novo-cartorio-estado-lancamento">Estado:</label>
+                        <input type="text" id="novo-cartorio-estado-lancamento" name="estado" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="novo-cartorio-cidade-lancamento">Cidade:</label>
+                        <input type="text" id="novo-cartorio-cidade-lancamento" name="cidade" class="form-control" required>
+                    </div>
+                    <div class="modal-buttons">
+                        <button type="button" class="btn btn-secondary" id="cancelar-novo-cartorio-lancamento">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar Cartório</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    // Configurar eventos do modal
+    configurarEventosModalNovoCartorio(modal);
+    
+    return modal;
+}
+
+// Função para configurar eventos do modal
+function configurarEventosModalNovoCartorio(modal) {
+    const fecharBtn = modal.querySelector('#fechar-modal-cartorio-lancamento');
+    const cancelarBtn = modal.querySelector('#cancelar-novo-cartorio-lancamento');
+    const form = modal.querySelector('#form-novo-cartorio-lancamento');
+    
+    // Fechar modal
+    fecharBtn.onclick = function() {
+        modal.style.display = 'none';
+        form.reset();
+    };
+    
+    cancelarBtn.onclick = function() {
+        modal.style.display = 'none';
+        form.reset();
+    };
+    
+    // Submeter novo cartório via AJAX
+    form.onsubmit = async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const data = {
+            nome: document.getElementById('novo-cartorio-nome-lancamento').value,
+            cns: document.getElementById('novo-cartorio-cns-lancamento').value,
+            estado: document.getElementById('novo-cartorio-estado-lancamento').value,
+            cidade: document.getElementById('novo-cartorio-cidade-lancamento').value,
+            endereco: '',
+            telefone: '',
+            email: ''
+        };
+        
+        try {
+            const resp = await fetch('/dominial/criar-cartorio/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await resp.json();
+            if (result.success) {
+                // Fechar modal
+                modal.style.display = 'none';
+                form.reset();
+                
+                // Chamar callback se existir
+                if (modal._callback) {
+                    modal._callback(result.cartorio);
+                }
+            } else {
+                alert(result.error || 'Erro ao criar cartório.');
+            }
+        } catch (err) {
+            alert('Erro ao criar cartório.');
+        }
+    };
+}
+
+// Função para mostrar sugestões do cartório da origem
+function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
+    // Obter ID do imóvel da URL
+    const imovelId = obterImovelIdDaUrl();
+    
+    if (!imovelId) {
+        console.log('ID do imóvel não encontrado na URL');
+        return;
+    }
+    
+    // Fazer requisição para obter sugestões baseadas no histórico
+    console.log('Fazendo requisição para:', `/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`);
+    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`)
+        .then(response => {
+            console.log('Resposta recebida:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados recebidos:', data);
+            suggestions.innerHTML = '';
+            
+            if (data.results && data.results.length > 0) {
+                console.log('Criando sugestões:', data.results.length);
+                // Mostrar título das sugestões
+                const tituloDiv = document.createElement('div');
+                tituloDiv.className = 'autocomplete-suggestion-title';
+                tituloDiv.textContent = '💡 Cartórios usados recentemente:';
+                suggestions.appendChild(tituloDiv);
+                
+                data.results.forEach(cartorio => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-suggestion sugestao';
+                    div.innerHTML = `
+                        <span class="cartorio-nome">${cartorio.nome}</span>
+                        <span class="cartorio-info">${cartorio.cidade || ''} ${cartorio.estado || ''}</span>
+                    `;
+                    div.addEventListener('click', function() {
+                        input.value = cartorio.nome;
+                        hidden.value = cartorio.id;
+                        suggestions.style.display = 'none';
+                        input.classList.remove('error');
+                    });
+                    suggestions.appendChild(div);
+                });
+                
+                // Adicionar opção "Adicionar novo cartório"
+                const adicionarDiv = document.createElement('div');
+                adicionarDiv.className = 'autocomplete-suggestion adicionar-cartorio';
+                adicionarDiv.innerHTML = `
+                    <span class="cartorio-nome">➕ Adicionar novo cartório</span>
+                `;
+                adicionarDiv.addEventListener('click', function() {
+                    abrirModalNovoCartorio(input, hidden, suggestions);
+                });
+                suggestions.appendChild(adicionarDiv);
+
+                suggestions.style.display = 'block';
+                suggestions.style.zIndex = '9999';
+                console.log('Sugestões exibidas');
+                
+                // Prevenir que as sugestões desapareçam imediatamente
+                setTimeout(() => {
+                    if (suggestions.style.display === 'block') {
+                        console.log('Sugestões ainda visíveis após 500ms');
+                    }
+                }, 500);
+            } else {
+                console.log('Nenhuma sugestão encontrada');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao buscar sugestões de cartórios:', error);
+        });
 }
 
 // ========================================

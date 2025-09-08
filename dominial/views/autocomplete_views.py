@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from ..models import Pessoas, Cartorios, Imovel
 from django.db.models import Q
+from django.db import models
 
 def pessoa_autocomplete(request):
     """View para autocomplete de pessoas"""
@@ -27,7 +28,37 @@ def pessoa_autocomplete(request):
 def cartorio_autocomplete(request):
     """View para autocomplete de cartórios"""
     query = request.GET.get('q', '').strip()
+    imovel_id = request.GET.get('imovel_id')
+    sugestoes = request.GET.get('sugestoes') == 'true'
     
+    # Se for para mostrar sugestões (sem query) e há imovel_id
+    if sugestoes and not query and imovel_id:
+        try:
+            from ..models import Imovel, Lancamento
+            imovel = Imovel.objects.get(id=imovel_id)
+            
+            # Buscar cartórios mais usados nos lançamentos deste imóvel
+            cartorios_origem = Lancamento.objects.filter(
+                documento__imovel=imovel,
+                cartorio_origem__isnull=False
+            ).values('cartorio_origem__id', 'cartorio_origem__nome', 'cartorio_origem__cidade', 'cartorio_origem__estado').annotate(
+                count=models.Count('id')
+            ).order_by('-count')[:5]
+            
+            results = []
+            for cartorio in cartorios_origem:
+                results.append({
+                    'id': cartorio['cartorio_origem__id'],
+                    'nome': cartorio['cartorio_origem__nome'],
+                    'cidade': cartorio['cartorio_origem__cidade'],
+                    'estado': cartorio['cartorio_origem__estado']
+                })
+            
+            return JsonResponse({'results': results})
+        except Imovel.DoesNotExist:
+            pass
+    
+    # Busca normal por query
     if len(query) < 2:
         return JsonResponse({'results': []})
     
