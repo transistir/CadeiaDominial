@@ -29,6 +29,12 @@ function configurarOrigem(index) {
     
     if (!tipoSelect || !numeroInput || !hiddenInput) return;
     
+    // Inicializar estado do campo número (bloqueado por padrão)
+    numeroInput.disabled = !tipoSelect.value;
+    
+    // Configurar validação para início de matrícula
+    configurarValidacaoInicioMatricula(index);
+    
     // Event listener para mudança no select
     tipoSelect.addEventListener('change', function() {
         atualizarOrigemCompleta(index);
@@ -36,6 +42,10 @@ function configurarOrigem(index) {
         numeroInput.disabled = !this.value;
         if (this.value) {
             numeroInput.focus();
+        } else {
+            // Limpar número se tipo for desmarcado
+            numeroInput.value = '';
+            atualizarOrigemCompleta(index);
         }
     });
     
@@ -202,6 +212,91 @@ function migrarDadosExistentes(index) {
         
         console.log(`Dados migrados para origem ${index}: ${origemExistente} -> ${tipo} + ${numero}`);
     }
+}
+
+function configurarValidacaoInicioMatricula(index) {
+    // Verificar se é início de matrícula
+    const tipoLancamentoSelect = document.querySelector('select[name="tipo_lancamento"]');
+    if (!tipoLancamentoSelect) return;
+    
+    // Função para verificar se é início de matrícula
+    function isInicioMatricula() {
+        const opcaoSelecionada = tipoLancamentoSelect.options[tipoLancamentoSelect.selectedIndex];
+        const dataTipo = opcaoSelecionada ? opcaoSelecionada.getAttribute('data-tipo') : null;
+        return dataTipo === 'inicio_matricula';
+    }
+    
+    // Função para verificar se fim de cadeia está preenchido
+    function isFimCadeiaPreenchido() {
+        const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
+        if (!fimCadeiaToggle || !fimCadeiaToggle.checked) return false;
+        
+        const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
+        const classificacaoFimCadeia = document.getElementById(`classificacao_fim_cadeia_${index}`);
+        
+        return tipoFimCadeia && tipoFimCadeia.value && 
+               classificacaoFimCadeia && classificacaoFimCadeia.value;
+    }
+    
+    // Função para aplicar validação
+    function aplicarValidacao() {
+        const tipoSelect = document.getElementById(`tipo_origem_${index}`);
+        const numeroInput = document.getElementById(`numero_origem_${index}`);
+        
+        if (!tipoSelect || !numeroInput) return;
+        
+        const isInicio = isInicioMatricula();
+        const fimCadeiaPreenchido = isFimCadeiaPreenchido();
+        
+        if (isInicio && !fimCadeiaPreenchido) {
+            // Para início de matrícula sem fim de cadeia, origem é obrigatória
+            tipoSelect.required = true;
+            numeroInput.required = true;
+            
+            // Adicionar classe de erro se vazio
+            if (!tipoSelect.value || !numeroInput.value) {
+                tipoSelect.classList.add('error');
+                numeroInput.classList.add('error');
+            } else {
+                tipoSelect.classList.remove('error');
+                numeroInput.classList.remove('error');
+            }
+        } else {
+            // Para outros casos, origem não é obrigatória
+            tipoSelect.required = false;
+            numeroInput.required = false;
+            tipoSelect.classList.remove('error');
+            numeroInput.classList.remove('error');
+        }
+    }
+    
+    // Aplicar validação quando tipo de lançamento muda
+    tipoLancamentoSelect.addEventListener('change', function() {
+        // Delay para permitir que outras funções sejam executadas primeiro
+        setTimeout(aplicarValidacao, 100);
+    });
+    
+    // Aplicar validação quando campos de origem mudam
+    const tipoSelect = document.getElementById(`tipo_origem_${index}`);
+    const numeroInput = document.getElementById(`numero_origem_${index}`);
+    
+    if (tipoSelect) {
+        tipoSelect.addEventListener('change', aplicarValidacao);
+    }
+    if (numeroInput) {
+        numeroInput.addEventListener('input', aplicarValidacao);
+    }
+    
+    // Aplicar validação quando fim de cadeia muda
+    const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
+    if (fimCadeiaToggle) {
+        fimCadeiaToggle.addEventListener('change', function() {
+            setTimeout(aplicarValidacao, 100); // Delay para permitir que outros eventos sejam processados
+        });
+    }
+    
+    // Aplicar validação inicial
+    aplicarValidacao();
 }
 
 // Exportar funções para uso global
