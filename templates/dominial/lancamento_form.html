@@ -26,7 +26,7 @@
             <p>
                 <strong>Documento:</strong> {{ documento.numero }} ({{ documento.tipo.get_tipo_display }})<br>
                 <strong>Origem:</strong> {{ documento.imovel_origem.matricula }} - {{ documento.imovel_origem.nome }}<br>
-                <strong>Importado em:</strong> {{ documento.data_importacao|date:"d/m/Y H:i" }}
+                <strong>Importado em:</strong> {{ documento.documentoimportado_set.first.data_importacao|date:"d/m/Y H:i" }}
                 {% if documento.tipo_importacao == 'referencia_lancamento' %}
                     <br><em>via referência de lançamento</em>
                 {% elif documento.tipo_importacao == 'cadeia_dominial' %}
