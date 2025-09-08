@@ -221,4 +221,4 @@ class LancamentoFormService:
         lancamento.area = float(area_value) if area_value else None
         lancamento.origem = request.POST.get('origem_completa', '').strip() if request.POST.get('origem_completa') else None
         lancamento.descricao = request.POST.get('descricao', '').strip() if request.POST.get('descricao') else None
-        lancamento.titulo = request.POST.get('titulo', '').strip() if request.POST.get('titulo') else None 
+        lancamento.titulo = request.POST.get('titulo', '').strip() if request.POST.get('titulo') else None

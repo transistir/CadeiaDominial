@@ -22,14 +22,6 @@
     </div>
     
     <div id="{{ container_id|default:'origens-container' }}">
-        <div class="origem-labels">
-            <label>Origem{% if origem_obrigatorio %} *{% endif %}</label>
-            <label>CRI da Origem{% if origem_obrigatorio %} *{% endif %}</label>
-            <label>Livro da Origem</label>
-            <label>Folha da Origem</label>
-            <label>Fim de Cadeia</label>
-            <label></label>
-        </div>
         {% if modo_edicao %}
             {% if origens_separadas %}
                 {% for origem in origens_separadas %}
@@ -106,37 +98,51 @@
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="origem-item" data-origem-index="0">
-                    <div class="form-group origem-field">
-                        <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
-                               placeholder="Ex: Número do registro anterior, descrição, etc.">
+            <div class="origem-item" data-origem-index="0">
+                <div class="form-group origem-field">
+                    <label class="field-label">Tipo{% if origem_obrigatorio %} *{% endif %}</label>
+                    <div class="origem-tipo-numero-container">
+                        <select name="tipo_origem_0" id="tipo_origem_0" class="origem-tipo-select" required>
+                            <option value="">Selecione...</option>
+                            <option value="M">Matrícula (M)</option>
+                            <option value="T">Transcrição (T)</option>
+                        </select>
+                        <input type="text" name="numero_origem_0" id="numero_origem_0" class="origem-numero-input" 
+                               placeholder="123" maxlength="10" pattern="[0-9]+" title="Apenas números">
                     </div>
-                    <div class="form-group cartorio-field">
-                        <div class="autocomplete-container">
-                            <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
-                                   placeholder="Digite o nome do cartório" autocomplete="off">
-                            <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id">
-                            <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
-                        </div>
-                    </div>
-                    <div class="form-group livro-field">
-                        <input type="text" name="livro_origem[]" id="livro_origem" class="livro-origem" 
-                               placeholder="Ex: 1, 2, A, etc.">
-                    </div>
-                    <div class="form-group folha-field">
-                        <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
-                               placeholder="Ex: 1, 2, A, etc.">
-                    </div>
-                    <div class="form-group fim-cadeia-field">
-                        <div class="fim-cadeia-toggle-container">
-                            <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_0" 
-                                   class="fim-cadeia-toggle" value="0">
-                            <label for="fim_cadeia_0" class="fim-cadeia-label">
-                            </label>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+                    <!-- Campo oculto para compatibilidade com backend -->
+                    <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_0" value="">
                 </div>
+                <div class="form-group cartorio-field">
+                    <label class="field-label">Cartório{% if origem_obrigatorio %} *{% endif %}</label>
+                    <div class="autocomplete-container">
+                        <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                               placeholder="Digite o nome do cartório" autocomplete="off">
+                        <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id">
+                        <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
+                    </div>
+                </div>
+                <div class="form-group livro-field">
+                    <label class="field-label">Livro</label>
+                    <input type="text" name="livro_origem[]" id="livro_origem" class="livro-origem" 
+                           placeholder="L" title="Ex: 1, 2, A, etc.">
+                </div>
+                <div class="form-group folha-field">
+                    <label class="field-label">Folha</label>
+                    <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
+                           placeholder="F" title="Ex: 1, 2, A, etc.">
+                </div>
+                <div class="form-group fim-cadeia-field">
+                    <label class="field-label">Fim</label>
+                    <div class="fim-cadeia-toggle-container">
+                        <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_0" 
+                               class="fim-cadeia-toggle" value="0">
+                        <label for="fim_cadeia_0" class="fim-cadeia-label">
+                        </label>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
+            </div>
                 
                 <!-- Campos de fim de cadeia para a primeira origem -->
                 <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
@@ -173,8 +179,17 @@
         {% else %}
             <div class="origem-item" data-origem-index="0">
                 <div class="form-group origem-field">
-                    <input type="text" name="origem_completa[]" id="origem_completa" class="origem-texto" 
-                           placeholder="Ex: Número do registro anterior, descrição, etc.">
+                    <div class="origem-tipo-numero-container">
+                        <select name="tipo_origem_0" id="tipo_origem_0" class="origem-tipo-select" required>
+                            <option value="">Selecione...</option>
+                            <option value="M">Matrícula (M)</option>
+                            <option value="T">Transcrição (T)</option>
+                        </select>
+                        <input type="text" name="numero_origem_0" id="numero_origem_0" class="origem-numero-input" 
+                               placeholder="123" maxlength="10" pattern="[0-9]+" title="Apenas números">
+                    </div>
+                    <!-- Campo oculto para compatibilidade com backend -->
+                    <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_0" value="">
                 </div>
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
@@ -186,11 +201,11 @@
                 </div>
                 <div class="form-group livro-field">
                     <input type="text" name="livro_origem[]" id="livro_origem" class="livro-origem" 
-                           placeholder="Ex: 1, 2, A, etc.">
+                           placeholder="Livro" title="Ex: 1, 2, A, etc.">
                 </div>
                 <div class="form-group folha-field">
                     <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
-                           placeholder="Ex: 1, 2, A, etc.">
+                           placeholder="Folha" title="Ex: 1, 2, A, etc.">
                 </div>
                 <div class="form-group fim-cadeia-field">
                     <div class="fim-cadeia-toggle-container">

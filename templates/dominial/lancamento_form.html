@@ -7,6 +7,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/origem_simples.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -136,6 +137,7 @@
 
 {% block extra_js %}
 <script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
+<script src="{% static 'dominial/js/origem_simples.js' %}"></script>
 <script>
     // Variáveis para detecção de tipo de documento
     window.isTranscricao = {% if documento.tipo.tipo == 'transcricao' %}true{% else %}false{% endif %};
