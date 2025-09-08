@@ -2,6 +2,13 @@
 
 ## 🗂️ **Estrutura Organizada por Assuntos**
 
+### 🎯 **[Melhorias de Finalização](melhorias-finalizacao/)**
+Documentação das 17 melhorias finais do sistema Cadeia Dominial.
+
+- **[README.md](melhorias-finalizacao/README.md)** - Índice e visão geral das melhorias
+- **[RESUMO_EXECUTIVO_17_MELHORIAS.md](melhorias-finalizacao/RESUMO_EXECUTIVO_17_MELHORIAS.md)** - Resumo executivo das 17 melhorias organizadas por prioridade
+- **[PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md](melhorias-finalizacao/PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md)** - Plano detalhado de implementação das 17 melhorias
+
 ### 🚀 **[Deploy e Produção](deploy/)**
 Documentação relacionada ao deploy, configuração de produção e infraestrutura.
 
@@ -58,6 +65,12 @@ Documentação sobre investigações e análises de dados.
 
 ## 📖 **Como Usar Esta Documentação**
 
+### 🎯 **Para Implementar Melhorias do Sistema**
+1. **Comece por:** **[melhorias-finalizacao/README.md](melhorias-finalizacao/README.md)** para visão geral
+2. **Resumo executivo:** **[melhorias-finalizacao/RESUMO_EXECUTIVO_17_MELHORIAS.md](melhorias-finalizacao/RESUMO_EXECUTIVO_17_MELHORIAS.md)** para visão executiva
+3. **Plano detalhado:** **[melhorias-finalizacao/PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md](melhorias-finalizacao/PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md)** para implementação
+4. **Siga o cronograma:** 4 semanas organizadas por prioridade
+
 ### 🚀 **Para Deploy em Produção**
 1. Comece pelo **[CHECKLIST_PRODUCAO.md](deploy/CHECKLIST_PRODUCAO.md)**
 2. Consulte **[README_DEPLOY.md](../README_DEPLOY.md)** para detalhes específicos
@@ -85,10 +98,11 @@ Documentação sobre investigações e análises de dados.
 
 ## 🔄 **Atualizações**
 - **Última atualização:** 2025-01-27
-- **Versão da documentação:** 2.0 (Reorganizada)
+- **Versão da documentação:** 2.2 (Com melhorias de finalização organizadas)
 - **Responsável:** Equipe de Desenvolvimento
 - **✅ REFORMULAÇÃO DOS CARTÓRIOS CONCLUÍDA**
 - **🔄 FUNCIONALIDADE DE VERIFICAÇÃO DE DUPLICATAS EM DESENVOLVIMENTO**
+- **🎯 17 MELHORIAS DE FINALIZAÇÃO ORGANIZADAS E DOCUMENTADAS**
 
 ---
 

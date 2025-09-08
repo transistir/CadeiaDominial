@@ -28,6 +28,10 @@ docs/
 ```
 docs/
 ├── README.md
+├── melhorias-finalizacao/
+│   ├── README.md
+│   ├── RESUMO_EXECUTIVO_17_MELHORIAS.md
+│   └── PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md
 ├── origens-estruturadas/
 │   ├── README.md
 │   ├── RESUMO_FIM_CADEIA_ORIGEM_TRADICIONAL.md
@@ -46,7 +50,13 @@ docs/
 └── deploy/
 ```
 
-## 📚 **Pastas Criadas/Organizadas**
+## 📚 **Documentos e Pastas Organizados**
+
+### **🎯 `melhorias-finalizacao/`**
+**Conteúdo:** Documentação das 17 melhorias finais do sistema
+- **README.md** - Índice e visão geral das melhorias
+- **RESUMO_EXECUTIVO_17_MELHORIAS.md** - Resumo executivo das 17 melhorias organizadas por prioridade
+- **PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md** - Plano detalhado de implementação das 17 melhorias
 
 ### **🌳 `origens-estruturadas/`**
 **Conteúdo:** Toda documentação relacionada às origens estruturadas
@@ -87,6 +97,7 @@ docs/
 ### **Arquivos Movidos:**
 - ✅ 5 arquivos para `origens-estruturadas/`
 - ✅ 1 arquivo para `cadeia-dominial/`
+- ✅ 3 arquivos de melhorias para `melhorias-finalizacao/`
 
 ### **READMEs Criados:**
 - ✅ `origens-estruturadas/README.md` - Índice e comparação
@@ -98,6 +109,11 @@ docs/
 - ✅ Navegação melhorada
 
 ## 🚀 **Como Usar a Nova Estrutura**
+
+### **Para Melhorias do Sistema:**
+1. **Acesse:** `docs/melhorias-finalizacao/` para documentação completa
+2. **Leia:** `docs/melhorias-finalizacao/README.md` para visão geral
+3. **Implemente:** Seguindo o cronograma de 4 semanas proposto
 
 ### **Para Origens Estruturadas:**
 1. **Acesse:** `docs/origens-estruturadas/`
