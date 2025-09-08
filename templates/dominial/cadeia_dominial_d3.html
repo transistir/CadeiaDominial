@@ -105,6 +105,7 @@
 <script>
     window.tisId = {{ tis.id|safe }};
     window.imovelId = {{ imovel.id|safe }};
+    window.imovelTipoDocumentoPrincipal = '{{ imovel.tipo_documento_principal }}';
 </script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3.js' %}"></script>
 {% endblock %} 

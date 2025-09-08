@@ -48,10 +48,11 @@ class ImovelForm(forms.ModelForm):
 
     class Meta:
         model = Imovel
-        fields = ['nome', 'matricula', 'observacoes']
+        fields = ['nome', 'matricula', 'tipo_documento_principal', 'observacoes']
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'matricula': forms.TextInput(attrs={'class': 'form-control'}),
+            'tipo_documento_principal': forms.Select(attrs={'class': 'form-control'}),
             'observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         } 
     

@@ -2,11 +2,22 @@ from django.db import models
 
 
 class Imovel(models.Model):
+    TIPO_DOCUMENTO_CHOICES = [
+        ('matricula', 'Matrícula'),
+        ('transcricao', 'Transcrição'),
+    ]
+    
     id = models.AutoField(primary_key=True)
     terra_indigena_id = models.ForeignKey('TIs', on_delete=models.PROTECT) 
     nome = models.CharField(max_length=100) # Obrigatório?
     proprietario = models.ForeignKey('Pessoas', on_delete=models.PROTECT) # Verificar 'on_delete'
     matricula = models.CharField(max_length=50, unique=True) # Verificar formato (Código Nacional de Matrícula - CNM ?? )
+    tipo_documento_principal = models.CharField(
+        max_length=20,
+        choices=TIPO_DOCUMENTO_CHOICES,
+        default='matricula',
+        verbose_name='Tipo do Documento Principal'
+    )
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
     cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT, null=True, blank=True) # Cartório onde o imóvel está registrado
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel

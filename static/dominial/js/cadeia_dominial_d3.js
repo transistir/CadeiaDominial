@@ -667,7 +667,12 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('x', -70)
         .attr('y', -40)
         .attr('rx', 12)
-        .attr('fill', d => d.data.tipo === 'transcricao' ? '#6f42c1' : '#007bff')
+        .attr('fill', d => {
+            // Usar o tipo do documento principal do imóvel para determinar a cor
+            // Se o imóvel tem tipo_documento_principal como 'transcricao', usar roxo
+            // Caso contrário, usar azul (padrão para matrícula)
+            return window.imovelTipoDocumentoPrincipal === 'transcricao' ? '#6f42c1' : '#007bff';
+        })
         .attr('stroke', d => {
             // Documentos importados têm borda laranja tracejada
             if (d.data.is_importado) {
@@ -677,7 +682,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
             if (d.data.is_compartilhado) {
                 return '#28a745'; // Verde
             }
-            return d.data.tipo === 'transcricao' ? '#5a32a3' : '#0056b3';
+            return window.imovelTipoDocumentoPrincipal === 'transcricao' ? '#5a32a3' : '#0056b3';
         })
         .attr('stroke-width', d => (d.data.is_importado || d.data.is_compartilhado) ? 3 : 2)
         .attr('stroke-dasharray', d => {

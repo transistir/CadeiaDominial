@@ -65,6 +65,11 @@
                 {{ form.matricula }}
             </div>
 
+            <div class="form-group">
+                <label for="{{ form.tipo_documento_principal.id_for_label }}">Tipo do Documento Principal:</label>
+                {{ form.tipo_documento_principal }}
+            </div>
+
             {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o imóvel" rows=3 %}
         </div>
 
