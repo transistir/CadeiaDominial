@@ -307,6 +307,7 @@ class HierarquiaArvoreService:
             'numero': documento.numero,
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
+            'tipo_documento': documento.tipo.tipo,  # Adicionar tipo do documento para cores
             'data': documento.data.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,

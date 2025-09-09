@@ -130,7 +130,8 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
                 'cartorio': documento.cartorio.nome,
                 'livro': documento.livro,
                 'folha': documento.folha,
-                'origem': documento.origem or ''
+                'origem': documento.origem or '',
+                'tipo_documento': documento.tipo.tipo  # Adicionar tipo do documento
             },
             'children': []
         }
