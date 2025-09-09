@@ -16,6 +16,26 @@ class CadeiaDominialTabelaService:
     def __init__(self):
         self.hierarquia_service = HierarquiaService()
     
+    @staticmethod
+    def _extrair_numero_simples(numero_lancamento):
+        """
+        Extrai o número simples do numero_lancamento para ordenação
+        Ex: "R4M235" -> 4, "AV12M235" -> 12, "AV4 M2725" -> 4, "M235" -> 0 (início de matrícula)
+        """
+        if not numero_lancamento:
+            return 0
+        
+        # Para início de matrícula, retornar 0 para ficar por último
+        if not numero_lancamento.startswith(('R', 'AV')):
+            return 0
+        
+        # Extrair número após R ou AV (com ou sem espaço)
+        match = re.search(r'^(R|AV)(\d+)', numero_lancamento)
+        if match:
+            return int(match.group(2))
+        
+        return 0
+    
     def get_cadeia_dominial_tabela(self, tis_id, imovel_id, session=None):
         """
         Obtém dados da cadeia dominial em formato de tabela
@@ -41,10 +61,18 @@ class CadeiaDominialTabelaService:
         cadeia_processada = []
         documentos_ordenados = tronco_expandido
         for documento in documentos_ordenados:
-            # Carregar lançamentos
+            # Carregar lançamentos e ordenar por número simples (decrescente)
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
                 'pessoas__pessoa'
             ).order_by('id')
+            
+            # Ordenar por número simples em Python
+            lancamentos_list = list(lancamentos)
+            lancamentos_list.sort(key=lambda x: (
+                -self._extrair_numero_simples(x.numero_lancamento),
+                x.id
+            ))
+            lancamentos = lancamentos_list
             
             # Verificar se tem múltiplas origens
             origens_disponiveis = self._obter_origens_documento(documento, lancamentos)
@@ -168,6 +196,14 @@ class CadeiaDominialTabelaService:
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
                 'pessoas__pessoa'
             ).order_by('id')
+            
+            # Ordenar por número simples em Python
+            lancamentos_list = list(lancamentos)
+            lancamentos_list.sort(key=lambda x: (
+                -CadeiaDominialTabelaService._extrair_numero_simples(x.numero_lancamento),
+                x.id
+            ))
+            lancamentos = lancamentos_list
             
             # Verificar se tem múltiplas origens
             tem_multiplas_origens = False

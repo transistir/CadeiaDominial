@@ -2,6 +2,7 @@
 Service para gerar a cadeia dominial completa
 """
 
+import re
 from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento
 from ..services.hierarquia_service import HierarquiaService
@@ -15,6 +16,26 @@ class CadeiaCompletaService:
     def __init__(self):
         self.hierarquia_service = HierarquiaService()
         self.imovel_atual = None
+    
+    @staticmethod
+    def _extrair_numero_simples(numero_lancamento):
+        """
+        Extrai o número simples do numero_lancamento para ordenação
+        Ex: "R4M235" -> 4, "AV12M235" -> 12, "AV4 M2725" -> 4, "M235" -> 0 (início de matrícula)
+        """
+        if not numero_lancamento:
+            return 0
+        
+        # Para início de matrícula, retornar 0 para ficar por último
+        if not numero_lancamento.startswith(('R', 'AV')):
+            return 0
+        
+        # Extrair número após R ou AV (com ou sem espaço)
+        match = re.search(r'^(R|AV)(\d+)', numero_lancamento)
+        if match:
+            return int(match.group(2))
+        
+        return 0
     
     def get_cadeia_completa(self, tis_id, imovel_id):
         """
@@ -170,6 +191,14 @@ class CadeiaCompletaService:
                 'pessoas__pessoa'
             ).order_by('id')
             
+            # Ordenar por número simples em Python
+            lancamentos_list = list(lancamentos)
+            lancamentos_list.sort(key=lambda x: (
+                -self._extrair_numero_simples(x.numero_lancamento),
+                x.id
+            ))
+            lancamentos = lancamentos_list
+            
             # Verificar se é importado
             is_importado = documento.imovel != self.imovel_atual
             
@@ -190,6 +219,14 @@ class CadeiaCompletaService:
         lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
             'pessoas__pessoa'
         ).order_by('id')
+        
+        # Ordenar por número simples em Python
+        lancamentos_list = list(lancamentos)
+        lancamentos_list.sort(key=lambda x: (
+            -CadeiaCompletaService._extrair_numero_simples(x.numero_lancamento),
+            x.id
+        ))
+        lancamentos = lancamentos_list
         
         # Verificar se é importado
         is_importado = documento.imovel != self.imovel_atual if self.imovel_atual else False

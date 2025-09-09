@@ -1,3 +1,4 @@
+import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -9,6 +10,26 @@ from datetime import date
 from ..services.documento_service import DocumentoService
 from ..services.cache_service import CacheService
 import json
+
+
+def _extrair_numero_simples(numero_lancamento):
+    """
+    Extrai o número simples do numero_lancamento para ordenação
+    Ex: "R4M235" -> 4, "AV12M235" -> 12, "AV4 M2725" -> 4, "M235" -> 0 (início de matrícula)
+    """
+    if not numero_lancamento:
+        return 0
+    
+    # Para início de matrícula, retornar 0 para ficar por último
+    if not numero_lancamento.startswith(('R', 'AV')):
+        return 0
+    
+    # Extrair número após R ou AV (com ou sem espaço)
+    match = re.search(r'^(R|AV)(\d+)', numero_lancamento)
+    if match:
+        return int(match.group(2))
+    
+    return 0
 
 @login_required
 def documentos(request, tis_id, imovel_id):
@@ -132,6 +153,14 @@ def documento_lancamentos(request, tis_id, imovel_id, documento_id):
         .select_related('tipo', 'transmitente', 'adquirente')\
         .prefetch_related('pessoas')\
         .order_by('id')
+    
+    # Ordenar por número simples (decrescente), com início de matrícula por último
+    lancamentos_list = list(lancamentos)
+    lancamentos_list.sort(key=lambda x: (
+        -_extrair_numero_simples(x.numero_lancamento),
+        x.id
+    ))
+    lancamentos = lancamentos_list
     
     # Verificar se o usuário é admin para permitir edição
     pode_editar = request.user.is_staff or request.user.is_superuser

@@ -248,13 +248,22 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
         'pessoas__pessoa'
     ).order_by('id')
     
+    # Aplicar ordenação personalizada por número simples (decrescente)
+    from ..services.lancamento_consulta_service import LancamentoConsultaService
+    lancamentos_list = list(lancamentos)
+    lancamentos_list.sort(key=lambda x: (
+        -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
+        x.id
+    ))
+    lancamentos = lancamentos_list
+    
     context = {
         'tis': tis,
         'imovel': imovel,
         'documento': documento,
         'lancamentos': lancamentos,
         'tipo_visualizacao': 'documento_unico',
-        'tem_lancamentos': lancamentos.exists(),
+        'tem_lancamentos': len(lancamentos) > 0,
         'is_importado': is_importado,
         'cadeias_dominiais': cadeias_dominiais,
         'total_cadeias': len(cadeias_dominiais)

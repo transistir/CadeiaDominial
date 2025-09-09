@@ -84,7 +84,7 @@
                             
                             {% if documento.lancamentos.exists %}
                             <div class="lancamentos-list">
-                                {% for lancamento in documento.lancamentos.all|dictsort:"id" %}
+                                {% for lancamento in documento.lancamentos.all %}
                                 <div class="lancamento-node">
                                     <div class="lancamento-header">
                                         <div>

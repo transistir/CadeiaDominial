@@ -2,15 +2,36 @@
 Service especializado para consultas e filtros de lançamentos
 """
 
-from django.db.models import Q
+from django.db.models import Q, Case, When, IntegerField, Value
 from django.core.paginator import Paginator
 from ..models import Lancamento, DocumentoTipo, LancamentoTipo
+import re
 
 
 class LancamentoConsultaService:
     """
     Service para consultas e filtros de lançamentos
     """
+    
+    @staticmethod
+    def _extrair_numero_simples(numero_lancamento):
+        """
+        Extrai o número simples do numero_lancamento para ordenação
+        Ex: "R4M235" -> 4, "AV12M235" -> 12, "AV4 M2725" -> 4, "M235" -> 0 (início de matrícula)
+        """
+        if not numero_lancamento:
+            return 0
+        
+        # Para início de matrícula, retornar 0 para ficar por último
+        if not numero_lancamento.startswith(('R', 'AV')):
+            return 0
+        
+        # Extrair número após R ou AV (com ou sem espaço)
+        match = re.search(r'^(R|AV)(\d+)', numero_lancamento)
+        if match:
+            return int(match.group(2))
+        
+        return 0
     
     @staticmethod
     def filtrar_lancamentos(filtros=None, pagina=None, itens_por_pagina=10):
@@ -34,18 +55,29 @@ class LancamentoConsultaService:
         if filtros:
             lancamentos = LancamentoConsultaService._aplicar_filtros(lancamentos, filtros)
         
-        # Ordenar por ordem de inserção (ID crescente)
+        # Ordenar por ID primeiro, depois aplicar ordenação por número simples em Python
         lancamentos = lancamentos.order_by('id')
         
-        # Paginação
-        paginator = Paginator(lancamentos, itens_por_pagina)
-        page = paginator.get_page(pagina)
+        # Converter para lista e ordenar por número simples em Python (decrescente)
+        lancamentos_list = list(lancamentos)
+        lancamentos_list.sort(key=lambda x: (
+            -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
+            x.id
+        ))
+        
+        # Paginação manual
+        total_registros = len(lancamentos_list)
+        total_paginas = (total_registros + itens_por_pagina - 1) // itens_por_pagina
+        pagina_atual = int(pagina) if pagina else 1
+        inicio = (pagina_atual - 1) * itens_por_pagina
+        fim = inicio + itens_por_pagina
+        lancamentos_paginados = lancamentos_list[inicio:fim]
         
         return {
-            'lancamentos': page,
-            'total_registros': paginator.count,
-            'total_paginas': paginator.num_pages,
-            'pagina_atual': page.number,
+            'lancamentos': lancamentos_paginados,
+            'total_registros': total_registros,
+            'total_paginas': total_paginas,
+            'pagina_atual': pagina_atual,
         }
     
     @staticmethod
@@ -90,16 +122,16 @@ class LancamentoConsultaService:
         return queryset
     
     @staticmethod
-    def obter_lancamentos_por_documento(documento, ordenacao='id'):
+    def obter_lancamentos_por_documento(documento, ordenacao='numero_simples'):
         """
         Obtém todos os lançamentos de um documento específico
         
         Args:
             documento: Documento para buscar lançamentos
-            ordenacao: Campo para ordenação ('id', 'data', 'numero_lancamento')
+            ordenacao: Campo para ordenação ('id', 'data', 'numero_lancamento', 'numero_simples')
             
         Returns:
-            QuerySet: Lançamentos do documento
+            List: Lançamentos do documento ordenados
         """
         lancamentos = Lancamento.objects.filter(documento=documento)\
             .select_related('tipo')\
@@ -109,22 +141,30 @@ class LancamentoConsultaService:
             lancamentos = lancamentos.order_by('data', 'id')
         elif ordenacao == 'numero_lancamento':
             lancamentos = lancamentos.order_by('numero_lancamento', 'id')
+        elif ordenacao == 'numero_simples':
+            # Ordenar por número simples (decrescente), com início de matrícula por último
+            lancamentos_list = list(lancamentos)
+            lancamentos_list.sort(key=lambda x: (
+                -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
+                x.id
+            ))
+            return lancamentos_list
         else:
             lancamentos = lancamentos.order_by('id')
         
         return lancamentos
     
     @staticmethod
-    def obter_lancamentos_por_imovel(imovel, ordenacao='id'):
+    def obter_lancamentos_por_imovel(imovel, ordenacao='numero_simples'):
         """
         Obtém todos os lançamentos de um imóvel
         
         Args:
             imovel: Imóvel para buscar lançamentos
-            ordenacao: Campo para ordenação ('id', 'data', 'numero_lancamento')
+            ordenacao: Campo para ordenação ('id', 'data', 'numero_lancamento', 'numero_simples')
             
         Returns:
-            QuerySet: Lançamentos do imóvel
+            List: Lançamentos do imóvel ordenados
         """
         lancamentos = Lancamento.objects.filter(documento__imovel=imovel)\
             .select_related('documento', 'documento__tipo', 'tipo')\
@@ -134,6 +174,14 @@ class LancamentoConsultaService:
             lancamentos = lancamentos.order_by('data', 'id')
         elif ordenacao == 'numero_lancamento':
             lancamentos = lancamentos.order_by('numero_lancamento', 'id')
+        elif ordenacao == 'numero_simples':
+            # Ordenar por número simples (decrescente), com início de matrícula por último
+            lancamentos_list = list(lancamentos)
+            lancamentos_list.sort(key=lambda x: (
+                -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
+                x.id
+            ))
+            return lancamentos_list
         else:
             lancamentos = lancamentos.order_by('id')
         
