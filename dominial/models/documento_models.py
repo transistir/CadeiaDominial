@@ -32,6 +32,20 @@ class Documento(models.Model):
     data_cadastro = models.DateField(auto_now_add=True)
     nivel_manual = models.IntegerField(null=True, blank=True, help_text="Nível manual na árvore da cadeia dominial (0-10)")
     
+    # Campo para classificação de fim de cadeia
+    classificacao_fim_cadeia = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        choices=[
+            ('origem_lidima', 'Imóvel com Origem Lídima'),
+            ('sem_origem', 'Imóvel sem Origem'),
+            ('inconclusa', 'Situação Inconclusa'),
+        ],
+        verbose_name='Classificação do Fim de Cadeia',
+        help_text='Classificação específica para documentos de fim de cadeia'
+    )
+    
     # NOVOS CAMPOS PARA CRI
     cri_atual = models.ForeignKey(
         'Cartorios', 

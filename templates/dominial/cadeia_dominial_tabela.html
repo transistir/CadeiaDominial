@@ -206,7 +206,7 @@
                                             {% for lancamento in item.lancamentos %}
                                             <tr class="planilha-row {% cycle 'linha-par' 'linha-impar' %}">
                                                 <!-- Matrícula -->
-                                                <td>{{ lancamento.numero_lancamento }}</td>
+                                                <td>{{ lancamento|numero_documento_criado }}</td>
                                                 <td>{{ item.documento.livro|default_if_none:"-" }}</td>
                                                 <td>{{ item.documento.folha|default_if_none:"-" }}</td>
                                                 <td>{{ item.documento.cartorio.nome }}</td>

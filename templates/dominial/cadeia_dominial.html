@@ -111,7 +111,7 @@
                                         {% for lancamento in documento.lancamentos.all|dictsort:"id" %}
                                         <tr class="planilha-row {% cycle 'linha-par' 'linha-impar' %}">
                                             <!-- Matrícula -->
-                                            <td>{{ lancamento.numero_lancamento }}</td>
+                                            <td>{{ lancamento|numero_documento_criado }}</td>
                                             <td>{{ documento.livro|default_if_none:"-" }}</td>
                                             <td>{{ documento.folha|default_if_none:"-" }}</td>
                                             <td>{{ documento.cartorio.nome }}</td>

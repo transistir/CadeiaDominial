@@ -131,7 +131,8 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
                 'livro': documento.livro,
                 'folha': documento.folha,
                 'origem': documento.origem or '',
-                'tipo_documento': documento.tipo.tipo  # Adicionar tipo do documento
+                'tipo_documento': documento.tipo.tipo,  # Adicionar tipo do documento
+                'classificacao_fim_cadeia': documento.classificacao_fim_cadeia  # Adicionar classificação de fim de cadeia
             },
             'children': []
         }
@@ -406,7 +407,8 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
                 'is_importado': documento.imovel != imovel,
                 'is_compartilhado': False,
                 'lancamentos_count': documento.lancamentos.count(),
-                'detalhes': f"{documento.data.strftime('%d/%m/%Y')} - {documento.cartorio.nome}"
+                'detalhes': f"{documento.data.strftime('%d/%m/%Y')} - {documento.cartorio.nome}",
+                'classificacao_fim_cadeia': documento.classificacao_fim_cadeia
             }
             documentos_organizados.append(documento_processado)
             documentos_processados_ids.add(documento.id)
@@ -429,7 +431,8 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
                     'is_importado': doc.get('is_importado', False),
                     'is_compartilhado': doc.get('is_compartilhado', False),
                     'lancamentos_count': len(doc.get('lancamentos', [])),
-                    'detalhes': f"{doc['data']} - {doc['cartorio']}"
+                    'detalhes': f"{doc['data']} - {doc['cartorio']}",
+                    'classificacao_fim_cadeia': doc.get('classificacao_fim_cadeia', None)
                 }
                 outros_documentos.append(documento_processado)
         

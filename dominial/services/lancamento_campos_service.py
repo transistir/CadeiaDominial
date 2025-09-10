@@ -203,27 +203,26 @@ class LancamentoCamposService:
                 cartorio_origem = None
                 fim_cadeia_esta_origem = str(i) in fim_cadeia_indices
                 
-                # Se NÃO for fim de cadeia para esta origem, processar cartório
-                if not fim_cadeia_esta_origem:
-                    # Tentar encontrar cartório por ID primeiro
-                    if i < len(cartorios_origem_ids) and cartorios_origem_ids[i] and cartorios_origem_ids[i].strip():
-                        try:
-                            cartorio_origem = Cartorios.objects.get(id=cartorios_origem_ids[i])
-                        except Cartorios.DoesNotExist:
-                            pass
-                    
-                    # Se não encontrou por ID, tentar por nome
-                    if not cartorio_origem and i < len(cartorios_origem_nomes) and cartorios_origem_nomes[i] and cartorios_origem_nomes[i].strip():
-                        try:
-                            cartorio_origem = Cartorios.objects.get(nome__iexact=cartorios_origem_nomes[i])
-                        except Cartorios.DoesNotExist:
-                            # Criar novo cartório se não existir
-                            cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                            cartorio_origem = Cartorios.objects.create(
-                                nome=cartorios_origem_nomes[i],
-                                cns=cns_unico,
-                                cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                            )
+                # Processar cartório para TODAS as origens (incluindo fim de cadeia)
+                # Tentar encontrar cartório por ID primeiro
+                if i < len(cartorios_origem_ids) and cartorios_origem_ids[i] and cartorios_origem_ids[i].strip():
+                    try:
+                        cartorio_origem = Cartorios.objects.get(id=cartorios_origem_ids[i])
+                    except Cartorios.DoesNotExist:
+                        pass
+                
+                # Se não encontrou por ID, tentar por nome
+                if not cartorio_origem and i < len(cartorios_origem_nomes) and cartorios_origem_nomes[i] and cartorios_origem_nomes[i].strip():
+                    try:
+                        cartorio_origem = Cartorios.objects.get(nome__iexact=cartorios_origem_nomes[i])
+                    except Cartorios.DoesNotExist:
+                        # Criar novo cartório se não existir
+                        cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
+                        cartorio_origem = Cartorios.objects.create(
+                            nome=cartorios_origem_nomes[i],
+                            cns=cns_unico,
+                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                        )
                 
                 # Adicionar origem com seu cartório ao mapeamento
                 origens_com_cartorios.append({

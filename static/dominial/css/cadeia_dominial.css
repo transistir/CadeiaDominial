@@ -190,4 +190,42 @@
     .tree-container {
         padding: 15px;
     }
+}
+
+/* Estilos para documentos de fim de cadeia */
+.documento-fim-cadeia-vermelho {
+    background-color: #fff5f5 !important;
+    border-left: 4px solid #dc3545 !important;
+}
+
+.documento-fim-cadeia-vermelho .documento-header {
+    color: #dc3545 !important;
+    font-weight: bold;
+}
+
+.documento-fim-cadeia-verde {
+    background-color: #f8fff9 !important;
+    border-left: 4px solid #28a745 !important;
+}
+
+.documento-fim-cadeia-verde .documento-header {
+    color: #28a745 !important;
+    font-weight: bold;
+}
+
+.lancamento-badge.fim-cadeia-vermelho {
+    background-color: #dc3545 !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+.lancamento-badge.fim-cadeia-verde {
+    background-color: #28a745 !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+.documento-normal {
+    background-color: #f8fff9 !important;
+    border-left: 4px solid #28a745 !important;
 } 

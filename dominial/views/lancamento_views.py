@@ -124,8 +124,8 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     # Redirecionar para a visualização dos lançamentos do documento
                     return redirect('documento_lancamentos', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
                 else:
-                    # Redirecionar para criar um novo lançamento no mesmo documento
-                    return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
+                    # Redirecionar para a página do documento detalhado
+                    return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
             else:
                 messages.error(request, mensagem_origens)
                 
@@ -314,8 +314,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 # Redirecionar para a visualização detalhada do documento
                 return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
             else:
-                # Redirecionar para criar um novo lançamento no mesmo documento
-                return redirect('novo_lancamento_documento', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
+                # Redirecionar para a página do documento detalhado
+                return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
         else:
             messages.error(request, mensagem_origens)
     
@@ -346,47 +346,80 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         # Separar múltiplas origens para o template
         origens_separadas = []
         
-        # Tentar recuperar mapeamento de origens e cartórios do cache
-        from django.core.cache import cache
-        cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
-        mapeamento_origens = cache.get(cache_key)
-        
-        if ';' in lancamento.origem:
-            origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-            
-            if mapeamento_origens and len(mapeamento_origens) == len(origens_list):
-                # Usar mapeamento do cache se disponível
-                for i, origem in enumerate(origens_list):
-                    mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
-                    origens_separadas.append({
-                        'texto': origem,
-                        'index': i,
-                        'cartorio_nome': mapeamento.get('cartorio_nome', ''),
-                        'cartorio_id': mapeamento.get('cartorio_id', ''),
-                        'livro': mapeamento.get('livro', ''),
-                        'folha': mapeamento.get('folha', '')
-                    })
-            else:
-                # Fallback: usar cartório geral do lançamento para todas as origens
-                for i, origem in enumerate(origens_list):
-                    origens_separadas.append({
-                        'texto': origem,
-                        'index': i,
-                        'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
-                        'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
-                        'livro': lancamento.livro_origem,
-                        'folha': lancamento.folha_origem
-                    })
+        # Verificar se é fim de cadeia
+        if 'FIM_CADEIA' in lancamento.origem:
+            # Processar origem de fim de cadeia
+            origem_parts = lancamento.origem.split(':')
+            if len(origem_parts) >= 2:
+                tipo_origem = origem_parts[1] if origem_parts[1] else ''
+                numero_origem = origem_parts[2] if len(origem_parts) > 2 else ''
+                
+                if len(origem_parts) == 4:  # Formato sem tipo de origem
+                    tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
+                    classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                else:  # Formato com tipo de origem
+                    tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                    classificacao = origem_parts[4] if len(origem_parts) > 4 else 'sem_origem'
+                
+                origens_separadas.append({
+                    'texto': lancamento.origem,
+                    'index': 0,
+                    'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                    'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                    'livro': lancamento.livro_origem,
+                    'folha': lancamento.folha_origem,
+                    'fim_cadeia': True,
+                    'tipo_origem': tipo_origem,
+                    'numero_origem': numero_origem,
+                    'tipo_fim_cadeia': tipo_fim_cadeia,
+                    'classificacao_fim_cadeia': classificacao
+                })
         else:
-            # Uma única origem
-            origens_separadas.append({
-                'texto': lancamento.origem,
-                'index': 0,
-                'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
-                'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
-                'livro': lancamento.livro_origem,
-                'folha': lancamento.folha_origem
-            })
+            # Processar origens normais
+            # Tentar recuperar mapeamento de origens e cartórios do cache
+            from django.core.cache import cache
+            cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
+            mapeamento_origens = cache.get(cache_key)
+            
+            if ';' in lancamento.origem:
+                origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                
+                if mapeamento_origens and len(mapeamento_origens) == len(origens_list):
+                    # Usar mapeamento do cache se disponível
+                    for i, origem in enumerate(origens_list):
+                        mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
+                        origens_separadas.append({
+                            'texto': origem,
+                            'index': i,
+                            'cartorio_nome': mapeamento.get('cartorio_nome', ''),
+                            'cartorio_id': mapeamento.get('cartorio_id', ''),
+                            'livro': mapeamento.get('livro', ''),
+                            'folha': mapeamento.get('folha', ''),
+                            'fim_cadeia': False
+                        })
+                else:
+                    # Fallback: usar cartório geral do lançamento para todas as origens
+                    for i, origem in enumerate(origens_list):
+                        origens_separadas.append({
+                            'texto': origem,
+                            'index': i,
+                            'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                            'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                            'livro': lancamento.livro_origem,
+                            'folha': lancamento.folha_origem,
+                            'fim_cadeia': False
+                        })
+            else:
+                # Uma única origem
+                origens_separadas.append({
+                    'texto': lancamento.origem,
+                    'index': 0,
+                    'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                    'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                    'livro': lancamento.livro_origem,
+                    'folha': lancamento.folha_origem,
+                    'fim_cadeia': False
+                })
     else:
         origens_separadas = []
     

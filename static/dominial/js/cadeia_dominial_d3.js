@@ -668,10 +668,18 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('y', -40)
         .attr('rx', 12)
         .attr('fill', d => {
-            // Usar o tipo individual de cada documento para determinar a cor
-            // Se o documento é do tipo 'transcricao', usar roxo
-            // Caso contrário, usar azul (padrão para matrícula)
-            return d.data.tipo_documento === 'transcricao' ? '#6f42c1' : '#007bff';
+            // Verificar se tem classificação de fim de cadeia
+            if (d.data.classificacao_fim_cadeia) {
+                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                    return '#28a745'; // Verde para origem lídima
+                } else {
+                    return '#dc3545'; // Vermelho para sem origem ou inconclusa
+                }
+            } else if (d.data.tipo_documento === 'transcricao') {
+                return '#6f42c1'; // Roxo para transcrição
+            } else {
+                return '#007bff'; // Azul para matrícula
+            }
         })
         .attr('stroke', d => {
             // Documentos importados têm borda laranja tracejada
@@ -682,7 +690,18 @@ function renderArvoreD3(data, svgGroup, width, height) {
             if (d.data.is_compartilhado) {
                 return '#28a745'; // Verde
             }
-            return d.data.tipo_documento === 'transcricao' ? '#5a32a3' : '#0056b3';
+            // Verificar se tem classificação de fim de cadeia
+            if (d.data.classificacao_fim_cadeia) {
+                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                    return '#1e7e34'; // Verde escuro para origem lídima
+                } else {
+                    return '#b02a37'; // Vermelho escuro para sem origem ou inconclusa
+                }
+            } else if (d.data.tipo_documento === 'transcricao') {
+                return '#5a32a3'; // Roxo escuro para transcrição
+            } else {
+                return '#0056b3'; // Azul escuro para matrícula
+            }
         })
         .attr('stroke-width', d => (d.data.is_importado || d.data.is_compartilhado) ? 3 : 2)
         .attr('stroke-dasharray', d => {

@@ -88,8 +88,42 @@ function atualizarOrigemCompleta(index) {
     const tipoSelect = document.getElementById(`tipo_origem_${index}`);
     const numeroInput = document.getElementById(`numero_origem_${index}`);
     const hiddenInput = document.getElementById(`origem_completa_hidden_${index}`);
+    const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
     
-    if (!tipoSelect || !numeroInput || !hiddenInput) return;
+    if (!hiddenInput) return;
+    
+    // Verificar se fim de cadeia está marcado
+    if (fimCadeiaToggle && fimCadeiaToggle.checked) {
+        // Buscar tipo e classificação do fim de cadeia
+        const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
+        const classificacaoFimCadeia = document.getElementById(`classificacao_fim_cadeia_${index}`);
+        
+        const tipoFimCadeiaValue = tipoFimCadeia ? tipoFimCadeia.value : '';
+        const classificacao = classificacaoFimCadeia ? classificacaoFimCadeia.value : '';
+        
+        // Se o usuário selecionou um tipo de origem (M ou T), usar esse tipo
+        // Caso contrário, usar o tipo de fim de cadeia
+        let tipoOrigem = '';
+        let numeroOrigem = '';
+        
+        if (tipoSelect && tipoSelect.value && numeroInput && numeroInput.value.trim()) {
+            tipoOrigem = tipoSelect.value; // M ou T
+            numeroOrigem = numeroInput.value.trim(); // Número digitado pelo usuário
+        } else {
+            // Se não selecionou tipo de origem, usar o tipo de fim de cadeia
+            tipoOrigem = tipoFimCadeiaValue;
+            numeroOrigem = '';
+        }
+        
+        // Criar origem com tipo de origem, número, tipo de fim de cadeia e classificação
+        const origemCompleta = `FIM_CADEIA:${tipoOrigem}:${numeroOrigem}:${tipoFimCadeiaValue}:${classificacao}`;
+        hiddenInput.value = origemCompleta;
+        console.log(`Origem ${index} atualizada: ${origemCompleta} (fim de cadeia marcado)`);
+        return;
+    }
+    
+    // Processamento normal para M/T + número
+    if (!tipoSelect || !numeroInput) return;
     
     const tipo = tipoSelect.value;
     const numero = numeroInput.value.trim();
@@ -292,6 +326,31 @@ function configurarValidacaoInicioMatricula(index) {
     if (fimCadeiaToggle) {
         fimCadeiaToggle.addEventListener('change', function() {
             setTimeout(aplicarValidacao, 100); // Delay para permitir que outros eventos sejam processados
+            atualizarOrigemCompleta(index); // Atualizar origem quando checkbox muda
+        });
+    }
+    
+    // Atualizar origem quando tipo e classificação de fim de cadeia mudam
+    const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
+    if (tipoFimCadeia) {
+        tipoFimCadeia.addEventListener('change', function() {
+            // Controlar exibição dos campos baseado no tipo selecionado
+            const especificacaoContainer = document.getElementById(`especificacao-container_${index}`);
+            
+            if (especificacaoContainer) {
+                especificacaoContainer.style.display = this.value === 'outra' ? 'block' : 'none';
+            }
+            
+            atualizarOrigemCompleta(index);
+            aplicarValidacao();
+        });
+    }
+    
+    const classificacaoFimCadeia = document.getElementById(`classificacao_fim_cadeia_${index}`);
+    if (classificacaoFimCadeia) {
+        classificacaoFimCadeia.addEventListener('change', function() {
+            atualizarOrigemCompleta(index);
+            aplicarValidacao();
         });
     }
     

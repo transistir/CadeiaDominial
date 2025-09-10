@@ -65,13 +65,18 @@
                     <!-- Lista hierárquica dos documentos e lançamentos da cadeia dominial -->
                     <div class="tree-list">
                         {% for documento in documentos %}
-                        <div class="documento-node" style="border-left: 4px solid var(--primary-color);">
+                        <div class="documento-node {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}documento-fim-cadeia-verde{% else %}documento-fim-cadeia-vermelho{% endif %}{% else %}documento-normal{% endif %}" style="border-left: 4px solid {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}#28a745{% else %}#dc3545{% endif %}{% else %}var(--primary-color){% endif %};">
                             <div class="documento-header">
-                                📄 {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
+                                {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}🟢{% else %}🔴{% endif %}{% else %}📄{% endif %} {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
                                 <span>({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
                                 {% if forloop.first %}
                                 <span class="lancamento-badge primary-dark">
                                     🏁 Início
+                                </span>
+                                {% endif %}
+                                {% if documento.classificacao_fim_cadeia %}
+                                <span class="lancamento-badge {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}fim-cadeia-verde{% else %}fim-cadeia-vermelho{% endif %}">
+                                    {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}🟢{% else %}🔴{% endif %} Fim de Cadeia
                                 </span>
                                 {% endif %}
                             </div>

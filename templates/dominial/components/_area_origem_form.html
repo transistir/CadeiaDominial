@@ -27,9 +27,19 @@
                 {% for origem in origens_separadas %}
             <div class="origem-item" data-origem-index="{{ origem.index }}">
                 <div class="form-group origem-field">
-                        <input type="text" name="origem_completa[]" id="origem_completa_{{ origem.index }}" class="origem-texto" 
-                           placeholder="Ex: Número do registro anterior, descrição, etc." 
-                               value="{{ origem.texto }}">
+                    <label class="field-label">Tipo{% if origem_obrigatorio %} *{% endif %}</label>
+                    <div class="origem-tipo-numero-container">
+                        <select name="tipo_origem_{{ origem.index }}" id="tipo_origem_{{ origem.index }}" class="origem-tipo-select">
+                            <option value="">Selecione...</option>
+                            <option value="M" {% if origem.tipo_origem == 'M' %}selected{% endif %}>Matrícula (M)</option>
+                            <option value="T" {% if origem.tipo_origem == 'T' %}selected{% endif %}>Transcrição (T)</option>
+                        </select>
+                        <input type="text" name="numero_origem_{{ origem.index }}" id="numero_origem_{{ origem.index }}" class="origem-numero-input" 
+                               placeholder="123" maxlength="10" pattern="[0-9]+" title="Apenas números"
+                               value="{{ origem.numero_origem }}">
+                    </div>
+                    <!-- Campo oculto para compatibilidade com backend -->
+                    <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_{{ origem.index }}" value="{{ origem.texto }}">
                 </div>
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
