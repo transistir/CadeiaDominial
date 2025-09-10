@@ -74,6 +74,43 @@ def origem_cartorio_especifico(lancamento, origem_texto):
     return ''
 
 @register.filter
+def origem_formatada(lancamento):
+    """
+    Template filter para formatar origem de forma legível
+    Para fim de cadeia, mostra apenas o tipo e sigla (se houver)
+    """
+    if not lancamento.origem:
+        return '-'
+    
+    origem = lancamento.origem.strip()
+    
+    # Se for fim de cadeia, formatar de forma legível
+    if 'FIM_CADEIA' in origem:
+        origem_parts = origem.split(':')
+        
+        if len(origem_parts) >= 4:
+            tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else ''
+            sigla_patrimonio = origem_parts[5] if len(origem_parts) > 5 else ''
+            
+            # Mapear tipos para nomes legíveis
+            tipo_nomes = {
+                'destacamento_publico': 'Destacamento Público',
+                'outra': 'Outra',
+                'sem_origem': 'Sem Origem'
+            }
+            
+            tipo_legivel = tipo_nomes.get(tipo_fim_cadeia, tipo_fim_cadeia)
+            
+            # Se tem sigla do patrimônio público, adicionar
+            if sigla_patrimonio and sigla_patrimonio.strip():
+                return f"{tipo_legivel} : {sigla_patrimonio.strip()}"
+            else:
+                return tipo_legivel
+    
+    # Para origens normais, retornar como está
+    return origem
+
+@register.filter
 def numero_documento_criado(lancamento):
     """
     Template filter para obter o número do documento criado por um lançamento de fim de cadeia

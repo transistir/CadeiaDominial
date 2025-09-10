@@ -169,7 +169,7 @@
                                   {% if ';' in lancamento.origem %}
                                     {% for origem in lancamento.origem|split:';' %}
                                       <div>
-                                        {{ origem|strip }}
+                                        {{ lancamento|origem_formatada }}
                                         {% with cartorio_nome=lancamento|origem_cartorio_especifico:origem %}
                                           {% if cartorio_nome %}
                                             <small class="text-muted">({{ cartorio_nome }})</small>
@@ -178,7 +178,7 @@
                                       </div>
                                     {% endfor %}
                                   {% else %}
-                                    {{ lancamento.origem }}
+                                    {{ lancamento|origem_formatada }}
                                     {% if lancamento.cartorio_origem %}
                                       <small class="text-muted">({{ lancamento.cartorio_origem.nome }})</small>
                                     {% endif %}

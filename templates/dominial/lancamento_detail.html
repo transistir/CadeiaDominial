@@ -246,7 +246,7 @@
                             {% if lancamento.origem %}
                             <div class="info-item full-width">
                                 <span class="info-label">Descrição da Origem</span>
-                                <span class="info-value">{{ lancamento.origem }}</span>
+                                <span class="info-value">{{ lancamento|origem_formatada }}</span>
                             </div>
                             {% endif %}
                             {% if lancamento.documento_origem %}
