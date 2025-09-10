@@ -108,7 +108,12 @@ def numero_documento_criado(lancamento):
             ).first()
             
             if documento_criado:
-                return documento_criado.numero
+                # Se for destacamento público e tiver sigla, exibir a sigla
+                if (documento_criado.sigla_patrimonio_publico and 
+                    documento_criado.sigla_patrimonio_publico.strip()):
+                    return documento_criado.sigla_patrimonio_publico
+                else:
+                    return documento_criado.numero
     
     # Fallback: retornar numero_lancamento se não conseguir determinar
     return lancamento.numero_lancamento

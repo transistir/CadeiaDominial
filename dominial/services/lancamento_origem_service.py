@@ -59,20 +59,28 @@ class LancamentoOrigemService:
         Processa lançamento de fim de cadeia e cria documento com classificação
         """
         # Extrair informações da origem
-        # Formato 1: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao (quando usuário seleciona tipo)
-        # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao (quando usuário não seleciona tipo)
+        # Formato 1: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao:sigla_patrimonio (quando usuário seleciona tipo)
+        # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao:sigla_patrimonio (quando usuário não seleciona tipo)
         partes = origem.split(':')
         
-        if len(partes) == 4:  # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao
+        if len(partes) == 4:  # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao (formato antigo)
             tipo_origem = ''
             numero_origem = ''
             tipo_fim_cadeia = partes[2] if len(partes) > 2 else 'sem_origem'
             classificacao = partes[3] if len(partes) > 3 else 'sem_origem'
-        else:  # Formato 1: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao
+            sigla_patrimonio = ''
+        elif len(partes) == 5:  # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao:sigla_patrimonio
+            tipo_origem = ''
+            numero_origem = ''
+            tipo_fim_cadeia = partes[2] if len(partes) > 2 else 'sem_origem'
+            classificacao = partes[3] if len(partes) > 3 else 'sem_origem'
+            sigla_patrimonio = partes[4] if len(partes) > 4 else ''
+        else:  # Formato 1: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao:sigla_patrimonio
             tipo_origem = partes[1] if len(partes) > 1 else ''  # M ou T
             numero_origem = partes[2] if len(partes) > 2 else ''  # Número digitado pelo usuário
             tipo_fim_cadeia = partes[3] if len(partes) > 3 else 'sem_origem'
             classificacao = partes[4] if len(partes) > 4 else 'sem_origem'
+            sigla_patrimonio = partes[5] if len(partes) > 5 else ''
         
         
         # Determinar tipo de documento baseado no tipo de origem selecionado pelo usuário
@@ -86,17 +94,19 @@ class LancamentoOrigemService:
             numero_doc = f'M{numero_origem}' if numero_origem else 'M00'
         else:
             # Usuário não selecionou tipo de origem, usar tipo de fim de cadeia
-            if tipo_fim_cadeia in ['destacamento_publico', 'outra']:
-                # Para destacamento público ou outra, criar como transcrição
+            if tipo_fim_cadeia == 'destacamento_publico':
+                # Para destacamento público, usar a sigla como número do documento
                 tipo_doc = DocumentoTipo.objects.get(tipo='transcricao')
-                # Gerar número único para evitar conflitos
+                numero_doc = sigla_patrimonio if sigla_patrimonio else 'T00'
+            elif tipo_fim_cadeia == 'outra':
+                # Para outra, criar como transcrição com número único
+                tipo_doc = DocumentoTipo.objects.get(tipo='transcricao')
                 from datetime import datetime
                 timestamp = datetime.now().strftime('%y%m%d%H%M%S')
                 numero_doc = f'T{timestamp}'
             else:
                 # Para sem origem, criar como matrícula
                 tipo_doc = DocumentoTipo.objects.get(tipo='matricula')
-                # Gerar número único para evitar conflitos
                 from datetime import datetime
                 timestamp = datetime.now().strftime('%y%m%d%H%M%S')
                 numero_doc = f'M{timestamp}'
@@ -115,7 +125,8 @@ class LancamentoOrigemService:
             'folha': '0',
             'origem': f'Documento de fim de cadeia - {tipo_fim_cadeia}',
             'observacoes': f'Documento criado automaticamente para fim de cadeia. Tipo: {tipo_fim_cadeia}, Classificação: {classificacao}',
-            'classificacao_fim_cadeia': classificacao
+            'classificacao_fim_cadeia': classificacao,
+            'sigla_patrimonio_publico': sigla_patrimonio if tipo_fim_cadeia == 'destacamento_publico' else None
         }
         
         # Criar documento usando CRIService

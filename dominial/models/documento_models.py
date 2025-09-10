@@ -46,6 +46,15 @@ class Documento(models.Model):
         help_text='Classificação específica para documentos de fim de cadeia'
     )
     
+    # Campo para sigla do patrimônio público
+    sigla_patrimonio_publico = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        verbose_name='Sigla do Patrimônio Público',
+        help_text='Sigla específica do patrimônio público (ex: INCRA, Estado, etc.)'
+    )
+    
     # NOVOS CAMPOS PARA CRI
     cri_atual = models.ForeignKey(
         'Cartorios', 

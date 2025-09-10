@@ -70,6 +70,8 @@
                             </label>
                         </div>
                     </div>
+                    
+                    
                     <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
                 </div>
                 
@@ -96,6 +98,26 @@
                                 <option value="inconclusa" {% if origem.classificacao_fim_cadeia == 'inconclusa' %}selected{% endif %}>Situação Inconclusa</option>
                             </select>
                         </div>
+                    </div>
+                    
+                    <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
+                    <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_{{ origem.index }}" 
+                         style="display: {% if origem.tipo_fim_cadeia == 'destacamento_publico' %}block{% else %}none{% endif %};">
+                        <label for="sigla_patrimonio_publico_{{ origem.index }}">Sigla do Patrimônio Público *</label>
+                        <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_{{ origem.index }}" 
+                               class="form-control sigla-patrimonio-publico-input" 
+                               placeholder="Ex: INCRA, Estado, União, etc."
+                               value="{% if origem.sigla_patrimonio_publico %}{{ origem.sigla_patrimonio_publico }}{% endif %}">
+                    </div>
+                    
+                    <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
+                    <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_{{ origem.index }}" 
+                         style="display: {% if origem.tipo_fim_cadeia == 'destacamento_publico' %}block{% else %}none{% endif %};">
+                        <label for="sigla_patrimonio_publico_{{ origem.index }}">Sigla do Patrimônio Público *</label>
+                        <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_{{ origem.index }}" 
+                               class="form-control sigla-patrimonio-publico-input" 
+                               placeholder="Ex: INCRA, Estado, União, etc."
+                               value="{% if origem.sigla_patrimonio_publico %}{{ origem.sigla_patrimonio_publico }}{% endif %}">
                     </div>
                     
                     <!-- Campo de especificação (aparece quando tipo = 'outra') -->
@@ -151,6 +173,8 @@
                         </label>
                     </div>
                 </div>
+                
+                
                 <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
             </div>
                 
@@ -250,6 +274,20 @@
                             <option value="inconclusa">Situação Inconclusa</option>
                         </select>
                     </div>
+                </div>
+                
+                <!-- Campo de teste temporário -->
+                <div class="form-group" id="teste-container_0" style="display: block;">
+                    <label for="teste_0">TESTE - Sempre visível</label>
+                    <input type="text" name="teste[]" id="teste_0" class="form-control" placeholder="Campo de teste">
+                </div>
+                
+                <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
+                <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_0" style="display: none;">
+                    <label for="sigla_patrimonio_publico_0">Sigla do Patrimônio Público *</label>
+                    <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_0" 
+                           class="form-control sigla-patrimonio-publico-input" 
+                           placeholder="Ex: INCRA, Estado, União, etc.">
                 </div>
                 
                 <!-- Campo de especificação (aparece quando tipo = 'outra') -->

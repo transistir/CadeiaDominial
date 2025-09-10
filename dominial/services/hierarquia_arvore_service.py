@@ -326,6 +326,7 @@ class HierarquiaArvoreService:
             'is_compartilhado': is_compartilhado,
             'imoveis_compartilhando': imoveis_compartilhando,
             'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,  # Adicionar classificação de fim de cadeia
+            'sigla_patrimonio_publico': documento.sigla_patrimonio_publico,  # Adicionar sigla do patrimônio público
             'info_importacao': info_importacao,
             'tooltip_importacao': tooltip_importacao,
             'cadeias_dominiais': cadeias_dominiais,

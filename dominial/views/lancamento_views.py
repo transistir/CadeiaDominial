@@ -354,12 +354,18 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 tipo_origem = origem_parts[1] if origem_parts[1] else ''
                 numero_origem = origem_parts[2] if len(origem_parts) > 2 else ''
                 
-                if len(origem_parts) == 4:  # Formato sem tipo de origem
+                if len(origem_parts) == 4:  # Formato sem tipo de origem (formato antigo)
                     tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
                     classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                    sigla_patrimonio = ''
+                elif len(origem_parts) == 5:  # Formato sem tipo de origem (com sigla patrimônio)
+                    tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
+                    classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                    sigla_patrimonio = origem_parts[4] if len(origem_parts) > 4 else ''
                 else:  # Formato com tipo de origem
                     tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
                     classificacao = origem_parts[4] if len(origem_parts) > 4 else 'sem_origem'
+                    sigla_patrimonio = origem_parts[5] if len(origem_parts) > 5 else ''
                 
                 origens_separadas.append({
                     'texto': lancamento.origem,
@@ -372,7 +378,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                     'tipo_origem': tipo_origem,
                     'numero_origem': numero_origem,
                     'tipo_fim_cadeia': tipo_fim_cadeia,
-                    'classificacao_fim_cadeia': classificacao
+                    'classificacao_fim_cadeia': classificacao,
+                    'sigla_patrimonio_publico': sigla_patrimonio
                 })
         else:
             # Processar origens normais

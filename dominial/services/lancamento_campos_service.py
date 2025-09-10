@@ -187,6 +187,7 @@ class LancamentoCamposService:
         tipos_fim_cadeia = request.POST.getlist('tipo_fim_cadeia[]')
         especificacoes_fim_cadeia = request.POST.getlist('especificacao_fim_cadeia[]')
         classificacoes_fim_cadeia = request.POST.getlist('classificacao_fim_cadeia[]')
+        siglas_patrimonio_publico = request.POST.getlist('sigla_patrimonio_publico[]')
         
         # Se há múltiplas origens, concatenar com ponto e vírgula
         if origens_completas:

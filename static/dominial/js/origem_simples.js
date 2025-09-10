@@ -97,9 +97,11 @@ function atualizarOrigemCompleta(index) {
         // Buscar tipo e classificação do fim de cadeia
         const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
         const classificacaoFimCadeia = document.getElementById(`classificacao_fim_cadeia_${index}`);
+        const siglaPatrimonioPublico = document.getElementById(`sigla_patrimonio_publico_${index}`);
         
         const tipoFimCadeiaValue = tipoFimCadeia ? tipoFimCadeia.value : '';
         const classificacao = classificacaoFimCadeia ? classificacaoFimCadeia.value : '';
+        const siglaPatrimonio = siglaPatrimonioPublico ? siglaPatrimonioPublico.value.trim() : '';
         
         // Se o usuário selecionou um tipo de origem (M ou T), usar esse tipo
         // Caso contrário, usar o tipo de fim de cadeia
@@ -115,8 +117,8 @@ function atualizarOrigemCompleta(index) {
             numeroOrigem = '';
         }
         
-        // Criar origem com tipo de origem, número, tipo de fim de cadeia e classificação
-        const origemCompleta = `FIM_CADEIA:${tipoOrigem}:${numeroOrigem}:${tipoFimCadeiaValue}:${classificacao}`;
+        // Criar origem com tipo de origem, número, tipo de fim de cadeia, classificação e sigla do patrimônio público
+        const origemCompleta = `FIM_CADEIA:${tipoOrigem}:${numeroOrigem}:${tipoFimCadeiaValue}:${classificacao}:${siglaPatrimonio}`;
         hiddenInput.value = origemCompleta;
         console.log(`Origem ${index} atualizada: ${origemCompleta} (fim de cadeia marcado)`);
         return;
@@ -325,6 +327,18 @@ function configurarValidacaoInicioMatricula(index) {
     const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
     if (fimCadeiaToggle) {
         fimCadeiaToggle.addEventListener('change', function() {
+            // Controlar exibição do container de fim de cadeia
+            const container = document.getElementById(`fim-cadeia-origem-container_${index}`);
+            if (container) {
+                container.style.display = this.checked ? 'block' : 'none';
+            }
+            
+            // Controlar exibição do campo de sigla do patrimônio público
+            const siglaContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
+            if (siglaContainer) {
+                siglaContainer.style.display = this.checked ? 'block' : 'none';
+            }
+            
             setTimeout(aplicarValidacao, 100); // Delay para permitir que outros eventos sejam processados
             atualizarOrigemCompleta(index); // Atualizar origem quando checkbox muda
         });
@@ -335,10 +349,11 @@ function configurarValidacaoInicioMatricula(index) {
     if (tipoFimCadeia) {
         tipoFimCadeia.addEventListener('change', function() {
             // Controlar exibição dos campos baseado no tipo selecionado
-            const especificacaoContainer = document.getElementById(`especificacao-container_${index}`);
+            controlarExibicaoCamposFimCadeia(index);
             
-            if (especificacaoContainer) {
-                especificacaoContainer.style.display = this.value === 'outra' ? 'block' : 'none';
+            // Criar campo de sigla do patrimônio público dinamicamente se não existir
+            if (this.value === 'destacamento_publico') {
+                criarCampoSiglaPatrimonio(index);
             }
             
             atualizarOrigemCompleta(index);
@@ -354,9 +369,93 @@ function configurarValidacaoInicioMatricula(index) {
         });
     }
     
+    const siglaPatrimonioPublico = document.getElementById(`sigla_patrimonio_publico_${index}`);
+    if (siglaPatrimonioPublico) {
+        siglaPatrimonioPublico.addEventListener('input', function() {
+            atualizarOrigemCompleta(index);
+        });
+    }
+    
+    // Controlar exibição inicial dos campos de fim de cadeia
+    controlarExibicaoCamposFimCadeia(index);
+    
     // Aplicar validação inicial
     aplicarValidacao();
 }
 
+/**
+ * Controla a exibição dos campos de fim de cadeia baseado no tipo selecionado
+ */
+function controlarExibicaoCamposFimCadeia(index) {
+    const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
+    const especificacaoContainer = document.getElementById(`especificacao-container_${index}`);
+    const siglaPatrimonioContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
+    
+    console.log(`DEBUG: Controlar exibição - index: ${index}`);
+    console.log(`DEBUG: tipoFimCadeia:`, tipoFimCadeia);
+    console.log(`DEBUG: especificacaoContainer:`, especificacaoContainer);
+    console.log(`DEBUG: siglaPatrimonioContainer:`, siglaPatrimonioContainer);
+    
+    if (tipoFimCadeia && especificacaoContainer && siglaPatrimonioContainer) {
+        const tipoSelecionado = tipoFimCadeia.value;
+        console.log(`DEBUG: Tipo selecionado: ${tipoSelecionado}`);
+        
+        // Controlar exibição do campo de especificação
+        especificacaoContainer.style.display = tipoSelecionado === 'outra' ? 'block' : 'none';
+        
+        // Controlar exibição do campo de sigla do patrimônio público
+        siglaPatrimonioContainer.style.display = tipoSelecionado === 'destacamento_publico' ? 'block' : 'none';
+        
+        console.log(`DEBUG: Especificação display: ${especificacaoContainer.style.display}`);
+        console.log(`DEBUG: Sigla patrimônio display: ${siglaPatrimonioContainer.style.display}`);
+    } else {
+        console.log(`DEBUG: Algum elemento não foi encontrado para index ${index}`);
+    }
+}
+
+/**
+ * Cria o campo de sigla do patrimônio público dinamicamente
+ */
+function criarCampoSiglaPatrimonio(index) {
+    // Verificar se o campo já existe
+    let siglaContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
+    
+    if (!siglaContainer) {
+        // Buscar o container de fim de cadeia
+        const fimCadeiaContainer = document.getElementById(`fim-cadeia-origem-container_${index}`);
+        
+        if (fimCadeiaContainer) {
+            // Criar o campo de sigla do patrimônio público
+            const siglaHTML = `
+                <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_${index}" style="display: block;">
+                    <label for="sigla_patrimonio_publico_${index}">Sigla do Patrimônio Público *</label>
+                    <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}" 
+                           class="form-control sigla-patrimonio-publico-input" 
+                           placeholder="Ex: INCRA, Estado, União, etc.">
+                </div>
+            `;
+            
+            // Inserir o campo após o grid-2
+            const grid2 = fimCadeiaContainer.querySelector('.grid-2');
+            if (grid2) {
+                grid2.insertAdjacentHTML('afterend', siglaHTML);
+                
+                // Adicionar event listener para o novo campo
+                const siglaInput = document.getElementById(`sigla_patrimonio_publico_${index}`);
+                if (siglaInput) {
+                    siglaInput.addEventListener('input', function() {
+                        atualizarOrigemCompleta(index);
+                    });
+                }
+            }
+        }
+    } else {
+        // Se o campo já existe, apenas exibir
+        siglaContainer.style.display = 'block';
+    }
+}
+
 // Exportar funções para uso global
 window.adicionarOrigemSimples = adicionarOrigemSimples;
+window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
+window.criarCampoSiglaPatrimonio = criarCampoSiglaPatrimonio;

@@ -132,7 +132,9 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
                 'folha': documento.folha,
                 'origem': documento.origem or '',
                 'tipo_documento': documento.tipo.tipo,  # Adicionar tipo do documento
-                'classificacao_fim_cadeia': documento.classificacao_fim_cadeia  # Adicionar classificação de fim de cadeia
+                'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,
+                'sigla_patrimonio_publico': documento.sigla_patrimonio_publico,  # Adicionar classificação de fim de cadeia
+                'sigla_patrimonio_publico': documento.sigla_patrimonio_publico  # Adicionar sigla do patrimônio público
             },
             'children': []
         }
@@ -408,7 +410,8 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
                 'is_compartilhado': False,
                 'lancamentos_count': documento.lancamentos.count(),
                 'detalhes': f"{documento.data.strftime('%d/%m/%Y')} - {documento.cartorio.nome}",
-                'classificacao_fim_cadeia': documento.classificacao_fim_cadeia
+                'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,
+                'sigla_patrimonio_publico': documento.sigla_patrimonio_publico
             }
             documentos_organizados.append(documento_processado)
             documentos_processados_ids.add(documento.id)

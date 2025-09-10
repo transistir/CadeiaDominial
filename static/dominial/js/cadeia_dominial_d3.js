@@ -738,7 +738,13 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('fill', 'white')
         .attr('font-size', 20)
         .attr('font-weight', 700)
-        .text(d => d.data.numero || d.data.name || '');
+        .text(d => {
+            // Se for destacamento público e tiver sigla, exibir a sigla
+            if (d.data.sigla_patrimonio_publico && d.data.sigla_patrimonio_publico.trim()) {
+                return d.data.sigla_patrimonio_publico;
+            }
+            return d.data.numero || d.data.name || '';
+        });
 
     // Total de lançamentos
     node.append('text')
