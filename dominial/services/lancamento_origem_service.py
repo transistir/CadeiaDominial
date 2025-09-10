@@ -18,6 +18,10 @@ class LancamentoOrigemService:
         if not origem:
             return None
         
+        # Verificar se é fim de cadeia
+        if 'FIM_CADEIA' in origem:
+            return LancamentoOrigemService._processar_fim_cadeia(lancamento, origem, imovel)
+        
         # Processar origens identificadas
         origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
         
@@ -48,6 +52,82 @@ class LancamentoOrigemService:
             return f'Foram criados {len(documentos_criados)} documento(s) automaticamente a partir das origens identificadas.'
         
         return f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.'
+    
+    @staticmethod
+    def _processar_fim_cadeia(lancamento, origem, imovel):
+        """
+        Processa lançamento de fim de cadeia e cria documento com classificação
+        """
+        # Extrair informações da origem
+        # Formato 1: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao (quando usuário seleciona tipo)
+        # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao (quando usuário não seleciona tipo)
+        partes = origem.split(':')
+        
+        if len(partes) == 4:  # Formato 2: FIM_CADEIA::tipo_fim_cadeia:classificacao
+            tipo_origem = ''
+            numero_origem = ''
+            tipo_fim_cadeia = partes[2] if len(partes) > 2 else 'sem_origem'
+            classificacao = partes[3] if len(partes) > 3 else 'sem_origem'
+        else:  # Formato 1: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao
+            tipo_origem = partes[1] if len(partes) > 1 else ''  # M ou T
+            numero_origem = partes[2] if len(partes) > 2 else ''  # Número digitado pelo usuário
+            tipo_fim_cadeia = partes[3] if len(partes) > 3 else 'sem_origem'
+            classificacao = partes[4] if len(partes) > 4 else 'sem_origem'
+        
+        
+        # Determinar tipo de documento baseado no tipo de origem selecionado pelo usuário
+        if tipo_origem == 'T':
+            # Usuário selecionou transcrição
+            tipo_doc = DocumentoTipo.objects.get(tipo='transcricao')
+            numero_doc = f'T{numero_origem}' if numero_origem else 'T00'
+        elif tipo_origem == 'M':
+            # Usuário selecionou matrícula
+            tipo_doc = DocumentoTipo.objects.get(tipo='matricula')
+            numero_doc = f'M{numero_origem}' if numero_origem else 'M00'
+        else:
+            # Usuário não selecionou tipo de origem, usar tipo de fim de cadeia
+            if tipo_fim_cadeia in ['destacamento_publico', 'outra']:
+                # Para destacamento público ou outra, criar como transcrição
+                tipo_doc = DocumentoTipo.objects.get(tipo='transcricao')
+                # Gerar número único para evitar conflitos
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%y%m%d%H%M%S')
+                numero_doc = f'T{timestamp}'
+            else:
+                # Para sem origem, criar como matrícula
+                tipo_doc = DocumentoTipo.objects.get(tipo='matricula')
+                # Gerar número único para evitar conflitos
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%y%m%d%H%M%S')
+                numero_doc = f'M{timestamp}'
+        
+        # Usar cartório do lançamento atual
+        cartorio_atual = lancamento.documento.cartorio
+        
+        # Criar documento de fim de cadeia
+        dados_documento = {
+            'imovel': imovel,
+            'tipo': tipo_doc,
+            'numero': numero_doc,
+            'data': date.today(),
+            'cartorio': cartorio_atual,
+            'livro': '0',
+            'folha': '0',
+            'origem': f'Documento de fim de cadeia - {tipo_fim_cadeia}',
+            'observacoes': f'Documento criado automaticamente para fim de cadeia. Tipo: {tipo_fim_cadeia}, Classificação: {classificacao}',
+            'classificacao_fim_cadeia': classificacao
+        }
+        
+        # Criar documento usando CRIService
+        documento_criado = CRIService.criar_documento_com_cri(
+            imovel, dados_documento, cri_origem=cartorio_atual
+        )
+        
+        # Invalidar cache do imóvel
+        CacheService.invalidate_documentos_imovel(imovel.id)
+        CacheService.invalidate_tronco_principal(imovel.id)
+        
+        return f'Documento de fim de cadeia criado: {documento_criado.numero} ({documento_criado.tipo.get_tipo_display()}) com classificação "{classificacao}"'
     
     @staticmethod
     def _processar_multiplas_origens(lancamento, origens_individuals, imovel):

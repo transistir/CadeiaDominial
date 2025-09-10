@@ -73,4 +73,44 @@ def origem_cartorio_especifico(lancamento, origem_texto):
     
     return ''
 
+@register.filter
+def numero_documento_criado(lancamento):
+    """
+    Template filter para obter o número do documento criado por um lançamento de fim de cadeia
+    Se não for fim de cadeia, retorna o numero_lancamento normal
+    """
+    if not lancamento.origem or 'FIM_CADEIA' not in lancamento.origem:
+        return lancamento.numero_lancamento
+    
+    # Extrair informações da origem para identificar o documento criado
+    origem_parts = lancamento.origem.split(':')
+    if len(origem_parts) >= 2:
+        tipo_origem = origem_parts[1] if origem_parts[1] else ''
+        numero_origem = origem_parts[2] if len(origem_parts) > 2 else ''
+        
+        # Construir o número esperado do documento
+        if tipo_origem == 'T':
+            numero_esperado = f'T{numero_origem}' if numero_origem else 'T00'
+        elif tipo_origem == 'M':
+            numero_esperado = f'M{numero_origem}' if numero_origem else 'M00'
+        else:
+            # Se não há tipo de origem, usar o tipo de fim de cadeia
+            if len(origem_parts) == 4:  # Formato sem tipo de origem
+                tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
+            else:  # Formato com tipo de origem
+                tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+            
+            # Para documentos de fim de cadeia, buscar o documento criado pelo lançamento
+            from ..models import Documento
+            documento_criado = Documento.objects.filter(
+                imovel=lancamento.documento.imovel,
+                classificacao_fim_cadeia__isnull=False
+            ).first()
+            
+            if documento_criado:
+                return documento_criado.numero
+    
+    # Fallback: retornar numero_lancamento se não conseguir determinar
+    return lancamento.numero_lancamento
+
  
