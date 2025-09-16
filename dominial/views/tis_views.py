@@ -53,10 +53,57 @@ def tis_form(request):
 @login_required
 def tis_detail(request, tis_id):
     tis = get_object_or_404(TIs, id=tis_id)
-    imoveis = Imovel.objects.filter(terra_indigena_id=tis)
+    
+    # Ordenar imóveis pela atividade mais recente na cadeia dominial
+    from django.db import connection
+    from ..models import Documento, Lancamento
+    
+    # Usar SQL raw para evitar problemas com campos do modelo
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT 
+                i.id,
+                i.nome,
+                i.matricula,
+                i.data_cadastro,
+                i.observacoes,
+                i.cartorio_id,
+                i.proprietario_id,
+                i.terra_indigena_id_id,
+                MAX(d.data_cadastro) as ultimo_documento,
+                MAX(l.data_cadastro) as ultimo_lancamento
+            FROM dominial_imovel i
+            LEFT JOIN dominial_documento d ON d.imovel_id = i.id
+            LEFT JOIN dominial_lancamento l ON l.documento_id = d.id
+            WHERE i.terra_indigena_id_id = %s
+            GROUP BY i.id, i.nome, i.matricula, i.data_cadastro, i.observacoes, i.cartorio_id, i.proprietario_id, i.terra_indigena_id_id
+            ORDER BY 
+                COALESCE(MAX(d.data_cadastro), MAX(l.data_cadastro), i.data_cadastro) DESC,
+                i.matricula ASC
+        """, [tis_id])
+        
+        # Converter resultados em objetos Imovel
+        imoveis_data = cursor.fetchall()
+        imoveis_ordenados = []
+        
+        for row in imoveis_data:
+            # Criar um objeto Imovel temporário com os dados do banco
+            imovel = Imovel()
+            imovel.id = row[0]
+            imovel.nome = row[1]
+            imovel.matricula = row[2]
+            imovel.data_cadastro = row[3]
+            imovel.observacoes = row[4]
+            imovel.cartorio_id = row[5]
+            imovel.proprietario_id = row[6]
+            imovel.terra_indigena_id_id = row[7]
+            imovel.ultimo_documento = row[8]
+            imovel.ultimo_lancamento = row[9]
+            imoveis_ordenados.append(imovel)
+    
     return render(request, 'dominial/tis_detail.html', {
         'tis': tis,
-        'imoveis': imoveis
+        'imoveis': imoveis_ordenados
     })
 
 @login_required
