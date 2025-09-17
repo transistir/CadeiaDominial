@@ -346,26 +346,26 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         # Separar múltiplas origens para o template
         origens_separadas = []
         
-        # Verificar se é fim de cadeia
-        if 'FIM_CADEIA' in lancamento.origem:
+        # Carregar dados de fim de cadeia do novo modelo
+        origens_fim_cadeia = lancamento.origens_fim_cadeia.all()
+        fim_cadeia_por_indice = {origem.indice_origem: origem for origem in origens_fim_cadeia}
+        
+        # Verificar se é fim de cadeia (formato antigo, novo formato ou tem dados no modelo)
+        padroes_fim_cadeia = ['FIM_CADEIA', 'Destacamento Público:', 'Outra:', 'Sem Origem:']
+        tem_fim_cadeia = any(padrao in lancamento.origem for padrao in padroes_fim_cadeia) or origens_fim_cadeia.exists()
+        
+        if tem_fim_cadeia:
             # Processar origem de fim de cadeia
-            origem_parts = lancamento.origem.split(':')
-            if len(origem_parts) >= 2:
-                tipo_origem = origem_parts[1] if origem_parts[1] else ''
-                numero_origem = origem_parts[2] if len(origem_parts) > 2 else ''
-                
-                if len(origem_parts) == 4:  # Formato sem tipo de origem (formato antigo)
-                    tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
-                    classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
-                    sigla_patrimonio = ''
-                elif len(origem_parts) == 5:  # Formato sem tipo de origem (com sigla patrimônio)
-                    tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
-                    classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
-                    sigla_patrimonio = origem_parts[4] if len(origem_parts) > 4 else ''
-                else:  # Formato com tipo de origem
-                    tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
-                    classificacao = origem_parts[4] if len(origem_parts) > 4 else 'sem_origem'
-                    sigla_patrimonio = origem_parts[5] if len(origem_parts) > 5 else ''
+            if origens_fim_cadeia.exists():
+                # Usar dados do novo modelo
+                origem_fim_cadeia = origens_fim_cadeia.first()
+                # Extrair sigla do patrimônio público da string de origem se disponível
+                sigla_patrimonio_publico = ''
+                if 'FIM_CADEIA' in lancamento.origem:
+                    # Formato antigo: FIM_CADEIA:tipo_origem:numero:tipo_fim_cadeia:classificacao:sigla_patrimonio
+                    origem_parts = lancamento.origem.split(':')
+                    if len(origem_parts) >= 6:
+                        sigla_patrimonio_publico = origem_parts[5]
                 
                 origens_separadas.append({
                     'texto': lancamento.origem,
@@ -375,12 +375,89 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                     'livro': lancamento.livro_origem,
                     'folha': lancamento.folha_origem,
                     'fim_cadeia': True,
-                    'tipo_origem': tipo_origem,
-                    'numero_origem': numero_origem,
-                    'tipo_fim_cadeia': tipo_fim_cadeia,
-                    'classificacao_fim_cadeia': classificacao,
-                    'sigla_patrimonio_publico': sigla_patrimonio
+                    'tipo_origem': '',
+                    'numero_origem': '',
+                    'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia,
+                    'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia,
+                    'sigla_patrimonio_publico': sigla_patrimonio_publico,
+                    'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia
                 })
+            else:
+                # Processar formato antigo FIM_CADEIA ou novo formato
+                if 'FIM_CADEIA' in lancamento.origem:
+                    # Formato antigo FIM_CADEIA
+                    origem_parts = lancamento.origem.split(':')
+                    if len(origem_parts) >= 2:
+                        tipo_origem = origem_parts[1] if origem_parts[1] else ''
+                        numero_origem = origem_parts[2] if len(origem_parts) > 2 else ''
+                        
+                        if len(origem_parts) == 4:  # Formato sem tipo de origem (formato antigo)
+                            tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
+                            classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                            sigla_patrimonio = ''
+                        elif len(origem_parts) == 5:  # Formato sem tipo de origem (com sigla patrimônio)
+                            tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
+                            classificacao = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                            sigla_patrimonio = origem_parts[4] if len(origem_parts) > 4 else ''
+                        else:  # Formato com tipo de origem
+                            tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
+                            classificacao = origem_parts[4] if len(origem_parts) > 4 else 'sem_origem'
+                            sigla_patrimonio = origem_parts[5] if len(origem_parts) > 5 else ''
+                        
+                        origens_separadas.append({
+                            'texto': lancamento.origem,
+                            'index': 0,
+                            'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                            'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                            'livro': lancamento.livro_origem,
+                            'folha': lancamento.folha_origem,
+                            'fim_cadeia': True,
+                            'tipo_origem': tipo_origem,
+                            'numero_origem': numero_origem,
+                            'tipo_fim_cadeia': tipo_fim_cadeia,
+                            'classificacao_fim_cadeia': classificacao,
+                            'sigla_patrimonio_publico': sigla_patrimonio,
+                            'especificacao_fim_cadeia': ''
+                        })
+                else:
+                    # Novo formato: Destacamento Público:Sigla:Classificação
+                    origem_parts = lancamento.origem.split(':')
+                    if len(origem_parts) >= 3:
+                        # Mapear os tipos para os valores corretos do template
+                        tipo_mapping = {
+                            'destacamento_público': 'destacamento_publico',
+                            'outra': 'outra',
+                            'sem_origem': 'sem_origem'
+                        }
+                        tipo_raw = origem_parts[0].lower().replace(' ', '_')
+                        tipo_fim_cadeia = tipo_mapping.get(tipo_raw, tipo_raw)
+                        
+                        sigla_patrimonio = origem_parts[1]
+                        
+                        # Mapear as classificações para os valores corretos do template
+                        classificacao_mapping = {
+                            'origem_lídima': 'origem_lidima',
+                            'sem_origem': 'sem_origem',
+                            'situação_inconclusa': 'inconclusa'
+                        }
+                        classificacao_raw = origem_parts[2].lower().replace(' ', '_')
+                        classificacao = classificacao_mapping.get(classificacao_raw, classificacao_raw)
+                        
+                        origens_separadas.append({
+                            'texto': lancamento.origem,
+                            'index': 0,
+                            'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
+                            'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
+                            'livro': lancamento.livro_origem,
+                            'folha': lancamento.folha_origem,
+                            'fim_cadeia': True,
+                            'tipo_origem': '',
+                            'numero_origem': '',
+                            'tipo_fim_cadeia': tipo_fim_cadeia,
+                            'classificacao_fim_cadeia': classificacao,
+                            'sigla_patrimonio_publico': sigla_patrimonio,
+                            'especificacao_fim_cadeia': ''
+                        })
         else:
             # Processar origens normais
             # Tentar recuperar mapeamento de origens e cartórios do cache
@@ -395,6 +472,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                     # Usar mapeamento do cache se disponível
                     for i, origem in enumerate(origens_list):
                         mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
+                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
+                        
                         origens_separadas.append({
                             'texto': origem,
                             'index': i,
@@ -402,11 +481,17 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                             'cartorio_id': mapeamento.get('cartorio_id', ''),
                             'livro': mapeamento.get('livro', ''),
                             'folha': mapeamento.get('folha', ''),
-                            'fim_cadeia': False
+                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
+                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
+                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
+                            'sigla_patrimonio_publico': '',
+                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
                         })
                 else:
                     # Fallback: usar cartório geral do lançamento para todas as origens
                     for i, origem in enumerate(origens_list):
+                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
+                        
                         origens_separadas.append({
                             'texto': origem,
                             'index': i,
@@ -414,10 +499,16 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                             'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
                             'livro': lancamento.livro_origem,
                             'folha': lancamento.folha_origem,
-                            'fim_cadeia': False
+                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
+                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
+                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
+                            'sigla_patrimonio_publico': '',
+                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
                         })
             else:
                 # Uma única origem
+                origem_fim_cadeia = fim_cadeia_por_indice.get(0)
+                
                 origens_separadas.append({
                     'texto': lancamento.origem,
                     'index': 0,
@@ -425,7 +516,11 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                     'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
                     'livro': lancamento.livro_origem,
                     'folha': lancamento.folha_origem,
-                    'fim_cadeia': False
+                    'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
+                    'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
+                    'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
+                    'sigla_patrimonio_publico': '',
+                    'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
                 })
     else:
         origens_separadas = []

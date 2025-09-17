@@ -110,16 +110,6 @@
                                value="{% if origem.sigla_patrimonio_publico %}{{ origem.sigla_patrimonio_publico }}{% endif %}">
                     </div>
                     
-                    <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
-                    <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_{{ origem.index }}" 
-                         style="display: {% if origem.tipo_fim_cadeia == 'destacamento_publico' %}block{% else %}none{% endif %};">
-                        <label for="sigla_patrimonio_publico_{{ origem.index }}">Sigla do Patrimônio Público *</label>
-                        <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_{{ origem.index }}" 
-                               class="form-control sigla-patrimonio-publico-input" 
-                               placeholder="Ex: INCRA, Estado, União, etc."
-                               value="{% if origem.sigla_patrimonio_publico %}{{ origem.sigla_patrimonio_publico }}{% endif %}">
-                    </div>
-                    
                     <!-- Campo de especificação (aparece quando tipo = 'outra') -->
                     <div class="form-group especificacao-container" id="especificacao-container_{{ origem.index }}" 
                          style="display: {% if origem.tipo_fim_cadeia == 'outra' %}block{% else %}none{% endif %};">
@@ -148,20 +138,20 @@
                 <div class="form-group cartorio-field">
                     <label class="field-label">Cartório{% if origem_obrigatorio %} *{% endif %}</label>
                     <div class="autocomplete-container">
-                        <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome" class="cartorio-origem-nome" 
+                        <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_0" class="cartorio-origem-nome" 
                                placeholder="Digite o nome do cartório" autocomplete="off">
-                        <input type="hidden" name="cartorio_origem[]" id="cartorio_origem" class="cartorio-origem-id">
+                        <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_0" class="cartorio-origem-id">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
                 </div>
                 <div class="form-group livro-field">
                     <label class="field-label">Livro</label>
-                    <input type="text" name="livro_origem[]" id="livro_origem" class="livro-origem" 
+                    <input type="text" name="livro_origem[]" id="livro_origem_0" class="livro-origem" 
                            placeholder="L" title="Ex: 1, 2, A, etc.">
                 </div>
                 <div class="form-group folha-field">
                     <label class="field-label">Folha</label>
-                    <input type="text" name="folha_origem[]" id="folha_origem" class="folha-origem" 
+                    <input type="text" name="folha_origem[]" id="folha_origem_0" class="folha-origem" 
                            placeholder="F" title="Ex: 1, 2, A, etc.">
                 </div>
                 <div class="form-group fim-cadeia-field">

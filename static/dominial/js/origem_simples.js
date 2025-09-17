@@ -118,8 +118,25 @@ function atualizarOrigemCompleta(index) {
             numeroOrigem = '';
         }
         
-        // Criar origem com tipo de origem, número, tipo de fim de cadeia, classificação e sigla do patrimônio público
-        const origemCompleta = `FIM_CADEIA:${tipoOrigem}:${numeroOrigem}:${tipoFimCadeiaValue}:${classificacao}:${siglaPatrimonio}`;
+        // Criar origem no formato novo: Tipo:Sigla:Classificação
+        let origemCompleta;
+        
+        if (tipoFimCadeiaValue === 'destacamento_publico' && siglaPatrimonio) {
+            // Formato: Destacamento Público:Sigla:Classificação
+            origemCompleta = `Destacamento Público:${siglaPatrimonio}:${classificacao}`;
+        } else if (tipoFimCadeiaValue === 'outra') {
+            // Formato: Outra:Especificação:Classificação
+            const especificacao = document.getElementById(`especificacao_fim_cadeia_${index}`);
+            const especificacaoValue = especificacao ? especificacao.value.trim() : '';
+            origemCompleta = `Outra:${especificacaoValue}:${classificacao}`;
+        } else if (tipoFimCadeiaValue === 'sem_origem') {
+            // Formato: Sem Origem::Classificação
+            origemCompleta = `Sem Origem::${classificacao}`;
+        } else {
+            // Fallback para formato antigo se não conseguir determinar o tipo
+            origemCompleta = `FIM_CADEIA:${tipoOrigem}:${numeroOrigem}:${tipoFimCadeiaValue}:${classificacao}:${siglaPatrimonio}`;
+        }
+        
         hiddenInput.value = origemCompleta;
         console.log(`Origem ${index} atualizada: ${origemCompleta} (fim de cadeia marcado)`);
         return;
