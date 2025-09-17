@@ -13,22 +13,65 @@ class LancamentoOrigemService:
     def processar_origens_automaticas(lancamento, origem, imovel):
         """
         Processa origens para criar documentos automáticos
-        CORREÇÃO: Processa múltiplas origens com seus respectivos cartórios
+        NOVO: Fim de cadeia não cria documentos, apenas formata a origem
         """
         if not origem:
             return None
         
-        # Verificar se é fim de cadeia
-        if 'FIM_CADEIA' in origem:
-            return LancamentoOrigemService._processar_fim_cadeia(lancamento, origem, imovel)
+        # Separar origens normais de fim de cadeia
+        origens_individuals = [o.strip() for o in origem.split(';') if o.strip()]
+        origens_normais = []
+        origens_fim_cadeia = []
         
+        for origem_individual in origens_individuals:
+            if LancamentoOrigemService._is_fim_cadeia(origem_individual):
+                origens_fim_cadeia.append(origem_individual)
+            else:
+                origens_normais.append(origem_individual)
+        
+        # Processar apenas origens normais (que criam documentos)
+        if origens_normais:
+            origem_normais_texto = '; '.join(origens_normais)
+            return LancamentoOrigemService._processar_origens_normais(
+                lancamento, origem_normais_texto, imovel
+            )
+        
+        # Se só tem fim de cadeia, retornar mensagem informativa
+        if origens_fim_cadeia:
+            return "Origem de fim de cadeia processada (sem criação de documento)"
+        
+        return None
+    
+    @staticmethod
+    def _is_fim_cadeia(origem_individual):
+        """
+        Verifica se uma origem individual é fim de cadeia
+        """
+        # Verificar se contém padrões de fim de cadeia
+        padroes_fim_cadeia = [
+            'Destacamento Público:',
+            'Outra:',
+            'Sem Origem:',
+            'FIM_CADEIA'  # Para compatibilidade com formato antigo
+        ]
+        
+        for padrao in padroes_fim_cadeia:
+            if padrao in origem_individual:
+                return True
+        
+        return False
+    
+    @staticmethod
+    def _processar_origens_normais(lancamento, origem, imovel):
+        """
+        Processa origens normais (que criam documentos)
+        """
         # Processar origens identificadas
         origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
         
         if not origens_processadas:
             return None
         
-        # CORREÇÃO: Processar múltiplas origens com seus respectivos cartórios
         # Extrair origens individuais do texto concatenado
         origens_individuals = [o.strip() for o in origem.split(';') if o.strip()]
         

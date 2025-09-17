@@ -414,6 +414,46 @@ function controlarExibicaoCamposFimCadeia(index) {
 }
 
 /**
+ * Controla se os campos de cartório devem ser desabilitados para fim de cadeia
+ */
+function controlarCamposFimCadeia(index) {
+    const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
+    const cartorioField = document.getElementById(`cartorio_origem_nome_${index}`);
+    const livroField = document.getElementById(`livro_origem_${index}`);
+    const folhaField = document.getElementById(`folha_origem_${index}`);
+    
+    if (fimCadeiaToggle && cartorioField && livroField && folhaField) {
+        if (fimCadeiaToggle.checked) {
+            // Fim de cadeia: desabilitar campos de cartório
+            cartorioField.disabled = true;
+            livroField.disabled = true;
+            folhaField.disabled = true;
+            
+            // Remover validação obrigatória
+            cartorioField.classList.remove('campo-obrigatorio');
+            livroField.classList.remove('campo-obrigatorio');
+            folhaField.classList.remove('campo-obrigatorio');
+            
+            // Limpar valores
+            cartorioField.value = '';
+            livroField.value = '';
+            folhaField.value = '';
+        } else {
+            // Origem normal: habilitar campos
+            cartorioField.disabled = false;
+            livroField.disabled = false;
+            folhaField.disabled = false;
+            
+            // Aplicar validação obrigatória se for início de matrícula
+            const tipoLancamento = document.querySelector('input[name="tipo"]:checked')?.value;
+            if (tipoLancamento === 'inicio_matricula') {
+                cartorioField.classList.add('campo-obrigatorio');
+            }
+        }
+    }
+}
+
+/**
  * Cria o campo de sigla do patrimônio público dinamicamente
  */
 function criarCampoSiglaPatrimonio(index) {
@@ -458,4 +498,5 @@ function criarCampoSiglaPatrimonio(index) {
 // Exportar funções para uso global
 window.adicionarOrigemSimples = adicionarOrigemSimples;
 window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
+window.controlarCamposFimCadeia = controlarCamposFimCadeia;
 window.criarCampoSiglaPatrimonio = criarCampoSiglaPatrimonio;

@@ -63,9 +63,6 @@ class HierarquiaArvoreService:
         # Criar conexões baseadas nas origens dos documentos e lançamentos
         HierarquiaArvoreService._criar_conexoes_documentos(arvore, documentos, documentos_por_numero)
         
-        # Criar conexões específicas para documentos de fim de cadeia
-        HierarquiaArvoreService._criar_conexoes_fim_cadeia(arvore, documentos, documentos_por_numero)
-        
         # Calcular níveis da árvore de forma hierárquica
         HierarquiaArvoreService._calcular_niveis_hierarquicos(arvore)
         
@@ -386,15 +383,23 @@ class HierarquiaArvoreService:
         """
         Processa origem de um lançamento específico
         Lógica: documento referenciado como origem → documento atual
+        NOVO: Ignora origens de fim de cadeia
         """
-        # Verificar se é fim de cadeia
-        if 'FIM_CADEIA' in lancamento.origem:
+        # Verificar se é fim de cadeia (formato antigo ou novo)
+        padroes_fim_cadeia = [
+            'FIM_CADEIA',
+            'Destacamento Público:',
+            'Outra:',
+            'Sem Origem:'
+        ]
+        
+        is_fim_cadeia = any(padrao in lancamento.origem for padrao in padroes_fim_cadeia)
+        
+        if is_fim_cadeia:
             # Para fim de cadeia, não criar conexão automática
-            # O documento de fim de cadeia deve aparecer como origem do documento onde foi lançado
-            # Mas não deve ter conexões automáticas baseadas na origem do lançamento
             return
         
-        # Extrair códigos de origem dos lançamentos
+        # Extrair códigos de origem dos lançamentos (apenas origens normais)
         origens_lancamento = re.findall(r'[MT]\d+', lancamento.origem)
         
         for origem in origens_lancamento:
@@ -409,41 +414,6 @@ class HierarquiaArvoreService:
                 if not any(c['from'] == origem and c['to'] == documento.numero for c in arvore['conexoes']):
                     arvore['conexoes'].append(conexao)
     
-    @staticmethod
-    def _criar_conexoes_fim_cadeia(arvore, documentos, documentos_por_numero):
-        """
-        Cria conexões específicas para documentos de fim de cadeia
-        Lógica: documento de fim de cadeia → documento onde foi lançado
-        """
-        from ..models import Lancamento
-        
-        # Buscar todos os lançamentos de fim de cadeia
-        lancamentos_fim_cadeia = Lancamento.objects.filter(
-            origem__contains='FIM_CADEIA'
-        ).select_related('documento')
-        
-        for lancamento in lancamentos_fim_cadeia:
-            # Buscar o documento de fim de cadeia criado por este lançamento
-            documento_fim_cadeia = None
-            
-            # Buscar o documento de fim de cadeia criado por este lançamento
-            # Como agora usamos números únicos, buscar pelo imóvel e classificação
-            documento_fim_cadeia = Documento.objects.filter(
-                imovel=lancamento.documento.imovel,
-                classificacao_fim_cadeia__isnull=False
-            ).first()
-            
-            if documento_fim_cadeia and documento_fim_cadeia.numero in documentos_por_numero:
-                # Criar conexão: documento de fim de cadeia → documento onde foi lançado
-                conexao = {
-                    'from': documento_fim_cadeia.numero,  # Documento de fim de cadeia
-                    'to': lancamento.documento.numero,    # Documento onde foi lançado
-                    'tipo': 'fim_cadeia'
-                }
-                
-                # Evitar duplicatas
-                if not any(c['from'] == documento_fim_cadeia.numero and c['to'] == lancamento.documento.numero for c in arvore['conexoes']):
-                    arvore['conexoes'].append(conexao)
     
     @staticmethod
     def _calcular_niveis_hierarquicos(arvore):

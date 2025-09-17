@@ -84,7 +84,7 @@ def origem_formatada(lancamento):
     
     origem = lancamento.origem.strip()
     
-    # Se for fim de cadeia, formatar de forma legível
+    # Se for fim de cadeia (formato antigo), formatar de forma legível
     if 'FIM_CADEIA' in origem:
         origem_parts = origem.split(':')
         
@@ -109,6 +109,42 @@ def origem_formatada(lancamento):
     
     # Para origens normais, retornar como está
     return origem
+
+@register.filter
+def origem_formatada_completa(lancamento):
+    """
+    Template filter para formatar origem completa: M123(Cartório); Destacamento Público:INCRA:Origem Lídima
+    """
+    if not lancamento.origem:
+        return '-'
+    
+    origens_formatadas = []
+    origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+    
+    for origem in origens:
+        # Verificar se é fim de cadeia usando padrões
+        padroes_fim_cadeia = [
+            'Destacamento Público:',
+            'Outra:',
+            'Sem Origem:',
+            'FIM_CADEIA'
+        ]
+        
+        is_fim_cadeia = any(padrao in origem for padrao in padroes_fim_cadeia)
+        
+        if is_fim_cadeia:
+            # Para fim de cadeia, usar formato legível
+            origens_formatadas.append(origem)
+        else:
+            # Para origem normal, adicionar cartório se disponível
+            cartorio_nome = lancamento.cartorio_origem.nome if lancamento.cartorio_origem else ''
+            if cartorio_nome:
+                origem_formatada = f"{origem}({cartorio_nome})"
+            else:
+                origem_formatada = origem
+            origens_formatadas.append(origem_formatada)
+    
+    return '; '.join(origens_formatadas)
 
 @register.filter
 def numero_documento_criado(lancamento):
