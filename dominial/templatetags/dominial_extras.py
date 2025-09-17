@@ -149,46 +149,67 @@ def origem_formatada_completa(lancamento):
 @register.filter
 def numero_documento_criado(lancamento):
     """
-    Template filter para obter o número do documento criado por um lançamento de fim de cadeia
-    Se não for fim de cadeia, retorna o numero_lancamento normal
+    Template filter para gerar sigla composta: TipoLançamento + Número + TipoDocumento + NúmeroDocumento
+    Formato: R1 M123, AV1 M123, M123 (para início de matrícula)
     """
-    if not lancamento.origem or 'FIM_CADEIA' not in lancamento.origem:
-        return lancamento.numero_lancamento
+    # Obter tipo de lançamento
+    tipo_lancamento = lancamento.tipo.tipo if lancamento.tipo else ''
     
-    # Extrair informações da origem para identificar o documento criado
-    origem_parts = lancamento.origem.split(':')
-    if len(origem_parts) >= 2:
-        tipo_origem = origem_parts[1] if origem_parts[1] else ''
-        numero_origem = origem_parts[2] if len(origem_parts) > 2 else ''
-        
-        # Construir o número esperado do documento
-        if tipo_origem == 'T':
-            numero_esperado = f'T{numero_origem}' if numero_origem else 'T00'
-        elif tipo_origem == 'M':
-            numero_esperado = f'M{numero_origem}' if numero_origem else 'M00'
-        else:
-            # Se não há tipo de origem, usar o tipo de fim de cadeia
-            if len(origem_parts) == 4:  # Formato sem tipo de origem
-                tipo_fim_cadeia = origem_parts[2] if len(origem_parts) > 2 else 'sem_origem'
-            else:  # Formato com tipo de origem
-                tipo_fim_cadeia = origem_parts[3] if len(origem_parts) > 3 else 'sem_origem'
-            
-            # Para documentos de fim de cadeia, buscar o documento criado pelo lançamento
-            from ..models import Documento
-            documento_criado = Documento.objects.filter(
-                imovel=lancamento.documento.imovel,
-                classificacao_fim_cadeia__isnull=False
-            ).first()
-            
-            if documento_criado:
-                # Se for destacamento público e tiver sigla, exibir a sigla
-                if (documento_criado.sigla_patrimonio_publico and 
-                    documento_criado.sigla_patrimonio_publico.strip()):
-                    return documento_criado.sigla_patrimonio_publico
-                else:
-                    return documento_criado.numero
+    # Extrair apenas o número do lançamento (remover prefixos como R, AV, etc.)
+    numero_lancamento_completo = lancamento.numero_lancamento or ''
+    numero_lancamento = numero_lancamento_completo
     
-    # Fallback: retornar numero_lancamento se não conseguir determinar
-    return lancamento.numero_lancamento
+    # Extrair apenas o número puro do lançamento
+    # Se o numero_lancamento tem formato como "R6M6726", extrair apenas "6"
+    # Se tem formato como "AV3M6726", extrair apenas "3"
+    # Se tem formato como "M6726", extrair apenas "6726"
+    # Se tem formato como "14125", usar "14125"
+    
+    if numero_lancamento_completo.startswith('R'):
+        # Formato: R6M6726 -> extrair "6"
+        numero_lancamento = numero_lancamento_completo[1:]  # Remove o 'R'
+        # Se ainda tem letras, extrair apenas os dígitos no início
+        import re
+        match = re.match(r'^(\d+)', numero_lancamento)
+        if match:
+            numero_lancamento = match.group(1)
+    elif numero_lancamento_completo.startswith('AV'):
+        # Formato: AV3M6726 -> extrair "3"
+        numero_lancamento = numero_lancamento_completo[2:]  # Remove o 'AV'
+        # Se ainda tem letras, extrair apenas os dígitos no início
+        import re
+        match = re.match(r'^(\d+)', numero_lancamento)
+        if match:
+            numero_lancamento = match.group(1)
+    elif numero_lancamento_completo.startswith('M'):
+        # Formato: M6726 -> extrair "6726"
+        numero_lancamento = numero_lancamento_completo[1:]  # Remove o 'M'
+    else:
+        # Formato: 14125 -> usar "14125"
+        numero_lancamento = numero_lancamento_completo
+    
+    # Obter sigla do tipo de documento e número do documento
+    tipo_documento = lancamento.documento.tipo.tipo if lancamento.documento.tipo else ''
+    numero_documento = lancamento.documento.numero or ''
+    
+    # Mapear tipo de documento para sigla
+    sigla_documento = ''
+    if tipo_documento == 'matricula':
+        sigla_documento = 'M'
+    elif tipo_documento == 'transcricao':
+        sigla_documento = 'T'
+    else:
+        sigla_documento = tipo_documento.upper()[:1]  # Primeira letra em maiúscula
+    
+    # Gerar sigla baseada no tipo de lançamento
+    if tipo_lancamento == 'registro':
+        return f"R{numero_lancamento} {sigla_documento}{numero_documento}"
+    elif tipo_lancamento == 'averbacao':
+        return f"AV{numero_lancamento} {sigla_documento}{numero_documento}"
+    elif tipo_lancamento == 'inicio_matricula':
+        return f"{sigla_documento}{numero_documento}"
+    else:
+        # Fallback para outros tipos
+        return f"{tipo_lancamento.upper()}{numero_lancamento} {sigla_documento}{numero_documento}"
 
  
