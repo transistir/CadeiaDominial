@@ -36,6 +36,9 @@ function configurarOrigem(index) {
     // Configurar validação para início de matrícula
     configurarValidacaoInicioMatricula(index);
     
+    // Configurar estado inicial dos campos de fim de cadeia
+    controlarCamposFimCadeia(index);
+    
     // Event listener para mudança no select
     tipoSelect.addEventListener('change', function() {
         atualizarOrigemCompleta(index);
@@ -56,6 +59,15 @@ function configurarOrigem(index) {
         this.value = this.value.replace(/[^0-9]/g, '');
         atualizarOrigemCompleta(index);
     });
+    
+    // Event listener para toggle de fim de cadeia
+    const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
+    if (fimCadeiaToggle) {
+        fimCadeiaToggle.addEventListener('change', function() {
+            controlarCamposFimCadeia(index);
+            atualizarOrigemCompleta(index);
+        });
+    }
     
     // Event listener para navegação com Tab
     numeroInput.addEventListener('keydown', function(e) {
@@ -524,13 +536,19 @@ function controlarExibicaoCamposFimCadeia(index) {
  */
 function controlarCamposFimCadeia(index) {
     const fimCadeiaToggle = document.getElementById(`fim_cadeia_${index}`);
+    const numeroField = document.getElementById(`numero_origem_${index}`);
     const cartorioField = document.getElementById(`cartorio_origem_nome_${index}`);
     const livroField = document.getElementById(`livro_origem_${index}`);
     const folhaField = document.getElementById(`folha_origem_${index}`);
     
     if (fimCadeiaToggle && cartorioField && livroField && folhaField) {
         if (fimCadeiaToggle.checked) {
-            // Fim de cadeia: desabilitar campos de cartório
+            // Fim de cadeia: desabilitar campos de número e cartório
+            if (numeroField) {
+                numeroField.disabled = true;
+                numeroField.classList.remove('campo-obrigatorio');
+                numeroField.value = '';
+            }
             cartorioField.disabled = true;
             livroField.disabled = true;
             folhaField.disabled = true;
@@ -546,6 +564,9 @@ function controlarCamposFimCadeia(index) {
             folhaField.value = '';
         } else {
             // Origem normal: habilitar campos
+            if (numeroField) {
+                numeroField.disabled = false;
+            }
             cartorioField.disabled = false;
             livroField.disabled = false;
             folhaField.disabled = false;
