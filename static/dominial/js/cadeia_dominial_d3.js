@@ -405,6 +405,22 @@ function ajustarPosicoesPorNivel(root) {
     // Ajustar posições horizontais baseado no campo 'nivel' dos dados
     root.descendants().forEach(node => {
         const nivel = node.data.nivel || 0;
+        
+        // Cards de fim de cadeia ficam próximos ao documento origem
+        if (node.data.is_fim_cadeia) {
+            // Encontrar o documento origem
+            const docOrigemId = node.data.documento_origem_id;
+            if (docOrigemId) {
+                const docOrigem = root.descendants().find(n => n.data.id === docOrigemId);
+                if (docOrigem) {
+                    // Posicionar à direita do documento origem
+                    node.y = docOrigem.y + 180; // 180px à direita
+                    node.x = docOrigem.x; // Mesma altura vertical
+                    return;
+                }
+            }
+        }
+        
         // Posicionar horizontalmente baseado no nível (200px por nível)
         node.y = nivel * 200 + 120;
     });
@@ -630,6 +646,61 @@ function renderArvoreD3(data, svgGroup, width, height) {
             .ease(d3.easeQuadInOut)
             .style('opacity', '0.6');
     }
+    
+    // Desenhar linhas especiais para cards de fim de cadeia
+    const fimCadeiaNodes = root.descendants().filter(d => d.data.is_fim_cadeia);
+    if (fimCadeiaNodes.length > 0) {
+        const linksFimCadeia = svgGroup.selectAll('path.link-fim-cadeia')
+            .data(fimCadeiaNodes, d => d.id)
+            .join('path')
+            .attr('class', 'link-fim-cadeia')
+            .attr('fill', 'none')
+            .attr('stroke', d => {
+                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                    return '#28a745'; // Verde para origem lídima
+                } else {
+                    return '#dc3545'; // Vermelho para sem origem ou inconclusa
+                }
+            })
+            .attr('stroke-width', 3)
+            .attr('stroke-dasharray', '8,4')
+            .attr('stroke-linecap', 'round')
+            .style('opacity', '0')
+            .attr('d', d => {
+                const docOrigemId = d.data.documento_origem_id;
+                if (docOrigemId) {
+                    const docOrigem = root.descendants().find(n => n.data.id === docOrigemId);
+                    if (docOrigem) {
+                        // Linha horizontal conectando o documento origem ao card de fim de cadeia
+                        const x1 = docOrigem.y + 120 + 70; // Lado direito do documento origem
+                        const y1 = docOrigem.x + 20; // Centro vertical do documento origem
+                        const x2 = d.y + 120 - 70; // Lado esquerdo do card de fim de cadeia
+                        const y2 = d.x + 20; // Centro vertical do card de fim de cadeia
+                        
+                        return `M ${x1} ${y1} L ${x2} ${y2}`;
+                    }
+                }
+                return '';
+            })
+            .on('mouseover', function(event, d) {
+                d3.select(this)
+                    .transition().duration(200)
+                    .style('stroke-width', '5')
+                    .style('opacity', '1');
+            })
+            .on('mouseout', function(event, d) {
+                d3.select(this)
+                    .transition().duration(200)
+                    .style('stroke-width', '3')
+                    .style('opacity', '0.8');
+            });
+
+        // Aplicar transição de opacidade para links de fim de cadeia
+        linksFimCadeia.transition()
+            .duration(600)
+            .ease(d3.easeQuadInOut)
+            .style('opacity', '0.8');
+    }
 
     // Desenhar nós (cards) com animações suaves
     const node = svgGroup.selectAll('g.node')
@@ -668,8 +739,8 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('y', -40)
         .attr('rx', 12)
         .attr('fill', d => {
-            // Verificar se tem classificação de fim de cadeia
-            if (d.data.classificacao_fim_cadeia) {
+            // Cards especiais de fim de cadeia
+            if (d.data.is_fim_cadeia) {
                 if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
                     return '#28a745'; // Verde para origem lídima
                 } else {
@@ -682,6 +753,14 @@ function renderArvoreD3(data, svgGroup, width, height) {
             }
         })
         .attr('stroke', d => {
+            // Cards especiais de fim de cadeia
+            if (d.data.is_fim_cadeia) {
+                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                    return '#1e7e34'; // Verde escuro para origem lídima
+                } else {
+                    return '#b02a37'; // Vermelho escuro para sem origem ou inconclusa
+                }
+            }
             // Documentos importados têm borda laranja tracejada
             if (d.data.is_importado) {
                 return '#ff8c00'; // Laranja
@@ -690,14 +769,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
             if (d.data.is_compartilhado) {
                 return '#28a745'; // Verde
             }
-            // Verificar se tem classificação de fim de cadeia
-            if (d.data.classificacao_fim_cadeia) {
-                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
-                    return '#1e7e34'; // Verde escuro para origem lídima
-                } else {
-                    return '#b02a37'; // Vermelho escuro para sem origem ou inconclusa
-                }
-            } else if (d.data.tipo_documento === 'transcricao') {
+            if (d.data.tipo_documento === 'transcricao') {
                 return '#5a32a3'; // Roxo escuro para transcrição
             } else {
                 return '#0056b3'; // Azul escuro para matrícula
@@ -712,6 +784,33 @@ function renderArvoreD3(data, svgGroup, width, height) {
             return 'none'; // Linha sólida
         })
         .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))')
+        .attr('title', d => {
+            // Tooltip especial para cards de fim de cadeia
+            if (d.data.is_fim_cadeia) {
+                let tipo = '';
+                if (d.data.tipo_fim_cadeia === 'destacamento_publico' && d.data.sigla_patrimonio_publico) {
+                    tipo = `Destacamento Público: ${d.data.sigla_patrimonio_publico}`;
+                } else if (d.data.tipo_fim_cadeia === 'outra') {
+                    tipo = 'Outra Origem';
+                } else {
+                    tipo = 'Sem Origem';
+                }
+                
+                let classificacao = '';
+                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                    classificacao = 'Origem Lídima';
+                } else if (d.data.classificacao_fim_cadeia === 'sem_origem') {
+                    classificacao = 'Sem Origem';
+                } else if (d.data.classificacao_fim_cadeia === 'inconclusa') {
+                    classificacao = 'Situação Inconclusa';
+                }
+                
+                return `Fim de Cadeia\nTipo: ${tipo}\nClassificação: ${classificacao}`;
+            }
+            
+            // Tooltip normal para documentos
+            return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\nLivro: ${d.data.livro}, Folha: ${d.data.folha}\nData: ${d.data.data}\n${d.data.total_lancamentos} lançamentos`;
+        })
         .on('mouseover', function() {
             d3.select(this)
                 .transition().duration(120)
@@ -728,7 +827,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
         })
         .on('click', (event, d) => {
             event.stopPropagation();
-            window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
+            // Cards de fim de cadeia não redirecionam
+            if (!d.data.is_fim_cadeia) {
+                window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
+            }
         });
 
     // Número do documento
@@ -739,6 +841,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('font-size', 20)
         .attr('font-weight', 700)
         .text(d => {
+            // Cards especiais de fim de cadeia
+            if (d.data.is_fim_cadeia) {
+                return d.data.numero || 'FIM';
+            }
             // Se for destacamento público e tiver sigla, exibir a sigla
             if (d.data.sigla_patrimonio_publico && d.data.sigla_patrimonio_publico.trim()) {
                 return d.data.sigla_patrimonio_publico;
@@ -746,8 +852,9 @@ function renderArvoreD3(data, svgGroup, width, height) {
             return d.data.numero || d.data.name || '';
         });
 
-    // Total de lançamentos
-    node.append('text')
+    // Total de lançamentos (não mostrar para cards de fim de cadeia)
+    node.filter(d => !d.data.is_fim_cadeia)
+        .append('text')
         .attr('text-anchor', 'middle')
         .attr('y', 14)
         .attr('fill', 'white')
@@ -824,6 +931,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
             let tooltip = `Documento compartilhado\nCompartilhado em: ${d.data.imoveis_compartilhando.join(', ')}`;
             return tooltip;
         });
+
 
     // Botões SVG
     const btnGroup = node.append('g')

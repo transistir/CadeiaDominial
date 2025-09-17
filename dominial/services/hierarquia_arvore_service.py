@@ -59,6 +59,18 @@ class HierarquiaArvoreService:
             doc_node = HierarquiaArvoreService._criar_no_documento(documento, imovel)
             documentos_por_numero[documento.numero] = doc_node
             arvore['documentos'].append(doc_node)
+            
+            # Verificar se é um documento de início de matrícula com fim de cadeia
+            if documento.tipo.tipo == 'matricula':
+                from ..models import OrigemFimCadeia
+                lancamentos_fim_cadeia = documento.lancamentos.filter(origens_fim_cadeia__isnull=False).distinct()
+                if lancamentos_fim_cadeia.exists():
+                    lancamento_fim_cadeia = lancamentos_fim_cadeia.first()
+                    origem_fim_cadeia = lancamento_fim_cadeia.origens_fim_cadeia.first()
+                    
+                    # Criar nó especial de fim de cadeia
+                    fim_cadeia_node = HierarquiaArvoreService._criar_no_fim_cadeia(documento, lancamento_fim_cadeia, origem_fim_cadeia)
+                    arvore['documentos'].append(fim_cadeia_node)
         
         # Criar conexões baseadas nas origens dos documentos e lançamentos
         HierarquiaArvoreService._criar_conexoes_documentos(arvore, documentos, documentos_por_numero)
@@ -322,12 +334,75 @@ class HierarquiaArvoreService:
             'is_importado': is_importado,
             'is_compartilhado': is_compartilhado,
             'imoveis_compartilhando': imoveis_compartilhando,
-            'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,  # Adicionar classificação de fim de cadeia
-            'sigla_patrimonio_publico': documento.sigla_patrimonio_publico,  # Adicionar sigla do patrimônio público
             'info_importacao': info_importacao,
             'tooltip_importacao': tooltip_importacao,
             'cadeias_dominiais': cadeias_dominiais,
             'total_cadeias': len(cadeias_dominiais)
+        }
+    
+    @staticmethod
+    def _criar_no_fim_cadeia(documento, lancamento_fim_cadeia, origem_fim_cadeia):
+        """
+        Cria um nó especial para representar o fim de cadeia
+        """
+        # Extrair sigla do patrimônio público da origem do lançamento se disponível
+        sigla_patrimonio_publico = None
+        if lancamento_fim_cadeia.origem:
+            if 'FIM_CADEIA' in lancamento_fim_cadeia.origem:
+                origem_parts = lancamento_fim_cadeia.origem.split(':')
+                if len(origem_parts) >= 6:
+                    sigla_patrimonio_publico = origem_parts[5]
+            elif ':' in lancamento_fim_cadeia.origem:
+                # Formato novo: Destacamento Público:Sigla:Classificação
+                origem_parts = lancamento_fim_cadeia.origem.split(':')
+                if len(origem_parts) >= 2:
+                    sigla_patrimonio_publico = origem_parts[1]
+        
+        # Determinar o tipo de fim de cadeia
+        tipo_fim_cadeia = origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else 'sem_origem'
+        classificacao = origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else 'sem_origem'
+        
+        # Criar título e número baseado no tipo
+        if tipo_fim_cadeia == 'destacamento_publico' and sigla_patrimonio_publico:
+            titulo = f"Destacamento Público\n{sigla_patrimonio_publico}"
+            numero = sigla_patrimonio_publico
+        elif tipo_fim_cadeia == 'outra' and origem_fim_cadeia.especificacao_fim_cadeia:
+            titulo = f"Outra Origem\n{origem_fim_cadeia.especificacao_fim_cadeia}"
+            numero = origem_fim_cadeia.especificacao_fim_cadeia[:10] + "..." if len(origem_fim_cadeia.especificacao_fim_cadeia) > 10 else origem_fim_cadeia.especificacao_fim_cadeia
+        else:
+            titulo = "Sem Origem"
+            numero = "Sem Origem"
+        
+        return {
+            'id': f"fim_cadeia_{documento.id}",
+            'numero': numero,
+            'tipo': 'fim_cadeia',
+            'tipo_display': 'Fim de Cadeia',
+            'tipo_documento': 'fim_cadeia',
+            'data': '',
+            'cartorio': '',
+            'livro': '',
+            'folha': '',
+            'origem': '',
+            'observacoes': '',
+            'total_lancamentos': 0,
+            'x': 0,  # Posição X (será calculada pelo frontend)
+            'y': 0,  # Posição Y (será calculada pelo frontend)
+            'nivel': 0,  # Nível na árvore (será calculado)
+            'nivel_manual': None,
+            'is_importado': False,
+            'is_compartilhado': False,
+            'imoveis_compartilhando': [],
+            'info_importacao': '',
+            'tooltip_importacao': '',
+            'cadeias_dominiais': [],
+            'total_cadeias': 0,
+            'is_fim_cadeia': True,  # Flag especial para identificar nós de fim de cadeia
+            'tipo_fim_cadeia': tipo_fim_cadeia,
+            'classificacao_fim_cadeia': classificacao,
+            'sigla_patrimonio_publico': sigla_patrimonio_publico,
+            'titulo_fim_cadeia': titulo,
+            'documento_origem_id': documento.id  # Referência ao documento que originou este fim de cadeia
         }
     
     @staticmethod
@@ -544,12 +619,27 @@ class HierarquiaArvoreService:
         # Para documentos que não foram processados (isolados), atribuir nível 0
         for doc_node in arvore['documentos']:
             if doc_node['numero'] not in niveis_hierarquicos:
-                niveis_hierarquicos[doc_node['numero']] = 0
+                # Cards de fim de cadeia ficam no mesmo nível do documento origem, mas com offset
+                if doc_node.get('is_fim_cadeia'):
+                    # Pegar o nível do documento origem
+                    doc_origem_id = doc_node.get('documento_origem_id')
+                    if doc_origem_id:
+                        # Encontrar o documento origem na árvore
+                        for doc_origem in arvore['documentos']:
+                            if doc_origem['id'] == doc_origem_id:
+                                nivel_origem = niveis_hierarquicos.get(doc_origem['numero'], 0)
+                                niveis_hierarquicos[doc_node['numero']] = nivel_origem + 0.5  # Offset para ficar à direita
+                                break
+                        else:
+                            niveis_hierarquicos[doc_node['numero']] = 0.5
+                    else:
+                        niveis_hierarquicos[doc_node['numero']] = 0.5
+                else:
+                    niveis_hierarquicos[doc_node['numero']] = 0
         
-        # Para documentos que não foram processados (isolados), atribuir nível 0
+        # Aplicar os níveis calculados aos nós
         for doc_node in arvore['documentos']:
-            if doc_node['numero'] not in niveis_hierarquicos:
-                niveis_hierarquicos[doc_node['numero']] = 0
+            doc_node['nivel'] = niveis_hierarquicos.get(doc_node['numero'], 0)
     
     @staticmethod
     def _calcular_nivel_documento(numero_doc, origens_por_documento, documentos_por_origem, niveis_hierarquicos):
