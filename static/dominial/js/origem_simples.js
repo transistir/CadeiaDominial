@@ -31,6 +31,7 @@ function configurarOrigem(index) {
     
     // Inicializar estado do campo número (bloqueado por padrão)
     numeroInput.disabled = !tipoSelect.value;
+    console.log(`Origem ${index}: tipoSelect.value = "${tipoSelect.value}", numeroInput.disabled = ${numeroInput.disabled}`);
     
     // Configurar validação para início de matrícula
     configurarValidacaoInicioMatricula(index);
@@ -177,10 +178,16 @@ function adicionarOrigemSimples() {
     // Atualizar IDs e names para o novo índice
     atualizarIdsOrigem(novaOrigem, proximoIndex);
     
-    // Inserir após a última origem
+    // Inserir no final do container
     const container = document.getElementById('origens-container');
     if (container) {
-        container.insertBefore(novaOrigem, container.lastElementChild);
+        container.appendChild(novaOrigem);
+        
+        // Limpar campos da nova origem
+        limparCamposNovaOrigem(novaOrigem);
+        
+        // Criar container de fim de cadeia para esta origem
+        criarContainerFimCadeia(proximoIndex);
         
         // Configurar nova origem
         configurarOrigem(proximoIndex);
@@ -192,7 +199,89 @@ function adicionarOrigemSimples() {
         }
         
         console.log(`Nova origem ${proximoIndex} adicionada`);
+        
+        // Reativar sugestões se for início de matrícula
+        if (typeof ativarSugestoesCartorioOrigem === 'function') {
+            ativarSugestoesCartorioOrigem();
+        }
     }
+}
+
+function limparCamposNovaOrigem(origemElement) {
+    // Limpar todos os campos da nova origem
+    const inputs = origemElement.querySelectorAll('input, select, textarea');
+    inputs.forEach(input => {
+        if (input.type === 'checkbox') {
+            input.checked = false;
+        } else if (input.type === 'hidden') {
+            input.value = '';
+        } else {
+            input.value = '';
+        }
+    });
+    
+    // Desabilitar campo número por padrão
+    const numeroInput = origemElement.querySelector('.origem-numero-input');
+    if (numeroInput) {
+        numeroInput.disabled = true;
+    }
+    
+    console.log('Campos da nova origem limpos');
+}
+
+function criarContainerFimCadeia(index) {
+    // Criar container de fim de cadeia para esta origem
+    const fimCadeiaContainer = document.createElement('div');
+    fimCadeiaContainer.className = 'fim-cadeia-origem-container';
+    fimCadeiaContainer.id = `fim-cadeia-origem-container_${index}`;
+    fimCadeiaContainer.style.display = 'none';
+    
+    fimCadeiaContainer.innerHTML = `
+        <div class="grid-2">
+            <div class="form-group">
+                <label for="tipo_fim_cadeia_${index}">Tipo do Fim de Cadeia *</label>
+                <select name="tipo_fim_cadeia[]" id="tipo_fim_cadeia_${index}" class="form-control tipo-fim-cadeia-select">
+                    <option value="">Selecione o tipo...</option>
+                    <option value="destacamento_publico">Destacamento do Patrimônio Público</option>
+                    <option value="outra">Outra</option>
+                    <option value="sem_origem">Sem Origem</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="classificacao_fim_cadeia_${index}">Classificação do Fim de Cadeia *</label>
+                <select name="classificacao_fim_cadeia[]" id="classificacao_fim_cadeia_${index}" class="form-control classificacao-fim-cadeia-select">
+                    <option value="">Selecione a classificação...</option>
+                    <option value="origem_lidima">Imóvel com Origem Lídima</option>
+                    <option value="sem_origem">Imóvel sem Origem</option>
+                    <option value="inconclusa">Situação Inconclusa</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
+        <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_${index}" style="display: none;">
+            <label for="sigla_patrimonio_publico_${index}">Sigla do Patrimônio Público *</label>
+            <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}" 
+                   class="form-control sigla-patrimonio-publico-input" 
+                   placeholder="Ex: INCRA, Estado, União, etc.">
+        </div>
+        
+        <!-- Campo de especificação (aparece quando tipo = 'outra') -->
+        <div class="form-group especificacao-container" id="especificacao-container_${index}" style="display: none;">
+            <label for="especificacao_fim_cadeia_${index}">Especificação *</label>
+            <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_${index}" class="form-control especificacao-fim-cadeia" 
+                      placeholder="Detalhe a especificação..."></textarea>
+        </div>
+    `;
+    
+    // Inserir o container após a origem correspondente
+    const origemItem = document.querySelector(`[data-origem-index="${index}"]`);
+    if (origemItem) {
+        origemItem.parentNode.insertBefore(fimCadeiaContainer, origemItem.nextSibling);
+    }
+    
+    console.log(`Container de fim de cadeia criado para origem ${index}`);
 }
 
 function atualizarIdsOrigem(elemento, novoIndex) {
