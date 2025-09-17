@@ -933,8 +933,9 @@ function renderArvoreD3(data, svgGroup, width, height) {
         });
 
 
-    // Botões SVG
-    const btnGroup = node.append('g')
+    // Botões SVG (não mostrar para cards de fim de cadeia)
+    const btnGroup = node.filter(d => !d.data.is_fim_cadeia)
+        .append('g')
         .attr('class', 'card-buttons')
         .attr('transform', 'translate(0,35)');
 
