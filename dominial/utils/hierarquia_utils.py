@@ -81,15 +81,35 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
                     continue
             break
         
-        # Extrair códigos de origem dos lançamentos
+        # Extrair códigos de origem dos lançamentos (apenas origens normais, não fim de cadeia)
         origens_identificadas = []
         for lancamento in lancamentos_com_origem:
             if lancamento.origem:
-                codigos = re.findall(r'[MT]\d+', lancamento.origem)
-                for codigo in codigos:
-                    doc_existente = next((doc for doc in documentos if doc.numero == codigo), None)
-                    if doc_existente:
-                        origens_identificadas.append(doc_existente)
+                # Separar origens normais de fim de cadeia
+                origens_individuals = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                origens_normais = []
+                
+                for origem_individual in origens_individuals:
+                    # Verificar se é fim de cadeia
+                    padroes_fim_cadeia = [
+                        'Destacamento Público:',
+                        'Outra:',
+                        'Sem Origem:',
+                        'FIM_CADEIA'
+                    ]
+                    
+                    is_fim_cadeia = any(padrao in origem_individual for padrao in padroes_fim_cadeia)
+                    
+                    if not is_fim_cadeia:
+                        origens_normais.append(origem_individual)
+                
+                # Processar apenas origens normais
+                for origem_normal in origens_normais:
+                    codigos = re.findall(r'[MT]\d+', origem_normal)
+                    for codigo in codigos:
+                        doc_existente = next((doc for doc in documentos if doc.numero == codigo), None)
+                        if doc_existente:
+                            origens_identificadas.append(doc_existente)
         
         # Escolher próximo documento baseado na escolha do usuário ou padrão
         proximo_documento = None
@@ -163,7 +183,24 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
     # Dividir por ponto e vírgula se houver múltiplas origens
     origens = [o.strip() for o in origem_texto.split(';') if o.strip()]
     
+    # Separar origens normais de fim de cadeia
+    origens_normais = []
     for origem in origens:
+        # Verificar se é fim de cadeia
+        padroes_fim_cadeia = [
+            'Destacamento Público:',
+            'Outra:',
+            'Sem Origem:',
+            'FIM_CADEIA'
+        ]
+        
+        is_fim_cadeia = any(padrao in origem for padrao in padroes_fim_cadeia)
+        
+        if not is_fim_cadeia:
+            origens_normais.append(origem)
+    
+    # Processar apenas origens normais
+    for origem in origens_normais:
         # Padrão para matrículas (M seguido de números)
         if re.match(r'^M\d+$', origem):
             origens_processadas.append({

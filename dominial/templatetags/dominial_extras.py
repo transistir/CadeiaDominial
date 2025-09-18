@@ -133,18 +133,61 @@ def origem_formatada_completa(lancamento):
         is_fim_cadeia = any(padrao in origem for padrao in padroes_fim_cadeia)
         
         if is_fim_cadeia:
-            # Para fim de cadeia, usar formato legível
-            origens_formatadas.append(origem)
+            # Para fim de cadeia, formatar de forma legível
+            if 'Destacamento Público:' in origem:
+                # Formato: Destacamento Público:Sigla:Classificação
+                partes = origem.split(':')
+                if len(partes) >= 2:
+                    sigla = partes[1].strip() if len(partes) > 1 else ''
+                    classificacao = partes[2].strip() if len(partes) > 2 else ''
+                    if sigla:
+                        origem_formatada = f"Destacamento Público : {sigla}"
+                        if classificacao:
+                            origem_formatada += f" ({classificacao})"
+                    else:
+                        origem_formatada = "Destacamento Público"
+                else:
+                    origem_formatada = origem
+            elif 'Outra:' in origem:
+                # Formato: Outra:Especificação:Classificação
+                partes = origem.split(':')
+                if len(partes) >= 2:
+                    especificacao = partes[1].strip() if len(partes) > 1 else ''
+                    classificacao = partes[2].strip() if len(partes) > 2 else ''
+                    if especificacao:
+                        origem_formatada = f"Outra : {especificacao}"
+                        if classificacao:
+                            origem_formatada += f" ({classificacao})"
+                    else:
+                        origem_formatada = "Outra"
+                else:
+                    origem_formatada = origem
+            elif 'Sem Origem:' in origem:
+                # Formato: Sem Origem::Classificação
+                partes = origem.split(':')
+                if len(partes) >= 3:
+                    classificacao = partes[2].strip() if len(partes) > 2 else ''
+                    origem_formatada = "Sem Origem"
+                    if classificacao:
+                        origem_formatada += f" ({classificacao})"
+                else:
+                    origem_formatada = "Sem Origem"
+            else:
+                # Para formato antigo FIM_CADEIA, usar como está
+                origem_formatada = origem
+            
+            origens_formatadas.append(origem_formatada)
         else:
             # Para origem normal, adicionar cartório se disponível
             cartorio_nome = lancamento.cartorio_origem.nome if lancamento.cartorio_origem else ''
             if cartorio_nome:
-                origem_formatada = f"{origem}({cartorio_nome})"
+                origem_formatada = f"{origem} ({cartorio_nome})"
             else:
                 origem_formatada = origem
             origens_formatadas.append(origem_formatada)
     
-    return '; '.join(origens_formatadas)
+    # Juntar com quebras de linha para melhor visualização
+    return '<br>'.join(origens_formatadas)
 
 @register.filter
 def numero_documento_criado(lancamento):

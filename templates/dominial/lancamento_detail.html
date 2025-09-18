@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load dominial_extras %}
 
 {% block title %}Detalhes do Lançamento - {{ lancamento.numero_lancamento|default:"Lançamento" }}{% endblock %}
 
@@ -184,7 +185,7 @@
                             {% if lancamento.origem %}
                             <div class="info-item full-width">
                                 <span class="info-label">Origem</span>
-                                <span class="info-value">{{ lancamento.origem }}</span>
+                                <span class="info-value">{{ lancamento|origem_formatada_completa|safe }}</span>
                             </div>
                             {% endif %}
                             {% if lancamento.detalhes %}
@@ -352,7 +353,7 @@
                             {% if lancamento.origem %}
                             <div class="info-item full-width">
                                 <span class="info-label">Origem</span>
-                                <span class="info-value">{{ lancamento.origem }}</span>
+                                <span class="info-value">{{ lancamento|origem_formatada_completa|safe }}</span>
                             </div>
                             {% endif %}
                             {% if lancamento.titulo %}

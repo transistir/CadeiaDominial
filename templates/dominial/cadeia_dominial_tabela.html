@@ -252,23 +252,7 @@
                                                 <td>{{ lancamento.area|default_if_none:"-" }}</td>
                                                 <td>
                                                   {% if lancamento.origem %}
-                                                    {% if ';' in lancamento.origem %}
-                                                      {% for origem in lancamento.origem|split:';' %}
-                                                        <div>
-                                                          {{ lancamento|origem_formatada }}
-                                                          {% with cartorio_nome=lancamento|origem_cartorio_especifico:origem %}
-                                                            {% if cartorio_nome %}
-                                                              <small class="text-muted">({{ cartorio_nome }})</small>
-                                                            {% endif %}
-                                                          {% endwith %}
-                                                        </div>
-                                                      {% endfor %}
-                                                    {% else %}
-                                                      {{ lancamento|origem_formatada }}
-                                                      {% if lancamento.cartorio_origem %}
-                                                        <small class="text-muted">({{ lancamento.cartorio_origem.nome }})</small>
-                                                      {% endif %}
-                                                    {% endif %}
+                                                    {{ lancamento|origem_formatada_completa|safe }}
                                                   {% else %}
                                                     -
                                                   {% endif %}

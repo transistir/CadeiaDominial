@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load dominial_extras %}
 
 {% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
@@ -155,7 +156,7 @@
                                             {% endif %}
                                             <!-- Restante -->
                                             <td>{{ lancamento.area|default_if_none:"-" }}</td>
-                                            <td>{{ lancamento.origem|default_if_none:"-" }}</td>
+                                            <td>{{ lancamento|origem_formatada_completa|safe|default_if_none:"-" }}</td>
                                             <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
                                         </tr>
                                         {% endfor %}

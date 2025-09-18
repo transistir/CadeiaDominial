@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load dominial_extras %}
 
 {% block title %}Lançamentos - {{ documento.numero }}{% endblock %}
 
@@ -172,7 +173,7 @@
                                     {% if lancamento.origem %}
                                         <div class="detalhe-item">
                                             <span class="detalhe-label">Origem:</span>
-                                            <span class="detalhe-valor">{{ lancamento.origem|truncatechars:25 }}</span>
+                                            <span class="detalhe-valor">{{ lancamento|origem_formatada_completa|safe|truncatechars:25 }}</span>
                                         </div>
                                     {% endif %}
                                     <!-- INFORMAÇÕES DE ORIGEM PARA INÍCIO DE MATRÍCULA -->

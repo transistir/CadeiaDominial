@@ -93,11 +93,19 @@ class LancamentoCriacaoService:
         print("DEBUG: Validando cartórios das origens...")
         cartorios_origem_ids = request.POST.getlist('cartorio_origem[]')
         cartorios_origem_nomes = request.POST.getlist('cartorio_origem_nome[]')
+        origens_completas = request.POST.getlist('origem_completa[]')
         
         from ..models import Cartorios
         
         for i, (cartorio_id, cartorio_nome) in enumerate(zip(cartorios_origem_ids, cartorios_origem_nomes)):
-            if cartorio_nome.strip():  # Se foi digitado um nome
+            # Verificar se esta origem é fim de cadeia
+            origem_atual = origens_completas[i] if i < len(origens_completas) else ''
+            is_fim_cadeia = any(padrao in origem_atual for padrao in [
+                'Destacamento Público:', 'Outra:', 'Sem Origem:', 'FIM_CADEIA'
+            ])
+            
+            # Só validar cartório se NÃO for fim de cadeia
+            if not is_fim_cadeia and cartorio_nome.strip():  # Se foi digitado um nome
                 if not cartorio_id.strip():  # Mas não foi selecionado da lista
                     print(f"DEBUG: Cartório inválido na origem {i+1}: '{cartorio_nome}'")
                     return None, f"❌ Cartório inválido na origem {i+1}: '{cartorio_nome}'. Selecione um cartório da lista. Não é possível criar novos cartórios."

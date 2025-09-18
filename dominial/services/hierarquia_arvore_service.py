@@ -354,9 +354,12 @@ class HierarquiaArvoreService:
                     sigla_patrimonio_publico = origem_parts[5]
             elif ':' in lancamento_fim_cadeia.origem:
                 # Formato novo: Destacamento Público:Sigla:Classificação
-                origem_parts = lancamento_fim_cadeia.origem.split(':')
+                # Mas pode ter múltiplas origens separadas por ';'
+                # Primeiro, pegar apenas a primeira origem (fim de cadeia)
+                primeira_origem = lancamento_fim_cadeia.origem.split(';')[0].strip()
+                origem_parts = primeira_origem.split(':')
                 if len(origem_parts) >= 2:
-                    sigla_patrimonio_publico = origem_parts[1]
+                    sigla_patrimonio_publico = origem_parts[1].strip()
         
         # Determinar o tipo de fim de cadeia
         tipo_fim_cadeia = origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else 'sem_origem'
