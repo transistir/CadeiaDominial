@@ -259,22 +259,19 @@ class HierarquiaArvoreService:
         """
         Cria um nó de documento para a árvore
         """
-        # Verificar se documento foi importado (está na tabela DocumentoImportado)
-        # Um documento só é "importado" no imóvel que o importou, não no imóvel de origem
+        # CORREÇÃO: Documentos referenciados devem ser compartilhados, não importados
+        # Um documento só é "importado" se foi explicitamente importado via interface
         is_importado = False
         if imovel:
-            # Verificar se este documento foi importado PARA este imóvel específico
-            # Ou seja, se existe um registro onde este documento foi importado de outro imóvel para este imóvel
+            # Verificar se este documento foi explicitamente importado PARA este imóvel
             from ..models import DocumentoImportado
             is_importado = DocumentoImportado.objects.filter(
                 documento=documento,
                 documento__imovel=imovel  # O documento pertence ao imóvel atual
             ).exists()
             
-            # Se o documento não pertence ao imóvel atual mas aparece na árvore,
-            # significa que foi importado por referência
-            if not is_importado and documento.imovel != imovel:
-                is_importado = True
+            # NÃO marcar como importado se o documento não pertence ao imóvel atual
+            # Isso será tratado como compartilhado
         info_importacao = None
         tooltip_importacao = None
         cadeias_dominiais = []
@@ -461,23 +458,9 @@ class HierarquiaArvoreService:
         """
         Processa origem de um lançamento específico
         Lógica: documento referenciado como origem → documento atual
-        NOVO: Ignora origens de fim de cadeia
+        CORRIGIDO: Extrai origens normais mesmo quando há fim de cadeia na mesma string
         """
-        # Verificar se é fim de cadeia (formato antigo ou novo)
-        padroes_fim_cadeia = [
-            'FIM_CADEIA',
-            'Destacamento Público:',
-            'Outra:',
-            'Sem Origem:'
-        ]
-        
-        is_fim_cadeia = any(padrao in lancamento.origem for padrao in padroes_fim_cadeia)
-        
-        if is_fim_cadeia:
-            # Para fim de cadeia, não criar conexão automática
-            return
-        
-        # Extrair códigos de origem dos lançamentos (apenas origens normais)
+        # Extrair códigos de origem dos lançamentos (M ou T seguidos de números)
         origens_lancamento = re.findall(r'[MT]\d+', lancamento.origem)
         
         for origem in origens_lancamento:
@@ -527,27 +510,43 @@ class HierarquiaArvoreService:
         """
         # Primeiro, tentar encontrar um documento que corresponda à matrícula do imóvel
         matricula_imovel = arvore['imovel']['matricula']
+        print(f"DEBUG MATRICULA: Procurando matrícula do imóvel: {matricula_imovel}")
         
-        # Procurar por documento com número igual à matrícula do imóvel
+        # Procurar por documento com número igual à matrícula do imóvel (sem restrição de tipo)
+        # Também verificar se o número do documento corresponde à matrícula sem o prefixo "M"
         for doc_node in arvore['documentos']:
-            if doc_node['numero'] == matricula_imovel and doc_node['tipo'] == 'matricula':
+            if doc_node['numero'] == matricula_imovel:
+                print(f"DEBUG MATRICULA: Encontrado documento com matrícula do imóvel: {doc_node['numero']} (tipo: {doc_node.get('tipo', 'N/A')}, importado: {doc_node.get('is_importado', False)})")
+                return doc_node['numero']
+            # Verificar se a matrícula do imóvel tem prefixo "M" e o documento não
+            elif matricula_imovel.startswith('M') and doc_node['numero'] == matricula_imovel[1:]:
+                print(f"DEBUG MATRICULA: Encontrado documento correspondente à matrícula do imóvel: {doc_node['numero']} (matrícula: {matricula_imovel}) (tipo: {doc_node.get('tipo', 'N/A')}, importado: {doc_node.get('is_importado', False)})")
                 return doc_node['numero']
         
-        # Se não encontrou, procurar por documento de matrícula mais recente
-        documentos_matricula = [doc for doc in arvore['documentos'] if doc['tipo'] == 'matricula']
+        # Se não encontrou, procurar por documento de matrícula mais recente (não importado)
+        documentos_matricula = [doc for doc in arvore['documentos'] if doc['tipo'] == 'matricula' and not doc.get('is_importado', False) and not doc.get('is_compartilhado', False)]
         if documentos_matricula:
             # Ordenar por data (mais recente primeiro) e pegar o primeiro
             documentos_matricula.sort(key=lambda x: x['data'], reverse=True)
+            print(f"DEBUG MATRICULA: Usando matrícula mais recente (não importada): {documentos_matricula[0]['numero']}")
             return documentos_matricula[0]['numero']
         
-        # Se não há matrículas, procurar por transcrições mais recentes
-        documentos_transcricao = [doc for doc in arvore['documentos'] if doc['tipo'] == 'transcricao']
+        # Se não há matrículas não importadas, procurar por transcrições mais recentes (não importadas)
+        documentos_transcricao = [doc for doc in arvore['documentos'] if doc['tipo'] == 'transcricao' and not doc.get('is_importado', False) and not doc.get('is_compartilhado', False)]
         if documentos_transcricao:
             documentos_transcricao.sort(key=lambda x: x['data'], reverse=True)
+            print(f"DEBUG MATRICULA: Usando transcrição mais recente (não importada): {documentos_transcricao[0]['numero']}")
             return documentos_transcricao[0]['numero']
         
-        # Último recurso: usar o primeiro documento disponível
+        # Último recurso: usar o primeiro documento não importado e não compartilhado disponível
+        documentos_nao_importados = [doc for doc in arvore['documentos'] if not doc.get('is_importado', False) and not doc.get('is_compartilhado', False)]
+        if documentos_nao_importados:
+            print(f"DEBUG MATRICULA: Usando primeiro documento não importado: {documentos_nao_importados[0]['numero']}")
+            return documentos_nao_importados[0]['numero']
+        
+        # Se todos são importados, usar o primeiro disponível
         if arvore['documentos']:
+            print(f"DEBUG MATRICULA: Todos são importados, usando primeiro: {arvore['documentos'][0]['numero']}")
             return arvore['documentos'][0]['numero']
         
         return None
@@ -566,9 +565,11 @@ class HierarquiaArvoreService:
         origens_por_documento = {}  # documento -> [origens]
         documentos_por_origem = {}  # origem -> [documentos que a referenciam]
         
+        print(f"DEBUG CONEXOES: Processando {len(arvore['conexoes'])} conexões:")
         for conexao in arvore['conexoes']:
             origem = conexao['from']
             destino = conexao['to']
+            print(f"DEBUG CONEXOES: {origem} -> {destino}")
             
             # Adicionar origem ao documento destino
             if destino not in origens_por_documento:
@@ -588,61 +589,139 @@ class HierarquiaArvoreService:
             if doc_node.get('nivel_manual') is not None:
                 niveis_hierarquicos[doc_node['numero']] = doc_node['nivel_manual']
         
-        # Calcular níveis usando algoritmo de ordenação topológica
-        # Processar documentos em múltiplas iterações até estabilizar
+        # LÓGICA CORRIGIDA: Calcular níveis baseado em quem referencia quem
+        print(f"DEBUG NIVEIS: Aplicando lógica corrigida de níveis...")
+        print(f"DEBUG NIVEIS: origens_por_documento: {origens_por_documento}")
+        print(f"DEBUG NIVEIS: documentos_por_origem: {documentos_por_origem}")
+        
+        # Primeiro, identificar documentos que são referenciados como origens
+        documentos_referenciados = set()
+        for origem, documentos in documentos_por_origem.items():
+            # Incluir todos os documentos que são referenciados como origens
+            documentos_referenciados.add(origem)
+        
+        print(f"DEBUG NIVEIS: Documentos referenciados como origens: {documentos_referenciados}")
+        
+        # Iterar até todos os documentos terem nível definido
         mudancas = True
         iteracao = 0
-        max_iteracoes = 100  # Evitar loop infinito
+        max_iteracoes = 10
         
         while mudancas and iteracao < max_iteracoes:
             mudancas = False
             iteracao += 1
+            print(f"DEBUG NIVEIS: Iteração {iteracao}")
             
-            # Para cada documento, calcular seu nível
             for doc_node in arvore['documentos']:
                 numero_doc = doc_node['numero']
                 
-                # Pular se já tem nível manual definido ou é a matrícula atual
-                if numero_doc in niveis_hierarquicos and doc_node.get('nivel_manual') is not None:
-                    continue
-                if numero_doc == matricula_atual:
+                # Pular se já tem nível definido ou é a matrícula atual
+                if numero_doc in niveis_hierarquicos or numero_doc == matricula_atual:
                     continue
                 
-                # Calcular nível baseado nas origens/referenciadores
-                nivel_calculado = HierarquiaArvoreService._calcular_nivel_documento(
-                    numero_doc, origens_por_documento, documentos_por_origem, niveis_hierarquicos
-                )
-                
-                # Se o nível mudou, atualizar
-                nivel_atual = niveis_hierarquicos.get(numero_doc, 0)
-                if nivel_calculado != nivel_atual:
-                    niveis_hierarquicos[numero_doc] = nivel_calculado
-                    mudancas = True
+                # Verificar se este documento é referenciado como origem
+                if numero_doc in documentos_referenciados:
+                    # Encontrar o menor nível entre os documentos que o referenciam
+                    min_nivel_referenciadores = float('inf')
+                    referenciadores_com_nivel = 0
+                    
+                    if numero_doc in documentos_por_origem:
+                        for referenciador in documentos_por_origem[numero_doc]:
+                            if referenciador in niveis_hierarquicos:
+                                min_nivel_referenciadores = min(min_nivel_referenciadores, niveis_hierarquicos[referenciador])
+                                referenciadores_com_nivel += 1
+                    
+                    # Se todos os referenciadores têm nível definido, definir nível deste documento
+                    if referenciadores_com_nivel > 0 and min_nivel_referenciadores != float('inf'):
+                        novo_nivel = min_nivel_referenciadores + 1
+                        niveis_hierarquicos[numero_doc] = novo_nivel
+                        print(f"DEBUG NIVEIS: {numero_doc} definido como nível {novo_nivel} (referenciado por documentos de nível {min_nivel_referenciadores})")
+                        mudancas = True
+                    else:
+                        print(f"DEBUG NIVEIS: {numero_doc} aguardando - {referenciadores_com_nivel} referenciadores têm nível")
         
-        # Para documentos que não foram processados (isolados), atribuir nível 0
+        # PULAR o algoritmo de ordenação topológica - usar apenas a lógica específica
+        print(f"DEBUG NIVEIS: Usando lógica específica de níveis (pulando algoritmo topológico)")
+        print(f"DEBUG NIVEIS: Matrícula atual: {matricula_atual}")
+        print(f"DEBUG NIVEIS: Conexões encontradas: {len(arvore['conexoes'])}")
+        
+        # Para documentos que não foram processados, verificar se são realmente isolados
         for doc_node in arvore['documentos']:
             if doc_node['numero'] not in niveis_hierarquicos:
-                # Cards de fim de cadeia ficam no mesmo nível do documento origem, mas com offset
+                # Cards de fim de cadeia ficam 2 níveis acima do mais alto
                 if doc_node.get('is_fim_cadeia'):
-                    # Pegar o nível do documento origem
-                    doc_origem_id = doc_node.get('documento_origem_id')
-                    if doc_origem_id:
-                        # Encontrar o documento origem na árvore
-                        for doc_origem in arvore['documentos']:
-                            if doc_origem['id'] == doc_origem_id:
-                                nivel_origem = niveis_hierarquicos.get(doc_origem['numero'], 0)
-                                niveis_hierarquicos[doc_node['numero']] = nivel_origem + 0.5  # Offset para ficar à direita
-                                break
-                        else:
-                            niveis_hierarquicos[doc_node['numero']] = 0.5
-                    else:
-                        niveis_hierarquicos[doc_node['numero']] = 0.5
+                    # Encontrar o nível mais alto entre todos os documentos
+                    max_nivel_geral = max(niveis_hierarquicos.values()) if niveis_hierarquicos else 0
+                    nivel_fim_cadeia = max_nivel_geral + 2
+                    niveis_hierarquicos[doc_node['numero']] = nivel_fim_cadeia
+                    print(f"DEBUG NIVEIS: {doc_node['numero']} (fim de cadeia) definido como nível {nivel_fim_cadeia}")
                 else:
-                    niveis_hierarquicos[doc_node['numero']] = 0
+                    # Verificar se o documento tem origens (não é realmente isolado)
+                    if doc_node['numero'] in origens_por_documento:
+                        print(f"DEBUG NIVEIS: {doc_node['numero']} tem origens, não é isolado - aguardando processamento")
+                        # Não definir nível ainda, será processado na segunda iteração
+                    else:
+                        # Documentos realmente isolados ficam no nível 1
+                        niveis_hierarquicos[doc_node['numero']] = 1
+                        print(f"DEBUG NIVEIS: {doc_node['numero']} (realmente isolado) definido como nível 1")
+        
+        # CORREÇÃO: Ajustar nível do INCRA após calcular todos os outros níveis
+        print(f"DEBUG NIVEIS: Ajustando nível do INCRA após calcular todos os outros níveis...")
+        for doc_node in arvore['documentos']:
+            if doc_node.get('is_fim_cadeia'):
+                # Encontrar o nível mais alto entre todos os documentos (exceto fim de cadeia)
+                max_nivel_geral = max([nivel for num, nivel in niveis_hierarquicos.items() 
+                                     if not any(d.get('is_fim_cadeia') for d in arvore['documentos'] if d['numero'] == num)]) if niveis_hierarquicos else 0
+                nivel_fim_cadeia = max_nivel_geral + 2
+                niveis_hierarquicos[doc_node['numero']] = nivel_fim_cadeia
+                print(f"DEBUG NIVEIS: {doc_node['numero']} (fim de cadeia) ajustado para nível {nivel_fim_cadeia}")
+        
+        # NOVA LÓGICA: Processar novamente após definir níveis dos isolados
+        print(f"DEBUG NIVEIS: Processando novamente após definir níveis dos isolados...")
+        mudancas = True
+        iteracao = 0
+        max_iteracoes = 5
+        
+        while mudancas and iteracao < max_iteracoes:
+            mudancas = False
+            iteracao += 1
+            print(f"DEBUG NIVEIS: Segunda iteração {iteracao}")
+            
+            for doc_node in arvore['documentos']:
+                numero_doc = doc_node['numero']
+                
+                # Pular se já tem nível definido ou é a matrícula atual
+                if numero_doc in niveis_hierarquicos or numero_doc == matricula_atual:
+                    continue
+                
+                # Verificar se este documento tem origens
+                if numero_doc in origens_por_documento:
+                    origens = origens_por_documento[numero_doc]
+                    print(f"DEBUG NIVEIS: {numero_doc} tem origens: {origens}")
+                    
+                    # Encontrar o maior nível entre as origens
+                    max_nivel_origens = -1
+                    origens_com_nivel = 0
+                    for origem in origens:
+                        if origem in niveis_hierarquicos:
+                            max_nivel_origens = max(max_nivel_origens, niveis_hierarquicos[origem])
+                            origens_com_nivel += 1
+                    
+                    # Se todas as origens têm nível definido, definir nível deste documento
+                    if origens_com_nivel == len(origens) and max_nivel_origens >= 0:
+                        novo_nivel = max_nivel_origens + 1
+                        niveis_hierarquicos[numero_doc] = novo_nivel
+                        print(f"DEBUG NIVEIS: {numero_doc} definido como nível {novo_nivel} (todas as origens têm nível)")
+                        mudancas = True
+                    else:
+                        print(f"DEBUG NIVEIS: {numero_doc} aguardando - {origens_com_nivel}/{len(origens)} origens têm nível")
         
         # Aplicar os níveis calculados aos nós
+        print(f"DEBUG NIVEIS: Resultado final dos níveis:")
         for doc_node in arvore['documentos']:
-            doc_node['nivel'] = niveis_hierarquicos.get(doc_node['numero'], 0)
+            nivel_final = niveis_hierarquicos.get(doc_node['numero'], 0)
+            doc_node['nivel'] = nivel_final
+            print(f"DEBUG NIVEIS: {doc_node['numero']} -> nível {nivel_final} (importado: {doc_node.get('is_importado', False)})")
     
     @staticmethod
     def _calcular_nivel_documento(numero_doc, origens_por_documento, documentos_por_origem, niveis_hierarquicos):
@@ -662,8 +741,8 @@ class HierarquiaArvoreService:
                 nivel_ref = niveis_hierarquicos.get(doc_ref, 0)
                 max_nivel_referenciadores = max(max_nivel_referenciadores, nivel_ref)
             
-            # Nível = maior nível dos referenciadores + 1
-            return max_nivel_referenciadores + 1
+            # Nível = maior nível dos referenciadores + 1 (limitado a 5)
+            return min(max_nivel_referenciadores + 1, 5)
         
         # Verificar se este documento tem origens
         elif numero_doc in origens_por_documento:
@@ -676,8 +755,8 @@ class HierarquiaArvoreService:
                 nivel_origem = niveis_hierarquicos.get(origem, 0)
                 max_nivel_origens = max(max_nivel_origens, nivel_origem)
             
-            # Nível = maior nível das origens + 1
-            return max_nivel_origens + 1
+            # Nível = maior nível das origens + 1 (limitado a 5)
+            return min(max_nivel_origens + 1, 5)
         
-        # Documento isolado (sem origens nem referenciadores)
-        return 0 
+        # Documento isolado (sem origens nem referenciadores) - nível 1
+        return 1 

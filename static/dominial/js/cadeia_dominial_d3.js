@@ -406,19 +406,12 @@ function ajustarPosicoesPorNivel(root) {
     root.descendants().forEach(node => {
         const nivel = node.data.nivel || 0;
         
-        // Cards de fim de cadeia ficam próximos ao documento origem
+        // Cards de fim de cadeia usam o nível do backend para posicionamento
         if (node.data.is_fim_cadeia) {
-            // Encontrar o documento origem
-            const docOrigemId = node.data.documento_origem_id;
-            if (docOrigemId) {
-                const docOrigem = root.descendants().find(n => n.data.id === docOrigemId);
-                if (docOrigem) {
-                    // Posicionar à direita do documento origem
-                    node.y = docOrigem.y + 180; // 180px à direita
-                    node.x = docOrigem.x; // Mesma altura vertical
-                    return;
-                }
-            }
+            // Usar o nível do backend para posicionar corretamente
+            node.y = nivel * 200 + 120;
+            console.log(`DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivel}, posição Y: ${node.y}`);
+            return;
         }
         
         // Posicionar horizontalmente baseado no nível (200px por nível)
@@ -1131,7 +1124,7 @@ function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
     const tx = centroDivX - (minX + treeWidth / 2) * finalScale;
     const ty = centroDivY - (minY + treeHeight / 2) * finalScale;
     
-    console.log(`DEBUG: Centralizando centro da árvore - Centro árvore: (${centroArvoreX}, ${centroArvoreY}) -> Centro div: (${centroDivX}, ${centroDivY})`);
+    console.log(`DEBUG: Centralizando centro da árvore - Centro árvore: (${minX + treeWidth / 2}, ${minY + treeHeight / 2}) -> Centro div: (${centroDivX}, ${centroDivY})`);
     console.log(`DEBUG: Translação calculada - tx: ${tx}, ty: ${ty}, escala: ${finalScale}`);
     
     console.log(`DEBUG: Enquadramento - Escala: ${finalScale}, tx: ${tx}, ty: ${ty}`);
