@@ -215,6 +215,23 @@
                 {% for adquirente_nome in form_data.adquirente_nome %}
                 <input type="hidden" name="adquirente_nome[]" value="{{ adquirente_nome }}">
                 {% endfor %}
+                
+                <!-- Preservar campos de fim de cadeia -->
+                {% for fim_cadeia in form_data.fim_cadeia %}
+                <input type="hidden" name="fim_cadeia[]" value="{{ fim_cadeia }}">
+                {% endfor %}
+                {% for tipo_fim_cadeia in form_data.tipo_fim_cadeia %}
+                <input type="hidden" name="tipo_fim_cadeia[]" value="{{ tipo_fim_cadeia }}">
+                {% endfor %}
+                {% for classificacao_fim_cadeia in form_data.classificacao_fim_cadeia %}
+                <input type="hidden" name="classificacao_fim_cadeia[]" value="{{ classificacao_fim_cadeia }}">
+                {% endfor %}
+                {% for sigla_patrimonio_publico in form_data.sigla_patrimonio_publico %}
+                <input type="hidden" name="sigla_patrimonio_publico[]" value="{{ sigla_patrimonio_publico }}">
+                {% endfor %}
+                {% for especificacao_fim_cadeia in form_data.especificacao_fim_cadeia %}
+                <input type="hidden" name="especificacao_fim_cadeia[]" value="{{ especificacao_fim_cadeia }}">
+                {% endfor %}
                 {% endif %}
                 
                 <div class="mt-3">

@@ -95,6 +95,12 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'transmitente_nome': request.POST.getlist('transmitente_nome[]'),
                         'adquirente': request.POST.getlist('adquirente[]'),
                         'adquirente_nome': request.POST.getlist('adquirente_nome[]'),
+                        # Preservar campos de fim de cadeia
+                        'fim_cadeia': request.POST.getlist('fim_cadeia[]'),
+                        'tipo_fim_cadeia': request.POST.getlist('tipo_fim_cadeia[]'),
+                        'classificacao_fim_cadeia': request.POST.getlist('classificacao_fim_cadeia[]'),
+                        'sigla_patrimonio_publico': request.POST.getlist('sigla_patrimonio_publico[]'),
+                        'especificacao_fim_cadeia': request.POST.getlist('especificacao_fim_cadeia[]'),
                     }
                     
                     # Renderizar template de duplicata

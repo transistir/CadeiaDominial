@@ -32,48 +32,66 @@ class LancamentoDuplicataService:
         print(f"DEBUG DUPLICATA: Cartórios origem recebidos: {cartorios_origem}")
         print(f"DEBUG DUPLICATA: Todos os campos POST: {list(request.POST.keys())}")
         
-        # Pegar a primeira origem e cartório (se houver)
-        origem = origens[0].strip() if origens and origens[0].strip() else ''
-        cartorio_origem_id = cartorios_origem[0] if cartorios_origem and cartorios_origem[0] else None
+        # Verificar duplicatas em TODAS as origens, não apenas a primeira
+        padroes_fim_cadeia = [
+            'FIM_CADEIA',
+            'Destacamento Público:',
+            'Outra:',
+            'Sem Origem:'
+        ]
         
-        print(f"DEBUG DUPLICATA: Origem processada: '{origem}'")
-        print(f"DEBUG DUPLICATA: Cartório origem ID processado: '{cartorio_origem_id}'")
+        for i, origem in enumerate(origens):
+            origem = origem.strip() if origem else ''
+            cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
+            
+            print(f"DEBUG DUPLICATA: Verificando origem {i}: '{origem}'")
+            print(f"DEBUG DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
+            
+            if not origem:
+                continue
+                
+            # Verificar se é origem de fim de cadeia
+            is_fim_cadeia = any(padrao in origem for padrao in padroes_fim_cadeia)
+            
+            if is_fim_cadeia:
+                # Para origens de fim de cadeia, não verificar duplicatas
+                print(f"DEBUG DUPLICATA: Origem {i} é fim de cadeia, pulando verificação")
+                continue
+            
+            # Para origens normais, verificar duplicatas
+            if not cartorio_origem_id:
+                print(f"DEBUG DUPLICATA: Origem {i} normal sem cartório, pulando verificação")
+                continue
+                
+            try:
+                cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
+            except Cartorios.DoesNotExist:
+                print(f"DEBUG DUPLICATA: Cartório {cartorio_origem_id} não encontrado para origem {i}")
+                continue
+            
+            # Verificar duplicata usando o service
+            duplicata_info = DuplicataVerificacaoService.verificar_duplicata_origem(
+                origem=origem,
+                cartorio_id=cartorio_origem.id,
+                imovel_atual_id=documento_ativo.imovel.id
+            )
+            
+            if duplicata_info['tem_duplicata']:
+                print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
+                return {
+                    'tem_duplicata': True,
+                    'duplicata_info': duplicata_info,
+                    'mensagem': f"Encontrada duplicata: {duplicata_info['documento_origem'].numero} - {duplicata_info['documento_origem'].imovel.nome}",
+                    'documento_origem': duplicata_info['documento_origem'],
+                    'documentos_importaveis': duplicata_info['documentos_importaveis'],
+                    'cadeia_dominial': duplicata_info['cadeia_dominial']
+                }
         
-        if not origem or not cartorio_origem_id:
-            return {
-                'tem_duplicata': False,
-                'mensagem': 'Origem ou cartório de origem não fornecidos para verificação'
-            }
-        
-        try:
-            cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
-        except Cartorios.DoesNotExist:
-            return {
-                'tem_duplicata': False,
-                'mensagem': 'Cartório de origem não encontrado'
-            }
-        
-        # Verificar duplicata usando o service
-        duplicata_info = DuplicataVerificacaoService.verificar_duplicata_origem(
-            origem=origem,
-            cartorio_id=cartorio_origem.id,
-            imovel_atual_id=documento_ativo.imovel.id
-        )
-        
-        if duplicata_info['tem_duplicata']:
-            return {
-                'tem_duplicata': True,
-                'duplicata_info': duplicata_info,
-                'mensagem': f"Encontrada duplicata: {duplicata_info['documento_origem'].numero} - {duplicata_info['documento_origem'].imovel.nome}",
-                'documento_origem': duplicata_info['documento_origem'],
-                'documentos_importaveis': duplicata_info['documentos_importaveis'],
-                'cadeia_dominial': duplicata_info['cadeia_dominial']
-            }
-        else:
-            return {
-                'tem_duplicata': False,
-                'mensagem': 'Nenhuma duplicata encontrada'
-            }
+        # Se chegou até aqui, não há duplicatas
+        return {
+            'tem_duplicata': False,
+            'mensagem': 'Nenhuma duplicata encontrada nas origens fornecidas'
+        }
     
     @staticmethod
     def processar_importacao_duplicata(request, documento_ativo, usuario):
