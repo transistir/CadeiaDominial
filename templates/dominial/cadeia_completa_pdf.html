@@ -95,10 +95,10 @@
                         {# Cabeçalho do documento com informações básicas #}
                         <div class="documento-header">
                             📄 {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
-                            {# Badge especial para documentos importados #}
+<!--                             {# Badge especial para documentos importados #}
                             {% if item.is_importado %}
                                 <span class="badge-importado">📥 Importado</span>
-                            {% endif %}
+                            {% endif %} -->
                             <br>
                             <small>
                                 Data: {{ item.documento.data|date:"d/m/Y" }} | 
