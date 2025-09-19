@@ -456,7 +456,7 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
             }
             <!-- Restante -->
             <td>${lancamento.area || '-'}</td>
-            <td>${lancamento.origem || '-'}</td>
+            <td>${formatarOrigemCompleta(lancamento)}</td>
             <td>${lancamento.observacoes || '-'}</td>
         </tr>
     `;
@@ -1198,4 +1198,83 @@ window.onclick = function(event) {
     if (event.target === modal) {
         fecharModalSelecaoSequencia();
     }
+}
+
+// Função para formatar origem completa igual ao filtro Django
+function formatarOrigemCompleta(lancamento) {
+    if (!lancamento.origem) {
+        return '-';
+    }
+    
+    const origens_formatadas = [];
+    const origens = lancamento.origem.split(';').map(o => o.trim()).filter(o => o);
+    
+    for (const origem of origens) {
+        // Verificar se é fim de cadeia
+        const padroes_fim_cadeia = [
+            'Destacamento Público:',
+            'Outra:',
+            'Sem Origem:',
+            'FIM_CADEIA'
+        ];
+        
+        const is_fim_cadeia = padroes_fim_cadeia.some(padrao => origem.includes(padrao));
+        
+        if (is_fim_cadeia) {
+            // Formatar fim de cadeia
+            if (origem.includes('Destacamento Público:')) {
+                const partes = origem.split(':');
+                if (partes.length >= 2) {
+                    const sigla = partes[1].trim();
+                    const classificacao = partes[2] ? partes[2].trim() : '';
+                    let origem_formatada = `Destacamento Público : ${sigla}`;
+                    if (classificacao) {
+                        origem_formatada += ` (${classificacao})`;
+                    }
+                    origens_formatadas.push(origem_formatada);
+                } else {
+                    origens_formatadas.push(origem);
+                }
+            } else if (origem.includes('Outra:')) {
+                const partes = origem.split(':');
+                if (partes.length >= 2) {
+                    const especificacao = partes[1].trim();
+                    const classificacao = partes[2] ? partes[2].trim() : '';
+                    let origem_formatada = `Outra : ${especificacao}`;
+                    if (classificacao) {
+                        origem_formatada += ` (${classificacao})`;
+                    }
+                    origens_formatadas.push(origem_formatada);
+                } else {
+                    origens_formatadas.push(origem);
+                }
+            } else if (origem.includes('Sem Origem:')) {
+                const partes = origem.split(':');
+                if (partes.length >= 3) {
+                    const classificacao = partes[2].trim();
+                    let origem_formatada = 'Sem Origem';
+                    if (classificacao) {
+                        origem_formatada += ` (${classificacao})`;
+                    }
+                    origens_formatadas.push(origem_formatada);
+                } else {
+                    origens_formatadas.push('Sem Origem');
+                }
+            } else {
+                // Para formato antigo FIM_CADEIA, usar como está
+                origens_formatadas.push(origem);
+            }
+        } else {
+            // Para origem normal, adicionar cartório se disponível
+            const cartorio_nome = lancamento.cartorio_origem_nome || '';
+            if (cartorio_nome) {
+                origens_formatadas.push(`${origem} (${cartorio_nome})`);
+            } else {
+                origens_formatadas.push(origem);
+            }
+        }
+    }
+    
+    // Juntar com quebras de linha para melhor visualização
+    return origens_formatadas.join('<br>');
 } 
