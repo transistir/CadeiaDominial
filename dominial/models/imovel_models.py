@@ -21,6 +21,7 @@ class Imovel(models.Model):
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
     cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT, null=True, blank=True) # Cartório onde o imóvel está registrado
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel
+    arquivado = models.BooleanField(default=False, verbose_name="Arquivado") # Campo para arquivar imóveis
 
     class Meta:
         verbose_name = "Imóvel"

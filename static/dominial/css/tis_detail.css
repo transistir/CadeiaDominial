@@ -388,4 +388,103 @@
         width: 100%;
         margin: 16px 0;
     }
+}
+
+/* ========================================
+   ABAS DE NAVEGAÇÃO
+   ======================================== */
+.abas-container {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ecf0f1;
+    background: white;
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.aba {
+    flex: 1;
+    padding: 15px 20px;
+    text-align: center;
+    text-decoration: none;
+    color: #7f8c8d;
+    font-weight: 500;
+    font-size: 14px;
+    background: #f8f9fa;
+    border: none;
+    transition: all 0.2s ease;
+    position: relative;
+    border-right: 1px solid #e9ecef;
+}
+
+.aba:last-child {
+    border-right: none;
+}
+
+.aba:hover {
+    background: #e9ecef;
+    color: #2c3e50;
+    text-decoration: none;
+}
+
+.aba.ativa {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    font-weight: 600;
+}
+
+.aba.ativa::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #3498db;
+}
+
+/* ========================================
+   BOTÕES DE ARQUIVAR
+   ======================================== */
+.archive-button {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+}
+
+.archive-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
+}
+
+.unarchive-button {
+    background: linear-gradient(135deg, #27ae60, #229954);
+}
+
+.unarchive-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+/* ========================================
+   RESPONSIVIDADE DAS ABAS
+   ======================================== */
+@media (max-width: 768px) {
+    .abas-container {
+        flex-direction: column;
+        border-radius: 8px;
+    }
+    
+    .aba {
+        border-right: none;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .aba:last-child {
+        border-bottom: none;
+    }
+    
+    .aba.ativa::after {
+        display: none;
+    }
 } 

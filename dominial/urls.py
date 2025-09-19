@@ -4,7 +4,7 @@ from django.contrib.auth import views as auth_views
 from dal import autocomplete
 
 # Importar views específicas dos novos módulos
-from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, imovel_detail, imovel_delete
+from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, imovel_detail, imovel_delete, arquivar_imovel
 from .views.imovel_views import imovel_form
 from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico, ajustar_nivel_documento
 from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail
@@ -28,6 +28,7 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/', imovel_detail, name='imovel_detail'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/editar/', imovel_form, name='imovel_editar'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/excluir/', imovel_delete, name='imovel_excluir'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/arquivar/', arquivar_imovel, name='arquivar_imovel'),
     
     # Cadeia Dominial
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial/', cadeia_dominial_d3, name='cadeia_dominial'),

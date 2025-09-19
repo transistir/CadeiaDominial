@@ -54,6 +54,10 @@ def tis_form(request):
 def tis_detail(request, tis_id):
     tis = get_object_or_404(TIs, id=tis_id)
     
+    # Obter status dos imóveis (ativos ou arquivados)
+    status = request.GET.get('status', 'ativos')
+    is_arquivado = status == 'arquivados'
+    
     # Ordenar imóveis pela atividade mais recente na cadeia dominial
     from django.db import connection
     from ..models import Documento, Lancamento
@@ -70,17 +74,18 @@ def tis_detail(request, tis_id):
                 i.cartorio_id,
                 i.proprietario_id,
                 i.terra_indigena_id_id,
+                i.arquivado,
                 MAX(d.data_cadastro) as ultimo_documento,
                 MAX(l.data_cadastro) as ultimo_lancamento
             FROM dominial_imovel i
             LEFT JOIN dominial_documento d ON d.imovel_id = i.id
             LEFT JOIN dominial_lancamento l ON l.documento_id = d.id
-            WHERE i.terra_indigena_id_id = %s
-            GROUP BY i.id, i.nome, i.matricula, i.data_cadastro, i.observacoes, i.cartorio_id, i.proprietario_id, i.terra_indigena_id_id
+            WHERE i.terra_indigena_id_id = %s AND i.arquivado = %s
+            GROUP BY i.id, i.nome, i.matricula, i.data_cadastro, i.observacoes, i.cartorio_id, i.proprietario_id, i.terra_indigena_id_id, i.arquivado
             ORDER BY 
                 COALESCE(MAX(d.data_cadastro), MAX(l.data_cadastro), i.data_cadastro) DESC,
                 i.matricula ASC
-        """, [tis_id])
+        """, [tis_id, is_arquivado])
         
         # Converter resultados em objetos Imovel
         imoveis_data = cursor.fetchall()
@@ -97,13 +102,15 @@ def tis_detail(request, tis_id):
             imovel.cartorio_id = row[5]
             imovel.proprietario_id = row[6]
             imovel.terra_indigena_id_id = row[7]
-            imovel.ultimo_documento = row[8]
-            imovel.ultimo_lancamento = row[9]
+            imovel.arquivado = row[8]
+            imovel.ultimo_documento = row[9]
+            imovel.ultimo_lancamento = row[10]
             imoveis_ordenados.append(imovel)
     
     return render(request, 'dominial/tis_detail.html', {
         'tis': tis,
-        'imoveis': imoveis_ordenados
+        'imoveis': imoveis_ordenados,
+        'status': status
     })
 
 @login_required
@@ -172,4 +179,27 @@ def imovel_delete(request, tis_id, imovel_id):
     return render(request, 'dominial/imovel_confirm_delete.html', {
         'imovel': imovel,
         'tis': tis
-    }) 
+    })
+
+@login_required
+def arquivar_imovel(request, tis_id, imovel_id):
+    """View para arquivar ou desarquivar um imóvel"""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    
+    try:
+        # Alternar status de arquivado
+        imovel.arquivado = not imovel.arquivado
+        imovel.save()
+        
+        if imovel.arquivado:
+            messages.success(request, f'Imóvel "{imovel.nome}" arquivado com sucesso!')
+            # Redirecionar para lista de ativos
+            return redirect('tis_detail', tis_id=tis.id)
+        else:
+            messages.success(request, f'Imóvel "{imovel.nome}" desarquivado com sucesso!')
+            # Redirecionar para lista de arquivados (onde estava antes)
+            return redirect(f'/dominial/tis/{tis.id}/?status=arquivados')
+    except Exception as e:
+        messages.error(request, f'Erro ao alterar status do imóvel: {str(e)}')
+        return redirect('tis_detail', tis_id=tis.id) 
