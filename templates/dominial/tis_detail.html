@@ -125,4 +125,32 @@
         <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
     </div>
 </div>
+
+<script>
+// Manter posição de rolagem ao trocar entre abas
+document.addEventListener('DOMContentLoaded', function() {
+    // Restaurar posição de rolagem se existir
+    const savedScrollPosition = sessionStorage.getItem('tis_detail_scroll_position');
+    if (savedScrollPosition) {
+        window.scrollTo(0, parseInt(savedScrollPosition));
+        sessionStorage.removeItem('tis_detail_scroll_position');
+    }
+    
+    // Salvar posição de rolagem ao clicar nas abas
+    const abas = document.querySelectorAll('.aba');
+    abas.forEach(function(aba) {
+        aba.addEventListener('click', function() {
+            sessionStorage.setItem('tis_detail_scroll_position', window.pageYOffset.toString());
+        });
+    });
+    
+    // Salvar posição de rolagem ao clicar nos botões de arquivar/desarquivar
+    const botoesArquivar = document.querySelectorAll('.archive-button, .unarchive-button');
+    botoesArquivar.forEach(function(botao) {
+        botao.addEventListener('click', function() {
+            sessionStorage.setItem('tis_detail_scroll_position', window.pageYOffset.toString());
+        });
+    });
+});
+</script>
 {% endblock %}
