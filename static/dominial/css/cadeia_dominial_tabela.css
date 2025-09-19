@@ -750,4 +750,9 @@
         top: 8px;
         right: 8px;
     }
+}
+
+/* Documentos ocultos baseados na escolha de origem */
+.documento-oculto {
+    display: none !important;
 } 

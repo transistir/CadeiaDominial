@@ -307,7 +307,23 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
     """
     try:
         service = CadeiaDominialTabelaService()
-        cadeia_data = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
+        
+        # Extrair escolhas de origem da sessão
+        escolhas_origem = {}
+        for key, value in request.session.items():
+            if key.startswith('origem_documento_'):
+                documento_id = key.replace('origem_documento_', '')
+                escolhas_origem[documento_id] = value
+        
+        # Usar a mesma lógica da view tronco_principal
+        if escolhas_origem:
+            cadeia_data = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session, escolhas_origem)
+        else:
+            # Se não há escolhas, usar o método simples (tronco principal)
+            from ..models import Imovel
+            imovel = Imovel.objects.get(id=imovel_id)
+            cadeia_simples = service.obter_cadeia_tabela(imovel, escolhas_origem)
+            cadeia_data = {'cadeia': cadeia_simples}
         
         # Serializar dados para JSON
         cadeia_serializada = []
@@ -324,7 +340,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                     'cartorio_nome': documento.cartorio.nome if documento.cartorio else '',
                     'livro': documento.livro,
                     'folha': documento.folha,
-                    'is_importado': item.get('is_importado', False),
+                    'is_compartilhado': item.get('is_compartilhado', False),
                     'grupo_importacao': item.get('grupo_importacao') is not None,
                     'is_primeiro_grupo': item.get('is_primeiro_grupo', False)
                 }
@@ -377,7 +393,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                 'origens_disponiveis': item.get('origens_disponiveis', []),
                 'tem_multiplas_origens': item.get('tem_multiplas_origens', False),
                 'escolha_atual': item.get('escolha_atual'),
-                'is_importado': item.get('is_importado', False),
+                'is_compartilhado': item.get('is_compartilhado', False),
                 'grupo_importacao': item.get('grupo_importacao'),
                 'is_primeiro_grupo': item.get('is_primeiro_grupo', False)
             }

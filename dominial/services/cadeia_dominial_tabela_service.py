@@ -36,20 +36,24 @@ class CadeiaDominialTabelaService:
         
         return 0
     
-    def get_cadeia_dominial_tabela(self, tis_id, imovel_id, session=None):
+    def get_cadeia_dominial_tabela(self, tis_id, imovel_id, session=None, escolhas_origem_param=None):
         """
         Obtém dados da cadeia dominial em formato de tabela
         """
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel, id=imovel_id)
         
-        # Extrair escolhas de origem da sessão
+        # Extrair escolhas de origem da sessão ou usar as escolhas passadas
         escolhas_origem = {}
         if session:
             for key, value in session.items():
                 if key.startswith('origem_documento_'):
                     documento_id = key.replace('origem_documento_', '')
                     escolhas_origem[documento_id] = value
+        
+        # Se escolhas foram passadas como parâmetro, usar elas em vez da sessão
+        if escolhas_origem_param:
+            escolhas_origem = escolhas_origem_param
         
         # Obter tronco principal considerando escolhas
         tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel, escolhas_origem)
@@ -78,8 +82,8 @@ class CadeiaDominialTabelaService:
             origens_disponiveis = self._obter_origens_documento(documento, lancamentos)
             tem_multiplas_origens = len(origens_disponiveis) > 1
             
-            # Verificar escolha atual da sessão
-            escolha_atual = session.get(f'origem_documento_{documento.id}') if session else None
+            # Verificar escolha atual das escolhas de origem
+            escolha_atual = escolhas_origem.get(str(documento.id)) if escolhas_origem else None
             
             # Se não há escolha na sessão E há origens disponíveis, usar a origem de número maior como padrão
             if not escolha_atual and origens_disponiveis:
@@ -96,8 +100,8 @@ class CadeiaDominialTabelaService:
                     'escolhida': is_escolhida
                 })
             
-            # Verificar se documento foi importado (está em outro imóvel)
-            is_importado = documento.imovel != imovel
+            # Verificar se documento é compartilhado (pertence a outro imóvel)
+            is_compartilhado = documento.imovel != imovel
             
             cadeia_processada.append({
                 'documento': documento,
@@ -105,7 +109,7 @@ class CadeiaDominialTabelaService:
                 'origens_disponiveis': origens_formatadas,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'escolha_atual': escolha_atual,
-                'is_importado': is_importado
+                'is_compartilhado': is_compartilhado
             })
         
         result = {
@@ -120,14 +124,14 @@ class CadeiaDominialTabelaService:
     
     def _obter_origens_documento(self, documento, lancamentos):
         """
-        Obtém as origens disponíveis para um documento
+        Obtém as origens disponíveis para um documento (apenas origens válidas para navegação)
         """
         origens = set()
         
         for lancamento in lancamentos:
             if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem:
-                # Extrair origens do campo origem
-                origens_lancamento = self._extrair_origens(lancamento.origem)
+                # Extrair apenas origens válidas (documentos reais) do campo origem
+                origens_lancamento = self._extrair_origens_validas(lancamento.origem)
                 origens.update(origens_lancamento)
         
         # Ordenar do maior para o menor número
@@ -143,7 +147,7 @@ class CadeiaDominialTabelaService:
     
     def _extrair_origens(self, origem_string):
         """
-        Extrai origens de uma string
+        Extrai todas as origens de uma string
         Ex: "M3212; M3211; M3210" -> ["M3212", "M3211", "M3210"]
         """
         if not origem_string:
@@ -152,6 +156,27 @@ class CadeiaDominialTabelaService:
         # Dividir por ponto e vírgula e limpar espaços
         partes = [parte.strip() for parte in origem_string.split(';') if parte.strip()]
         return partes
+    
+    def _extrair_origens_validas(self, origem_string):
+        """
+        Extrai apenas origens válidas (documentos reais) de uma string
+        Ex: "M3212; M3211; Destacamento Público:INCRA" -> ["M3212", "M3211"]
+        """
+        if not origem_string:
+            return []
+        
+        # Dividir por ponto e vírgula e limpar espaços
+        partes = [parte.strip() for parte in origem_string.split(';') if parte.strip()]
+        
+        # Filtrar apenas origens que são documentos reais (M ou T seguido de números)
+        import re
+        origens_validas = []
+        for parte in partes:
+            # Verificar se é um documento real (M ou T seguido de números)
+            if re.match(r'^[MT]\d+$', parte):
+                origens_validas.append(parte)
+        
+        return origens_validas
     
     def get_estatisticas_cadeia(self, cadeia):
         """
@@ -168,8 +193,7 @@ class CadeiaDominialTabelaService:
             'percentual_multiplas_origens': (documentos_com_multiplas_origens / total_documentos * 100) if total_documentos > 0 else 0
         }
 
-    @staticmethod
-    def obter_cadeia_tabela(imovel, escolhas_origem=None):
+    def obter_cadeia_tabela(self, imovel, escolhas_origem=None):
         """
         Retorna a cadeia dominial em formato de tabela com lançamentos expandíveis
         
@@ -211,12 +235,14 @@ class CadeiaDominialTabelaService:
             
             for lancamento in lancamentos:
                 if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem:
-                    origens = CadeiaDominialTabelaService.extrair_origens_disponiveis(
-                        lancamento.origem, imovel
-                    )
-                    if len(origens) > 1:
+                    # Para determinar múltiplas origens, contar todas as partes (incluindo fim de cadeia)
+                    partes_origem = [p.strip() for p in lancamento.origem.split(';') if p.strip()]
+                    if len(partes_origem) > 1:
                         tem_multiplas_origens = True
-                        origens_disponiveis = origens
+                        # Para os botões, usar apenas origens válidas (documentos reais)
+                        origens_disponiveis = CadeiaDominialTabelaService.extrair_origens_disponiveis(
+                            lancamento.origem, imovel
+                        )
                         break
             
             # Verificar escolha atual
@@ -235,12 +261,16 @@ class CadeiaDominialTabelaService:
                     'escolhida': is_escolhida
                 })
             
+            # Verificar se documento é compartilhado (pertence a outro imóvel)
+            is_compartilhado = documento.imovel != imovel
+            
             cadeia_completa.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'origens_disponiveis': origens_formatadas,
-                'escolha_atual': escolha_atual
+                'escolha_atual': escolha_atual,
+                'is_compartilhado': is_compartilhado
             })
         
         return cadeia_completa
@@ -269,8 +299,9 @@ class CadeiaDominialTabelaService:
             codigos = re.findall(r'[MT]\d+', origem)
             
             for codigo in codigos:
+                # Buscar documento em qualquer imóvel (não apenas no imóvel atual)
                 doc_existente = Documento.objects.filter(
-                    imovel=imovel, numero=codigo
+                    numero=codigo
                 ).first()
                 if doc_existente:
                     origens.append({

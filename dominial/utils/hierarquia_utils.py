@@ -48,6 +48,10 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
     # Primeiro, tentar encontrar o documento que corresponde à matrícula do imóvel
     documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula), None)
     
+    # Se não encontrou, verificar se a matrícula do imóvel tem prefixo "M" e o documento não
+    if not documento_atual and imovel.matricula.startswith('M'):
+        documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula[1:]), None)
+    
     # Se não encontrou o documento da matrícula atual, procurar por matrículas
     if not documento_atual:
         matriculas = [doc for doc in documentos if doc.tipo.tipo == 'matricula']
@@ -144,22 +148,71 @@ def identificar_troncos_secundarios(imovel, tronco_principal):
 
 def identificar_documentos_importados(imovel):
     """
-    Identifica documentos importados que são referenciados pelos lançamentos deste imóvel
+    Identifica documentos compartilhados que são referenciados pelos lançamentos deste imóvel
+    e também os documentos que são referenciados pelos documentos compartilhados (expansão recursiva)
     
     Args:
         imovel: Objeto Imovel
         
     Returns:
-        list: Lista de documentos importados
+        list: Lista de documentos compartilhados (que pertencem a outros imóveis)
     """
-    from ..models import DocumentoImportado
+    from ..models import Documento, Lancamento
+    import re
     
-    # Buscar apenas documentos que foram realmente importados para este imóvel
-    documentos_importados = DocumentoImportado.objects.filter(
-        documento__imovel=imovel
-    ).select_related('documento', 'documento__cartorio', 'documento__tipo', 'imovel_origem')
+    # Buscar todos os lançamentos do imóvel que têm origens
+    lancamentos_com_origem = Lancamento.objects.filter(
+        documento__imovel=imovel,
+        origem__isnull=False
+    ).exclude(origem='')
     
-    return [doc_importado.documento for doc_importado in documentos_importados]
+    # Coletar todos os códigos de origem referenciados
+    codigos_origem = set()
+    for lancamento in lancamentos_com_origem:
+        if lancamento.origem:
+            # Extrair códigos M/T dos lançamentos
+            codigos = re.findall(r'[MT]\d+', lancamento.origem)
+            codigos_origem.update(codigos)
+    
+    # Buscar documentos que correspondem aos códigos e pertencem a outros imóveis
+    documentos_compartilhados = []
+    documentos_processados = set()
+    
+    def expandir_documentos_recursivamente(codigos):
+        """Função recursiva para expandir documentos compartilhados"""
+        for codigo in codigos:
+            if codigo in documentos_processados:
+                continue
+                
+            doc_compartilhado = Documento.objects.filter(
+                numero=codigo
+            ).exclude(
+                imovel=imovel  # Excluir documentos do imóvel atual
+            ).select_related('cartorio', 'tipo', 'imovel').first()
+            
+            if doc_compartilhado:
+                documentos_compartilhados.append(doc_compartilhado)
+                documentos_processados.add(codigo)
+                
+                # Buscar origens deste documento compartilhado
+                lancamentos_doc = doc_compartilhado.lancamentos.filter(
+                    origem__isnull=False
+                ).exclude(origem='')
+                
+                codigos_origem_doc = set()
+                for lancamento in lancamentos_doc:
+                    if lancamento.origem:
+                        codigos_orig = re.findall(r'[MT]\d+', lancamento.origem)
+                        codigos_origem_doc.update(codigos_orig)
+                
+                # Expandir recursivamente
+                if codigos_origem_doc:
+                    expandir_documentos_recursivamente(codigos_origem_doc)
+    
+    # Expandir recursivamente todos os documentos compartilhados
+    expandir_documentos_recursivamente(codigos_origem)
+    
+    return documentos_compartilhados
 
 
 def processar_origens_para_documentos(origem_texto, imovel, lancamento):

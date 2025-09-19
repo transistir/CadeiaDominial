@@ -201,27 +201,76 @@ function atualizarTabelaCadeia(cadeia) {
     cadeia.forEach(item => {
         console.log('Processando item:', item.documento.numero, 'com', item.lancamentos.length, 'lançamentos');
         
+        // Verificar se este documento deve ser exibido baseado na escolha de origem
+        let deveExibir = true;
+        
+        // Encontrar a origem escolhida global (do documento que tem múltiplas origens)
+        // Procurar pelo documento que tem múltiplas origens e uma delas está escolhida
+        const documentoComEscolha = cadeia.find(otherItem => 
+            otherItem.tem_multiplas_origens && otherItem.origens_disponiveis && 
+            otherItem.origens_disponiveis.some(origem => origem.escolhida)
+        );
+        const origemEscolhidaGlobal = documentoComEscolha ? documentoComEscolha.escolha_atual : null;
+        
+        console.log(`  - ${item.documento.numero}: escolha_atual=${item.escolha_atual}, origemEscolhidaGlobal=${origemEscolhidaGlobal}, is_compartilhado=${item.is_compartilhado}`);
+        
+        if (origemEscolhidaGlobal) {
+            // Para documentos do imóvel atual, sempre exibir
+            if (!item.is_compartilhado) {
+                deveExibir = true;
+                console.log(`    -> Documento do imóvel atual: sempre exibir`);
+            } else {
+                // Para documentos compartilhados:
+                // 1. Sempre exibir o documento que tem a escolha (M8487)
+                // 2. Exibir apenas a origem escolhida (M583)
+                // 3. Esconder as outras origens (M4897, M543, M387)
+                if (item.tem_multiplas_origens && item.origens_disponiveis && 
+                    item.origens_disponiveis.some(origem => origem.escolhida)) {
+                    // Este documento tem múltiplas origens e uma escolha ativa, sempre exibir
+                    deveExibir = true;
+                    console.log(`    -> Documento com múltiplas origens e escolha ativa: sempre exibir`);
+                } else {
+                    // Este documento é uma origem, verificar se é a escolhida
+                    deveExibir = item.documento.numero === origemEscolhidaGlobal;
+                    console.log(`    -> Documento origem: ${item.documento.numero} === ${origemEscolhidaGlobal} = ${deveExibir}`);
+                }
+            }
+        } else {
+            // Se não há origem escolhida global, exibir todos
+            deveExibir = true;
+            console.log(`    -> Sem origem escolhida global: exibir todos`);
+        }
+        
+        console.log(`Documento ${item.documento.numero}: deveExibir = ${deveExibir}`);
+        
         // Criar linha do documento
         const documentoRow = document.createElement('tr');
         let rowClasses = 'documento-row';
         
         // Adicionar classe para documentos importados
-        if (item.is_importado) {
-            rowClasses += ' documento-importado';
+        if (item.is_compartilhado) {
+            rowClasses += ' documento-compartilhado';
+        }
+        
+        // Adicionar classe para documentos ocultos
+        if (!deveExibir) {
+            rowClasses += ' documento-oculto';
+            console.log(`  -> Aplicando classe documento-oculto para ${item.documento.numero}`);
         }
         
         documentoRow.className = rowClasses;
+        console.log(`  -> Classes aplicadas para ${item.documento.numero}: "${rowClasses}"`);
         documentoRow.setAttribute('data-documento-id', item.documento.id);
         
         // Criar badge de importado se necessário
         let importadoBadge = '';
-        if (item.is_importado) {
+        if (item.is_compartilhado) {
             importadoBadge = `
-                <span class="importado-badge" title="Documento importado">
+                <span class="compartilhado-badge" title="Documento compartilhado">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    Importado
+                    Compartilhado
                 </span>
             `;
         }
@@ -251,9 +300,14 @@ function atualizarTabelaCadeia(cadeia) {
         lancamentosRow.className = 'lancamentos-row';
         lancamentosRow.id = `lancamentos-${item.documento.id}`;
         
-        // Todos os documentos expandidos por padrão
-        lancamentosRow.style.display = 'table-row';
-        lancamentosRow.classList.add('show');
+        // Aplicar lógica de exibição baseada na escolha de origem
+        if (deveExibir) {
+            lancamentosRow.style.display = 'table-row';
+            lancamentosRow.classList.add('show');
+        } else {
+            lancamentosRow.style.display = 'none';
+            lancamentosRow.classList.remove('show');
+        }
         
         // Criar conteúdo dos lançamentos
         const lancamentosContent = criarConteudoLancamentos(item);
@@ -971,13 +1025,13 @@ function renderizarDocumentosLista() {
     const troncoCount = window.troncosPrincipalCount || 0;
     
     documentosSequencia.forEach((doc, index) => {
-        const isImportado = doc.is_importado ? 'importado' : '';
+        const isCompartilhado = doc.is_compartilhado ? 'compartilhado' : '';
         const isTroncoPrincipal = index < troncoCount ? 'tronco-principal' : '';
-        const badgeImportado = doc.is_importado ? '<span class="badge-importado">Importado</span>' : '';
+        const badgeCompartilhado = doc.is_compartilhado ? '<span class="badge-compartilhado">Compartilhado</span>' : '';
         const badgeTronco = index < troncoCount ? '<span class="badge-tronco">Tronco Principal</span>' : '';
         
         html += `
-            <div class="documento-item ${isImportado} ${isTroncoPrincipal}" data-index="${index}" draggable="true">
+            <div class="documento-item ${isCompartilhado} ${isTroncoPrincipal}" data-index="${index}" draggable="true">
                 <div class="documento-drag-handle">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M8 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -992,7 +1046,7 @@ function renderizarDocumentosLista() {
                     <div class="documento-numero">${doc.numero}</div>
                     <div class="documento-tipo">${doc.tipo_display}</div>
                     <div class="documento-detalhes">
-                        ${doc.detalhes} ${badgeImportado} ${badgeTronco}
+                        ${doc.detalhes} ${badgeCompartilhado} ${badgeTronco}
                         <small>(${doc.lancamentos_count} lanç.)</small>
                     </div>
                 </div>
