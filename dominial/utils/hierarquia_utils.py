@@ -220,6 +220,8 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
     Processa o texto de origem de um lançamento e extrai informações de documentos
     que podem ser criados automaticamente.
     
+    CORREÇÃO: Implementa validação rigorosa para evitar criação de documentos órfãos
+    
     Args:
         origem_texto (str): Texto contendo as origens (ex: "M123; T456")
         imovel: Objeto Imovel
@@ -252,33 +254,34 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
         if not is_fim_cadeia:
             origens_normais.append(origem)
     
-    # Processar apenas origens normais
+    # Processar apenas origens normais com VALIDAÇÃO RIGOROSA
     for origem in origens_normais:
-        # Padrão para matrículas (M seguido de números)
-        if re.match(r'^M\d+$', origem):
-            origens_processadas.append({
-                'numero': origem,
-                'tipo': 'matricula',
-                'descricao': f'Matrícula {origem} identificada na origem do lançamento'
-            })
+        # VALIDAÇÃO 1: Apenas origens com formato M/T seguido de números
+        if re.match(r'^[MT]\d+$', origem):
+            # VALIDAÇÃO 2: Verificar se o documento já existe em outro imóvel
+            if _validar_origem_existente(origem, imovel, lancamento):
+                tipo = 'matricula' if origem.startswith('M') else 'transcricao'
+                origens_processadas.append({
+                    'numero': origem,
+                    'tipo': tipo,
+                    'descricao': f'{tipo.title()} {origem} identificada na origem do lançamento'
+                })
+            else:
+                print(f"AVISO: Origem {origem} não existe em outros imóveis - não criando documento automático")
         
-        # Padrão para transcrições (T seguido de números)
-        elif re.match(r'^T\d+$', origem):
-            origens_processadas.append({
-                'numero': origem,
-                'tipo': 'transcricao',
-                'descricao': f'Transcrição {origem} identificada na origem do lançamento'
-            })
-        
-        # Padrão para números simples (assumir como matrícula)
+        # VALIDAÇÃO 3: Números simples - assumir como matrícula (padrão)
         elif re.match(r'^\d+$', origem):
-            origens_processadas.append({
-                'numero': f'M{origem}',  # Adicionar prefixo M
-                'tipo': 'matricula',
-                'descricao': f'Matrícula M{origem} identificada na origem do lançamento'
-            })
+            # Para números simples, assumir como matrícula (padrão do sistema)
+            if _validar_origem_existente(f'M{origem}', imovel, lancamento):
+                origens_processadas.append({
+                    'numero': f'M{origem}',
+                    'tipo': 'matricula',
+                    'descricao': f'Matrícula M{origem} identificada na origem do lançamento'
+                })
+            else:
+                print(f"AVISO: Número {origem} não pode ser criado como M{origem} - não criando documento automático")
         
-        # Padrão para texto que contém números
+        # VALIDAÇÃO 4: Texto com números - apenas se contexto for muito claro
         elif re.search(r'\d+', origem):
             # Extrair números do texto
             numeros = re.findall(r'\d+', origem)
@@ -291,10 +294,79 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
                 prefixo = 'T' if tipo == 'transcricao' else 'M'
                 numero_completo = f'{prefixo}{numero}'
                 
-                origens_processadas.append({
-                    'numero': numero_completo,
-                    'tipo': tipo,
-                    'descricao': f'{tipo.title()} {numero_completo} extraída do texto: "{origem}"'
-                })
+                # VALIDAÇÃO 5: Verificar se existe em outros imóveis
+                if _validar_origem_existente(numero_completo, imovel, lancamento):
+                    origens_processadas.append({
+                        'numero': numero_completo,
+                        'tipo': tipo,
+                        'descricao': f'{tipo.title()} {numero_completo} extraída do texto: "{origem}"'
+                    })
+                else:
+                    print(f"AVISO: {tipo.title()} {numero_completo} não existe em outros imóveis - não criando documento automático")
     
-    return origens_processadas 
+    return origens_processadas
+
+
+def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
+    """
+    Valida se uma origem deve ser criada automaticamente.
+    
+    Regras de validação:
+    1. REGRA PÉTREA: Se é lançamento de início de matrícula, sempre permitir
+    2. Se não é início de matrícula: documento deve existir em outro imóvel
+    3. O documento não deve existir no imóvel atual
+    4. O documento deve ter pelo menos um lançamento real (se existir)
+    
+    Args:
+        numero_documento (str): Número do documento (ex: "M123")
+        imovel_atual: Objeto Imovel atual
+        lancamento: Objeto Lancamento (opcional, para verificar tipo)
+    
+    Returns:
+        bool: True se a origem deve ser criada, False caso contrário
+    """
+    from ..models import Documento, Lancamento
+    
+    # REGRA PÉTREA: Se é lançamento de início de matrícula, sempre permitir
+    if lancamento and lancamento.tipo and lancamento.tipo.tipo == 'inicio_matricula':
+        # Verificar apenas se não existe no imóvel atual
+        documento_no_imovel_atual = Documento.objects.filter(
+            numero=numero_documento,
+            imovel=imovel_atual
+        ).exists()
+        
+        if documento_no_imovel_atual:
+            return False
+        
+        # Para início de matrícula, sempre permitir criação (regra pétrea)
+        return True
+    
+    # Para outros tipos de lançamento, usar validação restritiva
+    # Buscar documento em outros imóveis
+    documento_existente = Documento.objects.filter(
+        numero=numero_documento
+    ).exclude(
+        imovel=imovel_atual
+    ).first()
+    
+    if not documento_existente:
+        return False
+    
+    # Verificar se o documento tem lançamentos reais
+    lancamentos_count = Lancamento.objects.filter(
+        documento=documento_existente
+    ).count()
+    
+    if lancamentos_count == 0:
+        return False
+    
+    # Verificar se não existe no imóvel atual
+    documento_no_imovel_atual = Documento.objects.filter(
+        numero=numero_documento,
+        imovel=imovel_atual
+    ).exists()
+    
+    if documento_no_imovel_atual:
+        return False
+    
+    return True 
