@@ -18,6 +18,9 @@ function inicializarOrigensSimples() {
     // Configurar primeira origem
     configurarOrigem(0);
     
+    // CORREÇÃO: Processar todas as origens existentes (modo de edição)
+    processarTodasOrigensExistentes();
+    
     // Configurar eventos globais
     configurarEventosGlobais();
 }
@@ -87,6 +90,39 @@ function configurarOrigem(index) {
     
     // Migrar dados existentes se houver
     migrarDadosExistentes(index);
+}
+
+function processarTodasOrigensExistentes() {
+    console.log('Processando todas as origens existentes...');
+    
+    // Buscar todos os campos hidden de origem completa
+    const hiddenInputs = document.querySelectorAll('input[id^="origem_completa_hidden_"]');
+    console.log(`Encontrados ${hiddenInputs.length} campos de origem`);
+    
+    // Processar cada origem existente
+    hiddenInputs.forEach((hiddenInput, index) => {
+        const inputId = hiddenInput.id;
+        const match = inputId.match(/origem_completa_hidden_(\d+)/);
+        if (match) {
+            const origemIndex = parseInt(match[1]);
+            console.log(`Processando origem ${origemIndex}: ${hiddenInput.value}`);
+            
+            // Configurar a origem se ainda não foi configurada
+            const tipoSelect = document.getElementById(`tipo_origem_${origemIndex}`);
+            const numeroInput = document.getElementById(`numero_origem_${origemIndex}`);
+            
+            if (tipoSelect && numeroInput && hiddenInput.value) {
+                // Migrar dados existentes
+                migrarDadosExistentes(origemIndex);
+                
+                // Configurar eventos se ainda não foram configurados
+                if (!tipoSelect.hasAttribute('data-configured')) {
+                    configurarOrigem(origemIndex);
+                    tipoSelect.setAttribute('data-configured', 'true');
+                }
+            }
+        }
+    });
 }
 
 function configurarEventosGlobais() {
