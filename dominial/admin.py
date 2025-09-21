@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction
 from django.utils.safestring import mark_safe
-from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
 
@@ -340,5 +340,48 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return True
 
+    def has_delete_permission(self, request, obj=None):
+        return True
+
+
+@admin.register(FimCadeia)
+class FimCadeiaAdmin(admin.ModelAdmin):
+    """Admin para gerenciar os tipos de fim de cadeia"""
+    list_display = ['nome', 'tipo', 'classificacao', 'sigla', 'ativo', 'data_criacao']
+    list_filter = ['tipo', 'classificacao', 'ativo', 'data_criacao']
+    search_fields = ['nome', 'sigla', 'descricao']
+    list_editable = ['ativo']
+    ordering = ['nome']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('nome', 'tipo', 'classificacao', 'sigla')
+        }),
+        ('Descrição', {
+            'fields': ('descricao',),
+            'classes': ('collapse',)
+        }),
+        ('Controle', {
+            'fields': ('ativo',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).order_by('nome')
+    
+    def save_model(self, request, obj, form, change):
+        """Salvar o modelo com informações de auditoria"""
+        if not change:  # Novo objeto
+            obj.data_criacao = timezone.now()
+        obj.data_atualizacao = timezone.now()
+        super().save_model(request, obj, form, change)
+    
+    def has_add_permission(self, request):
+        return True
+    
+    def has_change_permission(self, request, obj=None):
+        return True
+    
     def has_delete_permission(self, request, obj=None):
         return True

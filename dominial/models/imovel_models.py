@@ -29,6 +29,18 @@ class Imovel(models.Model):
     
     def __str__(self):
         return self.matricula
+    
+    def get_sigla_formatada(self):
+        """
+        Retorna a sigla formatada baseada no tipo do documento
+        M + número para matrícula, T + número para transcrição
+        """
+        if self.tipo_documento_principal == 'matricula':
+            return f"M{self.matricula}"
+        elif self.tipo_documento_principal == 'transcricao':
+            return f"T{self.matricula}"
+        else:
+            return self.matricula
 
 
 class Cartorios(models.Model):

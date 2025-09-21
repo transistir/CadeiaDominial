@@ -55,6 +55,8 @@ class HierarquiaArvoreService:
         documentos_por_numero = {}
         
         # Processar cada documento
+        fins_cadeia_processados = {}  # Para evitar duplicação de nós de fim de cadeia
+        
         for documento in documentos:
             doc_node = HierarquiaArvoreService._criar_no_documento(documento, imovel)
             documentos_por_numero[documento.numero] = doc_node
@@ -70,7 +72,12 @@ class HierarquiaArvoreService:
                     
                     # Criar nó especial de fim de cadeia
                     fim_cadeia_node = HierarquiaArvoreService._criar_no_fim_cadeia(documento, lancamento_fim_cadeia, origem_fim_cadeia)
-                    arvore['documentos'].append(fim_cadeia_node)
+                    
+                    # Verificar se já existe um nó de fim de cadeia com o mesmo ID
+                    fim_cadeia_id = fim_cadeia_node['fim_cadeia_id']
+                    if fim_cadeia_id not in fins_cadeia_processados:
+                        fins_cadeia_processados[fim_cadeia_id] = fim_cadeia_node
+                        arvore['documentos'].append(fim_cadeia_node)
         
         # Criar conexões baseadas nas origens dos documentos e lançamentos
         HierarquiaArvoreService._criar_conexoes_documentos(arvore, documentos, documentos_por_numero)
@@ -340,42 +347,66 @@ class HierarquiaArvoreService:
     @staticmethod
     def _criar_no_fim_cadeia(documento, lancamento_fim_cadeia, origem_fim_cadeia):
         """
-        Cria um nó especial para representar o fim de cadeia
+        Cria um nó especial para representar o fim de cadeia usando o modelo FimCadeia
         """
-        # Extrair sigla do patrimônio público da origem do lançamento se disponível
+        from ..models import FimCadeia
+        
+        # Extrair informações da origem do lançamento
         sigla_patrimonio_publico = None
+        nome_fim_cadeia = None
+        
         if lancamento_fim_cadeia.origem:
             if 'FIM_CADEIA' in lancamento_fim_cadeia.origem:
                 origem_parts = lancamento_fim_cadeia.origem.split(':')
                 if len(origem_parts) >= 6:
                     sigla_patrimonio_publico = origem_parts[5]
+                    nome_fim_cadeia = sigla_patrimonio_publico
             elif ':' in lancamento_fim_cadeia.origem:
                 # Formato novo: Destacamento Público:Sigla:Classificação
-                # Mas pode ter múltiplas origens separadas por ';'
-                # Primeiro, pegar apenas a primeira origem (fim de cadeia)
                 primeira_origem = lancamento_fim_cadeia.origem.split(';')[0].strip()
                 origem_parts = primeira_origem.split(':')
                 if len(origem_parts) >= 2:
                     sigla_patrimonio_publico = origem_parts[1].strip()
+                    nome_fim_cadeia = sigla_patrimonio_publico
         
-        # Determinar o tipo de fim de cadeia
+        # Determinar o tipo e classificação
         tipo_fim_cadeia = origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else 'sem_origem'
         classificacao = origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else 'sem_origem'
         
-        # Criar título e número baseado no tipo
+        # Buscar ou criar o registro FimCadeia
+        if nome_fim_cadeia:
+            fim_cadeia_obj, created = FimCadeia.objects.get_or_create(
+                nome=nome_fim_cadeia,
+                defaults={
+                    'tipo': tipo_fim_cadeia,
+                    'classificacao': classificacao,
+                    'sigla': sigla_patrimonio_publico,
+                    'ativo': True
+                }
+            )
+        else:
+            # Para casos sem nome específico, usar um nome genérico
+            nome_fim_cadeia = "Sem Origem"
+            fim_cadeia_obj, created = FimCadeia.objects.get_or_create(
+                nome=nome_fim_cadeia,
+                defaults={
+                    'tipo': 'sem_origem',
+                    'classificacao': 'sem_origem',
+                    'ativo': True
+                }
+            )
+        
+        # Criar título baseado no tipo
         if tipo_fim_cadeia == 'destacamento_publico' and sigla_patrimonio_publico:
             titulo = f"Destacamento Público\n{sigla_patrimonio_publico}"
-            numero = sigla_patrimonio_publico
-        elif tipo_fim_cadeia == 'outra' and origem_fim_cadeia.especificacao_fim_cadeia:
+        elif tipo_fim_cadeia == 'outra' and origem_fim_cadeia and origem_fim_cadeia.especificacao_fim_cadeia:
             titulo = f"Outra Origem\n{origem_fim_cadeia.especificacao_fim_cadeia}"
-            numero = origem_fim_cadeia.especificacao_fim_cadeia[:10] + "..." if len(origem_fim_cadeia.especificacao_fim_cadeia) > 10 else origem_fim_cadeia.especificacao_fim_cadeia
         else:
             titulo = "Sem Origem"
-            numero = "Sem Origem"
         
         return {
-            'id': f"fim_cadeia_{documento.id}",
-            'numero': numero,
+            'id': f"fim_cadeia_{fim_cadeia_obj.id}",
+            'numero': fim_cadeia_obj.nome,
             'tipo': 'fim_cadeia',
             'tipo_display': 'Fim de Cadeia',
             'tipo_documento': 'fim_cadeia',
@@ -398,10 +429,11 @@ class HierarquiaArvoreService:
             'cadeias_dominiais': [],
             'total_cadeias': 0,
             'is_fim_cadeia': True,  # Flag especial para identificar nós de fim de cadeia
-            'tipo_fim_cadeia': tipo_fim_cadeia,
-            'classificacao_fim_cadeia': classificacao,
-            'sigla_patrimonio_publico': sigla_patrimonio_publico,
+            'tipo_fim_cadeia': fim_cadeia_obj.tipo,
+            'classificacao_fim_cadeia': fim_cadeia_obj.classificacao,
+            'sigla_patrimonio_publico': fim_cadeia_obj.sigla,
             'titulo_fim_cadeia': titulo,
+            'fim_cadeia_id': fim_cadeia_obj.id,  # ID do registro FimCadeia
             'documento_origem_id': documento.id  # Referência ao documento que originou este fim de cadeia
         }
     

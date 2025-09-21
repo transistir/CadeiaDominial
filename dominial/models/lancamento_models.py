@@ -198,4 +198,58 @@ class OrigemFimCadeia(models.Model):
             if not self.classificacao_fim_cadeia:
                 raise ValidationError("Classificação do fim de cadeia é obrigatória quando 'Fim de Cadeia' está ativo")
             if self.tipo_fim_cadeia == 'outra' and not self.especificacao_fim_cadeia:
-                raise ValidationError("Especificação é obrigatória quando o tipo é 'Outra'") 
+                raise ValidationError("Especificação é obrigatória quando o tipo é 'Outra'")
+
+
+class FimCadeia(models.Model):
+    """Modelo para gerenciar os tipos de fim de cadeia que aparecem na árvore D3"""
+    id = models.AutoField(primary_key=True)
+    nome = models.CharField(max_length=100, unique=True, help_text="Nome do fim de cadeia (ex: Estado da Bahia, INCRA)")
+    
+    TIPO_CHOICES = [
+        ('destacamento_publico', 'Destacamento Público'),
+        ('outra', 'Outra'),
+        ('sem_origem', 'Sem Origem'),
+    ]
+    tipo = models.CharField(max_length=50, choices=TIPO_CHOICES, default='destacamento_publico')
+    
+    CLASSIFICACAO_CHOICES = [
+        ('origem_lidima', 'Origem Lídima'),
+        ('sem_origem', 'Sem Origem'),
+        ('inconclusa', 'Situação Inconclusa'),
+    ]
+    classificacao = models.CharField(max_length=50, choices=CLASSIFICACAO_CHOICES, default='origem_lidima')
+    
+    sigla = models.CharField(max_length=50, blank=True, null=True, help_text="Sigla do órgão (ex: INCRA, SPU)")
+    descricao = models.TextField(blank=True, null=True, help_text="Descrição detalhada do fim de cadeia")
+    
+    # Campos de controle
+    ativo = models.BooleanField(default=True, help_text="Se o fim de cadeia está ativo")
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.nome} ({self.get_tipo_display()})"
+    
+    class Meta:
+        verbose_name = "Fim de Cadeia"
+        verbose_name_plural = "Fins de Cadeia"
+        ordering = ['nome']
+    
+    def get_cor_css(self):
+        """Retorna a cor CSS baseada na classificação"""
+        cores = {
+            'origem_lidima': '#28a745',  # Verde
+            'sem_origem': '#dc3545',     # Vermelho
+            'inconclusa': '#ffc107',     # Amarelo
+        }
+        return cores.get(self.classificacao, '#6c757d')
+    
+    def get_cor_borda_css(self):
+        """Retorna a cor da borda CSS baseada na classificação"""
+        cores = {
+            'origem_lidima': '#1e7e34',  # Verde escuro
+            'sem_origem': '#b02a37',     # Vermelho escuro
+            'inconclusa': '#e0a800',     # Amarelo escuro
+        }
+        return cores.get(self.classificacao, '#495057') 
