@@ -237,8 +237,27 @@ function converterParaArvoreD3(data) {
         }
     });
     
-    // Armazenar todas as conexões originais para renderização extra
-    raiz.conexoesExtras = data.conexoes;
+    // CORREÇÃO: Armazenar apenas conexões que NÃO estão na árvore principal
+    // Identificar quais conexões já estão representadas na árvore hierárquica
+    const conexoesNaArvore = new Set();
+    
+    function marcarConexoesArvore(node) {
+        if (node.children) {
+            node.children.forEach(child => {
+                // Marcar conexão pai -> filho como já representada na árvore
+                conexoesNaArvore.add(`${child.numero}->${node.numero}`);
+                marcarConexoesArvore(child);
+            });
+        }
+    }
+    
+    marcarConexoesArvore(raiz);
+    
+    // Filtrar apenas conexões que NÃO estão na árvore principal
+    raiz.conexoesExtras = data.conexoes.filter(con => {
+        const conexaoKey = `${con.from}->${con.to}`;
+        return !conexoesNaArvore.has(conexaoKey);
+    });
     
     // Ordenar filhos recursivamente
     ordenarFilhosPorNumeroDesc(raiz);
@@ -640,60 +659,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
             .style('opacity', '0.6');
     }
     
-    // Desenhar linhas especiais para cards de fim de cadeia
-    const fimCadeiaNodes = root.descendants().filter(d => d.data.is_fim_cadeia);
-    if (fimCadeiaNodes.length > 0) {
-        const linksFimCadeia = svgGroup.selectAll('path.link-fim-cadeia')
-            .data(fimCadeiaNodes, d => d.id)
-            .join('path')
-            .attr('class', 'link-fim-cadeia')
-            .attr('fill', 'none')
-            .attr('stroke', d => {
-                if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
-                    return '#28a745'; // Verde para origem lídima
-                } else {
-                    return '#dc3545'; // Vermelho para sem origem ou inconclusa
-                }
-            })
-            .attr('stroke-width', 3)
-            .attr('stroke-dasharray', '8,4')
-            .attr('stroke-linecap', 'round')
-            .style('opacity', '0')
-            .attr('d', d => {
-                const docOrigemId = d.data.documento_origem_id;
-                if (docOrigemId) {
-                    const docOrigem = root.descendants().find(n => n.data.id === docOrigemId);
-                    if (docOrigem) {
-                        // Linha horizontal conectando o documento origem ao card de fim de cadeia
-                        const x1 = docOrigem.y + 120 + 70; // Lado direito do documento origem
-                        const y1 = docOrigem.x + 20; // Centro vertical do documento origem
-                        const x2 = d.y + 120 - 70; // Lado esquerdo do card de fim de cadeia
-                        const y2 = d.x + 20; // Centro vertical do card de fim de cadeia
-                        
-                        return `M ${x1} ${y1} L ${x2} ${y2}`;
-                    }
-                }
-                return '';
-            })
-            .on('mouseover', function(event, d) {
-                d3.select(this)
-                    .transition().duration(200)
-                    .style('stroke-width', '5')
-                    .style('opacity', '1');
-            })
-            .on('mouseout', function(event, d) {
-                d3.select(this)
-                    .transition().duration(200)
-                    .style('stroke-width', '3')
-                    .style('opacity', '0.8');
-            });
-
-        // Aplicar transição de opacidade para links de fim de cadeia
-        linksFimCadeia.transition()
-            .duration(600)
-            .ease(d3.easeQuadInOut)
-            .style('opacity', '0.8');
-    }
+    // CORREÇÃO: Remover lógica de criação de linhas de fim de cadeia
+    // As conexões de fim de cadeia já são criadas pelo backend e processadas
+    // pelas conexões extras (link-extra) com tipo 'fim_cadeia'
+    // Não precisamos criar linhas adicionais baseadas em documento_origem_id
 
     // Desenhar nós (cards) com animações suaves
     const node = svgGroup.selectAll('g.node')

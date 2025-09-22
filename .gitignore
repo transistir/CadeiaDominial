@@ -35,3 +35,5 @@ backups/
 backup_producao.sh
 restaurar_backup.sh
 restaurar_backup_dev.sh
+backups/
+docs/livro/

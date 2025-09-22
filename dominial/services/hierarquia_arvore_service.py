@@ -456,6 +456,11 @@ class HierarquiaArvoreService:
                     HierarquiaArvoreService._processar_origem_lancamento(
                         arvore, documento, lancamento, documentos_por_numero
                     )
+                    
+                    # CORREÇÃO: Criar conexões para fim de cadeia
+                    HierarquiaArvoreService._processar_conexoes_fim_cadeia(
+                        arvore, documento, lancamento
+                    )
     
     @staticmethod
     def _processar_origem_documento(arvore, documento, documentos_por_numero):
@@ -506,6 +511,84 @@ class HierarquiaArvoreService:
                 # Evitar duplicatas
                 if not any(c['from'] == origem and c['to'] == documento.numero for c in arvore['conexoes']):
                     arvore['conexoes'].append(conexao)
+    
+    @staticmethod
+    def _processar_conexoes_fim_cadeia(arvore, documento, lancamento):
+        """
+        Processa conexões para fim de cadeia
+        Lógica: documento atual → nó de fim de cadeia (quando o lançamento tem fim de cadeia)
+        """
+        # Verificar se o lançamento tem fim de cadeia
+        if not lancamento.origem:
+            return
+            
+        # Verificar se há padrões de fim de cadeia na origem
+        padroes_fim_cadeia = ['FIM_CADEIA', 'Destacamento Público:', 'Outra:', 'Sem Origem:']
+        tem_fim_cadeia = any(padrao in lancamento.origem for padrao in padroes_fim_cadeia)
+        
+        if not tem_fim_cadeia:
+            return
+            
+        # CORREÇÃO: Buscar TODOS os nós de fim de cadeia que correspondem a este tipo
+        # Não apenas o nó criado para este documento específico
+        fim_cadeia_nodes = []
+        for doc_node in arvore['documentos']:
+            if doc_node.get('is_fim_cadeia'):
+                # Extrair o nome do fim de cadeia da origem do lançamento
+                nome_fim_cadeia_origem = HierarquiaArvoreService._extrair_nome_fim_cadeia(lancamento.origem)
+                if nome_fim_cadeia_origem and nome_fim_cadeia_origem in doc_node['numero']:
+                    fim_cadeia_nodes.append(doc_node)
+        
+        # Se não encontrou por nome, usar o nó criado para este documento
+        if not fim_cadeia_nodes:
+            for doc_node in arvore['documentos']:
+                if (doc_node.get('is_fim_cadeia') and 
+                    doc_node.get('documento_origem_id') == documento.id):
+                    fim_cadeia_nodes.append(doc_node)
+                    break
+        
+        # Criar conexões para todos os nós de fim de cadeia encontrados
+        for fim_cadeia_node in fim_cadeia_nodes:
+            conexao = {
+                'from': documento.numero,  # Documento atual
+                'to': fim_cadeia_node['numero'],  # Nó de fim de cadeia
+                'tipo': 'fim_cadeia'
+            }
+            
+            # Evitar duplicatas
+            if not any(c['from'] == documento.numero and c['to'] == fim_cadeia_node['numero'] for c in arvore['conexoes']):
+                arvore['conexoes'].append(conexao)
+    
+    @staticmethod
+    def _extrair_nome_fim_cadeia(origem):
+        """
+        Extrai o nome do fim de cadeia da origem do lançamento
+        """
+        if 'Destacamento Público:' in origem:
+            parts = origem.split('Destacamento Público:')
+            if len(parts) > 1:
+                nome = parts[1].split(':')[0].strip()
+                return nome
+        elif 'Outra:' in origem:
+            parts = origem.split('Outra:')
+            if len(parts) > 1:
+                nome = parts[1].split(':')[0].strip()
+                return nome
+        elif 'Sem Origem:' in origem:
+            return 'Sem Origem'
+        elif 'FIM_CADEIA:' in origem:
+            # Formato antigo: FIM_CADEIA:tipo::classificacao:
+            parts = origem.split('FIM_CADEIA:')
+            if len(parts) > 1:
+                tipo = parts[1].split(':')[0].strip()
+                if tipo == 'outra':
+                    return 'Sem Origem'
+                elif tipo == 'destacamento_publico':
+                    # Para destacamento público no formato antigo, usar "Sem Origem" como fallback
+                    return 'Sem Origem'
+                else:
+                    return 'Sem Origem'
+        return None
     
     
     @staticmethod
