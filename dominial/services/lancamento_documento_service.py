@@ -41,10 +41,15 @@ class LancamentoDocumentoService:
         from ..models import DocumentoTipo
         tipo_matricula = DocumentoTipo.objects.get_or_create(tipo='matricula')[0]
         
+        # CORREÇÃO: Adicionar prefixo "M" para matrículas
+        numero_documento = imovel.matricula
+        if not numero_documento.startswith('M'):
+            numero_documento = f'M{numero_documento}'
+        
         return Documento.objects.create(
             imovel=imovel,
             tipo=tipo_matricula,
-            numero=imovel.matricula,  # Usar o número da matrícula do imóvel
+            numero=numero_documento,  # Usar o número da matrícula do imóvel com prefixo M
             data='2024-01-01',
             cartorio=imovel.cartorio if imovel.cartorio else None,
             livro='0',  # Valor padrão, será atualizado pelo primeiro lançamento

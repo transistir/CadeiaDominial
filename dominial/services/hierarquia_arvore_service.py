@@ -306,8 +306,14 @@ class HierarquiaArvoreService:
         if imovel:
             # Verificar se este documento está sendo referenciado em outros imóveis
             from ..models import Lancamento
+            from django.db.models import Q
+            
+            # Buscar tanto com prefixo quanto sem prefixo
+            numero_com_prefixo = documento.numero
+            numero_sem_prefixo = documento.numero[1:] if documento.numero.startswith(('M', 'T')) else documento.numero
+            
             lancamentos_compartilhando = Lancamento.objects.filter(
-                origem__icontains=documento.numero
+                Q(origem__icontains=numero_com_prefixo) | Q(origem__icontains=numero_sem_prefixo)
             ).exclude(
                 documento__imovel=documento.imovel
             ).select_related('documento__imovel')
@@ -628,7 +634,7 @@ class HierarquiaArvoreService:
         # print(f"DEBUG MATRICULA: Procurando matrícula do imóvel: {matricula_imovel}")
         
         # Procurar por documento com número igual à matrícula do imóvel (sem restrição de tipo)
-        # Também verificar se o número do documento corresponde à matrícula sem o prefixo "M"
+        # Também verificar se o número do documento corresponde à matrícula com ou sem prefixo "M"
         for doc_node in arvore['documentos']:
             if doc_node['numero'] == matricula_imovel:
                 print(f"DEBUG MATRICULA: Encontrado documento com matrícula do imóvel: {doc_node['numero']} (tipo: {doc_node.get('tipo', 'N/A')}, importado: {doc_node.get('is_importado', False)})")
@@ -636,6 +642,10 @@ class HierarquiaArvoreService:
             # Verificar se a matrícula do imóvel tem prefixo "M" e o documento não
             elif matricula_imovel.startswith('M') and doc_node['numero'] == matricula_imovel[1:]:
                 print(f"DEBUG MATRICULA: Encontrado documento correspondente à matrícula do imóvel: {doc_node['numero']} (matrícula: {matricula_imovel}) (tipo: {doc_node.get('tipo', 'N/A')}, importado: {doc_node.get('is_importado', False)})")
+                return doc_node['numero']
+            # CORREÇÃO: Verificar se o documento tem prefixo "M" e a matrícula do imóvel não
+            elif doc_node['numero'].startswith('M') and doc_node['numero'][1:] == matricula_imovel:
+                print(f"DEBUG MATRICULA: Encontrado documento com prefixo M correspondente à matrícula do imóvel: {doc_node['numero']} (matrícula: {matricula_imovel}) (tipo: {doc_node.get('tipo', 'N/A')}, importado: {doc_node.get('is_importado', False)})")
                 return doc_node['numero']
         
         # Se não encontrou, procurar por documento de matrícula mais recente (não importado)
