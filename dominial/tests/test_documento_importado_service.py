@@ -1,17 +1,17 @@
 """
-Testes unitários para DocumentoImportadoService
+Testes unitários para DocumentoService
 """
 
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
 from ..models import TIs, Imovel, Documento, DocumentoTipo, Cartorios, DocumentoImportado
-from ..services.documento_importado_service import DocumentoImportadoService
+from ..services.documento_service import DocumentoService
 
 
-class DocumentoImportadoServiceTest(TestCase):
+class DocumentoServiceTest(TestCase):
     """
-    Testes para DocumentoImportadoService
+    Testes para DocumentoService
     """
     
     def setUp(self):
@@ -80,7 +80,7 @@ class DocumentoImportadoServiceTest(TestCase):
     
     def test_is_documento_importado_false(self):
         """Testa verificação de documento não importado"""
-        resultado = DocumentoImportadoService.is_documento_importado(self.documento1)
+        resultado = DocumentoService.is_documento_importado(self.documento1)
         self.assertFalse(resultado)
     
     def test_is_documento_importado_true(self):
@@ -92,12 +92,12 @@ class DocumentoImportadoServiceTest(TestCase):
             importado_por=self.user
         )
         
-        resultado = DocumentoImportadoService.is_documento_importado(self.documento1)
+        resultado = DocumentoService.is_documento_importado(self.documento1)
         self.assertTrue(resultado)
     
     def test_get_info_importacao_none(self):
         """Testa obtenção de informações de documento não importado"""
-        resultado = DocumentoImportadoService.get_info_importacao(self.documento1)
+        resultado = DocumentoService.get_info_importacao(self.documento1)
         self.assertIsNone(resultado)
     
     def test_get_info_importacao_success(self):
@@ -109,7 +109,7 @@ class DocumentoImportadoServiceTest(TestCase):
             importado_por=self.user
         )
         
-        resultado = DocumentoImportadoService.get_info_importacao(self.documento1)
+        resultado = DocumentoService.get_info_importacao(self.documento1)
         
         self.assertIsNotNone(resultado)
         self.assertEqual(resultado['imovel_origem'], self.imovel2)
@@ -131,7 +131,7 @@ class DocumentoImportadoServiceTest(TestCase):
             importado_por=self.user
         )
         
-        resultado = DocumentoImportadoService.get_documentos_importados_imovel(self.imovel1)
+        resultado = DocumentoService.get_documentos_importados_imovel(self.imovel1)
         
         self.assertEqual(resultado.count(), 1)
         self.assertEqual(resultado.first().documento, self.documento1)
@@ -151,7 +151,7 @@ class DocumentoImportadoServiceTest(TestCase):
             importado_por=self.user
         )
         
-        resultado = DocumentoImportadoService.get_documentos_importados_ids(self.imovel1)
+        resultado = DocumentoService.get_documentos_importados_ids(self.imovel1)
         
         self.assertEqual(len(resultado), 1)
         self.assertIn(self.documento1.id, resultado)
@@ -159,7 +159,7 @@ class DocumentoImportadoServiceTest(TestCase):
     
     def test_get_tooltip_importacao_none(self):
         """Testa geração de tooltip para documento não importado"""
-        resultado = DocumentoImportadoService.get_tooltip_importacao(self.documento1)
+        resultado = DocumentoService.get_tooltip_importacao(self.documento1)
         self.assertIsNone(resultado)
     
     def test_get_tooltip_importacao_success(self):
@@ -171,7 +171,7 @@ class DocumentoImportadoServiceTest(TestCase):
             importado_por=self.user
         )
         
-        resultado = DocumentoImportadoService.get_tooltip_importacao(self.documento1)
+        resultado = DocumentoService.get_tooltip_importacao(self.documento1)
         
         self.assertIsNotNone(resultado)
         self.assertIn('456', resultado)  # Matrícula do imóvel de origem
