@@ -327,9 +327,32 @@ def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
     """
     from ..models import Documento, Lancamento
     
-    # REGRA PÉTREA: Se é lançamento de início de matrícula, sempre permitir
+    # CORREÇÃO: Sempre verificar se documento existe em outros imóveis primeiro
+    # Buscar documento em outros imóveis (com e sem prefixo)
+    documento_existente = Documento.objects.filter(
+        numero=numero_documento
+    ).exclude(
+        imovel=imovel_atual
+    ).first()
+    
+    # Se não encontrou com prefixo, tentar sem prefixo
+    if not documento_existente and numero_documento.startswith(('M', 'T')):
+        numero_base = numero_documento[1:]  # Remove M ou T
+        documento_existente = Documento.objects.filter(
+            numero=numero_base
+        ).exclude(
+            imovel=imovel_atual
+        ).first()
+    
+    if documento_existente:
+        # Documento existe em outro imóvel - NÃO criar duplicado
+        # Em vez disso, deve importar a cadeia dominial
+        print(f"AVISO: Documento {numero_documento} já existe no imóvel {documento_existente.imovel.id} (número: {documento_existente.numero}) - não criando duplicado")
+        return False
+    
+    # REGRA PÉTREA: Se é lançamento de início de matrícula e não existe em outros imóveis
     if lancamento and lancamento.tipo and lancamento.tipo.tipo == 'inicio_matricula':
-        # Verificar apenas se não existe no imóvel atual
+        # Verificar se não existe no imóvel atual
         documento_no_imovel_atual = Documento.objects.filter(
             numero=numero_documento,
             imovel=imovel_atual
@@ -338,17 +361,11 @@ def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
         if documento_no_imovel_atual:
             return False
         
-        # Para início de matrícula, sempre permitir criação (regra pétrea)
+        # Para início de matrícula, permitir criação apenas se não existe em lugar nenhum
         return True
     
     # Para outros tipos de lançamento, usar validação restritiva
-    # Buscar documento em outros imóveis
-    documento_existente = Documento.objects.filter(
-        numero=numero_documento
-    ).exclude(
-        imovel=imovel_atual
-    ).first()
-    
+    # (já verificamos se existe em outros imóveis acima)
     if not documento_existente:
         return False
     
