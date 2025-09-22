@@ -185,7 +185,7 @@ class HierarquiaArvoreService:
     def _documento_pertence_cadeia(documento_candidato, documento_origem, documentos_processados=None):
         """
         Verifica se um documento candidato pertence à cadeia dominial de um documento origem
-        Faz busca recursiva para encontrar toda a cadeia
+        Versão otimizada para evitar loops infinitos e queries excessivas
         
         Args:
             documento_candidato: Documento a verificar
@@ -202,6 +202,10 @@ class HierarquiaArvoreService:
         if documento_candidato.id == documento_origem.id:
             return True
         
+        # Evitar loops infinitos - limite de profundidade
+        if len(documentos_processados) > 50:  # Limite de profundidade
+            return False
+            
         # Evitar loops infinitos
         if documento_origem.id in documentos_processados:
             return False
@@ -219,8 +223,8 @@ class HierarquiaArvoreService:
                 if documento_candidato.numero in origens:
                     return True
                 
-                # Buscar recursivamente nos documentos de origem
-                for origem_numero in origens:
+                # Buscar recursivamente nos documentos de origem (limitado)
+                for origem_numero in origens[:5]:  # Limitar a 5 origens por documento
                     try:
                         # Usar filter().first() em vez de get() para evitar erro de múltiplos objetos
                         # Buscar em qualquer imóvel, não apenas no mesmo imóvel
