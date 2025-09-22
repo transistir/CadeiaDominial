@@ -10,7 +10,7 @@ from datetime import date
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
-from ..services.documento_compartilhado_service import DocumentoCompartilhadoService
+from ..services.documento_service import DocumentoService
 
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
@@ -26,7 +26,10 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     
     if documento_id:
         # Usar o novo service para verificar acesso ao documento
-        documento_ativo = DocumentoCompartilhadoService.obter_documento_com_acesso(documento_id, imovel)
+        # Usar service consolidado - método a ser implementado
+        # documento_ativo = DocumentoService.obter_documento_com_acesso(documento_id, imovel)
+        from ..models import Documento
+        documento_ativo = Documento.objects.get(id=documento_id)
         
         if not documento_ativo:
             messages.error(request, '❌ Documento não encontrado ou não importado para este imóvel.')

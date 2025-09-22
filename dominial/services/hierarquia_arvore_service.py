@@ -4,7 +4,7 @@ Service especializado para construção da árvore de hierarquia
 
 from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
-from .documento_importado_service import DocumentoImportadoService
+from .documento_service import DocumentoService
 import re
 from collections import deque
 
@@ -284,8 +284,8 @@ class HierarquiaArvoreService:
         cadeias_dominiais = []
         
         if is_importado:
-            info_importacao = DocumentoImportadoService.get_info_importacao(documento)
-            tooltip_importacao = DocumentoImportadoService.get_tooltip_importacao(documento)
+            info_importacao = DocumentoService.get_info_importacao(documento)
+            # tooltip_importacao = DocumentoService.get_tooltip_importacao(documento)  # Método não implementado ainda
             
             # Buscar todas as cadeias dominiais onde este documento aparece
             from ..models import DocumentoImportado
