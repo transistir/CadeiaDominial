@@ -177,6 +177,8 @@ function ordenarFilhosPorNumeroDesc(nodo) {
 }
 
 function converterParaArvoreD3(data) {
+    console.log(`DEBUG: Iniciando conversão - Backend enviou ${data.documentos.length} documentos únicos`);
+    
     // Mapear documentos por número
     const docMap = {};
     data.documentos.forEach(doc => {
@@ -184,83 +186,136 @@ function converterParaArvoreD3(data) {
         docMap[doc.numero] = doc;
     });
     
-    // CORREÇÃO: Construir árvore sem duplicação e armazenar conexões extras
-    // Primeiro, identificar todas as conexões pai-filho
-    const conexoesPaiFilho = new Map(); // pai -> [filhos]
-    
-    data.conexoes.forEach(con => {
-        const from = docMap[con.from];
-        const to = docMap[con.to];
-        if (to && from) {
-            // Armazenar a relação pai-filho
-            if (!conexoesPaiFilho.has(to.numero)) {
-                conexoesPaiFilho.set(to.numero, []);
-            }
-            conexoesPaiFilho.get(to.numero).push(from.numero);
-        }
-    });
-    
-    // Construir a árvore evitando duplicação
-    const visitados = new Set();
-    const fila = [];
-    
     // Encontrar a matrícula principal (raiz)
     let raiz = data.documentos.find(doc => doc.nivel === 0 || doc.origem === '' || doc.origem == null);
     if (!raiz) raiz = data.documentos[0];
     
-    // Iniciar a fila com a raiz
-    fila.push(raiz.numero);
-    visitados.add(raiz.numero);
+    console.log(`DEBUG: Raiz identificada: ${raiz.numero}`);
     
-    // Processar a fila - construir árvore sem duplicação
-    while (fila.length > 0) {
-        const docAtual = fila.shift();
-        const docNode = docMap[docAtual];
+    // CORREÇÃO: Abordagem simples - usar apenas as conexões do backend
+    // Construir árvore diretamente das conexões, garantindo que cada documento apareça apenas uma vez
+    
+    const visitados = new Set();
+    const documentosNaArvore = new Set();
+    
+    // Função para construir árvore sem duplicação
+    function construirArvoreSimples(node) {
+        if (!node || visitados.has(node.numero)) {
+            console.log(`DEBUG: Pulando nó ${node?.numero} - já visitado ou nulo`);
+            return;
+        }
         
-        // Adicionar apenas filhos únicos que ainda não foram visitados
-        const filhos = conexoesPaiFilho.get(docAtual) || [];
-        for (const filhoNumero of filhos) {
-            if (!visitados.has(filhoNumero)) {
-                docNode.children.push(docMap[filhoNumero]);
-                visitados.add(filhoNumero);
-                fila.push(filhoNumero);
+        console.log(`DEBUG: Processando nó ${node.numero}`);
+        visitados.add(node.numero);
+        documentosNaArvore.add(node.numero);
+        
+        // Buscar filhos deste nó nas conexões (from = filho, to = pai)
+        const filhos = data.conexoes
+            .filter(con => con.from === node.numero)
+            .map(con => docMap[con.to])
+            .filter(doc => doc);
+        
+        console.log(`DEBUG: Nó ${node.numero} tem ${filhos.length} filhos: ${filhos.map(f => f.numero).join(', ')}`);
+        
+        // Adicionar filhos únicos (referências aos mesmos objetos)
+        filhos.forEach(filho => {
+            if (!node.children.some(child => child.numero === filho.numero)) {
+                // CORREÇÃO: Só adicionar se o filho ainda não foi visitado
+                if (!visitados.has(filho.numero)) {
+                    console.log(`DEBUG: Adicionando filho ${filho.numero} ao nó ${node.numero}`);
+                    node.children.push(filho);
+                    documentosNaArvore.add(filho.numero);
+                } else {
+                    console.log(`DEBUG: Filho ${filho.numero} já foi visitado, não adicionando ao nó ${node.numero}`);
+                }
+            } else {
+                console.log(`DEBUG: Filho ${filho.numero} já existe no nó ${node.numero}`);
             }
-        }
-    }
-    
-    // Adicionar documentos isolados (que não foram conectados)
-    data.documentos.forEach(doc => {
-        if (!visitados.has(doc.numero)) {
-            // Adicionar como filho da raiz para garantir que apareça
-            if (!raiz.children) raiz.children = [];
-            raiz.children.push(doc);
-        }
-    });
-    
-    // CORREÇÃO: Armazenar apenas conexões que NÃO estão na árvore principal
-    // Identificar quais conexões já estão representadas na árvore hierárquica
-    const conexoesNaArvore = new Set();
-    
-    function marcarConexoesArvore(node) {
+        });
+        
+        // Processar filhos recursivamente APENAS se não foram visitados
         if (node.children) {
-            node.children.forEach(child => {
-                // Marcar conexão pai -> filho como já representada na árvore
-                conexoesNaArvore.add(`${child.numero}->${node.numero}`);
-                marcarConexoesArvore(child);
+            node.children.forEach(filho => {
+                if (!visitados.has(filho.numero)) {
+                    console.log(`DEBUG: Processando recursivamente filho ${filho.numero} de ${node.numero}`);
+                    construirArvoreSimples(filho);
+                } else {
+                    console.log(`DEBUG: Filho ${filho.numero} já foi visitado, pulando recursão`);
+                }
             });
         }
     }
     
-    marcarConexoesArvore(raiz);
+    // Função para verificar se uma conexão já existe na árvore
+    function verificarConexaoExiste(node, from, to) {
+        if (!node) return false;
+        
+        // Verificar se este nó tem a conexão direta
+        if (node.numero === from && node.children) {
+            return node.children.some(child => child.numero === to);
+        }
+        
+        // Verificar recursivamente nos filhos
+        if (node.children) {
+            return node.children.some(child => verificarConexaoExiste(child, from, to));
+        }
+        
+        return false;
+    }
     
-    // Filtrar apenas conexões que NÃO estão na árvore principal
-    raiz.conexoesExtras = data.conexoes.filter(con => {
-        const conexaoKey = `${con.from}->${con.to}`;
-        return !conexoesNaArvore.has(conexaoKey);
+    // Construir árvore simples
+    construirArvoreSimples(raiz);
+    
+    // Verificar se há documentos não visitados
+    const documentosNaoVisitados = data.documentos.filter(doc => !visitados.has(doc.numero));
+    console.log(`DEBUG: Documentos não visitados: ${documentosNaoVisitados.length}`);
+    console.log(`DEBUG: Documentos na árvore: ${documentosNaArvore.size}`);
+    
+    // ETAPA 3: Criar conexões secundárias (traços sem duplicar cards)
+    const conexoesSecundarias = [];
+    
+    // Identificar conexões que foram perdidas devido à lógica de visitados
+    data.conexoes.forEach(conexao => {
+        const pai = docMap[conexao.to];
+        const filho = docMap[conexao.from];
+        
+        if (pai && filho) {
+            // Verificar se esta conexão não está representada na árvore principal
+            const conexaoExiste = verificarConexaoExiste(raiz, conexao.from, conexao.to);
+            
+            if (!conexaoExiste) {
+                console.log(`DEBUG: Criando conexão secundária: ${conexao.from} -> ${conexao.to}`);
+                conexoesSecundarias.push({
+                    from: conexao.from,
+                    to: conexao.to,
+                    tipo: 'conexao_secundaria'
+                });
+            }
+        }
     });
+    
+    console.log(`DEBUG: Total de conexões secundárias criadas: ${conexoesSecundarias.length}`);
+    
+    // Adicionar conexões secundárias à raiz
+    raiz.conexoesExtras = conexoesSecundarias;
     
     // Ordenar filhos recursivamente
     ordenarFilhosPorNumeroDesc(raiz);
+    
+    // DEBUG: Contar total de nós na árvore final
+    function contarNos(node) {
+        let total = 1;
+        if (node.children) {
+            node.children.forEach(child => {
+                total += contarNos(child);
+            });
+        }
+        return total;
+    }
+    
+    const totalNos = contarNos(raiz);
+    console.log(`DEBUG: Total de nós na árvore final: ${totalNos}`);
+    
     return raiz;
 }
 
