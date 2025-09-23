@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..services import HierarquiaService
+from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 from datetime import date
@@ -57,7 +58,7 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
         # Delegar a construção da árvore para um service/utilitário
-        arvore = HierarquiaService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
         
         # Adicionar headers para evitar cache
         response = JsonResponse(arvore, safe=False)
