@@ -22,6 +22,7 @@ Documentação relacionada ao deploy, configuração de produção e infraestrut
 ### 🔧 **[Refatoração e Melhorias](refatoracao/)**
 Documentação sobre refatorações realizadas e melhorias no sistema.
 
+- **[ESTUDO_IMPACTO_FIM_CADEIA_TIPO_ORIGEM.md](refatoracao/ESTUDO_IMPACTO_FIM_CADEIA_TIPO_ORIGEM.md)** - **📊 ESTUDO DE IMPACTO** - Mudança de toggle para tipo de origem
 - **[REFATORACAO_FASE_1_2_COMPLETA.md](refatoracao/REFATORACAO_FASE_1_2_COMPLETA.md)** - Resumo das fases 1 e 2 da refatoração
 - **[REFATORACAO_FASE_3_COMPLETA.md](refatoracao/REFATORACAO_FASE_3_COMPLETA.md)** - Resumo da fase 3 da refatoração
 - **[EXEMPLOS_PRATICOS_REFATORACAO.md](refatoracao/EXEMPLOS_PRATICOS_REFATORACAO.md)** - Exemplos práticos de refatoração

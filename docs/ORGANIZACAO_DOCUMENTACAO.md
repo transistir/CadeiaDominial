@@ -126,6 +126,11 @@ docs/
 2. **Leia:** `README.md` para visão geral
 3. **Entenda:** `LOGICA_CADEIA_DOMINIAL_TABELA.md` para detalhes
 
+### **Para Refatoração e Melhorias:**
+1. **Acesse:** `docs/refatoracao/` para estudos de impacto e planos
+2. **Leia:** `ESTUDO_IMPACTO_FIM_CADEIA_TIPO_ORIGEM.md` para mudanças no formulário
+3. **Siga:** Planos de implementação detalhados
+
 ### **Para Outras Funcionalidades:**
 1. **Acesse:** Pasta específica (ex: `verificacao-duplicatas/`)
 2. **Leia:** README da pasta para orientação
