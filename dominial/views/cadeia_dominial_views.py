@@ -58,7 +58,7 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
         # Delegar a construção da árvore para um service/utilitário
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=True)
         
         # Adicionar headers para evitar cache
         response = JsonResponse(arvore, safe=False)
