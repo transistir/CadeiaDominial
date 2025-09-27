@@ -215,26 +215,31 @@ class HierarquiaArvoreService:
         """
         try:
             # Determinar tipo do documento
+            from ..models import DocumentoTipo
             if numero_documento.startswith('M'):
-                tipo_documento = 'matricula'
+                tipo_documento = DocumentoTipo.objects.get(tipo='matricula')
             elif numero_documento.startswith('T'):
-                tipo_documento = 'transcricao'
+                tipo_documento = DocumentoTipo.objects.get(tipo='transcricao')
             else:
                 return None
             
             # Buscar cartório padrão (pode ser melhorado)
-            from ..models import Cartorio
-            cartorio = Cartorio.objects.first()  # Simplificado
+            from ..models import Cartorios
+            cartorio = Cartorios.objects.first()  # Simplificado
             
             if not cartorio:
                 return None
             
             # Criar documento
+            from datetime import date
             documento = Documento.objects.create(
                 numero=numero_documento,
                 imovel=imovel,
                 cartorio=cartorio,
-                tipo_id=tipo_documento,
+                tipo=tipo_documento,
+                data=date.today(),  # Data padrão
+                livro='',  # Campo obrigatório
+                folha='',  # Campo obrigatório
                 origem='',  # Será preenchido quando houver lançamentos
                 observacoes='Documento criado automaticamente para origem identificada'
             )
