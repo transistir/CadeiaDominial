@@ -52,6 +52,10 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
     if not documento_atual and imovel.matricula.startswith('M'):
         documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula[1:]), None)
     
+    # Se não encontrou, verificar se o documento tem prefixo "M" e a matrícula do imóvel não
+    if not documento_atual:
+        documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == f"M{imovel.matricula}"), None)
+    
     # Se não encontrou o documento da matrícula atual, procurar por matrículas
     if not documento_atual:
         matriculas = [doc for doc in documentos if doc.tipo.tipo == 'matricula']
