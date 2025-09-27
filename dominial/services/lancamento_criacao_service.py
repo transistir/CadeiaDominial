@@ -9,6 +9,7 @@ from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_campos_service import LancamentoCamposService
 from .regra_petrea_service import RegraPetreaService
 from .lancamento_duplicata_service import LancamentoDuplicataService
+from .lancamento_pessoa_service import LancamentoPessoaService
 
 
 class LancamentoCriacaoService:
@@ -179,9 +180,9 @@ class LancamentoCriacaoService:
             transmitente_ids = request.POST.getlist('transmitente[]')
             
             # Pessoas processadas no service consolidado
-            # LancamentoPessoaService.processar_pessoas_lancamento(
-            #     lancamento, transmitentes_data, transmitente_ids, 'transmitente'
-            # )
+            LancamentoPessoaService.processar_pessoas_lancamento(
+                lancamento, transmitentes_data, transmitente_ids, 'transmitente'
+            )
             
             # Processar adquirentes
             print("DEBUG: Processando adquirentes...")
@@ -189,9 +190,9 @@ class LancamentoCriacaoService:
             adquirente_ids = request.POST.getlist('adquirente[]')
             
             # Pessoas processadas no service consolidado
-            # LancamentoPessoaService.processar_pessoas_lancamento(
-            #     lancamento, adquirentes_data, adquirente_ids, 'adquirente'
-            # )
+            LancamentoPessoaService.processar_pessoas_lancamento(
+                lancamento, adquirentes_data, adquirente_ids, 'adquirente'
+            )
             
             print("DEBUG: Lançamento criado com sucesso!")
             return lancamento, mensagem_origens
@@ -311,18 +312,18 @@ class LancamentoCriacaoService:
             transmitente_ids = request.POST.getlist('transmitente[]')
             
             # Pessoas processadas no service consolidado
-            # LancamentoPessoaService.processar_pessoas_lancamento(
-            #     lancamento, transmitentes_data, transmitente_ids, 'transmitente'
-            # )
+            LancamentoPessoaService.processar_pessoas_lancamento(
+                lancamento, transmitentes_data, transmitente_ids, 'transmitente'
+            )
             
             # Processar adquirentes
             adquirentes_data = request.POST.getlist('adquirente_nome[]')
             adquirente_ids = request.POST.getlist('adquirente[]')
             
             # Pessoas processadas no service consolidado
-            # LancamentoPessoaService.processar_pessoas_lancamento(
-            #     lancamento, adquirentes_data, adquirente_ids, 'adquirente'
-            # )
+            LancamentoPessoaService.processar_pessoas_lancamento(
+                lancamento, adquirentes_data, adquirente_ids, 'adquirente'
+            )
             
             print("DEBUG: Lançamento atualizado com sucesso!")
             return True, mensagem_origens
