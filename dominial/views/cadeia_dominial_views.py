@@ -12,6 +12,9 @@ from weasyprint import HTML
 from django.template.loader import render_to_string
 from django.conf import settings
 import os
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 @login_required
 def cadeia_dominial(request, tis_id, imovel_id):
@@ -384,6 +387,220 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         </html>
         """
         return HttpResponse(error_html, content_type='text/html')
+
+@login_required
+def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
+    """
+    Exporta a cadeia dominial geral em formato Excel (mesma estrutura da página ver-cadeia-dominial)
+    """
+    try:
+        tis = get_object_or_404(TIs, id=tis_id)
+        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        
+        # Usar o CadeiaCompletaService (mesmo do PDF) para incluir TODOS os documentos
+        from ..services.cadeia_completa_service import CadeiaCompletaService
+        service = CadeiaCompletaService()
+        context = service.get_cadeia_completa(tis_id, imovel_id)
+        
+        # Criar workbook Excel
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Cadeia Dominial Geral"
+        
+        # Estilos
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        center_alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Cabeçalho principal
+        ws.merge_cells('A1:P1')
+        ws['A1'] = f"CADEIA DOMINIAL GERAL - {imovel.nome}"
+        ws['A1'].font = Font(bold=True, size=16)
+        ws['A1'].alignment = center_alignment
+        
+        # Informações do imóvel
+        ws['A3'] = "TIS:"
+        ws['B3'] = tis.nome
+        ws['A4'] = "Matrícula:"
+        ws['B4'] = imovel.matricula
+        ws['A5'] = "Nome:"
+        ws['B5'] = imovel.nome
+        ws['A6'] = "Proprietário:"
+        ws['B6'] = imovel.proprietario.nome if imovel.proprietario else ""
+        ws['A7'] = "Cartório:"
+        ws['B7'] = imovel.cartorio.nome if imovel.cartorio else ""
+        ws['A8'] = "Data de Exportação:"
+        ws['B8'] = date.today().strftime('%d/%m/%Y')
+        
+        # Inicializar linha atual
+        row = 10
+        
+        # Processar a cadeia completa (mesma estrutura do PDF)
+        cadeia_completa = context['cadeia_completa']
+        
+        for tronco in cadeia_completa:
+            # Processar documentos do tronco
+            for item in tronco['documentos']:
+                documento = item['documento']
+                lancamentos = item['lancamentos']
+                is_importado = item.get('is_importado', False)
+            
+                # Título do documento
+                row += 1
+                prefixo_importado = "📥 " if is_importado else ""
+                ws.merge_cells(f'A{row}:P{row}')
+                ws.cell(row=row, column=1, value=f"{prefixo_importado}{documento.tipo.get_tipo_display()}: {documento.numero}").font = Font(bold=True, size=12)
+                ws.cell(row=row, column=1).fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
+                ws.cell(row=row, column=1).alignment = center_alignment
+                row += 1
+            
+                # Cabeçalho da tabela de lançamentos (igual ao template)
+                # Primeira linha de cabeçalho (agrupamentos)
+                ws.merge_cells(f'A{row}:E{row}')
+                ws.cell(row=row, column=1, value="MATRÍCULA").font = header_font
+                ws.cell(row=row, column=1).fill = header_fill
+                ws.cell(row=row, column=1).alignment = center_alignment
+                
+                ws.merge_cells(f'F{row}:G{row}')
+                ws.cell(row=row, column=6, value="").fill = header_fill
+                
+                ws.merge_cells(f'H{row}:M{row}')
+                ws.cell(row=row, column=8, value="TRANSMISSÃO").font = header_font
+                ws.cell(row=row, column=8).fill = header_fill
+                ws.cell(row=row, column=8).alignment = center_alignment
+                
+                ws.cell(row=row, column=14, value="Área (ha)").font = header_font
+                ws.cell(row=row, column=14).fill = header_fill
+                ws.cell(row=row, column=14).alignment = center_alignment
+                
+                ws.cell(row=row, column=15, value="Origem").font = header_font
+                ws.cell(row=row, column=15).fill = header_fill
+                ws.cell(row=row, column=15).alignment = center_alignment
+                
+                ws.cell(row=row, column=16, value="Observações").font = header_font
+                ws.cell(row=row, column=16).fill = header_fill
+                ws.cell(row=row, column=16).alignment = center_alignment
+                row += 1
+            
+                # Segunda linha de cabeçalho (colunas específicas)
+                headers_detalhados = [
+                    'Nº', 'L', 'Fls.', 'Cartório', 'Data',  # Matrícula
+                    'Transmitente', 'Adquirente',  # Pessoas
+                    'Forma', 'Título', 'Cartório', 'L', 'Fls.', 'Data',  # Transmissão
+                    'Área (ha)', 'Origem', 'Observações'
+                ]
+                
+                for col, header in enumerate(headers_detalhados, 1):
+                    cell = ws.cell(row=row, column=col, value=header)
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.border = border
+                    cell.alignment = center_alignment
+                row += 1
+            
+                # Adicionar lançamentos
+                for lancamento in lancamentos:
+                    # Nº (usando o filtro numero_documento_criado)
+                    from ..templatetags.dominial_extras import numero_documento_criado
+                    numero_formatado = numero_documento_criado(lancamento)
+                    ws.cell(row=row, column=1, value=numero_formatado).border = border
+                    
+                    # L, Fls., Cartório, Data (do documento)
+                    ws.cell(row=row, column=2, value=documento.livro or "-").border = border
+                    ws.cell(row=row, column=3, value=documento.folha or "-").border = border
+                    ws.cell(row=row, column=4, value=documento.cartorio.nome if documento.cartorio else "-").border = border
+                    ws.cell(row=row, column=5, value=lancamento.data.strftime('%d/%m/%Y') if lancamento.data else "-").border = border
+                    
+                    # Transmitente
+                    transmitentes = [p.pessoa.nome for p in lancamento.transmitentes.all()]
+                    ws.cell(row=row, column=6, value=", ".join(transmitentes) if transmitentes else "-").border = border
+                    
+                    # Adquirente
+                    adquirentes = [p.pessoa.nome for p in lancamento.adquirentes.all()]
+                    ws.cell(row=row, column=7, value=", ".join(adquirentes) if adquirentes else "-").border = border
+                    
+                    # Transmissão
+                    if lancamento.tipo.tipo == 'averbacao':
+                        # Para averbação, mesclar colunas e mostrar descrição
+                        ws.merge_cells(f'H{row}:M{row}')
+                        ws.cell(row=row, column=8, value=lancamento.descricao or "-").border = border
+                    else:
+                        # Para outros tipos, mostrar campos específicos
+                        ws.cell(row=row, column=8, value=lancamento.forma or "-").border = border
+                        ws.cell(row=row, column=9, value=lancamento.titulo or "-").border = border
+                        ws.cell(row=row, column=10, value=lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else "-").border = border
+                        ws.cell(row=row, column=11, value=lancamento.livro_transacao or "-").border = border
+                        ws.cell(row=row, column=12, value=lancamento.folha_transacao or "-").border = border
+                        ws.cell(row=row, column=13, value=lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else "-").border = border
+                    
+                    # Área, Origem, Observações
+                    ws.cell(row=row, column=14, value="").border = border  # Área (não implementado)
+                    ws.cell(row=row, column=15, value=lancamento.origem or "-").border = border
+                    ws.cell(row=row, column=16, value=lancamento.observacoes or "-").border = border
+                    
+                    row += 1
+                
+                # Adicionar linha em branco entre documentos
+                row += 1
+        
+        # Adicionar estatísticas (se disponíveis)
+        if 'estatisticas' in context:
+            row += 1
+            estatisticas = context['estatisticas']
+            
+            # Título das estatísticas
+            ws.merge_cells(f'A{row}:P{row}')
+            ws.cell(row=row, column=1, value="📊 ESTATÍSTICAS").font = Font(bold=True, size=14, color="FFFFFF")
+            ws.cell(row=row, column=1).fill = PatternFill(start_color="28a745", end_color="28a745", fill_type="solid")
+            ws.cell(row=row, column=1).alignment = center_alignment
+            row += 1
+            
+            # Estatísticas
+            if 'total_documentos' in estatisticas:
+                ws.cell(row=row, column=1, value="Total de Documentos:").font = Font(bold=True)
+                ws.cell(row=row, column=2, value=estatisticas['total_documentos']).border = border
+                row += 1
+            
+            if 'total_lancamentos' in estatisticas:
+                ws.cell(row=row, column=1, value="Total de Lançamentos:").font = Font(bold=True)
+                ws.cell(row=row, column=2, value=estatisticas['total_lancamentos']).border = border
+                row += 1
+            
+            if 'documentos_compartilhados' in estatisticas:
+                ws.cell(row=row, column=1, value="Documentos Compartilhados:").font = Font(bold=True)
+                ws.cell(row=row, column=2, value=estatisticas['documentos_compartilhados']).border = border
+                row += 1
+        
+        # Ajustar largura das colunas (16 colunas)
+        column_widths = [12, 8, 8, 20, 12, 20, 20, 15, 15, 20, 8, 8, 12, 12, 20, 30]
+        for i, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+        
+        # Configurar resposta HTTP
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f"cadeia_dominial_geral_{imovel.matricula}_{date.today().strftime('%Y%m%d')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Salvar workbook
+        wb.save(response)
+        return response
+        
+    except Exception as e:
+        # Em caso de erro, retornar uma resposta de erro
+        error_response = HttpResponse(
+            f"Erro ao gerar Excel: {str(e)}",
+            content_type='text/plain'
+        )
+        error_response.status_code = 500
+        return error_response
 
 @login_required
 def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
