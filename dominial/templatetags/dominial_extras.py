@@ -246,13 +246,13 @@ def numero_documento_criado(lancamento):
     
     # Gerar sigla baseada no tipo de lançamento
     if tipo_lancamento == 'registro':
-        return f"R{numero_lancamento} {sigla_documento}{numero_documento}"
+        return f"R{numero_lancamento} {numero_documento}"
     elif tipo_lancamento == 'averbacao':
-        return f"AV{numero_lancamento} {sigla_documento}{numero_documento}"
+        return f"AV{numero_lancamento} {numero_documento}"
     elif tipo_lancamento == 'inicio_matricula':
-        return f"{sigla_documento}{numero_documento}"
+        return f"{numero_documento}"
     else:
         # Fallback para outros tipos
-        return f"{tipo_lancamento.upper()}{numero_lancamento} {sigla_documento}{numero_documento}"
+        return f"{tipo_lancamento.upper()}{numero_lancamento} {numero_documento}"
 
  
