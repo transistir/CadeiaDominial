@@ -364,11 +364,11 @@ function adicionarTransmitente() {
     pessoaDiv.innerHTML = `
         <div class="pessoa-input-group">
             <div class="autocomplete-container">
-                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off">
+                <input type="text" name="transmitente_nome[]" class="transmitente-nome" placeholder="Digite o nome do transmitente" autocomplete="off" tabindex="0">
                 <input type="hidden" name="transmitente[]" class="transmitente-id">
                 <div class="autocomplete-suggestions transmitente-suggestions"></div>
             </div>
-            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
         </div>
     `;
     container.appendChild(pessoaDiv);
@@ -407,11 +407,11 @@ function adicionarAdquirente() {
     pessoaDiv.innerHTML = `
         <div class="pessoa-input-group">
             <div class="autocomplete-container">
-                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off">
+                <input type="text" name="adquirente_nome[]" class="adquirente-nome" placeholder="Digite o nome do adquirente" autocomplete="off" tabindex="0">
                 <input type="hidden" name="adquirente[]" class="adquirente-id">
                 <div class="autocomplete-suggestions adquirente-suggestions"></div>
             </div>
-            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+            <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
         </div>
     `;
     container.appendChild(pessoaDiv);
@@ -425,10 +425,14 @@ function adicionarAdquirente() {
 
 // Função para configurar autocomplete de pessoa
 function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
+    let currentIndex = -1;
+    let currentSuggestions = [];
+    
     input.addEventListener('input', function() {
         const query = this.value.trim();
         if (query.length < 2) {
             suggestions.style.display = 'none';
+            currentIndex = -1;
             return;
         }
         
@@ -436,15 +440,17 @@ function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
             .then(response => response.json())
             .then(data => {
                 suggestions.innerHTML = '';
-                if (data.results && data.results.length > 0) {
-                    data.results.forEach(pessoa => {
+                currentSuggestions = data.results || [];
+                currentIndex = -1;
+                
+                if (currentSuggestions.length > 0) {
+                    currentSuggestions.forEach((pessoa, index) => {
                         const div = document.createElement('div');
                         div.className = 'autocomplete-suggestion';
                         div.textContent = pessoa.nome;
+                        div.setAttribute('data-index', index);
                         div.addEventListener('click', function() {
-                            input.value = pessoa.nome;
-                            hidden.value = pessoa.id;
-                            suggestions.style.display = 'none';
+                            selectSuggestion(index);
                         });
                         suggestions.appendChild(div);
                     });
@@ -456,23 +462,84 @@ function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
             .catch(error => {
                 console.error('Erro ao buscar pessoas:', error);
                 suggestions.style.display = 'none';
+                currentIndex = -1;
             });
     });
+    
+    // Função para selecionar uma sugestão
+    function selectSuggestion(index) {
+        if (index >= 0 && index < currentSuggestions.length) {
+            const pessoa = currentSuggestions[index];
+            input.value = pessoa.nome;
+            hidden.value = pessoa.id;
+            suggestions.style.display = 'none';
+            currentIndex = -1;
+        }
+    }
+    
+    // Navegação com teclado
+    input.addEventListener('keydown', function(e) {
+        if (suggestions.style.display === 'none' || currentSuggestions.length === 0) {
+            return;
+        }
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                currentIndex = Math.min(currentIndex + 1, currentSuggestions.length - 1);
+                updateHighlight();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                currentIndex = Math.max(currentIndex - 1, -1);
+                updateHighlight();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    selectSuggestion(currentIndex);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                suggestions.style.display = 'none';
+                currentIndex = -1;
+                break;
+        }
+    });
+    
+    // Função para atualizar o destaque da sugestão
+    function updateHighlight() {
+        const suggestionElements = suggestions.querySelectorAll('.autocomplete-suggestion');
+        suggestionElements.forEach((element, index) => {
+            if (index === currentIndex) {
+                element.classList.add('highlighted');
+                element.scrollIntoView({ block: 'nearest' });
+            } else {
+                element.classList.remove('highlighted');
+            }
+        });
+    }
     
     // Esconder sugestões quando clicar fora
     document.addEventListener('click', function(e) {
         if (!input.contains(e.target) && !suggestions.contains(e.target)) {
             suggestions.style.display = 'none';
+            currentIndex = -1;
         }
     });
 }
 
 // Função para configurar autocomplete de cartório
 function setupCartorioAutocomplete(input, hidden, suggestions) {
+    let currentIndex = -1;
+    let currentSuggestions = [];
+    
     input.addEventListener('input', function() {
         const query = this.value.trim();
         if (query.length < 2) {
             suggestions.style.display = 'none';
+            currentIndex = -1;
             // Limpar campo hidden se não há seleção válida
             hidden.value = '';
             return;
@@ -482,17 +549,17 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
             .then(response => response.json())
             .then(data => {
                 suggestions.innerHTML = '';
-                if (data.results && data.results.length > 0) {
-                    data.results.forEach(cartorio => {
+                currentSuggestions = data.results || [];
+                currentIndex = -1;
+                
+                if (currentSuggestions.length > 0) {
+                    currentSuggestions.forEach((cartorio, index) => {
                         const div = document.createElement('div');
                         div.className = 'autocomplete-suggestion';
                         div.textContent = cartorio.nome;
+                        div.setAttribute('data-index', index);
                         div.addEventListener('click', function() {
-                            input.value = cartorio.nome;
-                            hidden.value = cartorio.id;
-                            suggestions.style.display = 'none';
-                            // Remover classe de erro se existir
-                            input.classList.remove('error');
+                            selectCartorioSuggestion(index);
                         });
                         suggestions.appendChild(div);
                     });
@@ -510,8 +577,66 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
             .catch(error => {
                 console.error('Erro ao buscar cartórios:', error);
                 suggestions.style.display = 'none';
+                currentIndex = -1;
             });
     });
+    
+    // Função para selecionar uma sugestão de cartório
+    function selectCartorioSuggestion(index) {
+        if (index >= 0 && index < currentSuggestions.length) {
+            const cartorio = currentSuggestions[index];
+            input.value = cartorio.nome;
+            hidden.value = cartorio.id;
+            suggestions.style.display = 'none';
+            currentIndex = -1;
+            // Remover classe de erro se existir
+            input.classList.remove('error');
+        }
+    }
+    
+    // Navegação com teclado
+    input.addEventListener('keydown', function(e) {
+        if (suggestions.style.display === 'none' || currentSuggestions.length === 0) {
+            return;
+        }
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                currentIndex = Math.min(currentIndex + 1, currentSuggestions.length - 1);
+                updateCartorioHighlight();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                currentIndex = Math.max(currentIndex - 1, -1);
+                updateCartorioHighlight();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    selectCartorioSuggestion(currentIndex);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                suggestions.style.display = 'none';
+                currentIndex = -1;
+                break;
+        }
+    });
+    
+    // Função para atualizar o destaque da sugestão de cartório
+    function updateCartorioHighlight() {
+        const suggestionElements = suggestions.querySelectorAll('.autocomplete-suggestion:not(.no-results)');
+        suggestionElements.forEach((element, index) => {
+            if (index === currentIndex) {
+                element.classList.add('highlighted');
+                element.scrollIntoView({ block: 'nearest' });
+            } else {
+                element.classList.remove('highlighted');
+            }
+        });
+    }
     
     // Validar quando o usuário terminar de digitar
     input.addEventListener('blur', function() {

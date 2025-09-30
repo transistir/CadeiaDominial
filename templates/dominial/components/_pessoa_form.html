@@ -18,13 +18,13 @@
                 <div class="pessoa-input-group">
                     <div class="autocomplete-container">
                         <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
-                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off"
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off" tabindex="0"
                                value="{% if pessoa.pessoa %}{{ pessoa.pessoa.nome }}{% else %}{{ pessoa.nome }}{% endif %}">
                         <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id" 
                                value="{% if pessoa.pessoa %}{{ pessoa.pessoa.id }}{% else %}{{ pessoa.id }}{% endif %}">
                         <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
                 </div>
             </div>
             {% endfor %}
@@ -34,12 +34,12 @@
                 <div class="pessoa-input-group">
                     <div class="autocomplete-container">
                         <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
-                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off"
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off" tabindex="0"
                                value="{{ nome }}">
                         <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
                         <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
                 </div>
             </div>
             {% endfor %}
@@ -48,17 +48,17 @@
                 <div class="pessoa-input-group">
                     <div class="autocomplete-container">
                         <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
-                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off">
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off" tabindex="0">
                         <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
                         <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)">×</button>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
                 </div>
             </div>
         {% endif %}
     </div>
     
-    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|title }}()">
+    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|title }}()" tabindex="0">
         ➕ Adicionar {{ tipo|title }}
     </button>
 </div> 

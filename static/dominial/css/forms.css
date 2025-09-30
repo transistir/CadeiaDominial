@@ -124,6 +124,33 @@
     min-height: 40px;
 }
 
+/* Garantir que os campos de pessoa sejam navegáveis com o teclado */
+.pessoa-item input[type="text"]:focus {
+    outline: 2px solid #007bff !important;
+    outline-offset: 2px;
+    border-color: #007bff !important;
+}
+
+.pessoa-item button:focus {
+    outline: 2px solid #007bff !important;
+    outline-offset: 2px;
+}
+
+/* Estilo para sugestões destacadas no autocomplete */
+.autocomplete-suggestion.highlighted {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+.autocomplete-suggestion {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.autocomplete-suggestion:hover {
+    background-color: #f8f9fa;
+}
+
 
 
 #adquirentes-container,
