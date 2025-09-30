@@ -58,7 +58,7 @@
         {% for item in cadeia %}
             {% if item.is_importado and item.is_primeiro_grupo %}
             <div class="grupo-importacao-header">
-                📥 Documentos importados de {{ item.grupo_importacao.imovel_origem.matricula }} 
+                Documentos importados de {{ item.grupo_importacao.imovel_origem.matricula }} 
                 ({{ item.grupo_importacao.imovel_origem.nome }})<br>
                 <small>Importado em {{ item.grupo_importacao.data_importacao|date:"d/m/Y" }} 
                 por {{ item.grupo_importacao.importado_por.username|default:"Sistema" }}</small>
@@ -70,7 +70,7 @@
                     📄 {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
                     {% if item.is_importado %}
                         <span style="background-color: #ffc107; color: #856404; padding: 2px 6px; border-radius: 3px; font-size: 8pt; margin-left: 10px;">
-                            📥 Importado
+                             Importado
                         </span>
                     {% endif %}
                     <br>

@@ -61,6 +61,9 @@ class CadeiaDominialTabelaService:
         # Expandir tronco principal com documentos importados referenciados
         tronco_expandido = self._expandir_tronco_com_importados(imovel, tronco_principal, escolhas_origem)
         
+        # Garantir que todos os documentos referenciados como origem sejam incluídos
+        # tronco_expandido = self._garantir_todos_documentos_incluidos(imovel, tronco_expandido)
+        
         # Processar cada documento (manter ordem hierárquica)
         cadeia_processada = []
         documentos_ordenados = tronco_expandido
@@ -511,3 +514,42 @@ class CadeiaDominialTabelaService:
                 sub_cadeia = self._expandir_cadeia_recursiva(doc_origem, documentos_processados, escolhas_origem, profundidade + 1)
                 cadeia_expandida.extend(sub_cadeia)
         return cadeia_expandida
+    
+    def _garantir_todos_documentos_incluidos(self, imovel, documentos_atuais):
+        """
+        Garante que todos os documentos referenciados como origem sejam incluídos na cadeia
+        """
+        documentos_incluidos = set(doc.id for doc in documentos_atuais)
+        documentos_para_adicionar = []
+        
+        # Para cada documento atual, verificar suas origens
+        for documento in documentos_atuais:
+            lancamentos = documento.lancamentos.filter(
+                origem__isnull=False
+            ).exclude(origem='')
+            
+            for lancamento in lancamentos:
+                if lancamento.origem:
+                    # Extrair todas as origens (separadas por ';')
+                    origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                    
+                    for origem_numero in origens:
+                        # Buscar documento de origem (em qualquer imóvel)
+                        doc_origem = Documento.objects.filter(
+                            numero=origem_numero
+                        ).select_related('cartorio', 'tipo').first()
+                        
+                        if doc_origem and doc_origem.id not in documentos_incluidos:
+                            documentos_para_adicionar.append(doc_origem)
+                            documentos_incluidos.add(doc_origem.id)
+        
+        # Adicionar documentos encontrados
+        if documentos_para_adicionar:
+            # Ordenar por tipo e número
+            documentos_para_adicionar.sort(key=lambda x: (
+                x.tipo.tipo if x.tipo else '',
+                -int(str(x.numero).replace('M', '').replace('T', '')) if str(x.numero).replace('M', '').replace('T', '').isdigit() else 0
+            ))
+            documentos_atuais.extend(documentos_para_adicionar)
+        
+        return documentos_atuais
