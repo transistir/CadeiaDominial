@@ -297,7 +297,46 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     # Obter objetos básicos
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
+    
+    # Permitir edição de lançamentos de documentos compartilhados
+    # Primeiro, tentar buscar o lançamento no imóvel atual
+    try:
+        lancamento = Lancamento.objects.get(id=lancamento_id, documento__imovel=imovel)
+        is_lancamento_do_imovel = True
+    except Lancamento.DoesNotExist:
+        # Se não encontrou, verificar se é um lançamento de documento compartilhado
+        try:
+            lancamento = Lancamento.objects.get(id=lancamento_id)
+            is_lancamento_do_imovel = False
+            
+            # Verificar se o documento do lançamento é compartilhado (referenciado como origem)
+            from ..models import Lancamento as LancamentoModel
+            from ..services.hierarquia_arvore_service import HierarquiaArvoreService
+            
+            # Verificar referência direta
+            lancamentos_referenciando_direta = LancamentoModel.objects.filter(
+                documento__imovel=imovel,
+                origem__icontains=lancamento.documento.numero
+            ).exists()
+            
+            # Verificar referência indireta (através da cadeia dominial)
+            lancamentos_referenciando_indireta = False
+            if not lancamentos_referenciando_direta:
+                # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
+                arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+                documento_na_arvore = any(
+                    doc['id'] == lancamento.documento.id and doc['is_compartilhado'] 
+                    for doc in arvore['documentos']
+                )
+                lancamentos_referenciando_indireta = documento_na_arvore
+            
+            if not lancamentos_referenciando_direta and not lancamentos_referenciando_indireta:
+                # Se não é referenciado (direta ou indiretamente), não permitir edição
+                messages.error(request, f'Lançamento {lancamento.numero_lancamento} não pode ser editado pois não é referenciado como origem neste imóvel.')
+                return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
+                
+        except Lancamento.DoesNotExist:
+            raise Http404("Lançamento não encontrado")
     
     # Obter dados para o formulário
     pessoas = Pessoas.objects.all().order_by('nome')
@@ -347,7 +386,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
         'modo_edicao': True,
-        'cartorio_origem_correto': cartorio_origem_correto
+        'cartorio_origem_correto': cartorio_origem_correto,
+        'is_lancamento_do_imovel': is_lancamento_do_imovel,
+        'is_lancamento_compartilhado': not is_lancamento_do_imovel
     }
     
     # Preparar dados para o template
