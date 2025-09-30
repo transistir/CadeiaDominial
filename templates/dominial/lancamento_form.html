@@ -71,8 +71,16 @@
         <!-- Campos para Registro -->
         {% include "dominial/components/_lancamento_registro_form.html" %}
 
-        <!-- Campos para Início de Matrícula -->
-        {% include "dominial/components/_lancamento_inicio_matricula_form.html" %}
+        <!-- Campos para Início de Matrícula (Transmitente e Adquirente) -->
+        <div class="field-group" id="campos-inicio-matricula">
+            <h4>Campos Específicos - Início de Matrícula</h4>
+            
+            <!-- Campos de Pessoas (Transmitente e Adquirente) -->
+            <div class="grid-2">
+                {% include "dominial/components/_pessoa_form.html" with tipo="transmitente" label="Transmitente(s)" container_id="transmitentes-container-inicio" sugestao_class="transmitente-suggestions" pessoas=transmitentes %}
+                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container-inicio" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
+            </div>
+        </div>
 
         <!-- Campos Opcionais de Transação -->
         <div class="field-group hidden" id="campos-transacao">
@@ -125,6 +133,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- Campo de área e origem -->
+        {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=True container_id="origens-container" %}
 
         {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
 
