@@ -179,8 +179,16 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # Buscar documento com este número e cartório de origem
+                    # Se o lançamento tem cartório de origem, usar ele para filtrar
+                    if lancamento.cartorio_origem:
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                    else:
+                        # Fallback: buscar qualquer documento com este número
+                        doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
@@ -193,8 +201,16 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # Buscar documento com este número e cartório de origem
+                    # Se o lançamento tem cartório de origem, usar ele para filtrar
+                    if lancamento.cartorio_origem:
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                    else:
+                        # Fallback: buscar qualquer documento com este número
+                        doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         documentos_pais.append(doc_pai)

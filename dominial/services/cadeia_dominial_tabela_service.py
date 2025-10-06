@@ -244,7 +244,7 @@ class CadeiaDominialTabelaService:
                         tem_multiplas_origens = True
                         # Para os botões, usar apenas origens válidas (documentos reais)
                         origens_disponiveis = CadeiaDominialTabelaService.extrair_origens_disponiveis(
-                            lancamento.origem, imovel
+                            lancamento.origem, imovel, lancamento
                         )
                         break
             
@@ -279,13 +279,14 @@ class CadeiaDominialTabelaService:
         return cadeia_completa
     
     @staticmethod
-    def extrair_origens_disponiveis(origem_texto, imovel):
+    def extrair_origens_disponiveis(origem_texto, imovel, lancamento=None):
         """
         Extrai as origens disponíveis de um texto de origem
         
         Args:
             origem_texto: Texto contendo as origens
             imovel: Objeto Imovel
+            lancamento: Objeto Lancamento (opcional) para considerar cartório de origem
             
         Returns:
             list: Lista de origens disponíveis
@@ -302,10 +303,19 @@ class CadeiaDominialTabelaService:
             codigos = re.findall(r'[MT]\d+', origem)
             
             for codigo in codigos:
-                # Buscar documento em qualquer imóvel (não apenas no imóvel atual)
-                doc_existente = Documento.objects.filter(
-                    numero=codigo
-                ).first()
+                # Buscar documento considerando cartório de origem se disponível
+                if lancamento and lancamento.cartorio_origem:
+                    # Se o lançamento tem cartório de origem, usar ele para filtrar
+                    doc_existente = Documento.objects.filter(
+                        numero=codigo,
+                        cartorio=lancamento.cartorio_origem
+                    ).first()
+                else:
+                    # Fallback: buscar documento em qualquer imóvel (não apenas no imóvel atual)
+                    doc_existente = Documento.objects.filter(
+                        numero=codigo
+                    ).first()
+                
                 if doc_existente:
                     origens.append({
                         'numero': codigo,
