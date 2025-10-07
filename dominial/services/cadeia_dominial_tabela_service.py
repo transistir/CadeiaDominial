@@ -3,10 +3,13 @@ Service para visualização de tabela da cadeia dominial
 """
 
 import re
+import logging
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ..models import TIs, Imovel, Documento, Lancamento, DocumentoImportado
 from ..services.hierarquia_service import HierarquiaService
+
+logger = logging.getLogger(__name__)
 
 
 class CadeiaDominialTabelaService:
@@ -505,11 +508,11 @@ class CadeiaDominialTabelaService:
                 observacoes=f'Documento criado automaticamente para origem {numero_documento} do cartório {cartorio_origem.nome}'
             )
             
-            print(f"✅ Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
+            logger.info(f"Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
             return novo_documento
             
         except Exception as e:
-            print(f"❌ Erro ao criar documento {numero_documento}: {e}")
+            logger.error(f"Erro ao criar documento {numero_documento}: {e}")
             return None
     
     def _obter_documento_origem_mais_alto(self, documento):

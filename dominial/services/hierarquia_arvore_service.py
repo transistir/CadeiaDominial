@@ -8,7 +8,10 @@ from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
 import re
+import logging
 from collections import deque
+
+logger = logging.getLogger(__name__)
 
 
 class HierarquiaArvoreService:
@@ -193,7 +196,7 @@ class HierarquiaArvoreService:
                         # Se não encontrou no cartório de origem, NÃO criar novo documento
                         # (desabilitado temporariamente para evitar duplicação)
                         if not doc_pai:
-                            print(f"AVISO: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
+                            logger.warning(f"Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
                             continue
                     else:
                         # Se não tem cartório de origem, buscar qualquer documento
@@ -224,7 +227,7 @@ class HierarquiaArvoreService:
                         # Se não encontrou no cartório de origem, NÃO criar novo documento
                         # (desabilitado temporariamente para evitar duplicação)
                         if not doc_pai:
-                            print(f"AVISO: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
+                            logger.warning(f"Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
                             continue
                     else:
                         # Se não tem cartório de origem, buscar qualquer documento
@@ -281,7 +284,7 @@ class HierarquiaArvoreService:
             return documento
             
         except Exception as e:
-            print(f"Erro ao criar documento automático {numero_documento}: {e}")
+            logger.error(f"Erro ao criar documento automático {numero_documento}: {e}")
             return None
     
     @staticmethod
@@ -424,9 +427,9 @@ class HierarquiaArvoreService:
                 observacoes=f'Documento criado automaticamente para origem {numero_documento} do cartório {cartorio_origem.nome}'
             )
             
-            print(f"✅ Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
+            logger.info(f"Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
             return novo_documento
             
         except Exception as e:
-            print(f"❌ Erro ao criar documento {numero_documento}: {e}")
+            logger.error(f"Erro ao criar documento {numero_documento}: {e}")
             return None
