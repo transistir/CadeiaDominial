@@ -4,6 +4,7 @@ Service para visualização de tabela da cadeia dominial
 
 import re
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ..models import TIs, Imovel, Documento, Lancamento, DocumentoImportado
 from ..services.hierarquia_service import HierarquiaService
 
@@ -137,15 +138,33 @@ class CadeiaDominialTabelaService:
                 origens_lancamento = self._extrair_origens_validas(lancamento.origem)
                 origens.update(origens_lancamento)
         
-        # Ordenar do maior para o menor número
+        # Ordenar: matrículas primeiro (maior número), depois transcrições (maior número)
         origens_list = list(origens)
         if origens_list:
-            # Ordenar numericamente removendo M/T e convertendo para int
             try:
-                return sorted(origens_list, key=lambda x: int(str(x).replace('M', '').replace('T', '')), reverse=True)
+                def origem_sort_key(origem):
+                    if origem.startswith('M'):
+                        # Matrículas: prioridade 0 (maior prioridade), número negativo para ordem decrescente
+                        return (0, -int(origem[1:]))
+                    elif origem.startswith('T'):
+                        # Transcrições: prioridade 1 (menor prioridade), número negativo para ordem decrescente
+                        return (1, -int(origem[1:]))
+                    else:
+                        # Outros: prioridade 2, ordem alfabética reversa
+                        return (2, -ord(origem[0]) if origem else 0)
+                
+                return sorted(origens_list, key=origem_sort_key)
             except (ValueError, AttributeError):
-                # Se falhar, ordenar alfabeticamente reverso
-                return sorted(origens_list, reverse=True)
+                # Fallback: ordenação alfabética com matrículas primeiro
+                def fallback_sort_key(origem):
+                    if origem.startswith('M'):
+                        return (0, origem)
+                    elif origem.startswith('T'):
+                        return (1, origem)
+                    else:
+                        return (2, origem)
+                
+                return sorted(origens_list, key=fallback_sort_key)
         return []
     
     def _extrair_origens(self, origem_string):
@@ -244,7 +263,7 @@ class CadeiaDominialTabelaService:
                         tem_multiplas_origens = True
                         # Para os botões, usar apenas origens válidas (documentos reais)
                         origens_disponiveis = CadeiaDominialTabelaService.extrair_origens_disponiveis(
-                            lancamento.origem, imovel
+                            lancamento.origem, imovel, lancamento
                         )
                         break
             
@@ -279,13 +298,14 @@ class CadeiaDominialTabelaService:
         return cadeia_completa
     
     @staticmethod
-    def extrair_origens_disponiveis(origem_texto, imovel):
+    def extrair_origens_disponiveis(origem_texto, imovel, lancamento=None):
         """
         Extrai as origens disponíveis de um texto de origem
         
         Args:
             origem_texto: Texto contendo as origens
             imovel: Objeto Imovel
+            lancamento: Objeto Lancamento (opcional) para considerar cartório de origem
             
         Returns:
             list: Lista de origens disponíveis
@@ -302,10 +322,19 @@ class CadeiaDominialTabelaService:
             codigos = re.findall(r'[MT]\d+', origem)
             
             for codigo in codigos:
-                # Buscar documento em qualquer imóvel (não apenas no imóvel atual)
-                doc_existente = Documento.objects.filter(
-                    numero=codigo
-                ).first()
+                # Buscar documento considerando cartório de origem se disponível
+                if lancamento and lancamento.cartorio_origem:
+                    # Se o lançamento tem cartório de origem, usar ele para filtrar
+                    doc_existente = Documento.objects.filter(
+                        numero=codigo,
+                        cartorio=lancamento.cartorio_origem
+                    ).first()
+                else:
+                    # Fallback: buscar documento em qualquer imóvel (não apenas no imóvel atual)
+                    doc_existente = Documento.objects.filter(
+                        numero=codigo
+                    ).first()
+                
                 if doc_existente:
                     origens.append({
                         'numero': codigo,
@@ -313,12 +342,34 @@ class CadeiaDominialTabelaService:
                         'escolhida': False  # Será definida pelo contexto
                     })
         
-        # Ordenar do maior para o menor número
+        # Ordenar: matrículas primeiro (maior número), depois transcrições (maior número)
         if origens:
             try:
-                return sorted(origens, key=lambda x: int(str(x['numero']).replace('M', '').replace('T', '')), reverse=True)
+                def origem_sort_key(origem):
+                    numero = origem['numero']
+                    if numero.startswith('M'):
+                        # Matrículas: prioridade 0 (maior prioridade), número negativo para ordem decrescente
+                        return (0, -int(numero[1:]))
+                    elif numero.startswith('T'):
+                        # Transcrições: prioridade 1 (menor prioridade), número negativo para ordem decrescente
+                        return (1, -int(numero[1:]))
+                    else:
+                        # Outros: prioridade 2, ordem alfabética reversa
+                        return (2, -ord(numero[0]) if numero else 0)
+                
+                return sorted(origens, key=origem_sort_key)
             except (ValueError, AttributeError):
-                return sorted(origens, key=lambda x: x['numero'], reverse=True)
+                # Fallback: ordenação alfabética com matrículas primeiro
+                def fallback_sort_key(origem):
+                    numero = origem['numero']
+                    if numero.startswith('M'):
+                        return (0, numero)
+                    elif numero.startswith('T'):
+                        return (1, numero)
+                    else:
+                        return (2, numero)
+                
+                return sorted(origens, key=fallback_sort_key)
         
         return origens 
     
@@ -347,53 +398,119 @@ class CadeiaDominialTabelaService:
                 origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
                 
                 for origem_numero in origens:
-                    # Buscar documento importado com este número
-                    doc_importado = Documento.objects.filter(
-                        numero=origem_numero
-                    ).exclude(
-                        imovel=imovel
-                    ).select_related('cartorio', 'tipo').first()
+                    # Buscar documento importado com este número e cartório de origem
+                    # REGRA: Se não existe no cartório de origem, criar novo documento
+                    doc_importado = None
+                    
+                    if lancamento.cartorio_origem:
+                        # Buscar apenas no cartório de origem especificado
+                        doc_importado = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).exclude(
+                            imovel=imovel
+                        ).select_related('cartorio', 'tipo').first()
+                        
+                        # Se não encontrou no cartório de origem, criar novo documento
+                        if not doc_importado:
+                            doc_importado = self._criar_documento_automatico_para_origem(
+                                origem_numero, lancamento.cartorio_origem, imovel
+                            )
+                    else:
+                        # Se não tem cartório de origem, NÃO buscar qualquer documento
+                        # Isso evita confundir documentos com mesmo número mas cartórios diferentes
+                        doc_importado = None
                     
                     if doc_importado and doc_importado.id not in documentos_processados:
                         docs_importados_temp.append(doc_importado)
                         documentos_processados.add(doc_importado.id)
             
             # Adicionar documentos importados após o documento atual
-            tronco_expandido.extend(docs_importados_temp)
-            
-            # Expandir recursivamente a cadeia de cada documento importado
-            for doc_importado in docs_importados_temp:
+            # APLICAR FILTRO: apenas documentos que foram escolhidos como origem
+            if escolhas_origem:
                 # Verificar se há uma escolha específica para este documento
-                escolha_especifica = None
-                if escolhas_origem:
-                    escolha_especifica = escolhas_origem.get(str(doc_importado.id))
+                escolha_especifica = escolhas_origem.get(str(documento.id))
+                if escolha_especifica:
+                    # Filtrar apenas o documento escolhido
+                    docs_importados_filtrados = [doc for doc in docs_importados_temp if doc.numero == escolha_especifica]
+                    tronco_expandido.extend(docs_importados_filtrados)
+                else:
+                    # Se não há escolha específica, não adicionar documentos importados
+                    pass
+            else:
+                # Se não há escolhas de origem, não adicionar documentos importados
+                # Documentos importados só devem aparecer quando explicitamente escolhidos
+                pass
+            
+            # Expandir recursivamente APENAS se há escolhas de origem
+            # Sem escolhas, não expandir recursivamente para manter a cadeia limpa
+            if escolhas_origem:
+                # Verificar se há uma escolha específica para este documento
+                escolha_especifica = escolhas_origem.get(str(documento.id))
                 
                 if escolha_especifica:
-                    # Usar a escolha específica da sessão
-                    doc_origem_escolhido = Documento.objects.filter(
-                        numero=escolha_especifica
-                    ).select_related('cartorio', 'tipo').first()
-                    
-                    if doc_origem_escolhido and doc_origem_escolhido.id not in documentos_processados:
-                        tronco_expandido.append(doc_origem_escolhido)
-                        documentos_processados.add(doc_origem_escolhido.id)
-                        
-                        # Expandir recursivamente a cadeia completa abaixo da origem escolhida
-                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_escolhido, documentos_processados, escolhas_origem, 0)
-                        tronco_expandido.extend(cadeia_abaixo)
+                    # Expandir apenas o documento que corresponde à escolha específica
+                    for doc_importado in docs_importados_temp:
+                        if doc_importado.numero == escolha_especifica:
+                            # Expandir recursivamente APENAS a cadeia da origem escolhida
+                            cadeia_abaixo = self._expandir_cadeia_recursiva(doc_importado, documentos_processados, escolhas_origem, 0)
+                            tronco_expandido.extend(cadeia_abaixo)
+                            break  # Só expandir a primeira correspondência
                 else:
-                    # Usar o documento de origem de nível mais alto (comportamento padrão)
-                    doc_origem_mais_alto = self._obter_documento_origem_mais_alto(doc_importado)
-                    
-                    if doc_origem_mais_alto and doc_origem_mais_alto.id not in documentos_processados:
-                        tronco_expandido.append(doc_origem_mais_alto)
-                        documentos_processados.add(doc_origem_mais_alto.id)
-                        
-                        # Expandir recursivamente a cadeia completa abaixo da origem mais alta
-                        cadeia_abaixo = self._expandir_cadeia_recursiva(doc_origem_mais_alto, documentos_processados, escolhas_origem, 0)
-                        tronco_expandido.extend(cadeia_abaixo)
+                    # Se não há escolha específica para este documento, não expandir nada
+                    pass
+            # Se não há escolhas de origem, NÃO expandir recursivamente
         
         return tronco_expandido
+    
+    def _criar_documento_automatico_para_origem(self, numero_documento, cartorio_origem, imovel_atual):
+        """
+        Cria um documento automaticamente para uma origem que não existe no cartório especificado
+        """
+        from ..models import Documento, DocumentoTipo
+        
+        # Verificar se já existe documento com este número e cartório
+        documento_existente = Documento.objects.filter(
+            numero=numero_documento,
+            cartorio=cartorio_origem
+        ).first()
+        
+        if documento_existente:
+            return documento_existente
+        
+        # Determinar tipo do documento
+        tipo_documento = DocumentoTipo.objects.filter(tipo='matricula').first()
+        if not tipo_documento:
+            return None
+        
+        # Criar novo documento
+        try:
+            # Buscar um imóvel de referência do mesmo cartório para associar o documento
+            imovel_referencia = Documento.objects.filter(
+                cartorio=cartorio_origem
+            ).exclude(imovel=imovel_atual).first()
+            
+            if imovel_referencia:
+                imovel_associacao = imovel_referencia.imovel
+            else:
+                # Se não há outros documentos do cartório, usar o imóvel atual como último recurso
+                imovel_associacao = imovel_atual
+            
+            novo_documento = Documento.objects.create(
+                numero=numero_documento,
+                cartorio=cartorio_origem,
+                tipo=tipo_documento,
+                imovel=imovel_associacao,  # Associar a um imóvel de referência
+                data=timezone.now().date(),
+                observacoes=f'Documento criado automaticamente para origem {numero_documento} do cartório {cartorio_origem.nome}'
+            )
+            
+            print(f"✅ Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
+            return novo_documento
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar documento {numero_documento}: {e}")
+            return None
     
     def _obter_documento_origem_mais_alto(self, documento):
         """
@@ -418,10 +535,10 @@ class CadeiaDominialTabelaService:
                 if doc_origem:
                     origens_encontradas.append(doc_origem)
         
-        # Retornar o documento com maior número (nível mais alto)
+        # Retornar o documento com menor número (nível mais alto na hierarquia)
         if origens_encontradas:
             try:
-                return max(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
+                return min(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
             except (ValueError, AttributeError) as e:
                 print(f"⚠️ Erro ao ordenar documentos por número: {str(e)}")
                 # Em caso de erro, retornar o primeiro documento encontrado

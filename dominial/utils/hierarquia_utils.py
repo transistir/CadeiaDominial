@@ -168,31 +168,45 @@ def identificar_documentos_importados(imovel):
     lancamentos_com_origem = Lancamento.objects.filter(
         documento__imovel=imovel,
         origem__isnull=False
-    ).exclude(origem='')
+    ).exclude(origem='').select_related('cartorio_origem')
     
-    # Coletar todos os códigos de origem referenciados
-    codigos_origem = set()
+    # Coletar todos os códigos de origem referenciados com seus cartórios
+    codigos_origem_com_cartorio = []
     for lancamento in lancamentos_com_origem:
         if lancamento.origem:
             # Extrair códigos M/T dos lançamentos
             codigos = re.findall(r'[MT]\d+', lancamento.origem)
-            codigos_origem.update(codigos)
+            for codigo in codigos:
+                codigos_origem_com_cartorio.append({
+                    'codigo': codigo,
+                    'cartorio_origem': lancamento.cartorio_origem
+                })
     
     # Buscar documentos que correspondem aos códigos e pertencem a outros imóveis
     documentos_compartilhados = []
     documentos_processados = set()
     
-    def expandir_documentos_recursivamente(codigos):
+    def expandir_documentos_recursivamente(codigos_com_cartorio):
         """Função recursiva para expandir documentos compartilhados"""
-        for codigo in codigos:
+        for item in codigos_com_cartorio:
+            codigo = item['codigo']
+            cartorio_origem = item['cartorio_origem']
+            
             if codigo in documentos_processados:
                 continue
-                
-            doc_compartilhado = Documento.objects.filter(
-                numero=codigo
-            ).exclude(
-                imovel=imovel  # Excluir documentos do imóvel atual
-            ).select_related('cartorio', 'tipo', 'imovel').first()
+            
+            # Buscar documento considerando o cartório de origem
+            if cartorio_origem:
+                doc_compartilhado = Documento.objects.filter(
+                    numero=codigo,
+                    cartorio=cartorio_origem
+                ).exclude(
+                    imovel=imovel  # Excluir documentos do imóvel atual
+                ).select_related('cartorio', 'tipo', 'imovel').first()
+            else:
+                # Se não há cartório de origem, não buscar documento
+                # Isso evita confundir documentos com mesmo número mas cartórios diferentes
+                doc_compartilhado = None
             
             if doc_compartilhado:
                 documentos_compartilhados.append(doc_compartilhado)
@@ -201,20 +215,24 @@ def identificar_documentos_importados(imovel):
                 # Buscar origens deste documento compartilhado
                 lancamentos_doc = doc_compartilhado.lancamentos.filter(
                     origem__isnull=False
-                ).exclude(origem='')
+                ).exclude(origem='').select_related('cartorio_origem')
                 
-                codigos_origem_doc = set()
+                codigos_origem_doc = []
                 for lancamento in lancamentos_doc:
                     if lancamento.origem:
                         codigos_orig = re.findall(r'[MT]\d+', lancamento.origem)
-                        codigos_origem_doc.update(codigos_orig)
+                        for codigo in codigos_orig:
+                            codigos_origem_doc.append({
+                                'codigo': codigo,
+                                'cartorio_origem': lancamento.cartorio_origem
+                            })
                 
                 # Expandir recursivamente
                 if codigos_origem_doc:
                     expandir_documentos_recursivamente(codigos_origem_doc)
     
     # Expandir recursivamente todos os documentos compartilhados
-    expandir_documentos_recursivamente(codigos_origem)
+    expandir_documentos_recursivamente(codigos_origem_com_cartorio)
     
     return documentos_compartilhados
 

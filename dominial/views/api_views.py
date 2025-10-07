@@ -315,6 +315,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                 documento_id = key.replace('origem_documento_', '')
                 escolhas_origem[documento_id] = value
         
+        
         # Usar a mesma lógica da view tronco_principal
         if escolhas_origem:
             cadeia_data = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session, escolhas_origem)

@@ -299,6 +299,7 @@ class LancamentoOrigemService:
             
             # VERIFICAR SE É EDIÇÃO DE CARTÓRIO OU NOVA ORIGEM
             # Buscar documento existente com o mesmo número (independente do cartório)
+            # NOTA: É comum que origens tenham cartório diferente do lançamento pai
             documento_existente_mesmo_numero = Documento.objects.filter(
                 numero=origem_info['numero'],
                 imovel=imovel
@@ -405,6 +406,7 @@ class LancamentoOrigemService:
             
             # VERIFICAR SE É EDIÇÃO DE CARTÓRIO OU NOVA ORIGEM
             # Buscar documento existente com o mesmo número (independente do cartório)
+            # NOTA: É comum que origens tenham cartório diferente do lançamento pai
             documento_existente_mesmo_numero = Documento.objects.filter(
                 numero=origem_info['numero'],
                 imovel=imovel

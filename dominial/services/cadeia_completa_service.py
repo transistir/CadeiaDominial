@@ -250,15 +250,33 @@ class CadeiaCompletaService:
                 origens_lancamento = self._extrair_origens(lancamento.origem)
                 origens.update(origens_lancamento)
         
-        # Ordenar do maior para o menor número
+        # Ordenar: matrículas primeiro (maior número), depois transcrições (maior número)
         origens_list = list(origens)
         if origens_list:
-            # Ordenar numericamente removendo M/T e convertendo para int
             try:
-                return sorted(origens_list, key=lambda x: int(str(x).replace('M', '').replace('T', '')), reverse=True)
+                def origem_sort_key(origem):
+                    if origem.startswith('M'):
+                        # Matrículas: prioridade 0 (maior prioridade), número negativo para ordem decrescente
+                        return (0, -int(origem[1:]))
+                    elif origem.startswith('T'):
+                        # Transcrições: prioridade 1 (menor prioridade), número negativo para ordem decrescente
+                        return (1, -int(origem[1:]))
+                    else:
+                        # Outros: prioridade 2, ordem alfabética reversa
+                        return (2, -ord(origem[0]) if origem else 0)
+                
+                return sorted(origens_list, key=origem_sort_key)
             except (ValueError, AttributeError):
-                # Se falhar, ordenar alfabeticamente reverso
-                return sorted(origens_list, reverse=True)
+                # Fallback: ordenação alfabética com matrículas primeiro
+                def fallback_sort_key(origem):
+                    if origem.startswith('M'):
+                        return (0, origem)
+                    elif origem.startswith('T'):
+                        return (1, origem)
+                    else:
+                        return (2, origem)
+                
+                return sorted(origens_list, key=fallback_sort_key)
         return []
     
     def _extrair_origens(self, origem_string):

@@ -52,15 +52,17 @@
                     </div>
                 </div>
                 <div class="form-group livro-field">
-                        <input type="text" name="livro_origem[]" id="livro_origem_{{ origem.index }}" class="livro-origem" 
-                               placeholder="Ex: 1, 2, A, etc." 
-                               value="{{ origem.livro }}">
-                    </div>
-                    <div class="form-group folha-field">
-                        <input type="text" name="folha_origem[]" id="folha_origem_{{ origem.index }}" class="folha-origem" 
-                               placeholder="Ex: 1, 2, A, etc." 
-                               value="{{ origem.folha }}">
-                    </div>
+                    <label class="field-label">Livro</label>
+                    <input type="text" name="livro_origem[]" id="livro_origem_{{ origem.index }}" class="livro-origem" 
+                           placeholder="Ex: 1, 2, A, etc." 
+                           value="{{ origem.livro }}">
+                </div>
+                <div class="form-group folha-field">
+                    <label class="field-label">Folha</label>
+                    <input type="text" name="folha_origem[]" id="folha_origem_{{ origem.index }}" class="folha-origem" 
+                           placeholder="Ex: 1, 2, A, etc." 
+                           value="{{ origem.folha }}">
+                </div>
                     <div class="form-group fim-cadeia-field">
                         <div class="fim-cadeia-toggle-container">
                             <input type="checkbox" name="fim_cadeia[]" id="fim_cadeia_{{ origem.index }}" 

@@ -113,7 +113,7 @@ class HierarquiaArvoreService:
             
             # Criar nó do documento
             doc_node = HierarquiaArvoreService._criar_no_documento(
-                documento_atual, imovel, nivel
+                documento_atual, imovel, nivel, lancamento_origem=None
             )
             documentos_por_numero[documento_atual.numero] = doc_node
             arvore['documentos'].append(doc_node)
@@ -180,7 +180,24 @@ class HierarquiaArvoreService:
                     documentos_processados.add(origem_numero)
                     
                     # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # REGRA: Se não existe no cartório de origem, criar novo documento
+                    doc_pai = None
+                    
+                    if lancamento.cartorio_origem:
+                        # Buscar apenas no cartório de origem especificado
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                        
+                        # Se não encontrou no cartório de origem, NÃO criar novo documento
+                        # (desabilitado temporariamente para evitar duplicação)
+                        if not doc_pai:
+                            print(f"AVISO: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
+                            continue
+                    else:
+                        # Se não tem cartório de origem, buscar qualquer documento
+                        doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
@@ -194,7 +211,24 @@ class HierarquiaArvoreService:
                     documentos_processados.add(origem_numero)
                     
                     # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # REGRA: Se não existe no cartório de origem, criar novo documento
+                    doc_pai = None
+                    
+                    if lancamento.cartorio_origem:
+                        # Buscar apenas no cartório de origem especificado
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                        
+                        # Se não encontrou no cartório de origem, NÃO criar novo documento
+                        # (desabilitado temporariamente para evitar duplicação)
+                        if not doc_pai:
+                            print(f"AVISO: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
+                            continue
+                    else:
+                        # Se não tem cartório de origem, buscar qualquer documento
+                        doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         documentos_pais.append(doc_pai)
@@ -251,7 +285,7 @@ class HierarquiaArvoreService:
             return None
     
     @staticmethod
-    def _criar_no_documento(documento, imovel_atual, nivel):
+    def _criar_no_documento(documento, imovel_atual, nivel, lancamento_origem=None):
         """
         Cria um nó de documento para a árvore
         """
@@ -259,7 +293,13 @@ class HierarquiaArvoreService:
         is_documento_atual = documento.imovel.id == imovel_atual.id
         
         # Verificar se é compartilhado
+        # NOTA: Considerar cartório de origem se disponível
         is_compartilhado = not is_documento_atual
+        
+        # Se o documento foi marcado como "cartório diferente", não marcar como compartilhado
+        # para evitar borda tracejada verde incorreta
+        if hasattr(documento, '_cartorio_diferente') and documento._cartorio_diferente:
+            is_compartilhado = False
         
         # Verificar se é o documento principal do imóvel atual
         # Pode ser igual à matrícula ou conter a matrícula (ex: M6700 para matrícula 6700)
@@ -350,3 +390,43 @@ class HierarquiaArvoreService:
             for doc_node in arvore['documentos']:
                 if doc_node.get('is_fim_cadeia'):
                     doc_node['nivel'] = nivel_fim_cadeia
+    
+    @staticmethod
+    def _criar_documento_automatico_para_origem(numero_documento, cartorio_origem, imovel_atual):
+        """
+        Cria um documento automaticamente para uma origem que não existe no cartório especificado
+        """
+        from ..models import Documento, DocumentoTipo
+        from django.utils import timezone
+        
+        # Verificar se já existe documento com este número e cartório
+        documento_existente = Documento.objects.filter(
+            numero=numero_documento,
+            cartorio=cartorio_origem
+        ).first()
+        
+        if documento_existente:
+            return documento_existente
+        
+        # Determinar tipo do documento
+        tipo_documento = DocumentoTipo.objects.filter(tipo='matricula').first()
+        if not tipo_documento:
+            return None
+        
+        # Criar novo documento
+        try:
+            novo_documento = Documento.objects.create(
+                numero=numero_documento,
+                cartorio=cartorio_origem,
+                tipo=tipo_documento,
+                imovel=imovel_atual,  # Temporariamente associado ao imóvel atual
+                data=timezone.now().date(),
+                observacoes=f'Documento criado automaticamente para origem {numero_documento} do cartório {cartorio_origem.nome}'
+            )
+            
+            print(f"✅ Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
+            return novo_documento
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar documento {numero_documento}: {e}")
+            return None

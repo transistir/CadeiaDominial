@@ -185,8 +185,8 @@ function escolherOrigem(documentoId, origemNumero) {
 }
 
 function atualizarTabelaCadeia(cadeia) {
-    console.log('=== DEBUG: Dados recebidos na atualizarTabelaCadeia ===');
-    console.log('Cadeia:', cadeia);
+    console.log('=== ATUALIZANDO TABELA ===');
+    console.log('Total de documentos recebidos:', cadeia.length);
     
     const tbody = document.querySelector('.cadeia-tabela-principal tbody');
     if (!tbody) {
@@ -197,28 +197,26 @@ function atualizarTabelaCadeia(cadeia) {
     // Limpar tbody atual
     tbody.innerHTML = '';
     
-    // Reconstruir a tabela com os novos dados
+    // SIMPLIFICAÇÃO: Exibir TODOS os documentos que o backend enviou
+    // O backend já deve ter filtrado corretamente
     cadeia.forEach(item => {
-        console.log('Processando item:', item.documento.numero, 'com', item.lancamentos.length, 'lançamentos');
+        console.log(`Processando: ${item.documento.numero} (ID: ${item.documento.id})`);
         
-        // Verificar se este documento deve ser exibido baseado na escolha de origem
+        // SIMPLIFICAÇÃO: Sempre exibir todos os documentos
         let deveExibir = true;
         
         // Encontrar a origem escolhida global (do documento que tem múltiplas origens)
-        // Procurar pelo documento que tem múltiplas origens e uma delas está escolhida
+        // Procurar pelo documento que tem múltiplas origens e uma escolha ativa
         const documentoComEscolha = cadeia.find(otherItem => 
-            otherItem.tem_multiplas_origens && otherItem.origens_disponiveis && 
-            otherItem.origens_disponiveis.some(origem => origem.escolhida)
+            otherItem.tem_multiplas_origens && otherItem.escolha_atual
         );
         const origemEscolhidaGlobal = documentoComEscolha ? documentoComEscolha.escolha_atual : null;
         
-        console.log(`  - ${item.documento.numero}: escolha_atual=${item.escolha_atual}, origemEscolhidaGlobal=${origemEscolhidaGlobal}, is_compartilhado=${item.is_compartilhado}`);
         
         if (origemEscolhidaGlobal) {
             // Para documentos do imóvel atual, sempre exibir
             if (!item.is_compartilhado) {
                 deveExibir = true;
-                console.log(`    -> Documento do imóvel atual: sempre exibir`);
             } else {
                 // Para documentos compartilhados:
                 // 1. Sempre exibir o documento que tem a escolha (M8487)
@@ -228,20 +226,51 @@ function atualizarTabelaCadeia(cadeia) {
                     item.origens_disponiveis.some(origem => origem.escolhida)) {
                     // Este documento tem múltiplas origens e uma escolha ativa, sempre exibir
                     deveExibir = true;
-                    console.log(`    -> Documento com múltiplas origens e escolha ativa: sempre exibir`);
                 } else {
                     // Este documento é uma origem, verificar se é a escolhida
                     deveExibir = item.documento.numero === origemEscolhidaGlobal;
-                    console.log(`    -> Documento origem: ${item.documento.numero} === ${origemEscolhidaGlobal} = ${deveExibir}`);
                 }
             }
         } else {
             // Se não há origem escolhida global, exibir todos
             deveExibir = true;
-            console.log(`    -> Sem origem escolhida global: exibir todos`);
         }
         
-        console.log(`Documento ${item.documento.numero}: deveExibir = ${deveExibir}`);
+        // LÓGICA ADICIONAL: Se há múltiplos documentos com o mesmo número mas cartórios diferentes,
+        // exibir apenas o que corresponde ao cartório de origem da escolha
+        if (deveExibir && origemEscolhidaGlobal) {
+            // Verificar se há outros documentos com o mesmo número na cadeia
+            const documentosMesmoNumero = cadeia.filter(otherItem => 
+                otherItem.documento.numero === item.documento.numero && 
+                otherItem.documento.id !== item.documento.id
+            );
+            
+            if (documentosMesmoNumero.length > 0) {
+                // Há múltiplos documentos com o mesmo número
+                // Verificar qual é o documento que tem a escolha ativa
+                const documentoComEscolhaAtiva = cadeia.find(otherItem => 
+                    otherItem.tem_multiplas_origens && 
+                    otherItem.origens_disponiveis && 
+                    otherItem.origens_disponiveis.some(origem => 
+                        origem.numero === item.documento.numero && origem.escolhida
+                    )
+                );
+                
+                if (documentoComEscolhaAtiva) {
+                    // Verificar se este documento específico é o escolhido
+                    // Para isso, precisamos verificar se o cartório de origem do lançamento
+                    // corresponde ao cartório deste documento
+                    const lancamentoComOrigem = documentoComEscolhaAtiva.lancamentos.find(lanc => 
+                        lanc.origem && lanc.origem.includes(item.documento.numero)
+                    );
+                    
+                    if (lancamentoComOrigem && lancamentoComOrigem.cartorio_origem_nome) {
+                        // Só exibir se o cartório deste documento corresponde ao cartório de origem
+                        deveExibir = item.documento.cartorio_nome === lancamentoComOrigem.cartorio_origem_nome;
+                    }
+                }
+            }
+        }
         
         // Criar linha do documento
         const documentoRow = document.createElement('tr');
@@ -255,11 +284,9 @@ function atualizarTabelaCadeia(cadeia) {
         // Adicionar classe para documentos ocultos
         if (!deveExibir) {
             rowClasses += ' documento-oculto';
-            console.log(`  -> Aplicando classe documento-oculto para ${item.documento.numero}`);
         }
         
         documentoRow.className = rowClasses;
-        console.log(`  -> Classes aplicadas para ${item.documento.numero}: "${rowClasses}"`);
         documentoRow.setAttribute('data-documento-id', item.documento.id);
         
         // Criar badge de importado se necessário
