@@ -39,6 +39,13 @@
     </div>
 
     <div class="arvore-container" id="arvore-container">
+        <!-- Controles de versão -->
+        <div class="version-controls" style="position: absolute; top: 10px; left: 10px; z-index: 1000;">
+            <button id="toggle-version" onclick="toggleVersion()" style="padding: 8px 12px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                🔄 Versão Simples
+            </button>
+        </div>
+        
         <!-- Controles de zoom dentro do container -->
     <div class="zoom-controls">
             <button class="zoom-btn" onclick="zoomIn()" title="Zoom +">
@@ -106,6 +113,28 @@
     window.tisId = {{ tis.id|safe }};
     window.imovelId = {{ imovel.id|safe }};
     window.imovelTipoDocumentoPrincipal = '{{ imovel.tipo_documento_principal }}';
+    
+    // Controle de versão
+    let isSimpleVersion = true;
+    
+    function toggleVersion() {
+        isSimpleVersion = !isSimpleVersion;
+        const button = document.getElementById('toggle-version');
+        
+        if (isSimpleVersion) {
+            button.textContent = '🔄 Versão Simples';
+            button.style.background = '#17a2b8';
+            // Recarregar página com versão simples
+            window.location.reload();
+        } else {
+            button.textContent = '🔄 Versão Complexa';
+            button.style.background = '#dc3545';
+            // Trocar para versão complexa
+            const script = document.querySelector('script[src*="cadeia_dominial_d3"]');
+            script.src = script.src.replace('simple', '');
+            window.location.reload();
+        }
+    }
 </script>
-<script src="{% static 'dominial/js/cadeia_dominial_d3.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3_simple.js' %}"></script>
 {% endblock %} 

@@ -79,7 +79,16 @@ class HierarquiaArvoreService:
             return documento_principal
         
         # Se não encontrar, usar o primeiro documento do imóvel
-        documento_principal = Documento.objects.filter(imovel=imovel).first()
+        # Priorizar matrículas para documentos que começam com M
+        if imovel.matricula.startswith('M'):
+            documento_principal = Documento.objects.filter(
+                imovel=imovel,
+                tipo__tipo='matricula'
+            ).first()
+            if not documento_principal:
+                documento_principal = Documento.objects.filter(imovel=imovel).first()
+        else:
+            documento_principal = Documento.objects.filter(imovel=imovel).first()
         
         return documento_principal
     
@@ -193,14 +202,23 @@ class HierarquiaArvoreService:
                             cartorio=lancamento.cartorio_origem
                         ).first()
                         
-                        # Se não encontrou no cartório de origem, NÃO criar novo documento
-                        # (desabilitado temporariamente para evitar duplicação)
-                        if not doc_pai:
-                            logger.warning(f"Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
-                            continue
+                        # Se não encontrou no cartório de origem, criar automaticamente
+                        if not doc_pai and criar_documentos_automaticos:
+                            doc_pai = HierarquiaArvoreService._criar_documento_automatico(
+                                origem_numero, lancamento.cartorio_origem, imovel
+                            )
                     else:
                         # Se não tem cartório de origem, buscar qualquer documento
-                        doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                        # Priorizar transcrições para documentos que começam com T
+                        if origem_numero.startswith('T'):
+                            doc_pai = Documento.objects.filter(
+                                numero=origem_numero,
+                                tipo__tipo='transcricao'
+                            ).first()
+                            if not doc_pai:
+                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                        else:
+                            doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
@@ -224,21 +242,32 @@ class HierarquiaArvoreService:
                             cartorio=lancamento.cartorio_origem
                         ).first()
                         
-                        # Se não encontrou no cartório de origem, NÃO criar novo documento
-                        # (desabilitado temporariamente para evitar duplicação)
-                        if not doc_pai:
-                            logger.warning(f"Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem.nome} - não criando automaticamente")
-                            continue
+                        # Se não encontrou no cartório de origem, criar automaticamente
+                        if not doc_pai and criar_documentos_automaticos:
+                            doc_pai = HierarquiaArvoreService._criar_documento_automatico(
+                                origem_numero, lancamento.cartorio_origem, imovel
+                            )
                     else:
                         # Se não tem cartório de origem, buscar qualquer documento
-                        doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                        # Priorizar transcrições para documentos que começam com T
+                        if origem_numero.startswith('T'):
+                            doc_pai = Documento.objects.filter(
+                                numero=origem_numero,
+                                tipo__tipo='transcricao'
+                            ).first()
+                            if not doc_pai:
+                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                        else:
+                            doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         documentos_pais.append(doc_pai)
                     elif criar_documentos_automaticos:
                         # Criar documento automaticamente se solicitado
+                        from ..models import Cartorios
+                        cartorio_padrao = Cartorios.objects.first()
                         doc_pai = HierarquiaArvoreService._criar_documento_automatico(
-                            origem_numero, imovel
+                            origem_numero, cartorio_padrao, imovel
                         )
                         if doc_pai:
                             documentos_pais.append(doc_pai)
@@ -246,7 +275,7 @@ class HierarquiaArvoreService:
         return documentos_pais
     
     @staticmethod
-    def _criar_documento_automatico(numero_documento, imovel):
+    def _criar_documento_automatico(numero_documento, cartorio, imovel):
         """
         Cria um documento automaticamente para uma origem identificada
         """
@@ -259,10 +288,6 @@ class HierarquiaArvoreService:
                 tipo_documento = DocumentoTipo.objects.get(tipo='transcricao')
             else:
                 return None
-            
-            # Buscar cartório padrão (pode ser melhorado)
-            from ..models import Cartorios
-            cartorio = Cartorios.objects.first()  # Simplificado
             
             if not cartorio:
                 return None
@@ -310,12 +335,19 @@ class HierarquiaArvoreService:
                                  (documento.numero == imovel_atual.matricula or 
                                   documento.numero.endswith(imovel_atual.matricula)))
         
+        # Corrigir tipo_documento baseado no número do documento
+        tipo_correto = documento.tipo.tipo
+        if documento.numero.startswith('T') and documento.tipo.tipo == 'matricula':
+            tipo_correto = 'transcricao'
+        elif documento.numero.startswith('M') and documento.tipo.tipo == 'transcricao':
+            tipo_correto = 'matricula'
+        
         return {
             'id': documento.id,
             'numero': documento.numero,
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
-            'tipo_documento': documento.tipo.tipo,
+            'tipo_documento': tipo_correto,
             'data': documento.data.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,
