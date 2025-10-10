@@ -473,15 +473,7 @@ function atualizarInformacoesArvore(hierarchy) {
 function aplicarLayoutSimples(hierarchy) {
     console.log('📐 Aplicando layout simples...');
     
-    // Agrupar por nível calculado (não por depth do D3)
-    const niveis = {};
-    hierarchy.descendants().forEach(node => {
-        const nivel = node.data.nivel_calculado || 0;
-        if (!niveis[nivel]) niveis[nivel] = [];
-        niveis[nivel].push(node);
-    });
-    
-    // Função para ordenar documentos
+    // Função para ordenar documentos (filhos de um mesmo pai)
     function ordenarDocumentos(a, b) {
         const numeroA = a.data.numero;
         const numeroB = b.data.numero;
@@ -510,13 +502,32 @@ function aplicarLayoutSimples(hierarchy) {
         return numeroB.localeCompare(numeroA);
     }
     
+    // Função recursiva para ordenar filhos de cada nó
+    function ordenarFilhosRecursivo(node) {
+        if (node.children && node.children.length > 0) {
+            // Ordenar os filhos deste nó
+            node.children.sort(ordenarDocumentos);
+            console.log(`🔄 Ordenando ${node.children.length} filhos de ${node.data.numero}`);
+            
+            // Recursivamente ordenar filhos dos filhos
+            node.children.forEach(child => ordenarFilhosRecursivo(child));
+        }
+    }
+    
+    // Ordenar filhos de cada nó recursivamente
+    ordenarFilhosRecursivo(hierarchy);
+    
+    // Agrupar por nível calculado (não por depth do D3)
+    const niveis = {};
+    hierarchy.descendants().forEach(node => {
+        const nivel = node.data.nivel_calculado || 0;
+        if (!niveis[nivel]) niveis[nivel] = [];
+        niveis[nivel].push(node);
+    });
+    
     // Posicionar nós baseado no nível calculado
     Object.keys(niveis).forEach(nivel => {
         const nosNivel = niveis[nivel];
-        
-        // Ordenar documentos no nível (maior número primeiro, matrículas antes de transcrições)
-        nosNivel.sort(ordenarDocumentos);
-        
         const totalNos = nosNivel.length;
         
         nosNivel.forEach((node, index) => {
