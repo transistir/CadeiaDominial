@@ -207,19 +207,23 @@ class HierarquiaArvoreService:
                         if not doc_pai:
                             logger.warning(f"Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}. Buscando em outros cartórios...")
                             
-                            # Priorizar transcrições para documentos que começam com T
-                            if origem_numero.startswith('T'):
-                                doc_pai = Documento.objects.filter(
-                                    numero=origem_numero,
-                                    tipo__tipo='transcricao'
-                                ).first()
-                                if not doc_pai:
-                                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
-                            else:
-                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                            # Buscar todos os documentos com este número
+                            todos_docs = Documento.objects.filter(numero=origem_numero)
                             
-                            if doc_pai:
-                                logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (diferente do cartório de origem {lancamento.cartorio_origem.nome})")
+                            if todos_docs.exists():
+                                # PRIORIZAR: Documentos com lançamentos sobre documentos vazios
+                                docs_com_lancamentos = [doc for doc in todos_docs if doc.lancamentos.count() > 0]
+                                
+                                if docs_com_lancamentos:
+                                    # Se há documentos com lançamentos, usar o primeiro
+                                    doc_pai = docs_com_lancamentos[0]
+                                    logger.warning(f"Documento {origem_numero} encontrado com lançamentos no cartório {doc_pai.cartorio.nome} (priorizado sobre documentos vazios)")
+                                else:
+                                    # Se não há documentos com lançamentos, usar qualquer um
+                                    doc_pai = todos_docs.first()
+                                    logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (nenhum com lançamentos)")
+                            else:
+                                doc_pai = None
                         
                         # Só criar automaticamente se REALMENTE não existir em lugar nenhum
                         if not doc_pai and criar_documentos_automaticos:
@@ -267,19 +271,23 @@ class HierarquiaArvoreService:
                         if not doc_pai:
                             logger.warning(f"Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}. Buscando em outros cartórios...")
                             
-                            # Priorizar transcrições para documentos que começam com T
-                            if origem_numero.startswith('T'):
-                                doc_pai = Documento.objects.filter(
-                                    numero=origem_numero,
-                                    tipo__tipo='transcricao'
-                                ).first()
-                                if not doc_pai:
-                                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
-                            else:
-                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                            # Buscar todos os documentos com este número
+                            todos_docs = Documento.objects.filter(numero=origem_numero)
                             
-                            if doc_pai:
-                                logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (diferente do cartório de origem {lancamento.cartorio_origem.nome})")
+                            if todos_docs.exists():
+                                # PRIORIZAR: Documentos com lançamentos sobre documentos vazios
+                                docs_com_lancamentos = [doc for doc in todos_docs if doc.lancamentos.count() > 0]
+                                
+                                if docs_com_lancamentos:
+                                    # Se há documentos com lançamentos, usar o primeiro
+                                    doc_pai = docs_com_lancamentos[0]
+                                    logger.warning(f"Documento {origem_numero} encontrado com lançamentos no cartório {doc_pai.cartorio.nome} (priorizado sobre documentos vazios)")
+                                else:
+                                    # Se não há documentos com lançamentos, usar qualquer um
+                                    doc_pai = todos_docs.first()
+                                    logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (nenhum com lançamentos)")
+                            else:
+                                doc_pai = None
                         
                         # Só criar automaticamente se REALMENTE não existir em lugar nenhum
                         if not doc_pai and criar_documentos_automaticos:
