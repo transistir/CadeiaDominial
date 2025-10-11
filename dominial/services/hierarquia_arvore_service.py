@@ -196,14 +196,34 @@ class HierarquiaArvoreService:
                     doc_pai = None
                     
                     if lancamento.cartorio_origem:
-                        # Buscar apenas no cartório de origem especificado
+                        # CORREÇÃO: Buscar primeiro no cartório de origem especificado
                         doc_pai = Documento.objects.filter(
                             numero=origem_numero,
                             cartorio=lancamento.cartorio_origem
                         ).first()
                         
-                        # Se não encontrou no cartório de origem, criar automaticamente
+                        # Se não encontrou no cartório de origem, buscar em qualquer cartório
+                        # para preservar documentos já existentes
+                        if not doc_pai:
+                            logger.warning(f"Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}. Buscando em outros cartórios...")
+                            
+                            # Priorizar transcrições para documentos que começam com T
+                            if origem_numero.startswith('T'):
+                                doc_pai = Documento.objects.filter(
+                                    numero=origem_numero,
+                                    tipo__tipo='transcricao'
+                                ).first()
+                                if not doc_pai:
+                                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                            else:
+                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                            
+                            if doc_pai:
+                                logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (diferente do cartório de origem {lancamento.cartorio_origem.nome})")
+                        
+                        # Só criar automaticamente se REALMENTE não existir em lugar nenhum
                         if not doc_pai and criar_documentos_automaticos:
+                            logger.info(f"Criando documento automático {origem_numero} no cartório de origem {lancamento.cartorio_origem.nome}")
                             doc_pai = HierarquiaArvoreService._criar_documento_automatico(
                                 origem_numero, lancamento.cartorio_origem, imovel
                             )
@@ -236,14 +256,34 @@ class HierarquiaArvoreService:
                     doc_pai = None
                     
                     if lancamento.cartorio_origem:
-                        # Buscar apenas no cartório de origem especificado
+                        # CORREÇÃO: Buscar primeiro no cartório de origem especificado
                         doc_pai = Documento.objects.filter(
                             numero=origem_numero,
                             cartorio=lancamento.cartorio_origem
                         ).first()
                         
-                        # Se não encontrou no cartório de origem, criar automaticamente
+                        # Se não encontrou no cartório de origem, buscar em qualquer cartório
+                        # para preservar documentos já existentes
+                        if not doc_pai:
+                            logger.warning(f"Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}. Buscando em outros cartórios...")
+                            
+                            # Priorizar transcrições para documentos que começam com T
+                            if origem_numero.startswith('T'):
+                                doc_pai = Documento.objects.filter(
+                                    numero=origem_numero,
+                                    tipo__tipo='transcricao'
+                                ).first()
+                                if not doc_pai:
+                                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                            else:
+                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                            
+                            if doc_pai:
+                                logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (diferente do cartório de origem {lancamento.cartorio_origem.nome})")
+                        
+                        # Só criar automaticamente se REALMENTE não existir em lugar nenhum
                         if not doc_pai and criar_documentos_automaticos:
+                            logger.info(f"Criando documento automático {origem_numero} no cartório de origem {lancamento.cartorio_origem.nome}")
                             doc_pai = HierarquiaArvoreService._criar_documento_automatico(
                                 origem_numero, lancamento.cartorio_origem, imovel
                             )
