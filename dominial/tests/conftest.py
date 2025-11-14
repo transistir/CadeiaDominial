@@ -1,0 +1,146 @@
+"""
+Pytest configuration and fixtures for Sistema de Cadeia Dominial tests.
+
+This file provides:
+- Django test database configuration
+- Common fixtures for models
+- Factory configurations
+- Playwright fixtures for E2E tests
+"""
+
+import pytest
+from django.contrib.auth.models import User
+from django.test import Client
+
+
+# ============================================================================
+# Django Configuration
+# ============================================================================
+
+@pytest.fixture(scope='session')
+def django_db_setup():
+    """Configure test database settings."""
+    pass
+
+
+@pytest.fixture
+def client():
+    """Django test client for simulating HTTP requests."""
+    return Client()
+
+
+@pytest.fixture
+def authenticated_client(db, client):
+    """Django test client with authenticated user."""
+    user = User.objects.create_user(
+        username='testuser',
+        password='testpass123',
+        email='test@example.com'
+    )
+    client.force_login(user)
+    return client
+
+
+@pytest.fixture
+def test_user(db):
+    """Create a test user."""
+    return User.objects.create_user(
+        username='testuser',
+        password='testpass123',
+        email='test@example.com'
+    )
+
+
+# ============================================================================
+# Playwright Configuration (for E2E tests)
+# ============================================================================
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    """Configure Playwright browser context."""
+    return {
+        **browser_context_args,
+        "viewport": {
+            "width": 1920,
+            "height": 1080,
+        },
+        "locale": "pt-BR",
+    }
+
+
+@pytest.fixture
+def authenticated_page(page, live_server, db):
+    """Playwright page with authenticated user session.
+
+    Usage in E2E tests:
+        def test_something(authenticated_page):
+            authenticated_page.goto("/some-protected-page/")
+            # Page is already logged in
+    """
+    # Create user if not exists
+    user, created = User.objects.get_or_create(
+        username='testuser',
+        defaults={
+            'email': 'test@example.com'
+        }
+    )
+    if created:
+        user.set_password('testpass123')
+        user.save()
+
+    # Login via Playwright
+    page.goto(f"{live_server.url}/accounts/login/")
+    page.fill('input[name="username"]', 'testuser')
+    page.fill('input[name="password"]', 'testpass123')
+    page.click('button[type="submit"]')
+
+    # Wait for redirect after login
+    page.wait_for_url(f"{live_server.url}/", timeout=5000)
+
+    return page
+
+
+# ============================================================================
+# Database Cleanup
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def enable_db_access_for_all_tests(db):
+    """Enable database access for all tests automatically."""
+    pass
+
+
+# ============================================================================
+# Factory Configuration
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def reset_sequences(db):
+    """Reset factory sequences after each test to ensure predictable data."""
+    from factory import Sequence
+    # Sequences are automatically reset by factory_boy
+    pass
+
+
+# ============================================================================
+# Custom Assertions
+# ============================================================================
+
+@pytest.fixture
+def assert_model_exists():
+    """Helper to assert model instance exists in database."""
+    def _assert(model_class, **filters):
+        assert model_class.objects.filter(**filters).exists(), \
+            f"{model_class.__name__} matching {filters} not found in database"
+        return model_class.objects.get(**filters)
+    return _assert
+
+
+@pytest.fixture
+def assert_model_count():
+    """Helper to assert model instance count."""
+    def _assert(model_class, count, **filters):
+        actual_count = model_class.objects.filter(**filters).count()
+        assert actual_count == count, \
+            f"Expected {count} {model_class.__name__} instances, found {actual_count}"
+    return _assert
