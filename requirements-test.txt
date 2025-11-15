@@ -17,6 +17,12 @@ playwright==1.49.1
 
 # Code quality and coverage
 coverage==7.6.9
+pre-commit==4.0.1
+black==24.10.0
+isort==5.13.2
+flake8==7.1.1
+flake8-docstrings==1.7.0
+bandit==1.7.10
 
 # Mocking and assertions
 pytest-mock==3.14.0
