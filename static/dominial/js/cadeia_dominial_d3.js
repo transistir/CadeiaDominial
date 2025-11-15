@@ -748,6 +748,30 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .ease(d3.easeQuadInOut)
         .style('opacity', '1');
 
+    // MOLDURA ESPECIAL PARA FIM DE CADEIA - Adicionar antes do card base
+    node.filter(d => d.data.is_fim_cadeia)
+        .append('rect')
+        .attr('class', 'fim-cadeia-frame')
+        .attr('width', 156) // 16px maior que o card (140 + 16)
+        .attr('height', 96) // 16px maior que o card (80 + 16)
+        .attr('x', -78) // Centralizado (-70 - 8)
+        .attr('y', -48) // Centralizado (-40 - 8)
+        .attr('rx', 16)
+        .attr('fill', 'none')
+        .attr('stroke', d => {
+            if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                return '#28a745'; // Verde para origem lídima
+            } else if (d.data.classificacao_fim_cadeia === 'sem_origem') {
+                return '#dc3545'; // Vermelho para sem origem
+            } else {
+                return '#ffc107'; // Amarelo para inconclusa
+            }
+        })
+        .attr('stroke-width', 5)
+        .attr('stroke-dasharray', '10,5') // Padrão tracejado mais chamativo
+        .attr('opacity', 0.8)
+        .attr('filter', 'drop-shadow(0 0 10px rgba(0,0,0,0.3))');
+
     // Card base
     node.append('rect')
         .attr('width', 140)
@@ -878,6 +902,32 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr('font-size', 11)
         .attr('opacity', 0.7)
         .text(d => d.data.total_lancamentos !== undefined ? `${d.data.total_lancamentos} lançamentos` : '');
+
+    // LABEL DE CLASSIFICAÇÃO PARA FIM DE CADEIA - Abaixo do card
+    node.filter(d => d.data.is_fim_cadeia)
+        .append('text')
+        .attr('text-anchor', 'middle')
+        .attr('y', 55) // Abaixo do card (40 + 15)
+        .attr('font-size', 11)
+        .attr('font-weight', 600)
+        .attr('fill', d => {
+            if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                return '#1e7e34'; // Verde escuro
+            } else if (d.data.classificacao_fim_cadeia === 'sem_origem') {
+                return '#b02a37'; // Vermelho escuro
+            } else {
+                return '#e0a800'; // Amarelo escuro para inconclusa
+            }
+        })
+        .text(d => {
+            if (d.data.classificacao_fim_cadeia === 'origem_lidima') {
+                return 'ORIGEM LÍDIMA';
+            } else if (d.data.classificacao_fim_cadeia === 'sem_origem') {
+                return 'SEM ORIGEM';
+            } else {
+                return 'INCONCLUSA';
+            }
+        });
 
     // Badge de documento importado (laranja)
     node.filter(d => d.data.is_importado)
