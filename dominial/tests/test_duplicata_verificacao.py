@@ -21,31 +21,50 @@ class DuplicataVerificacaoServiceTest(TestCase):
             password='testpass123'
         )
         
-        # Criar cartório
+        # Criar cartórios
         self.cartorio = Cartorios.objects.create(
             nome='Cartório Teste',
             cidade='Cidade Teste',
             estado='TS'
         )
-        
+
+        self.cartorio2 = Cartorios.objects.create(
+            nome='Cartório Teste 2',
+            cidade='Cidade Teste 2',
+            estado='TS'
+        )
+
         # Criar tipo de documento
         self.tipo_documento = DocumentoTipo.objects.create(
-            tipo='matricula',
-            descricao='Matrícula'
+            tipo='matricula'
         )
-        
+
+        # Criar TI and Pessoa for Imovel
+        from ..models import TIs, Pessoas
+        self.tis = TIs.objects.create(
+            nome='TI Teste',
+            codigo='TEST001',
+            etnia='Teste'
+        )
+        self.pessoa = Pessoas.objects.create(
+            nome='Proprietário Teste',
+            cpf='12345678901'
+        )
+
         # Criar imóveis
         self.imovel1 = Imovel.objects.create(
             matricula='123456',
-            sncr='SNCR123'
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa
         )
-        
+
         self.imovel2 = Imovel.objects.create(
             matricula='789012',
-            sncr='SNCR456'
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa
         )
-        
-        # Criar documentos
+
+        # Criar documentos (with different cartórios to avoid UNIQUE constraint)
         self.documento1 = Documento.objects.create(
             numero='M123456',
             tipo=self.tipo_documento,
@@ -53,11 +72,11 @@ class DuplicataVerificacaoServiceTest(TestCase):
             imovel=self.imovel1,
             data='2023-01-01'
         )
-        
+
         self.documento2 = Documento.objects.create(
             numero='M123456',  # Mesmo número, cartório diferente
             tipo=self.tipo_documento,
-            cartorio=self.cartorio,
+            cartorio=self.cartorio2,  # Different cartório
             imovel=self.imovel2,
             data='2023-01-01'
         )
@@ -137,7 +156,7 @@ class DuplicataVerificacaoServiceTest(TestCase):
 
 class ImportacaoCadeiaServiceTest(TestCase):
     """Testes para o service de importação de cadeia."""
-    
+
     def setUp(self):
         """Configurar dados de teste."""
         # Criar usuário
@@ -145,29 +164,42 @@ class ImportacaoCadeiaServiceTest(TestCase):
             username='testuser',
             password='testpass123'
         )
-        
+
         # Criar cartório
         self.cartorio = Cartorios.objects.create(
             nome='Cartório Teste',
             cidade='Cidade Teste',
             estado='TS'
         )
-        
+
         # Criar tipo de documento
         self.tipo_documento = DocumentoTipo.objects.create(
-            tipo='matricula',
-            descricao='Matrícula'
+            tipo='matricula'
         )
-        
+
+        # Criar TI and Pessoa for Imovel
+        from ..models import TIs, Pessoas
+        self.tis = TIs.objects.create(
+            nome='TI Teste',
+            codigo='TEST002',
+            etnia='Teste'
+        )
+        self.pessoa = Pessoas.objects.create(
+            nome='Proprietário Teste',
+            cpf='98765432109'
+        )
+
         # Criar imóveis
         self.imovel_origem = Imovel.objects.create(
             matricula='123456',
-            sncr='SNCR123'
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa
         )
-        
+
         self.imovel_destino = Imovel.objects.create(
             matricula='789012',
-            sncr='SNCR456'
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa
         )
         
         # Criar documentos
@@ -273,7 +305,7 @@ class ImportacaoCadeiaServiceTest(TestCase):
 
 class DocumentoImportadoModelTest(TestCase):
     """Testes para o modelo DocumentoImportado."""
-    
+
     def setUp(self):
         """Configurar dados de teste."""
         # Criar usuário
@@ -281,29 +313,42 @@ class DocumentoImportadoModelTest(TestCase):
             username='testuser',
             password='testpass123'
         )
-        
+
         # Criar cartório
         self.cartorio = Cartorios.objects.create(
             nome='Cartório Teste',
             cidade='Cidade Teste',
             estado='TS'
         )
-        
+
         # Criar tipo de documento
         self.tipo_documento = DocumentoTipo.objects.create(
-            tipo='matricula',
-            descricao='Matrícula'
+            tipo='matricula'
         )
-        
+
+        # Criar TI and Pessoa for Imovel
+        from ..models import TIs, Pessoas
+        self.tis = TIs.objects.create(
+            nome='TI Teste',
+            codigo='TEST003',
+            etnia='Teste'
+        )
+        self.pessoa = Pessoas.objects.create(
+            nome='Proprietário Teste',
+            cpf='11122233344'
+        )
+
         # Criar imóveis
         self.imovel_origem = Imovel.objects.create(
             matricula='123456',
-            sncr='SNCR123'
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa
         )
-        
+
         self.imovel_destino = Imovel.objects.create(
             matricula='789012',
-            sncr='SNCR456'
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa
         )
         
         # Criar documento

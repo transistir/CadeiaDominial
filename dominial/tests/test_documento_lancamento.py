@@ -37,8 +37,7 @@ class DocumentoELancamentoTest(TestCase):
             terra_indigena_id=self.tis,
             nome="Imóvel Teste",
             proprietario=self.pessoa1,
-            matricula="123456",
-            sncr="789012"
+            matricula="123456"
         )
         
         # Criar tipos de documento e lançamento
