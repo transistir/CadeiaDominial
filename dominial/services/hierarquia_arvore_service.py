@@ -75,9 +75,9 @@ class HierarquiaArvoreService:
         if documento_principal:
             return documento_principal
         
-        # Se não encontrar, usar o primeiro documento do imóvel
-        documento_principal = Documento.objects.filter(imovel=imovel).first()
-        
+        # Se não encontrar, usar o documento mais antigo (ordenar por data)
+        documento_principal = Documento.objects.filter(imovel=imovel).order_by('data').first()
+
         return documento_principal
     
     @staticmethod
