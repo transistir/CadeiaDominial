@@ -24,12 +24,14 @@ class DuplicataVerificacaoServiceTest(TestCase):
         # Criar cartórios
         self.cartorio = Cartorios.objects.create(
             nome='Cartório Teste',
+            cns='CNS001',
             cidade='Cidade Teste',
             estado='TS'
         )
 
         self.cartorio2 = Cartorios.objects.create(
             nome='Cartório Teste 2',
+            cns='CNS002',
             cidade='Cidade Teste 2',
             estado='TS'
         )
@@ -168,6 +170,7 @@ class ImportacaoCadeiaServiceTest(TestCase):
         # Criar cartório
         self.cartorio = Cartorios.objects.create(
             nome='Cartório Teste',
+            cns='CNS003',
             cidade='Cidade Teste',
             estado='TS'
         )
@@ -317,6 +320,7 @@ class DocumentoImportadoModelTest(TestCase):
         # Criar cartório
         self.cartorio = Cartorios.objects.create(
             nome='Cartório Teste',
+            cns='CNS004',
             cidade='Cidade Teste',
             estado='TS'
         )
