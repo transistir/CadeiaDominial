@@ -17,12 +17,6 @@ from django.test import Client
 # Django Configuration
 # ============================================================================
 
-@pytest.fixture(scope='session')
-def django_db_setup():
-    """Configure test database settings."""
-    pass
-
-
 @pytest.fixture
 def client():
     """Django test client for simulating HTTP requests."""
@@ -115,28 +109,6 @@ def authenticated_page(page, live_server, db, client):
     page.goto(f"{live_server.url}/")
 
     return page
-
-
-# ============================================================================
-# Database Cleanup
-# ============================================================================
-
-@pytest.fixture(autouse=True)
-def enable_db_access_for_all_tests(db):
-    """Enable database access for all tests automatically."""
-    pass
-
-
-# ============================================================================
-# Factory Configuration
-# ============================================================================
-
-@pytest.fixture(autouse=True)
-def reset_sequences(db):
-    """Reset factory sequences after each test to ensure predictable data."""
-    from factory import Sequence
-    # Sequences are automatically reset by factory_boy
-    pass
 
 
 # ============================================================================
