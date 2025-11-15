@@ -166,8 +166,8 @@ class HierarquiaArvoreService:
         ).exclude(origem='')
         
         for lancamento in lancamentos:
-            # Extrair origens do lançamento
-            origens = re.findall(r'[MT]\d+', lancamento.origem)
+            # Extrair origens do lançamento (supports M1234, M-1234, T1234, T-1234)
+            origens = re.findall(r'[MT]-?\d+', lancamento.origem)
             
             # CORREÇÃO: Para documento principal, buscar apenas origens diretas
             if is_documento_principal:

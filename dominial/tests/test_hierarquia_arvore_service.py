@@ -11,6 +11,7 @@ from dominial.models import Documento, Lancamento
 from .factories import (
     ImovelFactory,
     DocumentoFactory,
+    DocumentoTipoFactory,
     LancamentoFactory,
     LancamentoTipoFactory,
     create_simple_chain,
@@ -88,8 +89,19 @@ class TestHierarquiaArvoreService:
         """Test building tree for simple 2-document chain."""
         # Arrange: doc1 <- doc2 (doc2 originates from doc1)
         imovel = ImovelFactory(matricula="M-002")
-        doc1 = DocumentoFactory.transcricao(imovel=imovel, numero="T-001")
-        doc2 = DocumentoFactory.matricula(imovel=imovel, numero="M-002")
+        # Use direct factory instantiation to avoid classmethod parameter collision
+        doc1 = DocumentoFactory(
+            imovel=imovel,
+            tipo=DocumentoTipoFactory.transcricao(),
+            numero="T-001",
+            data=date(1970, 1, 1)
+        )
+        doc2 = DocumentoFactory(
+            imovel=imovel,
+            tipo=DocumentoTipoFactory.matricula(),
+            numero="M-002",
+            data=date(2024, 1, 1)
+        )
 
         # Create lancamento linking doc2 to doc1
         tipo_inicio = LancamentoTipoFactory.inicio_matricula()
