@@ -41,32 +41,37 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         
         # Criar tipos de documento
         self.tipo_matricula = DocumentoTipo.objects.create(
-            tipo='matricula',
-            descricao='Matrícula'
+            tipo='matricula'
         )
         self.tipo_transcricao = DocumentoTipo.objects.create(
-            tipo='transcricao',
-            descricao='Transcrição'
+            tipo='transcricao'
         )
-        
+
         # Criar tipos de lançamento
         self.tipo_registro = LancamentoTipo.objects.create(
-            tipo='registro',
-            descricao='Registro'
+            tipo='registro'
         )
         
+        # Criar pessoa para proprietário
+        self.pessoa = Pessoas.objects.create(
+            nome='Proprietário Teste',
+            cpf='12345678901'
+        )
+
         # Criar imóveis
         self.imovel_origem = Imovel.objects.create(
             nome='Imóvel Origem',
             matricula='12345',
-            terra_indigena=self.tis,
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa,
             cartorio=self.cartorio
         )
-        
+
         self.imovel_destino = Imovel.objects.create(
             nome='Imóvel Destino',
             matricula='67890',
-            terra_indigena=self.tis,
+            terra_indigena_id=self.tis,
+            proprietario=self.pessoa,
             cartorio=self.cartorio
         )
         
