@@ -36,6 +36,9 @@ PLAYWRIGHT_CONFIG = {
     'base_url': os.getenv('PLAYWRIGHT_BASE_URL', 'http://localhost:8000'),
 
     # Artifacts directory
+    # SECURITY NOTE: Ensure test-results/ is in .gitignore and CI artifact
+    # uploads have proper access controls. Artifacts may contain sensitive
+    # UI states or data from seeded fixtures.
     'artifacts_dir': BASE_DIR / 'test-results',
     'screenshots_dir': BASE_DIR / 'test-results' / 'screenshots',
     'videos_dir': BASE_DIR / 'test-results' / 'videos',

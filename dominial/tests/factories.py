@@ -409,9 +409,12 @@ def create_simple_chain(length=3):
     # Chain subsequent documents
     for i in range(1, length):
         new_doc = DocumentoFactory.matricula(imovel=imovel)
+        # Create lancamento with both documento_origem link AND textual origem field
+        # so HierarquiaArvoreService can discover the chain
         LancamentoFactory.inicio_matricula(
             documento=new_doc,
-            documento_origem=documents[-1]
+            documento_origem=documents[-1],
+            origem=documents[-1].numero  # Set textual origem field for discovery
         )
         documents.append(new_doc)
 

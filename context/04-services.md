@@ -609,8 +609,14 @@ duplicatas = DuplicataVerificacaoService.listar_duplicatas_sistema()
 
 **Cache Keys:**
 ```python
-f"arvore_cadeia_{documento_id}_{hash(origens)}"
-f"tabela_cadeia_{documento_id}_{hash(filtros)}"
+import json
+
+# Ensure keys are sorted for consistent hashing
+origens_key = json.dumps(origens, sort_keys=True) if origens else ""
+filtros_key = json.dumps(filtros, sort_keys=True) if filtros else ""
+
+f"arvore_cadeia_{documento_id}_{hash(origens_key)}"
+f"tabela_cadeia_{documento_id}_{hash(filtros_key)}"
 f"estatisticas_cadeia_{documento_id}"
 ```
 

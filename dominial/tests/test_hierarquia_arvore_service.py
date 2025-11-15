@@ -50,18 +50,28 @@ class TestHierarquiaArvoreService:
         assert result.id == doc_principal.id
         assert imovel.matricula in result.numero
 
-    def test_identificar_documento_principal_fallback_to_first(self, db):
-        """Test fallback to first document when no match found."""
+    def test_identificar_documento_principal_fallback_to_oldest(self, db):
+        """Test fallback to oldest document when no match found."""
         # Arrange
         imovel = ImovelFactory(matricula="99999")
-        doc_first = DocumentoFactory(imovel=imovel, numero="M-0001")
-        doc_second = DocumentoFactory(imovel=imovel, numero="M-0002")
+        # Explicitly set creation dates to ensure deterministic ordering
+        doc_older = DocumentoFactory(
+            imovel=imovel,
+            numero="M-0001",
+            data=date(2000, 1, 1)
+        )
+        doc_newer = DocumentoFactory(
+            imovel=imovel,
+            numero="M-0002",
+            data=date(2001, 1, 1)
+        )
 
         # Act
         result = HierarquiaArvoreService._identificar_documento_principal(imovel)
 
         # Assert
-        assert result.id == doc_first.id
+        # Assuming the fallback logic picks the oldest document by creation date
+        assert result.id == doc_older.id
 
     def test_identificar_documento_principal_none_when_no_documents(self, db):
         """Test returns None when imovel has no documents."""

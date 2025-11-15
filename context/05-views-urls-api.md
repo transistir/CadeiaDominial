@@ -252,10 +252,10 @@ URLs follow a hierarchical pattern based on data relationships:
       'documento': Documento,
       'imovel': Imovel,
       'tis': TIs,
-      'transmitentes': LancamentoPessoa.filter(tipo='transmitente'),
-      'adquirentes': LancamentoPessoa.filter(tipo='adquirente'),
+      'transmitentes': LancamentoPessoa.objects.filter(lancamento=lancamento, tipo='transmitente'),
+      'adquirentes': LancamentoPessoa.objects.filter(lancamento=lancamento, tipo='adquirente'),
       'documento_origem': Documento if linked,
-      'origens_fim_cadeia': OrigemFimCadeia.filter(lancamento=lancamento)
+      'origens_fim_cadeia': OrigemFimCadeia.objects.filter(lancamento=lancamento)
   }
   ```
 - **Template:** `lancamento_detail.html`
@@ -594,6 +594,10 @@ class LoginRequiredMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Prevent path traversal vulnerability
+        if '..' in request.path:
+            return HttpResponseForbidden()
+
         # Allow access to login page and static files
         if not request.user.is_authenticated:
             if not request.path.startswith('/accounts/login/'):
@@ -697,13 +701,16 @@ def escolher_origem_documento(request):
         documento_id = request.POST.get('documento_id')
         origem_escolhida = request.POST.get('origem_escolhida')
 
-        # Store in session
-        request.session[f'origem_documento_{documento_id}'] = origem_escolhida
+        # Store in a nested dictionary in the session for better security
+        if 'origens_escolhidas' not in request.session:
+            request.session['origens_escolhidas'] = {}
+        request.session['origens_escolhidas'][documento_id] = origem_escolhida
+        request.session.modified = True
 
         # Rebuild tree with choice
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
             documento_id=documento_id,
-            origens_escolhidas={documento_id: origem_escolhida}
+            origens_escolhidas=request.session['origens_escolhidas']
         )
 
         return JsonResponse({'success': True, 'arvore': arvore})

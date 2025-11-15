@@ -166,7 +166,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production-backend
-      url: https://api.your-production-domain.com
+      url: ${{ secrets.PRODUCTION_BACKEND_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -177,7 +177,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --env production
-          workingDirectory: ./backend
           secrets: |
             DATABASE_URL
             SECRET_KEY
@@ -198,7 +197,7 @@ jobs:
               state: 'success',
               context: 'Backend Production Deployment',
               description: 'Deployed to production',
-              target_url: 'https://api.your-production-domain.com'
+              target_url: '${{ secrets.PRODUCTION_BACKEND_URL }}'
             })
 
   deploy-frontend-production:
@@ -208,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production-frontend
-      url: https://your-production-domain.com
+      url: ${{ secrets.PRODUCTION_FRONTEND_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -237,7 +236,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: your-frontend-project-name
+          projectName: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME }}
           directory: staticfiles
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: main
@@ -254,7 +253,7 @@ jobs:
               state: 'success',
               context: 'Frontend Production Deployment',
               description: 'Deployed to production',
-              target_url: 'https://your-production-domain.com'
+              target_url: '${{ secrets.PRODUCTION_FRONTEND_URL }}'
             })
 
   notify-deployment-complete:

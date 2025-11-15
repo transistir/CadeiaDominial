@@ -240,18 +240,24 @@ class TestLancamentoCriacaoServiceIntegration:
     """Integration tests for LancamentoCriacaoService with mocked requests."""
 
     def create_mock_request(self, post_data):
-        """Helper to create a mock Django request object."""
+        """Helper to create a mock Django request object with real QueryDict."""
         request = Mock()
-        request.POST = QueryDict('', mutable=True)
-        request.POST.update(post_data)
 
-        # Mock getlist method
-        def mock_getlist(key):
-            if key in post_data and isinstance(post_data[key], list):
-                return post_data[key]
-            return []
+        # Use a real QueryDict for accurate Django behavior
+        q_dict = QueryDict('', mutable=True)
 
-        request.POST.getlist = Mock(side_effect=mock_getlist)
+        # Properly handle lists in POST data for QueryDict
+        for key, value in post_data.items():
+            if isinstance(value, list):
+                # For list values, add each item separately
+                for item in value:
+                    q_dict.appendlist(key, item)
+            else:
+                # For single values, use update
+                q_dict[key] = value
+
+        request.POST = q_dict
+        # No need to mock getlist - QueryDict provides it natively
         return request
 
     @patch('dominial.services.lancamento_criacao_service.LancamentoDuplicataService')

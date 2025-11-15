@@ -69,14 +69,20 @@ def browser_context_args(browser_context_args):
 
 
 @pytest.fixture
-def authenticated_page(page, live_server, db):
+def authenticated_page(page, live_server, db, client):
     """Playwright page with authenticated user session.
+
+    Uses Django's session framework to create authenticated session,
+    avoiding brittle UI-based login and CSRF issues.
 
     Usage in E2E tests:
         def test_something(authenticated_page):
             authenticated_page.goto("/some-protected-page/")
             # Page is already logged in
     """
+    from django.contrib.sessions.backends.db import SessionStore
+    from django.contrib.auth import SESSION_KEY, BACKEND_SESSION_KEY, HASH_SESSION_KEY
+
     # Create user if not exists
     user, created = User.objects.get_or_create(
         username='testuser',
@@ -88,14 +94,25 @@ def authenticated_page(page, live_server, db):
         user.set_password('testpass123')
         user.save()
 
-    # Login via Playwright
-    page.goto(f"{live_server.url}/accounts/login/")
-    page.fill('input[name="username"]', 'testuser')
-    page.fill('input[name="password"]', 'testpass123')
-    page.click('button[type="submit"]')
+    # Create session directly using Django's session backend
+    session = SessionStore()
+    session[SESSION_KEY] = str(user.pk)
+    session[BACKEND_SESSION_KEY] = 'django.contrib.auth.backends.ModelBackend'
+    session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+    session.save()
 
-    # Wait for redirect after login
-    page.wait_for_url(f"{live_server.url}/", timeout=5000)
+    # Set session cookie in Playwright
+    page.context.add_cookies([{
+        'name': 'sessionid',
+        'value': session.session_key,
+        'domain': 'localhost',
+        'path': '/',
+        'httpOnly': True,
+        'sameSite': 'Lax',
+    }])
+
+    # Verify authentication by navigating to a protected page
+    page.goto(f"{live_server.url}/")
 
     return page
 

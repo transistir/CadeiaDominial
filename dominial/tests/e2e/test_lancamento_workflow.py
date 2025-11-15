@@ -147,13 +147,14 @@ class TestLancamentoCreationWorkflow:
         # Submit form
         page.click('button[type="submit"]')
 
-        # Wait for success message or redirect
-        # This depends on your app's behavior after successful creation
-        page.wait_for_timeout(1000)  # Wait for processing
-
-        # Verify success (adjust selector based on your app)
-        # Example: check for success alert or redirect to documento page
-        # expect(page.locator('.alert-success')).to_be_visible()
+        # Wait for success message or redirect (conditional wait instead of fixed timeout)
+        # Option 1: Wait for success alert if present
+        success_locator = page.locator('.alert-success, .alert.alert-success, [role="alert"]:has-text("sucesso")')
+        if success_locator.count() > 0:
+            expect(success_locator.first).to_be_visible(timeout=5000)
+        else:
+            # Option 2: Wait for redirect to documento page
+            page.wait_for_url(f"**/documento/{documento.id}/**", timeout=5000)
 
     @pytest.mark.slow
     def test_create_averbacao_lancamento(
@@ -187,8 +188,13 @@ class TestLancamentoCreationWorkflow:
         # Submit
         page.click('button[type="submit"]')
 
-        # Wait and verify
-        page.wait_for_timeout(1000)
+        # Wait for success indication (conditional wait)
+        success_locator = page.locator('.alert-success, .alert.alert-success, [role="alert"]:has-text("sucesso")')
+        if success_locator.count() > 0:
+            expect(success_locator.first).to_be_visible(timeout=5000)
+        else:
+            # Fallback: wait for redirect to documento page
+            page.wait_for_url(f"**/documento/{documento.id}/**", timeout=5000)
 
     def test_form_validation_missing_required_fields(
         self, authenticated_page_e2e: Page, live_server, test_data
@@ -213,11 +219,15 @@ class TestLancamentoCreationWorkflow:
         page.click('button[type="submit"]')
 
         # Should show validation error (HTML5 validation or backend error)
-        # The exact behavior depends on your form implementation
-        page.wait_for_timeout(500)
+        # Wait for either error message or form to remain visible
+        error_locator = page.locator('.alert-danger, .alert.alert-danger, .error, .invalid-feedback')
 
-        # Form should still be visible (not submitted)
-        expect(page.locator('select[name="tipo_lancamento"]')).to_be_visible()
+        # Check if error message appears, otherwise verify form is still visible
+        try:
+            expect(error_locator.first).to_be_visible(timeout=2000)
+        except AssertionError:
+            # Form should still be visible (not submitted due to HTML5 validation)
+            expect(page.locator('select[name="tipo_lancamento"]')).to_be_visible()
 
 
 class TestCadeiaDominialTreeVisualization:
@@ -335,12 +345,9 @@ class TestTableInteractivity:
             # Type search term
             search_input.fill('Test E2E')
 
-            # Wait for filtering
-            page.wait_for_timeout(500)
-
-            # Verify filtered results
+            # Wait for table to update (conditional wait)
             ti = test_data['ti']
-            expect(page.locator(f'text={ti.nome}')).to_be_visible()
+            expect(page.locator(f'text={ti.nome}')).to_be_visible(timeout=3000)
 
 
 class TestAutocompleteWidgets:
@@ -412,11 +419,25 @@ class TestDuplicateDetection:
         # Submit
         page.click('button[type="submit"]')
 
-        # Should show duplicate detection modal
-        # Adjust selector based on your implementation
-        page.wait_for_timeout(1000)
-        # Example:
-        # expect(page.locator('.modal:has-text("Duplicata")')).to_be_visible()
+        # Should show duplicate detection modal or warning message
+        # Wait for modal, alert, or warning message to appear
+        duplicate_indicators = page.locator(
+            '.modal:has-text("Duplicata"), '
+            '.modal:has-text("duplicado"), '
+            '.alert:has-text("já existe"), '
+            '.alert:has-text("similar"), '
+            '[role="dialog"]:has-text("Duplicata")'
+        )
+
+        # Assert that duplicate detection triggered
+        expect(duplicate_indicators.first).to_be_visible(timeout=5000)
+
+        # Optionally verify the duplicate warning content mentions relevant info
+        expect(duplicate_indicators.first).to_contain_text(
+            'R-1|Registro|duplicado|similar|já existe',
+            use_inner_text=True,
+            timeout=3000
+        )
 
 
 @pytest.mark.smoke
