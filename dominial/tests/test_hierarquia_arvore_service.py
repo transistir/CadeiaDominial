@@ -307,6 +307,11 @@ class TestHierarquiaArvoreService:
         """Test automatic document creation for missing origins."""
         # Arrange
         imovel = ImovelFactory()
+
+        # Ensure DocumentoTipo exists for automatic creation
+        # (This is needed for _criar_documento_automatico to work)
+        tipo_transcricao = DocumentoTipoFactory.transcricao()
+
         doc = DocumentoFactory(imovel=imovel, numero="M-100")
 
         # Create lancamento referencing non-existent document
@@ -462,6 +467,9 @@ class TestHierarquiaArvoreServiceEdgeCases:
         # Arrange
         imovel = ImovelFactory()
 
+        # Ensure DocumentoTipo exists for automatic creation
+        tipo_matricula = DocumentoTipoFactory.matricula()
+
         # Act
         doc = HierarquiaArvoreService._criar_documento_automatico("M-999", imovel)
 
@@ -476,6 +484,9 @@ class TestHierarquiaArvoreServiceEdgeCases:
         """Test automatic creation of transcrição document."""
         # Arrange
         imovel = ImovelFactory()
+
+        # Ensure DocumentoTipo exists for automatic creation
+        tipo_transcricao = DocumentoTipoFactory.transcricao()
 
         # Act
         doc = HierarquiaArvoreService._criar_documento_automatico("T-888", imovel)
