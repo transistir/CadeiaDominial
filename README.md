@@ -113,15 +113,15 @@ cp env.example .env
 
 #### 4. Inicialize o banco de dados
 ```bash
-python manage.py migrate
-python manage.py criar_tipos_documento
-python manage.py criar_tipos_lancamento
-python manage.py createsuperuser
+uv run python manage.py migrate
+uv run python manage.py criar_tipos_documento
+uv run python manage.py criar_tipos_lancamento
+uv run python manage.py createsuperuser
 ```
 
 #### 5. Inicie o servidor
 ```bash
-python manage.py runserver
+uv run python manage.py runserver
 ```
 
 **Pronto!** Acesse: http://localhost:8000
@@ -159,15 +159,15 @@ cp env.example .env
 
 #### 5. Inicialize o banco de dados
 ```bash
-python manage.py migrate
-python manage.py criar_tipos_documento
-python manage.py criar_tipos_lancamento
-python manage.py createsuperuser
+uv run python manage.py migrate
+uv run python manage.py criar_tipos_documento
+uv run python manage.py criar_tipos_lancamento
+uv run python manage.py createsuperuser
 ```
 
 #### 6. Inicie o servidor
 ```bash
-python manage.py runserver
+uv run python manage.py runserver
 ```
 
 </details>
@@ -181,16 +181,19 @@ python manage.py runserver
 uv pip install -r requirements-test.txt
 
 # Execute todos os testes
-pytest
+uv run pytest
 
 # Execute com relatório de cobertura
-pytest --cov=dominial --cov-report=html
+uv run pytest --cov=dominial --cov-report=html
 
 # Execute apenas testes unitários (rápido)
-pytest -m "not e2e"
+uv run pytest -m "not e2e"
 
 # Execute testes específicos
-pytest dominial/tests/test_hierarquia_arvore_service.py
+uv run pytest dominial/tests/test_hierarquia_arvore_service.py
+
+# Ou use Django test runner
+uv run python manage.py test
 
 # Visualize relatório de cobertura
 open htmlcov/index.html  # macOS
