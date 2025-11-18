@@ -54,6 +54,7 @@ class DuplicataVerificacaoService:
 
         # Serializar documento para dict
         documento_dict = {
+            'id': documento_existente.id,  # Include ID to avoid MultipleObjectsReturned
             'numero': documento_existente.numero,
             'imovel': {
                 'id': documento_existente.imovel.id,

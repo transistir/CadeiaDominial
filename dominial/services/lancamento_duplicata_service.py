@@ -78,10 +78,9 @@ class LancamentoDuplicataService:
 
             if duplicata_info.get('existe', False):
                 print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
-                # Reconstruct documento_origem from número and cartório
+                # Reconstruct documento_origem using ID to avoid MultipleObjectsReturned
                 documento_origem = Documento.objects.get(
-                    numero=duplicata_info['documento']['numero'],
-                    cartorio_id=cartorio_origem.id
+                    id=duplicata_info['documento']['id']
                 )
                 return {
                     'tem_duplicata': True,
