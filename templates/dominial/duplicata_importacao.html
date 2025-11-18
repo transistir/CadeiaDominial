@@ -160,9 +160,13 @@
                 <input type="hidden" name="documento_origem_id" value="{{ duplicata_info.documento_origem.id }}">
                 
                 <!-- Enviar todos os documentos da cadeia -->
-                {% for item in duplicata_info.cadeia_dominial %}
-                <input type="hidden" name="documentos_importaveis[]" value="{{ item.documento.id }}">
-                {% endfor %}
+                {% if duplicata_info.cadeia_dominial %}
+                    {% for item in duplicata_info.cadeia_dominial %}
+                        {% if item.documento and item.documento.id %}
+                            <input type="hidden" name="documentos_importaveis[]" value="{{ item.documento.id }}">
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
                 
                 <!-- Preservar dados do formulário original -->
                 {% if form_data %}
@@ -250,25 +254,39 @@
         <div class="cadeia-dominial">
             <h4><i class="fas fa-sitemap"></i> Cadeia Dominial Completa</h4>
             <p>Visualize a estrutura completa da cadeia dominial que será importada:</p>
-            
-            {% for item in duplicata_info.cadeia_dominial %}
-            <div class="lancamento-item">
-                <h6><strong>{{ item.documento.numero }}</strong> - {{ item.documento.tipo }}</h6>
-                <p><small>Livro: {{ item.documento.livro }}, Folha: {{ item.documento.folha }}</small></p>
-                
-                {% if item.lancamentos %}
-                <div class="ml-3">
-                    <strong>Lançamentos:</strong>
-                    {% for lanc in item.lancamentos %}
-                    <div class="small">
-                        • {{ lanc.numero }} - {{ lanc.tipo }} 
-                        ({{ lanc.data }}) - {{ lanc.observacoes }}
+
+            {% if duplicata_info.cadeia_dominial %}
+                {% for item in duplicata_info.cadeia_dominial %}
+                    {% if item.documento %}
+                        <div class="lancamento-item">
+                            <h6><strong>{{ item.documento.numero|default:"N/A" }}</strong> - {{ item.documento.tipo|default:"N/A" }}</h6>
+                            <p><small>Livro: {{ item.documento.livro|default:"N/A" }}, Folha: {{ item.documento.folha|default:"N/A" }}</small></p>
+
+                            {% if item.lancamentos %}
+                            <div class="ml-3">
+                                <strong>Lançamentos:</strong>
+                                {% for lanc in item.lancamentos %}
+                                <div class="small">
+                                    • {{ lanc.numero|default:"N/A" }} - {{ lanc.tipo|default:"N/A" }}
+                                    ({{ lanc.data|default:"N/A" }}) - {{ lanc.observacoes|default:"Sem observações" }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% empty %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Nenhum documento encontrado na cadeia dominial.
                     </div>
-                    {% endfor %}
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Informações da cadeia dominial não disponíveis.
                 </div>
-                {% endif %}
-            </div>
-            {% endfor %}
+            {% endif %}
         </div>
         
         <!-- Informações do Imóvel Atual -->
