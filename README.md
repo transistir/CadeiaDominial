@@ -64,50 +64,137 @@ Esta é a primeira versão beta do sistema, disponível para testes com clientes
 ## Instalação
 
 ### Pré-requisitos
-- Python 3.8+
-- pip
+- Python 3.8+ (recomendado 3.11+)
 - Git
 
-### Passos de Instalação
+### Método Recomendado: Usando uv (⚡ 10-100x mais rápido)
 
-1. **Clone o repositório**
+[uv](https://github.com/astral-sh/uv) é um instalador de pacotes Python extremamente rápido.
+
+#### 1. Instale o uv
+```bash
+# Linux/Mac
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Ou via pip
+pip install uv
+```
+
+#### 2. Clone e configure o projeto
+```bash
+# Clone o repositório
+git clone https://github.com/transistir/CadeiaDominial.git
+cd CadeiaDominial
+
+# Crie ambiente virtual e instale dependências
+uv venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
+
+# Instale todas as dependências (super rápido!)
+uv pip install -r requirements.txt
+
+# Opcional: instale dependências de teste
+uv pip install -r requirements-test.txt
+```
+
+#### 3. Configure o ambiente
+```bash
+# Copie o arquivo de exemplo
+cp env.example .env
+
+# Edite .env e configure pelo menos:
+# - SECRET_KEY (gere uma chave única)
+# - ADMIN_PASSWORD (senha forte)
+```
+
+#### 4. Inicialize o banco de dados
+```bash
+python manage.py migrate
+python manage.py criar_tipos_documento
+python manage.py criar_tipos_lancamento
+python manage.py createsuperuser
+```
+
+#### 5. Inicie o servidor
+```bash
+python manage.py runserver
+```
+
+**Pronto!** Acesse: http://localhost:8000
+
+---
+
+### Método Tradicional: Usando pip
+
+<details>
+<summary>Clique para ver instruções com pip tradicional</summary>
+
+#### 1. Clone o repositório
 ```bash
 git clone https://github.com/transistir/CadeiaDominial.git
 cd CadeiaDominial
 ```
 
-2. **Crie um ambiente virtual**
+#### 2. Crie um ambiente virtual
 ```bash
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate  # Windows
+# venv\Scripts\activate   # Windows
 ```
 
-3. **Instale as dependências**
+#### 3. Instale as dependências
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Configure o banco de dados**
+#### 4. Configure o ambiente
 ```bash
-python manage.py migrate
+cp env.example .env
+# Edite .env conforme necessário
 ```
 
-5. **Crie um superusuário**
+#### 5. Inicialize o banco de dados
 ```bash
+python manage.py migrate
+python manage.py criar_tipos_documento
+python manage.py criar_tipos_lancamento
 python manage.py createsuperuser
 ```
 
-6. **Execute os comandos de inicialização**
-```bash
-python manage.py criar_tipos_documento
-python manage.py criar_tipos_lancamento
-```
-
-7. **Inicie o servidor**
+#### 6. Inicie o servidor
 ```bash
 python manage.py runserver
+```
+
+</details>
+
+---
+
+### Executando Testes
+
+```bash
+# Instale dependências de teste (se ainda não instalou)
+uv pip install -r requirements-test.txt
+
+# Execute todos os testes
+pytest
+
+# Execute com relatório de cobertura
+pytest --cov=dominial --cov-report=html
+
+# Execute apenas testes unitários (rápido)
+pytest -m "not e2e"
+
+# Execute testes específicos
+pytest dominial/tests/test_hierarquia_arvore_service.py
+
+# Visualize relatório de cobertura
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
 ```
 
 ## Como Usar
