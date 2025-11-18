@@ -513,6 +513,253 @@ Lancamento.cartorio_origem_id → Cartorios.id
 - [ ] Documentation updated
 - [ ] Migrations created and tested
 - [ ] No security vulnerabilities
+- [ ] ORM `.get()` calls use primary keys or have exception handling
+- [ ] Serialized data includes IDs for safe reconstruction
+- [ ] API contract changes maintain backward compatibility
+- [ ] Templates have null checks and default values
+- [ ] Defensive logging for unexpected data formats
+
+---
+
+## 💡 Best Practices and Patterns
+
+### Defensive Programming
+
+Based on lessons learned from recent bug fixes (documented in `/docs/BUG_FIXES_SESSION_SUMMARY.md`), follow these defensive programming patterns:
+
+#### 1. Safe ORM Query Patterns
+
+**Always prefer primary key lookups:**
+```python
+# ✅ GOOD: Primary key lookup (can never raise MultipleObjectsReturned)
+documento = Documento.objects.get(id=documento_id)
+
+# ⚠️ RISKY: Non-unique field lookup
+documento = Documento.objects.get(numero=numero, cartorio_id=cartorio_id)  # Can raise MultipleObjectsReturned
+```
+
+**For non-unique lookups, use defensive patterns:**
+```python
+# Option 1: Use filter().first() for graceful fallback
+cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
+if not cartorio:
+    # Handle not found
+
+# Option 2: Catch MultipleObjectsReturned explicitly
+try:
+    cartorio = Cartorios.objects.get(nome__iexact=nome)
+except Cartorios.DoesNotExist:
+    # Handle not found
+except Cartorios.MultipleObjectsReturned:
+    # Log warning and use first match or show error
+    logger.warning(f"Multiple cartórios found with name: {nome}")
+    cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
+```
+
+**Include IDs in serialized responses:**
+```python
+# When serializing for later reconstruction, always include ID
+documento_dict = {
+    'id': documento.id,  # ✅ Essential for safe reconstruction
+    'numero': documento.numero,
+    # ... other fields
+}
+
+# Later, reconstruct using ID
+documento = Documento.objects.get(id=documento_dict['id'])  # ✅ Safe
+```
+
+#### 2. API Contract Handling (Defense-in-Depth)
+
+When services may receive different data formats during API transitions:
+
+**Layer 1: Type Detection**
+```python
+if isinstance(data, dict):
+    logger.warning("Received dict format (new API)")
+    processed_data = data.get('key', [])
+elif isinstance(data, list):
+    logger.info("Received list format (old API)")
+    processed_data = data
+else:
+    logger.error(f"Unexpected type: {type(data)}")
+    processed_data = []  # Safe default
+```
+
+**Layer 2: Validation**
+```python
+for item in processed_data:
+    if not isinstance(item, dict) or 'required_field' not in item:
+        logger.error("Invalid item structure, skipping")
+        continue
+    # Process item
+```
+
+**Layer 3: Template Safety**
+```django
+{% if data and data.items %}
+    {% for item in data.items %}
+        {% if item.required_field %}
+            {{ item.required_field|default:"N/A" }}
+        {% endif %}
+    {% empty %}
+        <div class="alert alert-warning">No items found</div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-warning">Data not available</div>
+{% endif %}
+```
+
+#### 3. Logging Best Practices
+
+Use appropriate log levels for defensive code:
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+# INFO: Expected behavior, good for debugging
+logger.info(f"Processing data in format: {data_format}")
+
+# WARNING: Unexpected but handled situation
+logger.warning(f"Received unexpected format, using fallback: {type(data)}")
+
+# ERROR: Error condition that might affect functionality
+logger.error(f"Missing required field in data: {data.keys()}", exc_info=True)
+```
+
+#### 4. Adapter Pattern for Backward Compatibility
+
+When changing API contracts, maintain backward compatibility:
+
+```python
+# New service returns new format
+new_result = SomeService.new_method()  # Returns {'exists': True, 'data': {...}}
+
+# Adapter converts to old format for existing consumers
+if new_result.get('exists'):
+    documento = Documento.objects.get(id=new_result['data']['id'])
+    return {
+        'has_data': True,  # Old key
+        'object': documento,  # Old key (Django model instance)
+        'message': f"Found: {new_result['data']['numero']}"
+    }
+```
+
+This allows incremental migration of consumers without breaking everything at once.
+
+### Data Integrity Patterns
+
+#### Cross-Entity Duplicate Prevention
+
+When preventing duplicates that span multiple relationships:
+
+```python
+# ❌ BAD: Checks tuple (documento, imovel_origem)
+if DocumentoImportado.objects.filter(
+    documento=documento,
+    imovel_origem=imovel_origem  # Only prevents from SAME origin
+).exists():
+    return "Already imported"
+
+# ✅ GOOD: Checks only the core entity
+if DocumentoImportado.objects.filter(
+    documento=documento  # Prevents from ANY origin
+).exists():
+    return "Already imported"
+```
+
+**Why:** When entities can be reached through different paths (e.g., different property chains), checking the full tuple allows duplicates. Check only the core entity being tracked.
+
+#### Unique Constraints
+
+Ensure database models have appropriate unique constraints:
+
+```python
+class MyModel(models.Model):
+    # Single field uniqueness
+    cns = models.CharField(max_length=20, unique=True)
+
+    # Compound uniqueness
+    class Meta:
+        unique_together = ('numero', 'cartorio')
+```
+
+**However:** Don't rely solely on constraints. Legacy data or edge cases may violate them. Use defensive `.get()` patterns.
+
+### Testing Patterns
+
+#### Integration Tests for Bug Fixes
+
+When fixing bugs, create integration tests that:
+
+1. **Reproduce the exact scenario** that caused the bug
+2. **Test the fix** works correctly
+3. **Test edge cases** around the fix
+4. **Document why** in test docstrings
+
+Example:
+```python
+def test_multiple_duplicates_same_numero_cartorio(self):
+    """
+    Test duplicate verification handles multiple documents with
+    same numero/cartorio gracefully.
+
+    Bug: Documento.objects.get(numero=..., cartorio_id=...) raised
+    MultipleObjectsReturned when 2+ documents existed.
+
+    Fix: Use document ID instead of numero/cartorio combination.
+    """
+    # Create 2 documents with SAME numero and cartorio
+    doc1 = Documento.objects.create(numero='T1234', cartorio=cartorio, ...)
+    doc2 = Documento.objects.create(numero='T1234', cartorio=cartorio, ...)
+
+    # Should NOT raise MultipleObjectsReturned
+    resultado = Service.method_that_was_broken(...)
+
+    # Verify it handles gracefully
+    self.assertTrue(resultado.get('success'))
+```
+
+### Common Pitfalls to Avoid
+
+Based on recent bug fixes, watch out for:
+
+1. **Assuming unique constraints are enforced** - Always code defensively
+2. **Using .get() with non-unique fields** - Prefer primary keys or catch exceptions
+3. **Changing API contracts without backward compatibility** - Use adapters
+4. **Not including IDs in serialized data** - Needed for safe reconstruction
+5. **Missing exception handling on .get() calls** - Catch both DoesNotExist and MultipleObjectsReturned
+6. **Templates assuming specific data structure** - Always check and provide defaults
+
+### Quick Reference: When to Use Each Pattern
+
+| Scenario | Pattern | Example |
+|----------|---------|---------|
+| Fetching by primary key | `.get(id=...)` | `Documento.objects.get(id=doc_id)` |
+| Fetching by unique field | `.get()` with exception handling | `Cartorios.objects.get(cns=cns)` |
+| Fetching by non-unique field | `.filter().first()` | `Cartorios.objects.filter(nome=nome).first()` |
+| Checking existence | `.filter().exists()` | `DocumentoImportado.objects.filter(documento=doc).exists()` |
+| Serializing for later use | Include ID | `{'id': obj.id, 'numero': obj.numero}` |
+| API format changes | Adapter pattern | Convert new→old in service layer |
+| Unknown data format | Type checking + logging | `if isinstance(data, dict): ...` |
+| Template data | Null checks + defaults | `{% if data %}...{% endif %}` with `|default` |
+
+### Recent Bug Fixes Reference
+
+For detailed information about recent bug fixes and the patterns that emerged:
+
+- **Complete Session Summary:** `/docs/BUG_FIXES_SESSION_SUMMARY.md`
+- **Code Review Findings:** `/docs/CODE_REVIEW_DUPLICATE_VERIFICATION.md`
+- **Defensive API Handling:** `/docs/DEFENSIVE_FIX_CADEIA_DOMINIAL_API.md`
+- **Integration Tests:** `dominial/tests/test_recent_bugfixes_integration.py`
+
+These documents provide:
+- Root cause analysis for each bug
+- Step-by-step fix explanations
+- Testing strategies
+- Lessons learned
+- Recommendations for future work
 
 ---
 
