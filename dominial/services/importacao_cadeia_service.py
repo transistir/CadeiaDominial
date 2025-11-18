@@ -51,11 +51,13 @@ class ImportacaoCadeiaService:
                 for doc_id in documentos_importaveis_ids:
                     try:
                         documento = Documento.objects.get(id=doc_id)
-                        
-                        # Verificar se já não foi importado
+
+                        # Verificar se já não foi importado (de qualquer propriedade)
+                        # Correção: verifica apenas pelo documento, não pelo imovel_origem
+                        # Isso previne duplicatas mesmo quando o documento é alcançado através
+                        # de diferentes caminhos na cadeia (propriedades diferentes)
                         if DocumentoImportado.objects.filter(
-                            documento=documento,
-                            imovel_origem=documento_origem.imovel
+                            documento=documento
                         ).exists():
                             erros.append(f"Documento {documento.numero} já foi importado")
                             continue
