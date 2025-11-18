@@ -116,16 +116,16 @@ class DuplicataVerificacaoService:
                             
                             if documento_anterior:
                                 print(f"DEBUG CADEIA: Documento encontrado: {documento_anterior.numero} - {documento_anterior.imovel.nome}")
-                                
-                                # Verificar se já não foi importado
+
+                                # Verificar se já não foi importado (de qualquer propriedade)
+                                # Alinhado com ImportacaoCadeiaService: verifica apenas pelo documento
                                 if not DocumentoImportado.objects.filter(
-                                    documento=documento_anterior,
-                                    imovel_origem=documento_origem.imovel
+                                    documento=documento_anterior
                                 ).exists():
-                                    
+
                                     documentos_importaveis.append(documento_anterior)
                                     print(f"DEBUG CADEIA: Documento adicionado à lista de importáveis")
-                                    
+
                                     # Buscar recursivamente as origens deste documento
                                     buscar_cadeia_recursiva(documento_anterior)
                                 else:
