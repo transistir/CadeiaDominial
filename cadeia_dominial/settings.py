@@ -23,10 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY: Use environment variables for sensitive settings
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-only-change-in-production')
 
-# SECURITY: Default to False for production safety
-DEBUG = config('DEBUG', default=False, cast=bool)
+# Development defaults - set DEBUG=False and configure ALLOWED_HOSTS in production
+DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver', cast=Csv())
 
 LOGIN_URL = '/accounts/login/'
 
