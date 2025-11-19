@@ -2,9 +2,12 @@
 Service para integração da verificação de duplicatas com o processo de criação de lançamentos
 """
 
+import logging
 from .duplicata_verificacao_service import DuplicataVerificacaoService
 from .importacao_cadeia_service import ImportacaoCadeiaService
 from ..models import Documento, Cartorios
+
+logger = logging.getLogger(__name__)
 
 
 class LancamentoDuplicataService:
@@ -28,9 +31,9 @@ class LancamentoDuplicataService:
         origens = request.POST.getlist('origem_completa[]')
         cartorios_origem = request.POST.getlist('cartorio_origem[]')
         
-        print(f"DEBUG DUPLICATA: Origens recebidas: {origens}")
-        print(f"DEBUG DUPLICATA: Cartórios origem recebidos: {cartorios_origem}")
-        print(f"DEBUG DUPLICATA: Todos os campos POST: {list(request.POST.keys())}")
+        logger.debug(f"DUPLICATA: Origens recebidas: {origens}")
+        logger.debug(f"DUPLICATA: Cartórios origem recebidos: {cartorios_origem}")
+        logger.debug(f"DUPLICATA: Todos os campos POST: {list(request.POST.keys())}")
         
         # Verificar duplicatas em TODAS as origens, não apenas a primeira
         padroes_fim_cadeia = [
@@ -44,8 +47,8 @@ class LancamentoDuplicataService:
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
             
-            print(f"DEBUG DUPLICATA: Verificando origem {i}: '{origem}'")
-            print(f"DEBUG DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
+            logger.debug(f"DUPLICATA: Verificando origem {i}: '{origem}'")
+            logger.debug(f"DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
             
             if not origem:
                 continue
@@ -55,18 +58,18 @@ class LancamentoDuplicataService:
             
             if is_fim_cadeia:
                 # Para origens de fim de cadeia, não verificar duplicatas
-                print(f"DEBUG DUPLICATA: Origem {i} é fim de cadeia, pulando verificação")
+                logger.debug(f"DUPLICATA: Origem {i} é fim de cadeia, pulando verificação")
                 continue
             
             # Para origens normais, verificar duplicatas
             if not cartorio_origem_id:
-                print(f"DEBUG DUPLICATA: Origem {i} normal sem cartório, pulando verificação")
+                logger.debug(f"DUPLICATA: Origem {i} normal sem cartório, pulando verificação")
                 continue
                 
             try:
                 cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
             except Cartorios.DoesNotExist:
-                print(f"DEBUG DUPLICATA: Cartório {cartorio_origem_id} não encontrado para origem {i}")
+                logger.debug(f"DUPLICATA: Cartório {cartorio_origem_id} não encontrado para origem {i}")
                 continue
             
             # Verificar duplicata usando o service
@@ -77,7 +80,7 @@ class LancamentoDuplicataService:
             )
 
             if duplicata_info.get('existe', False):
-                print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
+                logger.debug(f"DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
                 # Reconstruct documento_origem using ID to avoid MultipleObjectsReturned
                 documento_origem = Documento.objects.get(
                     id=duplicata_info['documento']['id']
@@ -150,10 +153,10 @@ class LancamentoDuplicataService:
         
         # Realizar importação
         try:
-            print(f"DEBUG IMPORTACAO: Iniciando importação para imóvel {documento_ativo.imovel.id}")
-            print(f"DEBUG IMPORTACAO: Documento origem ID: {documento_origem.id}")
-            print(f"DEBUG IMPORTACAO: Documentos importáveis IDs: {documentos_importaveis_ids}")
-            print(f"DEBUG IMPORTACAO: Usuário ID: {usuario.id}")
+            logger.debug(f"IMPORTACAO: Iniciando importação para imóvel {documento_ativo.imovel.id}")
+            logger.debug(f"IMPORTACAO: Documento origem ID: {documento_origem.id}")
+            logger.debug(f"IMPORTACAO: Documentos importáveis IDs: {documentos_importaveis_ids}")
+            logger.debug(f"IMPORTACAO: Usuário ID: {usuario.id}")
             
             resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
                 imovel_destino_id=documento_ativo.imovel.id,
@@ -162,7 +165,7 @@ class LancamentoDuplicataService:
                 usuario_id=usuario.id
             )
             
-            print(f"DEBUG IMPORTACAO: Resultado recebido: {resultado}")
+            logger.debug(f"IMPORTACAO: Resultado recebido: {resultado}")
             
             if resultado['sucesso']:
                 return {
@@ -172,16 +175,16 @@ class LancamentoDuplicataService:
                 }
             else:
                 erro_msg = resultado.get('erro', resultado.get('mensagem', 'Erro desconhecido na importação'))
-                print(f"DEBUG IMPORTACAO: Erro na importação: {erro_msg}")
+                logger.debug(f"IMPORTACAO: Erro na importação: {erro_msg}")
                 return {
                     'sucesso': False,
                     'mensagem': erro_msg
                 }
                 
         except Exception as e:
-            print(f"DEBUG IMPORTACAO: Exceção durante importação: {str(e)}")
+            logger.debug(f"IMPORTACAO: Exceção durante importação: {str(e)}")
             import traceback
-            print(f"DEBUG IMPORTACAO: Traceback: {traceback.format_exc()}")
+            logger.debug(f"IMPORTACAO: Traceback: {traceback.format_exc()}")
             return {
                 'sucesso': False,
                 'mensagem': f'Erro durante importação: {str(e)}'
