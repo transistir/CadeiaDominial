@@ -65,8 +65,9 @@ class LancamentoCriacaoService:
                 )
                 logger.debug("Verificação de duplicata executada com sucesso")
             except Exception as e:
-                logger.warning(f"Erro na verificação de duplicata: {e}", exc_info=True)
-                duplicata_resultado = {'tem_duplicata': False, 'mensagem': f'Erro na verificação: {str(e)}'}
+                logger.error(f"Erro na verificação de duplicata: {e}", exc_info=True)
+                # Return error instead of proceeding - prevents potential duplicate creation
+                return None, f'Erro na verificação de duplicatas: {str(e)}. Tente novamente.'
             logger.debug(f"Resultado verificação duplicata: {duplicata_resultado}")
             
             if duplicata_resultado['tem_duplicata']:
