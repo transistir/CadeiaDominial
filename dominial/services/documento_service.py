@@ -100,11 +100,10 @@ class DocumentoService:
                     'nome': doc_importado.imovel_origem.nome
                 },
                 'importado_por': {
-                    'id': doc_importado.importado_por.id,
-                    'username': doc_importado.importado_por.username
+                    'id': doc_importado.importado_por.id if doc_importado.importado_por else None,
+                    'username': doc_importado.importado_por.username if doc_importado.importado_por else 'Sistema'
                 },
-                'data_importacao': doc_importado.data_importacao,
-                'motivo_importacao': doc_importado.motivo_importacao
+                'data_importacao': doc_importado.data_importacao
             }
         except Exception as e:
             return None
@@ -118,8 +117,7 @@ class DocumentoService:
             documento=documento,
             defaults={
                 'imovel_origem': imovel_origem,
-                'importado_por': usuario,
-                'motivo_importacao': motivo or 'Importação automática'
+                'importado_por': usuario
             }
         )
         return doc_importado

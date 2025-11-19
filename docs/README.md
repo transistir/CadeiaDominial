@@ -1,5 +1,20 @@
 # 📚 Documentação - Cadeia Dominial
 
+## 🚀 **Começando**
+
+### Para Usuários
+- **[Guia de Instalação](INSTALLATION.md)** - Instruções detalhadas de instalação e configuração
+- **[Guia do Usuário](USER_GUIDE.md)** - Como usar o sistema completo
+- **[Perguntas Frequentes](#)** - FAQ (em breve)
+
+### Para Desenvolvedores
+- **[Guia de Desenvolvimento](DEVELOPMENT.md)** - Setup de dev, testes e debugging
+- **[Arquitetura do Sistema](../AGENTS.md)** - Arquitetura detalhada e padrões de código
+- **[Como Contribuir](../CONTRIBUTING.md)** - Guia para contribuidores
+- **[Roadmap](ROADMAP.md)** - Planejamento de versões futuras
+
+---
+
 ## 🗂️ **Estrutura Organizada por Assuntos**
 
 ### 🎯 **[Melhorias de Finalização](melhorias-finalizacao/)**
@@ -66,27 +81,37 @@ Documentação sobre investigações e análises de dados.
 
 ## 📖 **Como Usar Esta Documentação**
 
-### 🎯 **Para Implementar Melhorias do Sistema**
-1. **Comece por:** **[melhorias-finalizacao/README.md](melhorias-finalizacao/README.md)** para visão geral
-2. **Resumo executivo:** **[melhorias-finalizacao/RESUMO_EXECUTIVO_17_MELHORIAS.md](melhorias-finalizacao/RESUMO_EXECUTIVO_17_MELHORIAS.md)** para visão executiva
-3. **Plano detalhado:** **[melhorias-finalizacao/PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md](melhorias-finalizacao/PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md)** para implementação
-4. **Siga o cronograma:** 4 semanas organizadas por prioridade
+### 👤 **Sou um usuário novo**
+1. **Comece por:** **[Guia de Instalação](INSTALLATION.md)** - Configure o sistema
+2. **Aprenda a usar:** **[Guia do Usuário](USER_GUIDE.md)** - Use todas as funcionalidades
+3. **Precisa de ajuda?** Veja a seção de Suporte no final deste documento
 
-### 🚀 **Para Deploy em Produção**
-1. Comece pelo **[CHECKLIST_PRODUCAO.md](deploy/CHECKLIST_PRODUCAO.md)**
-2. Consulte **[README_DEPLOY.md](../README_DEPLOY.md)** para detalhes específicos
-3. Verifique **[README_DOCKER.md](../README_DOCKER.md)** se usando Docker
+### 💻 **Sou desenvolvedor**
+1. **Setup inicial:** **[Guia de Desenvolvimento](DEVELOPMENT.md)** - Configure ambiente de dev
+2. **Entenda a arquitetura:** **[AGENTS.md](../AGENTS.md)** - Arquitetura e padrões
+3. **Quero contribuir:** **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Processo de contribuição
+4. **Veja o futuro:** **[Roadmap](ROADMAP.md)** - Planejamento de versões
+
+### 🚀 **Quero fazer deploy em produção**
+1. **Comece pelo:** **[CHECKLIST_PRODUCAO.md](deploy/CHECKLIST_PRODUCAO.md)** - Checklist completo
+2. **Com Docker:** **[README_DOCKER.md](../README_DOCKER.md)** - Deploy containerizado
+3. **Sem Docker:** **[deploy_debian.md](deploy/deploy_debian.md)** - Deploy em servidor Debian
+
+### 🎯 **Para Implementar Melhorias do Sistema**
+1. **Comece por:** **[melhorias-finalizacao/README.md](melhorias-finalizacao/README.md)** - Visão geral
+2. **Resumo executivo:** **[RESUMO_EXECUTIVO_17_MELHORIAS.md](melhorias-finalizacao/RESUMO_EXECUTIVO_17_MELHORIAS.md)**
+3. **Plano detalhado:** **[PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md](melhorias-finalizacao/PLANO_TRABALHO_17_MELHORIAS_SISTEMA.md)**
 
 ### 🔧 **Para Entender Mudanças Recentes**
-1. Leia **[REFATORACAO_FASE_3_COMPLETA.md](refatoracao/REFATORACAO_FASE_3_COMPLETA.md)** para mudanças mais recentes
-2. Consulte **[EXEMPLOS_PRATICOS_REFATORACAO.md](refatoracao/EXEMPLOS_PRATICOS_REFATORACAO.md)** para exemplos
-3. Verifique **[PLANO_MELHORIAS_FORMULARIO_LANCAMENTO.md](refatoracao/PLANO_MELHORIAS_FORMULARIO_LANCAMENTO.md)** para melhorias no formulário
+1. **Refatorações:** **[REFATORACAO_FASE_3_COMPLETA.md](refatoracao/REFATORACAO_FASE_3_COMPLETA.md)**
+2. **Exemplos práticos:** **[EXEMPLOS_PRATICOS_REFATORACAO.md](refatoracao/EXEMPLOS_PRATICOS_REFATORACAO.md)**
+3. **Bug fixes recentes:** **[BUG_FIXES_SESSION_SUMMARY.md](BUG_FIXES_SESSION_SUMMARY.md)**
 
 ### 🏛️ **Para Entender Cartórios**
-1. **Para resumo final:** Leia **[RESUMO_REFORMULACAO_CARTORIOS.md](cartorios/RESUMO_REFORMULACAO_CARTORIOS.md)** ✅
-2. Comece com **[RESUMO_ANALISE_CARTORIOS.md](cartorios/RESUMO_ANALISE_CARTORIOS.md)**
-3. Leia **[PLANEJAMENTO_REFORMULACAO_CARTORIOS.md](cartorios/PLANEJAMENTO_REFORMULACAO_CARTORIOS.md)**
-4. Consulte **[DETALHES_TECNICOS_CARTORIOS.md](cartorios/DETALHES_TECNICOS_CARTORIOS.md)** para implementação
+1. **Resumo final:** **[RESUMO_REFORMULACAO_CARTORIOS.md](cartorios/RESUMO_REFORMULACAO_CARTORIOS.md)** ✅
+2. **Análise:** **[RESUMO_ANALISE_CARTORIOS.md](cartorios/RESUMO_ANALISE_CARTORIOS.md)**
+3. **Planejamento:** **[PLANEJAMENTO_REFORMULACAO_CARTORIOS.md](cartorios/PLANEJAMENTO_REFORMULACAO_CARTORIOS.md)**
+4. **Detalhes técnicos:** **[DETALHES_TECNICOS_CARTORIOS.md](cartorios/DETALHES_TECNICOS_CARTORIOS.md)**
 
 ### 🔍 **Para Desenvolver Verificação de Duplicatas**
 1. **Comece por:** **[README_VERIFICACAO_DUPLICATAS.md](verificacao-duplicatas/README_VERIFICACAO_DUPLICATAS.md)**

@@ -1,0 +1,35 @@
+# Testing dependencies for Sistema de Cadeia Dominial
+# Install with: pip install -r requirements-test.txt
+
+# Core testing framework
+pytest==8.3.4
+pytest-django==4.9.0
+pytest-cov==6.0.0
+pytest-xdist==3.6.1  # Parallel test execution
+
+# Test data factories
+factory-boy==3.3.1
+Faker==33.1.0
+
+# E2E testing with Playwright
+pytest-playwright==0.6.2
+playwright==1.49.1
+
+# Code quality and coverage
+coverage==7.6.9
+pre-commit==4.0.1
+black==24.10.0
+isort==5.13.2
+flake8==7.1.1
+flake8-docstrings==1.7.0
+bandit==1.7.10
+
+# Mocking and assertions
+pytest-mock==3.14.0
+
+# Database testing
+pytest-postgresql==6.1.1  # Optional: for isolated test databases
+
+# Debugging
+pytest-pudb==0.7.0  # Optional: debugger integration
+ipdb==0.13.13  # Optional: enhanced debugger

@@ -68,6 +68,14 @@ class LancamentoFormService:
                 # CORREÇÃO: Não criar cartório automaticamente
                 # O usuário deve selecionar um cartório existente
                 cartorio_origem = None
+            except Cartorios.MultipleObjectsReturned:
+                # Multiple cartórios with same name - use first
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Multiple cartórios found with name: {cartorio_nome}. Using first."
+                )
+                cartorio_origem = Cartorios.objects.filter(nome__iexact=cartorio_nome).first()
         
         # Processar múltiplas origens
         origens_completas = request.POST.getlist('origem_completa[]')
@@ -156,6 +164,16 @@ class LancamentoFormService:
                         cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                     )
                     lancamento.cartorio_origem = cartorio
+                except Cartorios.MultipleObjectsReturned:
+                    # Multiple cartórios with same name - use first
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Multiple cartórios found with name: {cartorio_origem_nome}. Using first."
+                    )
+                    cartorio = Cartorios.objects.filter(nome__iexact=cartorio_origem_nome).first()
+                    if cartorio:
+                        lancamento.cartorio_origem = cartorio
             lancamento.livro_origem = request.POST.get('livro_origem_averbacao') if request.POST.get('livro_origem_averbacao') and request.POST.get('livro_origem_averbacao').strip() else None
             lancamento.folha_origem = request.POST.get('folha_origem_averbacao') if request.POST.get('folha_origem_averbacao') and request.POST.get('folha_origem_averbacao').strip() else None
             lancamento.data_origem = request.POST.get('data_origem_averbacao') if request.POST.get('data_origem_averbacao') else None
@@ -203,6 +221,16 @@ class LancamentoFormService:
                     cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                 )
                 lancamento.cartorio_origem = cartorio
+            except Cartorios.MultipleObjectsReturned:
+                # Multiple cartórios with same name - use first
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Multiple cartórios found with name: {cartorio_transacao_nome}. Using first."
+                )
+                cartorio = Cartorios.objects.filter(nome__iexact=cartorio_transacao_nome).first()
+                if cartorio:
+                    lancamento.cartorio_origem = cartorio
         else:
             lancamento.cartorio_origem_id = None
         

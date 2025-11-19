@@ -51,19 +51,28 @@ class ImportacaoCadeiaService:
                 for doc_id in documentos_importaveis_ids:
                     try:
                         documento = Documento.objects.get(id=doc_id)
-                        
-                        # Verificar se já não foi importado
+
+                        # Verificar se já não foi importado (de qualquer propriedade)
+                        # Correção: verifica apenas pelo documento, não pelo imovel_origem
+                        # Isso previne duplicatas mesmo quando o documento é alcançado através
+                        # de diferentes caminhos na cadeia (propriedades diferentes)
                         if DocumentoImportado.objects.filter(
-                            documento=documento,
-                            imovel_origem=documento_origem.imovel
+                            documento=documento
                         ).exists():
                             erros.append(f"Documento {documento.numero} já foi importado")
                             continue
-                        
-                        # Marcar documento como importado
+
+                        # Salvar o imóvel de origem antes de alterá-lo
+                        imovel_origem_original = documento.imovel
+
+                        # Atualizar o documento para pertencer ao imóvel destino
+                        documento.imovel = imovel_destino
+                        documento.save()
+
+                        # Marcar documento como importado (guardando referência ao imóvel de origem)
                         documento_importado = ImportacaoCadeiaService.marcar_documento_importado(
                             documento=documento,
-                            imovel_origem=documento_origem.imovel,
+                            imovel_origem=imovel_origem_original,
                             importado_por=usuario
                         )
                         

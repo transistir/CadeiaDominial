@@ -239,6 +239,16 @@ class LancamentoOrigemService:
                             return cartorio
                         except Cartorios.DoesNotExist:
                             pass
+                        except Cartorios.MultipleObjectsReturned:
+                            # Multiple cartórios with same name - use first
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.warning(
+                                f"Multiple cartórios found with name: {item['cartorio_nome']}. Using first."
+                            )
+                            cartorio = Cartorios.objects.filter(nome__iexact=item['cartorio_nome']).first()
+                            if cartorio:
+                                return cartorio
         
         # Fallback: usar cartório de origem do lançamento
         if lancamento.cartorio_origem:
