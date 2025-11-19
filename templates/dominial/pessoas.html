@@ -15,7 +15,10 @@
 </div>
 
 <div class="aviso">
-    Total de Pessoas encontradas: {{ pessoas|length }}
+    Total de Pessoas encontradas: {{ pessoas.paginator.count }}
+    {% if pessoas.paginator.num_pages > 1 %}
+    (Página {{ pessoas.number }} de {{ pessoas.paginator.num_pages }})
+    {% endif %}
 </div>
 
 <ul>
@@ -25,4 +28,22 @@
         <li>Nenhuma pessoa encontrada.</li>
     {% endfor %}
 </ul>
+
+{% if pessoas.paginator.num_pages > 1 %}
+<nav class="pagination">
+    {% if pessoas.has_previous %}
+        <a href="?page=1">&laquo; Primeira</a>
+        <a href="?page={{ pessoas.previous_page_number }}">Anterior</a>
+    {% endif %}
+
+    <span class="current-page">
+        Página {{ pessoas.number }} de {{ pessoas.paginator.num_pages }}
+    </span>
+
+    {% if pessoas.has_next %}
+        <a href="?page={{ pessoas.next_page_number }}">Próxima</a>
+        <a href="?page={{ pessoas.paginator.num_pages }}">Última &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}
