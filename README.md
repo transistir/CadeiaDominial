@@ -1,117 +1,58 @@
 # Sistema de Cadeia Dominial
 
+![Version](https://img.shields.io/badge/version-1.0.0--beta-blue)
+![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![Django](https://img.shields.io/badge/django-5.2.3-green)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 Sistema web para gestão e visualização de cadeias dominiais de terras indígenas, desenvolvido em Django.
 
 ![Sistema de Cadeia Dominial](printpage.png)
 
-## Documentação
+---
 
-Toda a documentação está organizada na pasta [`docs/`](docs/README.md):
+## ✨ Principais Funcionalidades
 
-- **Deploy e Produção**: Checklists, guias de deploy e configuração
-- **Refatoração**: Documentação das melhorias implementadas
-- **Cartórios**: Análise e planejamento da estrutura de cartórios
-- **Planejamento**: Prioridades e estratégias de implementação
+- 🌳 **Visualização Interativa em Árvore** - Diagrama D3.js com zoom e pan
+- 📊 **Gestão Completa** - TIs, Imóveis, Documentos (Matrículas/Transcrições) e Lançamentos
+- 🔍 **Detecção de Duplicatas** - Prevenção automática de dados duplicados
+- 🔗 **Rastreamento de Cadeia** - Histórico completo desde a origem até o presente
+- 📤 **Exportação de Dados** - Excel, PDF e JSON
+- 🏛️ **Base de Cartórios** - Gestão de Cartórios de Registro de Imóveis (CRI)
+- 🎯 **Interface Moderna** - Design responsivo e intuitivo
 
-## Scripts de Teste
+---
 
-Scripts de teste e análise estão na pasta [`tests_scripts/`](tests_scripts/):
+## 🚀 Quick Start
 
-- Scripts de teste de funcionalidades
-- Análise de estrutura de cartórios
-- Testes de integração
+### 1. Instale o uv (instalador Python ultra-rápido)
 
-## Versão Beta v1.0.0
-
-Esta é a primeira versão beta do sistema, disponível para testes com clientes.
-
-### Funcionalidades Implementadas
-
-#### Gestão de Dados
-- **TIs (Terras Indígenas)**: Cadastro e gestão de terras indígenas
-- **Imóveis**: Registro de imóveis com matrícula, SNCR e SIGEF
-- **Cartórios**: Base de dados de cartórios brasileiros
-- **Pessoas**: Cadastro de proprietários e envolvidos
-- **Documentos**: Gestão de matrículas e transcrições
-- **Lançamentos**: Registro de averbações, registros e alterações
-
-#### Visualização em Árvore
-- **Diagrama Interativo**: Visualização da cadeia dominial em formato de árvore
-- **Zoom e Pan**: Navegação fluida com controles de zoom
-- **Cards Dinâmicos**: Tamanho ajustável baseado na quantidade de documentos
-- **Conexões Visuais**: Linhas conectando documentos relacionados
-- **Origens Identificadas**: Detecção automática de documentos de origem
-
-#### Interface Moderna
-- **Design Responsivo**: Adaptável a diferentes tamanhos de tela
-- **Tema Consistente**: Interface unificada e profissional
-- **Navegação Intuitiva**: Menu e botões organizados logicamente
-- **Feedback Visual**: Efeitos de hover e transições suaves
-
-#### Segurança
-- **Autenticação**: Sistema de login/logout
-- **Autorização**: Controle de acesso baseado em permissões
-- **Validação**: Verificação de dados e integridade
-
-## Tecnologias Utilizadas
-
-- **Backend**: Django 5.2.1
-- **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
-- **Banco de Dados**: SQLite (desenvolvimento)
-- **Geolocalização**: GeoDjango (PostGIS)
-- **Autocomplete**: Django Autocomplete Light
-
-## Instalação
-
-### Pré-requisitos
-- Python 3.8+ (recomendado 3.11+)
-- Git
-
-### Método Recomendado: Usando uv (⚡ 10-100x mais rápido)
-
-[uv](https://github.com/astral-sh/uv) é um instalador de pacotes Python extremamente rápido.
-
-#### 1. Instale o uv
 ```bash
-# Linux/Mac
+# Linux/macOS
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Windows (PowerShell)
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Ou via pip
-pip install uv
 ```
 
-#### 2. Clone e configure o projeto
+### 2. Clone e configure
+
 ```bash
-# Clone o repositório
 git clone https://github.com/transistir/CadeiaDominial.git
 cd CadeiaDominial
 
-# Crie ambiente virtual e instale dependências
+# Crie ambiente e instale dependências
 uv venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
-
-# Instale todas as dependências (super rápido!)
+source .venv/bin/activate  # Linux/macOS - Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
 
-# Opcional: instale dependências de teste
-uv pip install -r requirements-test.txt
-```
-
-#### 3. Configure o ambiente
-```bash
-# Copie o arquivo de exemplo
+# Configure ambiente
 cp env.example .env
-
-# Edite .env e configure pelo menos:
-# - SECRET_KEY (gere uma chave única)
-# - ADMIN_PASSWORD (senha forte)
+# Edite .env: configure SECRET_KEY e ADMIN_PASSWORD
 ```
 
-#### 4. Inicialize o banco de dados
+### 3. Inicialize o banco de dados
+
 ```bash
 uv run python manage.py migrate
 uv run python manage.py criar_tipos_documento
@@ -119,152 +60,118 @@ uv run python manage.py criar_tipos_lancamento
 uv run python manage.py createsuperuser
 ```
 
-#### 5. Inicie o servidor
+### 4. Inicie o servidor
+
 ```bash
 uv run python manage.py runserver
 ```
 
-**Pronto!** Acesse: http://localhost:8000
+**🎉 Pronto!** Acesse: http://localhost:8000
 
 ---
 
-### Método Tradicional: Usando pip
+## 📚 Documentação
 
-<details>
-<summary>Clique para ver instruções com pip tradicional</summary>
+### Para Usuários
+- **[Guia de Instalação](docs/INSTALLATION.md)** - Instruções detalhadas de instalação e configuração
+- **[Guia do Usuário](docs/USER_GUIDE.md)** - Como usar o sistema completo
+- **[Documentação Completa](docs/README.md)** - Índice de toda documentação
 
-#### 1. Clone o repositório
-```bash
-git clone https://github.com/transistir/CadeiaDominial.git
-cd CadeiaDominial
-```
+### Para Desenvolvedores
+- **[Guia de Desenvolvimento](docs/DEVELOPMENT.md)** - Setup de dev, testes e debugging
+- **[Arquitetura do Sistema](AGENTS.md)** - Arquitetura detalhada e padrões de código
+- **[Roadmap](docs/ROADMAP.md)** - Planejamento de versões futuras
+- **[Como Contribuir](CONTRIBUTING.md)** - Guia para contribuidores
 
-#### 2. Crie um ambiente virtual
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-```
-
-#### 3. Instale as dependências
-```bash
-pip install -r requirements.txt
-```
-
-#### 4. Configure o ambiente
-```bash
-cp env.example .env
-# Edite .env conforme necessário
-```
-
-#### 5. Inicialize o banco de dados
-```bash
-uv run python manage.py migrate
-uv run python manage.py criar_tipos_documento
-uv run python manage.py criar_tipos_lancamento
-uv run python manage.py createsuperuser
-```
-
-#### 6. Inicie o servidor
-```bash
-uv run python manage.py runserver
-```
-
-</details>
+### Deploy e Produção
+- **[Deploy com Docker](README_DOCKER.md)** - Configuração Docker completa
+- **[Checklist de Produção](docs/deploy/CHECKLIST_PRODUCAO.md)** - Guia para deploy em produção
 
 ---
 
-### Executando Testes
+## 🛠️ Tecnologias
+
+**Backend:**
+- Django 5.2.3
+- Python 3.8+
+- PostgreSQL (produção) / SQLite (desenvolvimento)
+
+**Frontend:**
+- HTML5, CSS3, JavaScript
+- Bootstrap 5
+- D3.js (visualização em árvore)
+- django-autocomplete-light
+
+**Outros:**
+- WeasyPrint (geração de PDF)
+- openpyxl (exportação Excel)
+
+---
+
+## 🧪 Executando Testes
 
 ```bash
-# Instale dependências de teste (se ainda não instalou)
+# Instale dependências de teste
 uv pip install -r requirements-test.txt
 
 # Execute todos os testes
 uv run pytest
 
-# Execute com relatório de cobertura
+# Com relatório de cobertura
 uv run pytest --cov=dominial --cov-report=html
-
-# Execute apenas testes unitários (rápido)
-uv run pytest -m "not e2e"
-
-# Execute testes específicos
-uv run pytest dominial/tests/test_hierarquia_arvore_service.py
 
 # Ou use Django test runner
 uv run python manage.py test
-
-# Visualize relatório de cobertura
-open htmlcov/index.html  # macOS
-xdg-open htmlcov/index.html  # Linux
 ```
 
-## Como Usar
+Para mais detalhes sobre testes, veja [Guia de Desenvolvimento](docs/DEVELOPMENT.md).
 
-### Acesso ao Sistema
-- URL: `http://localhost:8000`
-- Use as credenciais do superusuário criado
+---
 
-### Fluxo Principal
-1. **Cadastre uma TI** (Terra Indígena)
-2. **Adicione Imóveis** à TI
-3. **Cadastre Documentos** (matrículas/transcrições)
-4. **Registre Lançamentos** nos documentos
-5. **Visualize a Cadeia** na árvore dominial
+## 🤝 Como Contribuir
 
-### Visualização em Árvore
-- Acesse um imóvel específico
-- Clique em "Cadeia Dominial"
-- Use os controles de zoom (+/-) para navegar
-- Clique nos cards para ver detalhes
-- Arraste para mover a visualização
+Contribuições são bem-vindas! Por favor, leia o [Guia de Contribuição](CONTRIBUTING.md) para detalhes sobre:
 
-## Estratégia de Versionamento
+- Como reportar bugs
+- Como sugerir funcionalidades
+- Processo de desenvolvimento
+- Padrões de código
+- Processo de Pull Request
 
-### Branches
-- **`main`**: Código estável e testado
-- **`develop`**: Desenvolvimento ativo
-- **`feature/*`**: Novas funcionalidades
-- **`hotfix/*`**: Correções urgentes
+**Issues boas para começar:**
+- Procure labels `good first issue` e `help wanted`
+- [Veja as issues abertas](https://github.com/transistir/CadeiaDominial/issues)
 
-### Tags
-- **`v1.0.0-beta`**: Primeira versão para testes
-- **`v1.0.0`**: Versão estável (futuro)
-- **`v1.1.0`**: Novas funcionalidades (futuro)
+---
 
-## Próximas Versões
+## 📋 Versão Atual: Beta 1.0.0
 
-### v1.1.0 (Planejado)
-- [ ] Relatórios em PDF
-- [ ] Exportação de dados
-- [ ] Notificações por email
-- [ ] Dashboard com estatísticas
+Esta é a primeira versão beta, disponível para testes com clientes.
 
-### v1.2.0 (Planejado)
-- [ ] API REST
-- [ ] Integração com sistemas externos
-- [ ] Módulo de auditoria
-- [ ] Backup automático
+**Status:** Em testes | **Próxima versão:** 1.0.0 (Março 2025)
 
-## Contribuição
+Veja o [Roadmap](docs/ROADMAP.md) completo para funcionalidades planejadas.
 
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+---
 
-## Suporte
-
-Para dúvidas, sugestões ou problemas:
-- Abra uma [Issue](https://github.com/transistir/CadeiaDominial/issues)
-- Entre em contato com a equipe de desenvolvimento
-
-## Licença
+## 📄 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
 ---
 
+## 📞 Suporte
+
+- **Documentação:** [docs/README.md](docs/README.md)
+- **Issues:** [GitHub Issues](https://github.com/transistir/CadeiaDominial/issues)
+- **Discussões:** [GitHub Discussions](https://github.com/transistir/CadeiaDominial/discussions)
+
+---
+
+<div align="center">
+
 **Desenvolvido pela equipe Transistir**
+
+[Documentação](docs/README.md) • [Contribuir](CONTRIBUTING.md) • [Roadmap](docs/ROADMAP.md) • [Changelog](docs/ROADMAP.md#-changelog)
+
+</div>
