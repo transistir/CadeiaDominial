@@ -4,14 +4,22 @@ Tests for ONR (Organização Nacional dos Registradores) API integration
 import pytest
 import requests
 from django.test import TestCase, Client
+from django.contrib.auth.models import User
 
 
 class TestONRIntegration(TestCase):
     """Test ONR external API integration"""
 
     def setUp(self):
-        """Set up test client"""
+        """Set up test client and authenticated user"""
         self.client = Client()
+        # Create and authenticate a test user for endpoints that require login
+        self.user = User.objects.create_user(
+            username='testuser',
+            password='testpass123',
+            email='test@example.com'
+        )
+        self.client.login(username='testuser', password='testpass123')
 
     @pytest.mark.integration
     def test_onr_external_api_post(self):
