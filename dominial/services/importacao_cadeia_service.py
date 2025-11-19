@@ -217,13 +217,23 @@ class ImportacaoCadeiaService:
                         'sucesso': False,
                         'erro': 'Usuário não tem permissão para desfazer esta importação'
                     }
-                
+
+                # Backward compatibility: restore document to original imóvel if it was moved
+                # This handles imports made before the fix that kept documents in place
+                documento = documento_importado.documento
+                if documento.imovel_id != documento_importado.imovel_origem_id:
+                    documento.imovel = documento_importado.imovel_origem
+                    documento.save()
+
+                # Store numero before deleting for the success message
+                documento_numero = documento.numero
+
                 # Remover o registro de importação
                 documento_importado.delete()
-                
+
                 return {
                     'sucesso': True,
-                    'mensagem': f'Importação do documento {documento_importado.documento.numero} desfeita com sucesso'
+                    'mensagem': f'Importação do documento {documento_numero} desfeita com sucesso'
                 }
                 
         except DocumentoImportado.DoesNotExist:
