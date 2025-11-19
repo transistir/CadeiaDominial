@@ -1,7 +1,11 @@
 """
 Service para processamento de dados do formulário de lançamento
 """
+import logging
+
 from ..models import LancamentoTipo
+
+logger = logging.getLogger(__name__)
 
 class LancamentoFormService:
     @staticmethod

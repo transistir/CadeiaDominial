@@ -181,8 +181,14 @@ try:
     if not LOGS_DIR.exists():
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
     _file_logging_available = True
-except (PermissionError, OSError):
+except (PermissionError, OSError) as e:
     # Fall back to console-only logging if directory creation fails
+    import sys
+    print(
+        f"Warning: Could not create logs directory '{LOGS_DIR}': {e}. "
+        "File logging disabled, using console only.",
+        file=sys.stderr
+    )
     _file_logging_available = False
 
 # Define handlers based on availability

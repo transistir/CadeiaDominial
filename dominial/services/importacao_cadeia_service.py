@@ -1,6 +1,26 @@
 """
 Service para importação de cadeias dominiais.
 Importa documentos de outras cadeias dominiais para o imóvel atual.
+
+Import Behavior (v2 - Non-destructive):
+---------------------------------------
+Documents are NOT moved from their source imóvel. Instead, a DocumentoImportado
+record is created to track the import relationship, preserving the source
+property's chain integrity.
+
+This allows:
+- Source property chains to remain intact after import
+- Multiple properties to reference the same document
+- Safe rollback via desfazer_importacao
+
+The import relationship is tracked via:
+- imovel_origem: Where the document originally belongs
+- imovel_destino: Where the document was imported TO
+
+Backward Compatibility:
+----------------------
+desfazer_importacao() handles imports from before this change (where documents
+were moved) by restoring documento.imovel to imovel_origem if they differ.
 """
 
 from django.db import transaction
@@ -12,6 +32,11 @@ from ..models import Documento, DocumentoImportado, Imovel
 class ImportacaoCadeiaService:
     """
     Service responsável por importar cadeias dominiais de outros imóveis.
+
+    Key methods:
+    - importar_cadeia_dominial: Import documents (non-destructive)
+    - verificar_documentos_importados: Query imports by destination
+    - desfazer_importacao: Undo an import (with backward compatibility)
     """
     
     @staticmethod
@@ -209,8 +234,12 @@ class ImportacaoCadeiaService:
         """
         try:
             with transaction.atomic():
-                documento_importado = DocumentoImportado.objects.get(id=documento_importado_id)
-                
+                # Use select_for_update to prevent race conditions when
+                # multiple processes try to undo the same import
+                documento_importado = DocumentoImportado.objects.select_for_update().get(
+                    id=documento_importado_id
+                )
+
                 # Verificar se o usuário tem permissão (pode ser expandido)
                 if documento_importado.importado_por and documento_importado.importado_por.id != usuario_id:
                     return {

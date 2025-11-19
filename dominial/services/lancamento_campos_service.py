@@ -1,9 +1,12 @@
 """
 Service especializado para processamento de campos específicos por tipo de lançamento
 """
+import logging
+import uuid
 
 from ..models import Cartorios
-import uuid
+
+logger = logging.getLogger(__name__)
 
 
 class LancamentoCamposService:
