@@ -426,7 +426,7 @@ class CadeiaDominialTabelaService:
             try:
                 return max(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
             except (ValueError, AttributeError) as e:
-                logger.warning(f" Erro ao ordenar documentos por número: {str(e)}")
+                logger.warning(f"Erro ao ordenar documentos por número: {str(e)}")
                 # Em caso de erro, retornar o primeiro documento encontrado
                 return origens_encontradas[0] if origens_encontradas else None
         
@@ -439,7 +439,7 @@ class CadeiaDominialTabelaService:
         """
         # Proteção contra recursão infinita
         if profundidade > 50:  # Limite máximo de profundidade
-            logger.warning(f" Limite de profundidade atingido para documento {documento.numero}")
+            logger.warning(f"Limite de profundidade atingido para documento {documento.numero}")
             return []
             
         cadeia_expandida = []
@@ -485,11 +485,11 @@ class CadeiaDominialTabelaService:
                     if numero_part.isdigit():
                         origens_validas.append(origem)
                     else:
-                        logger.warning(f" Origem ignorada (não é número válido): '{origem}'")
+                        logger.warning(f"Origem ignorada (não é número válido): '{origem}'")
                 else:
                     origens_validas.append(origem)
             except Exception as e:
-                logger.warning(f" Origem ignorada (erro): '{origem}' - {str(e)}")
+                logger.warning(f"Origem ignorada (erro): '{origem}' - {str(e)}")
         
         origens_validas.sort(key=origem_sort_key)
         origens = origens_validas

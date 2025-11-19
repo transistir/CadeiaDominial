@@ -101,16 +101,16 @@ class DuplicataVerificacaoService:
             )
             
             for lancamento in lancamentos_do_documento:
-                logger.debug(f" CADEIA: Lançamento {lancamento.id} - Origem: '{lancamento.origem}' - Cartório Origem: {lancamento.cartorio_origem}")
+                logger.debug(f"CADEIA: Lançamento {lancamento.id} - Origem: '{lancamento.origem}' - Cartório Origem: {lancamento.cartorio_origem}")
                 
                 if lancamento.origem:
                     # Separar múltiplas origens (separadas por ;)
                     origens = [o.strip() for o in lancamento.origem.split(';')]
-                    logger.debug(f" CADEIA: Origens separadas: {origens}")
+                    logger.debug(f"CADEIA: Origens separadas: {origens}")
                     
                     for origem_numero in origens:
                         if origem_numero:
-                            logger.debug(f" CADEIA: Buscando documento {origem_numero} no cartório {lancamento.cartorio_origem}")
+                            logger.debug(f"CADEIA: Buscando documento {origem_numero} no cartório {lancamento.cartorio_origem}")
                             
                             # Buscar documento com este número (independente do cartório)
                             documento_anterior = Documento.objects.filter(
@@ -118,7 +118,7 @@ class DuplicataVerificacaoService:
                             ).first()
                             
                             if documento_anterior:
-                                logger.debug(f" CADEIA: Documento encontrado: {documento_anterior.numero} - {documento_anterior.imovel.nome}")
+                                logger.debug(f"CADEIA: Documento encontrado: {documento_anterior.numero} - {documento_anterior.imovel.nome}")
 
                                 # Verificar se já não foi importado (de qualquer propriedade)
                                 # Alinhado com ImportacaoCadeiaService: verifica apenas pelo documento
@@ -127,14 +127,14 @@ class DuplicataVerificacaoService:
                                 ).exists():
 
                                     documentos_importaveis.append(documento_anterior)
-                                    logger.debug(f" CADEIA: Documento adicionado à lista de importáveis")
+                                    logger.debug(f"CADEIA: Documento adicionado à lista de importáveis")
 
                                     # Buscar recursivamente as origens deste documento
                                     buscar_cadeia_recursiva(documento_anterior)
                                 else:
-                                    logger.debug(f" CADEIA: Documento já foi importado")
+                                    logger.debug(f"CADEIA: Documento já foi importado")
                             else:
-                                logger.debug(f" CADEIA: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem}")
+                                logger.debug(f"CADEIA: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem}")
         
         # Iniciar busca recursiva a partir do documento origem
         buscar_cadeia_recursiva(documento_origem)
