@@ -173,10 +173,37 @@ if not DEBUG:
 # Logging Configuration
 LOG_LEVEL = config('LOG_LEVEL', default='INFO')
 
-# Create logs directory if it doesn't exist
+# Try to create logs directory - wrapped in try-except to prevent startup failures
+# in production environments with restricted permissions
 LOGS_DIR = BASE_DIR / 'logs'
-if not LOGS_DIR.exists():
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+_file_logging_available = False
+try:
+    if not LOGS_DIR.exists():
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    _file_logging_available = True
+except (PermissionError, OSError):
+    # Fall back to console-only logging if directory creation fails
+    _file_logging_available = False
+
+# Define handlers based on availability
+_log_handlers = {
+    'console': {
+        'class': 'logging.StreamHandler',
+        'formatter': 'simple',
+    },
+}
+
+if _file_logging_available:
+    _log_handlers['file'] = {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': str(LOGS_DIR / 'django.log'),
+        'maxBytes': 10485760,  # 10 MB
+        'backupCount': 5,
+        'formatter': 'verbose',
+    }
+
+# Set handler list based on availability
+_active_handlers = ['console', 'file'] if _file_logging_available else ['console']
 
 LOGGING = {
     'version': 1,
@@ -191,31 +218,19 @@ LOGGING = {
             'style': '{',
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': str(LOGS_DIR / 'django.log'),
-            'maxBytes': 10485760,  # 10 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-        },
-    },
+    'handlers': _log_handlers,
     'root': {
-        'handlers': ['console', 'file'],
+        'handlers': _active_handlers,
         'level': LOG_LEVEL,
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': _active_handlers,
             'level': LOG_LEVEL,
             'propagate': False,
         },
         'dominial': {
-            'handlers': ['console', 'file'],
+            'handlers': _active_handlers,
             'level': 'DEBUG' if DEBUG else LOG_LEVEL,
             'propagate': False,
         },
