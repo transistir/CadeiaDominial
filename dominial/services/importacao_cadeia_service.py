@@ -62,17 +62,13 @@ class ImportacaoCadeiaService:
                             erros.append(f"Documento {documento.numero} já foi importado")
                             continue
 
-                        # Salvar o imóvel de origem antes de alterá-lo
-                        imovel_origem_original = documento.imovel
-
-                        # Atualizar o documento para pertencer ao imóvel destino
-                        documento.imovel = imovel_destino
-                        documento.save()
-
-                        # Marcar documento como importado (guardando referência ao imóvel de origem)
+                        # Marcar documento como importado, keeping it in its original imóvel
+                        # The document stays in place - we just record the import relationship
+                        # This preserves the source property's chain integrity
                         documento_importado = ImportacaoCadeiaService.marcar_documento_importado(
                             documento=documento,
-                            imovel_origem=imovel_origem_original,
+                            imovel_origem=documento.imovel,
+                            imovel_destino=imovel_destino,
                             importado_por=usuario
                         )
                         
@@ -142,16 +138,18 @@ class ImportacaoCadeiaService:
     def marcar_documento_importado(
         documento: Documento,
         imovel_origem: Imovel,
+        imovel_destino: Imovel,
         importado_por: User
     ) -> DocumentoImportado:
         """
         Marca um documento como importado.
-        
+
         Args:
             documento: Documento que foi importado
             imovel_origem: Imóvel de origem do documento
+            imovel_destino: Imóvel de destino da importação
             importado_por: Usuário que fez a importação
-            
+
         Returns:
             Instância do DocumentoImportado criado
         """
@@ -159,27 +157,28 @@ class ImportacaoCadeiaService:
             documento=documento,
             imovel_origem=imovel_origem,
             defaults={
+                'imovel_destino': imovel_destino,
                 'importado_por': importado_por
             }
         )
-        
+
         return documento_importado
     
     @staticmethod
     def verificar_documentos_importados(imovel_id: int) -> List[Dict[str, Any]]:
         """
         Verifica quais documentos foram importados para um imóvel.
-        
+
         Args:
-            imovel_id: ID do imóvel
-            
+            imovel_id: ID do imóvel (destino da importação)
+
         Returns:
             Lista de documentos importados
         """
         documentos_importados = DocumentoImportado.objects.filter(
-            documento__imovel_id=imovel_id
+            imovel_destino_id=imovel_id
         ).select_related('documento', 'documento__tipo', 'documento__cartorio', 'imovel_origem')
-        
+
         resultado = []
         for doc_importado in documentos_importados:
             resultado.append({
@@ -193,7 +192,7 @@ class ImportacaoCadeiaService:
                     'matricula': doc_importado.imovel_origem.matricula
                 }
             })
-        
+
         return resultado
     
     @staticmethod
