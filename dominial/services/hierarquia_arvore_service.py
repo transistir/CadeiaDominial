@@ -4,11 +4,14 @@ Implementa a lógica correta: filho -> pai (esquerda -> direita)
 Resolve todos os problemas identificados nos testes
 """
 
+import logging
 from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
 import re
 from collections import deque
+
+logger = logging.getLogger(__name__)
 
 
 class HierarquiaArvoreService:
@@ -247,7 +250,7 @@ class HierarquiaArvoreService:
             return documento
             
         except Exception as e:
-            print(f"Erro ao criar documento automático {numero_documento}: {e}")
+            logger.error(f"Erro ao criar documento automático {numero_documento}: {e}")
             return None
     
     @staticmethod

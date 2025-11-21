@@ -15,7 +15,10 @@
 </div>
 
 <div class="aviso">
-    Total de Documentos encontrados: {{ documentos|length }}
+    Total de Documentos encontrados: {{ documentos.paginator.count }}
+    {% if documentos.paginator.num_pages > 1 %}
+    (Página {{ documentos.number }} de {{ documentos.paginator.num_pages }})
+    {% endif %}
 </div>
 
 <ul>
@@ -25,4 +28,22 @@
         <li>Nenhum documento encontrado.</li>
     {% endfor %}
 </ul>
+
+{% if documentos.paginator.num_pages > 1 %}
+<nav class="pagination">
+    {% if documentos.has_previous %}
+        <a href="?page=1">&laquo; Primeira</a>
+        <a href="?page={{ documentos.previous_page_number }}">Anterior</a>
+    {% endif %}
+
+    <span class="current-page">
+        Página {{ documentos.number }} de {{ documentos.paginator.num_pages }}
+    </span>
+
+    {% if documentos.has_next %}
+        <a href="?page={{ documentos.next_page_number }}">Próxima</a>
+        <a href="?page={{ documentos.paginator.num_pages }}">Última &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}
