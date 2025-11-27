@@ -8,10 +8,12 @@ from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
-from django.views.decorators.csrf import csrf_exempt
 from .cadeia_dominial_views import cadeia_dominial_tabela
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 @require_http_methods(["POST"])
 @login_required
@@ -81,34 +83,37 @@ def buscar_cartorios(request):
     return JsonResponse(cartorios_list, safe=False)
 
 @require_POST
+@login_required
 def verificar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
         return JsonResponse({'error': 'Estado não informado'}, status=400)
-    
+
     # Usar o serviço para verificar cartórios
     resultado = CartorioVerificacaoService.verificar_cartorios_estado(estado)
-    
+
     if 'erro' in resultado:
         return JsonResponse(resultado, status=500)
-    
+
     return JsonResponse(resultado)
 
 @require_POST
+@login_required
 def importar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
         return JsonResponse({'error': 'Estado não informado'}, status=400)
-    
+
     # Usar o serviço para importar cartórios
     resultado = CartorioVerificacaoService.importar_cartorios_estado(estado)
-    
+
     if not resultado['success']:
         return JsonResponse(resultado, status=500)
-    
+
     return JsonResponse(resultado)
 
 @require_POST
+@login_required
 def criar_cartorio(request):
     """View para criar um novo cartório via AJAX"""
     try:
@@ -173,18 +178,24 @@ def criar_cartorio(request):
 
 @login_required
 def cartorios(request):
-    cartorios = Cartorios.objects.all().order_by('nome')
-    return render(request, 'dominial/cartorios.html', {'cartorios': cartorios})
+    cartorios_list = Cartorios.objects.all().order_by('nome')
+    paginator = Paginator(cartorios_list, 50)
+    page = paginator.get_page(request.GET.get('page'))
+    return render(request, 'dominial/cartorios.html', {'cartorios': page})
 
 @login_required
 def pessoas(request):
-    pessoas = Pessoas.objects.all().order_by('nome')
-    return render(request, 'dominial/pessoas.html', {'pessoas': pessoas})
+    pessoas_list = Pessoas.objects.all().order_by('nome')
+    paginator = Paginator(pessoas_list, 50)
+    page = paginator.get_page(request.GET.get('page'))
+    return render(request, 'dominial/pessoas.html', {'pessoas': page})
 
 @login_required
 def alteracoes(request):
-    documentos = Documento.objects.all().order_by('-data')
-    return render(request, 'dominial/alteracoes.html', {'documentos': documentos})
+    documentos_list = Documento.objects.all().order_by('-data')
+    paginator = Paginator(documentos_list, 50)
+    page = paginator.get_page(request.GET.get('page'))
+    return render(request, 'dominial/alteracoes.html', {'documentos': page})
 
 @login_required
 def lancamentos(request):
@@ -212,7 +223,6 @@ def lancamentos(request):
     })
 
 @login_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def escolher_origem_documento(request):
     """
@@ -255,7 +265,6 @@ def escolher_origem_documento(request):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def escolher_origem_lancamento(request):
     """
@@ -381,12 +390,12 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                             })
                     except Exception as e:
                         # Se houver erro ao serializar pessoas, continuar sem pessoas
-                        pass
+                        logger.warning(f"Error serializing pessoas for lancamento {lancamento.id}: {e}")
                     
                     lancamentos_serializados.append(lancamento_serializado)
             except Exception as e:
                 # Se houver erro ao serializar lançamentos, continuar sem lançamentos
-                pass
+                logger.warning(f"Error serializing lancamentos for documento {documento.id}: {e}")
             
             item_serializado = {
                 'documento': documento_serializado,
@@ -407,15 +416,13 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error getting updated cadeia dominial: {e}")
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }, status=500)
 
 @login_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def limpar_escolhas_origem(request):
     """
@@ -440,9 +447,8 @@ def limpar_escolhas_origem(request):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error clearing origin choices: {e}")
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }, status=500)

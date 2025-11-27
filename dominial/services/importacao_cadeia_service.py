@@ -1,6 +1,26 @@
 """
 Service para importação de cadeias dominiais.
 Importa documentos de outras cadeias dominiais para o imóvel atual.
+
+Import Behavior (v2 - Non-destructive):
+---------------------------------------
+Documents are NOT moved from their source imóvel. Instead, a DocumentoImportado
+record is created to track the import relationship, preserving the source
+property's chain integrity.
+
+This allows:
+- Source property chains to remain intact after import
+- Multiple properties to reference the same document
+- Safe rollback via desfazer_importacao
+
+The import relationship is tracked via:
+- imovel_origem: Where the document originally belongs
+- imovel_destino: Where the document was imported TO
+
+Backward Compatibility:
+----------------------
+desfazer_importacao() handles imports from before this change (where documents
+were moved) by restoring documento.imovel to imovel_origem if they differ.
 """
 
 from django.db import transaction
@@ -12,6 +32,11 @@ from ..models import Documento, DocumentoImportado, Imovel
 class ImportacaoCadeiaService:
     """
     Service responsável por importar cadeias dominiais de outros imóveis.
+
+    Key methods:
+    - importar_cadeia_dominial: Import documents (non-destructive)
+    - verificar_documentos_importados: Query imports by destination
+    - desfazer_importacao: Undo an import (with backward compatibility)
     """
     
     @staticmethod
@@ -51,26 +76,24 @@ class ImportacaoCadeiaService:
                 for doc_id in documentos_importaveis_ids:
                     try:
                         documento = Documento.objects.get(id=doc_id)
-                        
-                        # Verificar se já não foi importado
+
+                        # Verificar se já não foi importado (de qualquer propriedade)
+                        # Correção: verifica apenas pelo documento, não pelo imovel_origem
+                        # Isso previne duplicatas mesmo quando o documento é alcançado através
+                        # de diferentes caminhos na cadeia (propriedades diferentes)
                         if DocumentoImportado.objects.filter(
-                            documento=documento,
-                            imovel_origem=documento_origem.imovel
+                            documento=documento
                         ).exists():
                             erros.append(f"Documento {documento.numero} já foi importado")
                             continue
 
-                        # Salvar o imóvel de origem antes de alterá-lo
-                        imovel_origem_original = documento.imovel
-
-                        # Atualizar o documento para pertencer ao imóvel destino
-                        documento.imovel = imovel_destino
-                        documento.save()
-
-                        # Marcar documento como importado (guardando referência ao imóvel de origem)
+                        # Marcar documento como importado, keeping it in its original imóvel
+                        # The document stays in place - we just record the import relationship
+                        # This preserves the source property's chain integrity
                         documento_importado = ImportacaoCadeiaService.marcar_documento_importado(
                             documento=documento,
-                            imovel_origem=imovel_origem_original,
+                            imovel_origem=documento.imovel,
+                            imovel_destino=imovel_destino,
                             importado_por=usuario
                         )
                         
@@ -140,16 +163,18 @@ class ImportacaoCadeiaService:
     def marcar_documento_importado(
         documento: Documento,
         imovel_origem: Imovel,
+        imovel_destino: Imovel,
         importado_por: User
     ) -> DocumentoImportado:
         """
         Marca um documento como importado.
-        
+
         Args:
             documento: Documento que foi importado
             imovel_origem: Imóvel de origem do documento
+            imovel_destino: Imóvel de destino da importação
             importado_por: Usuário que fez a importação
-            
+
         Returns:
             Instância do DocumentoImportado criado
         """
@@ -157,27 +182,28 @@ class ImportacaoCadeiaService:
             documento=documento,
             imovel_origem=imovel_origem,
             defaults={
+                'imovel_destino': imovel_destino,
                 'importado_por': importado_por
             }
         )
-        
+
         return documento_importado
     
     @staticmethod
     def verificar_documentos_importados(imovel_id: int) -> List[Dict[str, Any]]:
         """
         Verifica quais documentos foram importados para um imóvel.
-        
+
         Args:
-            imovel_id: ID do imóvel
-            
+            imovel_id: ID do imóvel (destino da importação)
+
         Returns:
             Lista de documentos importados
         """
         documentos_importados = DocumentoImportado.objects.filter(
-            documento__imovel_id=imovel_id
+            imovel_destino_id=imovel_id
         ).select_related('documento', 'documento__tipo', 'documento__cartorio', 'imovel_origem')
-        
+
         resultado = []
         for doc_importado in documentos_importados:
             resultado.append({
@@ -191,7 +217,7 @@ class ImportacaoCadeiaService:
                     'matricula': doc_importado.imovel_origem.matricula
                 }
             })
-        
+
         return resultado
     
     @staticmethod
@@ -208,21 +234,35 @@ class ImportacaoCadeiaService:
         """
         try:
             with transaction.atomic():
-                documento_importado = DocumentoImportado.objects.get(id=documento_importado_id)
-                
+                # Use select_for_update to prevent race conditions when
+                # multiple processes try to undo the same import
+                documento_importado = DocumentoImportado.objects.select_for_update().get(
+                    id=documento_importado_id
+                )
+
                 # Verificar se o usuário tem permissão (pode ser expandido)
                 if documento_importado.importado_por and documento_importado.importado_por.id != usuario_id:
                     return {
                         'sucesso': False,
                         'erro': 'Usuário não tem permissão para desfazer esta importação'
                     }
-                
+
+                # Backward compatibility: restore document to original imóvel if it was moved
+                # This handles imports made before the fix that kept documents in place
+                documento = documento_importado.documento
+                if documento.imovel_id != documento_importado.imovel_origem_id:
+                    documento.imovel = documento_importado.imovel_origem
+                    documento.save()
+
+                # Store numero before deleting for the success message
+                documento_numero = documento.numero
+
                 # Remover o registro de importação
                 documento_importado.delete()
-                
+
                 return {
                     'sucesso': True,
-                    'mensagem': f'Importação do documento {documento_importado.documento.numero} desfeita com sucesso'
+                    'mensagem': f'Importação do documento {documento_numero} desfeita com sucesso'
                 }
                 
         except DocumentoImportado.DoesNotExist:

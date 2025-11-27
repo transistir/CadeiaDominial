@@ -27,8 +27,19 @@ class DocumentoImportado(models.Model):
     imovel_origem = models.ForeignKey(
         'Imovel',
         on_delete=models.CASCADE,
+        related_name='documentos_exportados',
         verbose_name="Imóvel de Origem",
         help_text="Imóvel de onde o documento foi importado"
+    )
+
+    imovel_destino = models.ForeignKey(
+        'Imovel',
+        on_delete=models.CASCADE,
+        related_name='documentos_importados',
+        verbose_name="Imóvel de Destino",
+        help_text="Imóvel para onde o documento foi importado",
+        null=True,  # Allow null for backward compatibility with existing records
+        blank=True
     )
     
     data_importacao = models.DateTimeField(
@@ -57,6 +68,7 @@ class DocumentoImportado(models.Model):
         indexes = [
             models.Index(fields=['documento']),
             models.Index(fields=['imovel_origem']),
+            models.Index(fields=['imovel_destino']),
             models.Index(fields=['data_importacao']),
             models.Index(fields=['importado_por']),
         ]
@@ -108,15 +120,15 @@ class DocumentoImportado(models.Model):
     def get_documentos_importados_imovel(cls, imovel_id):
         """
         Obtém todos os documentos importados para um imóvel.
-        
+
         Args:
-            imovel_id: ID do imóvel
-            
+            imovel_id: ID do imóvel (destino da importação)
+
         Returns:
             QuerySet: Documentos importados para o imóvel
         """
         return cls.objects.filter(
-            documento__imovel_id=imovel_id
+            imovel_destino_id=imovel_id
         ).select_related(
             'documento',
             'documento__tipo',

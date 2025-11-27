@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,13 +20,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-1#-@4yal@@)prr*c(#=&72d&l-=j^j@uk8t&9$a$&msd$fl^&&'
+# SECURITY: Use environment variables for sensitive settings
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-only-change-in-production')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Development defaults - set DEBUG=False and configure ALLOWED_HOSTS in production
+DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver', cast=Csv())
 
 LOGIN_URL = '/accounts/login/'
 
@@ -154,3 +155,90 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Feature Flags
 DUPLICATA_VERIFICACAO_ENABLED = True
+
+# Security Headers
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
+# Production security settings (enabled when DEBUG=False)
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+
+# Logging Configuration
+LOG_LEVEL = config('LOG_LEVEL', default='INFO')
+
+# Try to create logs directory - wrapped in try-except to prevent startup failures
+# in production environments with restricted permissions
+LOGS_DIR = BASE_DIR / 'logs'
+_file_logging_available = False
+try:
+    if not LOGS_DIR.exists():
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    _file_logging_available = True
+except (PermissionError, OSError) as e:
+    # Fall back to console-only logging if directory creation fails
+    import sys
+    print(
+        f"Warning: Could not create logs directory '{LOGS_DIR}': {e}. "
+        "File logging disabled, using console only.",
+        file=sys.stderr
+    )
+    _file_logging_available = False
+
+# Define handlers based on availability
+_log_handlers = {
+    'console': {
+        'class': 'logging.StreamHandler',
+        'formatter': 'simple',
+    },
+}
+
+if _file_logging_available:
+    _log_handlers['file'] = {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': str(LOGS_DIR / 'django.log'),
+        'maxBytes': 10485760,  # 10 MB
+        'backupCount': 5,
+        'formatter': 'verbose',
+    }
+
+# Set handler list based on availability
+_active_handlers = ['console', 'file'] if _file_logging_available else ['console']
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': _log_handlers,
+    'root': {
+        'handlers': _active_handlers,
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': _active_handlers,
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'dominial': {
+            'handlers': _active_handlers,
+            'level': 'DEBUG' if DEBUG else LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}

@@ -4,8 +4,10 @@ Comando para testar a conexão T1004 -> T2822
 
 from django.core.management.base import BaseCommand
 from dominial.models import Documento, Lancamento, Imovel
-from dominial.services.hierarquia_arvore_service_melhorado import HierarquiaArvoreServiceMelhorado
+from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
+from dominial.services.lancamento_origem_service import LancamentoOrigemService
 import logging
+import re
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Testa a conexão T1004 -> T2822 com o serviço melhorado'
+    help = 'Testa a conexão T1004 -> T2822'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -26,6 +28,37 @@ class Command(BaseCommand):
             action='store_true',
             help='Criar documentos automaticamente se não existirem'
         )
+
+    @staticmethod
+    def extrair_origens_simples(texto):
+        """Extrai números de origens de um texto (versão simplificada)"""
+        if not texto:
+            return []
+
+        origens = []
+
+        # Padrão 1: Letra explícita seguida de número (T2822, M9712)
+        pattern_explicito = r'([TMtm])[\s\-\.]*(\d+)'
+        for match in re.finditer(pattern_explicito, texto):
+            letra = match.group(1).upper()
+            numero = match.group(2)
+            origens.append(f'{letra}{numero}')
+
+        # Padrão 2: Só número com contexto
+        if not origens:
+            pattern_numero = r'\b(\d+)\b'
+            for match in re.finditer(pattern_numero, texto):
+                numero = match.group(1)
+                # Determinar tipo baseado no contexto
+                if 'transcrição' in texto.lower():
+                    origens.append(f'T{numero}')
+                elif 'matrícula' in texto.lower():
+                    origens.append(f'M{numero}')
+                else:
+                    # Padrão: tentar T primeiro
+                    origens.append(f'T{numero}')
+
+        return list(set(origens))  # Remove duplicatas
 
     def handle(self, *args, **options):
         imovel_matricula = options.get('imovel')
@@ -51,7 +84,7 @@ class Command(BaseCommand):
         ]
         
         for texto in textos_teste:
-            origens = HierarquiaArvoreServiceMelhorado.extrair_origens_robusto(texto)
+            origens = self.extrair_origens_simples(texto)
             self.stdout.write(f"   '{texto}' -> {origens}")
         
         # Buscar documento T1004
@@ -74,18 +107,20 @@ class Command(BaseCommand):
                 self.stdout.write(f"       Cartório Origem: {lanc.cartorio_origem.nome if lanc.cartorio_origem else 'None'}")
                 
                 # Testar extração de origens
-                origens = HierarquiaArvoreServiceMelhorado.extrair_origens_robusto(lanc.origem)
+                origens = self.extrair_origens_simples(lanc.origem)
                 self.stdout.write(f"       Origens extraídas: {origens}")
-                
+
                 # Testar busca de documentos
                 for origem in origens:
-                    doc_encontrado = HierarquiaArvoreServiceMelhorado.buscar_documento_origem_robusto(
-                        origem, lanc.cartorio_origem, lanc
-                    )
+                    # Buscar documento com o número de origem
+                    doc_encontrado = Documento.objects.filter(
+                        numero=origem
+                    ).first()
+
                     if doc_encontrado:
                         self.stdout.write(f"       ✅ {origem} encontrado: {doc_encontrado.numero} (ID: {doc_encontrado.id}) no cartório {doc_encontrado.cartorio.nome}")
                     else:
-                        self.stdout.write(f"       ❌ {origem} não encontrado no cartório de origem {lanc.cartorio_origem.nome if lanc.cartorio_origem else 'None'}")
+                        self.stdout.write(f"       ❌ {origem} não encontrado")
                 self.stdout.write()
         else:
             self.stdout.write("❌ Documento T1004 não encontrado")
@@ -109,10 +144,10 @@ class Command(BaseCommand):
             self.stdout.write("-" * 30)
             
             try:
-                arvore = HierarquiaArvoreServiceMelhorado.construir_arvore_cadeia_dominial_melhorada(
+                arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
                     doc_t1004.imovel, criar_documentos_automaticos=criar_automatico
                 )
-                
+
                 self.stdout.write(f"✅ Árvore construída com sucesso!")
                 self.stdout.write(f"   Documentos: {len(arvore['documentos'])}")
                 self.stdout.write(f"   Conexões: {len(arvore['conexoes'])}")
@@ -153,7 +188,7 @@ class Command(BaseCommand):
             self.stdout.write(f"     Cartório Origem: {lanc.cartorio_origem.nome if lanc.cartorio_origem else 'None'}")
             
             # Testar extração
-            origens = HierarquiaArvoreServiceMelhorado.extrair_origens_robusto(lanc.origem)
+            origens = self.extrair_origens_simples(lanc.origem)
             self.stdout.write(f"     Origens extraídas: {origens}")
             self.stdout.write()
         

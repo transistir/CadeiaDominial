@@ -1,9 +1,12 @@
 """
 Service especializado para processamento de campos específicos por tipo de lançamento
 """
+import logging
+import uuid
 
 from ..models import Cartorios
-import uuid
+
+logger = logging.getLogger(__name__)
 
 
 class LancamentoCamposService:
@@ -75,6 +78,16 @@ class LancamentoCamposService:
                     cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                 )
                 lancamento.cartorio_origem = cartorio
+            except Cartorios.MultipleObjectsReturned:
+                # Multiple cartórios with same name - use first
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Multiple cartórios found with name: {cartorio_origem_nome}. Using first."
+                )
+                cartorio = Cartorios.objects.filter(nome__iexact=cartorio_origem_nome).first()
+                if cartorio:
+                    lancamento.cartorio_origem = cartorio
     
     @staticmethod
     def _processar_campos_registro(request, lancamento):
@@ -112,6 +125,16 @@ class LancamentoCamposService:
                     cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                 )
                 lancamento.cartorio_origem = cartorio
+            except Cartorios.MultipleObjectsReturned:
+                # Multiple cartórios with same name - use first
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Multiple cartórios found with name: {cartorio_origem_nome}. Using first."
+                )
+                cartorio = Cartorios.objects.filter(nome__iexact=cartorio_origem_nome).first()
+                if cartorio:
+                    lancamento.cartorio_origem = cartorio
 
     @staticmethod
     def _processar_campos_transacao(request, lancamento):
@@ -144,6 +167,16 @@ class LancamentoCamposService:
                     cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                 )
                 lancamento.cartorio_transmissao = cartorio
+            except Cartorios.MultipleObjectsReturned:
+                # Multiple cartórios with same name - use first
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Multiple cartórios found with name: {cartorio_transmissao_nome}. Using first."
+                )
+                cartorio = Cartorios.objects.filter(nome__iexact=cartorio_transmissao_nome).first()
+                if cartorio:
+                    lancamento.cartorio_transmissao = cartorio
         else:
             lancamento.cartorio_transmissao_id = None
         
@@ -224,6 +257,14 @@ class LancamentoCamposService:
                             cns=cns_unico,
                             cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
                         )
+                    except Cartorios.MultipleObjectsReturned:
+                        # Multiple cartórios with same name - use first
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Multiple cartórios found with name: {cartorios_origem_nomes[i]}. Using first."
+                        )
+                        cartorio_origem = Cartorios.objects.filter(nome__iexact=cartorios_origem_nomes[i]).first()
                 
                 # Adicionar origem com seu cartório ao mapeamento
                 origens_com_cartorios.append({

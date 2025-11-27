@@ -15,7 +15,10 @@
 </div>
 
 <div class="aviso">
-    Total de Cartórios encontrados: {{ cartorios|length }}
+    Total de Cartórios encontrados: {{ cartorios.paginator.count }}
+    {% if cartorios.paginator.num_pages > 1 %}
+    (Página {{ cartorios.number }} de {{ cartorios.paginator.num_pages }})
+    {% endif %}
 </div>
 
 <ul>
@@ -25,4 +28,22 @@
         <li>Nenhum cartório encontrado.</li>
     {% endfor %}
 </ul>
+
+{% if cartorios.paginator.num_pages > 1 %}
+<nav class="pagination">
+    {% if cartorios.has_previous %}
+        <a href="?page=1">&laquo; Primeira</a>
+        <a href="?page={{ cartorios.previous_page_number }}">Anterior</a>
+    {% endif %}
+
+    <span class="current-page">
+        Página {{ cartorios.number }} de {{ cartorios.paginator.num_pages }}
+    </span>
+
+    {% if cartorios.has_next %}
+        <a href="?page={{ cartorios.next_page_number }}">Próxima</a>
+        <a href="?page={{ cartorios.paginator.num_pages }}">Última &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}

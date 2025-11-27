@@ -1,12 +1,15 @@
 """
 Service para processamento de origens automáticas dos lançamentos
 """
+import logging
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from ..models import Documento, DocumentoTipo, Cartorios, Lancamento
 from ..services.cri_service import CRIService
 from ..services.cache_service import CacheService
 from datetime import date
 import uuid
+
+logger = logging.getLogger(__name__)
 
 class LancamentoOrigemService:
     @staticmethod
@@ -239,6 +242,16 @@ class LancamentoOrigemService:
                             return cartorio
                         except Cartorios.DoesNotExist:
                             pass
+                        except Cartorios.MultipleObjectsReturned:
+                            # Multiple cartórios with same name - use first
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.warning(
+                                f"Multiple cartórios found with name: {item['cartorio_nome']}. Using first."
+                            )
+                            cartorio = Cartorios.objects.filter(nome__iexact=item['cartorio_nome']).first()
+                            if cartorio:
+                                return cartorio
         
         # Fallback: usar cartório de origem do lançamento
         if lancamento.cartorio_origem:
@@ -362,7 +375,7 @@ class LancamentoOrigemService:
             return None
         except Exception as e:
             # Log do erro mas não falhar o processo
-            print(f"Erro ao criar documento automático: {e}")
+            logger.error(f"Erro ao criar documento automático: {e}")
             return None
     
     @staticmethod
@@ -468,7 +481,7 @@ class LancamentoOrigemService:
             return None
         except Exception as e:
             # Log do erro mas não falhar o processo
-            print(f"Erro ao criar documento automático: {e}")
+            logger.error(f"Erro ao criar documento automático: {e}")
             return None
     
     @staticmethod
@@ -509,10 +522,10 @@ class LancamentoOrigemService:
             CacheService.invalidate_documentos_imovel(documento.imovel.id)
             CacheService.invalidate_tronco_principal(documento.imovel.id)
             
-            print(f"Documento {documento.numero} atualizado: cartório alterado de {documento.cartorio} para {novo_cartorio.nome}")
+            logger.info(f"Documento {documento.numero} atualizado: cartório alterado de {documento.cartorio} para {novo_cartorio.nome}")
             
             return documento
             
         except Exception as e:
-            print(f"Erro ao atualizar cartório do documento: {e}")
+            logger.error(f"Erro ao atualizar cartório do documento: {e}")
             return None 

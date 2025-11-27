@@ -2,9 +2,12 @@
 Service para integração da verificação de duplicatas com o processo de criação de lançamentos
 """
 
+import logging
 from .duplicata_verificacao_service import DuplicataVerificacaoService
 from .importacao_cadeia_service import ImportacaoCadeiaService
 from ..models import Documento, Cartorios
+
+logger = logging.getLogger(__name__)
 
 
 class LancamentoDuplicataService:
@@ -28,9 +31,9 @@ class LancamentoDuplicataService:
         origens = request.POST.getlist('origem_completa[]')
         cartorios_origem = request.POST.getlist('cartorio_origem[]')
         
-        print(f"DEBUG DUPLICATA: Origens recebidas: {origens}")
-        print(f"DEBUG DUPLICATA: Cartórios origem recebidos: {cartorios_origem}")
-        print(f"DEBUG DUPLICATA: Todos os campos POST: {list(request.POST.keys())}")
+        logger.debug(f"DUPLICATA: Origens recebidas: {origens}")
+        logger.debug(f"DUPLICATA: Cartórios origem recebidos: {cartorios_origem}")
+        logger.debug(f"DUPLICATA: Todos os campos POST: {list(request.POST.keys())}")
         
         # Verificar duplicatas em TODAS as origens, não apenas a primeira
         padroes_fim_cadeia = [
@@ -44,8 +47,8 @@ class LancamentoDuplicataService:
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
             
-            print(f"DEBUG DUPLICATA: Verificando origem {i}: '{origem}'")
-            print(f"DEBUG DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
+            logger.debug(f"DUPLICATA: Verificando origem {i}: '{origem}'")
+            logger.debug(f"DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
             
             if not origem:
                 continue
@@ -55,18 +58,18 @@ class LancamentoDuplicataService:
             
             if is_fim_cadeia:
                 # Para origens de fim de cadeia, não verificar duplicatas
-                print(f"DEBUG DUPLICATA: Origem {i} é fim de cadeia, pulando verificação")
+                logger.debug(f"DUPLICATA: Origem {i} é fim de cadeia, pulando verificação")
                 continue
             
             # Para origens normais, verificar duplicatas
             if not cartorio_origem_id:
-                print(f"DEBUG DUPLICATA: Origem {i} normal sem cartório, pulando verificação")
+                logger.debug(f"DUPLICATA: Origem {i} normal sem cartório, pulando verificação")
                 continue
                 
             try:
                 cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
             except Cartorios.DoesNotExist:
-                print(f"DEBUG DUPLICATA: Cartório {cartorio_origem_id} não encontrado para origem {i}")
+                logger.debug(f"DUPLICATA: Cartório {cartorio_origem_id} não encontrado para origem {i}")
                 continue
             
             # Verificar duplicata usando o service
@@ -77,11 +80,10 @@ class LancamentoDuplicataService:
             )
 
             if duplicata_info.get('existe', False):
-                print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
-                # Reconstruct documento_origem from número and cartório
+                logger.debug(f"DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
+                # Reconstruct documento_origem using ID to avoid MultipleObjectsReturned
                 documento_origem = Documento.objects.get(
-                    numero=duplicata_info['documento']['numero'],
-                    cartorio_id=cartorio_origem.id
+                    id=duplicata_info['documento']['id']
                 )
                 return {
                     'tem_duplicata': True,
@@ -151,10 +153,10 @@ class LancamentoDuplicataService:
         
         # Realizar importação
         try:
-            print(f"DEBUG IMPORTACAO: Iniciando importação para imóvel {documento_ativo.imovel.id}")
-            print(f"DEBUG IMPORTACAO: Documento origem ID: {documento_origem.id}")
-            print(f"DEBUG IMPORTACAO: Documentos importáveis IDs: {documentos_importaveis_ids}")
-            print(f"DEBUG IMPORTACAO: Usuário ID: {usuario.id}")
+            logger.debug(f"IMPORTACAO: Iniciando importação para imóvel {documento_ativo.imovel.id}")
+            logger.debug(f"IMPORTACAO: Documento origem ID: {documento_origem.id}")
+            logger.debug(f"IMPORTACAO: Documentos importáveis IDs: {documentos_importaveis_ids}")
+            logger.debug(f"IMPORTACAO: Usuário ID: {usuario.id}")
             
             resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
                 imovel_destino_id=documento_ativo.imovel.id,
@@ -163,7 +165,7 @@ class LancamentoDuplicataService:
                 usuario_id=usuario.id
             )
             
-            print(f"DEBUG IMPORTACAO: Resultado recebido: {resultado}")
+            logger.debug(f"IMPORTACAO: Resultado recebido: {resultado}")
             
             if resultado['sucesso']:
                 return {
@@ -173,16 +175,16 @@ class LancamentoDuplicataService:
                 }
             else:
                 erro_msg = resultado.get('erro', resultado.get('mensagem', 'Erro desconhecido na importação'))
-                print(f"DEBUG IMPORTACAO: Erro na importação: {erro_msg}")
+                logger.debug(f"IMPORTACAO: Erro na importação: {erro_msg}")
                 return {
                     'sucesso': False,
                     'mensagem': erro_msg
                 }
                 
         except Exception as e:
-            print(f"DEBUG IMPORTACAO: Exceção durante importação: {str(e)}")
+            logger.debug(f"IMPORTACAO: Exceção durante importação: {str(e)}")
             import traceback
-            print(f"DEBUG IMPORTACAO: Traceback: {traceback.format_exc()}")
+            logger.debug(f"IMPORTACAO: Traceback: {traceback.format_exc()}")
             return {
                 'sucesso': False,
                 'mensagem': f'Erro durante importação: {str(e)}'
@@ -192,20 +194,48 @@ class LancamentoDuplicataService:
     def obter_dados_duplicata_para_template(duplicata_info):
         """
         Prepara dados da duplicata para exibição no template
-        
+
         Args:
             duplicata_info: Informações da duplicata encontrada
-            
+
         Returns:
             dict: Dados formatados para o template
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         if not duplicata_info.get('tem_duplicata'):
             return None
-        
+
         documento_origem = duplicata_info['documento_origem']
         documentos_importaveis = duplicata_info['documentos_importaveis']
-        cadeia_dominial = duplicata_info['cadeia_dominial']
-        
+        cadeia_dominial_raw = duplicata_info['cadeia_dominial']
+
+        # DEFENSIVE: Handle both old (list) and new (dict with 'documentos' key) formats
+        # Log which format we received for debugging
+        if isinstance(cadeia_dominial_raw, dict):
+            logger.warning(
+                "DEFENSIVE: cadeia_dominial is dict (new format from DuplicataVerificacaoService). "
+                f"Keys: {cadeia_dominial_raw.keys()}. Extracting 'documentos' list."
+            )
+            # New format: {'documento_origem': {...}, 'total_documentos': N, 'documentos': [...]}
+            cadeia_dominial = cadeia_dominial_raw.get('documentos', [])
+            if not cadeia_dominial:
+                logger.error(
+                    "DEFENSIVE: 'documentos' key missing or empty in cadeia_dominial dict. "
+                    f"Available keys: {cadeia_dominial_raw.keys()}"
+                )
+        elif isinstance(cadeia_dominial_raw, list):
+            logger.info("DEFENSIVE: cadeia_dominial is list (expected adapter output). Using directly.")
+            # Old/expected format: Already a list of {'documento': ..., 'lancamentos': [...]}
+            cadeia_dominial = cadeia_dominial_raw
+        else:
+            logger.error(
+                f"DEFENSIVE: Unexpected cadeia_dominial type: {type(cadeia_dominial_raw)}. "
+                "Defaulting to empty list to prevent template crash."
+            )
+            cadeia_dominial = []
+
         # Formatar dados para exibição
         dados_template = {
             'documento_origem': {
@@ -220,7 +250,7 @@ class LancamentoDuplicataService:
             },
             'documentos_importaveis': []
         }
-        
+
         # Formatar documentos importáveis
         for doc in documentos_importaveis:
             dados_template['documentos_importaveis'].append({
@@ -232,27 +262,53 @@ class LancamentoDuplicataService:
                 'total_lancamentos': doc.lancamentos.count(),
                 'selecionado': True  # Por padrão, todos selecionados
             })
-        
+
         # Formatar cadeia dominial
         dados_template['cadeia_dominial'] = []
-        for item in cadeia_dominial:
-            dados_template['cadeia_dominial'].append({
-                'documento': {
-                    'id': item['documento'].id,
-                    'numero': item['documento'].numero,
-                    'tipo': item['documento'].tipo.get_tipo_display(),
-                    'livro': item['documento'].livro or 'Não informado',
-                    'folha': item['documento'].folha or 'Não informado'
-                },
-                'lancamentos': [
-                    {
-                        'numero': lanc.numero_lancamento,
-                        'tipo': lanc.tipo.get_tipo_display(),
-                        'data': lanc.data.strftime('%d/%m/%Y') if lanc.data and hasattr(lanc.data, 'strftime') else (str(lanc.data) if lanc.data else 'Não informado'),
-                        'observacoes': lanc.observacoes or 'Sem observações'
-                    }
-                    for lanc in item['lancamentos']
-                ]
-            })
-        
+        try:
+            for item in cadeia_dominial:
+                # DEFENSIVE: Validate item structure
+                if not isinstance(item, dict):
+                    logger.error(
+                        f"DEFENSIVE: cadeia_dominial item is not dict: {type(item)}. Skipping."
+                    )
+                    continue
+
+                if 'documento' not in item:
+                    logger.error(
+                        f"DEFENSIVE: cadeia_dominial item missing 'documento' key. "
+                        f"Available keys: {item.keys()}. Skipping."
+                    )
+                    continue
+
+                dados_template['cadeia_dominial'].append({
+                    'documento': {
+                        'id': item['documento'].id,
+                        'numero': item['documento'].numero,
+                        'tipo': item['documento'].tipo.get_tipo_display(),
+                        'livro': item['documento'].livro or 'Não informado',
+                        'folha': item['documento'].folha or 'Não informado'
+                    },
+                    'lancamentos': [
+                        {
+                            'numero': lanc.numero_lancamento,
+                            'tipo': lanc.tipo.get_tipo_display(),
+                            'data': lanc.data.strftime('%d/%m/%Y') if lanc.data and hasattr(lanc.data, 'strftime') else (str(lanc.data) if lanc.data else 'Não informado'),
+                            'observacoes': lanc.observacoes or 'Sem observações'
+                        }
+                        for lanc in item.get('lancamentos', [])
+                    ]
+                })
+        except Exception as e:
+            logger.error(
+                f"DEFENSIVE: Exception formatting cadeia_dominial: {e}. "
+                f"Type: {type(cadeia_dominial)}, Content: {cadeia_dominial}"
+            )
+            # Continue with empty cadeia_dominial to prevent complete failure
+
+        logger.info(
+            f"DEFENSIVE: Successfully formatted template data. "
+            f"cadeia_dominial items: {len(dados_template['cadeia_dominial'])}"
+        )
+
         return dados_template 
