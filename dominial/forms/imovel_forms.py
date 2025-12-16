@@ -56,6 +56,40 @@ class ImovelForm(forms.ModelForm):
             'observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         } 
     
+    def clean_matricula(self):
+        """
+        Valida se a matrícula é única para o cartório selecionado.
+        A matrícula pode existir em outros cartórios, mas não no mesmo cartório.
+        """
+        matricula = self.cleaned_data.get('matricula')
+        cartorio = self.cleaned_data.get('cartorio')
+        instance = self.instance
+        
+        if not matricula:
+            return matricula
+        
+        # Se não há cartório selecionado, não podemos validar a unicidade
+        # Mas o cartório é obrigatório no formulário, então isso não deveria acontecer
+        if not cartorio:
+            return matricula
+        
+        # Verificar se já existe outro imóvel com a mesma matrícula e cartório
+        queryset = Imovel.objects.filter(matricula=matricula, cartorio=cartorio)
+        
+        # Se estamos editando, excluir o próprio registro da verificação
+        if instance and instance.pk:
+            queryset = queryset.exclude(pk=instance.pk)
+        
+        if queryset.exists():
+            imovel_existente = queryset.first()
+            raise forms.ValidationError(
+                f'Já existe um imóvel com a matrícula "{matricula}" no cartório "{cartorio.nome}". '
+                f'Matrículas devem ser únicas por cartório. '
+                f'Se este é um imóvel diferente, certifique-se de que está selecionando o cartório correto.'
+            )
+        
+        return matricula
+    
     def clean(self):
         cleaned_data = super().clean()
         nome = cleaned_data.get('proprietario_nome')

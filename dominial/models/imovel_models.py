@@ -2,6 +2,13 @@ from django.db import models
 
 
 class Imovel(models.Model):
+    """
+    Modelo de Imóvel.
+    
+    IMPORTANTE: A matrícula deve ser única por cartório, não globalmente.
+    Isso permite que diferentes cartórios tenham imóveis com a mesma matrícula,
+    o que é o comportamento correto no sistema de registro de imóveis brasileiro.
+    """
     TIPO_DOCUMENTO_CHOICES = [
         ('matricula', 'Matrícula'),
         ('transcricao', 'Transcrição'),
@@ -11,7 +18,8 @@ class Imovel(models.Model):
     terra_indigena_id = models.ForeignKey('TIs', on_delete=models.PROTECT) 
     nome = models.CharField(max_length=100) # Obrigatório?
     proprietario = models.ForeignKey('Pessoas', on_delete=models.PROTECT) # Verificar 'on_delete'
-    matricula = models.CharField(max_length=50, unique=True) # Verificar formato (Código Nacional de Matrícula - CNM ?? )
+    # Removido unique=True - a unicidade é garantida pela constraint (matricula, cartorio)
+    matricula = models.CharField(max_length=50, help_text="Número da matrícula. Deve ser único por cartório.")
     tipo_documento_principal = models.CharField(
         max_length=20,
         choices=TIPO_DOCUMENTO_CHOICES,
@@ -26,6 +34,20 @@ class Imovel(models.Model):
     class Meta:
         verbose_name = "Imóvel"
         verbose_name_plural = "Imóveis"
+        # Constraint única: matrícula deve ser única por cartório
+        # Se cartório for NULL, a matrícula ainda precisa ser única (caso raro em produção)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['matricula', 'cartorio'],
+                name='unique_matricula_por_cartorio',
+                # Permite múltiplos registros com cartorio=NULL e mesma matrícula
+                # Na prática, cartório deve ser obrigatório no formulário
+            ),
+        ]
+        # Índice para melhorar performance de buscas
+        indexes = [
+            models.Index(fields=['matricula', 'cartorio'], name='dom_imovel_mat_cart_idx'),
+        ]
     
     def __str__(self):
         return self.matricula

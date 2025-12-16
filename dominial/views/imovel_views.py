@@ -80,7 +80,12 @@ def imovel_form(request, tis_id, imovel_id=None):
                 messages.error(request, f'Erro ao salvar imóvel: {str(e)}')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
         else:
-            messages.error(request, 'Erro no formulário. Verifique os dados.')
+            # Exibir erros específicos do formulário
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f'{field}: {error}')
+            if not form.errors:
+                messages.error(request, 'Erro no formulário. Verifique os dados.')
     else:
         form = ImovelForm(instance=imovel)
     

@@ -43,6 +43,9 @@
             <div class="form-group">
                 <label for="nome_proprietario">Nome do Proprietário:</label>
                 {{ form.proprietario_nome }}
+                {% if form.proprietario_nome.errors %}
+                    <div class="error-message">{{ form.proprietario_nome.errors }}</div>
+                {% endif %}
             </div>
         </div>
 
@@ -58,16 +61,25 @@
             <div class="form-group">
                 <label for="{{ form.nome.id_for_label }}">Nome do Imóvel:</label>
                 {{ form.nome }}
+                {% if form.nome.errors %}
+                    <div class="error-message">{{ form.nome.errors }}</div>
+                {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="{{ form.matricula.id_for_label }}">Número da Matrícula:</label>
                 {{ form.matricula }}
+                {% if form.matricula.errors %}
+                    <div class="error-message">{{ form.matricula.errors }}</div>
+                {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="{{ form.tipo_documento_principal.id_for_label }}">Tipo do Documento Principal:</label>
                 {{ form.tipo_documento_principal }}
+                {% if form.tipo_documento_principal.errors %}
+                    <div class="error-message">{{ form.tipo_documento_principal.errors }}</div>
+                {% endif %}
             </div>
 
             {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o imóvel" rows=3 %}
@@ -86,16 +98,25 @@
                 <div class="form-group">
                     <label for="estado">Estado:</label>
                     {{ form.estado }}
+                    {% if form.estado.errors %}
+                        <div class="error-message">{{ form.estado.errors }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="cidade">Cidade:</label>
                     {{ form.cidade }}
+                    {% if form.cidade.errors %}
+                        <div class="error-message">{{ form.cidade.errors }}</div>
+                    {% endif %}
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="cartorio">Cartório:</label>
                 {{ form.cartorio }}
+                {% if form.cartorio.errors %}
+                    <div class="error-message">{{ form.cartorio.errors }}</div>
+                {% endif %}
             </div>
 
             <div id="cartorio-info" class="form-info" style="display: none;">
