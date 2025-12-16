@@ -24,7 +24,6 @@ admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 admin.site.register(TIs)
 admin.site.register(Cartorios)
 admin.site.register(Pessoas)
-admin.site.register(Imovel)
 admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
@@ -46,6 +45,178 @@ class NumeroDocumentoFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(numero=self.value())
         return queryset
+
+@admin.register(Imovel)
+class ImovelAdmin(admin.ModelAdmin):
+    """
+    Admin customizado para Imóveis com funcionalidade de correção de TI.
+    """
+    list_display = ['matricula', 'nome', 'terra_indigena_id', 'proprietario', 'cartorio', 'tipo_documento_principal', 'arquivado', 'data_cadastro', 'info_documentos_lancamentos']
+    list_filter = ['terra_indigena_id', 'tipo_documento_principal', 'arquivado', 'cartorio', 'data_cadastro']
+    search_fields = ['matricula', 'nome', 'terra_indigena_id__nome', 'proprietario__nome', 'cartorio__nome']
+    date_hierarchy = 'data_cadastro'
+    list_per_page = 50
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('matricula', 'nome', 'tipo_documento_principal', 'terra_indigena_id', 'proprietario', 'cartorio')
+        }),
+        ('Status', {
+            'fields': ('arquivado',)
+        }),
+        ('Observações', {
+            'fields': ('observacoes',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ['data_cadastro']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'terra_indigena_id', 'proprietario', 'cartorio'
+        ).prefetch_related('documentos', 'documentos__lancamentos')
+    
+    def info_documentos_lancamentos(self, obj):
+        """
+        Mostra informações sobre documentos e lançamentos relacionados
+        """
+        num_documentos = obj.documentos.count()
+        num_lancamentos = Lancamento.objects.filter(documento__imovel=obj).count()
+        
+        if num_documentos == 0 and num_lancamentos == 0:
+            return mark_safe('<span style="color: green;">✓ Sem documentos/lançamentos</span>')
+        else:
+            return mark_safe(
+                f'<span style="color: orange;">📄 {num_documentos} doc(s) | 📋 {num_lancamentos} lançamento(s)</span>'
+            )
+    info_documentos_lancamentos.short_description = 'Documentos/Lançamentos'
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<int:imovel_id>/alterar-ti/',
+                self.admin_site.admin_view(self.alterar_ti_view),
+                name='dominial_imovel_alterar_ti'
+            ),
+        ]
+        return custom_urls + urls
+    
+    def alterar_ti_view(self, request, imovel_id):
+        """
+        View para alterar a TI de um imóvel com confirmação e informações
+        """
+        from django.db.models import Count
+        
+        try:
+            imovel = Imovel.objects.select_related(
+                'terra_indigena_id', 'proprietario', 'cartorio'
+            ).prefetch_related(
+                'documentos', 'documentos__lancamentos'
+            ).get(id=imovel_id)
+        except Imovel.DoesNotExist:
+            messages.error(request, 'Imóvel não encontrado.')
+            return redirect('admin:dominial_imovel_changelist')
+        
+        # Coletar informações sobre documentos e lançamentos
+        documentos = imovel.documentos.all()
+        num_documentos = documentos.count()
+        num_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).count()
+        
+        ti_atual = imovel.terra_indigena_id
+        todas_tis = TIs.objects.all().order_by('nome')
+        
+        if request.method == 'POST':
+            nova_ti_id = request.POST.get('nova_ti')
+            motivo = request.POST.get('motivo', '').strip()
+            
+            if not nova_ti_id:
+                messages.error(request, 'Por favor, selecione uma nova Terra Indígena.')
+            else:
+                try:
+                    nova_ti = TIs.objects.get(id=nova_ti_id)
+                    
+                    if nova_ti.id == ti_atual.id:
+                        messages.warning(request, 'O imóvel já está associado a esta Terra Indígena.')
+                        return redirect('admin:dominial_imovel_change', imovel_id)
+                    
+                    # Validar se há documentos ou lançamentos
+                    if num_documentos > 0 or num_lancamentos > 0:
+                        # Mostrar aviso mas permitir a mudança
+                        messages.warning(
+                            request,
+                            f'⚠️ ATENÇÃO: Este imóvel possui {num_documentos} documento(s) e {num_lancamentos} lançamento(s). '
+                            f'A alteração da TI pode afetar a navegação e relatórios.'
+                        )
+                    
+                    # Realizar a alteração
+                    ti_anterior = imovel.terra_indigena_id
+                    imovel.terra_indigena_id = nova_ti
+                    
+                    # Adicionar informação sobre a mudança nas observações
+                    timestamp = timezone.now().strftime('%d/%m/%Y %H:%M')
+                    usuario = request.user.get_full_name() or request.user.username
+                    observacao_mudanca = (
+                        f"\n\n--- ALTERAÇÃO DE TI ---\n"
+                        f"Data: {timestamp}\n"
+                        f"Usuário: {usuario}\n"
+                        f"TI Anterior: {ti_anterior.nome} (ID: {ti_anterior.id})\n"
+                        f"TI Nova: {nova_ti.nome} (ID: {nova_ti.id})\n"
+                    )
+                    if motivo:
+                        observacao_mudanca += f"Motivo: {motivo}\n"
+                    observacao_mudanca += "---\n"
+                    
+                    # Adicionar ao campo observações
+                    if imovel.observacoes:
+                        imovel.observacoes += observacao_mudanca
+                    else:
+                        imovel.observacoes = observacao_mudanca
+                    
+                    imovel.save()
+                    
+                    messages.success(
+                        request,
+                        f'✅ TI alterada com sucesso!\n'
+                        f'De: {ti_anterior.nome}\n'
+                        f'Para: {nova_ti.nome}'
+                    )
+                    
+                    return redirect('admin:dominial_imovel_change', imovel_id)
+                    
+                except TIs.DoesNotExist:
+                    messages.error(request, 'Terra Indígena selecionada não encontrada.')
+        
+        # Preparar contexto para o template
+        context = {
+            'title': f'Alterar TI do Imóvel: {imovel.matricula}',
+            'imovel': imovel,
+            'ti_atual': ti_atual,
+            'todas_tis': todas_tis,
+            'num_documentos': num_documentos,
+            'num_lancamentos': num_lancamentos,
+            'documentos': documentos[:10],  # Mostrar apenas os 10 primeiros
+            'opts': self.model._meta,
+            'has_view_permission': self.has_view_permission(request, imovel),
+            'has_change_permission': self.has_change_permission(request, imovel),
+        }
+        
+        return render(request, 'admin/dominial/imovel/alterar_ti.html', context)
+    
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """
+        Adiciona um botão customizado na página de edição do imóvel
+        """
+        extra_context = extra_context or {}
+        try:
+            imovel = Imovel.objects.get(id=object_id)
+            extra_context['mostrar_botao_alterar_ti'] = True
+            extra_context['imovel_id'] = object_id
+        except Imovel.DoesNotExist:
+            pass
+        
+        return super().change_view(request, object_id, form_url, extra_context)
 
 @admin.register(Documento)
 class DocumentoAdmin(admin.ModelAdmin):
