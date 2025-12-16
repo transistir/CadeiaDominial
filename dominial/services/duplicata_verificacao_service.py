@@ -19,18 +19,18 @@ class DuplicataVerificacaoService:
     def verificar_duplicata_origem(origem: str, cartorio_id: int, imovel_atual_id: int) -> Dict[str, Any]:
         """
         Verifica se uma origem/cartório já existe em outras cadeias dominiais.
-
+        
         Args:
             origem: Número da origem/documento
             cartorio_id: ID do cartório
             imovel_atual_id: ID do imóvel atual (para excluir da busca)
-
+            
         Returns:
             Dict com informações sobre a duplicata encontrada ou None
         """
-        if not getattr(settings, 'DUPLICATA_VERIFICACAO_ENABLED', True):
-            return {'existe': False}
-
+        if not getattr(settings, 'DUPLICATA_VERIFICACAO_ENABLED', False):
+            return {'tem_duplicata': False}
+        
         # Buscar documento com mesmo número e cartório em outros imóveis
         documento_existente = Documento.objects.filter(
             numero=origem,
@@ -38,32 +38,23 @@ class DuplicataVerificacaoService:
         ).exclude(
             imovel_id=imovel_atual_id
         ).select_related('imovel', 'cartorio', 'tipo').first()
-
+        
         if not documento_existente:
-            return {'existe': False}
-
+            return {'tem_duplicata': False}
+        
         # Calcular documentos importáveis
         documentos_importaveis = DuplicataVerificacaoService.calcular_documentos_importaveis(
             documento_existente
         )
-
+        
         # Obter cadeia dominial
         cadeia_dominial = DuplicataVerificacaoService.obter_cadeia_dominial_origem(
             documento_existente
         )
-
-        # Serializar documento para dict
-        documento_dict = {
-            'numero': documento_existente.numero,
-            'imovel': {
-                'id': documento_existente.imovel.id,
-                'matricula': documento_existente.imovel.matricula
-            }
-        }
-
+        
         return {
-            'existe': True,
-            'documento': documento_dict,
+            'tem_duplicata': True,
+            'documento_origem': documento_existente,
             'documentos_importaveis': documentos_importaveis,
             'cadeia_dominial': cadeia_dominial
         }
@@ -138,65 +129,57 @@ class DuplicataVerificacaoService:
         return documentos_importaveis
     
     @staticmethod
-    def obter_cadeia_dominial_origem(documento_origem: Documento) -> Dict[str, Any]:
+    def obter_cadeia_dominial_origem(documento_origem: Documento) -> List[Dict[str, Any]]:
         """
         Obtém informações completas da cadeia dominial de um documento origem.
         Busca recursivamente todos os documentos da cadeia.
-
+        
         Args:
             documento_origem: Documento de origem
-
+            
         Returns:
-            Dict com informações da cadeia dominial completa
+            Lista com informações da cadeia dominial completa
         """
-        cadeia_documentos = []
+        cadeia = []
         documentos_processados = set()  # Para evitar loops infinitos
-
+        
         def adicionar_documento_e_origens(documento):
             if documento.id in documentos_processados:
                 return
-
+            
             documentos_processados.add(documento.id)
-
+            
             # Adicionar o documento atual
-            cadeia_documentos.append({
+            cadeia.append({
                 'documento': documento,
                 'lancamentos': list(documento.lancamentos.all())
             })
-
+            
             # Buscar origens deste documento
             lancamentos_do_documento = Lancamento.objects.filter(
                 documento=documento
             )
-
+            
             for lancamento in lancamentos_do_documento:
                 if lancamento.origem:
                     # Separar múltiplas origens
                     origens = [o.strip() for o in lancamento.origem.split(';')]
-
+                    
                     for origem_numero in origens:
                         if origem_numero:
                             # Buscar documento com este número
                             documento_anterior = Documento.objects.filter(
                                 numero=origem_numero
                             ).first()
-
+                            
                             if documento_anterior and documento_anterior.id not in documentos_processados:
                                 # Recursivamente adicionar o documento anterior
                                 adicionar_documento_e_origens(documento_anterior)
-
+        
         # Iniciar a busca recursiva
         adicionar_documento_e_origens(documento_origem)
-
-        # Retornar dict com documento_origem e total_documentos
-        return {
-            'documento_origem': {
-                'numero': documento_origem.numero,
-                'id': documento_origem.id
-            },
-            'total_documentos': len(cadeia_documentos),
-            'documentos': cadeia_documentos
-        }
+        
+        return cadeia
     
     @staticmethod
     def verificar_performance_consulta(origem: str, cartorio_id: int) -> Dict[str, Any]:

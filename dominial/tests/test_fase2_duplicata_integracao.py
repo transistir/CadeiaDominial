@@ -2,12 +2,11 @@
 Testes para Fase 2 - Integração da verificação de duplicatas com formulário de lançamento
 """
 
-import pytest
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
 from ..models import (
-    TIs, Imovel, Documento, DocumentoTipo, Cartorios,
+    TIs, Imovel, Documento, DocumentoTipo, Cartorios, 
     Lancamento, LancamentoTipo, Pessoas
 )
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
@@ -42,37 +41,32 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         
         # Criar tipos de documento
         self.tipo_matricula = DocumentoTipo.objects.create(
-            tipo='matricula'
+            tipo='matricula',
+            descricao='Matrícula'
         )
         self.tipo_transcricao = DocumentoTipo.objects.create(
-            tipo='transcricao'
-        )
-
-        # Criar tipos de lançamento
-        self.tipo_registro = LancamentoTipo.objects.create(
-            tipo='registro'
+            tipo='transcricao',
+            descricao='Transcrição'
         )
         
-        # Criar pessoa para proprietário
-        self.pessoa = Pessoas.objects.create(
-            nome='Proprietário Teste',
-            cpf='12345678901'
+        # Criar tipos de lançamento
+        self.tipo_registro = LancamentoTipo.objects.create(
+            tipo='registro',
+            descricao='Registro'
         )
-
+        
         # Criar imóveis
         self.imovel_origem = Imovel.objects.create(
             nome='Imóvel Origem',
             matricula='12345',
-            terra_indigena_id=self.tis,
-            proprietario=self.pessoa,
+            terra_indigena=self.tis,
             cartorio=self.cartorio
         )
-
+        
         self.imovel_destino = Imovel.objects.create(
             nome='Imóvel Destino',
             matricula='67890',
-            terra_indigena_id=self.tis,
-            proprietario=self.pessoa,
+            terra_indigena=self.tis,
             cartorio=self.cartorio
         )
         
@@ -82,17 +76,15 @@ class Fase2DuplicataIntegracaoTest(TestCase):
             tipo=self.tipo_matricula,
             imovel=self.imovel_origem,
             cartorio=self.cartorio,
-            data='2023-01-01',
             livro='1',
             folha='1'
         )
-
+        
         self.documento_destino = Documento.objects.create(
             numero='67890',
             tipo=self.tipo_matricula,
             imovel=self.imovel_destino,
             cartorio=self.cartorio,
-            data='2023-01-02',
             livro='2',
             folha='2'
         )
@@ -114,11 +106,11 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         """Testar verificação quando não há duplicata"""
         from django.test import RequestFactory
         from django.contrib.messages.storage.fallback import FallbackStorage
-
+        
         factory = RequestFactory()
         request = factory.post('/fake-url/', {
-            'origem_completa[]': ['Origem diferente'],
-            'cartorio_origem[]': [str(self.cartorio.id)]
+            'origem_completa': 'Origem diferente',
+            'cartorio': str(self.cartorio.id)
         })
         
         # Configurar messages
@@ -137,11 +129,11 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         """Testar verificação quando há duplicata"""
         from django.test import RequestFactory
         from django.contrib.messages.storage.fallback import FallbackStorage
-
+        
         factory = RequestFactory()
         request = factory.post('/fake-url/', {
-            'origem_completa[]': [str(self.documento_origem.numero)],
-            'cartorio_origem[]': [str(self.cartorio.id)]
+            'origem_completa': str(self.documento_origem.numero),
+            'cartorio': str(self.cartorio.id)
         })
         
         # Configurar messages
@@ -161,11 +153,10 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         """Testar verificação sem origem fornecida"""
         from django.test import RequestFactory
         from django.contrib.messages.storage.fallback import FallbackStorage
-
+        
         factory = RequestFactory()
         request = factory.post('/fake-url/', {
-            'origem_completa[]': [],
-            'cartorio_origem[]': [str(self.cartorio.id)]
+            'cartorio': str(self.cartorio.id)
         })
         
         # Configurar messages
@@ -176,20 +167,19 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
             request, self.documento_destino
         )
-
-        # Quando origem vazia, service pula e retorna nenhuma duplicata
+        
         self.assertFalse(resultado['tem_duplicata'])
-        self.assertIn('Nenhuma duplicata encontrada', resultado['mensagem'])
+        self.assertIn('Origem ou cartório não fornecidos', resultado['mensagem'])
     
     def test_verificar_duplicata_cartorio_inexistente(self):
         """Testar verificação com cartório inexistente"""
         from django.test import RequestFactory
         from django.contrib.messages.storage.fallback import FallbackStorage
-
+        
         factory = RequestFactory()
         request = factory.post('/fake-url/', {
-            'origem_completa[]': ['Origem teste'],
-            'cartorio_origem[]': ['99999']  # ID inexistente
+            'origem_completa': 'Origem teste',
+            'cartorio': '99999'  # ID inexistente
         })
         
         # Configurar messages
@@ -200,10 +190,9 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
             request, self.documento_destino
         )
-
-        # Quando cartório não existe, service pula origem e retorna nenhuma duplicata
+        
         self.assertFalse(resultado['tem_duplicata'])
-        self.assertIn('Nenhuma duplicata encontrada', resultado['mensagem'])
+        self.assertIn('Cartório não encontrado', resultado['mensagem'])
     
     def test_obter_dados_duplicata_para_template(self):
         """Testar formatação de dados para template"""
@@ -308,7 +297,6 @@ class Fase2DuplicataIntegracaoTest(TestCase):
         self.assertFalse(resultado['sucesso'])
         self.assertIn('Documento de origem não encontrado', resultado['mensagem'])
     
-    @pytest.mark.skip(reason="Skipped due to lxml dependency issue causing ImportError in view imports - system dependency problem")
     def test_url_verificar_duplicata_ajax(self):
         """Testar URL de verificação AJAX"""
         url = reverse('verificar_duplicata_ajax', kwargs={
@@ -316,17 +304,16 @@ class Fase2DuplicataIntegracaoTest(TestCase):
             'imovel_id': self.imovel_destino.id,
             'documento_id': self.documento_destino.id
         })
-
+        
         response = self.client.post(url, {
             'origem_completa': str(self.documento_origem.numero),
             'cartorio': str(self.cartorio.id)
         })
-
+        
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['tem_duplicata'])
     
-    @pytest.mark.skip(reason="Skipped due to lxml dependency issue causing ImportError in view imports - system dependency problem")
     def test_url_importar_duplicata(self):
         """Testar URL de importação de duplicata"""
         url = reverse('importar_duplicata', kwargs={
@@ -334,16 +321,15 @@ class Fase2DuplicataIntegracaoTest(TestCase):
             'imovel_id': self.imovel_destino.id,
             'documento_id': self.documento_destino.id
         })
-
+        
         response = self.client.post(url, {
             'documento_origem_id': str(self.documento_origem.id),
             'documentos_importaveis[]': [str(self.documento_origem.id)]
         })
-
+        
         # Deve redirecionar após importação
         self.assertIn(response.status_code, [200, 302])
     
-    @pytest.mark.skip(reason="Skipped due to lxml dependency issue causing ImportError in view imports - system dependency problem")
     def test_url_cancelar_importacao(self):
         """Testar URL de cancelamento de importação"""
         url = reverse('cancelar_importacao_duplicata', kwargs={
@@ -351,8 +337,8 @@ class Fase2DuplicataIntegracaoTest(TestCase):
             'imovel_id': self.imovel_destino.id,
             'documento_id': self.documento_destino.id
         })
-
+        
         response = self.client.get(url)
-
+        
         # Deve redirecionar após cancelamento
         self.assertEqual(response.status_code, 302) 

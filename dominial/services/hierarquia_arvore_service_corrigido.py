@@ -1,20 +1,24 @@
 """
-Service final corrigido para construção da árvore de hierarquia
+Service corrigido para construção da árvore de hierarquia
 Implementa a lógica correta: filho -> pai (esquerda -> direita)
-Resolve todos os problemas identificados nos testes
+CORREÇÃO: Extração robusta de origens e busca apenas no cartório de origem
 """
 
 from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
 import re
+import logging
 from collections import deque
+
+logger = logging.getLogger(__name__)
 
 
 class HierarquiaArvoreService:
     """
     Service final para construir e gerenciar a árvore de hierarquia da cadeia dominial
     Lógica: filho -> pai (esquerda -> direita)
+    CORREÇÃO: Extração robusta de origens e busca restrita ao cartório de origem
     """
     
     @staticmethod
@@ -76,7 +80,16 @@ class HierarquiaArvoreService:
             return documento_principal
         
         # Se não encontrar, usar o primeiro documento do imóvel
-        documento_principal = Documento.objects.filter(imovel=imovel).first()
+        # Priorizar matrículas para documentos que começam com M
+        if imovel.matricula.startswith('M'):
+            documento_principal = Documento.objects.filter(
+                imovel=imovel,
+                tipo__tipo='matricula'
+            ).first()
+            if not documento_principal:
+                documento_principal = Documento.objects.filter(imovel=imovel).first()
+        else:
+            documento_principal = Documento.objects.filter(imovel=imovel).first()
         
         return documento_principal
     
@@ -113,7 +126,7 @@ class HierarquiaArvoreService:
             
             # Criar nó do documento
             doc_node = HierarquiaArvoreService._criar_no_documento(
-                documento_atual, imovel, nivel
+                documento_atual, imovel, nivel, lancamento_origem=None
             )
             documentos_por_numero[documento_atual.numero] = doc_node
             arvore['documentos'].append(doc_node)
@@ -150,7 +163,7 @@ class HierarquiaArvoreService:
     def _buscar_documentos_pais(documento, imovel, criar_documentos_automaticos):
         """
         Busca documentos pais (origens) de um documento
-        CORREÇÃO: Para o documento do imóvel atual, buscar apenas origens diretas
+        CORREÇÃO: Extração robusta de origens e busca apenas no cartório de origem
         """
         documentos_pais = []
         documentos_processados = set()
@@ -166,8 +179,10 @@ class HierarquiaArvoreService:
         ).exclude(origem='')
         
         for lancamento in lancamentos:
-            # Extrair origens do lançamento
-            origens = re.findall(r'[MT]\d+', lancamento.origem)
+            # CORREÇÃO: Extrair origens com método robusto
+            origens = HierarquiaArvoreService._extrair_origens_robusto(lancamento.origem)
+            
+            logger.info(f"📝 Lançamento {lancamento.id}: '{lancamento.origem}' -> origens extraídas: {origens}")
             
             # CORREÇÃO: Para documento principal, buscar apenas origens diretas
             if is_documento_principal:
@@ -179,12 +194,23 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # CORREÇÃO: Buscar APENAS no cartório de origem especificado
+                    doc_pai = None
                     
-                    if doc_pai:
-                        # Adicionar como origem direta do documento principal
-                        documentos_pais.append(doc_pai)
+                    if lancamento.cartorio_origem:
+                        # Buscar no cartório de origem especificado
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                        
+                        if doc_pai:
+                            logger.info(f"✅ Documento {origem_numero} encontrado no cartório de origem {lancamento.cartorio_origem.nome}")
+                            documentos_pais.append(doc_pai)
+                        else:
+                            logger.warning(f"❌ Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}")
+                    else:
+                        logger.warning(f"❌ Cartório de origem não especificado para {origem_numero}")
             else:
                 # Para outros documentos, usar lógica normal
                 for origem_numero in origens:
@@ -193,65 +219,76 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # CORREÇÃO: Buscar APENAS no cartório de origem especificado
+                    doc_pai = None
                     
-                    if doc_pai:
-                        documentos_pais.append(doc_pai)
-                    elif criar_documentos_automaticos:
-                        # Criar documento automaticamente se solicitado
-                        doc_pai = HierarquiaArvoreService._criar_documento_automatico(
-                            origem_numero, imovel
-                        )
+                    if lancamento.cartorio_origem:
+                        # Buscar no cartório de origem especificado
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                        
                         if doc_pai:
+                            logger.info(f"✅ Documento {origem_numero} encontrado no cartório de origem {lancamento.cartorio_origem.nome}")
                             documentos_pais.append(doc_pai)
+                        else:
+                            logger.warning(f"❌ Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}")
+                    else:
+                        logger.warning(f"❌ Cartório de origem não especificado para {origem_numero}")
         
         return documentos_pais
     
     @staticmethod
-    def _criar_documento_automatico(numero_documento, imovel):
+    def _extrair_origens_robusto(origem_texto):
         """
-        Cria um documento automaticamente para uma origem identificada
+        Extrai origens com múltiplos padrões para capturar mais casos
+        CORREÇÃO: Resolve o problema T1004 -> T2822
         """
-        try:
-            # Determinar tipo do documento
-            from ..models import DocumentoTipo
-            if numero_documento.startswith('M'):
-                tipo_documento = DocumentoTipo.objects.get(tipo='matricula')
-            elif numero_documento.startswith('T'):
-                tipo_documento = DocumentoTipo.objects.get(tipo='transcricao')
-            else:
-                return None
-            
-            # Buscar cartório padrão (pode ser melhorado)
-            from ..models import Cartorios
-            cartorio = Cartorios.objects.first()  # Simplificado
-            
-            if not cartorio:
-                return None
-            
-            # Criar documento
-            from datetime import date
-            documento = Documento.objects.create(
-                numero=numero_documento,
-                imovel=imovel,
-                cartorio=cartorio,
-                tipo=tipo_documento,
-                data=date.today(),  # Data padrão
-                livro='',  # Campo obrigatório
-                folha='',  # Campo obrigatório
-                origem='',  # Será preenchido quando houver lançamentos
-                observacoes='Documento criado automaticamente para origem identificada'
-            )
-            
-            return documento
-            
-        except Exception as e:
-            print(f"Erro ao criar documento automático {numero_documento}: {e}")
-            return None
+        if not origem_texto:
+            return []
+        
+        origens = []
+        
+        # Padrão 1: M/T seguido de números (padrão atual)
+        padrao1 = re.findall(r'[MT]\d+', origem_texto)
+        origens.extend(padrao1)
+        
+        # Padrão 2: M/T com separadores (espaços, hífens, pontos)
+        padrao2 = re.findall(r'[MT]\s*[-.]?\s*\d+', origem_texto)
+        for match in padrao2:
+            # Limpar e normalizar
+            limpo = re.sub(r'\s*[-.]?\s*', '', match)
+            if limpo not in origens:
+                origens.append(limpo)
+        
+        # Padrão 3: Números simples (assumir como matrícula se >= 3 dígitos)
+        padrao3 = re.findall(r'\b\d{3,}\b', origem_texto)
+        for num in padrao3:
+            # Verificar se não está já capturado em outros padrões
+            if not any(f'M{num}' in origem_texto or f'T{num}' in origem_texto for _ in [1]):
+                # Assumir como matrícula por padrão
+                if f'M{num}' not in origens:
+                    origens.append(f'M{num}')
+        
+        # Padrão 4: Busca por texto livre
+        # Procurar por "transcrição" + número
+        padrao4 = re.findall(r'transcri[çc][ãa]o\s*(\d+)', origem_texto, re.IGNORECASE)
+        for num in padrao4:
+            if f'T{num}' not in origens:
+                origens.append(f'T{num}')
+        
+        # Procurar por "matrícula" + número
+        padrao5 = re.findall(r'matr[íi]cula\s*(\d+)', origem_texto, re.IGNORECASE)
+        for num in padrao5:
+            if f'M{num}' not in origens:
+                origens.append(f'M{num}')
+        
+        # Remover duplicatas e retornar
+        return list(set(origens))
     
     @staticmethod
-    def _criar_no_documento(documento, imovel_atual, nivel):
+    def _criar_no_documento(documento, imovel_atual, nivel, lancamento_origem=None):
         """
         Cria um nó de documento para a árvore
         """
@@ -259,7 +296,13 @@ class HierarquiaArvoreService:
         is_documento_atual = documento.imovel.id == imovel_atual.id
         
         # Verificar se é compartilhado
+        # NOTA: Considerar cartório de origem se disponível
         is_compartilhado = not is_documento_atual
+        
+        # Se o documento foi marcado como "cartório diferente", não marcar como compartilhado
+        # para evitar borda tracejada verde incorreta
+        if hasattr(documento, '_cartorio_diferente') and documento._cartorio_diferente:
+            is_compartilhado = False
         
         # Verificar se é o documento principal do imóvel atual
         # Pode ser igual à matrícula ou conter a matrícula (ex: M6700 para matrícula 6700)
@@ -267,12 +310,19 @@ class HierarquiaArvoreService:
                                  (documento.numero == imovel_atual.matricula or 
                                   documento.numero.endswith(imovel_atual.matricula)))
         
+        # Corrigir tipo_documento baseado no número do documento
+        tipo_correto = documento.tipo.tipo
+        if documento.numero.startswith('T') and documento.tipo.tipo == 'matricula':
+            tipo_correto = 'transcricao'
+        elif documento.numero.startswith('M') and documento.tipo.tipo == 'transcricao':
+            tipo_correto = 'matricula'
+        
         return {
             'id': documento.id,
             'numero': documento.numero,
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
-            'tipo_documento': documento.tipo.tipo,
+            'tipo_documento': tipo_correto,
             'data': documento.data.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,

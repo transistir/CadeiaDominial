@@ -75,21 +75,16 @@ class LancamentoDuplicataService:
                 cartorio_id=cartorio_origem.id,
                 imovel_atual_id=documento_ativo.imovel.id
             )
-
-            if duplicata_info.get('existe', False):
+            
+            if duplicata_info['tem_duplicata']:
                 print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
-                # Reconstruct documento_origem from número and cartório
-                documento_origem = Documento.objects.get(
-                    numero=duplicata_info['documento']['numero'],
-                    cartorio_id=cartorio_origem.id
-                )
                 return {
                     'tem_duplicata': True,
                     'duplicata_info': duplicata_info,
-                    'mensagem': f"Encontrada duplicata: {duplicata_info['documento']['numero']}",
-                    'documento_origem': documento_origem,
-                    'documentos_importaveis': duplicata_info.get('documentos_importaveis', []),
-                    'cadeia_dominial': duplicata_info.get('cadeia_dominial', {}).get('documentos', [])
+                    'mensagem': f"Encontrada duplicata: {duplicata_info['documento_origem'].numero} - {duplicata_info['documento_origem'].imovel.nome}",
+                    'documento_origem': duplicata_info['documento_origem'],
+                    'documentos_importaveis': duplicata_info['documentos_importaveis'],
+                    'cadeia_dominial': duplicata_info['cadeia_dominial']
                 }
         
         # Se chegou até aqui, não há duplicatas
@@ -248,7 +243,7 @@ class LancamentoDuplicataService:
                     {
                         'numero': lanc.numero_lancamento,
                         'tipo': lanc.tipo.get_tipo_display(),
-                        'data': lanc.data.strftime('%d/%m/%Y') if lanc.data and hasattr(lanc.data, 'strftime') else (str(lanc.data) if lanc.data else 'Não informado'),
+                        'data': lanc.data.strftime('%d/%m/%Y') if lanc.data else 'Não informado',
                         'observacoes': lanc.observacoes or 'Sem observações'
                     }
                     for lanc in item['lancamentos']
