@@ -59,18 +59,11 @@ class ImportacaoCadeiaService:
                         ).exists():
                             erros.append(f"Documento {documento.numero} já foi importado")
                             continue
-
-                        # Salvar o imóvel de origem antes de alterá-lo
-                        imovel_origem_original = documento.imovel
-
-                        # Atualizar o documento para pertencer ao imóvel destino
-                        documento.imovel = imovel_destino
-                        documento.save()
-
-                        # Marcar documento como importado (guardando referência ao imóvel de origem)
+                        
+                        # Marcar documento como importado
                         documento_importado = ImportacaoCadeiaService.marcar_documento_importado(
                             documento=documento,
-                            imovel_origem=imovel_origem_original,
+                            imovel_origem=documento_origem.imovel,
                             importado_por=usuario
                         )
                         

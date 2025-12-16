@@ -8,7 +8,10 @@ from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
 import re
+import logging
 from collections import deque
+
+logger = logging.getLogger(__name__)
 
 
 class HierarquiaArvoreService:
@@ -76,7 +79,16 @@ class HierarquiaArvoreService:
             return documento_principal
         
         # Se não encontrar, usar o primeiro documento do imóvel
-        documento_principal = Documento.objects.filter(imovel=imovel).first()
+        # Priorizar matrículas para documentos que começam com M
+        if imovel.matricula.startswith('M'):
+            documento_principal = Documento.objects.filter(
+                imovel=imovel,
+                tipo__tipo='matricula'
+            ).first()
+            if not documento_principal:
+                documento_principal = Documento.objects.filter(imovel=imovel).first()
+        else:
+            documento_principal = Documento.objects.filter(imovel=imovel).first()
         
         return documento_principal
     
@@ -113,7 +125,7 @@ class HierarquiaArvoreService:
             
             # Criar nó do documento
             doc_node = HierarquiaArvoreService._criar_no_documento(
-                documento_atual, imovel, nivel
+                documento_atual, imovel, nivel, lancamento_origem=None
             )
             documentos_por_numero[documento_atual.numero] = doc_node
             arvore['documentos'].append(doc_node)
@@ -166,8 +178,8 @@ class HierarquiaArvoreService:
         ).exclude(origem='')
         
         for lancamento in lancamentos:
-            # Extrair origens do lançamento
-            origens = re.findall(r'[MT]\d+', lancamento.origem)
+            # Extrair origens do lançamento com método robusto
+            origens = HierarquiaArvoreService._extrair_origens_robusto(lancamento.origem)
             
             # CORREÇÃO: Para documento principal, buscar apenas origens diretas
             if is_documento_principal:
@@ -180,7 +192,56 @@ class HierarquiaArvoreService:
                     documentos_processados.add(origem_numero)
                     
                     # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # REGRA: Se não existe no cartório de origem, criar novo documento
+                    doc_pai = None
+                    
+                    if lancamento.cartorio_origem:
+                        # CORREÇÃO: Buscar primeiro no cartório de origem especificado
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                        
+                        # Se não encontrou no cartório de origem, buscar em qualquer cartório
+                        # para preservar documentos já existentes
+                        if not doc_pai:
+                            logger.warning(f"Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}. Buscando em outros cartórios...")
+                            
+                            # Buscar todos os documentos com este número
+                            todos_docs = Documento.objects.filter(numero=origem_numero)
+                            
+                            if todos_docs.exists():
+                                # PRIORIZAR: Documentos com lançamentos sobre documentos vazios
+                                docs_com_lancamentos = [doc for doc in todos_docs if doc.lancamentos.count() > 0]
+                                
+                                if docs_com_lancamentos:
+                                    # Se há documentos com lançamentos, usar o primeiro
+                                    doc_pai = docs_com_lancamentos[0]
+                                    logger.warning(f"Documento {origem_numero} encontrado com lançamentos no cartório {doc_pai.cartorio.nome} (priorizado sobre documentos vazios)")
+                                else:
+                                    # Se não há documentos com lançamentos, usar qualquer um
+                                    doc_pai = todos_docs.first()
+                                    logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (nenhum com lançamentos)")
+                            else:
+                                doc_pai = None
+                        
+                        # Só criar automaticamente se REALMENTE não existir em lugar nenhum
+                        if not doc_pai:
+                            logger.warning(f"Documento {origem_numero} não encontrado em nenhum cartório - não criando automaticamente para evitar duplicatas")
+                            # Não criar documento automático - apenas pular
+                            continue
+                    else:
+                        # Se não tem cartório de origem, buscar qualquer documento
+                        # Priorizar transcrições para documentos que começam com T
+                        if origem_numero.startswith('T'):
+                            doc_pai = Documento.objects.filter(
+                                numero=origem_numero,
+                                tipo__tipo='transcricao'
+                            ).first()
+                            if not doc_pai:
+                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                        else:
+                            doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
@@ -194,22 +255,67 @@ class HierarquiaArvoreService:
                     documentos_processados.add(origem_numero)
                     
                     # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # REGRA: Se não existe no cartório de origem, criar novo documento
+                    doc_pai = None
+                    
+                    if lancamento.cartorio_origem:
+                        # CORREÇÃO: Buscar primeiro no cartório de origem especificado
+                        doc_pai = Documento.objects.filter(
+                            numero=origem_numero,
+                            cartorio=lancamento.cartorio_origem
+                        ).first()
+                        
+                        # Se não encontrou no cartório de origem, buscar em qualquer cartório
+                        # para preservar documentos já existentes
+                        if not doc_pai:
+                            logger.warning(f"Documento {origem_numero} não encontrado no cartório de origem {lancamento.cartorio_origem.nome}. Buscando em outros cartórios...")
+                            
+                            # Buscar todos os documentos com este número
+                            todos_docs = Documento.objects.filter(numero=origem_numero)
+                            
+                            if todos_docs.exists():
+                                # PRIORIZAR: Documentos com lançamentos sobre documentos vazios
+                                docs_com_lancamentos = [doc for doc in todos_docs if doc.lancamentos.count() > 0]
+                                
+                                if docs_com_lancamentos:
+                                    # Se há documentos com lançamentos, usar o primeiro
+                                    doc_pai = docs_com_lancamentos[0]
+                                    logger.warning(f"Documento {origem_numero} encontrado com lançamentos no cartório {doc_pai.cartorio.nome} (priorizado sobre documentos vazios)")
+                                else:
+                                    # Se não há documentos com lançamentos, usar qualquer um
+                                    doc_pai = todos_docs.first()
+                                    logger.warning(f"Documento {origem_numero} encontrado no cartório {doc_pai.cartorio.nome} (nenhum com lançamentos)")
+                            else:
+                                doc_pai = None
+                        
+                        # Só criar automaticamente se REALMENTE não existir em lugar nenhum
+                        if not doc_pai:
+                            logger.warning(f"Documento {origem_numero} não encontrado em nenhum cartório - não criando automaticamente para evitar duplicatas")
+                            # Não criar documento automático - apenas pular
+                            continue
+                    else:
+                        # Se não tem cartório de origem, buscar qualquer documento
+                        # Priorizar transcrições para documentos que começam com T
+                        if origem_numero.startswith('T'):
+                            doc_pai = Documento.objects.filter(
+                                numero=origem_numero,
+                                tipo__tipo='transcricao'
+                            ).first()
+                            if not doc_pai:
+                                doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                        else:
+                            doc_pai = Documento.objects.filter(numero=origem_numero).first()
                     
                     if doc_pai:
                         documentos_pais.append(doc_pai)
-                    elif criar_documentos_automaticos:
-                        # Criar documento automaticamente se solicitado
-                        doc_pai = HierarquiaArvoreService._criar_documento_automatico(
-                            origem_numero, imovel
-                        )
-                        if doc_pai:
-                            documentos_pais.append(doc_pai)
+                    else:
+                        # CORREÇÃO: NÃO criar documentos automaticamente para evitar duplicatas
+                        logger.warning(f"Documento {origem_numero} não encontrado - não criando automaticamente para evitar duplicatas")
         
         return documentos_pais
     
     @staticmethod
-    def _criar_documento_automatico(numero_documento, imovel):
+    def _criar_documento_automatico(numero_documento, cartorio, imovel):
         """
         Cria um documento automaticamente para uma origem identificada
         """
@@ -222,10 +328,6 @@ class HierarquiaArvoreService:
                 tipo_documento = DocumentoTipo.objects.get(tipo='transcricao')
             else:
                 return None
-            
-            # Buscar cartório padrão (pode ser melhorado)
-            from ..models import Cartorios
-            cartorio = Cartorios.objects.first()  # Simplificado
             
             if not cartorio:
                 return None
@@ -247,11 +349,11 @@ class HierarquiaArvoreService:
             return documento
             
         except Exception as e:
-            print(f"Erro ao criar documento automático {numero_documento}: {e}")
+            logger.error(f"Erro ao criar documento automático {numero_documento}: {e}")
             return None
     
     @staticmethod
-    def _criar_no_documento(documento, imovel_atual, nivel):
+    def _criar_no_documento(documento, imovel_atual, nivel, lancamento_origem=None):
         """
         Cria um nó de documento para a árvore
         """
@@ -259,7 +361,13 @@ class HierarquiaArvoreService:
         is_documento_atual = documento.imovel.id == imovel_atual.id
         
         # Verificar se é compartilhado
+        # NOTA: Considerar cartório de origem se disponível
         is_compartilhado = not is_documento_atual
+        
+        # Se o documento foi marcado como "cartório diferente", não marcar como compartilhado
+        # para evitar borda tracejada verde incorreta
+        if hasattr(documento, '_cartorio_diferente') and documento._cartorio_diferente:
+            is_compartilhado = False
         
         # Verificar se é o documento principal do imóvel atual
         # Pode ser igual à matrícula ou conter a matrícula (ex: M6700 para matrícula 6700)
@@ -267,12 +375,19 @@ class HierarquiaArvoreService:
                                  (documento.numero == imovel_atual.matricula or 
                                   documento.numero.endswith(imovel_atual.matricula)))
         
+        # Corrigir tipo_documento baseado no número do documento
+        tipo_correto = documento.tipo.tipo
+        if documento.numero.startswith('T') and documento.tipo.tipo == 'matricula':
+            tipo_correto = 'transcricao'
+        elif documento.numero.startswith('M') and documento.tipo.tipo == 'transcricao':
+            tipo_correto = 'matricula'
+        
         return {
             'id': documento.id,
             'numero': documento.numero,
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
-            'tipo_documento': documento.tipo.tipo,
+            'tipo_documento': tipo_correto,
             'data': documento.data.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,
@@ -350,3 +465,91 @@ class HierarquiaArvoreService:
             for doc_node in arvore['documentos']:
                 if doc_node.get('is_fim_cadeia'):
                     doc_node['nivel'] = nivel_fim_cadeia
+    
+    @staticmethod
+    def _criar_documento_automatico_para_origem(numero_documento, cartorio_origem, imovel_atual):
+        """
+        Cria um documento automaticamente para uma origem que não existe no cartório especificado
+        """
+        from ..models import Documento, DocumentoTipo
+        from django.utils import timezone
+        
+        # Verificar se já existe documento com este número e cartório
+        documento_existente = Documento.objects.filter(
+            numero=numero_documento,
+            cartorio=cartorio_origem
+        ).first()
+        
+        if documento_existente:
+            return documento_existente
+        
+        # Determinar tipo do documento
+        tipo_documento = DocumentoTipo.objects.filter(tipo='matricula').first()
+        if not tipo_documento:
+            return None
+        
+        # Criar novo documento
+        try:
+            novo_documento = Documento.objects.create(
+                numero=numero_documento,
+                cartorio=cartorio_origem,
+                tipo=tipo_documento,
+                imovel=imovel_atual,  # Temporariamente associado ao imóvel atual
+                data=timezone.now().date(),
+                observacoes=f'Documento criado automaticamente para origem {numero_documento} do cartório {cartorio_origem.nome}'
+            )
+            
+            logger.info(f"Documento criado automaticamente: {numero_documento} - {cartorio_origem.nome}")
+            return novo_documento
+            
+        except Exception as e:
+            logger.error(f"Erro ao criar documento {numero_documento}: {e}")
+            return None
+    
+    @staticmethod
+    def _extrair_origens_robusto(origem_texto):
+        """
+        Extrai origens com múltiplos padrões para capturar mais casos
+        Resolve o problema T1004 -> T2822
+        """
+        if not origem_texto:
+            return []
+        
+        origens = []
+        
+        # Padrão 1: M/T seguido de números (padrão atual)
+        padrao1 = re.findall(r'[MT]\d+', origem_texto)
+        origens.extend(padrao1)
+        
+        # Padrão 2: M/T com separadores (espaços, hífens, pontos)
+        padrao2 = re.findall(r'[MT]\s*[-.]?\s*\d+', origem_texto)
+        for match in padrao2:
+            # Limpar e normalizar
+            limpo = re.sub(r'\s*[-.]?\s*', '', match)
+            if limpo not in origens:
+                origens.append(limpo)
+        
+        # Padrão 3: Números simples (assumir como matrícula se >= 3 dígitos)
+        padrao3 = re.findall(r'\b\d{3,}\b', origem_texto)
+        for num in padrao3:
+            # Verificar se não está já capturado em outros padrões
+            if not any(f'M{num}' in origem_texto or f'T{num}' in origem_texto for _ in [1]):
+                # Assumir como matrícula por padrão
+                if f'M{num}' not in origens:
+                    origens.append(f'M{num}')
+        
+        # Padrão 4: Busca por texto livre
+        # Procurar por "transcrição" + número
+        padrao4 = re.findall(r'transcri[çc][ãa]o\s*(\d+)', origem_texto, re.IGNORECASE)
+        for num in padrao4:
+            if f'T{num}' not in origens:
+                origens.append(f'T{num}')
+        
+        # Procurar por "matrícula" + número
+        padrao5 = re.findall(r'matr[íi]cula\s*(\d+)', origem_texto, re.IGNORECASE)
+        for num in padrao5:
+            if f'M{num}' not in origens:
+                origens.append(f'M{num}')
+        
+        # Remover duplicatas e retornar
+        return list(set(origens))
