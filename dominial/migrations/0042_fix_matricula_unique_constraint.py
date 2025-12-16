@@ -33,8 +33,9 @@ def verificar_duplicatas(apps, schema_editor):
             if cartorio_id:
                 try:
                     Cartorio = apps.get_model('dominial', 'Cartorios')
-                    cartorio = Cartorio.objects.get(id=cartorio_id)
-                    cartorio_nome = cartorio.nome
+                    cartorio = Cartorio.objects.filter(id=cartorio_id).first()
+                    if cartorio:
+                        cartorio_nome = cartorio.nome
                 except:
                     pass
             problemas.append(f"Matrícula '{matricula}' no cartório '{cartorio_nome}' ({cartorio_id}): {count} ocorrências")

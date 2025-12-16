@@ -30,8 +30,11 @@ class Command(BaseCommand):
                 matricula = dup['matricula']
                 cartorio_id = dup['cartorio']
                 count = dup['count']
-                cartorio_nome = "Sem cartório" if not cartorio_id else \
-                    Imovel.objects.filter(cartorio_id=cartorio_id).first().cartorio.nome if cartorio_id else "Sem cartório"
+                cartorio_nome = "Sem cartório"
+                if cartorio_id:
+                    imovel = Imovel.objects.filter(cartorio_id=cartorio_id).first()
+                    if imovel and imovel.cartorio:
+                        cartorio_nome = imovel.cartorio.nome
                 self.stdout.write(f"   Matrícula: {matricula}, Cartório: {cartorio_nome} ({cartorio_id}), Ocorrências: {count}")
             self.stdout.write("\n⚠️  A migração pode falhar se houver duplicatas no mesmo cartório!")
             self.stdout.write("   Execute uma limpeza antes de aplicar a migração.")
