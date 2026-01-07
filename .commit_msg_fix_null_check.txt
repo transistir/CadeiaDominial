@@ -1,0 +1,8 @@
+fix: Adiciona verificação de null em verificação de duplicatas
+
+- Corrige possível AttributeError ao acessar cartorio.nome quando query retorna None
+- Usa filter().first() ao invés de get() para evitar exceções
+- Adiciona verificação de null antes de acessar atributos
+
+Fixes: AttributeError quando não há imóvel ou cartório encontrado
+

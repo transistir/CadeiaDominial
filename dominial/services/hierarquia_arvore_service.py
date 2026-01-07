@@ -147,6 +147,94 @@ class HierarquiaArvoreService:
         return arvore
     
     @staticmethod
+    def _extrair_origens_robusto(origem_texto):
+        """
+        Versão melhorada da extração de origens
+        """
+        if not origem_texto:
+            return []
+        
+        origens = []
+        
+        # Padrão 1: M/T seguido de números (padrão atual)
+        padrao1 = re.findall(r'[MT]\d+', origem_texto)
+        origens.extend(padrao1)
+        
+        # Padrão 2: M/T com separadores (espaços, hífens, pontos)
+        padrao2 = re.findall(r'[MT]\s*[-.]?\s*\d+', origem_texto)
+        for match in padrao2:
+            # Limpar e normalizar
+            limpo = re.sub(r'\s*[-.]?\s*', '', match)
+            if limpo not in origens:
+                origens.append(limpo)
+        
+        # Padrão 3: Números simples (assumir como matrícula se >= 3 dígitos)
+        padrao3 = re.findall(r'\\b\\d{3,}\\b', origem_texto)
+        for num in padrao3:
+            # Verificar se não está já capturado em outros padrões
+            if not any(f'M{num}' in origem_texto or f'T{num}' in origem_texto for _ in [1]):
+                # Assumir como matrícula por padrão
+                if f'M{num}' not in origens:
+                    origens.append(f'M{num}')
+        
+        # Padrão 4: Busca por texto livre
+        # Procurar por "transcrição" + número
+        padrao4 = re.findall(r'transcri[çc][ãa]o\s*(\d+)', origem_texto, re.IGNORECASE)
+        for num in padrao4:
+            if f'T{num}' not in origens:
+                origens.append(f'T{num}')
+        
+        # Procurar por "matrícula" + número
+        padrao5 = re.findall(r'matr[íi]cula\s*(\d+)', origem_texto, re.IGNORECASE)
+        for num in padrao5:
+            if f'M{num}' not in origens:
+                origens.append(f'M{num}')
+        
+        # Remover duplicatas e retornar
+        return list(set(origens))
+
+    @staticmethod
+    def _buscar_documento_origem_robusto(origem_numero, cartorio_origem=None):
+        """
+        Busca documento de origem APENAS no cartório de origem especificado
+        """
+        # REGRA: Buscar APENAS no cartório de origem especificado
+        if cartorio_origem:
+            # Estratégia 1: Buscar exatamente como especificado
+            doc = Documento.objects.filter(
+                numero=origem_numero,
+                cartorio=cartorio_origem
+            ).first()
+            
+            if doc:
+                return doc
+            
+            # Estratégia 2: Buscar por variações do número no MESMO cartório
+            numero_limpo = re.sub(r'^[MT]', '', origem_numero)
+            if numero_limpo.isdigit():
+                # Buscar com prefixo M no mesmo cartório
+                doc_m = Documento.objects.filter(
+                    numero=f'M{numero_limpo}',
+                    cartorio=cartorio_origem
+                ).first()
+                if doc_m:
+                    return doc_m
+                
+                # Buscar com prefixo T no mesmo cartório
+                doc_t = Documento.objects.filter(
+                    numero=f'T{numero_limpo}',
+                    cartorio=cartorio_origem
+                ).first()
+                if doc_t:
+                    return doc_t
+            
+            return None
+        
+        # Se não tem cartório de origem especificado, buscar em qualquer lugar (comportamento fallback)
+        # Mas idealmente deveria ter cartorio_origem
+        return Documento.objects.filter(numero=origem_numero).first()
+
+    @staticmethod
     def _buscar_documentos_pais(documento, imovel, criar_documentos_automaticos):
         """
         Busca documentos pais (origens) de um documento
@@ -166,8 +254,8 @@ class HierarquiaArvoreService:
         ).exclude(origem='')
         
         for lancamento in lancamentos:
-            # Extrair origens do lançamento
-            origens = re.findall(r'[MT]\d+', lancamento.origem)
+            # Extrair origens do lançamento com método robusto
+            origens = HierarquiaArvoreService._extrair_origens_robusto(lancamento.origem)
             
             # CORREÇÃO: Para documento principal, buscar apenas origens diretas
             if is_documento_principal:
@@ -179,8 +267,11 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # Buscar documento com este número usando método robusto
+                    doc_pai = HierarquiaArvoreService._buscar_documento_origem_robusto(
+                        origem_numero, 
+                        getattr(lancamento, 'cartorio_origem', None)
+                    )
                     
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
@@ -193,8 +284,11 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # Buscar documento com este número usando método robusto
+                    doc_pai = HierarquiaArvoreService._buscar_documento_origem_robusto(
+                        origem_numero, 
+                        getattr(lancamento, 'cartorio_origem', None)
+                    )
                     
                     if doc_pai:
                         documentos_pais.append(doc_pai)
