@@ -1,0 +1,189 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:dominial_imovel_changelist' %}">Imóveis</a>
+    &rsaquo; <a href="{% url 'admin:dominial_imovel_change' imovel.id %}">{{ imovel.matricula }}</a>
+    &rsaquo; Alterar TI
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>{{ title }}</h1>
+    
+    <div class="module">
+        <h2>Informações do Imóvel</h2>
+        <table style="width: 100%; margin-bottom: 20px;">
+            <tr>
+                <th style="text-align: left; padding: 8px; background: #f8f8f8;">Matrícula:</th>
+                <td style="padding: 8px;">{{ imovel.matricula }}</td>
+            </tr>
+            <tr>
+                <th style="text-align: left; padding: 8px; background: #f8f8f8;">Nome:</th>
+                <td style="padding: 8px;">{{ imovel.nome|default:"—" }}</td>
+            </tr>
+            <tr>
+                <th style="text-align: left; padding: 8px; background: #f8f8f8;">Proprietário:</th>
+                <td style="padding: 8px;">{{ imovel.proprietario.nome }}</td>
+            </tr>
+            <tr>
+                <th style="text-align: left; padding: 8px; background: #f8f8f8;">TI Atual:</th>
+                <td style="padding: 8px; font-weight: bold; color: #ba2121;">
+                    {{ ti_atual.nome }} ({{ ti_atual.codigo }})
+                </td>
+            </tr>
+            <tr>
+                <th style="text-align: left; padding: 8px; background: #f8f8f8;">Cartório:</th>
+                <td style="padding: 8px;">{{ imovel.cartorio|default:"—" }}</td>
+            </tr>
+        </table>
+    </div>
+
+    {% if num_documentos > 0 or num_lancamentos > 0 %}
+    <div class="module" style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+        <h2 style="color: #856404; margin-top: 0;">⚠️ Atenção: Dados Relacionados</h2>
+        <p style="margin-bottom: 10px;">
+            <strong>Este imóvel possui dados relacionados:</strong>
+        </p>
+        <ul style="margin-bottom: 10px;">
+            <li><strong>{{ num_documentos }}</strong> documento(s)</li>
+            <li><strong>{{ num_lancamentos }}</strong> lançamento(s)</li>
+        </ul>
+        <p style="margin-bottom: 0; color: #856404;">
+            <strong>Importante:</strong> A alteração da TI pode afetar:
+            <ul style="margin-top: 10px;">
+                <li>Links de navegação (URLs que incluem o ID da TI)</li>
+                <li>Relatórios e visualizações filtradas por TI</li>
+                <li>Buscas e filtros no sistema</li>
+            </ul>
+            <strong>Certifique-se de que esta é a correção necessária antes de prosseguir.</strong>
+        </p>
+        
+        {% if documentos %}
+        <details style="margin-top: 15px;">
+            <summary style="cursor: pointer; font-weight: bold; color: #856404;">Ver documentos relacionados ({{ documentos|length }})</summary>
+            <table style="width: 100%; margin-top: 10px; background: white; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f8f8f8;">
+                        <th style="padding: 8px; text-align: left;">Número</th>
+                        <th style="padding: 8px; text-align: left;">Tipo</th>
+                        <th style="padding: 8px; text-align: left;">Data</th>
+                        <th style="padding: 8px; text-align: left;">Cartório</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documentos %}
+                    <tr>
+                        <td style="padding: 8px;">{{ doc.numero }}</td>
+                        <td style="padding: 8px;">{{ doc.tipo }}</td>
+                        <td style="padding: 8px;">{{ doc.data|date:"d/m/Y" }}</td>
+                        <td style="padding: 8px;">{{ doc.cartorio.nome }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="module" style="background: #d4edda; border: 1px solid #28a745; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+        <p style="margin: 0; color: #155724;">
+            <strong>✓ Este imóvel não possui documentos ou lançamentos relacionados.</strong>
+            A alteração da TI pode ser feita com segurança.
+        </p>
+    </div>
+    {% endif %}
+
+    <form method="post" id="alterar-ti-form">
+        {% csrf_token %}
+        
+        <div class="module">
+            <h2>Selecionar Nova Terra Indígena</h2>
+            <div class="form-row" style="margin-bottom: 20px;">
+                <label for="nova_ti" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                    Nova Terra Indígena: <span style="color: red;">*</span>
+                </label>
+                <select name="nova_ti" id="nova_ti" required style="width: 100%; padding: 8px; font-size: 14px;">
+                    <option value="">--- Selecione uma TI ---</option>
+                    {% for ti in todas_tis %}
+                    <option value="{{ ti.id }}" {% if ti.id == ti_atual.id %}disabled{% endif %}>
+                        {{ ti.nome }} ({{ ti.codigo }}){% if ti.id == ti_atual.id %} - ATUAL{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-row" style="margin-bottom: 20px;">
+                <label for="motivo" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                    Motivo da Alteração (opcional):
+                </label>
+                <textarea 
+                    name="motivo" 
+                    id="motivo" 
+                    rows="3" 
+                    style="width: 100%; padding: 8px; font-size: 14px;"
+                    placeholder="Descreva o motivo da correção da TI (ex: erro de cadastro, correção de dados, etc.)"
+                ></textarea>
+                <p class="help" style="margin-top: 5px; color: #666; font-size: 12px;">
+                    Esta informação será registrada no campo de observações do imóvel para auditoria.
+                </p>
+            </div>
+        </div>
+
+        <div class="submit-row" style="margin-top: 20px; padding: 15px; background: #f8f8f8; border-radius: 4px;">
+            <input 
+                type="submit" 
+                value="Confirmar Alteração de TI" 
+                class="default" 
+                style="background: #ba2121; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;"
+                onclick="return confirm('Tem certeza que deseja alterar a TI deste imóvel? Esta ação será registrada nas observações do imóvel.');"
+            />
+            <a 
+                href="{% url 'admin:dominial_imovel_change' imovel.id %}" 
+                class="button"
+                style="padding: 10px 20px; margin-left: 10px; text-decoration: none; background: #417690; color: white; border-radius: 4px; display: inline-block;"
+            >
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .module {
+        margin-bottom: 20px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+    }
+    
+    .module h2 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-size: 16px;
+        font-weight: bold;
+    }
+    
+    table {
+        border-collapse: collapse;
+    }
+    
+    table th, table td {
+        border: 1px solid #ddd;
+    }
+    
+    .form-row {
+        margin-bottom: 15px;
+    }
+    
+    #alterar-ti-form select:required:invalid {
+        color: #999;
+    }
+</style>
+{% endblock %}

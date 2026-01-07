@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Lista de TIs{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/tis.css' %}">
+{% endblock %}
+
+{% block content %}
+<h1>Terras Indígenas Registradas</h1>
+
+<div class="usuario">
+    Olá, {{ user.get_full_name|default:user.username }}!
+</div>
+
+<div class="aviso">
+    Total de Terras Indígenas encontradas: {{ tis|length }}
+</div>
+
+<ul>
+    {% for ti in tis %}
+        <li><strong>{{ ti.nome }}</strong> — Etnia: {{ ti.etnia }}</li>
+    {% empty %}
+        <li>Nenhuma Terra Indígena encontrada.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

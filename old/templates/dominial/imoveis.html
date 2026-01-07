@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Lista de Imóveis{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/imoveis.css' %}">
+{% endblock %}
+
+{% block content %}
+<h1>Imóveis Registrados</h1>
+
+<div class="usuario">
+    Olá, {{ user.get_full_name|default:user.username }}!
+</div>
+
+<div class="aviso">
+    Total de imóveis encontrados: {{ imoveis|length }}
+</div>
+
+<ul>
+    {% for imovel in imoveis %}
+        <li><strong>{{ imovel.nome }}</strong> — matrícula: {{ imovel.matricula }}</li>
+    {% empty %}
+        <li>Nenhum imóvel encontrado.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
