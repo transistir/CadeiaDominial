@@ -36,7 +36,14 @@ export const terraIndigenaReferencia = pgTable('dominial_terraindigenareferencia
   dataDelimitada: date('data_delimitada'),
   dataEmEstudo: date('data_em_estudo'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  /**
+   * Auto-updated timestamp. Django handles this via `auto_now=True`.
+   * The `$onUpdate()` ensures Drizzle also auto-updates this field.
+   */
+  updatedAt: timestamp('updated_at')
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 
 /**

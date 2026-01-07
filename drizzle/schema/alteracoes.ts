@@ -35,19 +35,24 @@ export const registroTipo = pgTable('dominial_registrotipo', {
 /**
  * Notation type definitions
  */
-export const averbacoesTipo = pgTable('dominial_averbacaotipo', {
+export const averbacoesTipo = pgTable('dominial_averbacoestipo', {
   id: serial('id').primaryKey(),
   tipo: varchar('tipo', { length: 100 }).notNull(),
 });
 
 /**
  * Property amendments/changes
+ *
+ * Note: Fields ending in `IdId` (e.g., imovelIdId) match Django's actual column names.
+ * Django ForeignKey field `imovel_id` creates column `imovel_id_id`.
  */
 export const alteracoes = pgTable('dominial_alteracoes', {
   id: serial('id').primaryKey(),
+  /** Django field `imovel_id` → column `imovel_id_id` */
   imovelIdId: integer('imovel_id_id')
     .notNull()
     .references(() => imovel.id, { onDelete: 'cascade' }),
+  /** Django field `tipo_alteracao_id` → column `tipo_alteracao_id_id` */
   tipoAlteracaoIdId: integer('tipo_alteracao_id_id')
     .notNull()
     .references(() => alteracoesTipo.id, { onDelete: 'cascade' }),

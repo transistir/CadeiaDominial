@@ -23,11 +23,20 @@ import { cartorios } from './cartorios';
  *
  * Note: The matricula is unique per cartorio, not globally.
  * This matches the Brazilian property registration system.
+ *
+ * Django FK Naming Convention: When a Django ForeignKey field is named `foo_id`,
+ * Django appends `_id` to create the database column `foo_id_id`. This results
+ * in property names like `terraIndigenaIdId` which appear redundant but accurately
+ * reflect the actual database column names.
  */
 export const imovel = pgTable(
   'dominial_imovel',
   {
     id: serial('id').primaryKey(),
+    /**
+     * Note: The double "Id" suffix (terraIndigenaIdId) matches Django's actual
+     * column name. Django field `terra_indigena_id` → column `terra_indigena_id_id`.
+     */
     terraIndigenaIdId: integer('terra_indigena_id_id')
       .notNull()
       .references(() => tis.id, { onDelete: 'restrict' }),

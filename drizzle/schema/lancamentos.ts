@@ -167,7 +167,11 @@ export const fimCadeia = pgTable('dominial_fimcadeia', {
   descricao: text('descricao'),
   ativo: boolean('ativo').notNull().default(true),
   dataCriacao: timestamp('data_criacao').defaultNow().notNull(),
-  dataAtualizacao: timestamp('data_atualizacao').defaultNow().notNull(),
+  /** Auto-updated timestamp via $onUpdate() for Drizzle operations */
+  dataAtualizacao: timestamp('data_atualizacao')
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 
 // Type exports

@@ -26,7 +26,20 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 
-// Create PostgreSQL connection pool
+/**
+ * Create PostgreSQL connection pool
+ *
+ * ⚠️ SECURITY WARNING: The default values below are for LOCAL DEVELOPMENT ONLY.
+ * In production, ALL connection parameters MUST be provided via environment variables:
+ *   - DB_HOST: Database server hostname
+ *   - DB_PORT: Database server port
+ *   - DB_USER: Database username (never use 'postgres' superuser in production)
+ *   - DB_PASSWORD: Database password (required in production)
+ *   - DB_NAME: Database name
+ *
+ * Consider using a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
+ * for production credentials.
+ */
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: Number(process.env.DB_PORT) || 5432,
