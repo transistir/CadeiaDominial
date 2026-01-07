@@ -1,0 +1,407 @@
+# This is an auto-generated Django model module.
+# You'll have to do the following manually to clean this up:
+#   * Rearrange models' order
+#   * Make sure each model has one field with primary_key=True
+#   * Make sure each ForeignKey and OneToOneField has `on_delete` set to the desired behavior
+#   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
+# Feel free to rename the models, but don't rename db_table values or field names.
+from django.db import models
+
+
+class AuthGroup(models.Model):
+    name = models.CharField(unique=True, max_length=150)
+
+    class Meta:
+        managed = False
+        db_table = 'auth_group'
+
+
+class AuthGroupPermissions(models.Model):
+    group = models.ForeignKey(AuthGroup, models.DO_NOTHING)
+    permission = models.ForeignKey('AuthPermission', models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'auth_group_permissions'
+        unique_together = (('group', 'permission'),)
+
+
+class AuthPermission(models.Model):
+    content_type = models.ForeignKey('DjangoContentType', models.DO_NOTHING)
+    codename = models.CharField(max_length=100)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = 'auth_permission'
+        unique_together = (('content_type', 'codename'),)
+
+
+class AuthUser(models.Model):
+    password = models.CharField(max_length=128)
+    last_login = models.DateTimeField(blank=True, null=True)
+    is_superuser = models.BooleanField()
+    username = models.CharField(unique=True, max_length=150)
+    last_name = models.CharField(max_length=150)
+    email = models.CharField(max_length=254)
+    is_staff = models.BooleanField()
+    is_active = models.BooleanField()
+    date_joined = models.DateTimeField()
+    first_name = models.CharField(max_length=150)
+
+    class Meta:
+        managed = False
+        db_table = 'auth_user'
+
+
+class AuthUserGroups(models.Model):
+    user = models.ForeignKey(AuthUser, models.DO_NOTHING)
+    group = models.ForeignKey(AuthGroup, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'auth_user_groups'
+        unique_together = (('user', 'group'),)
+
+
+class AuthUserUserPermissions(models.Model):
+    user = models.ForeignKey(AuthUser, models.DO_NOTHING)
+    permission = models.ForeignKey(AuthPermission, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'auth_user_user_permissions'
+        unique_together = (('user', 'permission'),)
+
+
+class DjangoAdminLog(models.Model):
+    object_id = models.TextField(blank=True, null=True)
+    object_repr = models.CharField(max_length=200)
+    action_flag = models.PositiveSmallIntegerField()
+    change_message = models.TextField()
+    content_type = models.ForeignKey('DjangoContentType', models.DO_NOTHING, blank=True, null=True)
+    user = models.ForeignKey(AuthUser, models.DO_NOTHING)
+    action_time = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'django_admin_log'
+
+
+class DjangoContentType(models.Model):
+    app_label = models.CharField(max_length=100)
+    model = models.CharField(max_length=100)
+
+    class Meta:
+        managed = False
+        db_table = 'django_content_type'
+        unique_together = (('app_label', 'model'),)
+
+
+class DjangoMigrations(models.Model):
+    app = models.CharField(max_length=255)
+    name = models.CharField(max_length=255)
+    applied = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'django_migrations'
+
+
+class DjangoSession(models.Model):
+    session_key = models.CharField(primary_key=True, max_length=40)
+    session_data = models.TextField()
+    expire_date = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'django_session'
+
+
+class DominialAlteracoes(models.Model):
+    livro = models.CharField(max_length=50, blank=True, null=True)
+    folha = models.CharField(max_length=50, blank=True, null=True)
+    data_alteracao = models.DateField(blank=True, null=True)
+    titulo = models.CharField(max_length=255, blank=True, null=True)
+    livro_origem = models.CharField(max_length=50, blank=True, null=True)
+    folha_origem = models.CharField(max_length=50, blank=True, null=True)
+    data_origem = models.DateField(blank=True, null=True)
+    valor_transacao = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    observacoes = models.TextField(blank=True, null=True)
+    data_cadastro = models.DateField()
+    tipo_alteracao_id = models.ForeignKey('DominialAlteracoestipo', models.DO_NOTHING)
+    averbacao_tipo = models.ForeignKey('DominialAverbacoestipo', models.DO_NOTHING, blank=True, null=True)
+    cartorio = models.ForeignKey('DominialCartorios', models.DO_NOTHING)
+    cartorio_origem = models.ForeignKey('DominialCartorios', models.DO_NOTHING, related_name='dominialalteracoes_cartorio_origem_set')
+    imovel_id = models.ForeignKey('DominialImovel', models.DO_NOTHING)
+    adquirente = models.ForeignKey('DominialPessoas', models.DO_NOTHING, blank=True, null=True)
+    transmitente = models.ForeignKey('DominialPessoas', models.DO_NOTHING, related_name='dominialalteracoes_transmitente_set', blank=True, null=True)
+    registro_tipo = models.ForeignKey('DominialRegistrotipo', models.DO_NOTHING, blank=True, null=True)
+    area = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_alteracoes'
+
+
+class DominialAlteracoestipo(models.Model):
+    tipo = models.CharField(max_length=50)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_alteracoestipo'
+
+
+class DominialAverbacoestipo(models.Model):
+    tipo = models.CharField(max_length=100)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_averbacoestipo'
+
+
+class DominialCartorios(models.Model):
+    nome = models.CharField(max_length=200)
+    cns = models.CharField(unique=True, max_length=20)
+    endereco = models.CharField(max_length=200, blank=True, null=True)
+    telefone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.CharField(max_length=254, blank=True, null=True)
+    cidade = models.CharField(max_length=100, blank=True, null=True)
+    estado = models.CharField(max_length=2, blank=True, null=True)
+    tipo = models.CharField(max_length=10)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_cartorios'
+
+
+class DominialDocumento(models.Model):
+    numero = models.CharField(max_length=50)
+    data = models.DateField()
+    livro = models.CharField(max_length=50)
+    folha = models.CharField(max_length=50)
+    observacoes = models.TextField(blank=True, null=True)
+    data_cadastro = models.DateField()
+    cartorio = models.ForeignKey(DominialCartorios, models.DO_NOTHING)
+    imovel = models.ForeignKey('DominialImovel', models.DO_NOTHING)
+    tipo = models.ForeignKey('DominialDocumentotipo', models.DO_NOTHING)
+    origem = models.TextField(blank=True, null=True)
+    nivel_manual = models.IntegerField(blank=True, null=True)
+    cri_atual = models.ForeignKey(DominialCartorios, models.DO_NOTHING, related_name='dominialdocumento_cri_atual_set', blank=True, null=True)
+    cri_origem = models.ForeignKey(DominialCartorios, models.DO_NOTHING, related_name='dominialdocumento_cri_origem_set', blank=True, null=True)
+    classificacao_fim_cadeia = models.CharField(max_length=50, blank=True, null=True)
+    sigla_patrimonio_publico = models.CharField(max_length=50, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_documento'
+        unique_together = (('numero', 'cartorio'),)
+
+
+class DominialDocumentoimportado(models.Model):
+    data_importacao = models.DateTimeField()
+    documento = models.ForeignKey(DominialDocumento, models.DO_NOTHING)
+    imovel_origem = models.ForeignKey('DominialImovel', models.DO_NOTHING)
+    importado_por = models.ForeignKey(AuthUser, models.DO_NOTHING, blank=True, null=True)
+    imovel_destino = models.ForeignKey('DominialImovel', models.DO_NOTHING, related_name='dominialdocumentoimportado_imovel_destino_set', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_documentoimportado'
+        unique_together = (('documento', 'imovel_origem'),)
+
+
+class DominialDocumentotipo(models.Model):
+    tipo = models.CharField(max_length=50)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_documentotipo'
+
+
+class DominialFimcadeia(models.Model):
+    nome = models.CharField(unique=True, max_length=100)
+    tipo = models.CharField(max_length=50)
+    classificacao = models.CharField(max_length=50)
+    sigla = models.CharField(max_length=50, blank=True, null=True)
+    descricao = models.TextField(blank=True, null=True)
+    ativo = models.BooleanField()
+    data_criacao = models.DateTimeField()
+    data_atualizacao = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_fimcadeia'
+
+
+class DominialImovel(models.Model):
+    nome = models.CharField(max_length=100)
+    matricula = models.CharField(unique=True, max_length=50)
+    observacoes = models.TextField(blank=True, null=True)
+    data_cadastro = models.DateField()
+    cartorio = models.ForeignKey(DominialCartorios, models.DO_NOTHING, blank=True, null=True)
+    proprietario = models.ForeignKey('DominialPessoas', models.DO_NOTHING)
+    terra_indigena_id = models.ForeignKey('DominialTis', models.DO_NOTHING)
+    tipo_documento_principal = models.CharField(max_length=20)
+    arquivado = models.BooleanField()
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_imovel'
+
+
+class DominialImportacaocartorios(models.Model):
+    estado = models.CharField(max_length=2)
+    data_inicio = models.DateTimeField()
+    data_fim = models.DateTimeField(blank=True, null=True)
+    total_cartorios = models.IntegerField()
+    status = models.CharField(max_length=20)
+    erro = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_importacaocartorios'
+
+
+class DominialLancamento(models.Model):
+    data = models.DateField()
+    valor_transacao = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    area = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    detalhes = models.TextField(blank=True, null=True)
+    observacoes = models.TextField(blank=True, null=True)
+    data_cadastro = models.DateField()
+    adquirente = models.ForeignKey('DominialPessoas', models.DO_NOTHING, blank=True, null=True)
+    documento = models.ForeignKey(DominialDocumento, models.DO_NOTHING)
+    transmitente = models.ForeignKey('DominialPessoas', models.DO_NOTHING, related_name='dominiallancamento_transmitente_set', blank=True, null=True)
+    tipo = models.ForeignKey('DominialLancamentotipo', models.DO_NOTHING)
+    cartorio_origem = models.ForeignKey(DominialCartorios, models.DO_NOTHING, blank=True, null=True)
+    data_origem = models.DateField(blank=True, null=True)
+    descricao = models.TextField(blank=True, null=True)
+    documento_origem = models.ForeignKey(DominialDocumento, models.DO_NOTHING, related_name='dominiallancamento_documento_origem_set', blank=True, null=True)
+    eh_inicio_matricula = models.BooleanField()
+    folha_origem = models.CharField(max_length=50, blank=True, null=True)
+    forma = models.CharField(max_length=100, blank=True, null=True)
+    livro_origem = models.CharField(max_length=50, blank=True, null=True)
+    titulo = models.CharField(max_length=255, blank=True, null=True)
+    origem = models.CharField(max_length=255, blank=True, null=True)
+    numero_lancamento = models.CharField(max_length=50, blank=True, null=True)
+    cartorio_transacao = models.ForeignKey(DominialCartorios, models.DO_NOTHING, related_name='dominiallancamento_cartorio_transacao_set', blank=True, null=True)
+    data_transacao = models.DateField(blank=True, null=True)
+    folha_transacao = models.CharField(max_length=50, blank=True, null=True)
+    livro_transacao = models.CharField(max_length=50, blank=True, null=True)
+    cartorio_transmissao = models.ForeignKey(DominialCartorios, models.DO_NOTHING, related_name='dominiallancamento_cartorio_transmissao_set', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_lancamento'
+
+
+class DominialLancamentopessoa(models.Model):
+    tipo = models.CharField(max_length=20)
+    nome_digitado = models.CharField(max_length=255, blank=True, null=True)
+    lancamento = models.ForeignKey(DominialLancamento, models.DO_NOTHING)
+    pessoa = models.ForeignKey('DominialPessoas', models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_lancamentopessoa'
+        unique_together = (('lancamento', 'pessoa', 'tipo'),)
+
+
+class DominialLancamentotipo(models.Model):
+    tipo = models.CharField(max_length=50)
+    requer_detalhes = models.BooleanField()
+    requer_transmissao = models.BooleanField()
+    requer_cartorio_origem = models.BooleanField()
+    requer_data_origem = models.BooleanField()
+    requer_descricao = models.BooleanField()
+    requer_folha_origem = models.BooleanField()
+    requer_forma = models.BooleanField()
+    requer_livro_origem = models.BooleanField()
+    requer_observacao = models.BooleanField()
+    requer_titulo = models.BooleanField()
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_lancamentotipo'
+
+
+class DominialOrigemfimcadeia(models.Model):
+    indice_origem = models.IntegerField()
+    fim_cadeia = models.BooleanField()
+    tipo_fim_cadeia = models.CharField(max_length=50, blank=True, null=True)
+    especificacao_fim_cadeia = models.TextField(blank=True, null=True)
+    classificacao_fim_cadeia = models.CharField(max_length=50, blank=True, null=True)
+    lancamento = models.ForeignKey(DominialLancamento, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_origemfimcadeia'
+        unique_together = (('lancamento', 'indice_origem'),)
+
+
+class DominialPessoas(models.Model):
+    cpf = models.CharField(unique=True, max_length=11, blank=True, null=True)
+    rg = models.CharField(max_length=20, blank=True, null=True)
+    data_nascimento = models.DateField(blank=True, null=True)
+    email = models.CharField(max_length=254, blank=True, null=True)
+    telefone = models.CharField(max_length=15, blank=True, null=True)
+    nome = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_pessoas'
+
+
+class DominialRegistrotipo(models.Model):
+    tipo = models.CharField(max_length=100)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_registrotipo'
+
+
+class DominialTerraindigenareferencia(models.Model):
+    codigo = models.CharField(unique=True, max_length=50)
+    nome = models.CharField(max_length=255)
+    etnia = models.CharField(max_length=255, blank=True, null=True)
+    municipio = models.CharField(max_length=255, blank=True, null=True)
+    area_ha = models.FloatField(blank=True, null=True)
+    fase = models.CharField(max_length=100, blank=True, null=True)
+    modalidade = models.CharField(max_length=100, blank=True, null=True)
+    coordenacao_regional = models.CharField(max_length=100, blank=True, null=True)
+    data_regularizada = models.DateField(blank=True, null=True)
+    data_homologada = models.DateField(blank=True, null=True)
+    data_declarada = models.DateField(blank=True, null=True)
+    data_delimitada = models.DateField(blank=True, null=True)
+    data_em_estudo = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+    estado = models.CharField(max_length=100, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_terraindigenareferencia'
+
+
+class DominialTis(models.Model):
+    codigo = models.CharField(unique=True, max_length=50)
+    etnia = models.CharField(max_length=255)
+    data_cadastro = models.DateField()
+    terra_referencia = models.ForeignKey(DominialTerraindigenareferencia, models.DO_NOTHING, blank=True, null=True)
+    area = models.DecimalField(max_digits=10, decimal_places=5, blank=True, null=True)  # max_digits and decimal_places have been guessed, as this database handles decimal fields as float
+    estado = models.CharField(max_length=100, blank=True, null=True)
+    nome = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_tis'
+
+
+class DominialTisImovel(models.Model):
+    imovel = models.ForeignKey(DominialImovel, models.DO_NOTHING)
+    tis_codigo = models.ForeignKey(DominialTis, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'dominial_tis_imovel'
