@@ -1,0 +1,18 @@
+fix: Corrige constraint de matrícula para ser única por cartório
+
+BREAKING CHANGE: Matrícula agora é única por cartório, não globalmente.
+
+- Remove unique=True do campo matricula no modelo Imovel
+- Adiciona UniqueConstraint (matricula, cartorio) no modelo
+- Adiciona validação customizada no ImovelForm com mensagens claras
+- Adiciona migração 0042 com verificação automática de duplicatas
+- Adiciona comando verificar_matricula_constraint para validação pré-migração
+- Melhora exibição de erros no formulário de imóvel
+
+Fixes: Erro 'Imóvel with this Matricula already exists' ao cadastrar
+imóvel com matrícula existente em outro cartório.
+
+Documentação:
+- docs/ANALISE_MIGRACAO_MATRICULA.md - Análise técnica completa
+- CHECKLIST_PRODUCAO_MATRICULA.md - Checklist para deploy
+
