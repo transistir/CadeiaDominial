@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Lista de Pessoas{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/pessoas.css' %}">
+{% endblock %}
+
+{% block content %}
+<h1>Pessoas Registradas</h1>
+
+<div class="usuario">
+    Olá, {{ user.get_full_name|default:user.username }}!
+</div>
+
+<div class="aviso">
+    Total de Pessoas encontradas: {{ pessoas|length }}
+</div>
+
+<ul>
+    {% for pessoa in pessoas %}
+        <li><strong>{{ pessoa.nome }}</strong> — Telefone: {{ pessoa.telefone }}</li>
+    {% empty %}
+        <li>Nenhuma pessoa encontrada.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

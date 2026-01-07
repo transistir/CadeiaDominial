@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Selecionar Documento - Novo Lançamento{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/selecionar_documento_lancamento.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-section">
+        <h1>📋 Selecionar Documento para Novo Lançamento</h1>
+        <p class="subtitle">Escolha o documento onde deseja adicionar o novo lançamento</p>
+        
+        <div class="imovel-info">
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>TI:</strong> {{ tis.nome }}
+                </div>
+                <div class="info-item">
+                    <strong>Imóvel:</strong> {{ imovel.matricula }}
+                </div>
+                <div class="info-item">
+                    <strong>Proprietário:</strong> {{ imovel.proprietario.nome }}
+                </div>
+                <div class="info-item">
+                    <strong>Total de Documentos:</strong> {{ documentos.count }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if documentos %}
+    <div class="documentos-grid">
+        {% for documento in documentos %}
+        <div class="documento-card">
+            <div class="documento-header">
+                <div class="documento-tipo">
+                    {% if documento.tipo.tipo == 'matricula' %}📋
+                    {% elif documento.tipo.tipo == 'transcricao' %}📄
+                    {% elif documento.tipo.tipo == 'certidao' %}📜
+                    {% else %}📝{% endif %}
+                    {{ documento.get_tipo_display }}
+                </div>
+                <div class="documento-data">
+                    {{ documento.data|date:'d/m/Y' }}
+                </div>
+            </div>
+
+            <div class="documento-numero">
+                {{ documento.numero }}
+            </div>
+
+            <div class="documento-details">
+                <div class="detail-item">
+                    <strong>Cartório:</strong> {{ documento.cartorio.nome }}
+                </div>
+                <div class="detail-item">
+                    <strong>Livro:</strong> {{ documento.livro }}
+                </div>
+                <div class="detail-item">
+                    <strong>Folha:</strong> {{ documento.folha }}
+                </div>
+                {% if documento.origem %}
+                <div class="detail-item">
+                    <strong>Origem:</strong> {{ documento.origem|truncatechars:50 }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="documento-stats">
+                <div class="stat-item">
+                    <span class="stat-number">{{ documento.lancamentos.count }}</span>
+                    <span class="stat-label">Lançamentos</span>
+                </div>
+                {% if documento.lancamentos.exists %}
+                <div class="stat-item">
+                    <span class="stat-number">{{ documento.lancamentos.last.numero_lancamento }}</span>
+                    <span class="stat-label">Último #</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="documento-actions">
+                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" 
+                   class="btn btn-primary">
+                    ➕ Novo Lançamento
+                </a>
+                <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" 
+                   class="btn btn-outline">
+                    👁️ Ver Lançamentos
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h3>Nenhum documento encontrado</h3>
+        <p>Este imóvel ainda não possui documentos registrados.</p>
+        <a href="{% url 'novo_documento' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-success">
+            ➕ Criar Primeiro Documento
+        </a>
+    </div>
+    {% endif %}
+
+    <div class="actions">
+        <a href="{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}" class="btn btn-secondary">
+            ← Voltar para Cadeia Dominial
+        </a>
+        <a href="{% url 'novo_documento' tis_id=tis.id imovel_id=imovel.id %}" class="btn">
+            📄 Novo Documento
+        </a>
+    </div>
+</div>
+{% endblock %}

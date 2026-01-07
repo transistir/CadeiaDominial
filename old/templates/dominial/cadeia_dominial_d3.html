@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Árvore D3 da Cadeia Dominial - {{ imovel.nome }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_d3.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="arvore-header">
+        <h1>
+            <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 3C17.2626 2.73744 17.5744 2.52901 17.9176 2.38687C18.2608 2.24473 18.6286 2.17157 19 2.17157C19.3714 2.17157 19.7392 2.24473 20.0824 2.38687C20.4256 2.52901 20.7374 2.73744 21 3C21.2626 3.26256 21.471 3.57444 21.6131 3.9176C21.7553 4.26077 21.8284 4.62856 21.8284 5C21.8284 5.37144 21.7553 5.73923 21.6131 6.0824C21.471 6.42556 21.2626 6.73744 21 7L12 16L3 7C2.73744 6.73744 2.52901 6.42556 2.38687 6.0824C2.24473 5.73923 2.17157 5.37144 2.17157 5C2.17157 4.62856 2.24473 4.26077 2.38687 3.9176C2.52901 3.57444 2.73744 3.26256 3 3C3.26256 2.73744 3.57444 2.52901 3.9176 2.38687C4.26077 2.24473 4.62856 2.17157 5 2.17157C5.37144 2.17157 5.73923 2.24473 6.0824 2.38687C6.42556 2.52901 6.73744 2.73744 7 3L12 8L17 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Árvore da Cadeia Dominial
+        </h1>
+        <div class="imovel-info">
+            <div>
+                <strong>Imóvel:</strong>
+                {{ imovel.nome }}
+            </div>
+            <div>
+                <strong>Matrícula:</strong>
+                {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>Proprietário:</strong>
+                {{ imovel.proprietario.nome }}
+            </div>
+            {% if imovel.sncr %}
+            <div>
+                <strong>SNCR:</strong>
+                {{ imovel.sncr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="arvore-container" id="arvore-container">
+        <!-- Controles de zoom dentro do container -->
+    <div class="zoom-controls">
+            <button class="zoom-btn" onclick="zoomIn()" title="Zoom +">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+            <button class="zoom-btn" onclick="zoomOut()" title="Zoom -">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+            <button class="zoom-btn" onclick="resetZoom()" title="Reset">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        <button class="zoom-btn" onclick="window.fimDaArvore && window.fimDaArvore()" title="Fim da Árvore">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 5L19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+    </div>
+
+        <!-- Aqui será renderizada a árvore D3.js -->
+        <svg id="arvore-d3-svg" width="100%" height="600"></svg>
+    </div>
+
+    <div class="navigation-actions">
+        <a href="{% url 'selecionar_documento_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="nav-btn nav-btn-success">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Novo Lançamento
+        </a>
+        <a href="{% url 'tronco_principal' tis_id=tis.id imovel_id=imovel.id %}" class="nav-btn nav-btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Cadeia Dominial Completa
+        </a>
+
+        <a href="{% url 'tis_detail' tis_id=tis.id %}" class="nav-btn nav-btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Voltar
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+    window.tisId = {{ tis.id|safe }};
+    window.imovelId = {{ imovel.id|safe }};
+    window.imovelTipoDocumentoPrincipal = '{{ imovel.tipo_documento_principal }}';
+</script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3.js' %}"></script>
+{% endblock %} 

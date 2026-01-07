@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # Banco de dados PostgreSQL
+  db:
+    image: postgres:15
+    container_name: cadeia_dominial_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cadeia_dominial}
+      POSTGRES_USER: ${DB_USER:-cadeia_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sua_senha_segura_aqui}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    # ports:
+    #   - "5432:5432"  # REMOVIDO POR SEGURANÇA - BLOQUEIA ACESSO EXTERNO AO BANCO
+    networks:
+      - cadeia_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cadeia_user} -d ${DB_NAME:-cadeia_dominial}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Aplicação Django
+  web:
+    build: .
+    container_name: cadeia_dominial_web
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_NAME=${DB_NAME:-cadeia_dominial}
+      - DB_USER=${DB_USER:-cadeia_user}
+      - DB_PASSWORD=${DB_PASSWORD:-sua_senha_segura_aqui}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - DJANGO_SETTINGS_MODULE=cadeia_dominial.settings_prod
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@cadeiadominial.com.br}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cadeia_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx com SSL automático plug-and-play
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: cadeia_dominial_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./staticfiles:/var/www/static:ro
+      - ./media:/var/www/media:ro
+      - ssl_certs:/etc/letsencrypt
+      - ssl_www:/var/www/certbot
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - cadeia_network
+    restart: unless-stopped
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - CERTBOT_EMAIL=${CERTBOT_EMAIL:-admin@localhost}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  ssl_certs:
+  ssl_www:
+
+networks:
+  cadeia_network:
+    driver: bridge 

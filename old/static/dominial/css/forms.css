@@ -1,0 +1,816 @@
+/* ========================================
+   SISTEMA DE CADEIA DOMINIAL - CSS DE FORMULÁRIOS
+   ======================================== */
+
+/* ========================================
+   AUTOCOMPLETE COM SUGESTÕES
+   ======================================== */
+.autocomplete-suggestion-title {
+    background: #e3f2fd;
+    color: #1976d2;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    border-bottom: 1px solid #bbdefb;
+    margin: 0;
+}
+
+.autocomplete-suggestion.sugestao {
+    background: #f3e5f5;
+    border-left: 3px solid #9c27b0;
+    position: relative;
+}
+
+.autocomplete-suggestion.sugestao:hover {
+    background: #e1bee7;
+}
+
+.autocomplete-suggestion.sugestao .cartorio-nome {
+    font-weight: 600;
+    color: #4a148c;
+    display: block;
+}
+
+.autocomplete-suggestion.sugestao .cartorio-info {
+    font-size: 0.8rem;
+    color: #666;
+    display: block;
+    margin-top: 2px;
+}
+
+/* Campo com sugestões ativas */
+.cartorio-origem-nome.sugestoes-ativas {
+    border-color: #9c27b0;
+    box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.2);
+}
+
+/* Garantir que as sugestões tenham prioridade visual */
+.autocomplete-suggestions {
+    z-index: 9999 !important;
+    position: relative !important;
+}
+
+.autocomplete-suggestions.sugestoes-ativas {
+    z-index: 9999 !important;
+}
+
+/* Opção "Adicionar novo cartório" */
+.autocomplete-suggestion.adicionar-cartorio {
+    background: #e8f5e8;
+    border-left: 3px solid #28a745;
+    border-top: 1px solid #d4edda;
+}
+
+.autocomplete-suggestion.adicionar-cartorio:hover {
+    background: #d1ecf1;
+}
+
+.autocomplete-suggestion.adicionar-cartorio .cartorio-nome {
+    color: #155724;
+    font-weight: 600;
+}
+
+/* ========================================
+   BLOCO DE INFORMAÇÕES DO DOCUMENTO
+   ======================================== */
+.field-group h4 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent-color);
+    padding-bottom: 5px;
+}
+
+/* Informações do Documento (herdadas) */
+.field-group:has(h4:contains("Informações do Documento")) {
+    background: #f8f9fa;
+    border-left: 4px solid var(--primary-color);
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+/* Informações do Lançamento (adicionadas pelo usuário) */
+.field-group:has(h4:contains("Informações do Lançamento")) {
+    background: #fff3cd;
+    border-left: 4px solid var(--warning-color);
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+/* ========================================
+   CAMPOS CONDICIONAIS
+   ======================================== */
+.field-group.hidden {
+    display: none;
+}
+
+/* ========================================
+   CAMPOS DE PESSOA
+   ======================================== */
+.pessoa-item {
+    margin-bottom: 10px;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.pessoa-input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-height: 40px;
+}
+
+/* Garantir que os campos de pessoa sejam navegáveis com o teclado */
+.pessoa-item input[type="text"]:focus {
+    outline: 2px solid #007bff !important;
+    outline-offset: 2px;
+    border-color: #007bff !important;
+}
+
+.pessoa-item button:focus {
+    outline: 2px solid #007bff !important;
+    outline-offset: 2px;
+}
+
+/* Estilo para sugestões destacadas no autocomplete */
+.autocomplete-suggestion.highlighted {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+.autocomplete-suggestion {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.autocomplete-suggestion:hover {
+    background-color: #f8f9fa;
+}
+
+
+
+#adquirentes-container,
+#adquirentes-container-registro,
+#transmitentes-container,
+#transmitentes-container-registro,
+#origens-container {
+    min-height: 50px;
+    display: block !important;
+    visibility: visible !important;
+}
+
+.autocomplete-container {
+    flex: 1;
+    position: relative;
+}
+
+.percentual-input {
+    width: 80px !important;
+}
+
+.remove-pessoa {
+    padding: 2px 6px !important;
+}
+
+/* ========================================
+   CAMPOS DE CARTÓRIO
+   ======================================== */
+.cartorio-fields {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.cartorio-fields h5 {
+    margin-top: 0;
+    color: #495057;
+}
+
+/* Validação de cartório obrigatório */
+.cartorio-origem-nome.error {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+    background-color: #fff5f5 !important;
+}
+
+.cartorio-origem-nome.error::placeholder {
+    color: #dc3545 !important;
+}
+
+.autocomplete-suggestion.no-results {
+    color: #6c757d;
+    font-style: italic;
+    cursor: default;
+    padding: 8px 12px;
+    background-color: #f8f9fa;
+}
+
+.autocomplete-suggestion.no-results:hover {
+    background-color: #f8f9fa;
+}
+
+/* ========================================
+   SUGESTÕES E AUTCOMPLETE
+   ======================================== */
+.sugestoes-container {
+    display: none;
+    margin-top: 5px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.autocomplete-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.autocomplete-suggestion {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.autocomplete-suggestion:hover {
+    background-color: #f8f9fa;
+}
+
+.autocomplete-suggestion:last-child {
+    border-bottom: none;
+}
+
+/* ========================================
+   VALIDAÇÃO E MENSAGENS
+   ======================================== */
+.error-message {
+    color: #dc3545;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+.validation-message {
+    display: none;
+    margin-top: 5px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.validation-message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.validation-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.validation-message.warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+/* ========================================
+   CAMPOS DE ÁREA E ORIGEM
+   ======================================== */
+.area-origem-group {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border-left: 4px solid var(--accent-color);
+}
+
+.area-origem-group h5 {
+    margin-top: 0;
+    color: var(--primary-color);
+}
+
+.origens-container {
+    margin-top: 10px;
+}
+
+.origem-labels {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 5px;
+    padding: 0 12px;
+    align-items: center;
+}
+
+.origem-labels label {
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--primary-color);
+    margin-bottom: 0;
+    text-align: center;
+}
+
+/* Alinhar labels com os campos correspondentes */
+.origem-labels label:nth-child(1) {
+    flex: 2; /* Origem */
+}
+
+.origem-labels label:nth-child(2) {
+    flex: 2; /* Cartório */
+}
+
+.origem-labels label:nth-child(3) {
+    flex: 1; /* Livro */
+}
+
+.origem-labels label:nth-child(4) {
+    flex: 1; /* Folha */
+}
+
+.origem-labels label:nth-child(5) {
+    flex: 0 0 40px; /* Fim de Cadeia - largura fixa */
+    text-align: center;
+}
+
+.origem-labels label:nth-child(6) {
+    flex: 0 0 32px; /* Botão de remover - largura fixa */
+    text-align: center;
+}
+
+.origem-item {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    min-height: 50px;
+    width: 100%;
+}
+
+.origem-item input {
+    flex: 1;
+}
+
+/* Campos específicos de origem */
+.origem-field {
+    flex: 2; /* Origem tem mais espaço */
+}
+
+.cartorio-field {
+    flex: 2; /* Cartório tem mais espaço */
+}
+
+.livro-field {
+    flex: 1; /* Livro tem espaço médio */
+}
+
+.folha-field {
+    flex: 1; /* Folha tem espaço médio */
+}
+
+.livro-origem,
+.folha-origem {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.livro-origem:focus,
+.folha-origem:focus {
+    border-color: var(--accent-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.remove-origem {
+    padding: 4px 8px;
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    min-width: 24px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 32px;
+    flex-shrink: 0;
+    margin-left: auto;
+    position: relative;
+    top: 0;
+    right: 0;
+}
+
+/* ========================================
+   CAMPOS DE OBSERVAÇÕES
+   ======================================== */
+.observacoes-group {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border-left: 4px solid var(--warning-color);
+}
+
+.observacoes-group h5 {
+    margin-top: 0;
+    color: var(--primary-color);
+}
+
+/* ========================================
+   BOTÕES DE FORMULÁRIO
+   ======================================== */
+.form-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.9em;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--accent-color);
+    color: var(--accent-color);
+}
+
+.btn-outline:hover {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* ========================================
+   ANIMAÇÕES
+   ======================================== */
+.field-group {
+    transition: all 0.3s ease;
+}
+
+.field-group.fade-in {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.field-group.fade-out {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+/* ========================================
+   RESPONSIVIDADE
+   ======================================== */
+@media (max-width: 768px) {
+    .pessoa-input-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+    }
+    
+    .origem-item {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .remove-origem {
+        align-self: flex-end;
+        margin-top: 5px;
+    }
+    
+    .percentual-input {
+        width: 100% !important;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .cartorio-fields {
+        padding: 10px;
+    }
+} 
+
+/* Estilos para o cartório da matrícula no primeiro lançamento */
+.cartorio-matricula-info {
+    background-color: #f8f9fa;
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.cartorio-matricula-info label {
+    color: #155724;
+    font-weight: bold;
+}
+
+.cartorio-matricula-info .form-text {
+    color: #155724;
+    font-style: italic;
+}
+
+.cartorio-matricula-info input[readonly] {
+    border-color: #28a745;
+    color: #155724;
+    font-weight: 500;
+}
+
+/* Estilos para o cartório da origem nos lançamentos subsequentes */
+.cartorio-origem-info {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.cartorio-origem-info label {
+    color: #856404;
+    font-weight: bold;
+}
+
+.cartorio-origem-info .form-text {
+    color: #856404;
+    font-style: italic;
+}
+
+/* Estilos comuns para exibição do cartório */
+.cartorio-display {
+    padding: 10px;
+    background-color: white;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+.cartorio-nome {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #495057;
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* ========================================
+   CAMPOS DE DISPLAY (LABELS)
+   ======================================== */
+.field-display {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+.field-value {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.field-display .field-value:empty::before {
+    content: "Não informado";
+    color: #6c757d;
+    font-style: italic;
+} 
+
+/* Estilos para documentos importados no formulário */
+
+.documento-importado-alert {
+    background: linear-gradient(135deg, #e8f5e8 0%, #f8fff9 100%);
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
+}
+
+.documento-importado-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    color: #155724;
+    font-size: 1.1rem;
+}
+
+.documento-importado-header i {
+    color: #28a745;
+    font-size: 1.2rem;
+}
+
+.documento-importado-info p {
+    margin-bottom: 15px;
+    line-height: 1.6;
+    color: #333;
+}
+
+.documento-importado-info strong {
+    color: #155724;
+}
+
+.documento-importado-warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    color: #856404;
+}
+
+.documento-importado-warning i {
+    color: #f39c12;
+    margin-top: 2px;
+}
+
+.documento-importado-warning strong {
+    color: #856404;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .documento-importado-alert {
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .documento-importado-header {
+        font-size: 1rem;
+    }
+    
+    .documento-importado-info p {
+        font-size: 0.9rem;
+    }
+    
+    .documento-importado-warning {
+        padding: 10px;
+        font-size: 0.9rem;
+    }
+}
+
+/* ========================================
+   CAMPOS DE FIM DE CADEIA POR ORIGEM
+   ======================================== */
+
+/* Campo de fim de cadeia na linha de origem */
+.fim-cadeia-field {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 40px;
+    min-width: 40px;
+}
+
+.fim-cadeia-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fim-cadeia-toggle {
+    display: none; /* Esconder checkbox padrão */
+}
+
+.fim-cadeia-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background-color: #ffffff;
+    border: 2px solid #dee2e6;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.fim-cadeia-label:hover {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.fim-cadeia-toggle:checked + .fim-cadeia-label {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.fim-cadeia-toggle:checked + .fim-cadeia-label::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+    line-height: 1;
+}
+
+/* Container dos campos de fim de cadeia por origem */
+.fim-cadeia-origem-container {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+}
+
+.fim-cadeia-origem-container .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.fim-cadeia-origem-container .form-group {
+    margin-bottom: 0;
+}
+
+.fim-cadeia-origem-container label {
+    font-weight: 600;
+    color: #856404;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.fim-cadeia-origem-container select,
+.fim-cadeia-origem-container textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+}
+
+.fim-cadeia-origem-container select:focus,
+.fim-cadeia-origem-container textarea:focus {
+    outline: none;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+}
+
+.especificacao-fim-cadeia {
+    width: 100%;
+    min-height: 80px;
+    padding: 8px 12px;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    font-size: 14px;
+    resize: vertical;
+    background-color: white;
+}
+
+.especificacao-fim-cadeia:focus {
+    outline: none;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .fim-cadeia-origem-container .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .fim-cadeia-label {
+        width: 18px;
+        height: 18px;
+    }
+    
+    .fim-cadeia-toggle:checked + .fim-cadeia-label::after {
+        font-size: 10px;
+    }
+} 

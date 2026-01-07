@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% load i18n static %}
+
+{% block title %}Cadastro de Imóvel - {{ tis.nome }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/imovel_form.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/modal.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="form-header">
+        <h1>
+            <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Cadastro de Imóvel
+        </h1>
+        <div class="tis-info">
+            <svg class="info-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 16V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ tis.nome }}
+        </div>
+    </div>
+
+    <form method="post" id="imovel-form">
+        {% csrf_token %}
+        
+        <div class="form-section">
+            <h3>
+                <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Informações do Proprietário
+            </h3>
+            
+            <div class="form-group">
+                <label for="nome_proprietario">Nome do Proprietário:</label>
+                {{ form.proprietario_nome }}
+                {% if form.proprietario_nome.errors %}
+                    <div class="error-message">{{ form.proprietario_nome.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>
+                <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Informações do Imóvel
+            </h3>
+            
+            <div class="form-group">
+                <label for="{{ form.nome.id_for_label }}">Nome do Imóvel:</label>
+                {{ form.nome }}
+                {% if form.nome.errors %}
+                    <div class="error-message">{{ form.nome.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.matricula.id_for_label }}">Número da Matrícula:</label>
+                {{ form.matricula }}
+                {% if form.matricula.errors %}
+                    <div class="error-message">{{ form.matricula.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.tipo_documento_principal.id_for_label }}">Tipo do Documento Principal:</label>
+                {{ form.tipo_documento_principal }}
+                {% if form.tipo_documento_principal.errors %}
+                    <div class="error-message">{{ form.tipo_documento_principal.errors }}</div>
+                {% endif %}
+            </div>
+
+            {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o imóvel" rows=3 %}
+        </div>
+
+        <div class="form-section">
+            <h3>
+                <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 10C21 17 12 23 12 23S3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Localização e Cartório
+            </h3>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="estado">Estado:</label>
+                    {{ form.estado }}
+                    {% if form.estado.errors %}
+                        <div class="error-message">{{ form.estado.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="cidade">Cidade:</label>
+                    {{ form.cidade }}
+                    {% if form.cidade.errors %}
+                        <div class="error-message">{{ form.cidade.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cartorio">Cartório:</label>
+                {{ form.cartorio }}
+                {% if form.cartorio.errors %}
+                    <div class="error-message">{{ form.cartorio.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div id="cartorio-info" class="form-info" style="display: none;">
+                <h5>Informações do Cartório</h5>
+                <div id="cartorio-detalhes"></div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button type="submit" class="submit-button">Salvar Imóvel</button>
+            <a href="{% url 'tis_detail' tis_id=tis.id %}" class="back-button">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<!-- Modal para adicionar novo cartório -->
+<div id="modal-novo-cartorio" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Adicionar Novo Cartório</h3>
+            <span class="close" id="fechar-modal-cartorio">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="form-novo-cartorio">
+                <div class="form-group">
+                    <label for="novo-cartorio-nome">Nome do Cartório:</label>
+                    <input type="text" id="novo-cartorio-nome" name="nome" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="novo-cartorio-cns">CNS:</label>
+                    <input type="text" id="novo-cartorio-cns" name="cns" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="novo-cartorio-estado">Estado:</label>
+                    <input type="text" id="novo-cartorio-estado" name="estado" class="form-control" readonly required>
+                </div>
+                <div class="form-group">
+                    <label for="novo-cartorio-cidade">Cidade:</label>
+                    <input type="text" id="novo-cartorio-cidade" name="cidade" class="form-control" readonly required>
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" id="cancelar-novo-cartorio">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Cartório</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'dominial/js/imovel_form.js' %}"></script>
+{% endblock %}

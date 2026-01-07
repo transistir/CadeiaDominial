@@ -1,0 +1,231 @@
+/* CSS específico para PDF da Cadeia Dominial */
+
+@page {
+    size: A4 landscape;
+    margin: 1.5cm;
+    @top-center {
+        content: "Cadeia Dominial";
+        font-size: 9pt;
+        color: #666;
+    }
+    @bottom-center {
+        content: "Página " counter(page) " de " counter(pages);
+        font-size: 9pt;
+        color: #666;
+    }
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    font-size: 8pt;
+    line-height: 1.3;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #2c5aa0;
+    padding-bottom: 10px;
+}
+
+.header h1 {
+    color: #2c5aa0;
+    font-size: 18pt;
+    margin: 0 0 10px 0;
+}
+
+.imovel-info {
+    display: table;
+    width: 100%;
+    margin-bottom: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.imovel-info-row {
+    display: table-row;
+}
+
+.imovel-info-cell {
+    display: table-cell;
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+
+.imovel-info-cell:first-child {
+    font-weight: bold;
+    background-color: #f8f9fa;
+    width: 30%;
+}
+
+.documento-section {
+    margin-bottom: 30px;
+    page-break-inside: avoid;
+}
+
+.documento-header {
+    background-color: #e1edf7;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #2c5aa0;
+}
+
+.documento-importado {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.lancamentos-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 6pt;
+}
+
+.lancamentos-table th {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 3px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 6pt;
+}
+
+.lancamentos-table td {
+    border: 1px solid #ddd;
+    padding: 2px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.lancamentos-table .agrupamento {
+    background-color: #e1edf7;
+    font-weight: bold;
+    text-align: center;
+}
+
+.linha-par {
+    background-color: #f8f9fa;
+}
+
+.linha-impar {
+    background-color: #ffffff;
+}
+
+.grupo-importacao-header {
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    padding: 8px;
+    margin: 10px 0;
+    border-radius: 5px;
+    font-weight: bold;
+    color: #856404;
+}
+
+.estatisticas {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+.estatisticas h3 {
+    margin-top: 0;
+    color: #2c5aa0;
+    font-size: 12pt;
+}
+
+.estatisticas-grid {
+    display: table;
+    width: 100%;
+}
+
+.estatisticas-item {
+    display: table-cell;
+    padding: 5px;
+    text-align: center;
+}
+
+.estatisticas-valor {
+    font-size: 14pt;
+    font-weight: bold;
+    color: #2c5aa0;
+}
+
+.estatisticas-label {
+    font-size: 8pt;
+    color: #666;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.page-break {
+    page-break-before: always;
+}
+
+.documento-juridico {
+    margin-top: 30px;
+    padding: 15px;
+    border: 2px solid #2c5aa0;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+    page-break-inside: avoid;
+}
+
+.documento-juridico h3 {
+    color: #2c5aa0;
+    font-size: 12pt;
+    margin-top: 0;
+    text-align: center;
+}
+
+.declaracao ol {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.declaracao li {
+    margin-bottom: 5px;
+    font-size: 8pt;
+}
+
+.assinatura {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+    text-align: center;
+}
+
+.assinatura p {
+    margin: 5px 0;
+    font-size: 8pt;
+}
+
+@media print {
+    .page-break {
+        page-break-before: always;
+    }
+    
+    .documento-section {
+        page-break-inside: avoid;
+    }
+    
+    .lancamentos-table {
+        page-break-inside: avoid;
+    }
+    
+    .documento-juridico {
+        page-break-inside: avoid;
+    }
+} 

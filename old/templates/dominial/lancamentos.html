@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Lançamentos{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/lancamentos.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header">
+        <h1>Lançamentos</h1>
+        <div class="usuario">
+            Olá, {{ user.get_full_name|default:user.username }}!
+        </div>
+    </div>
+
+    <div class="filters">
+        <form method="get" action="{% url 'lancamentos' %}">
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label for="tipo_documento">Tipo de Documento</label>
+                    <select name="tipo_documento" id="tipo_documento">
+                        <option value="">Todos</option>
+                        {% for tipo in tipos_documento %}
+                            <option value="{{ tipo.id }}" {% if request.GET.tipo_documento == tipo.id|stringformat:"i" %}selected{% endif %}>
+                                {{ tipo.get_tipo_display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="tipo_lancamento">Tipo de Lançamento</label>
+                    <select name="tipo_lancamento" id="tipo_lancamento">
+                        <option value="">Todos</option>
+                        {% for tipo in tipos_lancamento %}
+                            <option value="{{ tipo.id }}" {% if request.GET.tipo_lancamento == tipo.id|stringformat:"i" %}selected{% endif %}>
+                                {{ tipo.get_tipo_display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="busca">Buscar por número</label>
+                    <input type="text" name="busca" id="busca" value="{{ request.GET.busca }}" placeholder="Digite o número do documento">
+                </div>
+            </div>
+            <button type="submit" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Filtrar
+            </button>
+        </form>
+    </div>
+
+    <div class="lancamentos">
+        {% for lancamento in lancamentos %}
+            <div class="lancamento">
+                <div class="lancamento-header">
+                    <div class="documento-info">
+                        {{ lancamento.documento.tipo.get_tipo_display }} - {{ lancamento.documento.numero }}
+                    </div>
+                    <div class="data">
+                        {{ lancamento.data|date:"d/m/Y" }}
+                    </div>
+                </div>
+                <div class="detalhes">
+                    <div class="detalhe-item">
+                        <div class="detalhe-label">Tipo de Lançamento</div>
+                        <div class="detalhe-valor">{{ lancamento.tipo.get_tipo_display }}</div>
+                    </div>
+                    {% if lancamento.transmitente %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Transmitente</div>
+                            <div class="detalhe-valor">{{ lancamento.transmitente.nome }}</div>
+                        </div>
+                    {% endif %}
+                    {% if lancamento.adquirente %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Adquirente</div>
+                            <div class="detalhe-valor">{{ lancamento.adquirente.nome }}</div>
+                        </div>
+                    {% endif %}
+
+                    {% if lancamento.area %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Área</div>
+                            <div class="detalhe-valor">{{ lancamento.area }} ha</div>
+                        </div>
+                    {% endif %}
+                    {% if lancamento.detalhes %}
+                        <div class="detalhe-item">
+                            <div class="detalhe-label">Detalhes</div>
+                            <div class="detalhe-valor">{{ lancamento.detalhes }}</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% empty %}
+            <div class="no-results">
+                <p>Nenhum lançamento encontrado.</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% if lancamentos.has_other_pages %}
+        <div class="pagination">
+            {% if lancamentos.has_previous %}
+                <a href="?page=1{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">&laquo; Primeira</a>
+                <a href="?page={{ lancamentos.previous_page_number }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Anterior</a>
+            {% endif %}
+
+            <span class="current">
+                Página {{ lancamentos.number }} de {{ lancamentos.paginator.num_pages }}
+            </span>
+
+            {% if lancamentos.has_next %}
+                <a href="?page={{ lancamentos.next_page_number }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Próxima</a>
+                <a href="?page={{ lancamentos.paginator.num_pages }}{% if request.GET.tipo_documento %}&tipo_documento={{ request.GET.tipo_documento }}{% endif %}{% if request.GET.tipo_lancamento %}&tipo_lancamento={{ request.GET.tipo_lancamento }}{% endif %}{% if request.GET.busca %}&busca={{ request.GET.busca }}{% endif %}">Última &raquo;</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %} 
