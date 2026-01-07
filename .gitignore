@@ -38,3 +38,4 @@ restaurar_backup_dev.sh
 restaurar_backup_local.sh
 backups/
 docs/livro/
+old/
