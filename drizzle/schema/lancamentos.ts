@@ -14,6 +14,7 @@ import {
   boolean,
   unique,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { documento } from './documentos';
 import { pessoas } from './pessoas';
 import { cartorios } from './cartorios';
@@ -63,7 +64,7 @@ export const lancamento = pgTable('dominial_lancamento', {
   origem: varchar('origem', { length: 255 }),
   detalhes: text('detalhes'),
   observacoes: text('observacoes'),
-  dataCadastro: date('data_cadastro').defaultNow().notNull(),
+  dataCadastro: date('data_cadastro').default(sql`CURRENT_DATE`).notNull(),
 
   // Type-specific fields
   forma: varchar('forma', { length: 100 }),

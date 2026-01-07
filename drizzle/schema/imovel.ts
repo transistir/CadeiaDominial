@@ -13,6 +13,7 @@ import {
   unique,
   index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { tis } from './tis';
 import { pessoas } from './pessoas';
 import { cartorios } from './cartorios';
@@ -42,7 +43,7 @@ export const imovel = pgTable(
     cartorioId: integer('cartorio_id').references(() => cartorios.id, {
       onDelete: 'restrict',
     }),
-    dataCadastro: date('data_cadastro').defaultNow().notNull(),
+    dataCadastro: date('data_cadastro').default(sql`CURRENT_DATE`).notNull(),
     arquivado: boolean('arquivado').notNull().default(false),
   },
   (table) => [

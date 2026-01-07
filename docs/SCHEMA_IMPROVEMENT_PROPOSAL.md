@@ -8,7 +8,7 @@ This document proposes simplifications to the Cadeia Dominial database schema to
 3. Remove legacy/redundant fields
 4. Consolidate over-normalized tables
 
-**Estimated reduction: 19 tables → 13 tables (32% reduction)**
+**Estimated reduction: 19 tables → 11 tables (42% reduction)**
 
 ---
 
@@ -115,11 +115,12 @@ Both tables track property changes with similar fields:
 | Remove `alteracoestipo` table | Separate table | VARCHAR + CHECK | 1 table |
 | Remove `tis_imovel` junction | M:N table | Use existing FK | 1 table |
 | Remove legacy fields | 3 fields in `lancamento` | Delete columns | Cleaner schema |
-| Merge `origemfimcadeia` | Separate table | JSON field or inline | 1 table |
+| Merge `origemfimcadeia` | Separate table | Inline in `lancamento` | 1 table |
 | Remove `importacaocartorios` | Admin tracking | Move to logs | 1 table |
-| Simplify `lancamentotipo` | 10 boolean fields | Simplified | Cleaner |
+| Remove `alteracoes` + related | 3 tables | Merge into `lancamento` | 3 tables |
+| Simplify `lancamentotipo` | 10 boolean fields | 4 key fields | Cleaner |
 
-**Total: 6 tables removed**
+**Total: 8 tables removed (19 → 11)**
 
 ---
 
@@ -169,7 +170,7 @@ CREATE TABLE cartorios (
 
 ## Proposed Schema (v2)
 
-### Table Count: 13 Tables (down from 19)
+### Table Count: 11 Tables (down from 19)
 
 ### Tables to Keep (Modified)
 
@@ -374,22 +375,6 @@ CREATE TABLE fim_cadeia (
 );
 ```
 
-#### 12. `registro_tipo` (kept - dynamic values)
-```sql
-CREATE TABLE registro_tipo (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL
-);
-```
-
-#### 13. `averbacao_tipo` (kept - dynamic values)
-```sql
-CREATE TABLE averbacao_tipo (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL
-);
-```
-
 ### Tables Removed
 
 | Table | Reason | Data Migration |
@@ -397,9 +382,18 @@ CREATE TABLE averbacao_tipo (
 | `documentotipo` | Only 2 values | Inline CHECK constraint |
 | `alteracoestipo` | Only 3 values | Inline CHECK constraint |
 | `tis_imovel` | Redundant with `imovel.terra_indigena_id` | Verify M:N not needed |
-| `origemfimcadeia` | Over-engineered | Merge into `lancamento` |
+| `origemfimcadeia` | Over-engineered | Merge into `lancamento` (see note below) |
 | `importacaocartorios` | Admin/logging table | Move to application logs |
 | `alteracoes` | Duplicate of `lancamento` | Migrate data to `lancamento` |
+| `registrotipo` | Only used by `alteracoes` | Remove with `alteracoes` |
+| `averbacaotipo` | Only used by `alteracoes` | Remove with `alteracoes` |
+
+**Note on `origemfimcadeia` migration:** The inline approach in `lancamento` only supports single-origin cases. Before migration, verify that multi-origin cases (where `indice_origem > 0`) are rare or non-existent. If multi-origin cases exist, either:
+1. Keep `origemfimcadeia` table for complex cases
+2. Use a JSON field to store multiple origins
+3. Create separate `lancamento` records for each origin
+
+**Final Table Count: 11 Tables (down from 19) - 42% reduction**
 
 ---
 
@@ -566,6 +560,7 @@ PG_CONFIG = {
 SQLITE_PATH = 'cadeia_dominial.db'
 
 # Tables to migrate (in order for FK constraints)
+# Note: Table names follow Django convention (no underscores in multi-word names)
 TABLES = [
     'dominial_pessoas',
     'dominial_cartorios',
@@ -573,13 +568,11 @@ TABLES = [
     'dominial_tis',
     'dominial_imovel',
     'dominial_documento',
-    'dominial_documento_importado',
-    'dominial_lancamento_tipo',
+    'dominial_documentoimportado',     # Note: no underscore
+    'dominial_lancamentotipo',          # Note: no underscore
     'dominial_lancamento',
-    'dominial_lancamento_pessoa',
-    'dominial_fim_cadeia',
-    'dominial_registro_tipo',
-    'dominial_averbacao_tipo',
+    'dominial_lancamentopessoa',        # Note: no underscore
+    'dominial_fimcadeia',               # Note: no underscore
 ]
 
 def convert_value(val):
@@ -767,9 +760,9 @@ psql cadeia_dominial < backup_before_migration.sql
 
 | Metric | Before | After | Improvement |
 |--------|--------|-------|-------------|
-| Tables | 19 | 13 | -32% |
-| Foreign Keys | ~35 | ~25 | -29% |
-| Lookup Tables | 6 | 3 | -50% |
+| Tables | 19 | 11 | -42% |
+| Foreign Keys | ~35 | ~20 | -43% |
+| Lookup Tables | 6 | 2 | -67% |
 | Legacy Fields | 3 | 0 | -100% |
 
 ### SQLite Benefits
@@ -794,14 +787,47 @@ psql cadeia_dominial < backup_before_migration.sql
 Run this query to understand current data volumes:
 
 ```sql
+-- Get row counts and sizes for all dominial tables
 SELECT
-    table_name,
-    pg_size_pretty(pg_total_relation_size(quote_ident(table_name))) as total_size,
-    (SELECT COUNT(*) FROM dominial_lancamento) as estimated_rows
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name LIKE 'dominial_%'
-ORDER BY pg_total_relation_size(quote_ident(table_name)) DESC;
+    t.table_name,
+    pg_size_pretty(pg_total_relation_size('public.' || t.table_name)) as total_size,
+    (xpath('/row/cnt/text()',
+        query_to_xml(format('SELECT COUNT(*) as cnt FROM %I.%I',
+                           'public', t.table_name), false, true, ''))
+    )[1]::text::int as row_count
+FROM information_schema.tables t
+WHERE t.table_schema = 'public'
+  AND t.table_name LIKE 'dominial_%'
+ORDER BY pg_total_relation_size('public.' || t.table_name) DESC;
 ```
 
-This helps prioritize which tables to focus optimization efforts on.
+Alternative simpler query (requires running for each table):
+
+```sql
+-- Quick count of key tables
+SELECT 'pessoas' as table_name, COUNT(*) as rows FROM dominial_pessoas
+UNION ALL SELECT 'imovel', COUNT(*) FROM dominial_imovel
+UNION ALL SELECT 'documento', COUNT(*) FROM dominial_documento
+UNION ALL SELECT 'lancamento', COUNT(*) FROM dominial_lancamento
+UNION ALL SELECT 'lancamentopessoa', COUNT(*) FROM dominial_lancamentopessoa
+UNION ALL SELECT 'origemfimcadeia', COUNT(*) FROM dominial_origemfimcadeia
+UNION ALL SELECT 'alteracoes', COUNT(*) FROM dominial_alteracoes;
+```
+
+**Important pre-migration checks:**
+
+```sql
+-- Check for multi-origin cases (blocks simple inline migration)
+SELECT COUNT(*) as multi_origin_cases
+FROM dominial_origemfimcadeia
+WHERE indice_origem > 0;
+
+-- Check for data in legacy fields (must migrate before dropping)
+SELECT
+    COUNT(*) FILTER (WHERE transmitente_id IS NOT NULL) as legacy_transmitente,
+    COUNT(*) FILTER (WHERE adquirente_id IS NOT NULL) as legacy_adquirente,
+    COUNT(*) FILTER (WHERE cartorio_transacao_id IS NOT NULL) as legacy_cartorio_transacao
+FROM dominial_lancamento;
+```
+
+This helps prioritize which tables to focus optimization efforts on and validates migration readiness.

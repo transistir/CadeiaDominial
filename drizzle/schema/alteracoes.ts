@@ -11,6 +11,7 @@ import {
   integer,
   decimal,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { imovel } from './imovel';
 import { cartorios } from './cartorios';
 import { pessoas } from './pessoas';
@@ -79,7 +80,7 @@ export const alteracoes = pgTable('dominial_alteracoes', {
   valorTransacao: decimal('valor_transacao', { precision: 10, scale: 2 }),
   area: decimal('area', { precision: 12, scale: 4 }),
   observacoes: text('observacoes'),
-  dataCadastro: date('data_cadastro').defaultNow().notNull(),
+  dataCadastro: date('data_cadastro').default(sql`CURRENT_DATE`).notNull(),
 });
 
 // Type exports

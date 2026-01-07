@@ -16,41 +16,50 @@ The **Sistema de Cadeia Dominial** is a web application for managing and visuali
 ## Entity-Relationship Diagram
 
 ```
-                                    +----------------------+
-                                    |  TerraIndigenaRef   |
-                                    +----------------------+
-                                             |
-                                             | 1:N
-                                             v
-+----------+         +--------+         +---------+
-| Pessoas  |<--------| Imovel |-------->|   TIs   |
-+----------+   N:1   +--------+   N:1   +---------+
-     |                   |                   |
-     |                   |                   |
-     |              1:N  |                   |
-     |                   v                   |
-     |            +----------+               |
-     |            | Documento|               |
-     |            +----------+               |
-     |                   |                   |
-     |              1:N  |                   |
-     |                   v                   |
-     +------------>+-----------+             |
-         N:1       | Lancamento|             |
-                   +-----------+             |
-                        |                    |
-                   1:N  |                    |
-                        v                    |
-              +------------------+           |
-              | LancamentoPessoa |           |
-              +------------------+           |
-                                            |
-                        +-------------------+
-                        |
-                        v
-                  +------------+
-                  | TIs_Imovel | (Junction)
-                  +------------+
++------------------------+                    +----------------------+
+|  TerraIndigenaRef      |                    |      Cartorios       |
++------------------------+                    +----------------------+
+            |                                     /    |    \
+            | 1:N                                /     |     \
+            v                                   /      |      \
++----------+         +--------+         +---------+    |       |
+| Pessoas  |<--------| Imovel |-------->|   TIs   |    |       |
++----------+   N:1   +--------+   N:1   +---------+    |       |
+     |         (proprietario)  \              |        |       |
+     |                   |      \             |        |       |
+     |              1:N  |       \            |        |       |
+     |                   v        \           |        |       |
+     |            +----------+     +----------+--------+       |
+     |            | Documento|<----+ (cartorio, cri_atual,     |
+     |            +----------+       cri_origem)               |
+     |                   |                                     |
+     |              1:N  |                                     |
+     |                   v                                     |
+     +------------>+-----------+-------------------------------+
+         N:1       | Lancamento|  (cartorio_origem, cartorio_transmissao)
+                   +-----------+
+                     |       \
+                1:N  |        \ 1:N
+                     v         v
+    +------------------+    +------------------+
+    | LancamentoPessoa |    | OrigemFimCadeia  |
+    +------------------+    +------------------+
+
++------------+            +------------+
+| Alteracoes |----------->| TIs_Imovel | (Junction M:N)
++------------+ (to Imovel)+------------+
+                                |
+                                v
+                           TIs <-> Imovel
+
+Lookup Tables:
+  - DocumentoTipo (matricula, transcricao)
+  - LancamentoTipo (averbacao, registro, inicio_matricula)
+  - AlteracoesTipo (registro, averbacao, nao_classificado)
+  - RegistroTipo, AverbacoesTipo (dynamic values)
+  - FimCadeia (master list of end-of-chain types)
+  - ImportacaoCartorios (import log)
+  - DocumentoImportado (tracks imported documents)
 ```
 
 ---

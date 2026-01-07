@@ -13,6 +13,7 @@ import {
   unique,
   index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { imovel } from './imovel';
 import { cartorios } from './cartorios';
 
@@ -46,7 +47,7 @@ export const documento = pgTable(
     folha: varchar('folha', { length: 50 }).notNull(),
     origem: text('origem'),
     observacoes: text('observacoes'),
-    dataCadastro: date('data_cadastro').defaultNow().notNull(),
+    dataCadastro: date('data_cadastro').default(sql`CURRENT_DATE`).notNull(),
     nivelManual: integer('nivel_manual'),
     classificacaoFimCadeia: varchar('classificacao_fim_cadeia', { length: 50 }),
     siglaPatrimonioPublico: varchar('sigla_patrimonio_publico', { length: 50 }),

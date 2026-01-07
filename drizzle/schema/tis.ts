@@ -14,6 +14,7 @@ import {
   decimal,
   unique,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 /**
  * Reference data for Indigenous lands imported from government sources
@@ -52,7 +53,7 @@ export const tis = pgTable('dominial_tis', {
   etnia: varchar('etnia', { length: 255 }).notNull(),
   estado: varchar('estado', { length: 100 }),
   area: decimal('area', { precision: 12, scale: 2 }),
-  dataCadastro: date('data_cadastro').defaultNow().notNull(),
+  dataCadastro: date('data_cadastro').default(sql`CURRENT_DATE`).notNull(),
 });
 
 // Type exports
