@@ -37,3 +37,7 @@ restaurar_backup.sh
 restaurar_backup_dev.sh
 backups/
 docs/livro/
+
+# SQL dumps and database backups
+*.sql
+*.db
