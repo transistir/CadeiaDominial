@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dominial', '0026_add_cri_fields_to_documento'),
+        ('dominial', '0025_alter_cartorios_options_cartorios_tipo_and_more'),
     ]
 
     operations = [
