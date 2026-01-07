@@ -14,11 +14,15 @@ import {
 
 /**
  * Enum for cartorio types
+ * Note: Django uses VARCHAR with choices, not PostgreSQL ENUM.
+ * These are defined for optional stricter typing but not applied to maintain Django compatibility.
  */
 export const cartorioTipoEnum = pgEnum('cartorio_tipo', ['CRI', 'OUTRO']);
 
 /**
  * Enum for import status
+ * Note: Django uses VARCHAR with choices, not PostgreSQL ENUM.
+ * These are defined for optional stricter typing but not applied to maintain Django compatibility.
  */
 export const importStatusEnum = pgEnum('import_status', [
   'pendente',

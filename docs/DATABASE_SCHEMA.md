@@ -317,6 +317,8 @@ Individual recordings within documents.
 | `eh_inicio_matricula` | BOOLEAN | DEFAULT FALSE | Is start of matricula |
 | `documento_origem_id` | INTEGER | FK -> documento, NULL | Origin document link |
 
+**⚠️ Deprecated Fields:** `transmitente_id`, `adquirente_id`, and `cartorio_transacao_id` are legacy fields. Use `LancamentoPessoa` for persons and `cartorio_transmissao_id` for transmission registry. See [Deprecated Fields](#deprecated-fields) section.
+
 ---
 
 #### 12. `dominial_lancamentopessoa` - Recording Participants
@@ -525,6 +527,8 @@ dominial_alteracoes.adquirente_id -> dominial_pessoas.id
 
 The `matricula` field on properties is unique **per registry office (cartorio)**, not globally. This matches the Brazilian property registration system where different registries can have properties with the same matricula number.
 
+**Edge case:** When `cartorio_id` is NULL, the uniqueness constraint may allow multiple records with the same matricula (since NULL ≠ NULL in SQL). In production, `cartorio_id` should be treated as required.
+
 ### Document Chain (Cadeia Dominial)
 
 The system tracks the chain of ownership through:
@@ -538,6 +542,76 @@ When a property chain reaches its origin:
 - `origem_lidima`: Legitimate public origin (e.g., INCRA, State)
 - `sem_origem`: No traceable origin
 - `inconclusa`: Investigation incomplete
+
+**Note:** Classification exists at two levels:
+- `Documento.classificacao_fim_cadeia` - Document-level classification
+- `OrigemFimCadeia.classificacao_fim_cadeia` - Per-origin classification (for multi-origin documents)
+
+### LancamentoTipo Validation Rules
+
+Recording types have conditional field requirements enforced in application logic:
+
+| Type | Required Fields |
+|------|-----------------|
+| `registro` | `cartorio_origem`, `titulo` |
+| `averbacao` | `descricao` |
+| `inicio_matricula` | `cartorio_origem` |
+
+### OrigemFimCadeia Conditional Validation
+
+When `fim_cadeia = TRUE`:
+- `tipo_fim_cadeia` is **required**
+- `classificacao_fim_cadeia` is **required**
+- If `tipo_fim_cadeia = 'outra'`, then `especificacao_fim_cadeia` is **required**
+
+### Soft Delete Pattern (Arquivado)
+
+The `Imovel.arquivado` boolean field enables soft-delete functionality. Archived properties should be excluded from normal queries. To query only active properties:
+
+```python
+Imovel.objects.filter(arquivado=False)
+```
+
+---
+
+## Deprecated Fields
+
+The following fields are maintained for backward compatibility but should not be used in new code:
+
+### Lancamento Table
+
+| Field | Replacement | Notes |
+|-------|-------------|-------|
+| `transmitente_id` | `LancamentoPessoa` with `tipo='transmitente'` | Use junction table for multiple persons |
+| `adquirente_id` | `LancamentoPessoa` with `tipo='adquirente'` | Use junction table for multiple persons |
+| `cartorio_transacao_id` | `cartorio_transmissao_id` | New field with clearer naming |
+
+**Compatibility:** The `cartorio_transmissao_compat` property in Django falls back to `cartorio_transacao_id` if `cartorio_transmissao_id` is NULL.
+
+---
+
+## TIs_Imovel Junction Table
+
+**Purpose Clarification:** The `TIs_Imovel` junction table enables a many-to-many relationship between Indigenous Lands (TIs) and Properties (Imovel), even though `Imovel` already has a `terra_indigena_id` foreign key.
+
+**Use cases:**
+- Primary relationship: `Imovel.terra_indigena_id` → main TI assignment
+- Additional relationships: `TIs_Imovel` → property overlaps multiple TIs
+
+**Note:** If properties only ever belong to one TI, consider removing this junction table (see SCHEMA_IMPROVEMENT_PROPOSAL.md).
+
+---
+
+## Alteracoes vs Lancamento
+
+Both tables track property changes with similar fields. The key difference:
+
+| Table | Document Relationship | Use Case |
+|-------|----------------------|----------|
+| `Lancamento` | Attached to `Documento` | Recording within a document |
+| `Alteracoes` | Document-independent | Historical changes without document reference |
+
+**Recommendation:** Consider consolidating these tables (see SCHEMA_IMPROVEMENT_PROPOSAL.md).
 
 ---
 

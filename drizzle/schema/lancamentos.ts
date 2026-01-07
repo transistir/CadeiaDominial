@@ -51,10 +51,17 @@ export const lancamento = pgTable('dominial_lancamento', {
   numeroLancamento: varchar('numero_lancamento', { length: 50 }),
   data: date('data').notNull(),
 
-  // Legacy single person fields
+  /**
+   * @deprecated Use LancamentoPessoa junction table with tipo='transmitente' instead.
+   * Kept for backward compatibility with existing data.
+   */
   transmitenteId: integer('transmitente_id').references(() => pessoas.id, {
     onDelete: 'restrict',
   }),
+  /**
+   * @deprecated Use LancamentoPessoa junction table with tipo='adquirente' instead.
+   * Kept for backward compatibility with existing data.
+   */
   adquirenteId: integer('adquirente_id').references(() => pessoas.id, {
     onDelete: 'restrict',
   }),
@@ -75,10 +82,14 @@ export const lancamento = pgTable('dominial_lancamento', {
   cartorioOrigemId: integer('cartorio_origem_id').references(() => cartorios.id, {
     onDelete: 'restrict',
   }),
+  /**
+   * @deprecated Use cartorio_transmissao_id instead. This is a legacy field
+   * with unclear naming. Kept for backward compatibility.
+   */
   cartorioTransacaoId: integer('cartorio_transacao_id').references(
     () => cartorios.id,
     { onDelete: 'restrict' }
-  ), // Legacy
+  ),
   cartorioTransmissaoId: integer('cartorio_transmissao_id').references(
     () => cartorios.id,
     { onDelete: 'restrict' }
