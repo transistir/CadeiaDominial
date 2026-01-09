@@ -6,7 +6,7 @@ The **Sistema de Cadeia Dominial** is a web application for managing and visuali
 
 ### Technology Stack
 
-- **Development**: SQLite (local file-based)
+- **Development**: PostgreSQL 15+ (via Docker Compose)
 - **Production**: PostgreSQL 15+
 - **ORM**: Django 5.2.3 (Python) with optional Drizzle ORM (TypeScript)
 - **Extensions**: `uuid-ossp`, `pg_trgm` (trigram for full-text search)
@@ -72,25 +72,25 @@ Lookup Tables:
 
 Official reference data for Indigenous lands imported from government sources.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `codigo` | VARCHAR(50) | UNIQUE, NOT NULL | Official land code |
-| `nome` | VARCHAR(255) | NOT NULL | Land name |
-| `etnia` | VARCHAR(255) | NULL | Ethnic group |
-| `estado` | VARCHAR(100) | NULL | State(s) |
-| `municipio` | VARCHAR(255) | NULL | Municipality |
-| `area_ha` | FLOAT | NULL | Area in hectares |
-| `fase` | VARCHAR(100) | NULL | Current legal phase |
-| `modalidade` | VARCHAR(100) | NULL | Type/modality |
-| `coordenacao_regional` | VARCHAR(100) | NULL | Regional coordination |
-| `data_regularizada` | DATE | NULL | Regularization date |
-| `data_homologada` | DATE | NULL | Homologation date |
-| `data_declarada` | DATE | NULL | Declaration date |
-| `data_delimitada` | DATE | NULL | Delimitation date |
-| `data_em_estudo` | DATE | NULL | Study start date |
-| `created_at` | TIMESTAMP | DEFAULT NOW() | Creation timestamp |
-| `updated_at` | TIMESTAMP | AUTO UPDATE | Last update timestamp |
+| Column                 | Type         | Constraints      | Description           |
+| ---------------------- | ------------ | ---------------- | --------------------- |
+| `id`                   | SERIAL       | PRIMARY KEY      | Auto-increment ID     |
+| `codigo`               | VARCHAR(50)  | UNIQUE, NOT NULL | Official land code    |
+| `nome`                 | VARCHAR(255) | NOT NULL         | Land name             |
+| `etnia`                | VARCHAR(255) | NULL             | Ethnic group          |
+| `estado`               | VARCHAR(100) | NULL             | State(s)              |
+| `municipio`            | VARCHAR(255) | NULL             | Municipality          |
+| `area_ha`              | FLOAT        | NULL             | Area in hectares      |
+| `fase`                 | VARCHAR(100) | NULL             | Current legal phase   |
+| `modalidade`           | VARCHAR(100) | NULL             | Type/modality         |
+| `coordenacao_regional` | VARCHAR(100) | NULL             | Regional coordination |
+| `data_regularizada`    | DATE         | NULL             | Regularization date   |
+| `data_homologada`      | DATE         | NULL             | Homologation date     |
+| `data_declarada`       | DATE         | NULL             | Declaration date      |
+| `data_delimitada`      | DATE         | NULL             | Delimitation date     |
+| `data_em_estudo`       | DATE         | NULL             | Study start date      |
+| `created_at`           | TIMESTAMP    | DEFAULT NOW()    | Creation timestamp    |
+| `updated_at`           | TIMESTAMP    | AUTO UPDATE      | Last update timestamp |
 
 ---
 
@@ -98,16 +98,16 @@ Official reference data for Indigenous lands imported from government sources.
 
 Working records for Indigenous lands being analyzed in the system.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `terra_referencia_id` | INTEGER | FK -> terraindigenareferencia | Reference to official data |
-| `nome` | VARCHAR(255) | NOT NULL | Land name |
-| `codigo` | VARCHAR(50) | UNIQUE, NOT NULL | Land code |
-| `etnia` | VARCHAR(255) | NOT NULL | Ethnic group |
-| `estado` | VARCHAR(100) | NULL | State(s), comma-separated |
-| `area` | DECIMAL(12,2) | NULL | Area in hectares |
-| `data_cadastro` | DATE | DEFAULT CURRENT_DATE | Registration date |
+| Column                | Type          | Constraints                   | Description                |
+| --------------------- | ------------- | ----------------------------- | -------------------------- |
+| `id`                  | SERIAL        | PRIMARY KEY                   | Auto-increment ID          |
+| `terra_referencia_id` | INTEGER       | FK -> terraindigenareferencia | Reference to official data |
+| `nome`                | VARCHAR(255)  | NOT NULL                      | Land name                  |
+| `codigo`              | VARCHAR(50)   | UNIQUE, NOT NULL              | Land code                  |
+| `etnia`               | VARCHAR(255)  | NOT NULL                      | Ethnic group               |
+| `estado`              | VARCHAR(100)  | NULL                          | State(s), comma-separated  |
+| `area`                | DECIMAL(12,2) | NULL                          | Area in hectares           |
+| `data_cadastro`       | DATE          | DEFAULT CURRENT_DATE          | Registration date          |
 
 ---
 
@@ -115,15 +115,15 @@ Working records for Indigenous lands being analyzed in the system.
 
 Natural or legal persons involved in property transactions.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `nome` | VARCHAR(255) | NOT NULL | Full name |
-| `cpf` | VARCHAR(11) | UNIQUE, NULL | Brazilian tax ID (CPF) |
-| `rg` | VARCHAR(20) | NULL | ID document (RG) |
-| `data_nascimento` | DATE | NULL | Birth date |
-| `email` | VARCHAR(254) | NULL | Email address |
-| `telefone` | VARCHAR(15) | NULL | Phone number |
+| Column            | Type         | Constraints  | Description            |
+| ----------------- | ------------ | ------------ | ---------------------- |
+| `id`              | SERIAL       | PRIMARY KEY  | Auto-increment ID      |
+| `nome`            | VARCHAR(255) | NOT NULL     | Full name              |
+| `cpf`             | VARCHAR(11)  | UNIQUE, NULL | Brazilian tax ID (CPF) |
+| `rg`              | VARCHAR(20)  | NULL         | ID document (RG)       |
+| `data_nascimento` | DATE         | NULL         | Birth date             |
+| `email`           | VARCHAR(254) | NULL         | Email address          |
+| `telefone`        | VARCHAR(15)  | NULL         | Phone number           |
 
 ---
 
@@ -131,19 +131,20 @@ Natural or legal persons involved in property transactions.
 
 Brazilian registry offices (cartorios) where properties are registered.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `nome` | VARCHAR(200) | NOT NULL | Office name |
-| `cns` | VARCHAR(20) | UNIQUE, NOT NULL | National registry code |
-| `endereco` | VARCHAR(200) | NULL | Address |
-| `telefone` | VARCHAR(20) | NULL | Phone |
-| `email` | VARCHAR(254) | NULL | Email |
-| `estado` | VARCHAR(2) | NULL | State code (e.g., BA, SP) |
-| `cidade` | VARCHAR(100) | NULL | City |
-| `tipo` | VARCHAR(10) | NOT NULL, DEFAULT 'CRI' | Type: 'CRI' or 'OUTRO' |
+| Column     | Type         | Constraints             | Description               |
+| ---------- | ------------ | ----------------------- | ------------------------- |
+| `id`       | SERIAL       | PRIMARY KEY             | Auto-increment ID         |
+| `nome`     | VARCHAR(200) | NOT NULL                | Office name               |
+| `cns`      | VARCHAR(20)  | UNIQUE, NOT NULL        | National registry code    |
+| `endereco` | VARCHAR(200) | NULL                    | Address                   |
+| `telefone` | VARCHAR(20)  | NULL                    | Phone                     |
+| `email`    | VARCHAR(254) | NULL                    | Email                     |
+| `estado`   | VARCHAR(2)   | NULL                    | State code (e.g., BA, SP) |
+| `cidade`   | VARCHAR(100) | NULL                    | City                      |
+| `tipo`     | VARCHAR(10)  | NOT NULL, DEFAULT 'CRI' | Type: 'CRI' or 'OUTRO'    |
 
 **Values for `tipo`:**
+
 - `CRI`: Cartorio de Registro de Imoveis (Real Estate Registry)
 - `OUTRO`: Other type
 
@@ -153,23 +154,25 @@ Brazilian registry offices (cartorios) where properties are registered.
 
 Real estate properties being tracked in the system.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `terra_indigena_id_id` | INTEGER | FK -> tis, NOT NULL | Associated Indigenous land |
-| `nome` | VARCHAR(100) | NOT NULL | Property name |
-| `proprietario_id` | INTEGER | FK -> pessoas, NOT NULL | Current owner |
-| `matricula` | VARCHAR(50) | NOT NULL | Registration number |
-| `tipo_documento_principal` | VARCHAR(20) | NOT NULL, DEFAULT 'matricula' | 'matricula' or 'transcricao' |
-| `observacoes` | TEXT | NULL | Notes |
-| `cartorio_id` | INTEGER | FK -> cartorios, NULL | Registry office |
-| `data_cadastro` | DATE | DEFAULT CURRENT_DATE | Registration date |
-| `arquivado` | BOOLEAN | DEFAULT FALSE | Archived flag |
+| Column                     | Type         | Constraints                   | Description                  |
+| -------------------------- | ------------ | ----------------------------- | ---------------------------- |
+| `id`                       | SERIAL       | PRIMARY KEY                   | Auto-increment ID            |
+| `terra_indigena_id_id`     | INTEGER      | FK -> tis, NOT NULL           | Associated Indigenous land   |
+| `nome`                     | VARCHAR(100) | NOT NULL                      | Property name                |
+| `proprietario_id`          | INTEGER      | FK -> pessoas, NOT NULL       | Current owner                |
+| `matricula`                | VARCHAR(50)  | NOT NULL                      | Registration number          |
+| `tipo_documento_principal` | VARCHAR(20)  | NOT NULL, DEFAULT 'matricula' | 'matricula' or 'transcricao' |
+| `observacoes`              | TEXT         | NULL                          | Notes                        |
+| `cartorio_id`              | INTEGER      | FK -> cartorios, NULL         | Registry office              |
+| `data_cadastro`            | DATE         | DEFAULT CURRENT_DATE          | Registration date            |
+| `arquivado`                | BOOLEAN      | DEFAULT FALSE                 | Archived flag                |
 
 **Constraints:**
+
 - `unique_matricula_por_cartorio`: UNIQUE(matricula, cartorio_id)
 
 **Indexes:**
+
 - `dom_imovel_mat_cart_idx`: INDEX(matricula, cartorio_id)
 
 ---
@@ -178,11 +181,11 @@ Real estate properties being tracked in the system.
 
 Many-to-many relationship between Indigenous lands and properties.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `tis_codigo_id` | INTEGER | FK -> tis, NOT NULL | Indigenous land |
-| `imovel_id` | INTEGER | FK -> imovel, NOT NULL | Property |
+| Column          | Type    | Constraints            | Description       |
+| --------------- | ------- | ---------------------- | ----------------- |
+| `id`            | SERIAL  | PRIMARY KEY            | Auto-increment ID |
+| `tis_codigo_id` | INTEGER | FK -> tis, NOT NULL    | Indigenous land   |
+| `imovel_id`     | INTEGER | FK -> imovel, NOT NULL | Property          |
 
 ---
 
@@ -192,10 +195,10 @@ Many-to-many relationship between Indigenous lands and properties.
 
 Types of documents in the system.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `tipo` | VARCHAR(50) | NOT NULL | 'transcricao' or 'matricula' |
+| Column | Type        | Constraints | Description                  |
+| ------ | ----------- | ----------- | ---------------------------- |
+| `id`   | SERIAL      | PRIMARY KEY | Auto-increment ID            |
+| `tipo` | VARCHAR(50) | NOT NULL    | 'transcricao' or 'matricula' |
 
 ---
 
@@ -203,31 +206,33 @@ Types of documents in the system.
 
 Registration documents (matriculas and transcricoes).
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `imovel_id` | INTEGER | FK -> imovel, NOT NULL | Associated property |
-| `tipo_id` | INTEGER | FK -> documentotipo, NOT NULL | Document type |
-| `numero` | VARCHAR(50) | NOT NULL | Document number |
-| `data` | DATE | NOT NULL | Document date |
-| `cartorio_id` | INTEGER | FK -> cartorios, NOT NULL | Registry office |
-| `livro` | VARCHAR(50) | NOT NULL | Book number |
-| `folha` | VARCHAR(50) | NOT NULL | Page number |
-| `origem` | TEXT | NULL | Origin description |
-| `observacoes` | TEXT | NULL | Notes |
-| `data_cadastro` | DATE | DEFAULT CURRENT_DATE | Registration date |
-| `nivel_manual` | INTEGER | NULL | Manual hierarchy level (0-10) |
-| `classificacao_fim_cadeia` | VARCHAR(50) | NULL | End-of-chain classification |
-| `sigla_patrimonio_publico` | VARCHAR(50) | NULL | Public patrimony acronym |
-| `cri_atual_id` | INTEGER | FK -> cartorios, NULL | Current CRI |
-| `cri_origem_id` | INTEGER | FK -> cartorios, NULL | Origin CRI |
+| Column                     | Type        | Constraints                   | Description                   |
+| -------------------------- | ----------- | ----------------------------- | ----------------------------- |
+| `id`                       | SERIAL      | PRIMARY KEY                   | Auto-increment ID             |
+| `imovel_id`                | INTEGER     | FK -> imovel, NOT NULL        | Associated property           |
+| `tipo_id`                  | INTEGER     | FK -> documentotipo, NOT NULL | Document type                 |
+| `numero`                   | VARCHAR(50) | NOT NULL                      | Document number               |
+| `data`                     | DATE        | NOT NULL                      | Document date                 |
+| `cartorio_id`              | INTEGER     | FK -> cartorios, NOT NULL     | Registry office               |
+| `livro`                    | VARCHAR(50) | NOT NULL                      | Book number                   |
+| `folha`                    | VARCHAR(50) | NOT NULL                      | Page number                   |
+| `origem`                   | TEXT        | NULL                          | Origin description            |
+| `observacoes`              | TEXT        | NULL                          | Notes                         |
+| `data_cadastro`            | DATE        | DEFAULT CURRENT_DATE          | Registration date             |
+| `nivel_manual`             | INTEGER     | NULL                          | Manual hierarchy level (0-10) |
+| `classificacao_fim_cadeia` | VARCHAR(50) | NULL                          | End-of-chain classification   |
+| `sigla_patrimonio_publico` | VARCHAR(50) | NULL                          | Public patrimony acronym      |
+| `cri_atual_id`             | INTEGER     | FK -> cartorios, NULL         | Current CRI                   |
+| `cri_origem_id`            | INTEGER     | FK -> cartorios, NULL         | Origin CRI                    |
 
 **Values for `classificacao_fim_cadeia`:**
+
 - `origem_lidima`: Property with legitimate origin
 - `sem_origem`: Property without origin
 - `inconclusa`: Inconclusive situation
 
 **Constraints:**
+
 - UNIQUE(numero, cartorio_id)
 
 ---
@@ -236,18 +241,20 @@ Registration documents (matriculas and transcricoes).
 
 Tracks documents imported from other property chains.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `documento_id` | INTEGER | FK -> documento, NOT NULL | Imported document |
-| `imovel_origem_id` | INTEGER | FK -> imovel, NOT NULL | Source property |
-| `data_importacao` | TIMESTAMP | DEFAULT NOW() | Import timestamp |
-| `importado_por_id` | INTEGER | FK -> auth_user, NULL | Importing user |
+| Column             | Type      | Constraints               | Description       |
+| ------------------ | --------- | ------------------------- | ----------------- |
+| `id`               | SERIAL    | PRIMARY KEY               | Auto-increment ID |
+| `documento_id`     | INTEGER   | FK -> documento, NOT NULL | Imported document |
+| `imovel_origem_id` | INTEGER   | FK -> imovel, NOT NULL    | Source property   |
+| `data_importacao`  | TIMESTAMP | DEFAULT NOW()             | Import timestamp  |
+| `importado_por_id` | INTEGER   | FK -> auth_user, NULL     | Importing user    |
 
 **Constraints:**
+
 - UNIQUE(documento_id, imovel_origem_id)
 
 **Indexes:**
+
 - INDEX(documento_id)
 - INDEX(imovel_origem_id)
 - INDEX(data_importacao)
@@ -261,22 +268,23 @@ Tracks documents imported from other property chains.
 
 Types of recordings/transactions in documents.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `tipo` | VARCHAR(50) | NOT NULL | Type identifier |
-| `requer_transmissao` | BOOLEAN | DEFAULT FALSE | Requires transmission |
-| `requer_detalhes` | BOOLEAN | DEFAULT FALSE | Requires details |
-| `requer_titulo` | BOOLEAN | DEFAULT FALSE | Requires title |
-| `requer_cartorio_origem` | BOOLEAN | DEFAULT FALSE | Requires origin registry |
-| `requer_livro_origem` | BOOLEAN | DEFAULT FALSE | Requires origin book |
-| `requer_folha_origem` | BOOLEAN | DEFAULT FALSE | Requires origin page |
-| `requer_data_origem` | BOOLEAN | DEFAULT FALSE | Requires origin date |
-| `requer_forma` | BOOLEAN | DEFAULT FALSE | Requires form |
-| `requer_descricao` | BOOLEAN | DEFAULT FALSE | Requires description |
-| `requer_observacao` | BOOLEAN | DEFAULT TRUE | Requires notes |
+| Column                   | Type        | Constraints   | Description              |
+| ------------------------ | ----------- | ------------- | ------------------------ |
+| `id`                     | SERIAL      | PRIMARY KEY   | Auto-increment ID        |
+| `tipo`                   | VARCHAR(50) | NOT NULL      | Type identifier          |
+| `requer_transmissao`     | BOOLEAN     | DEFAULT FALSE | Requires transmission    |
+| `requer_detalhes`        | BOOLEAN     | DEFAULT FALSE | Requires details         |
+| `requer_titulo`          | BOOLEAN     | DEFAULT FALSE | Requires title           |
+| `requer_cartorio_origem` | BOOLEAN     | DEFAULT FALSE | Requires origin registry |
+| `requer_livro_origem`    | BOOLEAN     | DEFAULT FALSE | Requires origin book     |
+| `requer_folha_origem`    | BOOLEAN     | DEFAULT FALSE | Requires origin page     |
+| `requer_data_origem`     | BOOLEAN     | DEFAULT FALSE | Requires origin date     |
+| `requer_forma`           | BOOLEAN     | DEFAULT FALSE | Requires form            |
+| `requer_descricao`       | BOOLEAN     | DEFAULT FALSE | Requires description     |
+| `requer_observacao`      | BOOLEAN     | DEFAULT TRUE  | Requires notes           |
 
 **Values for `tipo`:**
+
 - `averbacao`: Notation
 - `registro`: Registration
 - `inicio_matricula`: Start of matricula
@@ -287,35 +295,35 @@ Types of recordings/transactions in documents.
 
 Individual recordings within documents.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `documento_id` | INTEGER | FK -> documento, NOT NULL | Parent document |
-| `tipo_id` | INTEGER | FK -> lancamentotipo, NOT NULL | Recording type |
-| `numero_lancamento` | VARCHAR(50) | NULL | Registry-generated number |
-| `data` | DATE | NOT NULL | Recording date |
-| `transmitente_id` | INTEGER | FK -> pessoas, NULL | Transferor (legacy) |
-| `adquirente_id` | INTEGER | FK -> pessoas, NULL | Transferee (legacy) |
-| `valor_transacao` | DECIMAL(10,2) | NULL | Transaction value |
-| `area` | DECIMAL(12,4) | NULL | Area |
-| `origem` | VARCHAR(255) | NULL | Origin reference |
-| `detalhes` | TEXT | NULL | Details |
-| `observacoes` | TEXT | NULL | Notes |
-| `data_cadastro` | DATE | DEFAULT CURRENT_DATE | Registration date |
-| `forma` | VARCHAR(100) | NULL | Form/method |
-| `descricao` | TEXT | NULL | Description |
-| `titulo` | VARCHAR(255) | NULL | Title |
-| `cartorio_origem_id` | INTEGER | FK -> cartorios, NULL | Origin registry |
-| `cartorio_transacao_id` | INTEGER | FK -> cartorios, NULL | Transaction registry (legacy) |
-| `cartorio_transmissao_id` | INTEGER | FK -> cartorios, NULL | Transmission registry |
-| `livro_transacao` | VARCHAR(50) | NULL | Transaction book |
-| `folha_transacao` | VARCHAR(50) | NULL | Transaction page |
-| `data_transacao` | DATE | NULL | Transaction date |
-| `livro_origem` | VARCHAR(50) | NULL | Origin book |
-| `folha_origem` | VARCHAR(50) | NULL | Origin page |
-| `data_origem` | DATE | NULL | Origin date |
-| `eh_inicio_matricula` | BOOLEAN | DEFAULT FALSE | Is start of matricula |
-| `documento_origem_id` | INTEGER | FK -> documento, NULL | Origin document link |
+| Column                    | Type          | Constraints                    | Description                   |
+| ------------------------- | ------------- | ------------------------------ | ----------------------------- |
+| `id`                      | SERIAL        | PRIMARY KEY                    | Auto-increment ID             |
+| `documento_id`            | INTEGER       | FK -> documento, NOT NULL      | Parent document               |
+| `tipo_id`                 | INTEGER       | FK -> lancamentotipo, NOT NULL | Recording type                |
+| `numero_lancamento`       | VARCHAR(50)   | NULL                           | Registry-generated number     |
+| `data`                    | DATE          | NOT NULL                       | Recording date                |
+| `transmitente_id`         | INTEGER       | FK -> pessoas, NULL            | Transferor (legacy)           |
+| `adquirente_id`           | INTEGER       | FK -> pessoas, NULL            | Transferee (legacy)           |
+| `valor_transacao`         | DECIMAL(10,2) | NULL                           | Transaction value             |
+| `area`                    | DECIMAL(12,4) | NULL                           | Area                          |
+| `origem`                  | VARCHAR(255)  | NULL                           | Origin reference              |
+| `detalhes`                | TEXT          | NULL                           | Details                       |
+| `observacoes`             | TEXT          | NULL                           | Notes                         |
+| `data_cadastro`           | DATE          | DEFAULT CURRENT_DATE           | Registration date             |
+| `forma`                   | VARCHAR(100)  | NULL                           | Form/method                   |
+| `descricao`               | TEXT          | NULL                           | Description                   |
+| `titulo`                  | VARCHAR(255)  | NULL                           | Title                         |
+| `cartorio_origem_id`      | INTEGER       | FK -> cartorios, NULL          | Origin registry               |
+| `cartorio_transacao_id`   | INTEGER       | FK -> cartorios, NULL          | Transaction registry (legacy) |
+| `cartorio_transmissao_id` | INTEGER       | FK -> cartorios, NULL          | Transmission registry         |
+| `livro_transacao`         | VARCHAR(50)   | NULL                           | Transaction book              |
+| `folha_transacao`         | VARCHAR(50)   | NULL                           | Transaction page              |
+| `data_transacao`          | DATE          | NULL                           | Transaction date              |
+| `livro_origem`            | VARCHAR(50)   | NULL                           | Origin book                   |
+| `folha_origem`            | VARCHAR(50)   | NULL                           | Origin page                   |
+| `data_origem`             | DATE          | NULL                           | Origin date                   |
+| `eh_inicio_matricula`     | BOOLEAN       | DEFAULT FALSE                  | Is start of matricula         |
+| `documento_origem_id`     | INTEGER       | FK -> documento, NULL          | Origin document link          |
 
 **⚠️ Deprecated Fields:** `transmitente_id`, `adquirente_id`, and `cartorio_transacao_id` are legacy fields. Use `LancamentoPessoa` for persons and `cartorio_transmissao_id` for transmission registry. See [Deprecated Fields](#deprecated-fields) section.
 
@@ -325,15 +333,16 @@ Individual recordings within documents.
 
 Multiple people per recording (many-to-many with roles).
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `lancamento_id` | INTEGER | FK -> lancamento, NOT NULL | Recording |
-| `pessoa_id` | INTEGER | FK -> pessoas, NOT NULL | Person |
-| `tipo` | VARCHAR(20) | NOT NULL | 'transmitente' or 'adquirente' |
-| `nome_digitado` | VARCHAR(255) | NULL | Manually typed name |
+| Column          | Type         | Constraints                | Description                    |
+| --------------- | ------------ | -------------------------- | ------------------------------ |
+| `id`            | SERIAL       | PRIMARY KEY                | Auto-increment ID              |
+| `lancamento_id` | INTEGER      | FK -> lancamento, NOT NULL | Recording                      |
+| `pessoa_id`     | INTEGER      | FK -> pessoas, NOT NULL    | Person                         |
+| `tipo`          | VARCHAR(20)  | NOT NULL                   | 'transmitente' or 'adquirente' |
+| `nome_digitado` | VARCHAR(255) | NULL                       | Manually typed name            |
 
 **Constraints:**
+
 - UNIQUE(lancamento_id, pessoa_id, tipo)
 
 ---
@@ -342,22 +351,24 @@ Multiple people per recording (many-to-many with roles).
 
 Tracks end-of-chain information for each origin in a recording.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `lancamento_id` | INTEGER | FK -> lancamento, NOT NULL | Recording |
-| `indice_origem` | INTEGER | NOT NULL | Origin index (0, 1, 2...) |
-| `fim_cadeia` | BOOLEAN | DEFAULT FALSE | Is end of chain |
-| `tipo_fim_cadeia` | VARCHAR(50) | NULL | End type |
-| `especificacao_fim_cadeia` | TEXT | NULL | Specification |
-| `classificacao_fim_cadeia` | VARCHAR(50) | NULL | Classification |
+| Column                     | Type        | Constraints                | Description               |
+| -------------------------- | ----------- | -------------------------- | ------------------------- |
+| `id`                       | SERIAL      | PRIMARY KEY                | Auto-increment ID         |
+| `lancamento_id`            | INTEGER     | FK -> lancamento, NOT NULL | Recording                 |
+| `indice_origem`            | INTEGER     | NOT NULL                   | Origin index (0, 1, 2...) |
+| `fim_cadeia`               | BOOLEAN     | DEFAULT FALSE              | Is end of chain           |
+| `tipo_fim_cadeia`          | VARCHAR(50) | NULL                       | End type                  |
+| `especificacao_fim_cadeia` | TEXT        | NULL                       | Specification             |
+| `classificacao_fim_cadeia` | VARCHAR(50) | NULL                       | Classification            |
 
 **Values for `tipo_fim_cadeia`:**
+
 - `destacamento_publico`: Public patrimony detachment
 - `outra`: Other
 - `sem_origem`: Without origin
 
 **Constraints:**
+
 - UNIQUE(lancamento_id, indice_origem)
 
 ---
@@ -366,17 +377,17 @@ Tracks end-of-chain information for each origin in a recording.
 
 Master list of end-of-chain types.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `nome` | VARCHAR(100) | UNIQUE, NOT NULL | Name (e.g., "INCRA") |
-| `tipo` | VARCHAR(50) | NOT NULL, DEFAULT 'destacamento_publico' | Type |
-| `classificacao` | VARCHAR(50) | NOT NULL, DEFAULT 'origem_lidima' | Classification |
-| `sigla` | VARCHAR(50) | NULL | Acronym (e.g., SPU) |
-| `descricao` | TEXT | NULL | Description |
-| `ativo` | BOOLEAN | DEFAULT TRUE | Active flag |
-| `data_criacao` | TIMESTAMP | DEFAULT NOW() | Creation date |
-| `data_atualizacao` | TIMESTAMP | AUTO UPDATE | Update date |
+| Column             | Type         | Constraints                              | Description          |
+| ------------------ | ------------ | ---------------------------------------- | -------------------- |
+| `id`               | SERIAL       | PRIMARY KEY                              | Auto-increment ID    |
+| `nome`             | VARCHAR(100) | UNIQUE, NOT NULL                         | Name (e.g., "INCRA") |
+| `tipo`             | VARCHAR(50)  | NOT NULL, DEFAULT 'destacamento_publico' | Type                 |
+| `classificacao`    | VARCHAR(50)  | NOT NULL, DEFAULT 'origem_lidima'        | Classification       |
+| `sigla`            | VARCHAR(50)  | NULL                                     | Acronym (e.g., SPU)  |
+| `descricao`        | TEXT         | NULL                                     | Description          |
+| `ativo`            | BOOLEAN      | DEFAULT TRUE                             | Active flag          |
+| `data_criacao`     | TIMESTAMP    | DEFAULT NOW()                            | Creation date        |
+| `data_atualizacao` | TIMESTAMP    | AUTO UPDATE                              | Update date          |
 
 ---
 
@@ -384,28 +395,28 @@ Master list of end-of-chain types.
 
 #### 15. `dominial_alteracoestipo` - Amendment Types
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `tipo` | VARCHAR(50) | NOT NULL | 'registro', 'averbacao', 'nao_classificado' |
+| Column | Type        | Constraints | Description                                 |
+| ------ | ----------- | ----------- | ------------------------------------------- |
+| `id`   | SERIAL      | PRIMARY KEY | Auto-increment ID                           |
+| `tipo` | VARCHAR(50) | NOT NULL    | 'registro', 'averbacao', 'nao_classificado' |
 
 ---
 
 #### 16. `dominial_registrotipo` - Registration Types
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `tipo` | VARCHAR(100) | NOT NULL | Registration type name |
+| Column | Type         | Constraints | Description            |
+| ------ | ------------ | ----------- | ---------------------- |
+| `id`   | SERIAL       | PRIMARY KEY | Auto-increment ID      |
+| `tipo` | VARCHAR(100) | NOT NULL    | Registration type name |
 
 ---
 
 #### 17. `dominial_averbacaotipo` - Notation Types
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `tipo` | VARCHAR(100) | NOT NULL | Notation type name |
+| Column | Type         | Constraints | Description        |
+| ------ | ------------ | ----------- | ------------------ |
+| `id`   | SERIAL       | PRIMARY KEY | Auto-increment ID  |
+| `tipo` | VARCHAR(100) | NOT NULL    | Notation type name |
 
 ---
 
@@ -413,28 +424,28 @@ Master list of end-of-chain types.
 
 Property amendments/changes.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `imovel_id_id` | INTEGER | FK -> imovel, NOT NULL | Property |
-| `tipo_alteracao_id_id` | INTEGER | FK -> alteracoestipo, NOT NULL | Amendment type |
-| `livro` | VARCHAR(50) | NULL | Book |
-| `folha` | VARCHAR(50) | NULL | Page |
-| `cartorio_id` | INTEGER | FK -> cartorios, NOT NULL | Registry |
-| `data_alteracao` | DATE | NULL | Amendment date |
-| `registro_tipo_id` | INTEGER | FK -> registrotipo, NULL | Registration type |
-| `averbacao_tipo_id` | INTEGER | FK -> averbacaotipo, NULL | Notation type |
-| `titulo` | VARCHAR(255) | NULL | Title |
-| `cartorio_origem_id` | INTEGER | FK -> cartorios, NOT NULL | Origin registry |
-| `livro_origem` | VARCHAR(50) | NULL | Origin book |
-| `folha_origem` | VARCHAR(50) | NULL | Origin page |
-| `data_origem` | DATE | NULL | Origin date |
-| `transmitente_id` | INTEGER | FK -> pessoas, NULL | Transferor |
-| `adquirente_id` | INTEGER | FK -> pessoas, NULL | Transferee |
-| `valor_transacao` | DECIMAL(10,2) | NULL | Transaction value |
-| `area` | DECIMAL(12,4) | NULL | Area |
-| `observacoes` | TEXT | NULL | Notes |
-| `data_cadastro` | DATE | DEFAULT CURRENT_DATE | Registration date |
+| Column                 | Type          | Constraints                    | Description       |
+| ---------------------- | ------------- | ------------------------------ | ----------------- |
+| `id`                   | SERIAL        | PRIMARY KEY                    | Auto-increment ID |
+| `imovel_id_id`         | INTEGER       | FK -> imovel, NOT NULL         | Property          |
+| `tipo_alteracao_id_id` | INTEGER       | FK -> alteracoestipo, NOT NULL | Amendment type    |
+| `livro`                | VARCHAR(50)   | NULL                           | Book              |
+| `folha`                | VARCHAR(50)   | NULL                           | Page              |
+| `cartorio_id`          | INTEGER       | FK -> cartorios, NOT NULL      | Registry          |
+| `data_alteracao`       | DATE          | NULL                           | Amendment date    |
+| `registro_tipo_id`     | INTEGER       | FK -> registrotipo, NULL       | Registration type |
+| `averbacao_tipo_id`    | INTEGER       | FK -> averbacaotipo, NULL      | Notation type     |
+| `titulo`               | VARCHAR(255)  | NULL                           | Title             |
+| `cartorio_origem_id`   | INTEGER       | FK -> cartorios, NOT NULL      | Origin registry   |
+| `livro_origem`         | VARCHAR(50)   | NULL                           | Origin book       |
+| `folha_origem`         | VARCHAR(50)   | NULL                           | Origin page       |
+| `data_origem`          | DATE          | NULL                           | Origin date       |
+| `transmitente_id`      | INTEGER       | FK -> pessoas, NULL            | Transferor        |
+| `adquirente_id`        | INTEGER       | FK -> pessoas, NULL            | Transferee        |
+| `valor_transacao`      | DECIMAL(10,2) | NULL                           | Transaction value |
+| `area`                 | DECIMAL(12,4) | NULL                           | Area              |
+| `observacoes`          | TEXT          | NULL                           | Notes             |
+| `data_cadastro`        | DATE          | DEFAULT CURRENT_DATE           | Registration date |
 
 ---
 
@@ -444,17 +455,18 @@ Property amendments/changes.
 
 Tracks batch imports of registry offices.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
-| `estado` | VARCHAR(2) | NOT NULL | State code |
-| `data_inicio` | TIMESTAMP | DEFAULT NOW() | Start time |
-| `data_fim` | TIMESTAMP | NULL | End time |
-| `total_cartorios` | INTEGER | DEFAULT 0 | Total imported |
-| `status` | VARCHAR(20) | NOT NULL, DEFAULT 'pendente' | Status |
-| `erro` | TEXT | NULL | Error message |
+| Column            | Type        | Constraints                  | Description       |
+| ----------------- | ----------- | ---------------------------- | ----------------- |
+| `id`              | SERIAL      | PRIMARY KEY                  | Auto-increment ID |
+| `estado`          | VARCHAR(2)  | NOT NULL                     | State code        |
+| `data_inicio`     | TIMESTAMP   | DEFAULT NOW()                | Start time        |
+| `data_fim`        | TIMESTAMP   | NULL                         | End time          |
+| `total_cartorios` | INTEGER     | DEFAULT 0                    | Total imported    |
+| `status`          | VARCHAR(20) | NOT NULL, DEFAULT 'pendente' | Status            |
+| `erro`            | TEXT        | NULL                         | Error message     |
 
 **Values for `status`:**
+
 - `pendente`: Pending
 - `em_andamento`: In progress
 - `concluido`: Completed
@@ -532,6 +544,7 @@ The `matricula` field on properties is unique **per registry office (cartorio)**
 ### Document Chain (Cadeia Dominial)
 
 The system tracks the chain of ownership through:
+
 1. **Documents** (`Documento`) linked to properties
 2. **Recordings** (`Lancamento`) within documents
 3. **Origin documents** (`documento_origem`) linking recordings to previous documents
@@ -539,11 +552,13 @@ The system tracks the chain of ownership through:
 ### End of Chain Classifications
 
 When a property chain reaches its origin:
+
 - `origem_lidima`: Legitimate public origin (e.g., INCRA, State)
 - `sem_origem`: No traceable origin
 - `inconclusa`: Investigation incomplete
 
 **Note:** Classification exists at two levels:
+
 - `Documento.classificacao_fim_cadeia` - Document-level classification
 - `OrigemFimCadeia.classificacao_fim_cadeia` - Per-origin classification (for multi-origin documents)
 
@@ -551,15 +566,16 @@ When a property chain reaches its origin:
 
 Recording types have conditional field requirements enforced in application logic:
 
-| Type | Required Fields |
-|------|-----------------|
-| `registro` | `cartorio_origem`, `titulo` |
-| `averbacao` | `descricao` |
-| `inicio_matricula` | `cartorio_origem` |
+| Type               | Required Fields             |
+| ------------------ | --------------------------- |
+| `registro`         | `cartorio_origem`, `titulo` |
+| `averbacao`        | `descricao`                 |
+| `inicio_matricula` | `cartorio_origem`           |
 
 ### OrigemFimCadeia Conditional Validation
 
 When `fim_cadeia = TRUE`:
+
 - `tipo_fim_cadeia` is **required**
 - `classificacao_fim_cadeia` is **required**
 - If `tipo_fim_cadeia = 'outra'`, then `especificacao_fim_cadeia` is **required**
@@ -580,11 +596,11 @@ The following fields are maintained for backward compatibility but should not be
 
 ### Lancamento Table
 
-| Field | Replacement | Notes |
-|-------|-------------|-------|
-| `transmitente_id` | `LancamentoPessoa` with `tipo='transmitente'` | Use junction table for multiple persons |
-| `adquirente_id` | `LancamentoPessoa` with `tipo='adquirente'` | Use junction table for multiple persons |
-| `cartorio_transacao_id` | `cartorio_transmissao_id` | New field with clearer naming |
+| Field                   | Replacement                                   | Notes                                   |
+| ----------------------- | --------------------------------------------- | --------------------------------------- |
+| `transmitente_id`       | `LancamentoPessoa` with `tipo='transmitente'` | Use junction table for multiple persons |
+| `adquirente_id`         | `LancamentoPessoa` with `tipo='adquirente'`   | Use junction table for multiple persons |
+| `cartorio_transacao_id` | `cartorio_transmissao_id`                     | New field with clearer naming           |
 
 **Compatibility:** The `cartorio_transmissao_compat` property in Django falls back to `cartorio_transacao_id` if `cartorio_transmissao_id` is NULL.
 
@@ -595,6 +611,7 @@ The following fields are maintained for backward compatibility but should not be
 **Purpose Clarification:** The `TIs_Imovel` junction table enables a many-to-many relationship between Indigenous Lands (TIs) and Properties (Imovel), even though `Imovel` already has a `terra_indigena_id` foreign key.
 
 **Use cases:**
+
 - Primary relationship: `Imovel.terra_indigena_id` → main TI assignment
 - Additional relationships: `TIs_Imovel` → property overlaps multiple TIs
 
@@ -606,10 +623,10 @@ The following fields are maintained for backward compatibility but should not be
 
 Both tables track property changes with similar fields. The key difference:
 
-| Table | Document Relationship | Use Case |
-|-------|----------------------|----------|
-| `Lancamento` | Attached to `Documento` | Recording within a document |
-| `Alteracoes` | Document-independent | Historical changes without document reference |
+| Table        | Document Relationship   | Use Case                                      |
+| ------------ | ----------------------- | --------------------------------------------- |
+| `Lancamento` | Attached to `Documento` | Recording within a document                   |
+| `Alteracoes` | Document-independent    | Historical changes without document reference |
 
 **Recommendation:** Consider consolidating these tables (see SCHEMA_IMPROVEMENT_PROPOSAL.md).
 
