@@ -1,180 +1,158 @@
-# Sistema de Cadeia Dominial
+# 🏡 CadeiaDominial
 
-Sistema web para gestão e visualização de cadeias dominiais de terras indígenas, desenvolvido em Django.
+[![CI](https://img.shields.io/github/actions/workflow/status/transistir/CadeiaDominial/ci.yml?style=flat-square&label=CI)](https://github.com/transistir/CadeiaDominial/actions)
+[![Coverage](https://img.shields.io/codecov/c/github/transistir/CadeiaDominial?style=flat-square)](https://codecov.io/gh/transistir/CadeiaDominial)
+[![Sentry](https://img.shields.io/badge/sentry-monitoring-%237E1FFF?logo=sentry&logoColor=white&style=flat-square)](https://sentry.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-![Sistema de Cadeia Dominial](printpage.png)
+> Full-stack TypeScript monorepo powered by Cloudflare Workers, React + Vite, Hono, and Drizzle — designed for land registry exploration.
 
-## Documentação
+## 📖 Project Overview
 
-Toda a documentação está organizada na pasta [`docs/`](docs/README.md):
+**Cadeia Dominial** (Chain of Title) is a web system for managing and visualizing property ownership chains for indigenous lands in Brazil. The system enables authorized users to:
 
-- **Deploy e Produção**: Checklists, guias de deploy e configuração
-- **Refatoração**: Documentação das melhorias implementadas
-- **Cartórios**: Análise e planejamento da estrutura de cartórios
-- **Planejamento**: Prioridades e estratégias de implementação
+- 📋 **Manage Properties**: Track indigenous lands (TIs), properties, and documents
+- 🏢 **Notary Offices**: Comprehensive database of Brazilian cartórios
+- 🌳 **Interactive Tree Visualization**: Visual exploration of property chains with zoom/pan
+- 👥 **Multi-User Support**: Role-based access (admin, editor, viewer)
 
-## Scripts de Teste
-
-Scripts de teste e análise estão na pasta [`tests_scripts/`](tests_scripts/):
-
-- Scripts de teste de funcionalidades
-- Análise de estrutura de cartórios
-- Testes de integração
-
-## Versão Beta v1.0.0
-
-Esta é a primeira versão beta do sistema, disponível para testes com clientes.
-
-### Funcionalidades Implementadas
-
-#### Gestão de Dados
-- **TIs (Terras Indígenas)**: Cadastro e gestão de terras indígenas
-- **Imóveis**: Registro de imóveis com matrícula, SNCR e SIGEF
-- **Cartórios**: Base de dados de cartórios brasileiros
-- **Pessoas**: Cadastro de proprietários e envolvidos
-- **Documentos**: Gestão de matrículas e transcrições
-- **Lançamentos**: Registro de averbações, registros e alterações
-
-#### Visualização em Árvore
-- **Diagrama Interativo**: Visualização da cadeia dominial em formato de árvore
-- **Zoom e Pan**: Navegação fluida com controles de zoom
-- **Cards Dinâmicos**: Tamanho ajustável baseado na quantidade de documentos
-- **Conexões Visuais**: Linhas conectando documentos relacionados
-- **Origens Identificadas**: Detecção automática de documentos de origem
-
-#### Interface Moderna
-- **Design Responsivo**: Adaptável a diferentes tamanhos de tela
-- **Tema Consistente**: Interface unificada e profissional
-- **Navegação Intuitiva**: Menu e botões organizados logicamente
-- **Feedback Visual**: Efeitos de hover e transições suaves
-
-#### Segurança
-- **Autenticação**: Sistema de login/logout
-- **Autorização**: Controle de acesso baseado em permissões
-- **Validação**: Verificação de dados e integridade
-
-## Tecnologias Utilizadas
-
-- **Backend**: Django 5.2.1
-- **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
-- **Banco de Dados**: SQLite (desenvolvimento)
-- **Geolocalização**: GeoDjango (PostGIS)
-- **Autocomplete**: Django Autocomplete Light
-
-## Instalação
-
-### Pré-requisitos
-- Python 3.8+
-- pip
-- Git
-
-### Passos de Instalação
-
-1. **Clone o repositório**
-```bash
-git clone https://github.com/transistir/CadeiaDominial.git
-cd CadeiaDominial
-```
-
-2. **Crie um ambiente virtual**
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate  # Windows
-```
-
-3. **Instale as dependências**
-```bash
-pip install -r requirements.txt
-```
-
-4. **Configure o banco de dados**
-```bash
-python manage.py migrate
-```
-
-5. **Crie um superusuário**
-```bash
-python manage.py createsuperuser
-```
-
-6. **Execute os comandos de inicialização**
-```bash
-python manage.py criar_tipos_documento
-python manage.py criar_tipos_lancamento
-```
-
-7. **Inicie o servidor**
-```bash
-python manage.py runserver
-```
-
-## Como Usar
-
-### Acesso ao Sistema
-- URL: `http://localhost:8000`
-- Use as credenciais do superusuário criado
-
-### Fluxo Principal
-1. **Cadastre uma TI** (Terra Indígena)
-2. **Adicione Imóveis** à TI
-3. **Cadastre Documentos** (matrículas/transcrições)
-4. **Registre Lançamentos** nos documentos
-5. **Visualize a Cadeia** na árvore dominial
-
-### Visualização em Árvore
-- Acesse um imóvel específico
-- Clique em "Cadeia Dominial"
-- Use os controles de zoom (+/-) para navegar
-- Clique nos cards para ver detalhes
-- Arraste para mover a visualização
-
-## Estratégia de Versionamento
-
-### Branches
-- **`main`**: Código estável e testado
-- **`develop`**: Desenvolvimento ativo
-- **`feature/*`**: Novas funcionalidades
-- **`hotfix/*`**: Correções urgentes
-
-### Tags
-- **`v1.0.0-beta`**: Primeira versão para testes
-- **`v1.0.0`**: Versão estável (futuro)
-- **`v1.1.0`**: Novas funcionalidades (futuro)
-
-## Próximas Versões
-
-### v1.1.0 (Planejado)
-- [ ] Relatórios em PDF
-- [ ] Exportação de dados
-- [ ] Notificações por email
-- [ ] Dashboard com estatísticas
-
-### v1.2.0 (Planejado)
-- [ ] API REST
-- [ ] Integração com sistemas externos
-- [ ] Módulo de auditoria
-- [ ] Backup automático
-
-## Contribuição
-
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
-
-## Suporte
-
-Para dúvidas, sugestões ou problemas:
-- Abra uma [Issue](https://github.com/transistir/CadeiaDominial/issues)
-- Entre em contato com a equipe de desenvolvimento
-
-## Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+This is a **modern TypeScript rewrite** of the original Django application, leveraging Cloudflare's edge platform for global performance and scalability.
 
 ---
 
-**Desenvolvido pela equipe Transistir**
+## 📋 Table of Contents
+
+- [✨ Features](#-features)
+- [🚀 Tech Stack](#-tech-stack)
+- [💻 Getting Started](#-getting-started)
+- [⚙️ Development](#-development)
+  - [Running Locally](#running-locally)
+  - [Database Migrations](#database-migrations)
+- [🔐 Authentication](#-authentication)
+- [🗄️ Database](#-database)
+- [📦 Deployment](#-deployment)
+- [🎯 Roles & Permissions](#-roles--permissions)
+- [📄 License](#-license)
+
+---
+
+## ✨ Features
+
+- 🌍 Edge-first deployment with Cloudflare Pages + Workers
+- 🔐 JWT authentication with Hono middleware
+- ⚡ Instant hot-reload dev with Vite + React
+- 🧩 End-to-end type safety with Zod validation
+- 🗄️ Cloudflare D1 (SQLite) with Drizzle ORM
+- 🧪 Testing with Vitest + Playwright + Codecov
+- 🧹 Code style enforced with ESLint + Prettier
+- 🎯 Role-based access (admin, editor, viewer)
+- 📈 Observability with Sentry and CI/CD on GitHub Actions
+
+---
+
+## 🚀 Tech Stack
+
+| Layer          | Tooling                                      |
+| -------------- | -------------------------------------------- |
+| **Frontend**   | React, Vite, TanStack Router/Query, Tailwind |
+| **Backend**    | Hono, Drizzle ORM, SQLite (D1)               |
+| **Auth**       | Hono JWT + D1                                |
+| **Infra**      | Cloudflare Workers + Pages + D1              |
+| **Tooling**    | TypeScript, Vitest, Playwright, ESLint       |
+| **CI/CD**      | GitHub Actions, Wrangler, Codecov            |
+| **Monitoring** | Sentry                                       |
+
+---
+
+## 💻 Getting Started
+
+### Prerequisites
+
+- Node.js v20+ (LTS)
+- pnpm (`npm i -g pnpm`)
+- Wrangler CLI (`npm i -g wrangler`)
+- Cloudflare account (for D1 + Pages)
+
+### Installation
+
+```bash
+git clone https://github.com/transistir/CadeiaDominial.git
+cd CadeiaDominial
+pnpm install
+cp packages/api/.dev.vars.example packages/api/.dev.vars
+cp packages/web/.env.example packages/web/.env
+```
+
+### Run Dev Environment
+
+```bash
+pnpm dev   # Starts both frontend and API
+```
+
+---
+
+## ⚙️ Development
+
+### Running Locally
+
+```bash
+# Full monorepo (recommended)
+pnpm dev
+
+# Or individually:
+cd packages/web && pnpm dev   # Frontend at http://localhost:5173
+cd packages/api && pnpm dev   # API at http://localhost:8787
+```
+
+### Database Migrations
+
+```bash
+cd packages/api
+pnpm db:generate       # Generate migrations from schema
+pnpm db:migrate:local  # Apply to local D1
+```
+
+---
+
+## 🔐 Authentication
+
+- JWT-based auth via **Hono middleware**
+- User data stored in **D1**
+- Roles stored in the user table: `admin`, `editor`, `viewer`
+- Role enforcement via custom Hono middleware
+
+---
+
+## 🗄️ Database
+
+- **Cloudflare D1** (SQLite)
+- Accessed via **Drizzle ORM**
+- Migrations tracked with `drizzle-kit`
+- Admin UI via **Drizzle Studio** at `/admin`
+
+---
+
+## 📦 Deployment
+
+- Frontend: **Cloudflare Pages**
+- API: **Cloudflare Workers** via Wrangler
+- CI: GitHub Actions
+  - Lint + Typecheck
+  - Tests + Coverage (Codecov)
+  - Auto-deploy on push to `main`
+
+---
+
+## 🎯 Roles & Permissions
+
+| Role   | Description      |
+| ------ | ---------------- |
+| Admin  | Full access      |
+| Editor | Add/edit records |
+| Viewer | Read-only access |
+
+---
+
+## 📄 License
+
+MIT © [transistir](https://github.com/transistir)

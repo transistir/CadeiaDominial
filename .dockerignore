@@ -2,33 +2,57 @@
 .git
 .gitignore
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env
-pip-log.txt
-pip-delete-this-directory.txt
-.tox
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git
-.mypy_cache
-.pytest_cache
-.hypothesis
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
-# Virtual environments
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+dist/
+dist-ssr/
+*.local
+
+# Vitest
+coverage/
+.nyc_output/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Wrangler (Cloudflare)
+.wrangler/
+.wrangler-dev/
+.mf/
+
+# Drizzle
+drizzle/**/*.snapshot.ts
+
+# Environment (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Virtual environments (legacy)
 venv/
 ENV/
 env/
 .venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
 # IDEs
 .vscode/
@@ -46,12 +70,24 @@ env/
 ehthumbs.db
 Thumbs.db
 
-# Django
+# Logs
 *.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media/
+logs/
+
+# Build artifacts
+build/
+out/
+.cache/
+
+# Tests
+test_*
+*_test.py
+.pytest_cache/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
 
 # Docker
 Dockerfile*
@@ -60,13 +96,4 @@ docker-compose*
 
 # Documentation
 *.md
-docs/
-
-# Tests
-test_*
-*_test.py
-.pytest_cache/
-
-# Temporary files
-*.tmp
-*.temp 
+docs/ 

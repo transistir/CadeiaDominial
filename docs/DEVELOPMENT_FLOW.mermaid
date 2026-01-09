@@ -1,0 +1,79 @@
+flowchart TD
+
+  classDef agent fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
+  classDef task fill:#f1f8e9,stroke:#2e7d32,stroke-width:2px;
+  classDef artifact fill:#fff3e0,stroke:#ef6c00,stroke-width:2px;
+  classDef human fill:#fce4ec,stroke:#ad1457,stroke-width:2px,stroke-dasharray:5 3;
+
+  T0[Start new work]:::task
+  I0[Create Issue in GitHub]:::task
+  A1[IssueImprover Agent]:::agent
+  I1[Improved Issue]:::artifact
+  H1[Human approval]:::human
+
+  A2[SubIssueSuggester Agent]:::agent
+  I2[Sub-issue proposals with acceptance criteria]:::artifact
+  H2[Human approval]:::human
+  I3[Create Sub-Issues in GitHub]:::task
+
+  T0 --> I0 --> A1 --> I1 --> H1 --> A2 --> I2 --> H2 --> I3
+
+  subgraph SUBISSUE_CYCLE[SubIssue cycle repeat for each sub-issue]
+    direction TD
+
+    S0[Pick one sub-issue]:::task
+
+    R0{Research needed}:::task
+    RA[Research Agent]:::agent
+    RMD[research.md]:::artifact
+    HR[Human approval]:::human
+
+    PM[PM Agent]:::agent
+    SMD[spec.md]:::artifact
+    HS[Human approval]:::human
+
+    TC[TestCreator Agent]:::agent
+    TMD[TESTS.md]:::artifact
+    HT[Human approval]:::human
+
+    PL[Planner Agent]:::agent
+    PMD[plan.md]:::artifact
+    HP[Human approval]:::human
+
+    DEV[Dev Agent]:::agent
+    CODE[Code changes]:::artifact
+
+    PR[Open or update PR]:::task
+
+    APR[Auto PR commenters qodo codex etc]:::agent
+    RAG[ReviewAgent]:::agent
+    HREV[Human code review]:::human
+    REVLOOP{Review approved}:::task
+
+    QAENV[Deploy PR to dev environment]:::task
+    HQA[Human QA on dev deployment]:::human
+    QAOK{QA approved}:::task
+
+    MERGE[Merge]:::task
+
+    DOC[DocsUpdater Agent]:::agent
+    DOCS[Update AGENTS.md docs README.md other md]:::artifact
+    HD[Human approval]:::human
+
+    S0 --> R0
+    R0 -->|Yes| RA --> RMD --> HR --> PM
+    R0 -->|No| PM
+
+    PM --> SMD --> HS --> TC --> TMD --> HT --> PL --> PMD --> HP --> DEV --> CODE --> PR
+
+    PR --> APR --> RAG --> HREV --> REVLOOP
+    REVLOOP -->|No changes requested| QAENV
+    REVLOOP -->|Changes requested| DEV
+
+    QAENV --> HQA --> QAOK
+    QAOK -->|Approved| MERGE
+    QAOK -->|Issues found| DEV
+
+    MERGE --> DOC --> DOCS --> HD
+  end
+TD
