@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
     "declaration": true,
@@ -8,9 +9,7 @@
     "rootDir": "src",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "target": "ES2022",
-    "strict": true,
-    "skipLibCheck": true
+    "noEmit": false
   },
   "include": ["src"]
 }
