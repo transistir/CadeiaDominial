@@ -39,6 +39,23 @@ drizzle/**/*.snapshot.ts
 .env.local
 .env.*.local
 
+# Claude Code - Security & State (NEVER commit these)
+.claude/.credentials.json
+.claude/command-history.log
+.claude/history.jsonl
+.claude/debug/
+.claude/file-history/
+.claude/session-env/
+.claude/shell-snapshots/
+.claude/todos/
+.claude/cache/
+.claude/logs/
+.claude/stats-*.json
+.claude/webui-projects.json
+.claude/.env
+.claude/state/
+.claude/tmp/
+
 # IDE
 .idea/
 .vscode/
@@ -65,6 +82,10 @@ out/
 .next/
 .cache/
 
+# Generated Mermaid diagrams
+docs/DEVELOPMENT_FLOW.svg
+docs/DEVELOPMENT_FLOW.png
+
 # Temporary files
 *.tmp
 *.temp
@@ -75,3 +96,4 @@ out/
 # Backup files
 backups/
 old/
+*.sql
