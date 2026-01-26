@@ -2,7 +2,23 @@
   "name": "@cadeia/web",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
-    "@cadeia/shared": "workspace:*"
+    "@cadeia/shared": "workspace:*",
+    "@tanstack/react-router": "^1.157.15",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }
