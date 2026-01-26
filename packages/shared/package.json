@@ -5,6 +5,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json"
+  },
   "dependencies": {
     "zod": "^4.1.5"
   }
