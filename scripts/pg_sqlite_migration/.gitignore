@@ -1,0 +1,16 @@
+# Local databases / exports
+*.sql
+*.dump
+*.sqlite
+*.sqlite3
+*.sqlite3.*
+
+db.sqlite3
+.db.sqlite3
+
+# Generated workspaces and local Postgres
+migration_workspace/
+.pgdata/
+
+# Reports (generated)
+reports/
