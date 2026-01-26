@@ -32,7 +32,7 @@ If you only touch docs, no build step is required.
 
 - The planned stack uses Vitest and Playwright with an 80% coverage target (see `docs/MIGRATION_GUIDE.md`).
 - No automated test runner is configured in this repository snapshot; treat `old/` as reference-only unless instructed otherwise.
-- For frontend verification (visual or interaction checks), use Agent Browser via `npx @vercel-labs/agent-browser` and document results in the relevant PRD or progress notes.
+- For frontend verification (visual or interaction checks), use Agent Browser via `agent-browser` (or `npx @vercel-labs/agent-browser`) and document results in the relevant PRD or progress notes.
 
 ## Commit & Pull Request Guidelines
 
