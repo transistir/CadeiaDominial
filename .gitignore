@@ -82,6 +82,7 @@ build/
 out/
 .next/
 .cache/
+.turbo/
 
 # Generated Mermaid diagrams
 docs/DEVELOPMENT_FLOW.svg
