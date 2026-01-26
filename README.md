@@ -28,6 +28,7 @@ This is a **modern TypeScript rewrite** of the original Django application, leve
 - [⚙️ Development](#-development)
   - [Running Locally](#running-locally)
   - [Database Migrations](#database-migrations)
+  - [Claude Code Integration](#claude-code-integration)
 - [🔐 Authentication](#-authentication)
 - [🗄️ Database](#-database)
 - [📦 Deployment](#-deployment)
@@ -111,6 +112,53 @@ cd packages/api
 pnpm db:generate       # Generate migrations from schema
 pnpm db:migrate:local  # Apply to local D1
 ```
+
+### Claude Code Integration
+
+This project includes **Agent-Driven Development (ADD)** workflow via `.claude/` configuration.
+
+#### Quick Start
+
+```bash
+# Initialize workflow for an issue
+/init <issue-id> <sub-id>
+
+# Execute phases (creates artifacts in .project/issues/)
+/research    # Codebase analysis
+/spec        # Write specification
+/tests       # Design tests
+/plan        # Implementation plan
+/dev         # Implement code
+/qa          # Quality assurance
+
+# Check status
+/status
+```
+
+#### Workflow
+
+```
+Issue → Context → Research → Spec → Tests → Plan → Dev → QA → Complete
+         ↓          ↓         ↓       ↓       ↓     ↓    ↓       ↓
+      (commit)   (commit)  (commit) (commit) (commit) (auto) (commit)
+```
+
+#### Artifacts
+
+Each phase creates an artifact in `.project/issues/ISSUE-{id}/`:
+
+| Phase    | Artifact       | Description                            |
+| -------- | -------------- | -------------------------------------- |
+| context  | 00-context.md  | Scope and boundaries                   |
+| research | 01-research.md | Codebase analysis                      |
+| spec     | 02-spec.md     | Specification with acceptance criteria |
+| tests    | 03-tests.md    | Test specification                     |
+| plan     | 04-plan.md     | Implementation plan                    |
+| qa       | 05-qa-agent.md | QA report                              |
+
+**Approval**: Commit artifact to git = phase approved.
+
+If you have the Claude Code config installed locally, see `.claude/skills/add-workflow.md` for full documentation.
 
 ---
 
