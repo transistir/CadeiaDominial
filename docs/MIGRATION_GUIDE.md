@@ -393,7 +393,7 @@ JWT_KEY="generate-with-openssl-rand-base64-32"
 
 ```bash
 # API endpoint (dev only, proxied by Vite)
-VITE_API_URL="http://localhost:8787"
+VITE_API_BASE_URL="http://localhost:8787"
 
 # Monitoring (optional)
 VITE_SENTRY_DSN=""
@@ -489,7 +489,13 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: "dist" },
   server: {
-    proxy: { "/api": { target: "http://localhost:8787", changeOrigin: true } },
+    proxy: {
+      "/api": {
+        target: "http://localhost:8787",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
   },
 });
 ```

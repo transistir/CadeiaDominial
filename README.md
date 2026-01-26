@@ -105,15 +105,29 @@ cd packages/web && pnpm dev   # Frontend at http://localhost:5173
 cd packages/api && pnpm dev   # API at http://localhost:8787
 ```
 
-The web app calls the API directly using `VITE_API_BASE_URL`. The default is
-`http://localhost:8787`, or set it in `packages/web/.env` for local overrides.
+The web dev server proxies `/api` to `http://localhost:8787`. By default the app
+uses `/api` as `VITE_API_BASE_URL`, so local dev does not need any env overrides.
+Only set a full URL in `packages/web/.env` when you want to bypass the proxy
+(preview or a remote API).
+
+For production and preview builds, set `VITE_API_BASE_URL` to the deployed API
+URL (for example, the Workers URL) via your Pages environment configuration.
+
+**Local ports**
+- Web: `http://localhost:5173`
+- API: `http://localhost:8787`
 
 ### Database Migrations
 
 ```bash
-cd packages/api
 pnpm db:generate       # Generate migrations from schema
 pnpm db:migrate:local  # Apply to local D1
+```
+
+If you haven't created the local D1 database yet:
+
+```bash
+wrangler d1 create cadeia-dominial --local --config packages/api/wrangler.toml
 ```
 
 ### Claude Code Integration

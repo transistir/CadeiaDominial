@@ -6,6 +6,10 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
+    "dev:api": "pnpm --filter @cadeia/api dev",
+    "dev:web": "pnpm --filter @cadeia/web dev",
+    "db:generate": "pnpm --filter @cadeia/api db:generate",
+    "db:migrate:local": "pnpm --filter @cadeia/api db:migrate:local",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
