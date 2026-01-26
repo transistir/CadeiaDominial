@@ -71,7 +71,7 @@ These are the target “starting point” versions for the bootstrap phase. Upda
 | PRD-005 | docs/prd/bootstrap/PRD-005-auth.json | done | JWT auth routes + users table |
 | PRD-006 | docs/prd/bootstrap/PRD-006-web-vite.json | done | Vite + React + TanStack Router |
 | PRD-007 | docs/prd/bootstrap/PRD-007-query-client.json | done | TanStack Query + health fetch |
-| PRD-008 | docs/prd/bootstrap/PRD-008-react-flow.json | not-started | sample graph |
+| PRD-008 | docs/prd/bootstrap/PRD-008-react-flow.json | done | React Flow route with sample graph |
 | PRD-009 | docs/prd/bootstrap/PRD-009-tooling.json | not-started | lint/format/types |
 | PRD-010 | docs/prd/bootstrap/PRD-010-tests.json | not-started | vitest/playwright |
 | PRD-011 | docs/prd/bootstrap/PRD-011-deploy.json | not-started | CF deploy |
