@@ -21,10 +21,10 @@ const GraphRoute = () => {
     <section className="graph-page">
       <header>
         <p className="hero-eyebrow">Case Map</p>
-        <h1>Title flow preview</h1>
+        <h1 data-testid="graph-title">Title flow preview</h1>
         <p>Follow the chain from parcel to transfer and final registry note.</p>
       </header>
-      <div className="graph-shell">
+      <div className="graph-shell" data-testid="graph-shell">
         <ReactFlow nodes={nodes} edges={edges} fitView>
           <Background gap={24} size={1.5} color="#d5c9b8" />
           <Controls position="bottom-right" />

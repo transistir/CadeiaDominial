@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "./api";
 
@@ -53,6 +53,7 @@ const rootRoute = createRootRoute({
             </dl>
           )}
         </section>
+        <Outlet />
       </div>
     );
   }
