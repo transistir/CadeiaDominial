@@ -66,7 +66,7 @@ These are the target “starting point” versions for the bootstrap phase. Upda
 | PRD-000 | docs/prd/bootstrap/PRD-000-alignment.json | not-started | confirm scope and package versions |
 | PRD-001 | docs/prd/bootstrap/PRD-001-monorepo.json | done | workspace + turbo + package layout |
 | PRD-002 | docs/prd/bootstrap/PRD-002-shared.json | done | shared Zod schema + api/web consumption |
-| PRD-003 | docs/prd/bootstrap/PRD-003-api-hono.json | not-started | minimal Hono app |
+| PRD-003 | docs/prd/bootstrap/PRD-003-api-hono.json | done | Hono app with health + CORS |
 | PRD-004 | docs/prd/bootstrap/PRD-004-d1-drizzle.json | not-started | D1 + Drizzle |
 | PRD-005 | docs/prd/bootstrap/PRD-005-auth.json | not-started | JWT auth skeleton |
 | PRD-006 | docs/prd/bootstrap/PRD-006-web-vite.json | not-started | Vite + React |
