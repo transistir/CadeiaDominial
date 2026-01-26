@@ -1,5 +1,11 @@
 {
   "name": "@cadeia/shared",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.1.5"
+  }
 }
