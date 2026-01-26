@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
+    "@tanstack/react-query": "^5.90.19",
     "@tanstack/react-router": "^1.157.15",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"

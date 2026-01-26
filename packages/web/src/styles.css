@@ -72,6 +72,38 @@ body {
   font-size: 1.2rem;
 }
 
+.health-panel {
+  padding: 1.5rem;
+  background: rgba(29, 27, 22, 0.9);
+  color: #fefaf4;
+  border-radius: 24px;
+  max-width: 640px;
+  animation: rise-in 900ms ease-out forwards;
+}
+
+.health-panel dl {
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.health-panel div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 1rem;
+}
+
+.health-panel dt {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.health-error {
+  color: #ffc7b5;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
