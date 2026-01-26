@@ -393,6 +393,32 @@ Origem 3: M30 (Cartório: 1º CRI Salvador, Livro: 2, Folha: 30)
 - O sistema armazena o mapeamento de cartórios por origem em cache temporário
 - Cada origem pode ter informações de "fim de cadeia" associadas
 
+### Particularidades: Opções de Origem
+
+O sistema deve exigir que o usuário escolha uma das opções de origem ao cadastrar um lançamento do tipo "Início de Matrícula":
+
+#### Opções de Origem Disponíveis
+
+| Opção | Descrição | Campos Obrigatórios | Continua a Cadeia? |
+|-------|-----------|---------------------|-------------------|
+| **a. Matrícula** | Origem é uma matrícula anterior | Número da matrícula + CRI | ✓ Sim - a cadeia continua |
+| **b. Transcrição** | Origem é uma transcrição anterior | Número da transcrição + CRI | ✓ Sim - a cadeia continua |
+| **c. Outra** | Outra situação (comumente sentença judicial) | Especificação detalhada (número de processo, Vara, data, etc.) | ✗ Não - fim de cadeia |
+| **d. Destacamento do Patrimônio Público** | Origem é órgão público (INCRA, governo estadual, etc.) | Sigla do órgão (INCRA, Estado, etc.) | ✗ Não - fim de cadeia |
+| **e. Registro** | Origem é um registro (não sempre CRI) | Número + Livro + Cartório | ✗ Não - fim de cadeia |
+| **f. Sem Origem** | Não há origem documentada | Reprodução de fala da transcrição (opcional) | ✗ Não - fim de cadeia |
+
+#### Regras de Continuidade da Cadeia
+
+- **Opções a e b (Matrícula/Transcrição):** A cadeia **continua**. O sistema deve buscar/criar o documento de origem e permitir que a cadeia seja expandida recursivamente.
+- **Opções c, d, e e f:** A cadeia **termina**. O sistema deve marcar como "fim de cadeia" e solicitar classificação.
+
+#### Marcação Visual na Árvore
+
+Quando a cadeia chega ao fim (opções c, d, e ou f), o sistema deve:
+- Exibir uma **moldura ou marcação bem nítida** na árvore indicando que chegamos na origem (ou na falta dela)
+- A marcação deve ser visualmente distinta para facilitar identificação
+
 ### Particularidades: Fim de Cadeia
 
 Cada origem pode ser marcada como **"Fim de Cadeia"**, indicando que a cadeia dominial termina naquela origem. Quando marcado, são obrigatórios:
@@ -407,6 +433,21 @@ Cada origem pode ser marcada como **"Fim de Cadeia"**, indicando que a cadeia do
   - `inconclusa`: Situação Inconclusa
 - `especificacao_fim_cadeia`: Especificação (obrigatório se tipo = "outra")
 - `sigla_patrimonio_publico`: Sigla do órgão (ex: "INCRA", "Estado")
+
+#### Classificação Obrigatória no Fim de Cadeia
+
+Quando a cadeia chega ao fim, o sistema **deve pedir** para marcar uma das opções de classificação:
+
+- **Imóvel com origem lídima** (`origem_lidima`)
+- **Imóvel sem origem** (`sem_origem`)
+- **Situação inconclusa** (`inconclusa`)
+
+**Visualização:**
+- Se der para marcar isso na árvore, ótimo
+- Se ficar ilegível, não tem problema, mas essa informação sobre a origem (lídima, sem origem ou inconclusa) será o principal
+- Em algum lugar, precisa aparecer uma **lista de imóveis com essa condição**
+
+> **📋 Documentação Complementar:** Para informações detalhadas sobre fim de cadeia, tipos, classificações e implementação, consulte o documento: [`FIM_DE_CADEIA.md`](./FIM_DE_CADEIA.md).
 
 ### Exemplos de Uso
 
@@ -650,6 +691,119 @@ if lancamento.tipo.tipo == 'averbacao':
 | `cartorio_transmissao` | Select (Cartorios) | Cartório onde foi registrada a transmissão |
 
 **Nota:** A nomenclatura "transação" no código é tecnicamente incorreta - deveria ser "transmissão", mas foi mantida por questões de compatibilidade com código legado.
+
+---
+
+## Melhorias na Tela "Novo Lançamento"
+
+Esta seção documenta as melhorias de interface e usabilidade solicitadas para a tela de criação de novos lançamentos.
+
+### 1. Destaque da Matrícula
+
+**Requisito:** A matrícula cujos lançamentos serão feitos deve estar em maior evidência na tela.
+
+**Implementação sugerida:**
+- Exibir a matrícula atual em um card destacado no topo do formulário
+- Usar tipografia maior e cor de destaque
+- Incluir informações básicas: número da matrícula, CRI, proprietário atual
+
+### 2. Abolição de Livro e Folha em Lançamentos Repetidos
+
+**Requisito:** Todos os lançamentos em uma matrícula terão o mesmo número de livro e página. O sistema deve herdar automaticamente esses valores do primeiro lançamento, poupando tempo do usuário.
+
+**Regra de negócio:**
+- Ao criar o primeiro lançamento de uma matrícula, o usuário preenche livro e folha
+- Para lançamentos subsequentes, o sistema deve:
+  - Herdar automaticamente livro e folha do primeiro lançamento da matrícula
+  - Ocultar ou desabilitar os campos de livro e folha (ou torná-los opcionais apenas para correções)
+  - Permitir edição apenas se necessário (casos excepcionais)
+
+**Implementação sugerida:**
+```python
+# No service de lançamento
+def obter_livro_folha_da_matricula(documento):
+    primeiro_lancamento = documento.lancamentos.order_by('id').first()
+    if primeiro_lancamento:
+        return {
+            'livro': primeiro_lancamento.livro,
+            'folha': primeiro_lancamento.folha
+        }
+    return None
+```
+
+### 3. Campo de Área
+
+**Requisito:** Inserir campo de área em todos os tipos de lançamento.
+
+**Especificações:**
+- Campo: `area` (Decimal)
+- Formato: 4 casas decimais
+- Unidade: Hectares
+- Obrigatório: Não (opcional)
+
+**Observação:** O campo de área já existe no modelo `Lancamento` e aparece como opcional em Averbação, Registro e Início de Matrícula. A validação de 4 casas decimais deve ser implementada no frontend e backend.
+
+### 4. Visualização de Lançamentos Anteriores (Planilha)
+
+**Requisito:** Visualizar as linhas de cima (lançamentos já feitos) na tela de novo lançamento, pois é na comparação que se percebem fraudes.
+
+**Implementação sugerida:**
+- Adicionar uma seção de "Lançamentos Anteriores" acima ou ao lado do formulário
+- Exibir em formato de tabela/planilha:
+  - Número do lançamento
+  - Tipo (Averbação/Registro/Início de Matrícula)
+  - Data
+  - Descrição/Título
+  - Transmitentes/Adquirentes
+  - Área
+  - Livro/Folha
+- Permitir ordenação e filtros
+- Destacar o último lançamento para referência
+
+### 5. Troca de Nomenclatura: Cartório → Registro Imobiliário
+
+**Requisito:** No campo "Informações Básicas da Matrícula/Transcrição", trocar "Cartório" por "Registro Imobiliário".
+
+**Implementação:**
+- Atualizar labels e textos de interface
+- Manter a nomenclatura técnica no código (`cartorio`) para compatibilidade
+- Atualizar documentação e mensagens de erro
+
+### 6. Validação de Cartório (Registro Imobiliário) - Seleção Obrigatória
+
+**Requisito:** No campo "Registro Imobiliário" (anteriormente "Cartório") no quadro "Informações Básicas da Matrícula/Transcrição", impedir que alguém digite algo e crie um cartório novo. O usuário deve obrigatoriamente selecionar um existente.
+
+**Regra de negócio:**
+- O campo deve ser um **select/autocomplete** que só permite seleção de cartórios existentes
+- Não deve permitir criação de novos cartórios neste contexto
+- A criação de novos cartórios deve ser feita em outra tela/fluxo administrativo
+
+**Observação:** Em um momento futuro, pode-se pensar em um modo de adicionar cartório, pois sempre se criam novos.
+
+### 7. Cartórios de Notas vs Cartórios de Registro de Imóveis
+
+**Requisito:** No quadro "Transmissão", na opção de lançar registro, o usuário será obrigado a criar novos cartórios, mas esses cartórios (que são de notas) não podem entrar na lista dos cartórios de registro de imóveis.
+
+**Regra de negócio:**
+- Cartórios de **Registro de Imóveis** (CRI): usados em "Informações Básicas da Matrícula/Transcrição"
+- Cartórios de **Notas** (Tabelionato): usados em "Transmissão" quando o lançamento é do tipo Registro
+- Os dois tipos devem ser separados no sistema
+- Cartórios de notas não devem aparecer na lista de seleção de cartórios de registro de imóveis
+
+**Implementação sugerida:**
+- Adicionar campo `tipo` ao modelo `Cartorio`:
+  - `registro_imoveis` - Cartório de Registro de Imóveis (CRI)
+  - `tabelionato` - Cartório de Notas
+- Filtrar cartórios por tipo em cada contexto
+- Permitir criação de cartórios de notas apenas no contexto de transmissão
+
+### 8. Campos Opcionais de Transmitentes e Adquirentes em Averbação
+
+**Requisito:** Quando o lançamento for Averbação, precisa ter opcionalmente os campos transmitentes e adquirentes.
+
+**Status atual:** Os campos `transmitente` e `adquirente` já aparecem como opcionais para Averbação na tabela comparativa (linha 565-566). A implementação já permite isso através do modelo `LancamentoPessoa`.
+
+**Validação necessária:** Garantir que o formulário de Averbação exiba esses campos como opcionais.
 
 ---
 
