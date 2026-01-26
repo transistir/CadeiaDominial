@@ -2,9 +2,16 @@
   "name": "@cadeia/api",
   "version": "0.0.0",
   "private": true,
+  "scripts": {
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts"
+  },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
     "@hono/cors": "^1.2.0",
+    "drizzle-orm": "^0.45.1",
     "hono": "^4.11.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.8"
   }
 }
