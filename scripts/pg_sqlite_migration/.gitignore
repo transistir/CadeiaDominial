@@ -14,3 +14,7 @@ migration_workspace/
 
 # Reports (generated)
 reports/
+
+# Python cache
+__pycache__/
+*.pyc

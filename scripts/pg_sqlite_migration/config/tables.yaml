@@ -1,0 +1,34 @@
+tables:
+  - dominial_lancamento
+  - dominial_cartorios
+  - dominial_documento
+  - dominial_imovel
+  - dominial_lancamentopessoa
+  - dominial_pessoas
+  - dominial_tis
+  - dominial_terraindigenareferencia
+  - django_session
+  - django_admin_log
+  - django_migrations
+  - django_content_type
+  - auth_permission
+  - auth_user
+  - dominial_documentoimportado
+  - dominial_origemfimcadeia
+  - dominial_documentotipo
+  - dominial_lancamentotipo
+  - dominial_fimcadeia
+
+# Optionally map source tables to preprocessed views
+views:
+  django_migrations: v_django_migrations
+  django_session: v_django_session
+  auth_user: v_auth_user
+  django_admin_log: v_django_admin_log
+  dominial_fimcadeia: v_dominial_fimcadeia
+  dominial_importacaocartorios: v_dominial_importacaocartorios
+  dominial_lancamento: v_dominial_lancamento
+  dominial_alteracoes: v_dominial_alteracoes
+  dominial_tis: v_dominial_tis
+  dominial_terraindigenareferencia: v_dominial_terraindigenareferencia
+  dominial_documentoimportado: v_dominial_documentoimportado
