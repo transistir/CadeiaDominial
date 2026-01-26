@@ -38,6 +38,7 @@ drizzle/**/*.snapshot.ts
 .env
 .env.local
 .env.*.local
+.cloudflare.token
 
 # Claude Code - Security & State (NEVER commit these)
 .claude/.credentials.json
@@ -105,3 +106,5 @@ old/
 *.sqlite3
 *.sqlite3.*
 db.sqlite3
+db.sqlite3.new
+.d1_chunks/
