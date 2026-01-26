@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Bootstrap Vite + React web app with TanStack Router",
+  "steps": [
+    "Create packages/web with Vite React setup",
+    "Add TanStack Router with a home route",
+    "Render a simple landing page and verify local dev server"
+  ],
+  "passes": true
+}

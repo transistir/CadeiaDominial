@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Integrate Cloudflare D1 with Drizzle schema and migrations",
+  "steps": [
+    "Add Drizzle schema and migration folder in packages/api",
+    "Configure D1 bindings in wrangler.toml",
+    "Validate local migration flow with drizzle-kit"
+  ],
+  "passes": true
+}

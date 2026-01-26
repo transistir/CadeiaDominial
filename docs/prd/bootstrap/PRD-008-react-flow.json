@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Add a minimal React Flow screen with sample nodes and edges",
+  "steps": [
+    "Install @xyflow/react and include its base styles",
+    "Create a simple graph with 2-3 nodes and edges",
+    "Render the graph in a dedicated route"
+  ],
+  "passes": true
+}

@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Provide a unified local development workflow for web/api with D1",
+  "steps": [
+    "Add root scripts to run api and web together",
+    "Document local D1 setup and migration commands",
+    "Confirm local ports and proxy configuration between web and api"
+  ],
+  "passes": true
+}

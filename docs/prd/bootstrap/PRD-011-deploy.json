@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Configure Cloudflare Pages + Workers deployment",
+  "steps": [
+    "Add wrangler and Pages config for api and web",
+    "Document environment variables and D1 bindings",
+    "Verify deployment commands for both services"
+  ],
+  "passes": true
+}

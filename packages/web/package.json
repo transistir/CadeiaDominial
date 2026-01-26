@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test --config ../../playwright.config.ts",
-    "deploy": "wrangler pages deploy dist --config wrangler.toml"
+    "deploy": "wrangler pages deploy dist"
   },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
@@ -22,6 +22,7 @@
     "react-dom": "^19.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.2",

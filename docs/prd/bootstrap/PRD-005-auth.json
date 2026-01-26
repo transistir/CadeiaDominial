@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Create a JWT-based auth skeleton using Hono middleware and D1",
+  "steps": [
+    "Add auth routes for login and session verification",
+    "Create a minimal users table with role field",
+    "Protect a sample route with JWT middleware"
+  ],
+  "passes": true
+}

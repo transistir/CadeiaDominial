@@ -8,6 +8,6 @@ JWT_SECRET = "replace-me"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "cadeiadominial-db"
+database_name = "cadeia-dominial"
 migrations_dir = "drizzle/migrations"
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "be41b97b-1819-4305-895e-0ba2bb69950e"

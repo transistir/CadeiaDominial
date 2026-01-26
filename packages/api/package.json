@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "dev": "wrangler dev --config wrangler.toml",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply cadeia-dominial --local --config wrangler.toml",
     "lint": "eslint src drizzle --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -11,7 +13,6 @@
   },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
-    "@hono/cors": "^1.2.0",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.5"
   },

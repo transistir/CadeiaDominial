@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Wire TanStack Query and a typed API client in the web app",
+  "steps": [
+    "Add TanStack Query provider at the app root",
+    "Create a minimal fetch client targeting the API /health route",
+    "Render health response data on the home screen"
+  ],
+  "passes": true
+}

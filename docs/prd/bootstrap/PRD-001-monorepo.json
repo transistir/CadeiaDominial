@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Create pnpm workspace, turbo pipeline, and initial packages layout",
+  "steps": [
+    "Create workspace root package.json and pnpm-workspace.yaml",
+    "Add turbo.json with build/dev/test pipelines",
+    "Create packages/web, packages/api, packages/shared directories with placeholder package.json files"
+  ],
+  "passes": true
+}

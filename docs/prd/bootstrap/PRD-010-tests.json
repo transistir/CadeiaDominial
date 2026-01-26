@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Add Vitest unit tests and Playwright e2e baseline",
+  "steps": [
+    "Configure Vitest for web and api smoke tests",
+    "Add a Playwright test that hits the web home page",
+    "Wire test scripts into turbo pipeline"
+  ],
+  "passes": true
+}

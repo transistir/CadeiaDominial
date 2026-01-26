@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Add shared package for TypeScript types and Zod schemas used by web and api",
+  "steps": [
+    "Create packages/shared with tsconfig and export entry",
+    "Define a minimal shared schema (e.g., HealthResponse) in Zod",
+    "Consume the shared types in both api and web"
+  ],
+  "passes": true
+}

@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Confirm bootstrap scope, architecture anchors, and dependency baseline",
+  "steps": [
+    "Review docs/ARCHITECTURE_DECISIONS.md and docs/MIGRATION_GUIDE.md",
+    "Confirm the monorepo layout and Cloudflare deployment target",
+    "Validate the dependency baseline for latest stable versions"
+  ],
+  "passes": true
+}

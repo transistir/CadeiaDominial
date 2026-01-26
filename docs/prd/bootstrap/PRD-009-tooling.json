@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Add ESLint, Prettier, and strict TypeScript configs across packages",
+  "steps": [
+    "Create shared tsconfig base and per-package tsconfig",
+    "Add ESLint and Prettier configs at the repo root",
+    "Verify lint and typecheck scripts run across packages"
+  ],
+  "passes": true
+}

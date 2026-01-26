@@ -6,7 +6,7 @@ Standardize how we represent the cadeia dominial graph in React Flow and the JSO
 ## Install (packages/web)
 
 ```bash
-pnpm add reactflow
+pnpm add @xyflow/react
 ```
 
 ## Data Shape
@@ -40,12 +40,18 @@ Minimal structure:
   - `id`: `lanc-<lancamento.id>`
   - `source`: `doc-<documento_origem>`
   - `target`: `doc-<documento>`
+  - **Note:** Lancamentos are not separate nodes; they only supply origin data for edges.
+  - **Special case:** `inicio_matricula` always has one or more origins and is the primary source of edges.
+- **Fim de cadeia** → Synthetic leaf node
+  - `id`: `fim-<documento.id>-<indice>`
+  - `data`: include `tipo_fim_cadeia`, `classificacao_fim_cadeia`
+  - edge from `doc-<documento.id>` to `fim-...`
 
 ## Minimal Component
 
 ```tsx
-import { ReactFlow } from "reactflow";
-import "reactflow/dist/style.css";
+import { ReactFlow } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 export function CadeiaFlow({ nodes, edges }) {
   return <ReactFlow nodes={nodes} edges={edges} fitView />;
@@ -58,6 +64,14 @@ export function CadeiaFlow({ nodes, edges }) {
   - `x = depth * 300`
   - `y = indexWithinDepth * 120`
 - Keep layout logic in app code (not in the DB).
+- Layout is visual only; it does not define semantic hierarchy.
+
+## Graph Semantics
+
+- The chain is a directed acyclic graph (DAG), not a strict tree.
+- Nodes can have multiple origins; edges represent derivation.
+- Depth is contextual; do not duplicate nodes to force a tree.
+ - Root is the document that represents the current property (created at chain start and tied to `imovel.matricula`), not the largest registry number across cartórios.
 
 ## Conventions
 

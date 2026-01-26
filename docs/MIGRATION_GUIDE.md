@@ -17,7 +17,7 @@ The current **Cadeia Dominial** system is a Django 5.2.3 application:
 | **Database**      | PostgreSQL (prod) / SQLite (dev) | Cloudflare D1 (SQLite)           |
 | **Auth**          | Django Auth System               | Hono JWT + D1                    |
 | **Deployment**    | Traditional server               | Cloudflare Pages + Workers       |
-| **Visualization** | D3.js tree                       | React-based visualization        |
+| **Visualization** | D3.js tree                       | React Flow visualization       |
 
 ### Core Features to Preserve
 
@@ -69,7 +69,7 @@ The current **Cadeia Dominial** system is a Django 5.2.3 application:
 **How to use (baseline)**:
 
 1. **Install** (in `packages/web`):
-   - `pnpm add reactflow`
+   - `pnpm add @xyflow/react`
 
 2. **Data shape**:
    - Output JSON should be `{ nodes, edges, viewport? }`.
@@ -79,18 +79,21 @@ The current **Cadeia Dominial** system is a Django 5.2.3 application:
 3. **Domain mapping**:
    - `Documento` -> Node (`id: doc-<documento.id>`, `data: { numero, tipo, cartorio, data }`).
    - `Lancamento.documento_origem -> documento` -> Edge (`id: lanc-<id>`, `source: doc-<origem>`, `target: doc-<documento>`).
+   - `inicio_matricula` always has one or more origins and is the primary source of edges.
+   - Root is the document that represents the current property (created at chain start and tied to `imovel.matricula`), not the largest registry number across cartórios.
 
 4. **Layout**:
    - Start with a simple BFS layout:
      - `x = depth * 300`
      - `y = indexWithinDepth * 120`
    - Replace with a DAG layout later if needed.
+   - Layout is visual only; it does not define semantic hierarchy.
 
 **Minimal component example**:
 
 ```tsx
-import { ReactFlow } from "reactflow";
-import "reactflow/dist/style.css";
+import { ReactFlow } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 export function CadeiaFlow({ nodes, edges }) {
   return <ReactFlow nodes={nodes} edges={edges} fitView />;

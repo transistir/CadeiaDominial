@@ -105,6 +105,9 @@ cd packages/web && pnpm dev   # Frontend at http://localhost:5173
 cd packages/api && pnpm dev   # API at http://localhost:8787
 ```
 
+The web app calls the API directly using `VITE_API_BASE_URL`. The default is
+`http://localhost:8787`, or set it in `packages/web/.env` for local overrides.
+
 ### Database Migrations
 
 ```bash

@@ -1,0 +1,10 @@
+{
+  "category": "functional",
+  "description": "Bootstrap a minimal Hono API on Cloudflare Workers",
+  "steps": [
+    "Create packages/api with Hono app entrypoint and wrangler.toml",
+    "Add a /health route returning JSON",
+    "Enable CORS and typed environment bindings"
+  ],
+  "passes": true
+}
