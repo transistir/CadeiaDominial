@@ -2,16 +2,17 @@ import { RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
+import type { ReactElement } from "react";
 
 const graphModule = vi.hoisted(() => {
-  let resolve: ((mod: { default: () => JSX.Element }) => void) | null = null;
-  const promise = new Promise<{ default: () => JSX.Element }>((res) => {
+  let resolve: ((mod: { default: () => ReactElement }) => void) | null = null;
+  const promise = new Promise<{ default: () => ReactElement }>((res) => {
     resolve = res;
   });
 
   return {
     promise,
-    resolve: resolve as (mod: { default: () => JSX.Element }) => void
+    resolve: resolve as ((mod: { default: () => ReactElement }) => void) | null
   };
 });
 
@@ -24,11 +25,12 @@ describe("router lazy-loaded graph route", () => {
   });
 
   it("shows loading state and resolves graph route without console errors", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({ ok: true, timestamp: "2026-01-26T00:00:00.000Z" }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true, timestamp: "2026-01-26T00:00:00.000Z" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        })
     );
 
     vi.stubGlobal("fetch", fetchMock);
@@ -50,9 +52,11 @@ describe("router lazy-loaded graph route", () => {
 
     expect(await screen.findByText(/loading graph/i)).toBeInTheDocument();
     await act(async () => {
-      graphModule.resolve({
-        default: () => <div data-testid="graph-route">Graph Route Loaded</div>
-      });
+      if (graphModule.resolve) {
+        graphModule.resolve({
+          default: () => <div data-testid="graph-route">Graph Route Loaded</div>
+        });
+      }
     });
     await navigation;
 

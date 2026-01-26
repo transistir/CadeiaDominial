@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import app from "./index";
 
 type UserRecord = {
@@ -43,7 +44,7 @@ const makeTestEnv = () => {
 describe("api health", () => {
   it("responds with ok and timestamp", async () => {
     const res = await app.request("/health", {}, makeTestEnv());
-    const json = await res.json();
+    const json = (await res.json()) as { ok: boolean; timestamp: string };
 
     expect(res.status).toBe(200);
     expect(json).toHaveProperty("ok", true);
@@ -72,7 +73,7 @@ describe("auth flow", () => {
     );
 
     expect(loginRes.status).toBe(200);
-    const { token } = await loginRes.json();
+    const { token } = (await loginRes.json()) as { token: string };
     expect(typeof token).toBe("string");
 
     const sessionRes = await app.request(

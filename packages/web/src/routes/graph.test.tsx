@@ -1,3 +1,4 @@
+import type { ReactElement, ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import GraphRoute from "./graph";
@@ -5,7 +6,17 @@ import GraphRoute from "./graph";
 const fitViewSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("@xyflow/react", () => ({
-  ReactFlow: ({ nodes, edges, fitView, children }: any) => {
+  ReactFlow: ({
+    nodes,
+    edges,
+    fitView,
+    children
+  }: {
+    nodes: unknown[];
+    edges: unknown[];
+    fitView?: (() => void) | null;
+    children?: ReactNode;
+  }): ReactElement => {
     if (fitView) {
       fitViewSpy();
     }
@@ -13,18 +24,24 @@ vi.mock("@xyflow/react", () => ({
     return (
       <div data-testid="reactflow">
         <div data-testid="nodes">
-          {nodes.map((node: any) => (
-            <div key={node.id} data-node-id={node.id}>
-              {node.data?.label ?? node.id}
-            </div>
-          ))}
+          {nodes.map((node: unknown) => {
+            const n = node as { id: string; data?: { label?: string } };
+            return (
+              <div key={n.id} data-node-id={n.id}>
+                {n.data?.label ?? n.id}
+              </div>
+            );
+          })}
         </div>
         <div data-testid="edges">
-          {edges.map((edge: any) => (
-            <div key={edge.id} data-edge-id={edge.id}>
-              {edge.id}
-            </div>
-          ))}
+          {edges.map((edge: unknown) => {
+            const e = edge as { id: string };
+            return (
+              <div key={e.id} data-edge-id={e.id}>
+                {e.id}
+              </div>
+            );
+          })}
         </div>
         {children}
       </div>
@@ -36,10 +53,7 @@ vi.mock("@xyflow/react", () => ({
 
 describe("GraphRoute", () => {
   const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
-  const originalClientWidth = Object.getOwnPropertyDescriptor(
-    HTMLElement.prototype,
-    "clientWidth"
-  );
+  const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
   const originalClientHeight = Object.getOwnPropertyDescriptor(
     HTMLElement.prototype,
     "clientHeight"
@@ -76,14 +90,20 @@ describe("GraphRoute", () => {
     if (originalClientWidth) {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete (HTMLElement.prototype as any).clientWidth;
+      // Restore default JSDOM-like behavior
+      Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+        configurable: true,
+        get: () => 0
+      });
     }
     if (originalClientHeight) {
       Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete (HTMLElement.prototype as any).clientHeight;
+      // Restore default JSDOM-like behavior
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+        configurable: true,
+        get: () => 0
+      });
     }
     HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   });
