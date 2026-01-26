@@ -45,7 +45,7 @@ app.post("/auth/login", async (c) => {
   const role = "viewer";
 
   const existingUser = await c.env.DB.prepare(
-    "SELECT id, email, role FROM users WHERE email = ?"
+    "SELECT id, email, role, password_hash FROM users WHERE email = ?"
   )
     .bind(email)
     .first();
@@ -56,9 +56,20 @@ app.post("/auth/login", async (c) => {
     )
       .bind(crypto.randomUUID(), email, `dev-${password}`, role, Date.now())
       .run();
+  } else if (existingUser.password_hash !== `dev-${password}`) {
+    return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const token = await sign({ sub: email, role }, c.env.JWT_SECRET);
+  const now = Math.floor(Date.now() / 1000);
+  const token = await sign(
+    {
+      sub: email,
+      role,
+      iat: now,
+      exp: now + 60 * 60 * 12
+    },
+    c.env.JWT_SECRET
+  );
   return c.json({ token });
 });
 
