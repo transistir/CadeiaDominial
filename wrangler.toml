@@ -1,0 +1,13 @@
+name = "cadeia-dominial-api"
+main = "packages/api/src/index.ts"
+compatibility_date = "2026-01-26"
+account_id = "3d361180fd421ec83440a70817117b59"
+
+[vars]
+# JWT_SECRET is set in Cloudflare dashboard or via `wrangler secret put JWT_SECRET`
+
+[[d1_databases]]
+# Update these after creating the D1 database
+binding = "DB"
+database_name = "cadeia-dominial"
+database_id = "REPLACE_WITH_D1_ID"
