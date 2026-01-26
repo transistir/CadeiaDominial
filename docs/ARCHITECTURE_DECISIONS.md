@@ -653,25 +653,59 @@ Application needs to manage server state, caching, and synchronization for:
 
 ---
 
+## ADR-007: Tree Visualization Library - React Flow
+
+**Status**: ✅ **DECIDED** - React Flow
+**Date**: 2026-01-26
+**Decision Maker**: Development Team
+
+### Context
+
+The frontend needs an interactive graph to visualize `Documento` and `Lancamento` relationships
+with pan/zoom, node/edge customization, and support for iterative layouts.
+
+### Decision
+
+Use **React Flow** for the cadeia dominial tree visualization in the React frontend.
+
+### Rationale
+
+- React-native graph API and ecosystem-friendly integration.
+- Built-in zoom/pan controls and node/edge customization.
+- Good fit for incremental prototyping with minimal D3 interop.
+
+### Consequences
+
+#### Positive
+
+- ✅ React-native primitives for nodes/edges reduce custom D3 glue code.
+- ✅ Strong ecosystem with examples and extensions for layout/interaction.
+- ✅ Built-in viewport state simplifies fit-to-view and navigation.
+
+#### Negative
+
+- ❌ Large graphs may require layout optimization and render tuning.
+- ❌ Complex layouts may need external layout helpers.
+
+### Rejected Options
+
+- **D3.js with React wrapper**: higher integration overhead and more custom glue code for interactions.
+- **Vis.js**: heavier dependency with less React-native ergonomics.
+- **Custom React implementation**: increased maintenance cost and slower iteration for graph features.
+
+### Implementation Notes
+
+- Data shape: `{ nodes, edges, viewport? }` with `nodes[].id`, `nodes[].position`, `edges[].source`, `edges[].target`.
+- Nodes represent `Documento` records; edges represent `Lancamento` links (`documento_origem -> documento`).
+- Layout is computed in app code (simple BFS or a layout helper), not in the DB.
+
+### References
+
+- [React Flow Documentation](https://reactflow.dev/)
+
+---
+
 ## Pending Decisions
-
-### PD-001: Tree Visualization Library
-
-**Options**:
-
-- D3.js with React wrapper (legacy compatibility)
-- React Flow (modern, React-native)
-- Vis.js (mature, feature-rich)
-- Custom React implementation (full control)
-
-**Status**: 🔍 **Under Investigation**
-
-**Research Needed**:
-
-- Performance with large datasets (1000+ nodes)
-- Zoom/pan performance
-- Mobile responsiveness
-- Accessibility support
 
 ### PD-002: PDF Export Strategy
 

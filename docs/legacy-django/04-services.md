@@ -113,7 +113,7 @@ troncos_secundarios = HierarquiaService.obter_troncos_secundarios(documento)
 - `construir_no_documento(documento)` - Build a single tree node
 - `construir_no_fim_cadeia(tipo, classificacao)` - Build end-of-chain node
 
-**Migration Note:** The tree building logic needs to be reimplemented in the new TypeScript stack using React-based visualization (see [../ARCHITECTURE_DECISIONS.md](../ARCHITECTURE_DECISIONS.md) - PD-001: Tree Visualization Library).
+**Migration Note:** The tree building logic needs to be reimplemented in the new TypeScript stack using React-based visualization (see [../ARCHITECTURE_DECISIONS.md](../ARCHITECTURE_DECISIONS.md) - ADR-007: Tree Visualization Library).
 
 ---
 

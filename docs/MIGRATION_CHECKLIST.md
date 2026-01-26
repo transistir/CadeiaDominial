@@ -157,11 +157,8 @@ Checklist for migrating CadeiaDominial from Django to **React + Vite + Hono** on
 ### D3.js to React Migration
 
 - [ ] Audit existing D3.js code
-- [ ] Choose React visualization library
-  - [ ] D3.js with React wrapper
-  - [ ] React Flow
-  - [ ] Vis.js
-  - [ ] Custom React implementation
+- [x] Choose React visualization library
+  - Selected: React Flow (ADR-007)
 - [ ] Implement tree data structure
 - [ ] Render tree component
 - [ ] Add zoom controls

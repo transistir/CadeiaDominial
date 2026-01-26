@@ -54,6 +54,49 @@ The current **Cadeia Dominial** system is a Django 5.2.3 application:
 
 > **Reference**: [ADR-001 in ARCHITECTURE_DECISIONS.md](./ARCHITECTURE_DECISIONS.md)
 
+### Tree Visualization: React Flow
+
+**Decision**: Use **React Flow** for the cadeia dominial graph.
+
+**Rationale**:
+
+- ✅ React-native graph UI with strong ecosystem fit
+- ✅ Built-in zoom/pan and easy node/edge customization
+- ✅ Supports rapid iteration before adding advanced layouts
+
+> **Reference**: [ADR-007 in ARCHITECTURE_DECISIONS.md](./ARCHITECTURE_DECISIONS.md) and [React Flow Quick Reference](./react-flow.md)
+
+**How to use (baseline)**:
+
+1. **Install** (in `packages/web`):
+   - `pnpm add reactflow`
+
+2. **Data shape**:
+   - Output JSON should be `{ nodes, edges, viewport? }`.
+   - `nodes[]` require `id` and `position`.
+   - `edges[]` require `id`, `source`, `target`.
+
+3. **Domain mapping**:
+   - `Documento` -> Node (`id: doc-<documento.id>`, `data: { numero, tipo, cartorio, data }`).
+   - `Lancamento.documento_origem -> documento` -> Edge (`id: lanc-<id>`, `source: doc-<origem>`, `target: doc-<documento>`).
+
+4. **Layout**:
+   - Start with a simple BFS layout:
+     - `x = depth * 300`
+     - `y = indexWithinDepth * 120`
+   - Replace with a DAG layout later if needed.
+
+**Minimal component example**:
+
+```tsx
+import { ReactFlow } from "reactflow";
+import "reactflow/dist/style.css";
+
+export function CadeiaFlow({ nodes, edges }) {
+  return <ReactFlow nodes={nodes} edges={edges} fitView />;
+}
+```
+
 ### Backend API: Hono on Cloudflare Workers
 
 **Decision**: Use **Hono** as the backend framework on Workers.
