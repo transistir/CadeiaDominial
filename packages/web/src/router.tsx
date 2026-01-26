@@ -1,7 +1,9 @@
+import { lazy } from "react";
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "./api";
-import GraphRoute from "./routes/graph";
+
+const GraphRoute = lazy(() => import("./routes/graph"));
 
 const rootRoute = createRootRoute({
   component: () => {
