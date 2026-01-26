@@ -6,7 +6,8 @@
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "lint": "eslint src drizzle --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "wrangler deploy --config wrangler.toml"
   },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
