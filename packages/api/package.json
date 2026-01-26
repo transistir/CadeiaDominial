@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "dependencies": {
-    "@cadeia/shared": "workspace:*"
+    "@cadeia/shared": "workspace:*",
+    "@hono/cors": "^1.2.0",
+    "hono": "^4.11.5"
   }
 }
