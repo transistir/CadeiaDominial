@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { Suspense, lazy } from "react";
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "./api";
@@ -67,7 +67,11 @@ const indexRoute = createRoute({
 const graphRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/graph",
-  component: GraphRoute
+  component: () => (
+    <Suspense fallback={<div className="route-loading">Loading graph...</div>}>
+      <GraphRoute />
+    </Suspense>
+  )
 });
 
 const routeTree = rootRoute.addChildren([indexRoute, graphRoute]);
