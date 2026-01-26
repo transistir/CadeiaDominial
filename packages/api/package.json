@@ -5,7 +5,8 @@
   "scripts": {
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "lint": "eslint src drizzle --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
@@ -14,6 +15,7 @@
     "hono": "^4.11.5"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.8"
+    "drizzle-kit": "^0.31.8",
+    "vitest": "^4.0.17"
   }
 }
