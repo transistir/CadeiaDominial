@@ -74,5 +74,5 @@ These are the target “starting point” versions for the bootstrap phase. Upda
 | PRD-008 | docs/prd/bootstrap/PRD-008-react-flow.json | done | React Flow route with sample graph |
 | PRD-009 | docs/prd/bootstrap/PRD-009-tooling.json | done | lint/format/types |
 | PRD-010 | docs/prd/bootstrap/PRD-010-tests.json | done | vitest/playwright |
-| PRD-011 | docs/prd/bootstrap/PRD-011-deploy.json | not-started | CF deploy |
+| PRD-011 | docs/prd/bootstrap/PRD-011-deploy.json | done | CF Pages + Workers deploy docs |
 | PRD-012 | docs/prd/bootstrap/PRD-012-local-dev.json | not-started | local dev setup |
