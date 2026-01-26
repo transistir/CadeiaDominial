@@ -104,6 +104,20 @@ body {
   color: #ffc7b5;
 }
 
+.graph-page {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 1000px;
+}
+
+.graph-shell {
+  height: 420px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 18px 40px rgba(29, 27, 22, 0.14);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

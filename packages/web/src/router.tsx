@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "./api";
+import GraphRoute from "./routes/graph";
 
 const rootRoute = createRootRoute({
   component: () => {
@@ -61,7 +62,13 @@ const indexRoute = createRoute({
   component: () => null
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+const graphRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/graph",
+  component: GraphRoute
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, graphRoute]);
 
 export const router = createRouter({ routeTree });
 
