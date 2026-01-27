@@ -208,6 +208,32 @@ export function CadeiaFlow({ nodes, edges }) {
 - **Drizzle ORM**: Type-safe SQL
 - **Drizzle Kit**: Migration management
 
+### File Storage (R2)
+
+**Signed URL flow (uploads):**
+- Client requests a short-lived upload URL from the API (`POST /api/files/sign-upload`).
+- API signs an R2 S3-compatible URL (AWS Signature v4) scoped to a single key, content type, and size limit.
+- Client uploads directly to R2; API stores metadata in D1 (owner, key, size, mime, hash).
+
+**Signed URL flow (downloads):**
+- Client requests a short-lived download URL from the API (`GET /api/files/sign-download?key=...`).
+- API signs a GET URL with a small TTL; client fetches from R2 directly.
+- For sensitive files, API can proxy the download and enforce ACL checks server-side.
+
+**Implemented endpoints (current API):**
+- `POST /api/files/sign-upload` (returns `url`, `key`, `expiresAt`, required headers)
+- `GET /api/files/sign-download?key=...` (returns `url`, `key`, `expiresAt`)
+- `GET /api/files/:key/sign-download` (legacy support for keys without `/`)
+- `GET /api/files?key=...` (proxy download for keys with `/`)
+
+**Lifecycle policy notes:**
+- Use object prefixes to apply lifecycle rules:
+  - `exports/` → auto-expire after 7–30 days.
+  - `tmp/` → auto-expire after 24–72 hours.
+  - `documents/` → retain indefinitely unless soft-deleted.
+- Configure rules in the Cloudflare R2 dashboard; keep rule names aligned with prefixes.
+- Persist retention metadata in D1 so the API can display expiry dates and enforce cleanup UI.
+
 ### Tooling
 
 | Tool           | Purpose                   |

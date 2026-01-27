@@ -48,7 +48,10 @@ describe("router lazy-loaded graph route", () => {
       </QueryClientProvider>
     );
 
-    const navigation = router.navigate({ to: "/graph" });
+    let navigation: Promise<void>;
+    await act(async () => {
+      navigation = router.navigate({ to: "/graph" });
+    });
 
     expect(await screen.findByText(/loading graph/i)).toBeInTheDocument();
     await act(async () => {
@@ -58,7 +61,9 @@ describe("router lazy-loaded graph route", () => {
         });
       }
     });
-    await navigation;
+    await act(async () => {
+      await navigation;
+    });
 
     expect(await screen.findByTestId("graph-route")).toBeInTheDocument();
     expect(consoleError).not.toHaveBeenCalled();

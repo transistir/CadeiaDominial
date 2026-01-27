@@ -130,6 +130,20 @@ cadeia-dominial/
    - Similar bundle concerns as Next.js
    - Smaller community
 
+### Implementation Notes
+
+**Mapped files**
+- `packages/web/package.json` (React + Vite dependencies)
+- `packages/web/vite.config.ts`
+- `packages/web/src/main.tsx`
+- `packages/api/src/index.ts`
+- `packages/shared/src/index.ts`
+- `pnpm-workspace.yaml`
+- `turbo.json`
+
+**Gaps**
+- `packages/web/src/components`, `packages/web/src/features`, and `packages/web/src/lib` from the architecture overview are not present yet; current UI code lives directly in `packages/web/src`.
+
 ### References
 
 - [Cloudflare Full-Stack Development on Workers (2025)](https://blog.cloudflare.com/full-stack-development-on-cloudflare-workers/)
@@ -292,6 +306,16 @@ export default app;
 | Smaller ecosystem | Most Node middleware patterns translate; growing community |
 | Learning curve    | Hono is simpler than Express; excellent docs               |
 
+### Implementation Notes
+
+**Mapped files**
+- `packages/api/package.json` (Hono dependency)
+- `packages/api/src/index.ts`
+- `packages/api/wrangler.toml`
+
+**Gaps**
+- Route modules (e.g., `packages/api/src/routes/*`) are not split out yet; endpoints live in `packages/api/src/index.ts`.
+
 ### References
 
 - [Hono Documentation](https://hono.dev/)
@@ -349,6 +373,18 @@ Current Django application uses PostgreSQL in production and SQLite in developme
 - Use Drizzle ORM for database-agnostic queries
 - Implement data archival strategy for size limits
 - Use D1 for primary copy, consider R2 for document storage
+
+### Implementation Notes
+
+**Mapped files**
+- `packages/api/wrangler.toml` (D1 binding)
+- `packages/api/drizzle/schema.ts`
+- `packages/api/drizzle/migrations/0000_acoustic_madame_hydra.sql`
+- `packages/api/drizzle.config.ts`
+- `packages/api/package.json` (Drizzle scripts)
+
+**Gaps**
+- No archival or size-monitoring strategy is documented or implemented yet.
 
 ### References
 
@@ -562,6 +598,17 @@ export const lucia = new Lucia(
 | Token refresh            | Implement refresh token rotation pattern     |
 | Session invalidation     | Use KV/D1 blocklist for immediate revocation |
 
+### Implementation Notes
+
+**Mapped files**
+- `packages/api/src/index.ts` (JWT auth, `/auth/login`, `/auth/session`)
+- `packages/api/drizzle/schema.ts` (users table)
+- `packages/api/wrangler.toml` (JWT secret)
+
+**Gaps**
+- Token revocation flow is not implemented.
+- Refresh token rotation and session persistence are not implemented.
+
 ### References
 
 - [Hono JWT Middleware](https://hono.dev/docs/middleware/builtin/jwt)
@@ -616,6 +663,16 @@ Application needs to manage server state, caching, and synchronization for:
 - ❌ Additional library to learn
 - ❌ Configuration needed for complex scenarios
 
+### Implementation Notes
+
+**Mapped files**
+- `packages/web/package.json` (TanStack Query dependency)
+- `packages/web/src/main.tsx` (QueryClientProvider)
+- `packages/web/src/router.tsx` (useQuery usage)
+
+**Gaps**
+- Query usage is limited to the health check; domain data queries and caching policies are not implemented yet.
+
 ### References
 
 - [TanStack Query Documentation](https://tanstack.com/query/latest)
@@ -644,6 +701,17 @@ Application needs to manage server state, caching, and synchronization for:
 | **Playwright**      | E2E tests       | Cloudflare support, reliable, multi-browser |
 | **Testing Library** | Component tests | React best practices, user-centric          |
 | **MSW**             | API mocking     | Request interception, type-safe             |
+
+### Implementation Notes
+
+**Mapped files**
+- `packages/web/vitest.config.ts`
+- `packages/api/vitest.config.ts`
+- `playwright.config.ts`
+- `packages/web/e2e`
+
+**Gaps**
+- MSW is not set up for API mocking.
 
 ### References
 
@@ -699,6 +767,15 @@ Use **React Flow** for the cadeia dominial tree visualization in the React front
 - Nodes represent `Documento` records; edges represent `Lancamento` links (`documento_origem -> documento`).
 - Layout is computed in app code (simple BFS or a layout helper), not in the DB.
 
+**Mapped files**
+- `packages/web/src/routes/graph.tsx` (React Flow screen)
+- `packages/web/src/routes/graph.test.tsx`
+- `packages/web/package.json` (React Flow dependency)
+- `packages/web/src/main.tsx` (React Flow styles)
+
+**Gaps**
+- Graph data is static; no API-driven nodes/edges or layout helper integration yet.
+
 ### References
 
 - [React Flow Documentation](https://reactflow.dev/)
@@ -747,6 +824,15 @@ Use **Cloudflare Browser Rendering** for server-side HTML-to-PDF generation.
 
 - Add a dedicated `/api/pdf` endpoint in `packages/api` that calls Browser Rendering.
 - Store template HTML in `packages/shared` and pass variables from the API.
+
+**Mapped files**
+- `packages/api/src/index.ts` (`/api/pdf` endpoint)
+- `packages/shared/src/pdf.ts` (HTML template)
+- `packages/shared/src/index.ts` (template export)
+
+**Gaps**
+- PDF template uses a domain-specific layout, but data wiring from chain services is not implemented.
+- PDF caching and cost controls are not implemented.
 
 ### References
 
@@ -797,6 +883,15 @@ Use **Cloudflare R2** as the primary file storage backend.
 - Bind R2 in `packages/api/wrangler.toml` and expose helpers in `packages/api/src/services/storage`.
 - Document upload/download flow in `docs/MIGRATION_GUIDE.md`.
 
+**Mapped files**
+- `packages/api/wrangler.toml` (R2 binding)
+- `packages/api/src/services/storage.ts`
+- `packages/api/src/index.ts` (`/api/files` routes)
+
+**Gaps**
+- Signed URL endpoints are implemented, but access policy enforcement and UI integration are not.
+- Lifecycle rules are documented but not enforced or surfaced in the UI.
+
 ### References
 
 - Cloudflare R2 documentation: https://developers.cloudflare.com/r2/
@@ -842,5 +937,5 @@ For future architectural decisions, use this template:
 
 ---
 
-**Last Updated**: 2026-01-27
+**Last Updated**: 2026-01-27 (Implementation notes and gap updates)
 **Maintained By**: Development Team

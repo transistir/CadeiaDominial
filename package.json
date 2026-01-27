@@ -10,6 +10,7 @@
     "dev:web": "pnpm --filter @cadeia/web dev",
     "db:generate": "pnpm --filter @cadeia/api db:generate",
     "db:migrate:local": "pnpm --filter @cadeia/api db:migrate:local",
+    "db:studio": "pnpm --filter @cadeia/api db:studio",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "turbo run test",
     "lint": "turbo run lint",
@@ -37,5 +38,13 @@
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",
     "wrangler": "^4.60.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
   }
 }

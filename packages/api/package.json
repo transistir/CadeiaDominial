@@ -6,6 +6,7 @@
     "dev": "wrangler dev --config wrangler.toml",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply cadeia-dominial --local --config wrangler.toml",
+    "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "lint": "eslint src drizzle --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -13,11 +14,14 @@
   },
   "dependencies": {
     "@cadeia/shared": "workspace:*",
+    "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.5"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.0.10",
+    "better-sqlite3": "^12.6.2",
     "drizzle-kit": "^0.31.8",
     "vitest": "^4.0.17"
   }

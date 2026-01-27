@@ -5,9 +5,22 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 JWT_SECRET = "replace-me"
+BROWSER_RENDERING_ACCOUNT_ID = "replace-me"
+BROWSER_RENDERING_API_TOKEN = "replace-me"
+ALLOW_DEV_BOOTSTRAP = "false"
+R2_ACCOUNT_ID = "replace-me"
+R2_ACCESS_KEY_ID = "replace-me"
+R2_SECRET_ACCESS_KEY = "replace-me"
+R2_BUCKET_NAME = "cadeia-dominial-files"
+# Optional custom domain for signed URLs (defaults to <account>.r2.cloudflarestorage.com)
+# R2_PUBLIC_HOST = "files.example.com"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "cadeia-dominial"
 migrations_dir = "drizzle/migrations"
 database_id = "be41b97b-1819-4305-895e-0ba2bb69950e"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "cadeia-dominial-files"
