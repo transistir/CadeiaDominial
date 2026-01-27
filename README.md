@@ -124,11 +124,14 @@ pnpm db:generate       # Generate migrations from schema
 pnpm db:migrate:local  # Apply to local D1
 ```
 
-If you haven't created the local D1 database yet:
+If you haven't created the D1 database yet (remote, one-time):
 
 ```bash
-wrangler d1 create cadeia-dominial --local --config packages/api/wrangler.toml
+wrangler d1 create cadeia-dominial --config packages/api/wrangler.toml
 ```
+
+For the simplest local/remote workflow, see `docs/D1_LOCAL_DEV.md`.
+For quick commands, see `docs/DEPLOYMENT.md` (D1 cheat sheet).
 
 ### Claude Code Integration
 

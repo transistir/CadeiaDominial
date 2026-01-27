@@ -421,8 +421,8 @@ cd packages/web && pnpm dev
 ```bash
 cd packages/api
 
-# Create local D1 database
-npx wrangler d1 create cadeiadominial-db --local
+# Create D1 database (remote, one-time)
+npx wrangler d1 create cadeia-dominial
 
 # Generate migrations from Drizzle schema
 pnpm db:generate
@@ -434,6 +434,8 @@ pnpm db:migrate:local
 pnpm db:studio
 ```
 
+For the full local and remote workflow, see `docs/D1_LOCAL_DEV.md`.
+
 ---
 
 ## 6. 🚀 Deployment
@@ -444,7 +446,7 @@ pnpm db:studio
 cd packages/api
 
 # Create production D1 database
-npx wrangler d1 create cadeiadominial-db
+npx wrangler d1 create cadeia-dominial
 
 # Run migrations on production
 pnpm db:migrate:prod
@@ -475,7 +477,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "cadeiadominial-db"
+database_name = "cadeia-dominial"
+migrations_dir = "drizzle/migrations"
 database_id = "your-database-id-here"
 ```
 

@@ -705,30 +705,102 @@ Use **React Flow** for the cadeia dominial tree visualization in the React front
 
 ---
 
-## Pending Decisions
+## ADR-008: PDF Export Strategy - Cloudflare Browser Rendering
 
-### PD-002: PDF Export Strategy
+**Status**: ✅ **DECIDED** - Cloudflare Browser Rendering
+**Date**: 2026-01-27
+**Decision Maker**: Development Team
 
-**Options**:
+### Context
 
-- jsPDF (client-side, free)
-- Puppeteer (server-side, requires Node.js runtime)
-- Cloudflare Workers PDF generation
-- External service API
+The system needs reliable PDF export for legal documents. Cloudflare Workers does not provide full Node.js APIs, so a Workers-native approach is required.
 
-**Status**: 🔍 **Under Investigation**
+### Decision
 
-**Constraint**: Cloudflare Workers has limited Node.js APIs
+Use **Cloudflare Browser Rendering** for server-side HTML-to-PDF generation.
 
-### PD-003: File Storage Strategy
+### Rationale
 
-**Options**:
+- Cloudflare provides a Workers-compatible HTML/URL-to-PDF flow.
+- Output quality is more consistent than client-side PDF libraries for complex layouts.
+- Keeps PDF generation within the Cloudflare platform.
 
-- Cloudflare R2 (S3-compatible, edge-optimized)
-- Cloudflare Images (optimized for images only)
-- Base64 in database (small files only)
+### Consequences
 
-**Status**: 🔍 **Under Investigation**
+#### Positive
+
+- ✅ Server-side rendering yields consistent output for legal documents.
+- ✅ Fits Cloudflare runtime constraints.
+- ✅ Enables future automation (headers, footers, pagination control).
+
+#### Negative
+
+- ❌ Adds a service dependency for PDF generation.
+- ❌ Requires managing rendering costs and timeouts.
+
+### Mitigations
+
+- Cache generated PDFs where appropriate.
+- Fall back to client-side export for lightweight/temporary needs.
+
+### Implementation Notes
+
+- Add a dedicated `/api/pdf` endpoint in `packages/api` that calls Browser Rendering.
+- Store template HTML in `packages/shared` and pass variables from the API.
+
+### References
+
+- Cloudflare Browser Rendering documentation: https://developers.cloudflare.com/browser-rendering/
+- Browser Rendering PDF endpoint: https://developers.cloudflare.com/browser-rendering/rest-api/pdf-endpoint/
+
+---
+
+## ADR-009: File Storage Strategy - Cloudflare R2
+
+**Status**: ✅ **DECIDED** - Cloudflare R2
+**Date**: 2026-01-27
+**Decision Maker**: Development Team
+
+### Context
+
+The system needs durable document storage with API access, low operational overhead, and compatibility with Cloudflare Workers.
+
+### Decision
+
+Use **Cloudflare R2** as the primary file storage backend.
+
+### Rationale
+
+- S3-compatible API with strong Cloudflare integration.
+- Lower egress costs and edge-friendly access patterns.
+- Keeps storage in the same platform as API/runtime.
+
+### Consequences
+
+#### Positive
+
+- ✅ Scalable object storage for documents.
+- ✅ Works naturally with Workers bindings.
+- ✅ Cost-effective for large file retention.
+
+#### Negative
+
+- ❌ Requires explicit lifecycle management and access controls.
+
+### Mitigations
+
+- Define bucket-level retention and access policies.
+- Use signed URLs for secure downloads.
+
+### Implementation Notes
+
+- Bind R2 in `packages/api/wrangler.toml` and expose helpers in `packages/api/src/services/storage`.
+- Document upload/download flow in `docs/MIGRATION_GUIDE.md`.
+
+### References
+
+- Cloudflare R2 documentation: https://developers.cloudflare.com/r2/
+- R2 API basics: https://developers.cloudflare.com/r2/api/
 
 ---
 
@@ -770,5 +842,5 @@ For future architectural decisions, use this template:
 
 ---
 
-**Last Updated**: 2026-01-08
+**Last Updated**: 2026-01-27
 **Maintained By**: Development Team

@@ -104,3 +104,39 @@ For local development, you can also set this in `packages/web/.env` using
 - Binding name: `DB`
 - Database name: `cadeia-dominial`
 - `database_id` must match the DB created via `wrangler d1 create`.
+
+## D1 Cheat Sheet
+
+Local-first (recommended):
+
+```bash
+wrangler dev                          # Local Worker + local D1 by default
+pnpm db:migrate:local                 # Apply Drizzle migrations locally
+wrangler d1 execute cadeia-dominial --local --config packages/api/wrangler.toml --command="SELECT 1;"
+wrangler d1 execute cadeia-dominial --local --config packages/api/wrangler.toml --file="./seeds/dev.sql"
+```
+
+If you run commands from `packages/api`, you can drop the `--config` flag.
+
+Remote (use with care):
+
+```bash
+wrangler d1 execute cadeia-dominial --remote --config packages/api/wrangler.toml --command="SELECT 1;"
+wrangler d1 migrations apply cadeia-dominial --config packages/api/wrangler.toml
+wrangler dev --remote                 # Runs on Cloudflare infra
+```
+
+Remote bindings (local Worker, remote DB):
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "cadeia-dominial"
+database_id = "REPLACE_WITH_REMOTE_ID"
+preview_database_id = "REPLACE_WITH_PREVIEW_ID"
+remote = true
+```
+
+```bash
+wrangler dev                          # Worker stays local, DB is remote
+```
