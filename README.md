@@ -16,6 +16,8 @@
 - 🌳 **Interactive Tree Visualization**: Visual exploration of property chains with zoom/pan
 - 👥 **Multi-User Support**: Role-based access (admin, editor, viewer)
 
+💡 **[Entendendo a Cadeia Dominial (Guia Didático)](docs/cadeia-dominial/ENTENDENDO_CADEIA_DOMINIAL.md)** — Uma explicação simples sobre como o sistema funciona.
+
 This is a **modern TypeScript rewrite** of the original Django application, leveraging Cloudflare's edge platform for global performance and scalability.
 
 ---
