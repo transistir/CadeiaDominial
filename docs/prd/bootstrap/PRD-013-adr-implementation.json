@@ -1,0 +1,10 @@
+{
+  "category": "documentation",
+  "description": "Audit ADR implementation against the current repo and update status notes",
+  "steps": [
+    "Map each DECIDED ADR to concrete files/paths in the repo",
+    "Note any gaps between ADR intent and current implementation",
+    "Update docs/ARCHITECTURE_DECISIONS.md with Implementation notes and an updated Last Updated date"
+  ],
+  "passes": false
+}

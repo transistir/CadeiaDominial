@@ -1,0 +1,10 @@
+{
+  "category": "decision",
+  "description": "Decide the file storage strategy and record the ADR",
+  "steps": [
+    "Evaluate Cloudflare R2 vs D1 blobs vs external storage",
+    "Pick the default approach for v1 and note constraints",
+    "Update docs/ARCHITECTURE_DECISIONS.md to resolve PD-003"
+  ],
+  "passes": false
+}

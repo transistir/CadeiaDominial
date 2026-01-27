@@ -1,0 +1,10 @@
+{
+  "category": "decision",
+  "description": "Decide the PDF export strategy and record the ADR",
+  "steps": [
+    "Evaluate jsPDF vs server-side rendering (Workers-compatible) vs external API",
+    "Pick the default approach for v1 and note constraints",
+    "Update docs/ARCHITECTURE_DECISIONS.md to resolve PD-002"
+  ],
+  "passes": false
+}
