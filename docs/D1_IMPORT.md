@@ -29,6 +29,10 @@ sqlite3 db.sqlite3.new ".dump --data-only" > data.sql
 # Remove transaction/pragma lines
 rg -v "^(BEGIN TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA)" schema.sql > schema.cleaned.sql
 rg -v "^(BEGIN TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA)" data.sql > data.cleaned.sql
+
+# If you don't have rg installed, use grep instead
+grep -Ev "^(BEGIN TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA)" schema.sql > schema.cleaned.sql
+grep -Ev "^(BEGIN TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA)" data.sql > data.cleaned.sql
 ```
 
 ## 2) Remove Django/auth tables + references
@@ -74,6 +78,18 @@ text = re.sub(r'\s+REFERENCES\s+"[^"]+"\s*\("[^"]+"\)\s*DEFERRABLE\s+INITIALLY\s
 text = re.sub(r'\s+REFERENCES\s+"[^"]+"\s*\("[^"]+"\)', '', text)
 
 Path('schema.cleaned.core.no-auth.no-fk.sql').write_text(text)
+PY
+```
+
+## 3b) Remove sqlite_sequence (reserved in D1)
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+src = Path('schema.cleaned.core.no-auth.no-fk.sql')
+lines = [ln for ln in src.read_text().splitlines() if 'sqlite_sequence' not in ln]
+src.write_text("\n".join(lines) + "\n")
 PY
 ```
 
