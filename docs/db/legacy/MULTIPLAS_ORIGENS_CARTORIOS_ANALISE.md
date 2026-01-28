@@ -1,3 +1,7 @@
+> **LEGACY / REFERENCIA**: este documento foi consolidado. Fonte de verdade: `docs/db/SCHEMA_CONSOLIDATED.md` e ERD em `docs/db/SCHEMA_CONSOLIDATED_ERD.*`.
+>
+> Este arquivo e mantido apenas para contexto historico e pode conter regras desatualizadas.
+
 # Análise: Múltiplas Origens vs Múltiplos Cartórios no Lancamento
 
 **Versão:** 1.0
