@@ -42,17 +42,19 @@
 - Remover `origem` (mensagem automática errada, sem uso).
 - Remover `nivel_manual` (campo de visualização; deve ser calculado no frontend).
 - **Inline** o tipo: `tipo` TEXT com CHECK (`matricula`, `transcricao`) no lugar de `tipo_id`.
-- **Normalizar `numero`**: manter apenas números; não precisamos de letras no número (o tipo já indica a letra).
+- **Normalizar `numero`**: manter apenas digitos; guardar valor original em `numero_raw`.
 - Remover `observacoes`.
-- **Adicionar `is_principal`** (0/1) para marcar o documento vigente do imovel.
-- **Demais campos permanecem** (ex: `data`, `livro`, `folha`, `data_cadastro`, `sigla_patrimonio_publico`).
+- **Adicionar `numero_raw`** (texto original antes da normalizacao).
+- **Renomear `is_principal`** para `is_documento_atual` (0/1) para marcar o documento vigente do imovel.
+- Remover `sigla_patrimonio_publico` (fica em `origem_fim_cadeia`).
+- **Demais campos permanecem** (ex: `data`, `livro`, `folha`, `data_cadastro`).
 
 **`dominial_lancamento`**
 - Remover campos legados: `transmitente_id`, `adquirente_id`, `cartorio_transacao_id`.
 - Remover campos de origem legados: `origem`, `documento_origem_id`, `livro_origem`, `folha_origem`, `data_origem`.
 - Usar `lancamento_pessoa` para pessoas e `cartorio_transmissao_id` (manual) para transmissão.
 - Renomear `livro_transacao`, `folha_transacao`, `data_transacao` para `*_transmissao`.
-- Renomear `cartorio_origem_id` → `cri_origem_id` (FK para `cri`).
+- Remover `cartorio_origem_id` (CRI de origem passa a ficar em `origem.cri_id`).
 - Remover `eh_inicio_matricula` (derivado de `lancamento_tipo.tipo`).
 - Manter `numero_lancamento` (inteiro informado pelo usuario).
 - Manter `forma` (texto livre informado pelo usuario).
@@ -64,13 +66,14 @@
 
 **`dominial_imovel`**
 - Um `imovel` representa a matricula vigente. Quando a matricula muda, cria-se um novo `imovel`.
-- Nao manter campos derivados (`matricula`, `tipo_documento_principal`); usar `documento.is_principal`.
+- Nao manter campos derivados (`matricula`, `tipo_documento_principal`); usar `documento.is_documento_atual`.
 
 ### 2.3 Fim de cadeia
 
 - **Manter `origem_fim_cadeia`**, agora vinculada a uma tabela `origem` (suporta múltiplas origens por lançamento).
 - **Remover `fim_cadeia` (catálogo)** por não uso real.
 - **Nao manter** campos de fim de cadeia em `documento` (o fim de cadeia qualifica a `origem`).
+- `sigla_patrimonio_publico` passa a existir em `origem_fim_cadeia`.
 
 > **Decisão:** não inline em `lancamento`, pois perderíamos suporte a múltiplas origens. Se futuramente não houver multi-origem, avaliamos simplificar.
 
@@ -80,6 +83,7 @@
 - `tipo_fim_cadeia` e **opcional**; quando preenchido, indica fim de cadeia.
 - `classificacao_fim_cadeia` e **obrigatoria apenas quando** `tipo_fim_cadeia` estiver preenchido.
 - Se `tipo_fim_cadeia = 'outra'`, exigir `especificacao_fim_cadeia`.
+- Se `tipo_fim_cadeia = 'destacamento_publico'`, exigir `sigla_patrimonio_publico`.
 - Adicionar CHECKs e corrigir dados nulos antes da migracao.
 
 #### Origens estruturadas (nova tabela)
@@ -88,7 +92,8 @@
 - `origem` substitui o uso de strings em `lancamento.origem` e fornece base para `origem_fim_cadeia`.
 - `origem_fim_cadeia` passa a referenciar `origem` (1:1 por origem).
 - **Um `lancamento` pode ter várias origens** (modelado por múltiplas linhas em `origem` com `indice`).
-- **Fim de cadeia nao e um tipo de origem**. Ele e uma qualificacao da `origem` via `origem_fim_cadeia`.
+- **Fim de cadeia e um tipo de origem** (`origem.tipo = 'fim_cadeia'`), com dados adicionais em `origem_fim_cadeia`.
+- Quando a origem for um documento, preencher `origem.documento_id` (opcional) e manter os dados de identificacao (`numero`, `livro`, `folha`, `data`).
 
 ### 2.4 Campos de CRI em documentos
 
@@ -109,7 +114,7 @@
 
 ### 3.1 Tabelas mantidas (com ajustes)
 
-- `pessoas`
+- `pessoa`
 - `cri`
 - `cartorio_transmissao` (cadastro manual)
 - `terra_indigena_referencia`
@@ -129,19 +134,19 @@
 
 **`documento` (resumo)**
 - `tipo` TEXT NOT NULL CHECK (`matricula`, `transcricao`)
-- `numero` TEXT NOT NULL (normalizado so com digitos)
+- `numero` TEXT NOT NULL (normalizado so com digitos; aplicar CHECK de apenas digitos)
+- `numero_raw` TEXT (valor original)
 - `cri_id` FK obrigatório (aponta para `cri`)
 - `imovel_id` FK obrigatório
-- `is_principal` INTEGER NOT NULL DEFAULT 0 CHECK (is_principal IN (0,1))
-- `lancamento_origem_id` FK opcional (lancamento que **criou** o documento em runtime)
+- `is_documento_atual` INTEGER NOT NULL DEFAULT 0 CHECK (is_documento_atual IN (0,1))
 - UNIQUE (`cri_id`, `tipo`, `numero`)
-- UNIQUE parcial para garantir **um** documento principal por imovel:
-  - `UNIQUE (imovel_id) WHERE is_principal = 1`
-- Sem `origem`, sem `nivel_manual`
+- UNIQUE parcial para garantir **um** documento atual por imovel:
+  - `UNIQUE (imovel_id) WHERE is_documento_atual = 1`
+- Sem `origem`, sem `nivel_manual`, sem `sigla_patrimonio_publico`
 
 **`imovel` (resumo)**
-- `cartorio_id` FK obrigatório (aponta para `cri`)
-- `proprietario_id` FK obrigatório (aponta para `pessoas`)
+- `cri_id` FK obrigatório (aponta para `cri`)
+- `proprietario_id` FK obrigatório (aponta para `pessoa`)
 - `arquivado` INTEGER NOT NULL DEFAULT 0 (0/1)
 - Um `imovel` representa a matricula vigente. Quando a matricula muda, cria-se um novo `imovel`.
 - **Relacao com TI**: um `imovel` pode ter varias TIs e uma TI pode ter varios imoveis (N:N via `tis_imovel`).
@@ -155,6 +160,7 @@
 
 **`lancamento_tipo` (resumo)**
 - `tipo` TEXT NOT NULL CHECK (`inicio_matricula`, `registro`, `averbacao`)
+- `nome` TEXT NOT NULL (label legivel para UI)
 - Flags de UI/validacao (permissivas, sem obrigatoriedade no banco):
   - `requer_detalhes`
   - `requer_transmissao`
@@ -170,10 +176,9 @@
 **`lancamento` (resumo)**
 - `tipo_id` FK obrigatório (`lancamento_tipo`)
 - Sem `transmitente_id`/`adquirente_id`
-- `cri_origem_id` (para inicio de matricula; FK para `cri`, **obrigatorio quando tipo = inicio_matricula**)
 - `cartorio_transmissao_id` (manual, tabela separada de `cri`, **opcional**)
 - `livro_transmissao`, `folha_transmissao`, `data_transmissao` (renomeados)
-- `numero_lancamento` INTEGER NOT NULL CHECK (numero_lancamento > 0)
+- `numero_lancamento` INTEGER CHECK (numero_lancamento > 0) (pode ser NULL durante migracao; aplicar NOT NULL apos backfill)
 - UNIQUE (`documento_id`, `numero_lancamento`)
 - Usado para compor a sigla exibida do lancamento (ex: `AV5 M123`).
 - `forma` TEXT (opcional, entrada livre do usuario)
@@ -182,13 +187,16 @@
 - `lancamento_id` + `indice` unico
 - `indice` deve ser **>= 0** e **contiguo** por `lancamento` (0,1,2...)
 - `cri_id` (FK para `cri`, opcional)
-- `tipo` (`matricula`, `transcricao`)
+- `documento_id` (FK para `documento`, opcional)
+- `tipo` (`matricula`, `transcricao`, `fim_cadeia`)
 - `numero` (somente digitos), `livro`, `folha`, `data`
 - `observacoes` (opcional)
+- Se `tipo = 'fim_cadeia'`, exige linha em `origem_fim_cadeia` e `documento_id` deve ser NULL
 
 **`origem_fim_cadeia` (resumo)**
 - `origem_id` unico
 - `tipo_fim_cadeia`, `classificacao_fim_cadeia`, `especificacao_fim_cadeia`
+- `sigla_patrimonio_publico` (opcional; obrigatorio quando tipo_fim_cadeia = destacamento_publico)
 - `classificacao_fim_cadeia` obrigatoria quando `tipo_fim_cadeia` estiver preenchido
 - `especificacao_fim_cadeia` obrigatoria quando `tipo_fim_cadeia = 'outra'`
 
@@ -202,12 +210,13 @@
 
 ### 3.3 Regras condicionais (aplicacao/trigger)
 
-- Se `lancamento_tipo.tipo = 'inicio_matricula'`, entao `lancamento.cri_origem_id` deve ser **obrigatorio**.
-- Se `documento.is_principal = 1`, entao `documento.cri_id` deve **coincidir** com `imovel.cartorio_id`.
-- As flags `requer_*` em `lancamento_tipo` sao apenas configuracoes de UI/validacao e **nao** devem ser tratadas como constraints do banco.
-- As flags `requer_*_origem` referem-se aos campos da tabela `origem` (e nao a campos em `lancamento`).
+- Se `lancamento_tipo.tipo = 'inicio_matricula'`, entao `origem.cri_id` deve ser **obrigatorio** para as origens do lancamento.
+- Se `documento.is_documento_atual = 1`, entao `documento.cri_id` deve **coincidir** com `imovel.cri_id`.
+- As flags `requer_*` em `lancamento_tipo` sao apenas configuracoes de UI/validacao do **lancamento** e **nao** devem ser tratadas como constraints do banco.
+- Se `origem.tipo = 'fim_cadeia'`, entao deve existir uma linha em `origem_fim_cadeia` e `origem.documento_id` deve ser NULL.
+- Se `origem.tipo IN ('matricula', 'transcricao')`, entao `origem_fim_cadeia` **nao** deve existir.
 - `origem.indice` deve ser contiguo por `lancamento` (enforce via aplicacao/trigger).
-- Evitar deletar o **ultimo** documento principal de um `imovel` (enforce via aplicacao/trigger).
+- Evitar deletar o **ultimo** documento atual de um `imovel` (enforce via aplicacao/trigger).
 
 ---
 
@@ -223,44 +232,53 @@
 ## 5) Migracao de dados (ordem sugerida)
 
 1. **Backups e contagens:** snapshot completo + contagem de linhas.
-2. **Migrar pessoas/CRI/terras/tis/imovel**.
+2. **Migrar pessoa/CRI/terras/tis/imovel**.
 3. **Documento:**
    - Criar `tipo` inline.
    - Remover `origem`/`nivel_manual`.
-   - Normalizar `numero`.
+   - Normalizar `numero` e preencher `numero_raw`.
    - Garantir apenas `matricula`/`transcricao` (remover valor legado `transmissao`).
-   - Preencher `documento.is_principal = 1` para o documento vigente de cada imovel (exatamente 1).
-   - Preencher `documento.lancamento_origem_id` para documentos criados por `inicio_matricula` (quando for possivel inferir).
+   - Preencher `documento.is_documento_atual = 1` para o documento vigente de cada imovel (exatamente 1).
+   - Migrar `sigla_patrimonio_publico` para `origem_fim_cadeia` quando aplicavel.
+   - Remover `documento.lancamento_origem_id` (campo eliminado).
 4. **Lancamento:**
    - Migrar `lancamento_pessoa` se necessário.
    - Remover campos legados.
-   - Renomear `cartorio_origem_id` → `cri_origem_id` e apontar FK para `cri`.
-   - Definir `numero_lancamento` por documento antes de aplicar a constraint (ex: ordem por `data`, `id`).
-5. **Origem fim de cadeia:**
-   - Criar `origem` e migrar dados estruturados (ou parsing do `lancamento.origem`).
-   - Atualizar `origem_fim_cadeia` para referenciar `origem`.
+   - Remover `cartorio_origem_id` (CRI passa para `origem.cri_id`).
+   - Definir `numero_lancamento` por documento antes de aplicar a constraint NOT NULL (ex: ordem por `data`, `id`).
+5. **Origem e fim de cadeia:**
+   - Criar `origem` (com `tipo`, `cri_id`, `documento_id` quando aplicavel) e migrar dados estruturados (ou parsing do `lancamento.origem`).
+   - Atualizar `origem_fim_cadeia` para referenciar `origem` e receber `sigla_patrimonio_publico` quando houver.
    - Nao criar documentos automaticamente na migracao; isso e comportamento de runtime para `inicio_matricula`.
 6. **Remover tabelas legadas** após checagens.
 
-### Mapa de renomeacoes (cartorio → cri)
+### Mapa de renomeacoes e remocoes
 
-**Tabela**
+**Tabelas**
 - `dominial_cartorios` → `cri`
+- `dominial_pessoas` → `pessoa`
 - `cartorio_transmissao` (nova tabela, manual)
+
+**Imoveis**
+- `imovel.cartorio_id` → `imovel.cri_id`
 
 **Documentos**
 - `documento.cartorio_id` → `documento.cri_id` (FK passa a apontar para `cri`)
+- `documento.is_principal` → `documento.is_documento_atual`
 - `documento.cri_atual_id` → removido
 - `documento.cri_origem_id` → removido
+- `documento.lancamento_origem_id` → removido
+- `documento.sigla_patrimonio_publico` → `origem_fim_cadeia.sigla_patrimonio_publico`
 
 **Lancamentos**
-- `lancamento.cartorio_origem_id` → `lancamento.cri_origem_id`
+- `lancamento.cartorio_origem_id` → removido (CRI passa para `origem.cri_id`)
 - `lancamento.cartorio_transmissao_id` → manter (tabela separada, preenchimento manual)
 - `lancamento.cartorio_transacao_id` → removido (legado)
 
 **Origens**
 - Criar `origem` e migrar de `lancamento.origem` (se ainda existir) + `origemfimcadeia.indice_origem`
 - `origem_fim_cadeia.lancamento_id + indice_origem` → `origem_fim_cadeia.origem_id`
+- `origem.tipo` inclui `fim_cadeia` e `origem.documento_id` liga a origem ao documento quando aplicavel
 
 ---
 
@@ -299,7 +317,8 @@ WHERE indice_origem > 0;
 
 ## 8) Pendências mínimas (se houver)
 
-1. **Normalização de `documento.numero`:** extrair apenas dígitos e validar unicidade por cartório.
+1. **Normalização de `documento.numero`:** extrair apenas dígitos, preservar `numero_raw` e validar unicidade por CRI.
+2. **`numero_lancamento`:** backfill por documento antes de ativar NOT NULL.
 
 ---
 
@@ -307,7 +326,7 @@ WHERE indice_origem > 0;
 
 - `origem` é a fonte estruturada oficial; `lancamento.origem` (string) deve ser removido após migração.
 - `cartorio_transmissao_id` permanece **separado** de `cri` e é **preenchido manualmente**.
-- `documento.cri_id` e `imovel.cartorio_id` apontam para `cri` e devem **coincidir** quando `documento.is_principal = 1`.
+- `documento.cri_id` e `imovel.cri_id` apontam para `cri` e devem **coincidir** quando `documento.is_documento_atual = 1`.
 - `origem_fim_cadeia` referencia `origem` (não `lancamento`); crie `origem` antes de migrar `origem_fim_cadeia`.
 - CHECKs de fim de cadeia só devem ser ativados após corrigir nulos existentes.
 
@@ -318,13 +337,12 @@ WHERE indice_origem > 0;
 - **`imovel` → `documento`**: `ON DELETE CASCADE`.
 - **`imovel` → `tis_imovel`**: `ON DELETE CASCADE`.
 - **`documento` → `lancamento`**: `ON DELETE CASCADE`.
-- **`lancamento` → `documento` (via `documento.lancamento_origem_id`)**: `ON DELETE CASCADE`.
 - **`lancamento` → `origem`**: `ON DELETE CASCADE`.
 - **`origem` → `origem_fim_cadeia`**: `ON DELETE CASCADE`.
 - **`lancamento` → `lancamento_pessoa`**: `ON DELETE CASCADE`.
 - **Documentos gerados automaticamente**: nao ha criacao automatica de documentos na migracao.
-- **Regra em runtime**: lancamentos do tipo `inicio_matricula` criam **um ou mais** `documento` automaticamente (dependendo da quantidade de origens, usando `tipo`, `numero` e `cartorio`).
-- **Exclusao**: ao excluir um `lancamento` do tipo `inicio_matricula`, apagar os `documento` criados automaticamente por ele.
+- **Regra em runtime**: lancamentos do tipo `inicio_matricula` criam **um ou mais** `documento` automaticamente (dependendo da quantidade de origens, usando `tipo`, `numero` e `cri_id`).
+- **Exclusao**: ao excluir um `lancamento` do tipo `inicio_matricula`, apagar os `documento` criados automaticamente por ele (derivar via `origem.documento_id`).
 - **Arquivamento**: `imovel.arquivado = 1` desativa o imovel sem apagar a cadeia.
 
 ---

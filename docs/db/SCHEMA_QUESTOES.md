@@ -2,6 +2,7 @@
 
 Este documento consolida pontos ambiguos, riscos e decisoes pendentes do schema.  
 Use-o para registrar respostas e alinhar o time.
+Status: **resolvidas** em `docs/db/SCHEMA_RESPOSTAS.md`.
 
 Formato sugerido para responder cada item:
 

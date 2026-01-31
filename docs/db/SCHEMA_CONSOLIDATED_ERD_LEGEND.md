@@ -38,23 +38,24 @@ O formato e do tipo: `A ||--o{ B : rotulo`
 - **possui**: entidade tem varias ligacoes (ex: imovel -> documento).
 - **proprietario**: pessoa relacionada ao imovel como proprietario.
 - **gera**: documento que gera lancamentos.
-- **cria**: lancamento que cria documentos (inicio de matricula).
 - **classifica**: tipo que define regras do lancamento.
-- **envolve / participa**: ligacao entre lancamento e pessoas.
+- **envolve / participa**: ligacao entre lancamento e pessoa.
 - **referencia**: origem aponta para um CRI (opcional).
-- **cri_origem**: CRI de origem do lancamento (inicio de matricula).
+- **origem_doc**: origem aponta para um documento (opcional).
 - **transmissao**: cartorio_transmissao usado na transmissao do lancamento.
 - **vincula (TI)**: imovel associado a uma TI.
 - **referencia (TI)**: TI aponta para a tabela de referencia oficial.
 
 ## 4) Campos importantes explicados em linguagem simples
-- **documento.is_principal**: marca o documento vigente do imovel (apenas 1 por imovel).
-- **cri_origem_id**: CRI de origem (usado para lancamentos de inicio de matricula).
+- **documento.is_documento_atual**: marca o documento vigente do imovel (apenas 1 por imovel).
 - **cartorio_transmissao_id**: cartorio manual usado na transmissao.
+- **origem.tipo**: `matricula`, `transcricao` ou `fim_cadeia`.
+- **origem.documento_id**: documento de origem (opcional, quando tipo != `fim_cadeia`).
 - **origem.indice**: ordem das origens dentro de um lancamento (0, 1, 2...).
+- **origem_fim_cadeia.sigla_patrimonio_publico**: sigla do orgao (ex: INCRA, SPU) quando aplicavel.
 - **lancamento.numero_lancamento**: numero informado pelo usuario (nao e derivado); usado para compor a sigla exibida (ex: `AV5 M123`).
-- **documento.lancamento_origem_id**: lancamento que criou o documento em runtime (inicio de matricula).
 
 ## 5) Observacoes sobre obrigatoriedade
 - Um campo marcado como `FK` pode ser **obrigatorio ou opcional** dependendo da regra de negocio.
 - A obrigatoriedade especifica esta definida no documento `docs/db/SCHEMA_CONSOLIDATED.md`.
+- No SQLite, `bool` representa `INTEGER` (0/1).

@@ -27,9 +27,9 @@ A cadeia dominial termina quando a origem do lançamento é uma das seguintes op
 
 ## Modelos de Dados
 
-### 1. OrigemFimCadeia
+> **Nota (schema v2):** fim de cadeia e indicado por `origem.tipo = 'fim_cadeia'` e os detalhes ficam em `origem_fim_cadeia`.
 
-**Arquivo:** `old/dominial/models/lancamento_models.py:151`
+### 1. OrigemFimCadeia (schema consolidado v2)
 
 Armazena informações de fim de cadeia **por origem individual** quando um lançamento possui múltiplas origens.
 
@@ -37,25 +37,25 @@ Armazena informações de fim de cadeia **por origem individual** quando um lan�
 
 | Campo | Tipo | Descrição |
 |-------|------|-----------|
-| `lancamento` | FK (Lancamento) | Lançamento ao qual esta origem pertence |
-| `indice_origem` | Integer | Índice da origem no array (0, 1, 2, ...) |
-| `fim_cadeia` | Boolean | Indica se esta origem marca o fim da cadeia |
-| `tipo_fim_cadeia` | CharField | Tipo do fim de cadeia (ver tipos abaixo) |
-| `especificacao_fim_cadeia` | TextField | Especificação quando tipo = "outra" |
-| `classificacao_fim_cadeia` | CharField | Classificação do imóvel (ver classificações abaixo) |
+| `origem` | FK (Origem) | Origem a que estes dados pertencem |
+| `tipo_fim_cadeia` | Text | Tipo do fim de cadeia (ver tipos abaixo) |
+| `especificacao_fim_cadeia` | Text | Especificação quando tipo = "outra" |
+| `classificacao_fim_cadeia` | Text | Classificação do imóvel (ver classificações abaixo) |
+| `sigla_patrimonio_publico` | Text | Sigla do órgão quando tipo = "destacamento_publico" |
 
 **Constraints:**
-- `unique_together = ['lancamento', 'indice_origem']`
+- `origem_id` único (1:1 com `origem`)
 
 **Validações:**
-- Se `fim_cadeia = True`, então `tipo_fim_cadeia` e `classificacao_fim_cadeia` são obrigatórios
+- Se `origem.tipo = 'fim_cadeia'`, então `origem_fim_cadeia` é obrigatório
 - Se `tipo_fim_cadeia = 'outra'`, então `especificacao_fim_cadeia` é obrigatório
+- Se `tipo_fim_cadeia = 'destacamento_publico'`, então `sigla_patrimonio_publico` é obrigatório
 
-### 2. FimCadeia
+### 2. FimCadeia (legado)
 
 **Arquivo:** `old/dominial/models/lancamento_models.py:204`
 
-Gerencia tipos predefinidos de fim de cadeia que aparecem na visualização D3 da árvore.
+Tabela de catalogo **legada** (removida no schema consolidado v2). Os dados relevantes agora vivem em `origem_fim_cadeia`.
 
 **Campos:**
 

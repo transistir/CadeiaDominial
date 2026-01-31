@@ -41,11 +41,11 @@ Este documento contem as decisoes tomadas para cada questao levantada em `SCHEMA
    - Perde granularidade quando houver varias origens.
 
 **Decisao:** **Remover `lancamento.cri_origem_id`**
-**Justificativa:** modelo antigo assumia uma origem por lancamento. O novo modelo usa tabela `origem` onde cada lancamento pode ter multiplas origens, cada uma com seu proprio `cartorio_id`. Campo era redundante e incompativel com o novo design.
+**Justificativa:** modelo antigo assumia uma origem por lancamento. O novo modelo usa tabela `origem` onde cada lancamento pode ter multiplas origens, cada uma com seu proprio `cri_id`. Campo era redundante e incompativel com o novo design.
 **Acoes:**
 
 - Remover campo `cri_origem_id` da tabela `lancamento`
-- Usar `origem.cartorio_id` para identificar o cartorio de cada origem
+- Usar `origem.cri_id` para identificar o cartorio de cada origem
 
 ---
 
@@ -62,13 +62,13 @@ Este documento contem as decisoes tomadas para cada questao levantada em `SCHEMA
 **Justificativa:** transmissao englobada (art. 225 e 234 da Lei 6.015/73) pode ter varias origens com cartorios diferentes. Cada origem pode ser:
 
 - Um documento (matricula/transcricao): `origem.documento_id` aponta para `documento`
-- Um fim de cadeia: `origem.fim_cadeia_id` aponta para `fim_cadeia`
+- Um fim de cadeia: detalhes ficam em `origem_fim_cadeia` (1:1 com `origem`)
 
 **Acoes:**
 
 - Documentar conceito de transmissao englobada com exemplo real
-- Usar FK polimorfica em `origem`: `documento_id` OU `fim_cadeia_id`
-- Cada origem tera campos proprios: `cartorio_id`, `livro`, `folha`, `data`
+- Usar `origem.documento_id` quando a origem for um documento; fim de cadeia fica em `origem_fim_cadeia`
+- Cada origem tera campos proprios: `cri_id`, `livro`, `folha`, `data`
 
 **Exemplo de Transmissao Englobada:**
 
@@ -82,12 +82,14 @@ Imovel X tem matricula M100 (documento atual)
 Resultado no banco:
   lancamento (id=1) → documento_id=100 (M100) → tipo=inicio_matricula
   │
-  ├── origem (id=1): documento_id=50 (M50), cartorio_id=1, livro=3, folha=45
+  ├── origem (id=1): documento_id=50 (M50), cri_id=1, livro=3, folha=45
   │
-  ├── origem (id=2): fim_cadeia_id=1, tipo_fim=destacamento_publico,
-  │     especificacao=INCRA, classificacao=origem_lidima
+  ├── origem (id=2): tipo=fim_cadeia
   │
-  └── origem (id=3): documento_id=30 (T30), cartorio_id=3, livro=2, folha=30
+  ├── origem_fim_cadeia (origem_id=2): tipo_fim_cadeia=destacamento_publico,
+  │     especificacao_fim_cadeia=INCRA, classificacao_fim_cadeia=origem_lidima
+  │
+  └── origem (id=3): documento_id=30 (T30), cri_id=3, livro=2, folha=30
 ```
 
 ---
@@ -104,7 +106,7 @@ Resultado no banco:
 **Decisao:** **Numero do documento de origem (matricula/transcricao)**
 **Justificativa:** quando a origem e um documento, `origem.numero` e o numero
 do documento (ex: "M50", "T30"). Quando a origem e um fim de cadeia,
-nao ha numero de documento (o numero fica em `fim_cadeia.especificacao`).
+nao ha numero de documento (o numero fica em `origem_fim_cadeia.especificacao_fim_cadeia`).
 **Acoes:** nenhuma mudanca necessaria no schema
 
 ---
@@ -220,7 +222,7 @@ transcricoes) e precisamos saber qual esta em vigor.
 **Justificativa:** as flags `requer_descricao`, `requer_titulo`, etc. indicam
 quais campos do lancamento sao obrigatorios para preenchimento pelo usuario,
 nao das origens. Cada origem pode ter seus proprios requisitos definidos
-em `origem.tipo` ou em `fim_cadeia`.
+em `origem.tipo` ou em `origem_fim_cadeia`.
 **Acoes:** nenhuma - manter como esta
 
 ---

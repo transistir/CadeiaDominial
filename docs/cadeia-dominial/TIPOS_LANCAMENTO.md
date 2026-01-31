@@ -224,6 +224,8 @@ A **Averbação** é um lançamento que atualiza fatos modificadores **sem alter
 
 ### Implementação no Código
 
+> **Nota (schema v2):** o CRI de origem passa a ficar em `origem.cri_id` e fim de cadeia em `origem_fim_cadeia`; `cartorio_origem_id` foi removido do lancamento.
+
 **Modelo:** `old/dominial/models/lancamento_models.py`
 
 ```python

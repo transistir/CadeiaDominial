@@ -3,16 +3,15 @@ erDiagram
     cri ||--o{ documento : emite
     cri ||--o{ imovel : registra
     imovel ||--o{ documento : possui
-    pessoas ||--o{ imovel : proprietario
+    pessoa ||--o{ imovel : proprietario
     documento ||--o{ lancamento : gera
-    lancamento o|--o{ documento : cria
+    documento o|--o{ origem : origem_doc
     lancamento_tipo ||--o{ lancamento : classifica
     lancamento ||--o{ lancamento_pessoa : envolve
-    pessoas ||--o{ lancamento_pessoa : participa
+    pessoa ||--o{ lancamento_pessoa : participa
     lancamento ||--o{ origem : possui
     origem ||--o| origem_fim_cadeia : fim_cadeia
     cri o|--o{ origem : referencia
-    cri o|--o{ lancamento : cri_origem
     cartorio_transmissao o|--o{ lancamento : transmissao
     tis ||--o{ tis_imovel : vincula
     imovel ||--o{ tis_imovel : vincula
@@ -36,7 +35,7 @@ erDiagram
       string endereco
     }
 
-    pessoas {
+    pessoa {
       int id PK
       string cpf
       string rg
@@ -51,7 +50,7 @@ erDiagram
       string nome
       string observacoes
       date data_cadastro
-      int cartorio_id FK
+      int cri_id FK
       int proprietario_id FK
       bool arquivado
     }
@@ -59,6 +58,7 @@ erDiagram
     documento {
       int id PK
       string numero
+      string numero_raw
       date data
       string livro
       string folha
@@ -66,14 +66,13 @@ erDiagram
       int cri_id FK
       int imovel_id FK
       string tipo
-      bool is_principal
-      int lancamento_origem_id FK
-      string sigla_patrimonio_publico
+      bool is_documento_atual
     }
 
     lancamento_tipo {
       int id PK
       string tipo
+      string nome
       bool requer_detalhes
       bool requer_transmissao
       bool requer_cartorio_origem
@@ -96,7 +95,6 @@ erDiagram
       date data_cadastro
       int documento_id FK
       int tipo_id FK
-      int cri_origem_id FK
       string descricao
       string forma
       string titulo
@@ -119,6 +117,7 @@ erDiagram
       int id PK
       int lancamento_id FK
       int cri_id FK
+      int documento_id FK
       int indice
       string tipo
       string numero
@@ -134,6 +133,7 @@ erDiagram
       string tipo_fim_cadeia
       string especificacao_fim_cadeia
       string classificacao_fim_cadeia
+      string sigla_patrimonio_publico
     }
 
     tis {
