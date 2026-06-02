@@ -149,6 +149,26 @@ Phase 0: Decisions ──┐
 - **Files:** (no local work; use `gh pr list`)
 - **Description:** For each of: #6 (cleanup/clean), #7 (cleanup/unused-python-files), #8 (docker-containerization), decide: merge, close, or rebase onto `v2`. Document decision in PR comments.
 
+### T-403 — Organize `docs/` structure
+- **Status:** in-progress (PR #17)
+- **Worktree branch:** `docs/organize-docs-structure`
+- **Files:** `docs/README.md` (new), `docs/domain/` (renamed from `docs/cadeia-dominial/`), `docs/db/README.md` (new), `docs/prd/README.md` (new), `docs/db/erd-v2.{mmd,-legend.md}` (renamed), `docs/domain/react-flow-quick-reference.md` (moved from root)
+- **Description:** Reorganize `docs/` to fix navigation, naming, and discoverability. No content or schemas changed.
+- **Scope:**
+  - Rename `docs/cadeia-dominial/` → `docs/domain/` (English, cleaner)
+  - 7 internal files to kebab-case
+  - Move `docs/react-flow.md` → `docs/domain/react-flow-quick-reference.md`
+  - Rename `docs/db/SCHEMA_CONSOLIDATED_ERD.mmd` → `erd-v2.mmd` and its legend
+  - Add 4 index files (root + domain + db + prd)
+  - Cross-link `MIGRATION_GUIDE.md` ↔ `MIGRATION_CHECKLIST.md`
+  - Fix 3 broken internal cross-references
+- **Acceptance:**
+  - All cross-references verified — zero broken links after renames
+  - Git history preserved (used `git mv` for all renames)
+  - No source code or schema changes
+  - PR opened against `v2`
+- **Out of scope:** untracked `docs/ERD_CADEIA_DOMINIAL.{md,png}` (handled separately — see related documents), `db/legacy/`, `legacy-django/`, PRD JSON filenames.
+
 ---
 
 ## Status summary
@@ -166,6 +186,7 @@ Phase 0: Decisions ──┐
 | T-400 | open | — |
 | T-401 | open | — |
 | T-402 | open | — |
+| T-403 | in-progress (PR #17) | — |
 
 **Current gate: T-000 → T-001.** Nothing else matters until Luandro reads the decision doc and answers Q1–Q6.
 
@@ -175,7 +196,8 @@ Phase 0: Decisions ──┐
 
 - `docs/SCHEMA_V2_BLINDSPOT_REVIEW.md` — the 27-issue audit (PR #15)
 - `docs/db/SCHEMA_DECISOES_PENDENTES.md` — the 6 blocking decisions (in pt-BR, this PR)
-- `docs/ERD_CADEIA_DOMINIAL.md` — the schema draft (target of T-100)
+- `docs/ERD_CADEIA_DOMINIAL.md` — the schema draft (target of T-100). **Note:** as of the docs/ restructure (T-403, PR #17), the v2 ERD is at `docs/db/erd-v2.mmd` and the legacy Django ERD will be moved to `docs/legacy-django/erd-modelo-antigo.md` in a follow-up.
 - `docs/legacy-django/03-database-models.md` — Django source of truth
 - `docs/MIGRATION_GUIDE.md` — overall migration architecture
 - `docs/ARCHITECTURE_DECISIONS.md` — log of past architecture decisions
+- PR #17 — `docs(structure): reorganize docs/ for navigation and clarity` (T-403)
