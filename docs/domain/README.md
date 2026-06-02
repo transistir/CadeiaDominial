@@ -15,4 +15,4 @@ Documents describing **what a land-registry chain is** in this system. Independe
 
 ## Migration note
 
-The D3 documents describe the **legacy Django** visualization. The v2 frontend uses **React Flow** instead — see [`../react-flow.md`](../MIGRATION_GUIDE.md) in the migration guide and [`ARCHITECTURE_DECISIONS.md`](../ARCHITECTURE_DECISIONS.md) for the rationale.
+The D3 documents describe the **legacy Django** visualization. The v2 frontend uses **React Flow** instead — see [`react-flow-quick-reference.md`](./react-flow-quick-reference.md) and the [migration guide](../MIGRATION_GUIDE.md) and [`ARCHITECTURE_DECISIONS.md`](../ARCHITECTURE_DECISIONS.md) for the rationale.
