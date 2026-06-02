@@ -2,6 +2,8 @@
 
 This guide outlines our migration from a Django monolith to a modern full-stack TypeScript architecture using **React + Vite** (frontend), **Hono** (backend API), and **Drizzle** (ORM) on the Cloudflare platform.
 
+> **Looking for the execution plan?** See [`MIGRATION_CHECKLIST.md`](./MIGRATION_CHECKLIST.md) — phase-by-phase to-do list. This guide is the **technical companion** (why and how).
+
 ---
 
 ## Migration Context
@@ -64,7 +66,7 @@ The current **Cadeia Dominial** system is a Django 5.2.3 application:
 - ✅ Built-in zoom/pan and easy node/edge customization
 - ✅ Supports rapid iteration before adding advanced layouts
 
-> **Reference**: [ADR-007 in ARCHITECTURE_DECISIONS.md](./ARCHITECTURE_DECISIONS.md) and [React Flow Quick Reference](./react-flow.md)
+> **Reference**: [ADR-007 in ARCHITECTURE_DECISIONS.md](./ARCHITECTURE_DECISIONS.md) and [React Flow Quick Reference](./domain/react-flow-quick-reference.md)
 
 **How to use (baseline)**:
 

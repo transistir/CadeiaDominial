@@ -249,7 +249,7 @@ Regra prática:
 - **Sem origem**: documento não "puxa" pais novos para a árvore.
 - **Com origem**: cada código `M123`/`T456` citado em `lancamento.origem` vira um documento pai (já existente ou criado automaticamente, dependendo do caso) e aparece conectado ao documento atual.
 
-> **📋 Documentação Complementar:** Para informações detalhadas sobre todos os tipos de lançamento (Averbação, Registro, Início de Matrícula), seus campos obrigatórios, particularidades e regras de preenchimento, consulte o documento auxiliar: [`TIPOS_LANCAMENTO.md`](./TIPOS_LANCAMENTO.md).
+> **📋 Documentação Complementar:** Para informações detalhadas sobre todos os tipos de lançamento (Averbação, Registro, Início de Matrícula), seus campos obrigatórios, particularidades e regras de preenchimento, consulte o documento auxiliar: [`lancamento-tipos.md`](./lancamento-tipos.md).
 
 **Como as origens são interpretadas no backend**
 
