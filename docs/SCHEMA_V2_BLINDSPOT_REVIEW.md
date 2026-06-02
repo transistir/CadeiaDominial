@@ -334,7 +334,7 @@ The plan says "auth out of scope" but `users` is in the current Drizzle schema. 
 
 ### 6.7 [P2] The dump file is in the repo working dir (not gitignored by path)
 
-`.gitignore` excludes `*.sql`, but the file is at `~/CadeiaDominial/data.cleaned.core.no-auth.no-unistr.sql` (the project root). **Action:** double-check with `git status` that it shows as ignored. If `git status` shows it under "untracked," add a more specific rule.
+`.gitignore` excludes `*.sql`, but the file is at `<project-root>/data.cleaned.core.no-auth.no-unistr.sql` (the project root). **Action:** double-check with `git status` that it shows as ignored. If `git status` shows it under "untracked," add a more specific rule.
 
 ---
 

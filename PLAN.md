@@ -106,10 +106,10 @@ No. SQLite is file-based; we can open the database file directly from a Node.js 
   - Cycle prevention (visited set) to avoid infinite loops.
 
 ### Logic Inspiration (legacy docs)
-- Use the D3 flow docs as the reference for the core graph logic and levels:
-  - `docs/cadeia-dominial/D3_CHAIN_VISUALIZATION_FLOW.md`
-  - `docs/cadeia-dominial/ANALISE_FLUXO_D3.md`
-  - `docs/cadeia-dominial/DOCUMENTACAO_VISUALIZACAO_D3.md`
+- Use the D3 flow docs as the reference for the core graph logic and levels (consolidated into `docs/domain/` as part of the T-403 doc rename):
+  - `docs/domain/visualization-d3.md`
+  - `docs/domain/visualization-d3-analysis.md`
+  - `docs/domain/visualization-d3-reference.md`
 
 ## Implementation Steps
 1. **Schema recon**: Write a small script to list tables + sample columns via `PRAGMA table_info` to confirm names.
