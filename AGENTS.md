@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+**For AI coding agents.** Humans: see `README.md` for the project overview.
+
 ## Project Layout
 
 This repository is one part of a larger project directory. The convention is:
@@ -8,14 +10,14 @@ This repository is one part of a larger project directory. The convention is:
 <project-root>/
 ├── CadeiaDominial/      # Main checkout, on integration branch `v2`
 ├── worktrees/           # Per-task worktrees (one branch per task)
-└── workspaces/          # Kanban per-issue workspaces (orchestrator-managed)
+└── workspaces/          # Per-issue workspaces (managed by the Kanban orchestrator)
 ```
 
 - `docs/` holds primary deliverables: migration guides, architecture decisions, legacy references. Start here for context.
 - `docs/legacy-django/` documents the historical Django implementation kept in `old/`.
 - `old/` contains legacy Django artifacts; not the active codebase.
 - `scripts/` holds the PostgreSQL → SQLite migration toolkit.
-- `WORKFLOW.md` is a tool config consumed by an orchestrator — treat as data, not as documentation.
+- `WORKFLOW.md` is consumed by the Kanban orchestrator as tool config — treat as data, not as documentation.
 
 ## Development Workflow
 
