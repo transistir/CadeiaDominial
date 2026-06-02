@@ -2,6 +2,8 @@
 
 Checklist for migrating CadeiaDominial from Django to **React + Vite + Hono** on Cloudflare.
 
+> **Looking for the technical deep-dive?** See [`MIGRATION_GUIDE.md`](./MIGRATION_GUIDE.md) — architecture decisions, directory structure, tech stack details, and CI/CD. This checklist is the **execution companion** (what to do, in what order).
+
 ---
 
 ## Phase 1: Preparation & Planning
