@@ -23,25 +23,26 @@ This repository is one part of a larger project directory. The convention is:
 
 ### Lifecycle
 
-1. From the main checkout on `v2`, confirm with `git status` and `git branch --show-current`.
+1. **Start from the main checkout on `v2`.** Run `git status` and `git branch --show-current` — expect `v2`. If you are already in a worktree, run `git worktree list` and `cd` to the worktree whose branch is `v2` (the main checkout).
 2. Create a worktree for the task:
    ```bash
    git fetch origin
+   mkdir -p ../worktrees
    git worktree add -b <type>/<short-task> ../worktrees/<short> origin/v2
    cd ../worktrees/<short>
    ```
 3. Work in the worktree — all commits, pushes, and PR work happen here.
 4. Push and open a PR against `v2`.
-5. After CI passes and the PR is merged, clean up:
+5. After CI passes and the PR is merged, return to the main checkout, clean up, and pull the new `v2` tip:
    ```bash
+   cd ../../CadeiaDominial
+   git status
+   git branch --show-current  # should be v2
    git worktree remove --force ../worktrees/<short>
    git branch -D <type>/<short-task>
    git push origin --delete <type>/<short-task> 2>/dev/null  # OK if already gone
    git remote prune origin
-   ```
-6. From the main checkout, pull the new `v2` tip:
-   ```bash
-   git -C ../CadeiaDominial pull origin v2
+   git pull origin v2
    ```
 
 ### Conventions
@@ -69,12 +70,13 @@ This branch tracks the roadmap and pending decisions. It is also kept as a long-
 This repository snapshot is documentation-focused; the TypeScript monorepo described in `README.md` and `docs/MIGRATION_GUIDE.md` is not present here. When working against the full monorepo:
 
 ```bash
-pnpm dev                       # Start API + web together
-pnpm -C packages/web dev       # Frontend dev server
-pnpm -C packages/api dev       # API dev server
+pnpm install                  # Install workspace dependencies (one-time)
+pnpm dev                      # Start API + web together
+pnpm -C packages/web dev      # Frontend dev server
+pnpm -C packages/api dev      # API dev server
 pnpm -C packages/api db:generate
 pnpm -C packages/api db:migrate:local
-pnpm test                      # Vitest + Playwright
+pnpm test                     # Vitest + Playwright
 pnpm format && pnpm lint
 ```
 
@@ -88,7 +90,7 @@ If you only touch `docs/`, no build step is required.
 
 ## Testing Guidelines
 
-- The planned stack uses Vitest and Playwright with an 80% coverage target.
+- This documentation snapshot has no configured automated test runner. When working against the full monorepo, use Vitest and Playwright with an 80% coverage target.
 - For frontend visual/interaction checks, use Agent Browser (`agent-browser` or `npx @vercel-labs/agent-browser`) and document results in the relevant PRD or progress notes.
 
 ## Commit & Pull Request Guidelines
