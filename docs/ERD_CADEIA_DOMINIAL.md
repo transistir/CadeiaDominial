@@ -1,269 +1,253 @@
 # Diagrama ERD — Cadeia Dominial
 
-## Schema do Banco de Dados
+> **Status:** Este diagrama reflete o **design v2** (atual) consolidado em
+> [`docs/db/SCHEMA_CONSOLIDATED.md`](../db/SCHEMA_CONSOLIDATED.md) e
+> [`docs/db/erd-v2.mmd`](../db/erd-v2.mmd). Sincronizado em junho/2026 com o
+> resultado do **T-100** (re-desenho do ERD a partir do blindspot review).
+>
+> **⚠ Phase 0 (BLOCKING):** seis decisões em
+> [`docs/db/SCHEMA_DECISOES_PENDENTES.md`](../db/SCHEMA_DECISOES_PENDENTES.md)
+> (Q1–Q6) podem alterar este schema antes do lock-in. Tarefa **T-001** em
+> [`TASKS.md`](../TASKS.md).
+
+## Schema do Banco de Dados (v2 — design atual)
 
 ```mermaid
+%%{init: {"theme":"neutral","er":{"layoutDirection":"LR","minEntityWidth":180,"minEntityHeight":90,"entityPadding":12},"themeVariables":{"fontSize":"12px"}}}%%
 erDiagram
-    TIs {
-        int id PK
-        string nome
-        string codigo UK
-        string etnia
-        string estado
-        decimal area
-        date data_cadastro
+    cri ||--o{ documento : emite
+    cri ||--o{ imovel : registra
+    imovel ||--o{ documento : possui
+    pessoa ||--o{ imovel : proprietario
+    documento ||--o{ lancamento : gera
+    documento o|--o{ origem : origem_doc
+    lancamento_tipo ||--o{ lancamento : classifica
+    lancamento ||--o{ lancamento_pessoa : envolve
+    pessoa ||--o{ lancamento_pessoa : participa
+    lancamento ||--o{ origem : possui
+    origem ||--o| origem_fim_cadeia : fim_cadeia
+    cri o|--o{ origem : referencia
+    cartorio_transmissao o|--o{ lancamento : transmissao
+    tis ||--o{ tis_imovel : vincula
+    imovel ||--o{ tis_imovel : vincula
+    terra_indigena_referencia ||--o{ tis : referencia
+
+    cri {
+      int id PK
+      string nome
+      string cns
+      string estado
+      string cidade
+      string endereco
     }
 
-    TerraIndigenaReferencia {
-        int id PK
-        string codigo UK
-        string nome
-        string etnia
-        string estado
-        string municipio
-        float area_ha
-        string fase
-        string modalidade
-        date data_regularizada
-        datetime created_at
-        datetime updated_at
+    cartorio_transmissao {
+      int id PK
+      string nome
+      string cns
+      string estado
+      string cidade
+      string endereco
     }
 
-    Imovel {
-        int id PK
-        string nome
-        string matricula
-        string tipo_documento_principal
-        text observacoes
-        date data_cadastro
-        boolean arquivado
+    pessoa {
+      int id PK
+      string cpf
+      string rg
+      date data_nascimento
+      string email
+      string telefone
+      string nome
     }
 
-    Cartorios {
-        int id PK
-        string nome
-        string cns UK
-        string endereco
-        string telefone
-        string email
-        string estado
-        string cidade
-        string tipo
+    imovel {
+      int id PK
+      string nome
+      string observacoes
+      date data_cadastro
+      int cri_id FK
+      int proprietario_id FK
+      bool arquivado
     }
 
-    ImportacaoCartorios {
-        int id PK
-        string estado
-        datetime data_inicio
-        datetime data_fim
-        int total_cartorios
-        string status
-        text erro
+    documento {
+      int id PK
+      string numero
+      string numero_raw
+      date data
+      string livro
+      string folha
+      date data_cadastro
+      int cri_id FK
+      int imovel_id FK
+      string tipo
+      bool is_documento_atual
     }
 
-    Pessoas {
-        int id PK
-        string nome
-        string cpf UK
-        string rg
-        date data_nascimento
-        string email
-        string telefone
+    lancamento_tipo {
+      int id PK
+      string tipo
+      string nome
+      bool requer_detalhes
+      bool requer_transmissao
+      bool requer_cartorio_origem
+      bool requer_data_origem
+      bool requer_descricao
+      bool requer_folha_origem
+      bool requer_forma
+      bool requer_livro_origem
+      bool requer_observacao
+      bool requer_titulo
     }
 
-    DocumentoTipo {
-        int id PK
-        string tipo
+    lancamento {
+      int id PK
+      date data
+      decimal valor_transacao
+      decimal area
+      string detalhes
+      string observacoes
+      date data_cadastro
+      int documento_id FK
+      int tipo_id FK
+      string descricao
+      string forma
+      string titulo
+      int numero_lancamento
+      int cartorio_transmissao_id FK
+      string livro_transmissao
+      string folha_transmissao
+      date data_transmissao
     }
 
-    Documento {
-        int id PK
-        string numero
-        date data
-        string livro
-        string folha
-        text origem
-        text observacoes
-        date data_cadastro
-        int nivel_manual
-        string classificacao_fim_cadeia
-        string sigla_patrimonio_publico
+    lancamento_pessoa {
+      int id PK
+      string tipo
+      string nome_digitado
+      int lancamento_id FK
+      int pessoa_id FK
     }
 
-    LancamentoTipo {
-        int id PK
-        string tipo
-        boolean requer_transmissao
-        boolean requer_detalhes
-        boolean requer_titulo
-        boolean requer_cartorio_origem
-        boolean requer_livro_origem
-        boolean requer_folha_origem
-        boolean requer_data_origem
-        boolean requer_forma
-        boolean requer_descricao
-        boolean requer_observacao
+    origem {
+      int id PK
+      int lancamento_id FK
+      int cri_id FK
+      int documento_id FK
+      int indice
+      string tipo
+      string numero
+      string livro
+      string folha
+      date data
+      string observacoes
     }
 
-    Lancamento {
-        int id PK
-        string numero_lancamento
-        date data
-        decimal valor_transacao
-        decimal area
-        string origem
-        text detalhes
-        text observacoes
-        date data_cadastro
-        string forma
-        text descricao
-        string titulo
-        string livro_transacao
-        string folha_transacao
-        date data_transacao
-        string livro_origem
-        string folha_origem
-        date data_origem
-        boolean eh_inicio_matricula
+    origem_fim_cadeia {
+      int id PK
+      int origem_id FK
+      string tipo_fim_cadeia
+      string especificacao_fim_cadeia
+      string classificacao_fim_cadeia
+      string sigla_patrimonio_publico
     }
 
-    LancamentoPessoa {
-        int id PK
-        string tipo
-        string nome_digitado
+    tis {
+      int id PK
+      string codigo
+      string etnia
+      date data_cadastro
+      int terra_referencia_id FK
+      decimal area
+      string estado
+      string nome
     }
 
-    OrigemFimCadeia {
-        int id PK
-        int indice_origem
-        boolean fim_cadeia
-        string tipo_fim_cadeia
-        text especificacao_fim_cadeia
-        string classificacao_fim_cadeia
+    tis_imovel {
+      int id PK
+      int tis_id FK
+      int imovel_id FK
     }
 
-    FimCadeia {
-        int id PK
-        string nome UK
-        string tipo
-        string classificacao
-        string sigla
-        text descricao
-        boolean ativo
-        datetime data_criacao
-        datetime data_atualizacao
+    terra_indigena_referencia {
+      int id PK
+      string codigo
+      string nome
+      string etnia
+      string estado
+      string municipio
+      decimal area_ha
+      string fase
+      string modalidade
+      string coordenacao_regional
+      date data_regularizada
+      date data_homologada
+      date data_declarada
+      date data_delimitada
+      date data_em_estudo
     }
-
-    AlteracoesTipo {
-        int id PK
-        string tipo
-    }
-
-    RegistroTipo {
-        int id PK
-        string tipo
-    }
-
-    AverbacoesTipo {
-        int id PK
-        string tipo
-    }
-
-    Alteracoes {
-        int id PK
-        string livro
-        string folha
-        date data_alteracao
-        string titulo
-        string livro_origem
-        string folha_origem
-        date data_origem
-        decimal valor_transacao
-        decimal area
-        text observacoes
-        date data_cadastro
-    }
-
-    TIs_Imovel {
-        int id PK
-    }
-
-    DocumentoImportado {
-        int id PK
-        datetime data_importacao
-    }
-
-    %% ==================== RELACIONAMENTOS ====================
-
-    %% Terra Indigena
-    TIs ||--o| TerraIndigenaReferencia : "terra_referencia"
-    TIs ||--o{ TIs_Imovel : "tem"
-    Imovel ||--o{ TIs_Imovel : "associado_a"
-
-    %% Imovel
-    Imovel ||--o{ Documento : "possui"
-    Imovel ||--o{ Alteracoes : "historico"
-    Imovel }o--|| Pessoas : "proprietario"
-    Imovel }o--|| TIs : "terra_indigena"
-
-    %% Cartorio
-    Cartorios ||--o{ Imovel : "registra"
-    Cartorios ||--o{ Documento : "emissor"
-    Cartorios ||--o{ Lancamento : "cartorio_origem"
-    Cartorios ||--o{ Lancamento : "cartorio_transacao"
-    Cartorios ||--o{ Lancamento : "cartorio_transmissao"
-    Cartorios ||--o{ Alteracoes : "cartorio_responsavel"
-    Documento }o--|| Cartorios : "cri_atual"
-    Documento }o--|| Cartorios : "cri_origem"
-
-    %% Pessoa
-    Pessoas ||--o{ Lancamento : "transmitente"
-    Pessoas ||--o{ Lancamento : "adquirente"
-    Pessoas ||--o{ LancamentoPessoa : "envolvida"
-    Pessoas ||--o{ Alteracoes : "transmitente_alt"
-    Pessoas ||--o{ Alteracoes : "adquirente_alt"
-
-    %% Documento
-    Documento }o--|| DocumentoTipo : "classificado_como"
-    Documento ||--o{ Lancamento : "lancamentos"
-    Documento ||--o{ Lancamento : "documento_origem"
-    Documento ||--o{ DocumentoImportado : "importacoes"
-
-    %% Lancamento
-    Lancamento }o--|| LancamentoTipo : "tipo_de_lancamento"
-    Lancamento ||--o{ LancamentoPessoa : "pessoas"
-    Lancamento ||--o{ OrigemFimCadeia : "origens_fim_cadeia"
-
-    %% Alteracao
-    Alteracoes }o--|| AlteracoesTipo : "tipo_alteracao"
-    Alteracoes }o--|| RegistroTipo : "tipo_registro"
-    Alteracoes }o--|| AverbacoesTipo : "tipo_averbacao"
-
-    %% DocumentoImportado
-    %% (relação Documento -> DocumentoImportado já declarada em Documento acima; manter só a referência ao imóvel de origem)
-    DocumentoImportado }o--|| Imovel : "imovel_origem"
 ```
 
 ## Legenda das Entidades
 
 | Entidade | Descrição |
 |----------|-----------|
-| **Imovel** | Entidade central — imóveis registrados com matrícula única por cartório |
-| **Documento** | Documentos (matrículas/transcrições) associados a um imóvel |
-| **Lancamento** | Lançamentos da cadeia dominial (registros, averbações, início de matrícula) |
-| **LancamentoPessoa** | Pessoas (transmitentes/adquirentes) associadas a lançamentos |
-| **Pessoas** | Pessoas físicas/jurídicas envolvidas |
-| **Cartorios** | Cartórios de Registro de Imóveis |
-| **Alteracoes** | Alterações sobre imóveis (registros/averbações) |
-| **TIs** | Terras Indígenas sobrepostas |
-| **FimCadeia** | Tipos configuráveis de fim de cadeia dominial |
-| **DocumentoImportado** | Rastreamento de documentos importados entre cadeias |
+| **cri** | Cartório de Registro de Imóveis (renomeado de `Cartorios`; sem coluna `tipo`) |
+| **cartorio_transmissao** | Cadastro manual de cartórios usados em transmissão (separado de `cri`) |
+| **pessoa** | Pessoas físicas/jurídicas envolvidas (renomeado de `Pessoas`) |
+| **imovel** | Imóvel — representa a matrícula vigente. Quando a matrícula muda, cria-se um novo `imovel` |
+| **documento** | Matrícula ou transcrição. `tipo` inline (`matricula` \| `transcricao`); `is_documento_atual` marca o documento vigente do imóvel |
+| **lancamento_tipo** | Tipos de lançamento (`inicio_matricula` \| `registro` \| `averbacao`) + flags `requer_*` (UI/validação) |
+| **lancamento** | Lançamento (registro/averbação/início de matrícula) sobre um `documento` |
+| **lancamento_pessoa** | Pessoas (transmitente/adquirente) associadas a um lançamento (1:N por lançamento) |
+| **origem** | Origem estruturada de um lançamento — substitui os campos legados `lancamento.origem` e `documento_origem_id`. Suporta múltiplas origens por lançamento via `indice` |
+| **origem_fim_cadeia** | Detalhes de fim de cadeia para uma `origem` (1:1 opcional). Só existe quando `origem.tipo = 'fim_cadeia'` |
+| **tis** | Terra Indígena |
+| **tis_imovel** | Junção N:N entre `tis` e `imovel` (substitui `TIs_Imovel`) |
+| **terra_indigena_referencia** | Dados de referência importados da FUNAI (read-only; não sujeito às mesmas regras de FK CASCADE) |
 
 ## Relacionamentos Principais
 
-- **Imovel ↔ Documento**: 1:N — um imóvel pode ter múltiplos documentos
-- **Documento ↔ Lancamento**: 1:N — um documento pode ter vários lançamentos
-- **Lancamento ↔ LancamentoPessoa**: 1:N — um lançamento pode ter múltiplas pessoas
-- **Imovel ↔ Alteracoes**: 1:N — um imóvel tem um histórico de alterações
-- **Imovel ↔ TIs**: 1:N via `Imovel.terra_indigena_id` (FK direta para uma TI) + N:N via `TIs_Imovel` (junction) — a FK cobre a relação principal; o junction modela sobreposições históricas/opcional
-- **Documento → Lancamento (documento_origem)**: cada Documento é o documento de origem de N Lancamentos (chain link) — FK `Lancamento.documento_origem_id` aponta para `Documento`
+- **cri ↔ documento** — 1:N. Um CRI emite vários documentos.
+- **cri ↔ imovel** — 1:N. Um CRI registra vários imóveis.
+- **imovel ↔ documento** — 1:N. Um imóvel tem histórico de documentos; apenas **um** com `is_documento_atual = 1` (UNIQUE parcial).
+- **pessoa ↔ imovel** — 1:N. Uma pessoa pode ser proprietária de vários imóveis.
+- **documento ↔ lancamento** — 1:N. Um documento gera vários lançamentos.
+- **lancamento ↔ lancamento_tipo** — N:1. Todo lançamento tem um tipo.
+- **lancamento ↔ origem** — 1:N. Um lançamento pode ter várias origens (`indice` 0, 1, 2, … contíguos por `lancamento`).
+- **origem ↔ origem_fim_cadeia** — 1:1 opcional. Apenas quando a origem é `fim_cadeia`.
+- **origem → documento / cri** — N:1 opcional. Origem pode apontar para um documento (quando `tipo ∈ {matricula, transcricao}`) ou para um CRI (quando aplicável, ex.: `inicio_matricula`).
+- **pessoa ↔ lancamento_pessoa ↔ lancamento** — N:N mediado por `lancamento_pessoa`. Múltiplas pessoas por lançamento (transmitente + adquirente).
+- **cartorio_transmissao ↔ lancamento** — N:1 opcional. Cartório de transmissão manual (não confundir com `cri`).
+- **tis ↔ imovel** — N:N via `tis_imovel` (substitui FK direta legada `Imovel.terra_indigena_id`).
+- **tis ↔ terra_indigena_referencia** — N:1 opcional. TI pode referenciar dados oficiais da FUNAI.
+
+## Composite Unique Constraints (DDL)
+
+Declaradas em [`docs/db/SCHEMA_CONSTRAINTS.md`](../db/SCHEMA_CONSTRAINTS.md). Mermaid ERD não tem sintaxe nativa para `UNIQUE`, então ficam fora do diagrama:
+
+- **documento** — `UNIQUE (cri_id, tipo, numero)` + `UNIQUE (imovel_id) WHERE is_documento_atual = 1` (parcial — garante **um** documento atual por imóvel)
+- **lancamento** — `UNIQUE (documento_id, numero_lancamento)`
+- **origem** — `UNIQUE (lancamento_id, indice)` (índices contíguos por lançamento)
+- **origem_fim_cadeia** — `UNIQUE (origem_id)` (1:1 com `origem`)
+- **tis_imovel** — `UNIQUE (tis_id, imovel_id)`
+
+## Tabelas Removidas no v2
+
+Presentes no schema Django legado, removidas em [`docs/db/SCHEMA_CONSOLIDATED.md` §2.1](../db/SCHEMA_CONSOLIDATED.md):
+
+- `documento_tipo` — apenas 2 valores fixos; substituído por `documento.tipo` inline + CHECK
+- `alteracoes` + `alteracoes_tipo` + `registro_tipo` + `averbacoes_tipo` — legado, migrado para `lancamento` + `documento`
+- `documento_importado` — funcionalidade não usada (opcional: flag simples em `documento`)
+- `fim_cadeia` (catálogo) — redundante; `origem_fim_cadeia` carrega essa informação
+- `importacao_cartorios` — log administrativo; migrado para logs de aplicação
+- `TIs_Imovel` → renomeado para `tis_imovel` (nomenclatura apenas)
+
+## Fonte / Cross-reference
+
+- Schema consolidado: [`docs/db/SCHEMA_CONSOLIDATED.md`](../db/SCHEMA_CONSOLIDATED.md)
+- Constraints (DDL + regras condicionais): [`docs/db/SCHEMA_CONSTRAINTS.md`](../db/SCHEMA_CONSTRAINTS.md)
+- Mermaid (tooling-friendly, sem prose): [`docs/db/erd-v2.mmd`](../db/erd-v2.mmd)
+- Legenda compartilhada: [`docs/db/erd-v2-legend.md`](../db/erd-v2-legend.md)
+- Blindspot review (27 issues, 10 P0): [`docs/SCHEMA_V2_BLINDSPOT_REVIEW.md`](../SCHEMA_V2_BLINDSPOT_REVIEW.md)
+- Django legado (referência histórica): [`docs/legacy-django/03-database-models.md`](../legacy-django/03-database-models.md)
+- Roadmap & tasks: [`TASKS.md`](../TASKS.md) — T-100 (re-desenho do ERD), T-101 (Drizzle schema)

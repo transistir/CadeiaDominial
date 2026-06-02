@@ -84,9 +84,11 @@ out/
 .cache/
 .turbo/
 
-# Generated Mermaid diagrams
+# Generated Mermaid diagrams (render with mmdr --out elsewhere)
 docs/DEVELOPMENT_FLOW.svg
 docs/DEVELOPMENT_FLOW.png
+docs/ERD_*.png
+docs/db/erd-v2.png
 
 # Temporary files
 *.tmp
