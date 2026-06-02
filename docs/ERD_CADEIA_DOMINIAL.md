@@ -1,14 +1,14 @@
 # Diagrama ERD — Cadeia Dominial
 
 > **Status:** Este diagrama reflete o **design v2** (atual) consolidado em
-> [`docs/db/SCHEMA_CONSOLIDATED.md`](../db/SCHEMA_CONSOLIDATED.md) e
-> [`docs/db/erd-v2.mmd`](../db/erd-v2.mmd). Sincronizado em junho/2026 com o
+> [`docs/db/SCHEMA_CONSOLIDATED.md`](db/SCHEMA_CONSOLIDATED.md) e
+> [`docs/db/erd-v2.mmd`](db/erd-v2.mmd). Sincronizado em junho/2026 com o
 > resultado do **T-100** (re-desenho do ERD a partir do blindspot review).
 >
 > **⚠ Phase 0 (BLOCKING):** seis decisões em
-> [`docs/db/SCHEMA_DECISOES_PENDENTES.md`](../db/SCHEMA_DECISOES_PENDENTES.md)
+> [`docs/db/SCHEMA_DECISOES_PENDENTES.md`](db/SCHEMA_DECISOES_PENDENTES.md)
 > (Q1–Q6) podem alterar este schema antes do lock-in. Tarefa **T-001** em
-> [`TASKS.md`](../TASKS.md).
+> [`TASKS.md`](TASKS.md).
 
 ## Schema do Banco de Dados (v2 — design atual)
 
@@ -223,7 +223,7 @@ erDiagram
 
 ## Composite Unique Constraints (DDL)
 
-Declaradas em [`docs/db/SCHEMA_CONSTRAINTS.md`](../db/SCHEMA_CONSTRAINTS.md). Mermaid ERD não tem sintaxe nativa para `UNIQUE`, então ficam fora do diagrama:
+Declaradas em [`docs/db/SCHEMA_CONSTRAINTS.md`](db/SCHEMA_CONSTRAINTS.md). Mermaid ERD não tem sintaxe nativa para `UNIQUE`, então ficam fora do diagrama:
 
 - **documento** — `UNIQUE (cri_id, tipo, numero)` + `UNIQUE (imovel_id) WHERE is_documento_atual = 1` (parcial — garante **um** documento atual por imóvel)
 - **lancamento** — `UNIQUE (documento_id, numero_lancamento)`
@@ -233,7 +233,7 @@ Declaradas em [`docs/db/SCHEMA_CONSTRAINTS.md`](../db/SCHEMA_CONSTRAINTS.md). Me
 
 ## Tabelas Removidas no v2
 
-Presentes no schema Django legado, removidas em [`docs/db/SCHEMA_CONSOLIDATED.md` §2.1](../db/SCHEMA_CONSOLIDATED.md):
+Presentes no schema Django legado, removidas em [`docs/db/SCHEMA_CONSOLIDATED.md` §2.1](db/SCHEMA_CONSOLIDATED.md):
 
 - `documento_tipo` — apenas 2 valores fixos; substituído por `documento.tipo` inline + CHECK
 - `alteracoes` + `alteracoes_tipo` + `registro_tipo` + `averbacoes_tipo` — legado, migrado para `lancamento` + `documento`
@@ -244,10 +244,10 @@ Presentes no schema Django legado, removidas em [`docs/db/SCHEMA_CONSOLIDATED.md
 
 ## Fonte / Cross-reference
 
-- Schema consolidado: [`docs/db/SCHEMA_CONSOLIDATED.md`](../db/SCHEMA_CONSOLIDATED.md)
-- Constraints (DDL + regras condicionais): [`docs/db/SCHEMA_CONSTRAINTS.md`](../db/SCHEMA_CONSTRAINTS.md)
-- Mermaid (tooling-friendly, sem prose): [`docs/db/erd-v2.mmd`](../db/erd-v2.mmd)
-- Legenda compartilhada: [`docs/db/erd-v2-legend.md`](../db/erd-v2-legend.md)
-- Blindspot review (27 issues, 10 P0): [`docs/SCHEMA_V2_BLINDSPOT_REVIEW.md`](../SCHEMA_V2_BLINDSPOT_REVIEW.md)
-- Django legado (referência histórica): [`docs/legacy-django/03-database-models.md`](../legacy-django/03-database-models.md)
-- Roadmap & tasks: [`TASKS.md`](../TASKS.md) — T-100 (re-desenho do ERD), T-101 (Drizzle schema)
+- Schema consolidado: [`docs/db/SCHEMA_CONSOLIDATED.md`](db/SCHEMA_CONSOLIDATED.md)
+- Constraints (DDL + regras condicionais): [`docs/db/SCHEMA_CONSTRAINTS.md`](db/SCHEMA_CONSTRAINTS.md)
+- Mermaid (tooling-friendly, sem prose): [`docs/db/erd-v2.mmd`](db/erd-v2.mmd)
+- Legenda compartilhada: [`docs/db/erd-v2-legend.md`](db/erd-v2-legend.md)
+- Blindspot review (27 issues, 10 P0): [`docs/SCHEMA_V2_BLINDSPOT_REVIEW.md`](SCHEMA_V2_BLINDSPOT_REVIEW.md)
+- Django legado (referência histórica): [`docs/legacy-django/03-database-models.md`](legacy-django/03-database-models.md)
+- Roadmap & tasks: [`TASKS.md`](TASKS.md) — T-100 (re-desenho do ERD), T-101 (Drizzle schema)
