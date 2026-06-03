@@ -1,5 +1,14 @@
 # Schema Consolidado (v2) - Cadeia Dominial
 
+> **⚠️ SUPERSEDED (2026-06-03, round 3 do T-001).** Este documento é histórico/proposta de consolidação e **NÃO** está alinhado com as decisões finais Q1-Q15 + Q11b + D1-D4 + T1-T4 (PR #24). Continua referenciando campos removidos (`documento.imovel_id`, `documento.is_documento_atual`, `cartorio_transmissao_id`) que foram movidos ou eliminados pelas decisões da PR #24.
+>
+> **Fontes canônicas atuais:**
+> - Decisões + apêndice SQLite/D1: [`docs/db/SCHEMA_DECISOES_PENDENTES.md`](./SCHEMA_DECISOES_PENDENTES.md)
+> - Diagrama visual: [`docs/db/erd-v2.mmd`](./erd-v2.mmd) (note: Mermaid é documentação visual, não schema; UNIQUE_NOTE/CHECK constraints não são enforcem pelo .mmd)
+> - Migration executável: **T-101 (Drizzle, ainda não escrita)**
+>
+> Próximo passo: ou (a) reescrever este arquivo para refletir as decisões da PR #24, ou (b) removê-lo. A migration T-101 will replace both this file and the legacy `DATABASE_SCHEMA.md`/`SCHEMA_IMPROVEMENT_PROPOSAL.md` com um único Drizzle schema versionado.
+
 **Objetivo:** consolidar todas as propostas de melhoria em um único documento coerente, pronto para migração de dados do banco atual para um novo esquema limpo, com foco em SQLite.
 
 **Fontes consolidadas:**

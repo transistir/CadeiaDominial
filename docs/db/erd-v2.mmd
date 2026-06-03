@@ -1,172 +1,263 @@
 %%{init: {"theme":"neutral","er":{"layoutDirection":"LR","minEntityWidth":180,"minEntityHeight":90,"entityPadding":12},"themeVariables":{"fontSize":"12px"}}}%%
+%% ERD v2 — Cadeia Dominial
+%% Decisões: ver docs/db/SCHEMA_DECISOES_PENDENTES.md (Q1-Q15, Q11b, D1-D4, T1-T4)
+%% Convenções SQLite/D1: TEXT ISO8601 p/ datas, INTEGER 0/1 p/ bool, INTEGER centavos p/ money
+%% CHECK constraints vão via migration Drizzle (Mermaid interpreta -- e | em comentários)
+%% Soft-delete: deleted_at TEXT NULL em todas as tabelas relevantes (Q2=B)
+%% ============================================================================
+%% ⚠️ T4 — Mermaid NÃO é schema. UNIQUE_NOTE é só documentação visual.
+%%    A versão canônica é a Drizzle migration (T-101). Partial UNIQUE indexes
+%%    (`WHERE deleted_at IS NULL`), CHECK constraints, FTS5 sync triggers,
+%%    e a view v_lancamento_current_location (T2) NÃO aparecem no .mmd —
+%%    aplicar via migration Drizzle + SQL DDL.
+%% ============================================================================
 erDiagram
-    cri ||--o{ documento : emite
-    cri ||--o{ imovel : registra
-    imovel ||--o{ documento : possui
-    pessoa ||--o{ imovel : proprietario
-    documento ||--o{ lancamento : gera
-    documento o|--o{ origem : origem_doc
-    lancamento_tipo ||--o{ lancamento : classifica
-    lancamento ||--o{ lancamento_pessoa : envolve
-    pessoa ||--o{ lancamento_pessoa : participa
-    lancamento ||--o{ origem : possui
-    origem ||--o| origem_fim_cadeia : fim_cadeia
-    cri o|--o{ origem : referencia
-    cartorio_transmissao o|--o{ lancamento : transmissao
-    tis ||--o{ tis_imovel : vincula
-    imovel ||--o{ tis_imovel : vincula
-    terra_indigena_referencia ||--o{ tis : referencia
+    cri ||--o{ imovel : "registra (fixo, Q11b=B)"
+    cri ||--o{ documento : "emite (Q11b=C, FK direto, sem junction)"
+    imovel ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
+    documento ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
+    imovel_documento ||--o{ anotacao_versao : "anotado_em (Q9=C)"
+    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, era pessoa)"
+    user ||--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original)"
+    user ||--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa)"
+    user ||--o{ audit_log : "actor (D3, user NAO pessoa)"
+    pessoa ||--o{ imovel : "proprietario (pode ser NULL se anonimizado LGPD)"
+    pessoa ||--o{ lancamento_pessoa : "participa (Q2=B, nome_verbatim preservado)"
+    lancamento ||--o{ lancamento_pessoa : "envolve"
+    lancamento_tipo ||--o{ lancamento : "classifica (tipo_id, F3)"
+    documento ||--o{ lancamento : "gera"
+    documento o|--o{ origem : "origem_doc (opcional)"
+    lancamento ||--o{ origem : "possui (1:N, Q3=B)"
+    origem ||--o| origem_fim_cadeia : "fim_cadeia (Q3=B, 1:1 por origem)"
+    cri o|--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id)"
+    lancamento ||--o{ lancamento_move_event : "movido (Q14=B, append-only)"
+    documento ||--o{ lancamento_move_event : "from_doc"
+    documento ||--o{ lancamento_move_event : "to_doc"
+    audit_log ||--o{ lancamento_move_event : "registra"
+    imovel ||--o{ tis_imovel : "vincula_TI"
+    tis ||--o{ tis_imovel : "vincula_TI"
+    terra_indigena_referencia ||--o{ tis : "referencia"
 
     cri {
-      int id PK
-      string nome
-      string cns
-      string estado
-      string cidade
-      string endereco
+        int id PK
+        text nome "1o Cartorio de Registro de Imoveis de Salvador"
+        text cns_codigo "Cadastro Nacional de Serventia, TBD"
+        text cidade
+        text uf "CHECK uf in 27 valores"
+        text endereco
+        text created_at "ISO8601"
+        text updated_at "ISO8601"
+        text deleted_at "soft-delete (Q2=B)"
+        text UNIQUE_NOTE "D1: UNIQUE (cns_codigo) WHERE cns_codigo IS NOT NULL AND deleted_at IS NULL (partial UNIQUE). Duplicatas de nome aceitas (cidade tem 2 1o Cartorio)."
     }
 
-    cartorio_transmissao {
-      int id PK
-      string nome
-      string cns
-      string estado
-      string cidade
-      string endereco
+    user {
+        int id PK
+        text email "UNIQUE, login do pesquisador"
+        text nome "nome de exibicao do pesquisador"
+        text created_at "ISO8601"
+        text updated_at "ISO8601"
+        text deleted_at "soft-delete (Q2=B). LGPD: pesquisador pode pedir anonimizacao do proprio user"
     }
 
     pessoa {
-      int id PK
-      string cpf
-      string rg
-      date data_nascimento
-      string email
-      string telefone
-      string nome
+        int id PK
+        text nome "UNICO campo PII; Q5=REMOVER cpf/rg/email/telefone"
+        text created_at
+        text updated_at
+        text deleted_at "soft-delete (Q2=B). LGPD: NULL + deleted_at preenche, NUNCA hard-delete"
     }
 
     imovel {
-      int id PK
-      string nome
-      string observacoes
-      date data_cadastro
-      int cri_id FK
-      int proprietario_id FK
-      bool arquivado
+        int id PK
+        text nome
+        text observacoes
+        text data_cadastro
+        int cri_id FK "FIXO, sem historico no v1 (Q11b=B)"
+        int proprietario_id FK "pode ser NULL se pessoa anonimizada (LGPD)"
+        integer arquivado "0/1, CHECK in (0,1)"
+        text created_at
+        text updated_at
+        text deleted_at "soft-delete (Q2=B). cascade conservador: I + junctions, L preservados (Q7b=B)"
+        int delete_operation_id FK "audit_log (Q9=C, Q8=A)"
+    }
+
+    imovel_documento {
+        int id PK
+        int imovel_id FK
+        int documento_id FK
+        integer is_documento_atual "0/1, PER-PAR (Imovel,Documento), NAO global (Q13=B)"
+        text created_at
+        text deleted_at "soft-delete per chain membership (Q7b=B)"
+        int delete_operation_id FK "audit_log"
+        int create_operation_id FK "audit_log, Q9=C provenance"
+        text UNIQUE_NOTE "T1: UNIQUE (imovel_id, documento_id) WHERE deleted_at IS NULL (partial UNIQUE). Q15=D4: no max 1 row com is_documento_atual=1 por imovel_id WHERE deleted_at IS NULL (outro partial UNIQUE)"
     }
 
     documento {
-      int id PK
-      string numero
-      string numero_raw
-      date data
-      string livro
-      string folha
-      date data_cadastro
-      int cri_id FK
-      int imovel_id FK
-      string tipo
-      bool is_documento_atual
+        int id PK
+        text tipo "CHECK in (matricula, transcricao)"
+        text numero "normalizado, so digitos"
+        text numero_raw "valor original, so para referencia"
+        text data "ISO8601"
+        text livro
+        text folha
+        text data_cadastro
+        int cri_id FK "FK direto, sem junction (Q11b=C)"
+        text outorgante_nome "busca fuzzy FTS5 (Q10=A, sem _raw)"
+        text outorgado_nome "busca fuzzy FTS5"
+        text endereco "busca fuzzy FTS5"
+        text created_at
+        text deleted_at "soft-delete (Q2=B). Ver Q15: pode afetar N chains"
+        int delete_operation_id FK "audit_log"
+        int create_operation_id FK "audit_log"
+        text UNIQUE_NOTE "UNIQUE (cri_id, tipo, numero) - (Q11b=C) cartorio+tipo+numero"
     }
 
     lancamento_tipo {
-      int id PK
-      string tipo
-      string nome
-      bool requer_detalhes
-      bool requer_transmissao
-      bool requer_cartorio_origem
-      bool requer_data_origem
-      bool requer_descricao
-      bool requer_folha_origem
-      bool requer_forma
-      bool requer_livro_origem
-      bool requer_observacao
-      bool requer_titulo
+        int id PK
+        text tipo "CHECK in (inicio_matricula, registro, averbacao)"
+        text nome "label legivel para UI"
+        integer requer_detalhes "0/1"
+        integer requer_transmissao "0/1"
+        integer requer_cartorio_origem "0/1"
+        integer requer_data_origem "0/1"
+        integer requer_descricao "0/1"
+        integer requer_folha_origem "0/1"
+        integer requer_forma "0/1"
+        integer requer_livro_origem "0/1"
+        integer requer_observacao "0/1"
+        integer requer_titulo "0/1"
     }
 
     lancamento {
-      int id PK
-      date data
-      decimal valor_transacao
-      decimal area
-      string detalhes
-      string observacoes
-      date data_cadastro
-      int documento_id FK
-      int tipo_id FK
-      string descricao
-      string forma
-      string titulo
-      int numero_lancamento
-      int cartorio_transmissao_id FK
-      string livro_transmissao
-      string folha_transmissao
-      date data_transmissao
+        int id PK
+        text data "ISO8601"
+        integer valor_transacao "em CENTAVOS (evita rounding errors)"
+        integer area "em CENTIARES (1 are = 100 m2)"
+        text detalhes
+        text observacoes
+        text data_cadastro
+        int documento_id FK
+        int tipo_id FK
+        text descricao
+        text forma "entrada livre do usuario"
+        text titulo
+        int numero_lancamento "CHECK > 0, pode ser NULL durante migracao"
+        text cartorio_transmissao_nome "FREE-FORM TEXT, SEM FK (Q11b: tabelionato de notas, qualquer um)"
+        text livro_transmissao
+        text folha_transmissao
+        text data_transmissao
+        text created_at
+        text deleted_at "soft-delete (Q2=B). L preservado orfao (Q7b=B)"
+        int delete_operation_id FK "audit_log"
+        text UNIQUE_NOTE "UNIQUE (documento_id, numero_lancamento)"
     }
 
     lancamento_pessoa {
-      int id PK
-      string tipo
-      string nome_digitado
-      int lancamento_id FK
-      int pessoa_id FK
+        int id PK
+        text papel "CHECK in (transmitente, adquirente, etc)"
+        text nome_verbatim "EVIDENCIA preservada mesmo se pessoa_id for NULL (Q2=B)"
+        int lancamento_id FK
+        int pessoa_id FK "pode ser NULL apos LGPD; nome_verbatim persiste"
+        text created_at
+        text deleted_at "soft-delete (Q2=B). NAO cascadear no delete de I (Q7b=B)"
     }
 
     origem {
-      int id PK
-      int lancamento_id FK
-      int cri_id FK
-      int documento_id FK
-      int indice
-      string tipo
-      string numero
-      string livro
-      string folha
-      date data
-      string observacoes
+        int id PK
+        int lancamento_id FK
+        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id)"
+        int documento_id FK "opcional, NULL se tipo=fim_cadeia"
+        int indice "0, 1, 2..., CHECK >= 0, contiguo por lancamento"
+        text tipo "CHECK in (matricula, transcricao, fim_cadeia)"
+        text numero "so digitos (D2: normalizado pra busca)"
+        text numero_raw "D2: valor original verbatim, evidencia de divergencia entre certidoes"
+        text livro
+        text folha
+        text data
+        text observacoes
+        text created_at
+        text UNIQUE_NOTE "UNIQUE (lancamento_id, indice)"
     }
 
     origem_fim_cadeia {
-      int id PK
-      int origem_id FK
-      string tipo_fim_cadeia
-      string especificacao_fim_cadeia
-      string classificacao_fim_cadeia
-      string sigla_patrimonio_publico
+        int id PK
+        int origem_id FK "UNIQUE 1:1 com origem"
+        text tipo_fim_cadeia "destacamento_publico, sem_origem, outra, etc"
+        text classificacao_fim_cadeia "obrigatoria se tipo_fim_cadeia preenchido"
+        text especificacao_fim_cadeia "obrigatoria se tipo_fim_cadeia=outra"
+        text sigla_patrimonio_publico "obrigatoria se tipo_fim_cadeia=destacamento_publico"
+    }
+
+    anotacao_versao {
+        int id PK
+        int imovel_documento_id FK "junction que recebeu a anotacao"
+        int autor_original_id FK "USER pesquisador que criou originalmente (F1: era pessoa, Q9=C imutavel)"
+        integer versao "1, 2, 3..."
+        text texto "anotacao analitica do pesquisador"
+        integer is_current "0/1, partial UNIQUE garante 1 current per junction. is_current=0 = versao antiga, mantida no historico (F2)"
+        text created_at
+        text deleted_at "F2: soft-delete da anotacao INTEIRA (todas versoes). NAO confundir com is_current=0 que so marca versao"
+        int created_by_id FK "USER editor desta versao (D3, pode diferir do autor_original)"
+        int operation_id FK "audit_log (Q9=C, Q8=A)"
+    }
+
+    lancamento_move_event {
+        int id PK
+        int lancamento_id FK
+        int from_documento_id FK
+        int to_documento_id FK
+        text reason "obrigatorio (Q12=D)"
+        int moved_by_id FK "USER pesquisador (D3, nao pessoa)"
+        text moved_at "ISO8601"
+        int audit_log_id FK "audit_log.action=MOVE"
+        text UNIQUE_NOTE "append-only: sem updated_at, sem deleted_at (Q14=B). T2: current location via view v_lancamento_current_location"
+    }
+
+    audit_log {
+        int id PK
+        text operation_id "UUID v4, agrupa eventos de uma operacao atomica"
+        text action "CHECK in (CREATE, EDIT, SOFT_DELETE, RESTORE, MOVE, ANNOTATE, EXPORT)"
+        text entity_type "imovel, documento, lancamento, anotacao, etc"
+        int entity_id
+        text payload_json "snapshot do estado pre-acao"
+        text created_at
+        int actor_id FK "USER pesquisador (D3, nao pessoa)"
     }
 
     tis {
-      int id PK
-      string codigo
-      string etnia
-      date data_cadastro
-      int terra_referencia_id FK
-      decimal area
-      string estado
-      string nome
+        int id PK
+        text codigo
+        text etnia
+        text data_cadastro
+        int terra_referencia_id FK
+        integer area "em centiares"
+        text estado
+        text nome
     }
 
     tis_imovel {
-      int id PK
-      int tis_id FK
-      int imovel_id FK
+        int id PK
+        int tis_id FK
+        int imovel_id FK
+        text UNIQUE_NOTE "UNIQUE (tis_id, imovel_id)"
     }
 
     terra_indigena_referencia {
-      int id PK
-      string codigo
-      string nome
-      string etnia
-      string estado
-      string municipio
-      decimal area_ha
-      string fase
-      string modalidade
-      string coordenacao_regional
-      date data_regularizada
-      date data_homologada
-      date data_declarada
-      date data_delimitada
-      date data_em_estudo
+        int id PK
+        text codigo
+        text nome
+        text etnia
+        text estado
+        text municipio
+        integer area_ha "em centiares (1 ha = 100 are = 10000 m2)"
+        text fase
+        text modalidade
+        text coordenacao_regional
+        text data_regularizada
+        text data_homologada
+        text data_declarada
+        text data_delimitada
+        text data_em_estudo
     }
