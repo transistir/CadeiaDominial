@@ -194,7 +194,6 @@ erDiagram
         int id PK
         int imovel_documento_id FK "junction que recebeu a anotacao"
         int autor_original_id FK "USER pesquisador que criou originalmente (F1: era pessoa, Q9=C imutavel)"
-        text current_marker "UNIQUE per (imovel_documento_id) WHERE is_current=1, ver partial UNIQUE"
         integer versao "1, 2, 3..."
         text texto "anotacao analitica do pesquisador"
         integer is_current "0/1, partial UNIQUE garante 1 current per junction. is_current=0 = versao antiga, mantida no historico (F2)"

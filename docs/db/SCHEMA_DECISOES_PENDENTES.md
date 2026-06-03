@@ -821,6 +821,8 @@ WHERE d.deleted_at IS NULL;
 
 **D1/SQLite support:** `CREATE VIEW` totalmente suportado. Custo: index em `lancamento_move_event(lancamento_id, moved_at DESC, id DESC)` para performance (Drizzle adiciona via `CREATE INDEX` na migration T-101).
 
+**Edge case documentado para T-101 (round 3, Opus 4.8 flag):** o `INNER JOIN documento d ... WHERE d.deleted_at IS NULL` significa que, se o documento atual de um L for **soft-deletado** (D entra em estado "removal pending" via Q15=🅳️), o L **desaparece completamente da view** — não há fallback para o D anterior. **Isso é intencional**, alinhado com Q15=🅳️ (soft-delete de D é admin-only, intencional, e o L fica "preso" até (a) o D ser restaurado por admin, ou (b) um novo MOVE ser executado pelo pesquisador apontando o L para outro D). T-101 NÃO deve implementar fallback para `lancamento_move_event.to_documento_id` mais antigo que ainda não foi soft-deletado — isso violaria Q15=🅳️ (esconderia que D foi removido e o L "pularia" para o histórico, criando inconsistência forense). A UI deve detectar "L sumiu da chain de D" e mostrar estado explícito "D em remoção — veja admin".
+
 **Por que não coluna `current_documento_id` em `lancamento`?**
 - Quebraria Q14=B (append-only) — coluna seria mutada em cada MOVE.
 - Q8=🅰️ (restore simétrico) não conseguiria desfazer via SQL: precisaria salvar estado anterior.
@@ -908,7 +910,7 @@ Usuário clica "Apagar" em Documento D
 
 ## Decisões
 
-> ✅ **Seção preenchida em 2026-06-02/03** durante sessão de grupo com Luandro (decisor) e Hiure (implementador). Q15 ainda em aberto. As decisões destravam T-001 e liberam o início de T-100 (re-desenhar o ERD aplicando Q1–Q14) e T-101 (schema Drizzle).
+> ✅ **Seção preenchida em 2026-06-02/03** durante sessão de grupo com Luandro (decisor) e Hiure (implementador). Q1–Q15 (mais Q11b) decididas, incluindo Q15=🅳️ decidida por @Hiure em 2026-06-03. As decisões destravam T-001 e liberam o início de T-100 (re-desenhar o ERD aplicando Q1–Q14) e T-101 (schema Drizzle).
 >
 > **Contexto crítico que ancorou várias decisões** (revelado por Hiure durante a sessão): o v2 é usado por um **grupo de pesquisadores investigando grilagem de terras**, não por cartório. Eles copiam dados do cartório pro sistema **exatamente como estão** (inclusive erros), porque **divergências entre certidões são indícios de grilagem**. Sistema = cópia fiel + camada de análise, NÃO uma base "limpa".
 
@@ -937,7 +939,7 @@ Usuário clica "Apagar" em Documento D
 
 - **Nova task T-104 — Controles de visualização da cadeia** (toggle de ramos, colapso de subárvore, filtros por classificação, layouts de export PDF/XLSX/PNG). **Bloqueada em T-100 e T-101.** Justificativa: cadeias com centenas de documentos inviabilizam a visualização sem esses controles; precisa ser uma feature de UI/UX própria, não uma escolha binária escondida dentro da Q6. Detalhes no TASKS.md.
 - **Sub-task do T-300 (legacy-fit)** — "Definir e descartar colunas PII do legado". Lista atual: `Pessoas.cpf`, `Pessoas.rg`, `Pessoas.data_nascimento`, `Pessoas.email`, `Pessoas.telefone`. Migrar do Postgres legado (que tem esses campos) pro Drizzle/D1 (que não terá) sem perda funcional.
-- **T-105 (Soft-delete workflow)** — implementação do delete UX (Q7a/B, Q12=🅳️), restore (Q8=🅰️), MOVE (Q14=🅱️), delete de Documento shared (Q15 — bloqueada até decisão). **Bloqueada em T-100/T-101 E na decisão de Q15.**
+- **T-105 (Soft-delete workflow)** — implementação do delete UX (Q7a/B, Q12=🅳️), restore (Q8=🅰️), MOVE (Q14=🅱️), delete de Documento shared (Q15=🅳️ já decidida). **Bloqueada apenas em T-100/T-101.** Q15 já está resolvida (ver decisão acima).
 
 **Notas finais para implementadores (T-100/T-101):**
 - A tabela acima (linhas de Decisões) é a fonte de verdade. Use-a como referência canônica.
