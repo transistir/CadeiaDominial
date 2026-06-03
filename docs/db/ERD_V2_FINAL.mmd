@@ -1,0 +1,236 @@
+erDiagram
+    cartorio {
+        int id PK
+        text tipo_cartorio "CHECK: CRI | NOTAS | CIVIL | TRANSMISSAO | OUTRO"
+        text nome
+        text cnpj "nullable, da API"
+        text cidade
+        text uf
+        text comarca
+        text fonte "CHECK: API | MANUAL"
+        text api_id "id na API do Sistema Nacional de Cartorios, nullable p/ MANUAIS"
+        int criado_por_researcher_id "FK user, quando fonte=MANUAL"
+        text nome_raw "verbatim da API, para preservar variacoes"
+        text created_at "ISO8601 TEXT"
+        text updated_at "ISO8601 TEXT"
+        text deleted_at "soft-delete; hard-delete RESTRICT (Q1=C)"
+        int delete_operation_id "FK audit_log; NULL = nunca soft-deletado (Q8=A restore simetrico)"
+    }
+
+    pessoa {
+        int id PK
+        text nome "unico campo PII no v2 (Q2=B + Q4=A + Q5: Pessoa minima, sem CPF/RG/email/telefone)"
+        text nome_anonimizado "= '[REMOVIDO POR LGPD]' apos anonimizacao explicita (Q2=B)"
+        text tipo_pessoa "FISICA ou JURIDICA ou NAO_INFORMADO"
+        text created_at "ISO8601 TEXT"
+        text updated_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B)"
+        int delete_operation_id "FK audit_log; NULL = nunca soft-deletado (Q8=A)"
+    }
+
+    imovel {
+        int id PK
+        text matricula "snapshot legivel; fonte da verdade = imovel_documento.is_documento_atual"
+        int cartorio_id FK "FK cartorio CHECK tipo_cartorio = CRI"
+        int proprietario_id FK "FK pessoa"
+        int terra_indigena_referencia_id FK "nullable"
+        int arquivado "0/1 INTEGER (Q1=C: nunca BOOLEAN em SQLite/D1)"
+        text created_at "ISO8601 TEXT"
+        text updated_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q1=C)"
+        int delete_operation_id "FK audit_log; NULL = nunca soft-deletado (Q8=A)"
+    }
+
+    documento {
+        int id PK
+        int cartorio_id FK "FK cartorio CHECK tipo_cartorio IN (CRI, NOTAS, CIVIL, OUTRO)"
+        text tipo "CHECK: matricula | transcricao (Q11 inline)"
+        text numero "rigido, sem _raw (Q11=A)"
+        text numero_raw "legacy compat (Q11=A)"
+        text numero_normalizado "digitos apenas, INDEX (Q11=C)"
+        text data "ISO8601 TEXT"
+        text livro
+        text folha
+        text outorgante_nome
+        text outorgado_nome
+        text endereco
+        text cartorio_nome_raw "verbatim antes de mapear via cartorio_id (Q6: erros cartorio = evidencia)"
+        text created_at "ISO8601 TEXT"
+        text updated_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B)"
+        int delete_operation_id "FK audit_log; NULL = nunca soft-deletado (Q8=A)"
+    }
+
+    imovel_documento {
+        int id PK
+        int imovel_id FK
+        int documento_id FK
+        int is_documento_atual "0/1 CHECK is_documento_atual IN (0,1), per-par (Q14=B)"
+        int delete_operation_id "FK audit_log; agrupa multi-junction unlinks (Q15)"
+        text created_at "ISO8601 TEXT"
+        text deleted_at "soft-delete per chain membership (Q2=B)"
+    }
+
+    lancamento_tipo {
+        int id PK
+        text tipo "CHECK: inicio_matricula | registro | averbacao"
+        text nome
+        int requer_detalhes "0/1"
+        int requer_transmissao "0/1"
+        int requer_cartorio_origem "0/1"
+        int requer_data_origem "0/1"
+        int requer_descricao "0/1"
+        int requer_folha_origem "0/1"
+        int requer_forma "0/1"
+        int requer_livro_origem "0/1"
+        int requer_observacao "0/1"
+        int requer_titulo "0/1"
+    }
+
+    lancamento {
+        int id PK
+        int documento_id FK
+        int tipo_id FK
+        int cartorio_transmissao_id FK "nullable, FK cartorio CHECK tipo_cartorio = TRANSMISSAO"
+        int numero_lancamento "CHECK numero_lancamento > 0"
+        text data_transmissao "ISO8601 TEXT"
+        text livro_transmissao
+        text folha_transmissao
+        int valor_transacao_centavos "BIGINT INTEGER; nunca REAL/decimal (dinheiro)"
+        int area_centiares "BIGINT INTEGER; nunca REAL (area)"
+        text forma
+        text descricao
+        text titulo
+        text detalhes
+        text observacoes
+        text created_at "ISO8601 TEXT"
+        text updated_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B) - RARO: L e preservado por default (Q7b=B)"
+        int delete_operation_id "FK audit_log; agrupa em operacao de admin (Q8=A)"
+    }
+
+    lancamento_pessoa {
+        int id PK
+        int lancamento_id FK
+        int pessoa_id FK "nullable p/ preservar L se pessoa foi anonimizada (Q2=B)"
+        text papel "CHECK: transmitente | adquirente"
+        text nome_verbatim "preserva nome exato desta occurrence no L (Q6: discrepancia = evidencia)"
+        text created_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B) - RARO: evidencia preservada por default"
+        int delete_operation_id "FK audit_log; agrupa em operacao de admin (Q8=A)"
+    }
+
+    origem {
+        int id PK
+        int lancamento_id FK
+        int indice ">=0, contiguo por lancamento"
+        int cartorio_id FK "FK cartorio; substitui 'cri_id' ambiguo"
+        int documento_id FK "nullable"
+        text tipo "CHECK: matricula | transcricao | fim_cadeia"
+        text numero
+        text livro
+        text folha
+        text data "ISO8601 TEXT"
+        text observacoes
+        text created_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B)"
+        int delete_operation_id "FK audit_log; agrupa em operacao (Q8=A)"
+    }
+
+    origem_fim_cadeia {
+        int id PK
+        int origem_id FK "UNIQUE (1:1 com origem, Q3=B)"
+        text tipo_fim_cadeia
+        text classificacao_fim_cadeia
+        text especificacao_fim_cadeia
+        text sigla_patrimonio_publico
+        text created_at "ISO8601 TEXT"
+        text updated_at "ISO8601 TEXT"
+        text deleted_at "soft-delete acompanha origem (Q2=B)"
+        int delete_operation_id "FK audit_log (Q8=A)"
+    }
+
+    lancamento_move_event {
+        int id PK
+        int lancamento_id FK "Lancamento preservado byte-for-byte (Q13=B event-sourced)"
+        int from_documento_id FK "D origem; NULL no 1o registro"
+        int to_documento_id FK "D destino; o Lancamento passa a ser visivel na chain de D'"
+        text reason
+        int moved_by "FK user"
+        text moved_at "ISO8601 TEXT"
+        int audit_log_id "FK audit_log; o MOVE gera um audit_log entry com action=MOVE"
+    }
+
+    terra_indigena_referencia {
+        int id PK
+        text nome
+        text codigo_funai
+        text created_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B)"
+        int delete_operation_id "FK audit_log (Q8=A)"
+    }
+
+    tis {
+        int id PK
+        text nome
+        text codigo_funai
+        text created_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B)"
+        int delete_operation_id "FK audit_log (Q8=A)"
+    }
+
+    tis_imovel {
+        int id PK
+        int tis_id FK
+        int imovel_id FK
+        text created_at "ISO8601 TEXT"
+        text deleted_at "soft-delete (Q2=B)"
+        int delete_operation_id "FK audit_log (Q8=A)"
+    }
+
+    anotacao_versao {
+        int id PK
+        int root_annotation_id "FK self; == id da v1 (primeira) ou referencia a cadeia"
+        int parent_version_id "FK self; NULL na v1 (criacao)"
+        int version_no "1, 2, 3... sequencial por root_annotation_id"
+        int entity_type_id "polimorfico via tabela de tipo?"
+        int entity_id
+        int user_id "quem CRIOU esta versao (imutavel)"
+        text user_id_snapshot "FK user no momento da escrita; nunca muda"
+        text texto
+        text texto_hash "SHA-256 do texto, garante imutabilidade (Q9)"
+        text created_at "ISO8601 TEXT; imutavel"
+        int current_marker "= 1 na versao atual; 0 nas historicas. Atualizavel. Trigger: so 1 current por root."
+    }
+
+    audit_log {
+        int id PK
+        text operation_id "UUID; agrupa multi-row operations (Q8=A restore, Q7b cascade)"
+        int user_id "FK user"
+        text action "CHECK: DELETE | RESTORE | EDIT | PURGE | MOVE | EXPORT | ANONIMIZE | UNLINK"
+        text entity_type
+        int entity_id
+        text reason "obrigatorio em DESTRUCTIVE + PURGE + MOVE"
+        text payload_json "snapshot pre-mudanca (Q9=C)"
+        text timestamp "ISO8601 TEXT"
+        text chain_impact_summary "ex: '1 chain, 3 L's, 1 junction' (Q12 blast radius)"
+    }
+
+    cartorio ||--o{ imovel : "registra (CRI)"
+    cartorio ||--o{ documento : "emite"
+    cartorio ||--o{ lancamento : "transmissao (TRANSMISSAO)"
+    cartorio ||--o{ origem : "origem"
+    pessoa ||--o{ imovel : "proprietario"
+    pessoa ||--o{ lancamento_pessoa : "envolvida"
+    imovel ||--o{ imovel_documento : "participa"
+    documento ||--o{ imovel_documento : "participa"
+    imovel ||--o{ tis_imovel : "sobrepoe"
+    tis ||--o{ tis_imovel : "marca"
+    terra_indigena_referencia ||--o{ imovel : "referencia"
+    documento ||--o{ lancamento : "contem"
+    lancamento_tipo ||--o{ lancamento : "tipifica"
+    lancamento ||--o{ lancamento_pessoa : "envolve"
+    lancamento ||--o{ origem : "cita"
+    origem ||--o| origem_fim_cadeia : "detalha"
+    lancamento ||--o{ lancamento_move_event : "historico de moves (Q13=B, event-sourced)"
+    anotacao_versao ||--o{ anotacao_versao : "cadeia de versoes (parent_version_id)"

@@ -495,27 +495,325 @@ Só 1 nó folha visível (o "atual"). Os outros 2 fins de cadeia do exemplo ante
 
 ## Decisões
 
-> 👇 **Esta seção deve ser preenchida por Luandro** com a escolha de cada pergunta. O blocker T-001 do `docs/TASKS.md` só é considerado fechado quando todas as 6 tiverem uma resposta aqui.
+> ✅ **Seção preenchida em 2026-06-02** durante sessão de grupo com Luandro (decisor) e Hiure (implementador). As decisões destravam T-001 e liberam o início de T-100 (re-desenhar o ERD aplicando Q1–Q6) e T-101 (schema Drizzle).
+>
+> **Contexto crítico que ancorou várias decisões** (revelado por Hiure durante a sessão): o v2 é usado por um **grupo de pesquisadores investigando grilagem de terras**, não por cartório. Eles copiam dados do cartório pro sistema **exatamente como estão** (inclusive erros), porque **divergências entre certidões são indícios de grilagem**. Sistema = cópia fiel + camada de análise, NÃO uma base "limpa".
 
 | # | Pergunta | Escolha | Justificativa |
 |---|---|---|---|
-| Q1 | Cascade em Imovel | _pendente_ | |
-| Q2 | Soft-delete vs hard-delete | _pendente_ | |
-| Q3 | Cardinalidade OrigemFimCadeia | _pendente_ | |
-| Q4 | PII encryption at rest | _pendente_ | |
-| Q5 | Validação CPF/CNPJ (DB vs app) | _pendente_ | |
-| Q6 | React Flow: atual vs completo | _pendente_ | |
+| Q1 | Cascade em Imovel | **Opção C** (soft-delete + CASCADE admin-only) | Erros de digitação de imóvel são comuns no cartório; histórico precisa continuar auditável (quem lançou, quando, em qual documento). Soft-delete + CASCADE real só via admin resolve isso. |
+| Q2 | Soft-delete vs hard-delete | **Opção B** (coluna `deleted_at` em todas as tabelas relevantes) | LGPD moot: v2 `Pessoa` só tem `nome`. Anonimização (C) não se aplica. Soft-delete (B) preserva divergências entre certidões como **evidência de grilagem** — corrigir "erro" não pode significar perder a string original. Hard-delete (A) vira ainda mais perigoso com esse contexto. |
+| Q3 | Cardinalidade OrigemFimCadeia | **Opção B** (1:N — uma OrigemFimCadeia por origem, como Django) | **Essa é a informação mais importante e precisa ganhar destaque no grafo. A maioria das grilagens vai ser desvendada por ela** (Hiure, 2026-06-02). Cada origem com classificação independente permite ver o mapa granular de legitimidade de uma vez. Não é comum ter >1 origem por Lancamento, mas pode acontecer e precisa estar modelado. |
+| Q4 | PII encryption at rest | **Opção A** (texto puro) | v2 `Pessoa` só tem `nome` (sem CPF/RG/email/telefone), e nome em cartório é público por definição. Usuários são grupo fechado de pesquisadores que precisam buscar/comparar nomes livremente. Criptografia quebraria a busca sem ganho de segurança real. Complexidade de KMS/chave mestra em D1/Cloudflare Workers é custo desproporcional. |
+| Q5 | Validação CPF/CNPJ | **REMOVER** `cpf`/`rg`/`data_nascimento`/`email`/`telefone` de `Pessoa` no v2. Q5b vira N/A. | Coerente com Q2/Q4: v2 não é sistema de PII, é cópia fiel do cartório + análise. Pesquisadores não precisam do CPF dentro do sistema — quem precisa cruza com bases externas (Receita, processos judiciais). Sub-task explícita do T-300: "definir quais colunas descartar do legado no v2". |
+| Q6 | React Flow: atual vs completo | **Opção A** (mostrar todos os fins de cadeia sempre) | Fins de cadeia são a evidência mais crítica pra detecção de grilagem (ancorada em Q3); precisam estar visíveis sempre. A complexidade visual de "cadeia gigante" (centenas de documentos) é resolvida por uma **camada de controles de visualização** (toggle de ramos, colapso de subárvore, filtros por classificação) que vale pra cadeia **inteira** — não só pra fins de cadeia. Essa camada vira **task T-104** (Phase 1.5 do roadmap). |
 
-**Formato sugerido para preencher:**
+### Decisões adicionais derivadas das Q1–Q6
 
-```markdown
-| Q1 | Cascade em Imovel | **Opção C** (soft-delete + CASCADE) | Permite restaurar cadastros errados sem perder histórico. Auditoria cartorial exige. |
-| Q2 | Soft-delete | **Opção C** (anonimização LGPD) | Único caminho que atende LGPD e mantém navegação do grafo. |
-| Q3 | Cardinalidade OrigemFimCadeia | **Opção B** (1:N, como Django) | Preserva toda informação. Compatibilidade com legado. |
-| Q4 | PII encryption | **Opção A** (texto puro) | Ambiente interno controlado, sem exposição à internet. Decidir de novo se mudar. |
-| Q5 | Validação CPF/CNPJ | **Opção C** (normalizado no banco) | CHECK constraint garante integridade; app valida dígitos. |
-| Q6 | React Flow visualização | **Opção C** (toggle) | Melhor para múltiplos públicos. Custo de UI aceitável. |
+> Estas não estavam nas 6 perguntas originais, mas emergiram naturalmente da discussão.
+
+- **Nova task T-104 — Controles de visualização da cadeia** (toggle de ramos, colapso de subárvore, filtros por classificação, layouts de export PDF/XLSX/PNG). **Bloqueada em T-100 e T-101.** Justificativa: cadeias com centenas de documentos inviabilizam a visualização sem esses controles; precisa ser uma feature de UI/UX própria, não uma escolha binária escondida dentro da Q6. Detalhes no TASKS.md.
+- **Sub-task do T-300 (legacy-fit)** — "Definir e descartar colunas PII do legado". Lista atual: `Pessoas.cpf`, `Pessoas.rg`, `Pessoas.data_nascimento`, `Pessoas.email`, `Pessoas.telefone`. Migrar do Postgres legado (que tem esses campos) pro Drizzle/D1 (que não terá) sem perda funcional.
+
+**Notas finais para implementadores (T-100/T-101):**
+
+- A tabela acima (linhas 502–509) é a fonte de verdade das decisões. O "formato sugerido" original (linhas 518–527 antes deste patch) listava respostas alternativas que **contradiziam** as decisões tomadas e foi removido. Use a tabela de Decisões como referência canônica.
+- Para o contexto crítico (pesquisadores de grilagem, cópia fiel) e a justificativa de cada escolha, ver `docs/db/erd-v2-legend.md` seção 6 e este doc linhas 502-509.
+
+---
+
+## Open questions (Q7–Q12) — bloqueiam T-105, não bloqueiam T-100/T-101
+
+> Estas perguntas surgiram da revisão do Codex + da observação do Hiure sobre **cross-chain delete behavior**. Não estavam nas Q1-Q6 originais. São decisões de **camada de aplicação** (workflow + UX), não de schema — T-100/T-101 podem começar sem elas, mas T-105 (soft-delete workflow) fica bloqueado até serem respondidas.
+
+### Q7 — Cross-chain delete behavior (um Documento pode ser `is_documento_atual=true` para N Imóveis E `origem.documento_id` para M outros Lancamentos)
+
+**Q7a** — Quando o usuário clica "remover" num Lancamento/Documento, qual o menu de opções na UI?
+- **Resposta (Hiure, 2026-06-02): 🅱️ Menu: [Editar] [Mover] [Soft-delete]** — sem hard-delete na UI principal (admin usa rota separada). "Mover" precisa ser um botão distinto pra dar confiança ao usuário de que o trabalho não vai ser perdido. Hard-delete é admin-only, fora do menu padrão.
+- A) Cascade só nos descendentes "privados" de I; Documentos compartilhados ficam visíveis com badge nas outras chains.
+
+**Q7c (UX)** — Confirmação obrigatória antes de delete mostrando blast radius (N+M chains afetadas, M' Lancamentos), com botão padrão "Editar ao invés de apagar".
+
+**Respostas parciais:**
+- **Q7a = 🅱️ (Hiure, 2026-06-02)** — Menu: [Editar] [Mover] [Soft-delete]. Sem hard-delete na UI principal.
+- **Q7b = 🅱️ (Hiure, 2026-06-02)** — Cascade conservador: só I + junctions soft-deletadas. L's todos preservados. D's I-exclusivos ficam "sem chain" e L's neles ficam "pendentes".
+
+### Q8 — Restore semantics
+
+Dada Q7b=🅱️ (soft-delete conservador: só I + junctions, L's preservados), o restore é simétrico por default. Mas vale a pena formalizar pra cobrir edge cases.
+
+🅰️ **Restore simétrico (recomendação)** — undo exato do Q7b=B: `I.deleted_at = NULL` + restaurar as junctions (I, D) que foram soft-deletadas. L's já estavam preservados (nunca foram soft-deletados), então nada a fazer neles. D's I-exclusivos voltam a ter chain ativa via I; D's shared voltam a ter I na lista de chains.
+
+🅱️ **Restore cascata reverso** — restore I + cascade restore em junctions + cascade restore em L's que tinham D I-exclusivos. (Não se aplica com Q7b=B, mas seria o simétrico do Q7b=B+.)
+
+🅲️ **Restore minimal** — só I.deleted_at = NULL. Junctions ficam "pendentes" (não voltam). Usuário decide manualmente re-ativar cada junction. Mais trabalho pro usuário, mas mais seguro se o motivo do delete original era "I está errado".
+
+🅳️ **Restore com revisão de pares** — antes de restaurar, mostra todas as junctions + L's que serão afetados. Usuário confirma cada um individualmente.
+
+**Recomendação: 🅰️** — simétrico ao Q7b=B, intuitivo ("restaurar = desfazer"), e o soft-delete foi conservador (L's preservados), então não há "lixo" pra restaurar.
+
+**DECIDIDO: 🅰️** (Hiure, 2026-06-03).
+
+### Q9 — Trilha de análise do pesquisador (researcher attribution)
+
+**Contexto correto (Hiure, 2026-06-03):** o sistema é usado por **pesquisadores de grilagem** que ingerem dados públicos de cartórios (read-only — não deletam, não editam certidões) e adicionam suas **próprias anotações analíticas** em cima. Não há "admin do cartório" dando hard-purge; há **pesquisador A** editando uma anotação feita por **pesquisador B**.
+
+A pergunta real de auditoria é: **quando um pesquisador cria/edita/remove uma anotação analítica própria** (ex: "este Lancamento parece falsificado", "esta cadeia é suspeita"), o sistema deve rastrear **quem, quando, e qual era o conteúdo antes**?
+
+🅰️ **Sem trilha** — última versão ganha. Simples, mas se Hiure publica um relatório dizendo "esta cadeia é grilada" e depois edita a anotação pra "na verdade é ok", não tem como provar o que foi dito originalmente. *(Perigoso em contexto jurídico.)*
+
+🅱️ **Histórico de versões por anotação** — cada vez que o pesquisador edita, salva uma versão. UI mostra "v3 (atual) | v2 | v1". Restauração é trivial.
+
+🅲️ **Histórico + provenance de criação** — igual a B, mas registra também **quem criou originalmente** (importante em equipe: Hiure cria, estagiário X edita, e depois o relatório precisa creditar a Hiure como autor original).
+
+🅳️ **Tudo de C + exportação logada** — cada export (PDF, CSV, JSON) registra **o quê foi exportado, por quem, quando, e pra onde (download local vs share link)**. Chain-of-custody completa.
+
+**DECIDIDO: 🅲️** (Hiure, 2026-06-03).
+
+### Q13 — Operação MOVE/REASSIGN cross-chain (NOVA — surgiu do insight do Hiure)
+
+> *"Ela não pode perder esses lançamentos. Eles precisam ser atrelados a outra cadeia dominial. Só enviar ele para outra cadeia dominial de outro imóvel."* (Hiure, 2026-06-02)
+
+O sistema precisa de uma operação MOVE que:
+
+- ✅ **Preserva o Lancamento byte-for-byte** (igualdade no MOVE = preservação de evidência)
+- ✅ **Torna o Lancamento visível na chain do Documento de destino** (D'), sem mutar o L
+- ✅ **É auditável** — registra o evento de move no log + na tabela append-only `lancamento_move_event`
+- ✅ **Trigger de soft-delete no D de origem?** Se L é o ÚNICO Lancamento em D, mover L deixa D "órfão" (sem Lancamentos atuais). D vira soft-deleted automaticamente? Ou fica "pendente"?
+
+- **Resposta (Hiure, 2026-06-02): 🅱️ MOVE preserva Lancamento; D de origem fica "pendente"** (sem Lancamentos ativos, mas NÃO soft-deletado) — usuário decide depois se quer fechar a chain, reatribuir D, ou deixar pendente pra futura análise.
+
+**Implementação (event-sourced, alinhada com Codex critique 2026-06-03):**
+
+**Ação é append-only — o Lancamento NÃO é mutado.**
+
 ```
+Tabela lancamento_move_event (append-only, sem updated_at/deleted_at):
+  id
+  lancamento_id     -- FK lancamento
+  from_documento_id -- D origem
+  to_documento_id   -- D destino
+  reason            -- text, obrigatório (Q12=🅓️)
+  moved_by          -- FK user
+  moved_at          -- ISO8601 TEXT
+  audit_log_id      -- FK audit_log; action='MOVE'
+
+Tabela audit_log:
+  operation_id  -- UUID; agrupa todos os moves de uma operação
+  action = 'MOVE'
+  payload_json  -- snapshot do estado pré-move
+```
+
+**Lógica:**
+
+1. Usuário seleciona um ou mais Lancamentos e clica "Mover para outra cadeia"
+2. UI mostra preview: "L [id] será movido de D [origem] para D' [destino]. L's já existem em D'? Mostra possíveis colisões." (Q12=🅓️)
+3. Usuário confirma
+4. Sistema: cria 1 row em `lancamento_move_event` por Lancamento movido
+5. Sistema: cria 1 row em `audit_log` com `action='MOVE'`, `operation_id=UUID`, `payload_json` snapshot
+6. **Lancamento NÃO é mutado.** Sua PK e FKs originais (incluindo `documento_id`) ficam intactas.
+7. UI consulta `lancamento_move_event` para mostrar o L na chain de D' (regra de visualização: "L aparece na chain de D' se existe um move event com `to_documento_id = D'` mais recente que qualquer move event com `from_documento_id = D'`, OU se L foi criado direto em D' e nunca foi movido.")
+8. D de origem fica "pendente" se não tem mais L's ativos apontando pra ele
+
+**Por que append-only (não mutação em `lancamento`)?**
+
+- **Evidência:** hash/byte do Lancamento é estável através do tempo. MOVE é um evento, não uma mutação do estado.
+- **Auditoria:** histórico completo de moves (um L pode ter sido movido múltiplas vezes).
+- **Restore simétrico (Q8=🅰️):** undo de MOVE = insert de move event reverso, não mutação.
+- **Time-travel queries:** "onde o L estava em 2025-01-01?" = filtrar `lancamento_move_event` por `moved_at <= X`.
+
+**Trigger automático (Hiure = 🅱️ D órfão):** se após o MOVE, D de origem fica sem L's ativos, D NÃO é auto-soft-deletado. Fica "pendente" — UI flag. Decisão posterior: fechar chain, reatribuir, ou deixar pendente.
+
+---
+
+### Q14 — Modelagem de "chain membership" (CRITICAL — v1 tinha bug estrutural)
+
+> *"Não é para ser prioritário de nenhuma cadeia dominial esse histórico. Ele pertence igualmente a diferentes imóveis."* (Hiure, 2026-06-02)
+
+**Contexto:** v1 (e v2 herdado) tinha `imovel ||--o{ documento : possui`, o que codificava "este Imóvel é o dono do Documento". Isso é **errado** — a cadeia histórica é **igualmente pertencente** a todos os Imóveis que a citam (matrícula compartilhada entre grileiros disputando, por exemplo).
+
+- **Resposta (Hiure, 2026-06-02): 🅱️ Junction table `imovel_documento` (N:N completo)** — Documento perde `imovel_id` direto; chain membership fica explícita via junction. `is_documento_atual` vira per-par (não global). "Compartilhado" deixa de ser conceito especial — é o caso default.
+
+**Schema resultante:**
+
+```mermaid
+imovel ||--o{ imovel_documento : ""
+documento ||--o{ imovel_documento : ""
+imovel_documento {
+  int id PK
+  int imovel_id FK
+  int documento_id FK
+  int is_documento_atual "0/1 INTEGER, per (Imovel, Documento) pair"
+  int delete_operation_id "FK audit_log (Q8=A)"
+  text created_at "ISO8601 TEXT"
+  text deleted_at "soft-delete per chain membership"
+}
+documento {
+  int id PK
+  text numero
+  text numero_raw
+  text tipo
+  text created_at "ISO8601 TEXT"
+  text deleted_at "soft-delete"
+  int delete_operation_id "FK audit_log"
+  // imovel_id REMOVIDO (vai pra junction)
+  // is_documento_atual REMOVIDO (vai pra junction, per-par)
+}
+```
+
+**Como Q14=🅱️ simplifica Q7/Q7b/Q13:**
+
+- **Q7a (delete Documento):** Documento some + cascade nas junctions. Sem "primário" pra preservar — todos iguais. Ver Q15 (delete de Documento shared — precisa decisão do Hiure).
+- **Q7b (delete Imóvel):** Imóvel some + cascade **APENAS** nas junctions `imovel_documento` dele. **Documentos não são afetados** (eles podem estar em outras junctions). L's e `lancamento_pessoa` são preservados (evidência). Ver Q7b no final deste doc para a lógica completa.
+- **Q13 (MOVE Lancamento):** MOVE é **append-only** em `lancamento_move_event` (Lancamento NÃO é mutado, `lancamento.documento_id` original permanece intacto). Cross-chain visibility vem de graça porque o UI consulta `lancamento_move_event` para mostrar L na chain de D'. Ver Q13 acima para a especificação event-sourced completa.
+
+> **⚠️ Esta seção foi corrigida em 2026-06-03** (Codex critique): a versão anterior deste summary ainda dizia "MOVE muda `lancamento.documento_id` (FK simples)", o que **contradiz** a nova implementação event-sourced de Q13. Corrigido: agora o summary referencia a Q13 corrigida.
+
+**Implicações em T-100 / T-101:**
+- T-100 (re-draw ERD): adicionar `imovel_documento` ao ERD; remover `imovel_id` e `is_documento_atual` de `documento`
+- T-101 (Drizzle schema): criar a tabela junction; ajustar FKs
+- T-300 (legacy-fit): o legacy Django tinha `documento.imovel_id` (1:N); precisa popular a junction `imovel_documento` na migração
+
+---
+
+### Q7b (com Q14=🅱️) — Cascade ao soft-deletar um **Imóvel I**
+
+**Conceito-chave (Hiure 2026-06-02):** A cadeia é construída **do Imóvel atual pro passado histórico** via Lancamentos. O cadastro do Imóvel atual inicia a jornada; cada Lancamento adiciona uma relação com um Documento passado; origens apontam pra Documentos ainda mais antigos. **Documentos são formados pelos Lancamentos** (do início da matrícula ao fim).
+
+**Consequência:** um Documento D pode estar em chains de N Imóveis simultaneamente (compartilhar a história é o caso default). Quando deletar I, "deletar a história de I" significa deletar APENAS o sub-grafo que é exclusivo de I — não o que é co-pertencente a outros.
+
+**DECIDIDO: 🅱️** (Hiure, 2026-06-03) — **Cascade conservador**: `I.deleted_at = NOW()` + soft-delete **SOMENTE** nas junctions `imovel_documento` daquele I. **L's e `lancamento_pessoa` NÃO são tocados** (Lancamentos são evidência — preservados mesmo órfãos).
+
+> **⚠️ Clarificação crítica (Codex critique 2026-06-03):** o "Algoritmo proposto" anterior deste Q7b continha uma frase conflitante — "cascade soft-delete nos Lancamentos L onde L.documento_id = D" (D I-exclusivo). **Isso era o algoritmo da opção B+ (não escolhida).** A decisão final é 🅱️: **L's são preservados** (não tocados no cascade). Esta ambiguidade foi removida na versão 2026-06-03 do doc.
+>
+> **⚠️ 2ª clarificação (Codex critique 2026-06-03):** a versão anterior deste Q7b também soft-deletava `lancamento_pessoa` (junction L↔Pessoa) no passo 3. **ERRADO**: `nome_verbatim` é evidência da occurrence e deve sobreviver. **Versão correta:** cascade toca APENAS `imovel_documento`. L's preservados + lancamento_pessoa preservados. O que pode mudar é o `lancamento_pessoa.pessoa_id` (vira NULL se a pessoa foi anonimizada por LGPD) — mas a ROW e o `nome_verbatim` permanecem.
+
+**Lógica correta do cascade Q7b=B (versão 2026-06-03, final):**
+
+1. Soft-delete I (`imovel.deleted_at = NOW()`, `delete_operation_id = <audit_log_id>`)
+2. Para cada junction (I, D) ativa em `imovel_documento`: soft-delete a junction (`deleted_at = NOW()`, `delete_operation_id = <audit_log_id>`)
+3. **L's em si NÃO são soft-deletados** — eles continuam no banco. O `documento_id` do L não é mutado.
+4. **Junction `lancamento_pessoa` NÃO é soft-deletada** — `nome_verbatim` é evidência, preservada. O `pessoa_id` pode virar NULL se a pessoa for anonimizada (LGPD), mas a ROW persiste.
+5. **D's I-exclusivos** ficam sem chain (todas junctions que os ligavam foram soft-deletadas). D ainda existe, fica "pendente" — UI mostra como "Documento órfão" pra MOVE posterior.
+6. **D's shared** preservam seus L's (as outras chains mantêm access via suas junctions ainda ativas).
+7. **Cartórios NÃO são tocados** no cascade de I (eles podem emitir D's de outros I's).
+8. **Pessoas NÃO são tocadas** no cascade de I (LGPD: anonimização é por requisição individual, não em cascata).
+
+---
+
+### Q15 — Delete de Documento compartilhado entre N Imóveis (NOVA — surgiu da critique do Codex em 2026-06-03)
+
+**Contexto:** Q14 fez `Documento` ser compartilhável entre N Imóveis via junction `imovel_documento`. Q7a=🅱️ diz "soft-delete no menu" mas não distingue entre:
+
+- **D está em 1 chain só** (I-exclusive) → soft-delete do D afeta 1 chain
+- **D está em 3 chains** (shared entre I1, I2, I3) → soft-delete do D afeta 3 chains simultaneamente
+
+O usuário que clica "Apagar" no D talvez **não perceba** que está afetando outras 2 chains. A UI precisa deixar isso explícito.
+
+🅰️ **"Desvincular desta cadeia" (default)** — soft-delete só da junction `imovel_documento` ativa. D continua existindo nas outras chains. Operacional: usuário vê D como "removido da chain atual" mas pode re-vincular depois.
+
+🅱️ **"Apagar globalmente" (admin-only)** — soft-delete do D + cascade em TODAS as junctions. Operacional: D some de TODAS as chains. Para D errado em todas as chains (ex: cadastro duplicado em todos os cartórios).
+
+🅲️ **Two-step: tenta desvincular primeiro** — UI mostra preview: "D está em 3 chains. Opções: (a) Desvincular desta chain, (b) Apagar globalmente (afeta 3 chains)". Se usuário escolhe (b), abre dialog de confirmação com blast radius completo.
+
+🅳️ **Igual C, mais "modo D órfão"** — se D fica sem junctions ativas (todos desvincularam), D vira "órfão" automaticamente. UI mostra como "Documento órfão — sem chain ativa" e oferece hard-delete admin-only.
+
+@Hiure: A, B, C ou D?
+
+> *Implementação de qualquer uma das opções está em T-105 (UX workflow). A escolha aqui determina o wording dos botões e o flow da UI.*
+
+---
+
+### Apêndice: Convenções SQLite/D1 (Codex critique 2026-06-03)
+
+Para o schema Drizzle/T-101, as seguintes convenções de tipos são obrigatórias:
+
+| Conceito | Tipo errado | Tipo correto (SQLite/D1) |
+|---|---|---|
+| Boolean | `bool`, `boolean` | `INTEGER` (0/1) com `CHECK (col IN (0,1))` |
+| Date | `date` | `TEXT` ISO8601 (`'2026-06-03'`) |
+| Datetime | `datetime`, `timestamp` | `TEXT` ISO8601 (`'2026-06-03T14:30:00Z'`) |
+| Money | `decimal`, `numeric`, `real` | `INTEGER` em **centavos** (evita rounding errors) |
+| Area | `decimal`, `real` | `INTEGER` em **centiares** (1 are = 100 m²) ou `TEXT` decimal com escala fixa |
+| Enum (ex: `tipo_cartorio`) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))` |
+| UUID (operation_id) | n/a | `TEXT` (Drizzle gera UUID v4) |
+| Encrypted blob | n/a | `BLOB` (AES-256-GCM) — **N/A no v2** (Q4=A + Q5=REMOVER PII de Pessoa; v2 não armazena PII) |
+| Hash (cpf_hash) | n/a | `TEXT` (SHA-256 hex) — **N/A no v2** (sem PII para hashear; `pessoa.nome` uniqueness via FTS5 ou normalizado) |
+
+**FTS5 (D1 suporta oficial):** tabela virtual `*_fts` para busca full-text BM25. Aplicar a:
+- `pessoa.nome` (texto puro, sem criptografia — Q4=A)
+- `documento.outorgante_nome`, `outorgado_nome`, `endereco`
+- `cartorio.nome`
+- `lancamento.descricao`, `observacoes`
+- `anotacao_versao.texto`
+
+**Partial UNIQUE indexes** (D1/SQLite suportam): `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` em junctions (`imovel_documento`, `lancamento_pessoa`, `tis_imovel`) para garantir unicidade só entre rows ativas. Mermaid não renderiza isto — aplicar via migration Drizzle.
+
+**CHECK constraints** em todos os enums (`tipo_cartorio`, `lancamento_tipo.tipo`, `documento.tipo`, `origem.tipo`, `lancamento_pessoa.papel`, `audit_log.action`, `imovel.arquivado`, `imovel_documento.is_documento_atual`, `anotacao_versao.current_marker`) — aplicar via migration Drizzle.
+
+**Nota sobre Mermaid ERD:** tipos `text` no Mermaid correspondem a `TEXT` no D1. Campos `*_encrypted` (quando existirem em tabelas com PII) são `BLOB` no D1 mas declarados como `text` no Mermaid por limitação de tipos suportados. A constraint de UNIQUE/CHECK no nível do DB vai via migration Drizzle, não no .mmd (Mermaid interpreta `--` e `|` em comentários como relações).
+
+---
+
+### Q11 — Raw vs normalized em campos string com variação real de cartório
+
+**Contexto (Hiure, 2026-06-03):** `documento.numero` tem formato rígido (`<M|T>` + número). Cartório não erra — `_raw` ali é parsing ("M. 1234" vs "M-1234"), não preservação de erro.
+
+**Onde a variação real existe** (campos onde cartório escreve diferente em certidões diferentes pra mesma coisa):
+
+- `documento.outorgante_nome`, `documento.outorgado_nome` — "João da Silva" vs "JOÃO DA SILVA" vs "João da Silva Santos"
+- `documento.endereco` — "Rua S. João, 100" vs "Rua São João, n. 100" vs "R. S. João, 100"
+- `lancamento.descricao` — texto livre, pode ter abreviações
+- `lancamento.outorgante_nome`, `lancamento.outorgado_nome` — mesma variação
+- `origem.descricao` — texto livre
+- `documento.cartorio_nome` — "1º Cartório de Registro de Imóveis" vs "1o. Cart. Reg. Imóveis"
+
+A pergunta: o padrão `campo_raw` (verbatim) + `campo` (normalized pra busca) deve ser aplicado a esses campos variáveis?
+
+🅰️ **Não** — versão única basta. Mais simples, mas matches de busca podem falhar ("São João" ≠ "S. João") e evidência verbatim se perde.
+
+🅱️ **Sim, em todos os campos variáveis** (nomes, endereços, descrições, cartório) — cada um com `_raw` + normalized. Busca usa normalized; exibição mostra raw com highlight "este verbatim difere do normalizado". Tratamento padrão.
+
+🅲️ **Sim em B, mais flag de "variação significativa"** — quando raw e normalized diferem muito (ex: normalizado tem 80%+ dos tokens do raw, mas com abreviações), marca o campo com `has_significant_variation = true` pra revisão.
+
+🅳️ **Tudo de C, mais detecção de discrepância entre certidões** — quando o MESMO imóvel/documento tem múltiplas certidões com strings diferentes pro mesmo campo lógico, sistema **marca como discrepância** (potencial evidência de grilagem ou erro de cartório). Isso ALINHA com a regra "discrepâncias entre certidões são indicadores de fraude".
+
+**DECIDIDO: 🅰️ com exceção de `cartorio_nome` (Hiure, 2026-06-03).**
+
+**Implicação estrutural:** `cartorio` vira **entidade própria** (tabela `cartorio`), não string field em `documento`. Schema:
+
+- `cartorio` table com campos espelhando a API do **Sistema Nacional de Cartórios** (schema exato TBD — buscar documentação)
+- **Source 1 (preferencial):** API lookup → preenche/normaliza `cartorio` automaticamente
+- **Source 2 (fallback):** cadastro manual pelo pesquisador, **com os mesmos campos** que a API fornece (consistência de schema)
+- `documento.cartorio_id` é FK pra `cartorio.id` (não mais string)
+- Cartórios menores do interior não cobertos pela API são cadastrados manualmente — **não tem campo "outros" / texto livre**; o pesquisador preenche a mesma estrutura da API, só que direto
+
+**Por que essa é a escolha "🅱️" só pro cartório:** é o único campo onde a **busca exata + normalização** tem valor sistêmico (cruzar certidões que citam o mesmo cartório); pros outros campos (nomes, endereços, descrições), a busca fuzzy full-text sem _raw/_normalized é suficiente.
+
+@Luandro: tarefa de follow-up — buscar schema da API do Sistema Nacional de Cartórios antes de T-101 (Drizzle schema) e T-300 (legacy-fit).
+
+### Q12 — UX confirmation dialog (UX requirement explícita)
+
+> *"É importante perguntar ao usuário se ele quer mesmo apagar ou se ele quer só editar alguma informação"* (Hiure, 2026-06-02)
+
+Toda operação de delete (soft ou hard) passa por um dialog que:
+- Lista blast radius (N+M chains, M' Lancamentos)
+- Tem botão padrão "Editar ao invés de apagar" (não destrutivo)
+- Tem botão destrutivo "Apagar mesmo assim" (vermelho, exige dupla confirmação)
+- Mostra preview do que vai ficar visível/invisível depois do delete
+
+**Recomendação proposta:** Obrigatório em T-105.
+
+**DECIDIDO: 🅳️** (Hiure, 2026-06-03) — dialog sempre com **preview ANTES** (read-only read-back do que vai sumir) + dialog de confirmação. Dois cliques extras, zero ambiguidade.
+
+**Comportamento final do delete (T-105):**
+
+1. Usuário clica "Apagar" → **modal de preview read-only**: lista blast radius ("vai esconder: 1 chain com 3 L's, 1 junction, 0 certidões cross-chain"); permite CANCELAR ou AVANÇAR
+2. AVANÇAR → **dialog de confirmação**:
+   - Botão padrão (não destrutivo, foco do Enter): **"Editar ao invés de apagar"** → abre o form de edição
+   - Botão destrutivo (vermelho, requer type-to-confirm com nome do registro): **"Apagar mesmo assim"**
+   - Checkbox opcional: "não mostrar preview de novo nesta sessão" (com audit log)
+3. Confirmação → soft-delete (Q7a/B/Q13=B) + audit log (Q9=C) + provenance (Q11)
 
 ---
 
