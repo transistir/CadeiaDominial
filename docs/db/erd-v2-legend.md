@@ -2,7 +2,7 @@
 
 Este diagrama mostra **tabelas** (caixas) e **relacionamentos** (linhas) entre elas. A ideia e que qualquer pessoa consiga entender o que cada linha significa.
 
-> **Decisoes de design** (Q1-Q15, Q11b, D1-D4, T1-T4) que ancoram este ERD: `docs/db/SCHEMA_DECISOES_PENDENTES.md`. **Schema canonico** (colunas, constraints, tipos SQLite/D1): `docs/db/SCHEMA_CONSOLIDATED.md`. **Critica completa do Codex gpt-5.5 (high)**: `docs/db/CODEX_CRITIQUE_2026-06-03.md`.
+> **Decisoes de design** (Q1-Q15, Q11b, D1-D4, T1-T4) que ancoram este ERD: `docs/db/SCHEMA_DECISOES_PENDENTES.md`. **Schema canonico** (colunas, constraints, tipos SQLite/D1): **`docs/db/SCHEMA_CONSOLIDATED.md` ESTÁ SUPERSEDED — ver aviso no topo desse arquivo; usar `docs/db/SCHEMA_DECISOES_PENDENTES.md` + `erd-v2.mmd` como referência canônica até a migration T-101 ser aplicada**. **Critica completa do Codex gpt-5.5 (xhigh)**: `docs/db/CODEX_CRITIQUE_2026-06-03.md` (round 1) e `docs/db/CODEX_CRITIQUE_2026-06-03_ROUND2.md` (round 2) e triage round 3 em "Próximos passos" do decisions doc.
 >
 > **T4 — Mermaid NAO e schema.** O `.mmd` e documentacao visual. UNIQUE_NOTE, comentarios inline, e tipos no Mermaid nao sao enforcem em SQL. A versao canonica e a Drizzle migration (T-101) com partial UNIQUE indexes, CHECK constraints, FTS5 sync triggers, e views.
 
@@ -75,7 +75,7 @@ O formato e do tipo: `A ||--o{ B : rotulo`
 - **from_doc / to_doc (Q14=B)**: D origem e D destino do MOVE.
 - **moved_by (D3)**: `user` (pesquisador) que executou o MOVE. NAO `pessoa` (que e do dominio cartorio).
 - **actor (D3)**: `user` (pesquisador) que executou a acao registrada no `audit_log`. NAO `pessoa`.
-- **created_by (D3)**: `user` editor da `anotacao_versao`. DIFERENTE de `autor_original_id`, que permanece como `pessoa` (criador original, imutavel por Q9=C).
+- **created_by (D3)**: `user` editor da `anotacao_versao`. DIFERENTE de `autor_original_id`, que também aponta para `user` (F1: era `pessoa`, corrigido no round 2 — Q9=C fala de pesquisador, não cartório). `created_by` é o editor; `autor_original` é o criador imutável.
 - **anotado_em (Q9=C)**: anotacao_versao registra anotacoes analiticas do pesquisador. Trilha de versoes + provenance de criacao.
 - **anotou (Q9=C)**: autor_original_id da anotacao. **NUNCA muda** (mesmo se outrem editar a anotacao depois).
 - **vincula_TI**: imovel associado a uma Terra Indigena (N:N via tis_imovel).
@@ -96,14 +96,14 @@ O formato e do tipo: `A ||--o{ B : rotulo`
 - **lancamento.numero_lancamento**: numero informado pelo usuario (nao e derivado); usado para compor a sigla exibida (ex: `AV5 M123`). UNIQUE (documento_id, numero_lancamento).
 - **lancamento.cartorio_transmissao_nome (Q11b)**: FREE-FORM TEXT, sem FK. Tabelionato de notas (compra e venda, etc) — pode ser qualquer um, nao precisa ser normalizado.
 - **lancamento_move_event (Q14=B)**: append-only. Registra MOVE cross-chain. Lancamento NAO e mutado. `from_documento_id` e `to_documento_id` sao os D origem e destino.
-- **anotacao_versao.autor_original_id (Q9=C)**: pessoa que criou a anotacao. **IMUTAVEL** (so o editor muda entre versoes, nao o autor).
+- **anotacao_versao.autor_original_id (Q9=C, F1)**: `user` (pesquisador) que criou a anotação. **IMUTÁVEL** (só o editor `created_by_id` muda entre versões, não o autor). **Round 2 corrigiu: era `pessoa` na v1/legado; foi movido para `user` porque Q9=C fala de pesquisador criando anotação, não de cartório.**
 - **anotacao_versao.current_marker (Q9=C)**: marca a versao atual da anotacao. `partial UNIQUE (imovel_documento_id) WHERE is_current=1`.
 - **deleted_at (Q2=B)**: presente em imovel, documento, lancamento, lancamento_pessoa, imovel_documento, pessoa, anotacao_versao, cri. Soft-delete e a estrategia padrao. Hard-delete admin-only.
 
 ## 5) Observacoes sobre obrigatoriedade
 
 - Um campo marcado como `FK` pode ser **obrigatorio ou opcional** dependendo da regra de negocio.
-- A obrigatoriedade especifica esta definida no documento `docs/db/SCHEMA_CONSOLIDATED.md`.
+- A obrigatoriedade especifica esta definida no documento `docs/db/SCHEMA_DECISOES_PENDENTES.md` (canônico, seção Q1-Q15 + D1-D4 + T1-T4). **`docs/db/SCHEMA_CONSOLIDATED.md` está SUPERSEDED — não usar como referência de obrigatoriedade até ser reescrito ou removido (ver aviso no topo daquele arquivo).**
 - **UNIQUE constraints** vao via migration Drizzle (Mermaid nao suporta `UNIQUE` em declaracao de campo).
 - **CHECK constraints** vao via migration Drizzle (Mermaid interpreta `--` e `|` em comentarios como relacoes — usar `text` com descricao em vez de constraint syntax).
 - **Cascade conservador (Q7b=B)**: soft-delete de Imovel toca APENAS `imovel_documento` (junctions). Lancamentos, lancamento_pessoa, Documentos, Pessoas, CRIs **NAO sao tocados** (evidencia preservada).

@@ -794,17 +794,24 @@ Regra UI-only ("L aparece na chain de D' se existe move event mais recente com `
 ```sql
 CREATE VIEW v_lancamento_current_location AS
 SELECT
-  l.id AS lancamento_id,
-  COALESCE(
-    (SELECT me.to_documento_id
-     FROM lancamento_move_event me
-     WHERE me.lancamento_id = l.id
-     ORDER BY me.moved_at DESC, me.id DESC
-     LIMIT 1),
-    l.documento_id
-  ) AS current_documento_id
-FROM lancamento l
-WHERE l.deleted_at IS NULL;
+  inner_q.lancamento_id,
+  inner_q.current_documento_id
+FROM (
+  SELECT
+    l.id AS lancamento_id,
+    COALESCE(
+      (SELECT me.to_documento_id
+       FROM lancamento_move_event me
+       WHERE me.lancamento_id = l.id
+       ORDER BY me.moved_at DESC, me.id DESC
+       LIMIT 1),
+      l.documento_id
+    ) AS current_documento_id
+  FROM lancamento l
+  WHERE l.deleted_at IS NULL
+) inner_q
+INNER JOIN documento d ON d.id = inner_q.current_documento_id
+WHERE d.deleted_at IS NULL;
 ```
 
 **Como a UI consome:**
@@ -981,6 +988,7 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 | `documento.cri_id` → `cri.id` | `RESTRICT` | Não pode apagar CRI com docs; admin tem hard-delete separado |
 | `imovel.cri_id` → `cri.id` | `RESTRICT` | Mesmo |
 | `origem.cri_id` → `cri.id` | `RESTRICT` | Mesmo |
+| `origem.lancamento_id` → `lancamento.id` | `RESTRICT` | Q3 (round 3): `origem` carrega evidência verbatim (`numero_raw`); CASCADE apagaria evidência junto com L. RESTRICT protege a cadeia forense. Hard-delete de L é admin-only e explícito. |
 | `lancamento.documento_id` → `documento.id` | `SET NULL` | Q7b=B: L preservado órfão se D sumir |
 | `lancamento.tipo_id` → `lancamento_tipo.id` | `RESTRICT` | Não pode apagar tipo em uso; criar novo + migrate L se necessário |
 | `lancamento_pessoa.lancamento_id` → `lancamento.id` | `CASCADE` | Junction de membership, segue o L |
@@ -1009,9 +1017,9 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 const current = await db.query.v_lancamento_current_location.findFirst({
   where: eq(v_lancamento_current_location.lancamento_id, payload.lancamento_id),
 });
-if (current && current.documento_id !== payload.from_documento_id) {
+if (current && current.current_documento_id !== payload.from_documento_id) {
   throw new Error(
-    `Q14 violation: L ${payload.lancamento_id} is currently in D ${current.documento_id}, ` +
+    `Q14 violation: L ${payload.lancamento_id} is currently in D ${current.current_documento_id}, ` +
     `but move event says from D ${payload.from_documento_id}`
   );
 }
@@ -1120,7 +1128,7 @@ Cartórios frequentemente registram data incompleta ("15/06/1950" sem hora, ou "
 
 Aplicar via migration Drizzle em todos os enums:
 
-- `cri.tipo_cartorio` → `CHECK (tipo_cartorio IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))`
+- ~~`cri.tipo_cartorio` → `CHECK (tipo_cartorio IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))`~~ **REMOVIDO (round 3)**: a coluna `tipo_cartorio` não existe no ERD (`cri` tem só `nome`, `cns_codigo`, `cidade`, `uf`, `endereco`). Adicionar essa coluna é fora de escopo das decisões Q1-Q15 — `cri` é especificamente o cartório de registro de imóveis, não um cartório genérico.
 - `lancamento_tipo.tipo` → `CHECK (tipo IN ('inicio_matricula','registro','averbacao'))`
 - `documento.tipo` → `CHECK (tipo IN ('matricula','transcricao'))`
 - `origem.tipo` → `CHECK (tipo IN ('matricula','transcricao','fim_cadeia'))`
@@ -1167,7 +1175,7 @@ Aplicar via migration Drizzle em todos os enums:
 | # | Achado | Fix | Status |
 |---|---|---|---|
 | **T1** | Faltam partial UNIQUE constraints em `imovel_documento` | `UNIQUE (imovel_id, documento_id) WHERE deleted_at IS NULL` + `UNIQUE (imovel_id) WHERE is_documento_atual=1 AND deleted_at IS NULL` (Q15=🅳️: garante no máximo 1 doc atual por Imóvel) | ✅ Documentado no .mmd, Drizzle vai aplicar |
-| **T2** | Q14 append-only MOVE precisa de SQL view determinística | `v_lancamento_current_location` (coroutine via `lancamento_move_event ORDER BY moved_at, id DESC LIMIT 1`); documentado em Q14 | ✅ Documentado em Q14 + view SQL inline |
+| **T2** | Q14 append-only MOVE precisa de SQL view determinística | `v_lancamento_current_location` (coroutine via `lancamento_move_event ORDER BY moved_at DESC, id DESC LIMIT 1`); documentado em Q14 | ✅ Documentado em Q14 + view SQL inline |
 | **T3** | Apêndice SQLite/D1 incompleto | Expandido com: FTS5 sync (triggers INSERT/UPDATE/DELETE), FK actions explícitas (RESTRICT/SET NULL/CASCADE), sem `NOW()` PG (UTC ISO8601 no app), datas parciais do cartório (`text` com validação leve de formato) | ✅ Apêndice expandido |
 | **T4** | Mermaid `UNIQUE_NOTE` é só visual, não enforce | Nota explícita no topo do .mmd: "Mermaid NÃO é schema. UNIQUE_NOTE é só documentação visual. Drizzle migration é canônica" | ✅ Nota no topo do .mmd |
 
@@ -1197,5 +1205,27 @@ Ambas views são D1-compatíveis (CREATE VIEW suportado em SQLite). Implementaç
 | **F5** | Q1 intro dizia "6 perguntas (Q1 a Q6)" | Atualizado para "15 perguntas (Q1–Q15, mais Q11b)" | ✅ Aplicado |
 | **F6** | Q11b "schema final" snippet ainda mostrava `documento.imovel_id` e `documento.is_documento_atual` (removidos em Q13) | Snippet atualizado com comentários `// (Q13) REMOVIDO em v2` | ✅ Aplicado |
 | **F7** | Q14 invariante write-time faltando | Documentada invariante (validar `from_documento_id` = `v_lancamento_current_location` antes de INSERT) com snippet TS | ✅ Documentado |
+
+---
+
+## Crítica Codex 2026-06-03 Round 3 (gpt-5.5, xhigh) — Triage + fixes aplicados 2026-06-03
+
+> Triagem dos 8 inline review threads abertos (Codex 3 + Greptile 5) contra a PR #24. **Verdict inicial do triage: ship-blocked (1 BLOCKER + 5 MUST-FIX + 1 NICE-TO-HAVE, 0 DISAGREE).** Todos os 7 fixes únicos aplicados.
+
+| # | Issue | Severity | Fix aplicado | Status |
+|---|---|---|---|---|
+| **R3-1** | Q14 TS invariant lia o nome de campo errado da view (campo `documento_id` no read, view expõe `current_documento_id`) — invariante silenciosamente no-op | MUST-FIX | Linha 1012 (`if`) + linha 1014 (throw message): campo agora é `current.current_documento_id` | ✅ Aplicado |
+| **R3-2** | `SCHEMA_CONSOLIDATED.md` é stale (ainda referencia v1) mas a legend e decisões o marcam como canonical | **BLOCKER** | Aviso de SUPERSEDED no topo de `SCHEMA_CONSOLIDATED.md`; legend atualizada para indicar SUPERSEDED e apontar para `SCHEMA_DECISOES_PENDENTES.md` + `erd-v2.mmd` | ✅ Aplicado |
+| **R3-3** | F1 voltou na legend: `anotacao_versao.autor_original_id` descrito como `pessoa` (mas ERD e decisions já apontam para `user`) | MUST-FIX | Legend linha 78 + 99: `pessoa` → `user`; nota explícita do round 2 fix | ✅ Aplicado |
+| **R3-4** | `v_lancamento_current_location` filtra `lancamento.deleted_at` mas não filtra `documento.deleted_at` no `to_documento_id` resolvido — pode mostrar doc soft-deletado como current location | MUST-FIX | View reescrita com inner query + `INNER JOIN documento d ON d.id = inner_q.current_documento_id WHERE d.deleted_at IS NULL` | ✅ Aplicado |
+| **R3-5** | `cri.tipo_cartorio` CHECK no apêndice mas a coluna não existe no ERD | MUST-FIX | Linha riscada com justificativa (round 3): coluna fora de escopo Q1-Q15; `cri` é especificamente registro de imóveis | ✅ Aplicado |
+| **R3-6** | FK action de `origem.lancamento_id` ausente da tabela — `origem` carrega evidência verbatim, CASCADE apagaria forense | MUST-FIX | Adicionada `origem.lancamento_id → lancamento.id | RESTRICT` (proteger cadeia forense) | ✅ Aplicado |
+| **R3-7** | T2 fix summary `ORDER BY moved_at, id DESC` ambíguo (sem DESC explícito no `moved_at`) | NICE-TO-HAVE | Adicionado `DESC` no `moved_at` para consistência com SQL inline | ✅ Aplicado |
+
+**R3-8** (Codex #2 dup) e **R3-4 dup** (Greptile P1 duplicata de R3-1) — não contados separadamente.
+
+**Verdict final após fixes (pendente round 3 review):** Aguardando aprovação do Codex round 3 para confirmar APROVA.
+
+---
 
 **Perguntas ou discordâncias?** Abra um issue ou comente direto neste PR.
