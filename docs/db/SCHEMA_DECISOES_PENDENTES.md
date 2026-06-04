@@ -610,6 +610,7 @@ O padrão `campo_raw` (verbatim) + `campo` (normalized pra busca) deve ser aplic
 ```
 cri {
   int id PK
+  text tipo "CRI ou OUTRO (CHECK tipo IN (CRI,OUTRO), DEFAULT CRI). T-100: parity com Django Cartorios.tipo"
   text nome "1º Cartório de Registro de Imóveis de Salvador"
   text cidade
   text uf
