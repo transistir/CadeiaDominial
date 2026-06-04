@@ -22,10 +22,11 @@
  * UF is checked in app layer; v2 has 27 federative units.
  *
  * NOTE on DB-level constraints: `*.sql` migrations are git-ignored by
- * project policy. The CHECK constraint for `tipo` (and the `enum: []`
- * for `uf` etc.) is declared via Drizzle's `check()` API in this file
- * and emitted into the generated migration by `drizzle-kit generate`
- * (run on-the-fly in CI; not committed to git).
+ * project policy. The DB-level CHECK for `tipo` is declared via Drizzle's
+ * `check()` API in this file and emitted into the generated migration by
+ * `drizzle-kit generate` (run on-the-fly in CI; not committed to git).
+ * The `uf` column remains a plain `text` (v2 has 27 federative units;
+ * validation lives in the app layer, not the DB).
  */
 
 import { sql } from "drizzle-orm";

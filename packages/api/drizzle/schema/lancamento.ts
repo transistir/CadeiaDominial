@@ -44,6 +44,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { documento } from "./documento";
 import { lancamentoTipo } from "./lancamento_tipo";
+import { auditLog } from "./audit_log";
 
 export const lancamento = sqliteTable(
   "lancamento",
@@ -87,8 +88,11 @@ export const lancamento = sqliteTable(
       .default(sql`(current_timestamp)`),
     /** Q2=B: soft-delete (L preserved órfão per Q7b=B). */
     deletedAt: text("deleted_at"),
-    /** Q9+C: provenance of the soft-delete. */
-    deleteOperationId: integer("delete_operation_id"),
+    /** Q9+C: provenance of the soft-delete. SET NULL if audit purged. */
+    deleteOperationId: integer("delete_operation_id").references(
+      () => auditLog.id,
+      { onDelete: "set null" }
+    ),
   },
   (table) => ({
     /**
