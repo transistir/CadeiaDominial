@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdir } from "fs/promises";
+import { mkdir, stat } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -31,8 +31,13 @@ test("graph preview renders and screenshot is saved", async ({ page }) => {
   await mkdir(screenshotsDir, { recursive: true });
 
   // Take screenshot
+  const screenshotPath = join(screenshotsDir, "basic-graph.png");
   await page.screenshot({
-    path: join(screenshotsDir, "basic-graph.png"),
+    path: screenshotPath,
     fullPage: false
   });
+
+  // Verify screenshot file exists and is non-empty
+  const fileStats = await stat(screenshotPath);
+  expect(fileStats.size).toBeGreaterThan(0);
 });

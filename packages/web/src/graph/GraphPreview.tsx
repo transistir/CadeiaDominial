@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ReactFlow, ReactFlowProvider, Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { GraphJson } from "./types";
@@ -6,14 +7,11 @@ import { layoutGraph } from "./layoutGraph";
 import { toReactFlow } from "./toReactFlow";
 
 export function GraphPreview({ graph }: { graph: GraphJson }) {
-  // Validate
-  validateGraph(graph);
-
-  // Layout
-  const layouted = layoutGraph(graph);
-
-  // Convert to React Flow
-  const { nodes, edges } = toReactFlow(layouted);
+  const { nodes, edges } = useMemo(() => {
+    validateGraph(graph);
+    const layouted = layoutGraph(graph);
+    return toReactFlow(layouted);
+  }, [graph]);
 
   return (
     <div data-testid="graph-preview" style={{ width: "100vw", height: "100vh" }}>
