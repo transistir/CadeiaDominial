@@ -6,7 +6,8 @@ yarn-error.log*
 pnpm-debug.log*
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+# pnpm-lock.yaml is INTENTIONALLY committed (see PR #25): we need --frozen-lockfile
+# in CI for deterministic installs. Other lockfiles remain ignored (we use pnpm only).
 
 # TypeScript
 *.tsbuildinfo

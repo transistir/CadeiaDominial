@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 find "$ROOT_DIR" -type d -name "node_modules" -prune -exec rm -rf {} +
 
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
 
 echo "✅ Clean install and build successful"
