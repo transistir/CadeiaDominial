@@ -40,7 +40,12 @@ export const vLancamentoCurrentLocation = sqliteView(
   "v_lancamento_current_location",
   {
     lancamentoId: integer("lancamento_id").notNull(),
-    currentDocumentoId: integer("current_documento_id").notNull(),
+    // Nullable: a NULL `currentDocumentoId` means the lancamento is "preso"
+    // (latest `lancamento_move_event.to_documento_id` was hard-deleted or
+    // never set), so the view reports "no current location" and the row is
+    // omitted by the INNER JOIN on `documento` below. Distinct from
+    // "no move event row exists" — that case falls back to `l.documento_id`.
+    currentDocumentoId: integer("current_documento_id"),
   }
 ).as(sql`
   SELECT
@@ -49,15 +54,22 @@ export const vLancamentoCurrentLocation = sqliteView(
   FROM (
     SELECT
       l.id AS lancamento_id,
-      COALESCE(
-        (SELECT me.to_documento_id
-         FROM lancamento_move_event me
-         WHERE me.lancamento_id = l.id
-         ORDER BY me.moved_at DESC, me.id DESC
-         LIMIT 1),
-        l.documento_id
-      ) AS current_documento_id
+      CASE
+        WHEN latest.lancamento_id IS NULL THEN l.documento_id
+        ELSE latest.to_documento_id
+      END AS current_documento_id
     FROM lancamento l
+    LEFT JOIN (
+      SELECT me.lancamento_id, me.to_documento_id
+      FROM lancamento_move_event me
+      WHERE me.id = (
+        SELECT me2.id
+        FROM lancamento_move_event me2
+        WHERE me2.lancamento_id = me.lancamento_id
+        ORDER BY me2.moved_at DESC, me2.id DESC
+        LIMIT 1
+      )
+    ) latest ON latest.lancamento_id = l.id
     WHERE l.deleted_at IS NULL
   ) inner_q
   INNER JOIN documento d ON d.id = inner_q.current_documento_id
