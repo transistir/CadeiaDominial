@@ -391,7 +391,8 @@ app.get("/api/files", authMiddleware, async (c) => {
 });
 
 app.get("/api/files/:key", authMiddleware, async (c) => {
-  const keyInput = c.req.param("key");
+  const keyParam = c.req.param("key");
+  const keyInput = typeof keyParam === "string" ? keyParam : "";
   const key = normalizeStorageKey(keyInput);
   if (!key) {
     return c.json({ error: "Invalid key format." }, 400);
@@ -463,7 +464,8 @@ app.get("/api/files/:key/sign-download", authMiddleware, async (c) => {
     return c.json({ error: "R2 signing is not configured." }, 501);
   }
 
-  const keyInput = c.req.param("key");
+  const keyParam = c.req.param("key");
+  const keyInput = typeof keyParam === "string" ? keyParam : "";
   const key = normalizeStorageKey(keyInput);
   if (!key) {
     return c.json({ error: "Invalid key format." }, 400);
