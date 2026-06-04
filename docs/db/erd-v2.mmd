@@ -4,6 +4,7 @@
 %% Convenções SQLite/D1: TEXT ISO8601 p/ datas, INTEGER 0/1 p/ bool, INTEGER centavos p/ money
 %% CHECK constraints vão via migration Drizzle (Mermaid interpreta -- e | em comentários)
 %% Soft-delete: deleted_at TEXT NULL em todas as tabelas relevantes (Q2=B)
+%% T-100 (2026-06-04): adicionado `cri.tipo` (CHECK CRI/OUTRO) p/ paridade com Django Cartorios
 %% ============================================================================
 %% ⚠️ T4 — Mermaid NÃO é schema. UNIQUE_NOTE é só documentação visual.
 %%    A versão canônica é a Drizzle migration (T-101). Partial UNIQUE indexes
@@ -45,6 +46,7 @@ erDiagram
         text cidade
         text uf "CHECK uf in 27 valores"
         text endereco
+        text tipo "CHECK in (CRI, OUTRO), default CRI. T-100: adicionado p/ paridade com Django Cartorios.tipo (legado line 271)"
         text created_at "ISO8601"
         text updated_at "ISO8601"
         text deleted_at "soft-delete (Q2=B)"
