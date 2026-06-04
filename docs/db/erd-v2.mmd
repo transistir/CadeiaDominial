@@ -4,7 +4,6 @@
 %% Convenções SQLite/D1: TEXT ISO8601 p/ datas, INTEGER 0/1 p/ bool, INTEGER centavos p/ money
 %% CHECK constraints vão via migration Drizzle (Mermaid interpreta -- e | em comentários)
 %% Soft-delete: deleted_at TEXT NULL em todas as tabelas relevantes (Q2=B)
-%% T-100 (2026-06-04): adicionado `cri.tipo` (CHECK CRI/OUTRO) p/ paridade com Django Cartorios
 %% ============================================================================
 %% ⚠️ T4 — Mermaid NÃO é schema. UNIQUE_NOTE é só documentação visual.
 %%    A versão canônica é a Drizzle migration (T-101). Partial UNIQUE indexes
@@ -18,23 +17,23 @@ erDiagram
     imovel ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     documento ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     imovel_documento ||--o{ anotacao_versao : "anotado_em (Q9=C)"
-    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, RESTRICT — autor nunca vira NULL, mesmo com LGPD do editor)"
-    user o|--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original, SET NULL)"
-    user o|--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa, SET NULL)"
-    user o|--o{ audit_log : "actor (D3, user NAO pessoa, SET NULL on LGPD)"
-    pessoa o|--o{ imovel : "proprietario (SET NULL se anonimizado LGPD, imovel preservado)"
-    pessoa o|--o{ lancamento_pessoa : "participa (Q2=B, SET NULL on LGPD, nome_verbatim preservado)"
-    lancamento ||--o{ lancamento_pessoa : "envolve (NOT NULL, CASCADE)"
-    lancamento_tipo ||--o{ lancamento : "classifica (tipo_id, F3, NOT NULL, RESTRICT)"
-    documento o|--o{ lancamento : "gera (SET NULL on documento delete, L preservado orfao — Q7b=B)"
+    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, era pessoa)"
+    user ||--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original)"
+    user ||--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa)"
+    user ||--o{ audit_log : "actor (D3, user NAO pessoa)"
+    pessoa ||--o{ imovel : "proprietario (pode ser NULL se anonimizado LGPD)"
+    pessoa ||--o{ lancamento_pessoa : "participa (Q2=B, nome_verbatim preservado)"
+    lancamento ||--o{ lancamento_pessoa : "envolve"
+    lancamento_tipo ||--o{ lancamento : "classifica (tipo_id, F3)"
+    documento ||--o{ lancamento : "gera"
     documento o|--o{ origem : "origem_doc (opcional)"
-    lancamento ||--o{ origem : "possui (1:N, Q3=B, NOT NULL, RESTRICT)"
-    origem ||--o| origem_fim_cadeia : "fim_cadeia (Q3=B, 1:1 por origem, CASCADE)"
-    cri ||--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id, RESTRICT — cadeia forense protegida, Q3 round-3)"
-    lancamento ||--o{ lancamento_move_event : "movido (Q14=B, append-only, NOT NULL, RESTRICT)"
-    documento o|--o{ lancamento_move_event : "from_doc (SET NULL)"
-    documento o|--o{ lancamento_move_event : "to_doc (SET NULL)"
-    audit_log o|--o{ lancamento_move_event : "registra (SET NULL on audit purge)"
+    lancamento ||--o{ origem : "possui (1:N, Q3=B)"
+    origem ||--o| origem_fim_cadeia : "fim_cadeia (Q3=B, 1:1 por origem)"
+    cri o|--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id)"
+    lancamento ||--o{ lancamento_move_event : "movido (Q14=B, append-only)"
+    documento ||--o{ lancamento_move_event : "from_doc"
+    documento ||--o{ lancamento_move_event : "to_doc"
+    audit_log ||--o{ lancamento_move_event : "registra"
     imovel ||--o{ tis_imovel : "vincula_TI"
     tis ||--o{ tis_imovel : "vincula_TI"
     terra_indigena_referencia ||--o{ tis : "referencia"
@@ -46,7 +45,6 @@ erDiagram
         text cidade
         text uf "CHECK uf in 27 valores"
         text endereco
-        text tipo "CHECK (CRI, OUTRO), DEFAULT CRI (T-100)"
         text created_at "ISO8601"
         text updated_at "ISO8601"
         text deleted_at "soft-delete (Q2=B)"
@@ -169,7 +167,7 @@ erDiagram
     origem {
         int id PK
         int lancamento_id FK
-        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id, RESTRICT)"
+        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id)"
         int documento_id FK "opcional, NULL se tipo=fim_cadeia"
         int indice "0, 1, 2..., CHECK >= 0, contiguo por lancamento"
         text tipo "CHECK in (matricula, transcricao, fim_cadeia)"
@@ -180,7 +178,6 @@ erDiagram
         text data
         text observacoes
         text created_at
-        text deleted_at "soft-delete (Q2=B). Origem preserva evidencia de divergencia entre certidoes (Q3 round-3)"
         text UNIQUE_NOTE "UNIQUE (lancamento_id, indice)"
     }
 
@@ -199,7 +196,7 @@ erDiagram
         int autor_original_id FK "USER pesquisador que criou originalmente (F1: era pessoa, Q9=C imutavel)"
         integer versao "1, 2, 3..."
         text texto "anotacao analitica do pesquisador"
-        integer is_current "0/1, partial UNIQUE (imovel_documento_id) WHERE is_current=1 AND deleted_at IS NULL garante 1 current per junction. is_current=0 = versao antiga, mantida no historico (F2)"
+        integer is_current "0/1, partial UNIQUE garante 1 current per junction. is_current=0 = versao antiga, mantida no historico (F2)"
         text created_at
         text deleted_at "F2: soft-delete da anotacao INTEIRA (todas versoes). NAO confundir com is_current=0 que so marca versao"
         int created_by_id FK "USER editor desta versao (D3, pode diferir do autor_original)"

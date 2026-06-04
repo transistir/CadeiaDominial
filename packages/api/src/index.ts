@@ -391,8 +391,6 @@ app.get("/api/files", authMiddleware, async (c) => {
 });
 
 app.get("/api/files/:key", authMiddleware, async (c) => {
-  // R5-3 (typecheck fix, same as fix-ci PR): defensive guard for
-  // c.req.param('key') which can return string | undefined.
   const keyParam = c.req.param("key");
   const keyInput = typeof keyParam === "string" ? keyParam : "";
   const key = normalizeStorageKey(keyInput);
@@ -466,8 +464,6 @@ app.get("/api/files/:key/sign-download", authMiddleware, async (c) => {
     return c.json({ error: "R2 signing is not configured." }, 501);
   }
 
-  // R5-3 (typecheck fix, same as fix-ci PR): defensive guard for
-  // c.req.param('key') which can return string | undefined.
   const keyParam = c.req.param("key");
   const keyInput = typeof keyParam === "string" ? keyParam : "";
   const key = normalizeStorageKey(keyInput);

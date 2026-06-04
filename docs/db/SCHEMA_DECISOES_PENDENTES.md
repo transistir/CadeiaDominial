@@ -417,9 +417,7 @@ CREATE TABLE pessoa (
 **🌳 Como fica no grafo:** Sem impacto direto. UI formata para "123.456.789-01" na exibição.
 
 ### ✅ Recomendação
-**HISTÓRICO (round 1, 2026-06-03):** "Opção C (normalizado no banco, validado na app)" parecia a melhor prática da indústria. CHECK constraint garantiria integridade mesmo se a app falhasse. UI formataria para exibição. Migrar dados antigos exigiria um script de normalização (que o `legacy-fit` script — T-300 — poderia fazer).
-
-> **⚠️ DECISÃO FINAL (round 2, 2026-06-03) — SOBRESCREVE a recomendação acima:** **REMOVER** `cpf`/`rg`/`data_nascimento`/`email`/`telefone` de `Pessoa` no v2. Q5b vira N/A. Coerente com Q2/Q4: v2 não é sistema de PII, é cópia fiel do cartório + análise. Pesquisadores não precisam do CPF dentro do sistema — quem precisa cruza com bases externas (Receita, processos judiciais). Sub-task explícita do T-300: "definir quais colunas descartar do legado no v2".
+**Opção C (normalizado no banco, validado na app)** — é a melhor prática da indústria. CHECK constraint garante integridade mesmo se a app falhar. UI formata para exibição. Migrar dados antigos exige um script de normalização (que o `legacy-fit` script — T-300 — pode fazer).
 
 ---
 
@@ -578,7 +576,7 @@ O padrão `campo_raw` (verbatim) + `campo` (normalized pra busca) deve ser aplic
 - `documento.cartorio_id` é FK pra `cartorio.id`
 - Sem campo "outros" / texto livre — pesquisador preenche a mesma estrutura da API
 
-> **⚠️ Q11b (NOVA — Hiure, 2026-06-03) — SOBRESCREVE o texto acima:** ver seção dedicada abaixo. Resumo: tabela vira `cri` (não `cartorio` genérico), `documento.cri_id` FK direto sem junction, `imovel.cri_id` fixo sem histórico, `UNIQUE (cri_id, tipo, numero)`, `cartorio_transmissao` permanece campo livre (não vira tabela).
+> **⚠️ Q11b (NOVA — Hiure, 2026-06-03):** refinamento da decisão. Ver seção dedicada abaixo.
 
 ---
 
@@ -596,7 +594,7 @@ O padrão `campo_raw` (verbatim) + `campo` (normalized pra busca) deve ser aplic
 
 **Resposta (Hiure, 2026-06-03): NÃO no v1.** Quando pesquisadores pegam o documento, isso já foi consolidado e não deve mudar. `imovel.cri_id` é fixo (FK direto, sem histórico). Se v2+ precisar, criar `imovel_cri_historico` na hora.
 
-> **Importante (Hiure):** "sempre manter a unicidade de documentos com `cartorio + numero_documento` (M ou T + número)" — constraint de unicidade deve ser pelo par `(cri_id, tipo, numero)`, não só pelo número. (Nota: `cartorio_id` era terminologia pré-Q11b; usar `cri_id` no v2.)
+> **Importante (Hiure):** "sempre manter a unicidade de documentos com `cartorio + numero_documento` (M ou T + número)" — constraint de unicidade deve ser pelo par `(cartorio_id, tipo, numero)`, não só pelo número.
 
 ### 🅲️ Cada Documento tem 1 CRI só? Ou N:N (junction)?
 **Pergunta:** `documento.cri_id` FK direto, ou junction `documento_cri` (N:N)?
@@ -637,22 +635,13 @@ documento {
 
 imovel {
   int id PK
-  int cri_id FK                  // fixo, sem histórico no v1 (Q11b=🅱️)
+  int cri_id FK                  // fixo, sem histórico no v1
   int proprietario_id FK
   int arquivado "0/1"
   text created_at
   text deleted_at
-}
-
-imovel_documento {                 // Q13=🅱️: junction N:N (NÃO tem imovel_id direto em documento)
-  int id PK
-  int imovel_id FK
-  int documento_id FK
-  int is_documento_atual "0/1, per-par"
-  text created_at
-  text deleted_at
-  UNIQUE (imovel_id, documento_id) WHERE deleted_at IS NULL
-  UNIQUE (imovel_id) WHERE is_documento_atual = 1 AND deleted_at IS NULL
+  // (Q11b=🅲️) v1: imovel_id direto no documento (sem junction imovel_documento)
+  //             Q13=N:N com junction vem depois (ver Q13 abaixo)
 }
 
 lancamento {
@@ -675,7 +664,7 @@ origem {
   int id PK
   int lancamento_id FK
   int indice "0, 1, 2..."
-  int cri_id FK                  // CRI de origem (Q11b=🅰️: este campo já é o "cri_origem_id", RESTRICT)
+  int cri_id FK                  // CRI de origem (Q11b=🅰️: este campo já é o "cri_origem_id")
   int documento_id FK "opcional"
   text tipo "matricula | transcricao | fim_cadeia"
   text numero
@@ -683,35 +672,9 @@ origem {
   text folha
   text data
   text observacoes
-  text deleted_at "soft-delete (Q2=B). Origem preserva evidencia de divergencia entre certidoes"
   UNIQUE (lancamento_id, indice)
 }
 ```
-
----
-
-## T-100 / Q11b addendum — `cri.tipo` field (parity com Django legado)
-
-> **Contexto:** A coluna `cri.tipo` **não estava** nas decisões Q1-Q15/Q11b. Foi adicionada por T-100 (2026-06-04) para paridade de migração com o legado Django `dominial_cartorios.tipo` (T-300 legacy-fit), que distingue entre cartórios de **registro de imóveis** (CRI) e **outros** (tabelionato de notas, ofícios de notas, etc).
-
-### 🅰️ A coluna
-- **`cri.tipo TEXT NOT NULL DEFAULT 'CRI' CHECK (tipo IN ('CRI', 'OUTRO'))`**
-- Default `'CRI'` para novas linhas (v2 só usa CRIs no momento — T-300 pode carregar legados OUTRO)
-- Migration Drizzle: CHECK constraint + DEFAULT + NOT NULL explícito
-- ERD: `cri.tipo` visível no schema visual
-
-### 🅱️ Por que foi re-adicionada (reviravolta do R3-5)
-R3-5 (round 3) tinha **riscado** uma proposta anterior de `cri.tipo_cartorio` por considerá-la fora de escopo Q1-Q15. T-100 reabriu o ponto porque:
-
-1. **T-300 legacy-fit precisa do campo** — o legado Django `dominial_cartorios.tipo` é uma das 5 colunas da tabela Cartorios no Postgres. Sem `cri.tipo`, T-300 não consegue mapear 1:1 e perde informação na migração.
-2. **A semântica é diferente do que R3-5 riscou** — R3-5 riscou "cri.tipo_cartorio" como "fora de escopo Q1-Q15". T-100 adiciona `cri.tipo` (sem `_cartorio`) com semântica específica do legado (CRI/OUTRO), não generalização para "qualquer cartório".
-3. **Era a única divergência entre o ERD canônico (T-100) e o Drizzle schema (T-101)** — ✅ **RESOLVIDO no T-101 round 5**: `cri.tipo: text('tipo', { enum: ['CRI', 'OUTRO'] }).notNull().default('CRI')` agora está em `packages/api/drizzle/schema/cri.ts:52-54` com CHECK em `:80-83`. Divergência ERD↔schema fechada.
-
-### Implicações
-- **Drizzle schema (T-101):** adicionar `cri.tipo: text('tipo', { enum: ['CRI', 'OUTRO'] }).notNull().default('CRI')` em `packages/api/drizzle/schema/cri.ts` + CHECK constraint na migration
-- **FTS5 (Q10/T3):** incluir `cri.tipo` na virtual table `fts_cri` para busca filtrada
-- **API/UI:** filtro por tipo em queries de CRI; exibição do badge "CRI" / "OUTRO" no header do cartório
-- **T-300 legacy-fit:** mapear `dominial_cartorios.tipo` → `cri.tipo` diretamente; sem perda
 
 ---
 
@@ -855,7 +818,6 @@ WHERE d.deleted_at IS NULL;
 - "Mostrar L na chain de D" → `JOIN lancamento l ON l.id = ? JOIN v_lancamento_current_location v ON v.lancamento_id = l.id WHERE v.current_documento_id = D`
 - "Quais L's estão em D'?" → query acima
 - "Histórico de moves do L" → `SELECT * FROM lancamento_move_event WHERE lancamento_id = L ORDER BY moved_at, id`
-- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los, faça um UNION com `SELECT l.* FROM lancamento l WHERE l.deleted_at IS NULL AND l.id NOT IN (SELECT lancamento_id FROM v_lancamento_current_location)` (ver edge case abaixo). O view expõe apenas `lancamento_id` e `current_documento_id` — não há coluna `location_state`; o estado é **derivado** da presença/ausência em `v_lancamento_current_location` (ausente + existe em `lancamento_move_event` = PRESO; ausente + zero moves = ORIGINAL sem destino).
 
 **D1/SQLite support:** `CREATE VIEW` totalmente suportado. Custo: index em `lancamento_move_event(lancamento_id, moved_at DESC, id DESC)` para performance (Drizzle adiciona via `CREATE INDEX` na migration T-101).
 
@@ -964,7 +926,7 @@ Usuário clica "Apagar" em Documento D
 | Q7b | Cascade delete Imóvel | **🅱️** Cascade conservador: I + junctions, L's preservados | Lancamentos são evidência — devem sobreviver órfãos. Cascade em junctions `imovel_documento` apenas. |
 | Q8 | Restore semantics | **🅰️** Simétrico ao Q7b=B | Intuitivo ("restaurar = desfazer"). Soft-delete foi conservador, nada de "lixo" pra restaurar. |
 | Q9 | Trilha de análise | **🅲️** Histórico + provenance de criação | Crítico em equipe (autor original vs editor). |
-| Q10 | Raw vs normalized | **🅰️** com exceção de `cri.nome` | Demais campos variáveis usam busca fuzzy FTS5. `cri.nome` vira entidade própria (tabela `cri`, ver Q11b). |
+| Q10 | Raw vs normalized | **🅰️** com exceção de `cartorio_nome` | Demais campos variáveis usam busca fuzzy FTS5. `cartorio_nome` vira entidade própria (tabela `cartorio`). |
 | Q11b | Refinamento Q10 sobre `cri` | **Ver Q11b acima** | `cri` table (não genérico `cartorio`); `documento.cri_id` FK direto (sem junction); `UNIQUE (cri_id, tipo, numero)`; `cartorio_transmissao` é campo livre, não tabela; `imovel.cri_id` fixo (sem histórico v1). |
 | Q12 | UX confirmation dialog | **🅳️** preview ANTES + dialog | "É importante perguntar se quer mesmo apagar ou se quer só editar" (Hiure, 2026-06-02). |
 | Q13 | Chain membership | **🅱️** Junction `imovel_documento` (N:N) | "Pertence igualmente a diferentes imóveis" (Hiure, 2026-06-02). `is_documento_atual` per-par. |
@@ -996,7 +958,7 @@ Para o schema Drizzle/T-101, as seguintes convenções de tipos são obrigatóri
 | Datetime | `datetime`, `timestamp` | `TEXT` ISO8601 (`'2026-06-03T14:30:00Z'`) |
 | Money | `decimal`, `numeric`, `real` | `INTEGER` em **centavos** (evita rounding errors) |
 | Area | `decimal`, `real` | `INTEGER` em **centiares** (1 are = 100 m²) ou `TEXT` decimal com escala fixa |
-| Enum (ex: `cri.tipo`, T-100) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','OUTRO'))` (T-100: paridade com Django Cartorios.tipo). NOTA: Q11b+round-3 havia riscado `cri.tipo_cartorio` (valores amplos CRI/NOTAS/CIVIL/TRANSMISSAO/OUTRO) por estar fora de escopo; o T-100 reintroduz um subconjunto mínimo porque a entidade `cri` é especificamente o cartório de registro de imóveis, não um cartório genérico. Ver T-100 addendum abaixo. |
+| Enum (ex: `tipo_cartorio`) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))` |
 | UUID (operation_id) | n/a | `TEXT` (Drizzle gera UUID v4) |
 | Encrypted blob | n/a | `BLOB` (AES-256-GCM) — **N/A no v2** (Q4=A + Q5=REMOVER PII de Pessoa; v2 não armazena PII) |
 | Hash (cpf_hash) | n/a | `TEXT` (SHA-256 hex) — **N/A no v2** (sem PII para hashear) |
@@ -1027,7 +989,6 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 |---|---|---|
 | `documento.cri_id` → `cri.id` | `RESTRICT` | Não pode apagar CRI com docs; admin tem hard-delete separado |
 | `imovel.cri_id` → `cri.id` | `RESTRICT` | Mesmo |
-| `imovel.proprietario_id` → `pessoa.id` | `SET NULL` | Q2=B: LGPD anonymization do dono; imovel permanece com `created_at`/`updated_at`/`deleted_at` próprios |
 | `origem.cri_id` → `cri.id` | `RESTRICT` | Mesmo |
 | `origem.lancamento_id` → `lancamento.id` | `RESTRICT` | Q3 (round 3): `origem` carrega evidência verbatim (`numero_raw`); CASCADE apagaria evidência junto com L. RESTRICT protege a cadeia forense. Hard-delete de L é admin-only e explícito. |
 | `lancamento.documento_id` → `documento.id` | `SET NULL` | Q7b=B: L preservado órfão se D sumir |
@@ -1046,18 +1007,11 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 | `lancamento_move_event.moved_by_id` → `user.id` | `SET NULL` | Pesquisador removido, evento preservado |
 | `lancamento_move_event.audit_log_id` → `audit_log.id` | `SET NULL` | Audit log pode ser purgado, evento preservado |
 | `origem.documento_id` → `documento.id` | `SET NULL` | Origem órfã se D sumir; tipo=fim_cadeia tem NULL anyway |
-| `origem_fim_cadeia.origem_id` → `origem.id` | `CASCADE` | Junction 1:1, segue a origem |
-| `imovel.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete do imovel |
-| `imovel_documento.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete da chain membership |
-| `imovel_documento.create_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance de criação da chain membership |
-| `documento.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete do documento |
-| `documento.create_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance de criação do documento |
-| `lancamento.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete do lancamento |
+| `user.deleted_at` | (no FK) | n/a |
 | `audit_log.actor_id` → `user.id` | `SET NULL` | LGPD: pesquisador pode pedir remoção, log preservado |
+| `audit_log.deleted_at` | (no FK) | n/a |
 | `tis_imovel.*` | `CASCADE` | Junction simples |
 | `tis.terra_referencia_id` → `terra_indigena_referencia.id` | `RESTRICT` | Referência oficial não pode sumir com TIs em uso |
-
-**Nota sobre soft-delete:** A coluna `deleted_at` existe em `cri`, `user`, `pessoa`, `imovel`, `imovel_documento`, `documento`, `lancamento`, `lancamento_pessoa`, `origem`, `anotacao_versao` (Q2=B) — não é FK, é timestamp ISO8601 NULL. **`audit_log` é a exceção explícita: NÃO tem `deleted_at`** (Q2). É append-only imutável; LGPD purge do pesquisador faz `actor_id → NULL` (SET NULL acima), o log permanece. **`lancamento_move_event` também NÃO tem `deleted_at`** (Q14=B: append-only).
 
 **Invariante Q14 (write-time, no app antes de INSERT):**
 ```ts
@@ -1141,11 +1095,6 @@ CREATE UNIQUE INDEX uq_imovel_documento_pair
 CREATE UNIQUE INDEX uq_imovel_documento_atual
   ON imovel_documento(imovel_id)
   WHERE is_documento_atual = 1 AND deleted_at IS NULL;
-
--- Q9=C + F2 round 2: no máximo 1 versão "atual" por (imovel_documento_id)
-CREATE UNIQUE INDEX uq_anotacao_versao_current
-  ON anotacao_versao(imovel_documento_id)
-  WHERE is_current = 1 AND deleted_at IS NULL;
 
 -- T1+D1: UNIQUE no cri por CNS ativo
 CREATE UNIQUE INDEX uq_cri_cns
@@ -1278,8 +1227,6 @@ Ambas views são D1-compatíveis (CREATE VIEW suportado em SQLite). Implementaç
 **R3-8** (Codex #2 dup) e **R3-4 dup** (Greptile P1 duplicata de R3-1) — não contados separadamente.
 
 **Verdict final após fixes (pendente round 3 review):** Aguardando aprovação do Codex round 3 para confirmar APROVA.
-
-> **⚠️ ATUALIZAÇÃO 2026-06-04 (round 4 review, gpt-5.5 xhigh):** O round 3 "APROVA" interno **NÃO foi confirmado por review externo fresh** — encontrou 1 BLOCKER (cardinalidade ERD errada para FKs nullable) + 4 MUST-FIX (FK table incompleta, audit_log.deleted_at inexistente, Q5/Q10 texto stale) + 3 NICE-TO-HAVE (snippet, legend, este status). **Todos os 8 fixes aplicados nesta seção.** Próximo round 5 review revalidará o APROVA 5/5.
 
 ---
 
