@@ -40,7 +40,7 @@ export const cri = sqliteTable(
     /** Cadastro Nacional de Serventia (TBD exact format; nullable until mapped). */
     cnsCodigo: text("cns_codigo"),
     cidade: text("cidade"),
-    /** CHECK uf in 27 federative units — enforced in migration / app layer. */
+    /** 27 federative units (BR). Validated in the app layer; no DB-level CHECK. */
     uf: text("uf"),
     endereco: text("endereco"),
     /**
@@ -54,11 +54,9 @@ export const cri = sqliteTable(
       .default("CRI"),
     /** ISO8601 UTC TEXT, generated in app layer (Node `new Date().toISOString()`). */
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(current_timestamp)`)
       .$onUpdate(() => new Date().toISOString()),
     /** Q2=B: soft-delete. NULL = active. ISO8601 UTC TEXT. */
     deletedAt: text("deleted_at"),

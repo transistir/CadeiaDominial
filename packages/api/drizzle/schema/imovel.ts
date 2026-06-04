@@ -58,11 +58,9 @@ export const imovel = sqliteTable(
       .notNull()
       .default(false),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(current_timestamp)`)
       .$onUpdate(() => new Date().toISOString()),
     /** Q2=B: soft-delete. */
     deletedAt: text("deleted_at"),

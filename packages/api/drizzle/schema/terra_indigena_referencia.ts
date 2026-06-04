@@ -14,7 +14,6 @@
  * as INTEGER centiares to match the convention in T3 (SQLite/D1 appendix).
  */
 
-import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const terraIndigenaReferencia = sqliteTable(
@@ -41,11 +40,9 @@ export const terraIndigenaReferencia = sqliteTable(
     dataDelimitada: text("data_delimitada"),
     dataEmEstudo: text("data_em_estudo"),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(current_timestamp)`)
       .$onUpdate(() => new Date().toISOString()),
   },
   (table) => ({

@@ -58,7 +58,9 @@ export const origem = sqliteTable(
     /** 0-based, contiguous per Lancamento. CHECK (indice >= 0). */
     indice: integer("indice").notNull(),
     /**
-     * CHECK (tipo IN ('matricula','transcricao','fim_cadeia')) — migration.
+     * DB-level CHECK (emitted by `drizzle-kit generate` from the `check()`
+     * below) — Drizzle `text({ enum: [...] })` is TS-only. The list of
+     * Origem types is FIXED in v2.
      */
     tipo: text("tipo", {
       enum: ["matricula", "transcricao", "fim_cadeia"],
@@ -73,8 +75,7 @@ export const origem = sqliteTable(
     data: text("data"),
     observacoes: text("observacoes"),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     /** Q2=B: soft-delete. NULL = active. ISO8601 UTC TEXT. */
     deletedAt: text("deleted_at"),
   },
@@ -88,6 +89,13 @@ export const origem = sqliteTable(
     indiceNaoNegativo: check(
       "origem_indice_nao_negativo",
       sql`${table.indice} >= 0`
+    ),
+    /**
+     * DB-level CHECK (emitted by `drizzle-kit generate` from this `check()`).
+     */
+    tipoCheck: check(
+      "origem_tipo_check",
+      sql`${table.tipo} IN ('matricula', 'transcricao', 'fim_cadeia')`
     ),
   })
 );

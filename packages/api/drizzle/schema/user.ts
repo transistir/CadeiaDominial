@@ -31,11 +31,9 @@ export const user = sqliteTable(
     nome: text("nome").notNull(),
     /** ISO8601 UTC TEXT, generated in app layer. */
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(current_timestamp)`)
       .$onUpdate(() => new Date().toISOString()),
     /** Q2=B: soft-delete (LGPD). NULL = active. */
     deletedAt: text("deleted_at"),

@@ -19,8 +19,9 @@
  *  - `sigla_patrimonio_publico`: REQUIRED when tipo_fim_cadeia = 'destacamento_publico'
  */
 
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, check } from "drizzle-orm/sqlite-core";
 import { origem } from "./origem";
+import { sql } from "drizzle-orm";
 
 export const origemFimCadeia = sqliteTable(
   "origem_fim_cadeia",
@@ -33,11 +34,6 @@ export const origemFimCadeia = sqliteTable(
       .notNull()
       .unique()
       .references(() => origem.id, { onDelete: "cascade" }),
-    /**
-     * 'destacamento_publico' | 'sem_origem' | 'outra' | ... —
-     * CHECK in migration. No Drizzle `enum` because the list is
-     * domain-extensible.
-     */
     tipoFimCadeia: text("tipo_fim_cadeia"),
     /** Required when tipo_fim_cadeia is set. */
     classificacaoFimCadeia: text("classificacao_fim_cadeia"),
@@ -47,8 +43,15 @@ export const origemFimCadeia = sqliteTable(
     siglaPatrimonioPublico: text("sigla_patrimonio_publico"),
   },
   (table) => ({
-    // The 1:1 UNIQUE on origem_id is enforced by the column-level
-    // `.unique()` above; no separate index needed here.
+    /**
+     * DB-level CHECK (emitted by `drizzle-kit generate` from this `check()`).
+     * The list is domain-extensible: extend the CHECK in a future migration
+     * to allow new values.
+     */
+    tipoFimCadeiaCheck: check(
+      "origem_fim_cadeia_tipo_check",
+      sql`${table.tipoFimCadeia} IS NULL OR ${table.tipoFimCadeia} IN ('destacamento_publico', 'sem_origem', 'outra')`
+    ),
   })
 );
 

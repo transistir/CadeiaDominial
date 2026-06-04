@@ -13,7 +13,6 @@
  * CASCADE on both sides — junction is fully dependent.
  */
 
-import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { tis } from "./tis";
 import { imovel } from "./imovel";
@@ -29,8 +28,7 @@ export const tisImovel = sqliteTable(
       .notNull()
       .references(() => imovel.id, { onDelete: "cascade" }),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
   },
   (table) => ({
     /** UNIQUE (tis_id, imovel_id) per ERD. */

@@ -12,7 +12,6 @@
  * RESTRICT (reference data cannot be removed while TIs reference it).
  */
 
-import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { terraIndigenaReferencia } from "./terra_indigena_referencia";
 
@@ -31,11 +30,9 @@ export const tis = sqliteTable("tis", {
   estado: text("estado"),
   nome: text("nome"),
   createdAt: text("created_at")
-    .notNull()
-    .default(sql`(current_timestamp)`),
+    .notNull(),
   updatedAt: text("updated_at")
     .notNull()
-    .default(sql`(current_timestamp)`)
     .$onUpdate(() => new Date().toISOString()),
 });
 

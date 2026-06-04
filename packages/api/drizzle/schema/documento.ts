@@ -30,7 +30,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core";
 import { cri } from "./cri";
 import { auditLog } from "./audit_log";
 
@@ -39,8 +39,9 @@ export const documento = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     /**
-     * CHECK (tipo IN ('matricula','transcricao')) — enforced in migration.
-     * Drizzle `enum` is TS-only.
+     * DB-level CHECK (emitted by `drizzle-kit generate` from the `check()`
+     * below) — Drizzle `text({ enum: [...] })` is TS-only. The list of
+     * Documento types is FIXED in v2 (Q11b=C).
      */
     tipo: text("tipo", {
       enum: ["matricula", "transcricao"],
@@ -74,8 +75,7 @@ export const documento = sqliteTable(
     /** FTS5-searchable (Q10). */
     endereco: text("endereco"),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     /** Q2=B: soft-delete. NULL = active. */
     deletedAt: text("deleted_at"),
     /** Q9+C: provenance of the soft-delete. SET NULL if audit purged. */
@@ -100,9 +100,13 @@ export const documento = sqliteTable(
       table.tipo,
       table.numero
     ),
-    /** CHECK constraints for booleans/enums. */
-    // tipo is constrained by the Drizzle `enum` option; the DB-level CHECK
-    // is added via Drizzle Kit custom SQL in the migration.
+    /**
+     * DB-level CHECK (emitted by `drizzle-kit generate` from this `check()`).
+     */
+    tipoCheck: check(
+      "documento_tipo_check",
+      sql`${table.tipo} IN ('matricula', 'transcricao')`
+    ),
   })
 );
 

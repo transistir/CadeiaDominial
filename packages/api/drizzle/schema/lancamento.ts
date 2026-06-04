@@ -84,8 +84,7 @@ export const lancamento = sqliteTable(
     folhaTransmissao: text("folha_transmissao"),
     dataTransmissao: text("data_transmissao"),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     /** Q2=B: soft-delete (L preserved órfão per Q7b=B). */
     deletedAt: text("deleted_at"),
     /** Q9+C: provenance of the soft-delete. SET NULL if audit purged. */

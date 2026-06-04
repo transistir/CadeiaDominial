@@ -19,7 +19,6 @@
  * NOT create virtual FTS5 tables). FTS5 sync will be added later.
  */
 
-import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const pessoa = sqliteTable("pessoa", {
@@ -28,11 +27,9 @@ export const pessoa = sqliteTable("pessoa", {
   nome: text("nome").notNull(),
   /** ISO8601 UTC TEXT, generated in app layer. */
   createdAt: text("created_at")
-    .notNull()
-    .default(sql`(current_timestamp)`),
+    .notNull(),
   updatedAt: text("updated_at")
     .notNull()
-    .default(sql`(current_timestamp)`)
     .$onUpdate(() => new Date().toISOString()),
   /** Q2=B: soft-delete (LGPD). NULL = active. */
   deletedAt: text("deleted_at"),

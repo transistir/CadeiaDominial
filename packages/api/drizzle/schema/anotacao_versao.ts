@@ -69,8 +69,7 @@ export const anotacaoVersao = sqliteTable(
       .notNull()
       .default(false),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     /** F2: soft-delete the entire annotation. */
     deletedAt: text("deleted_at"),
     /** D3: editor of THIS version (can differ from autor_original). SET NULL. */

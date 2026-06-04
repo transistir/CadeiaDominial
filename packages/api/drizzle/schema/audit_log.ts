@@ -23,38 +23,50 @@
  */
 
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, check } from "drizzle-orm/sqlite-core";
 import { user } from "./user";
 
-export const auditLog = sqliteTable("audit_log", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** UUID v4 generated in app layer. Groups all events of one operation. */
-  operationId: text("operation_id").notNull(),
-  /** CHECK (action IN ('CREATE','EDIT','SOFT_DELETE','RESTORE','MOVE','ANNOTATE','EXPORT')) — migration. */
-  action: text("action", {
-    enum: [
-      "CREATE",
-      "EDIT",
-      "SOFT_DELETE",
-      "RESTORE",
-      "MOVE",
-      "ANNOTATE",
-      "EXPORT",
-    ],
-  }).notNull(),
-  /** e.g. 'imovel' | 'documento' | 'lancamento' | 'anotacao' | 'mover' */
-  entityType: text("entity_type").notNull(),
-  entityId: integer("entity_id").notNull(),
-  /** JSON text snapshot of pre-action state. */
-  payloadJson: text("payload_json"),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(current_timestamp)`),
-  /** D3: USER (researcher), not pessoa. SET NULL on user LGPD-anonymization. */
-  actorId: integer("actor_id").references(() => user.id, {
-    onDelete: "set null",
-  }),
-});
+export const auditLog = sqliteTable(
+  "audit_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** UUID v4 generated in app layer. Groups all events of one operation. */
+    operationId: text("operation_id").notNull(),
+    /**
+     * DB-level CHECK (emitted by `drizzle-kit generate` from the `check()`
+     * below) — Drizzle `text({ enum: [...] })` is TS-only. The list of
+     * action types is FIXED in v2.
+     */
+    action: text("action", {
+      enum: [
+        "CREATE",
+        "EDIT",
+        "SOFT_DELETE",
+        "RESTORE",
+        "MOVE",
+        "ANNOTATE",
+        "EXPORT",
+      ],
+    }).notNull(),
+    /** e.g. 'imovel' | 'documento' | 'lancamento' | 'anotacao' | 'mover' */
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    /** JSON text snapshot of pre-action state. */
+    payloadJson: text("payload_json"),
+    createdAt: text("created_at")
+      .notNull(),
+    /** D3: USER (researcher), not pessoa. SET NULL on user LGPD-anonymization. */
+    actorId: integer("actor_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => ({
+    actionCheck: check(
+      "audit_log_action_check",
+      sql`${table.action} IN ('CREATE', 'EDIT', 'SOFT_DELETE', 'RESTORE', 'MOVE', 'ANNOTATE', 'EXPORT')`
+    ),
+  })
+);
 
 // Type exports
 export type AuditLog = typeof auditLog.$inferSelect;

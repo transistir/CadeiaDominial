@@ -48,8 +48,7 @@ export const imovelDocumento = sqliteTable(
       .notNull()
       .default(false),
     createdAt: text("created_at")
-      .notNull()
-      .default(sql`(current_timestamp)`),
+      .notNull(),
     /**
      * Q2=B: soft-delete per chain-membership. Soft-deleting this row
      * means "this Documento is unlinked from this Imovel's chain" (Q15=D4).
