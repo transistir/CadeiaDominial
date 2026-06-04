@@ -17,7 +17,7 @@ erDiagram
     imovel ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     documento ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     imovel_documento ||--o{ anotacao_versao : "anotado_em (Q9=C)"
-    user o|--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, era pessoa, SET NULL on LGPD)"
+    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, RESTRICT — autor nunca vira NULL, mesmo com LGPD do editor)"
     user o|--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original, SET NULL)"
     user o|--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa, SET NULL)"
     user o|--o{ audit_log : "actor (D3, user NAO pessoa, SET NULL on LGPD)"
@@ -29,7 +29,7 @@ erDiagram
     documento o|--o{ origem : "origem_doc (opcional)"
     lancamento ||--o{ origem : "possui (1:N, Q3=B, NOT NULL, RESTRICT)"
     origem ||--o| origem_fim_cadeia : "fim_cadeia (Q3=B, 1:1 por origem, CASCADE)"
-    cri o|--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id, SET NULL on origem_fim)"
+    cri ||--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id, RESTRICT — cadeia forense protegida, Q3 round-3)"
     lancamento ||--o{ lancamento_move_event : "movido (Q14=B, append-only, NOT NULL, RESTRICT)"
     documento o|--o{ lancamento_move_event : "from_doc (SET NULL)"
     documento o|--o{ lancamento_move_event : "to_doc (SET NULL)"
@@ -167,7 +167,7 @@ erDiagram
     origem {
         int id PK
         int lancamento_id FK
-        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id)"
+        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id, RESTRICT)"
         int documento_id FK "opcional, NULL se tipo=fim_cadeia"
         int indice "0, 1, 2..., CHECK >= 0, contiguo por lancamento"
         text tipo "CHECK in (matricula, transcricao, fim_cadeia)"
@@ -178,6 +178,7 @@ erDiagram
         text data
         text observacoes
         text created_at
+        text deleted_at "soft-delete (Q2=B). Origem preserva evidencia de divergencia entre certidoes (Q3 round-3)"
         text UNIQUE_NOTE "UNIQUE (lancamento_id, indice)"
     }
 

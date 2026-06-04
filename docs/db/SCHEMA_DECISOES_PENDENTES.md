@@ -596,7 +596,7 @@ O padrão `campo_raw` (verbatim) + `campo` (normalized pra busca) deve ser aplic
 
 **Resposta (Hiure, 2026-06-03): NÃO no v1.** Quando pesquisadores pegam o documento, isso já foi consolidado e não deve mudar. `imovel.cri_id` é fixo (FK direto, sem histórico). Se v2+ precisar, criar `imovel_cri_historico` na hora.
 
-> **Importante (Hiure):** "sempre manter a unicidade de documentos com `cartorio + numero_documento` (M ou T + número)" — constraint de unicidade deve ser pelo par `(cartorio_id, tipo, numero)`, não só pelo número.
+> **Importante (Hiure):** "sempre manter a unicidade de documentos com `cartorio + numero_documento` (M ou T + número)" — constraint de unicidade deve ser pelo par `(cri_id, tipo, numero)`, não só pelo número. (Nota: `cartorio_id` era terminologia pré-Q11b; usar `cri_id` no v2.)
 
 ### 🅲️ Cada Documento tem 1 CRI só? Ou N:N (junction)?
 **Pergunta:** `documento.cri_id` FK direto, ou junction `documento_cri` (N:N)?
@@ -675,7 +675,7 @@ origem {
   int id PK
   int lancamento_id FK
   int indice "0, 1, 2..."
-  int cri_id FK                  // CRI de origem (Q11b=🅰️: este campo já é o "cri_origem_id")
+  int cri_id FK                  // CRI de origem (Q11b=🅰️: este campo já é o "cri_origem_id", RESTRICT)
   int documento_id FK "opcional"
   text tipo "matricula | transcricao | fim_cadeia"
   text numero
@@ -683,6 +683,7 @@ origem {
   text folha
   text data
   text observacoes
+  text deleted_at "soft-delete (Q2=B). Origem preserva evidencia de divergencia entre certidoes"
   UNIQUE (lancamento_id, indice)
 }
 ```
@@ -805,30 +806,43 @@ Regra UI-only ("L aparece na chain de D' se existe move event mais recente com `
 ```sql
 CREATE VIEW v_lancamento_current_location AS
 SELECT
-  inner_q.lancamento_id,
-  inner_q.current_documento_id
-FROM (
-  SELECT
-    l.id AS lancamento_id,
-    COALESCE(
-      (SELECT me.to_documento_id
-       FROM lancamento_move_event me
-       WHERE me.lancamento_id = l.id
-       ORDER BY me.moved_at DESC, me.id DESC
-       LIMIT 1),
-      l.documento_id
-    ) AS current_documento_id
-  FROM lancamento l
-  WHERE l.deleted_at IS NULL
-) inner_q
-INNER JOIN documento d ON d.id = inner_q.current_documento_id
-WHERE d.deleted_at IS NULL;
+  l.id AS lancamento_id,
+  last_move.to_documento_id AS current_documento_id,
+  CASE
+    WHEN last_move.lancamento_id IS NULL THEN 'ORIGINAL'
+    WHEN last_move.to_documento_id IS NULL THEN 'PRESO'
+    ELSE 'MOVED'
+  END AS location_state
+FROM lancamento l
+LEFT JOIN (
+  -- Most recent MOVE event per Lancamento (append-only, Q14=B)
+  SELECT me.lancamento_id, me.to_documento_id
+  FROM lancamento_move_event me
+  WHERE me.id = (
+    SELECT me2.id
+    FROM lancamento_move_event me2
+    WHERE me2.lancamento_id = me.lancamento_id
+    ORDER BY me2.moved_at DESC, me2.id DESC
+    LIMIT 1
+  )
+) last_move ON last_move.lancamento_id = l.id
+INNER JOIN documento d ON d.id = COALESCE(last_move.to_documento_id, l.documento_id)
+WHERE l.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  -- Distinguish "no move event" (l.documento_id is canonical, ORIGINAL)
+  -- from "move event with target NULL" (PRESO state, Q15=🅳️):
+  -- exclude rows whose current move target is NULL.
+  -- A Lancamento sem move event aparece com current_documento_id = l.documento_id.
+  -- Um Lancamento com move event aparece com current_documento_id = me.to_documento_id.
+  -- Um Lancamento "preso" (último MOVE com to_documento_id NULL) NÃO aparece nesta view.
+  AND (last_move.lancamento_id IS NULL OR last_move.to_documento_id IS NOT NULL);
 ```
 
 **Como a UI consome:**
 - "Mostrar L na chain de D" → `JOIN lancamento l ON l.id = ? JOIN v_lancamento_current_location v ON v.lancamento_id = l.id WHERE v.current_documento_id = D`
 - "Quais L's estão em D'?" → query acima
 - "Histórico de moves do L" → `SELECT * FROM lancamento_move_event WHERE lancamento_id = L ORDER BY moved_at, id`
+- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los: `SELECT l.* FROM lancamento l LEFT JOIN lancamento_move_event me ON me.id = (SELECT id FROM lancamento_move_event me2 WHERE me2.lancamento_id = l.id ORDER BY me2.moved_at DESC, me2.id DESC LIMIT 1) WHERE me.to_documento_id IS NULL AND l.deleted_at IS NULL`. A coluna `location_state` (`ORIGINAL` / `MOVED` / `PRESO`) explicita a origem do `current_documento_id` retornado — use-a em vez de inferir do NULL/NOT NULL.
 
 **D1/SQLite support:** `CREATE VIEW` totalmente suportado. Custo: index em `lancamento_move_event(lancamento_id, moved_at DESC, id DESC)` para performance (Drizzle adiciona via `CREATE INDEX` na migration T-101).
 
@@ -937,7 +951,7 @@ Usuário clica "Apagar" em Documento D
 | Q7b | Cascade delete Imóvel | **🅱️** Cascade conservador: I + junctions, L's preservados | Lancamentos são evidência — devem sobreviver órfãos. Cascade em junctions `imovel_documento` apenas. |
 | Q8 | Restore semantics | **🅰️** Simétrico ao Q7b=B | Intuitivo ("restaurar = desfazer"). Soft-delete foi conservador, nada de "lixo" pra restaurar. |
 | Q9 | Trilha de análise | **🅲️** Histórico + provenance de criação | Crítico em equipe (autor original vs editor). |
-| Q10 | Raw vs normalized | **🅰️** com exceção de `cartorio_nome` | Demais campos variáveis usam busca fuzzy FTS5. `cartorio_nome` vira entidade própria (tabela `cartorio`). |
+| Q10 | Raw vs normalized | **🅰️** com exceção de `cri.nome` | Demais campos variáveis usam busca fuzzy FTS5. `cri.nome` vira entidade própria (tabela `cri`, ver Q11b). |
 | Q11b | Refinamento Q10 sobre `cri` | **Ver Q11b acima** | `cri` table (não genérico `cartorio`); `documento.cri_id` FK direto (sem junction); `UNIQUE (cri_id, tipo, numero)`; `cartorio_transmissao` é campo livre, não tabela; `imovel.cri_id` fixo (sem histórico v1). |
 | Q12 | UX confirmation dialog | **🅳️** preview ANTES + dialog | "É importante perguntar se quer mesmo apagar ou se quer só editar" (Hiure, 2026-06-02). |
 | Q13 | Chain membership | **🅱️** Junction `imovel_documento` (N:N) | "Pertence igualmente a diferentes imóveis" (Hiure, 2026-06-02). `is_documento_atual` per-par. |
@@ -1030,7 +1044,7 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 | `tis_imovel.*` | `CASCADE` | Junction simples |
 | `tis.terra_referencia_id` → `terra_indigena_referencia.id` | `RESTRICT` | Referência oficial não pode sumir com TIs em uso |
 
-**Nota sobre soft-delete:** A coluna `deleted_at` existe em `cri`, `user`, `pessoa`, `imovel`, `imovel_documento`, `documento`, `lancamento`, `lancamento_pessoa`, `origem` (Q2=B) — não é FK, é timestamp ISO8601 NULL. **`audit_log` é a exceção explícita: NÃO tem `deleted_at`** (Q2). É append-only imutável; LGPD purge do pesquisador faz `actor_id → NULL` (SET NULL acima), o log permanece.
+**Nota sobre soft-delete:** A coluna `deleted_at` existe em `cri`, `user`, `pessoa`, `imovel`, `imovel_documento`, `documento`, `lancamento`, `lancamento_pessoa`, `origem`, `anotacao_versao` (Q2=B) — não é FK, é timestamp ISO8601 NULL. **`audit_log` é a exceção explícita: NÃO tem `deleted_at`** (Q2). É append-only imutável; LGPD purge do pesquisador faz `actor_id → NULL` (SET NULL acima), o log permanece. **`lancamento_move_event` também NÃO tem `deleted_at`** (Q14=B: append-only).
 
 **Invariante Q14 (write-time, no app antes de INSERT):**
 ```ts
@@ -1114,6 +1128,11 @@ CREATE UNIQUE INDEX uq_imovel_documento_pair
 CREATE UNIQUE INDEX uq_imovel_documento_atual
   ON imovel_documento(imovel_id)
   WHERE is_documento_atual = 1 AND deleted_at IS NULL;
+
+-- Q9=C + F2 round 2: no máximo 1 versão "atual" por (imovel_documento_id)
+CREATE UNIQUE INDEX uq_anotacao_versao_current
+  ON anotacao_versao(imovel_documento_id)
+  WHERE is_current = 1 AND deleted_at IS NULL;
 
 -- T1+D1: UNIQUE no cri por CNS ativo
 CREATE UNIQUE INDEX uq_cri_cns
