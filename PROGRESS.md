@@ -13,7 +13,7 @@
 - **PR #20** — AGENTS.md development workflow
 - **PR #21** — stale path reference fixes
 - **PR #22** — ERD\_CADEIA\_DOMINIAL.md sync to v2 design
-- **PR #24** — T-001 schema decisions Q1-Q15 + ERD v2 final (pending merge — token expired, will merge on GH\_TOKEN restore)
+- **PR #24** — T-001 schema decisions Q1-Q15 + ERD v2 final (ready to merge)
 
 ## Task Status
 
@@ -80,15 +80,14 @@
 
 ## CI Status
 
-- **`ci-validate.yml`**: broken (pnpm v9 vs v10 mismatch). Fix ready in `fix/ci-pnpm-baseline` worktree. Blocked on GH\_TOKEN renewal.
+- **`ci-validate.yml`**: ✅ fixed in PR #27 (pnpm v9→v10 via `packageManager`, `--frozen-lockfile` enforced, scoped `rm -rf` for `ci-validate.sh`, `test:unit` isolated from e2e chain).
 
-## Blockers
+## Recently Resolved (2026-06-04)
 
-- **GH_TOKEN expired** — cannot push, open PRs, or close PRs until renewed. Generate new PAT at https://github.com/settings/tokens/new (`repo` scope, no expiration). Once restored:
-  1. Merge PR #24 (T-001)
-  2. Merge `ci-pnpm-baseline` (CI fix)
-  3. Rebase T-100 + T-101 worktrees onto merged `v2`
-  4. Open PRs for T-100 (`docs/erd-v2-rev1`) + T-101 (`feat/drizzle-schema-v2`)
+- **GH_TOKEN renewal** — `gh` CLI auth restored; pushes to `fix/ci-pnpm-baseline` and other branches now work.
+- **CI pnpm v9/v10 mismatch** — root cause was hardcoded `version: 9` in three `pnpm/action-setup@v4` calls; removed in favour of `packageManager: pnpm@10.28.2` in root `package.json` (already set in PR #24).
+- **`test:unit` was running the wrong turbo task** — root `test:unit` invoked `turbo run test` (which runs ALL test variants including e2e + Playwright). Fixed to `turbo run test:unit`, with the new task defined in `turbo.json` and a `test:unit` script added to each workspace that has unit tests. `packages/shared` has only types — added an intentional no-op `test:unit` script that documents the absence.
+- **`ci-validate.sh` broad `find` was dangerous** — `find ... -name node_modules -exec rm -rf` would nuke sibling repos checked out alongside this one. Replaced with scoped `rm -rf node_modules packages/*/node_modules`.
 
 ## PR Salvage Plan
 
