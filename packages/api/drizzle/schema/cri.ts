@@ -11,6 +11,13 @@
  * Q2: Soft-delete via `deleted_at`. Duplicate `nome` is allowed (e.g. a city
  * can have two "1º Cartório de Registro de Imóveis").
  *
+ * T-100: `tipo` field re-added for parity with Django `Cartorios.tipo`.
+ * CHECK (tipo IN ('CRI','OUTRO')), DEFAULT 'CRI'. Round-3 had struck
+ * `cri.tipo_cartorio` (broader values CRI/NOTAS/CIVIL/TRANSMISSAO/OUTRO) as
+ * out-of-scope; T-100 re-introduces a minimal subset because the `cri`
+ * entity is specifically a cartório de registro de imóveis, not a generic
+ * cartório. See T-100 addendum in `SCHEMA_DECISOES_PENDENTES.md`.
+ *
  * T3 (SQLite/D1): booleans as INTEGER 0/1 with CHECK; dates as TEXT ISO8601.
  * UF is checked in app layer; v2 has 27 federative units.
  */
@@ -29,6 +36,14 @@ export const cri = sqliteTable(
     /** CHECK uf in 27 federative units — enforced in migration / app layer. */
     uf: text("uf"),
     endereco: text("endereco"),
+    /**
+     * T-100: parity with Django `Cartorios.tipo`. Minimal subset
+     * ('CRI' | 'OUTRO') — see T-100 addendum in `SCHEMA_DECISOES_PENDENTES.md`.
+     * CHECK enforced in migration.
+     */
+    tipo: text("tipo", { enum: ["CRI", "OUTRO"] })
+      .notNull()
+      .default("CRI"),
     /** ISO8601 UTC TEXT, generated in app layer (Node `new Date().toISOString()`). */
     createdAt: text("created_at")
       .notNull()

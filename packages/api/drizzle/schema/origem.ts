@@ -24,9 +24,9 @@
  * UNIQUE (lancamento_id, indice): per-Lancamento ordered list of origens.
  * Indice is 0-based and contiguous.
  *
- * `tipo` enum: 'matricula' | 'transcricao' | 'fim_cadeia'. When tipo =
- * 'fim_cadeia', `documento_id` is NULL and an `origem_fim_cadeia` row
- * captures the end-of-chain details.
+ * Q2=B: soft-delete via `deleted_at` (NULL = active). The origens are
+ * forensic evidence and rarely deleted, but the field is here for parity
+ * with the rest of the Q2=B inventory (see legend soft-delete list).
  */
 
 import { sql } from "drizzle-orm";
@@ -75,6 +75,8 @@ export const origem = sqliteTable(
     createdAt: text("created_at")
       .notNull()
       .default(sql`(current_timestamp)`),
+    /** Q2=B: soft-delete. NULL = active. ISO8601 UTC TEXT. */
+    deletedAt: text("deleted_at"),
   },
   (table) => ({
     /** UNIQUE (lancamento_id, indice) per ERD. */
