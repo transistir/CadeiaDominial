@@ -690,6 +690,31 @@ origem {
 
 ---
 
+## T-100 / Q11b addendum — `cri.tipo` field (parity com Django legado)
+
+> **Contexto:** A coluna `cri.tipo` **não estava** nas decisões Q1-Q15/Q11b. Foi adicionada por T-100 (2026-06-04) para paridade de migração com o legado Django `dominial_cartorios.tipo` (T-300 legacy-fit), que distingue entre cartórios de **registro de imóveis** (CRI) e **outros** (tabelionato de notas, ofícios de notas, etc).
+
+### 🅰️ A coluna
+- **`cri.tipo TEXT NOT NULL DEFAULT 'CRI' CHECK (tipo IN ('CRI', 'OUTRO'))`**
+- Default `'CRI'` para novas linhas (v2 só usa CRIs no momento — T-300 pode carregar legados OUTRO)
+- Migration Drizzle: CHECK constraint + DEFAULT + NOT NULL explícito
+- ERD: `cri.tipo` visível no schema visual
+
+### 🅱️ Por que foi re-adicionada (reviravolta do R3-5)
+R3-5 (round 3) tinha **riscado** uma proposta anterior de `cri.tipo_cartorio` por considerá-la fora de escopo Q1-Q15. T-100 reabriu o ponto porque:
+
+1. **T-300 legacy-fit precisa do campo** — o legado Django `dominial_cartorios.tipo` é uma das 5 colunas da tabela Cartorios no Postgres. Sem `cri.tipo`, T-300 não consegue mapear 1:1 e perde informação na migração.
+2. **A semântica é diferente do que R3-5 riscou** — R3-5 riscou "cri.tipo_cartorio" como "fora de escopo Q1-Q15". T-100 adiciona `cri.tipo` (sem `_cartorio`) com semântica específica do legado (CRI/OUTRO), não generalização para "qualquer cartório".
+3. **É a única divergência entre o ERD canônico (T-100) e o Drizzle schema (T-101)** — T-101 NÃO tem `cri.tipo` no momento. **Resolver em T-101 fix round 1**: adicionar `cri.tipo` no schema + migration (próximo bloco).
+
+### Implicações
+- **Drizzle schema (T-101):** adicionar `cri.tipo: text('tipo', { enum: ['CRI', 'OUTRO'] }).notNull().default('CRI')` em `packages/api/drizzle/schema/cri.ts` + CHECK constraint na migration
+- **FTS5 (Q10/T3):** incluir `cri.tipo` na virtual table `fts_cri` para busca filtrada
+- **API/UI:** filtro por tipo em queries de CRI; exibição do badge "CRI" / "OUTRO" no header do cartório
+- **T-300 legacy-fit:** mapear `dominial_cartorios.tipo` → `cri.tipo` diretamente; sem perda
+
+---
+
 ## Q12 — UX confirmation dialog (obrigatório em T-105)
 
 ### 🤔 A pergunta
