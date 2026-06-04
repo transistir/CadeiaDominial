@@ -40,10 +40,11 @@ erDiagram
 
     cri {
         int id PK
+        text tipo "CRI ou OUTRO (CHECK tipo IN (CRI,OUTRO), DEFAULT CRI). T-100: parity com Django Cartorios.tipo"
         text nome "1o Cartorio de Registro de Imoveis de Salvador"
         text cns_codigo "Cadastro Nacional de Serventia, TBD"
         text cidade
-        text uf "CHECK uf in 27 valores"
+        text uf "app-layer CHECK (27 UFs). DB: plain text, sem CHECK constraint"
         text endereco
         text created_at "ISO8601"
         text updated_at "ISO8601"
@@ -133,8 +134,8 @@ erDiagram
     lancamento {
         int id PK
         text data "ISO8601"
-        integer valor_transacao "em CENTAVOS (evita rounding errors)"
-        integer area "em CENTIARES (1 are = 100 m2)"
+        integer valor_transacao_centavos "em CENTAVOS (evita rounding errors). DB col: valor_transacao_centavos"
+        integer area_centiares "em CENTIARES (1 are = 100 m2). DB col: area_centiares"
         text detalhes
         text observacoes
         text data_cadastro
@@ -177,7 +178,8 @@ erDiagram
         text folha
         text data
         text observacoes
-        text created_at
+        text created_at "ISO8601"
+        text deleted_at "soft-delete (Q2=B)"
         text UNIQUE_NOTE "UNIQUE (lancamento_id, indice)"
     }
 
@@ -232,7 +234,7 @@ erDiagram
         text etnia
         text data_cadastro
         int terra_referencia_id FK
-        integer area "em centiares"
+        integer area_centiares "em centiares (1 are = 100 m2). DB col: area_centiares"
         text estado
         text nome
     }
@@ -251,7 +253,7 @@ erDiagram
         text etnia
         text estado
         text municipio
-        integer area_ha "em centiares (1 ha = 100 are = 10000 m2)"
+        integer area_ha_centiares "em centiares. DB col: area_ha_centiares"
         text fase
         text modalidade
         text coordenacao_regional

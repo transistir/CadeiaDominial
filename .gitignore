@@ -106,6 +106,15 @@ old/
 *.sql
 *.SQL
 *.dump
+
+# Drizzle migrations: generated on-the-fly in CI by `drizzle-kit generate`.
+# The .sql, .json (snapshots) and meta/ files are NOT the source of truth —
+# the TypeScript schema files in packages/api/drizzle/schema/ are.
+# Committing migrations creates drift between TS and SQL (Codex REJECTED
+# round 4 of T-101 for exactly this reason).
+packages/api/drizzle/migrations/*.sql
+packages/api/drizzle/migrations/*_snapshot.json
+**/drizzle/migrations/meta/
 *.sqlite
 *.sqlite3
 *.sqlite3.*
