@@ -29,15 +29,22 @@
 - **T-100** ✅ done — ERD v2 redraw + 1:1 sync. Codex 5/5 APROVA. Branch `docs/erd-v2-rev1` (merged + cleaned)
 - **T-101** ✅ done — Drizzle v2 schema. 19 arquivos em `packages/api/drizzle/schema/` + migration. Codex 5/5 APROVA (round 4). Branch `feat/drizzle-schema-v2` (merged + cleaned)
 
-### Phase 2 — Data (next)
+### Phase 1.5 — Visualization (next)
 
-- **T-200** 📋 planned — Chain topology generator. **Ready to start** (T-101 merged)
+- **T-500** 📋 ready — Custom node + edge types for `@xyflow/react` graph. **Ready to start**
+- **T-501** 📋 planned — Graph data layer (types, builder, layout, mock)
+- **T-502** 📋 planned — Graph page integration (replace skeleton with full graph view)
+- **T-503** 📋 planned — API endpoint + real data wiring (blocked on T-202)
+
+### Phase 2 — Data
+
+- **T-200** 📋 planned — Chain topology generator. **Ready to start** (parallel com T-500)
 - **T-201** 📋 planned — Field filler (faker). **Ready to start** (T-101 merged, parallel com T-200)
 - **T-202** 📋 planned — Seed orchestrator
 
 ### Phase 3 — Legacy-fit
 
-- **T-300** 📋 planned — Load legacy Postgres dump into v2 schema, validate integrity. **Sub-task:** drop PII columns (cpf, rg, data\_nascimento, email, telefone) — Q5 decision
+- **T-300** 📋 planned — Load legacy Postgres dump into v2 schema, validate integrity. Blocked on T-202 + T-503 (graph must render legacy data). **Sub-task:** drop PII columns (cpf, rg, data\_nascimento, email, telefone) — Q5 decision
 
 ### Phase 4 — Cleanup ✅ DONE
 

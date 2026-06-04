@@ -20,8 +20,8 @@ The full blindspot review of the schema lock-in draft is in `docs/SCHEMA_V2_BLIN
 
 ```
 Phase 0: Decisions ──┐
-                     ├──> Phase 1: Schema ──> Phase 2: Data ──> Phase 3: Legacy-fit ──> Phase 4: Cleanup
-                     │       (Drizzle + ERD)    (faker)         (proof)               (housekeeping)
+                     ├──> Phase 1: Schema ──> Phase 1.5: Visualization ──> Phase 2: Data ──> Phase 3: Legacy-fit
+                     │       (Drizzle + ERD)    (@xyflow/react graph)        (seed/faker)      (proof)
                      │
        BLOCKING: nothing else starts until this phase closes
 ```
@@ -67,6 +67,83 @@ Phase 0: Decisions ──┐
 - **Description:** Translate Django models → Drizzle ORM. All Q1-Q15 decisions implemented. PII removed (Q5), soft-delete on all tables (Q2), `cri` table with `tipo` CHECK (Q11b), N:N junction `imovel_documento` (Q13), `lancamento_move_event` append-only (Q14), `audit_log` (Q9).
 - **Acceptance:** ✅ `db:generate` clean, `db:migrate:local` clean, 100% type-safe, CI 4/4 green.
 - **Blocks:** T-200, T-201, T-300.
+
+---
+
+## Phase 1.5 — Visualization (@xyflow/react)
+
+> Phase 1 (schema) is done. Before generating seed data, set up the graph visualization layer so we can see what we're building against. Uses **mock data** initially; swaps to real API data once Phase 2 lands.
+>
+> **Key docs:** `docs/domain/react-flow-quick-reference.md` (canonical mapping), `docs/domain/tree-model.md` (DAG semantics), `docs/domain/fim-de-cadeia.md` (end-of-chain), `docs/domain/lancamento-tipos.md` (lancamento types).
+>
+> **Current state:** `@xyflow/react ^12.10.0` installed, skeleton `routes/graph.tsx` with 3 hardcoded nodes exists. TanStack Router + React Query wired. No custom nodes, no graph logic, no API endpoint.
+
+### T-500 — Custom node + edge types
+- **Status:** 📋 **ready to start**
+- **Worktree branch:** `feat/xyflow-custom-nodes`
+- **Files:** `packages/web/src/components/graph/`
+- **Description:** Design and implement custom React Flow node types for the cadeia dominial graph:
+  - `DocumentoNode` — matrícula, transcrição, averbação (card with numero, tipo, cartório, data)
+  - `FimCadeiaNode` — synthetic leaf (color-coded: origem lídima green, sem origem red, inconclusa yellow)
+  - `OrigemEdge` — edge type with origin label (matrícula/transcrição/fim_cadeia)
+  - Styling: type-based color scheme matching legacy D3 (matrícula=blue, transcrição=purple, registro=teal)
+- **Acceptance:**
+  - Storybook or standalone page renders all 3 node types with sample data
+  - Nodes are responsive (readable at 50%-200% zoom)
+  - TypeScript: all props fully typed, no `any`
+  - Vitest: snapshot tests for each node type
+- **Depends on:** T-101 (schema defined for type alignment)
+- **Blocks:** T-501
+
+### T-501 — Graph data layer (types + mock builder)
+- **Status:** blocked on T-500
+- **Worktree branch:** `feat/xyflow-graph-data`
+- **Files:** `packages/web/src/lib/graph/`
+- **Description:** Pure TypeScript library that builds `{ nodes, edges }` from domain data:
+  - `types.ts` — `CadeiaNode`, `CadeiaEdge`, `GraphData`, `ChainShape` types
+  - `builder.ts` — `buildGraph(chainData): GraphData` — maps documentos → nodes, origens → edges, adds synthetic fim-cadeia leaves
+  - `layout.ts` — `applyLayout(graphData): GraphData` — BFS from root, `x = depth * 300`, `y = indexWithinDepth * 120`. DAG-aware (nodes can have multiple parents)
+  - `mock.ts` — `generateMockGraph(shape): GraphData` — produces 3+ chain shapes (linear, branching, with merge) for development without a backend
+- **Acceptance:**
+  - `buildGraph()` produces valid `{ nodes, edges }` from typed input
+  - `applyLayout()` produces non-overlapping positions for graphs up to 100 nodes
+  - `generateMockGraph('linear'|'branching'|'merge')` returns deterministic output
+  - 100% unit test coverage on pure functions
+- **Depends on:** T-500 (node/edge types for type alignment)
+- **Blocks:** T-502
+
+### T-502 — Graph page integration
+- **Status:** blocked on T-501
+- **Worktree branch:** `feat/xyflow-graph-page`
+- **Files:** `packages/web/src/routes/graph.tsx` (rewrite), `packages/web/src/components/graph/GraphView.tsx`
+- **Description:** Replace the hardcoded skeleton with a full-featured graph page:
+  - `<GraphView>` component: `<ReactFlow>` with custom node/edge types, fitView, minimap, controls
+  - Mock data toggle: loads from `mock.ts` initially, with a `<select>` to switch chain shapes
+  - Interaction: pan, zoom, node click → detail panel (collapsible sidebar or drawer)
+  - Fim-de-cadeia: synthetic leaf nodes rendered with classification colors
+  - Responsive: works on desktop (1200px+) and tablet (768px+)
+- **Acceptance:**
+  - `/graph` renders a multi-chain mock graph with 20+ nodes
+  - All 3 node types render correctly
+  - Pan, zoom, fitView, minimap work
+  - Node click opens detail panel with documento info
+  - Lighthouse perf ≥ 90 on the graph route
+  - E2E test: load graph, zoom, click node, verify detail
+- **Depends on:** T-501
+- **Blocks:** T-503
+
+### T-503 — Graph API endpoint + data wiring
+- **Status:** blocked on T-502, T-202
+- **Worktree branch:** `feat/api-graph-endpoint`
+- **Files:** `packages/api/src/routes/graph.ts`, `packages/web/src/lib/graph/api.ts`
+- **Description:** Add `GET /api/cadeia/:imovelId` API endpoint that queries Drizzle for documento + lancamento + origem data, returns `{ nodes, edges }` JSON. Wire web to fetch from API instead of mock.
+- **Acceptance:**
+  - API returns valid graph JSON for any imóvel with seed data
+  - Web fetches and renders real data
+  - Fallback to mock when API returns empty
+  - Error handling: loading state, error boundary, retry
+- **Depends on:** T-502 (graph page), T-202 (seed data in DB)
+- **Blocks:** T-300 (legacy data must render in graph)
 
 ---
 
@@ -144,16 +221,20 @@ Phase 0: Decisions ──┐
 | T-001 | ✅ done | #24 |
 | T-100 | ✅ done | #26 |
 | T-101 | ✅ done | #25 |
-| T-200 | 📋 **ready** | — |
-| T-201 | 📋 **ready** | — |
+| **T-500** | 📋 **ready** | — |
+| T-501 | blocked (T-500) | — |
+| T-502 | blocked (T-501) | — |
+| T-503 | blocked (T-502, T-202) | — |
+| T-200 | 📋 ready | — |
+| T-201 | 📋 ready | — |
 | T-202 | blocked (T-200, T-201) | — |
-| T-300 | blocked (T-101, T-202) | — |
+| T-300 | blocked (T-202, T-503) | — |
 | T-400 | ✅ done | #22 |
 | T-401 | ✅ done | — |
 | T-402 | ✅ done | — |
 | T-403 | ✅ done | #17 |
 
-**Current gate: Phase 2 — T-200 + T-201 ready to start.** Pick lowest-id open task whose dependencies are met. T-200 and T-201 can run in parallel.
+**Current gate: Phase 1.5 — T-500 ready to start.** Custom node/edge types for `@xyflow/react` graph. Phase 2 (T-200, T-201) can run in parallel if desired.
 
 ---
 
