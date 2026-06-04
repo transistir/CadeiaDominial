@@ -12,15 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        # No `version:` — action reads packageManager from package.json (pnpm@10.28.2).
-        # Previous value `version: 9` caused ERR_PNPM_BAD_PM_VERSION mismatch (PR #24, PR #25).
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Setup pnpm + Node
+        uses: ./.github/actions/setup-pnpm-node
       - name: Clean install and build
         run: bash scripts/ci-validate.sh
 
@@ -29,15 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        # No `version:` — action reads packageManager from package.json (pnpm@10.28.2).
-        # Previous value `version: 9` caused ERR_PNPM_BAD_PM_VERSION mismatch (PR #24, PR #25).
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Setup pnpm + Node
+        uses: ./.github/actions/setup-pnpm-node
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run lint
@@ -50,15 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        # No `version:` — action reads packageManager from package.json (pnpm@10.28.2).
-        # Previous value `version: 9` caused ERR_PNPM_BAD_PM_VERSION mismatch (PR #24, PR #25).
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Setup pnpm + Node
+        uses: ./.github/actions/setup-pnpm-node
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run unit tests
@@ -69,15 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        # No `version:` — action reads packageManager from package.json (pnpm@10.28.2).
-        # Previous value `version: 9` caused ERR_PNPM_BAD_PM_VERSION mismatch (PR #24, PR #25).
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Setup pnpm + Node
+        uses: ./.github/actions/setup-pnpm-node
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
