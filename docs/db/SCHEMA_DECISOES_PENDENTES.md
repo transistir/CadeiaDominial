@@ -417,7 +417,9 @@ CREATE TABLE pessoa (
 **🌳 Como fica no grafo:** Sem impacto direto. UI formata para "123.456.789-01" na exibição.
 
 ### ✅ Recomendação
-**Opção C (normalizado no banco, validado na app)** — é a melhor prática da indústria. CHECK constraint garante integridade mesmo se a app falhar. UI formata para exibição. Migrar dados antigos exige um script de normalização (que o `legacy-fit` script — T-300 — pode fazer).
+**HISTÓRICO (round 1, 2026-06-03):** "Opção C (normalizado no banco, validado na app)" parecia a melhor prática da indústria. CHECK constraint garantiria integridade mesmo se a app falhasse. UI formataria para exibição. Migrar dados antigos exigiria um script de normalização (que o `legacy-fit` script — T-300 — poderia fazer).
+
+> **⚠️ DECISÃO FINAL (round 2, 2026-06-03) — SOBRESCREVE a recomendação acima:** **REMOVER** `cpf`/`rg`/`data_nascimento`/`email`/`telefone` de `Pessoa` no v2. Q5b vira N/A. Coerente com Q2/Q4: v2 não é sistema de PII, é cópia fiel do cartório + análise. Pesquisadores não precisam do CPF dentro do sistema — quem precisa cruza com bases externas (Receita, processos judiciais). Sub-task explícita do T-300: "definir quais colunas descartar do legado no v2".
 
 ---
 
@@ -576,7 +578,7 @@ O padrão `campo_raw` (verbatim) + `campo` (normalized pra busca) deve ser aplic
 - `documento.cartorio_id` é FK pra `cartorio.id`
 - Sem campo "outros" / texto livre — pesquisador preenche a mesma estrutura da API
 
-> **⚠️ Q11b (NOVA — Hiure, 2026-06-03):** refinamento da decisão. Ver seção dedicada abaixo.
+> **⚠️ Q11b (NOVA — Hiure, 2026-06-03) — SOBRESCREVE o texto acima:** ver seção dedicada abaixo. Resumo: tabela vira `cri` (não `cartorio` genérico), `documento.cri_id` FK direto sem junction, `imovel.cri_id` fixo sem histórico, `UNIQUE (cri_id, tipo, numero)`, `cartorio_transmissao` permanece campo livre (não vira tabela).
 
 ---
 
@@ -635,13 +637,22 @@ documento {
 
 imovel {
   int id PK
-  int cri_id FK                  // fixo, sem histórico no v1
+  int cri_id FK                  // fixo, sem histórico no v1 (Q11b=🅱️)
   int proprietario_id FK
   int arquivado "0/1"
   text created_at
   text deleted_at
-  // (Q11b=🅲️) v1: imovel_id direto no documento (sem junction imovel_documento)
-  //             Q13=N:N com junction vem depois (ver Q13 abaixo)
+}
+
+imovel_documento {                 // Q13=🅱️: junction N:N (NÃO tem imovel_id direto em documento)
+  int id PK
+  int imovel_id FK
+  int documento_id FK
+  int is_documento_atual "0/1, per-par"
+  text created_at
+  text deleted_at
+  UNIQUE (imovel_id, documento_id) WHERE deleted_at IS NULL
+  UNIQUE (imovel_id) WHERE is_documento_atual = 1 AND deleted_at IS NULL
 }
 
 lancamento {
@@ -989,6 +1000,7 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 |---|---|---|
 | `documento.cri_id` → `cri.id` | `RESTRICT` | Não pode apagar CRI com docs; admin tem hard-delete separado |
 | `imovel.cri_id` → `cri.id` | `RESTRICT` | Mesmo |
+| `imovel.proprietario_id` → `pessoa.id` | `SET NULL` | Q2=B: LGPD anonymization do dono; imovel permanece com `created_at`/`updated_at`/`deleted_at` próprios |
 | `origem.cri_id` → `cri.id` | `RESTRICT` | Mesmo |
 | `origem.lancamento_id` → `lancamento.id` | `RESTRICT` | Q3 (round 3): `origem` carrega evidência verbatim (`numero_raw`); CASCADE apagaria evidência junto com L. RESTRICT protege a cadeia forense. Hard-delete de L é admin-only e explícito. |
 | `lancamento.documento_id` → `documento.id` | `SET NULL` | Q7b=B: L preservado órfão se D sumir |
@@ -1007,11 +1019,18 @@ Toda FK precisa ter `onDelete` explícito. Defaults Drizzle = `NO ACTION` (= RES
 | `lancamento_move_event.moved_by_id` → `user.id` | `SET NULL` | Pesquisador removido, evento preservado |
 | `lancamento_move_event.audit_log_id` → `audit_log.id` | `SET NULL` | Audit log pode ser purgado, evento preservado |
 | `origem.documento_id` → `documento.id` | `SET NULL` | Origem órfã se D sumir; tipo=fim_cadeia tem NULL anyway |
-| `user.deleted_at` | (no FK) | n/a |
+| `origem_fim_cadeia.origem_id` → `origem.id` | `CASCADE` | Junction 1:1, segue a origem |
+| `imovel.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete do imovel |
+| `imovel_documento.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete da chain membership |
+| `imovel_documento.create_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance de criação da chain membership |
+| `documento.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete do documento |
+| `documento.create_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance de criação do documento |
+| `lancamento.delete_operation_id` → `audit_log.id` | `SET NULL` | Q9=C: provenance do soft-delete do lancamento |
 | `audit_log.actor_id` → `user.id` | `SET NULL` | LGPD: pesquisador pode pedir remoção, log preservado |
-| `audit_log.deleted_at` | (no FK) | n/a |
 | `tis_imovel.*` | `CASCADE` | Junction simples |
 | `tis.terra_referencia_id` → `terra_indigena_referencia.id` | `RESTRICT` | Referência oficial não pode sumir com TIs em uso |
+
+**Nota sobre soft-delete:** A coluna `deleted_at` existe em `cri`, `user`, `pessoa`, `imovel`, `imovel_documento`, `documento`, `lancamento`, `lancamento_pessoa`, `origem` (Q2=B) — não é FK, é timestamp ISO8601 NULL. **`audit_log` é a exceção explícita: NÃO tem `deleted_at`** (Q2). É append-only imutável; LGPD purge do pesquisador faz `actor_id → NULL` (SET NULL acima), o log permanece.
 
 **Invariante Q14 (write-time, no app antes de INSERT):**
 ```ts
@@ -1227,6 +1246,8 @@ Ambas views são D1-compatíveis (CREATE VIEW suportado em SQLite). Implementaç
 **R3-8** (Codex #2 dup) e **R3-4 dup** (Greptile P1 duplicata de R3-1) — não contados separadamente.
 
 **Verdict final após fixes (pendente round 3 review):** Aguardando aprovação do Codex round 3 para confirmar APROVA.
+
+> **⚠️ ATUALIZAÇÃO 2026-06-04 (round 4 review, gpt-5.5 xhigh):** O round 3 "APROVA" interno **NÃO foi confirmado por review externo fresh** — encontrou 1 BLOCKER (cardinalidade ERD errada para FKs nullable) + 4 MUST-FIX (FK table incompleta, audit_log.deleted_at inexistente, Q5/Q10 texto stale) + 3 NICE-TO-HAVE (snippet, legend, este status). **Todos os 8 fixes aplicados nesta seção.** Próximo round 5 review revalidará o APROVA 5/5.
 
 ---
 

@@ -57,8 +57,7 @@ O formato e do tipo: `A ||--o{ B : rotulo`
   - Cada origem pertence a **um** lancamento.
   - Cada origem pode ter (zero ou um) `origem_fim_cadeia` independente (classificacao por origem).
 
-- `origem o|--o{ origem_fim_cadeia : "?"` (na verdade e 1:1)
-  - Ver: `origem ||--o| origem_fim_cadeia : fim_cadeia` — uma origem pode ter zero ou um registro de fim de cadeia.
+- `origem ||--o| origem_fim_cadeia : fim_cadeia (Q3=B)` — uma origem pode ter zero ou um registro de fim de cadeia (1:1 parcial).
 
 ## 3) Significado dos rotulos (texto nas linhas)
 
