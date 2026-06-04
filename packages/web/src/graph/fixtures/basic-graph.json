@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    { "id": "field-data", "label": "Field Data", "type": "source" },
+    { "id": "analysis", "label": "Legal Analysis", "type": "process" },
+    { "id": "report", "label": "Final Report", "type": "output" }
+  ],
+  "edges": [
+    { "id": "field-data-analysis", "source": "field-data", "target": "analysis" },
+    { "id": "analysis-report", "source": "analysis", "target": "report" }
+  ]
+}
