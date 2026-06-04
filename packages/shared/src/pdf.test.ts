@@ -112,6 +112,47 @@ describe("renderPdfTemplate — defaults and empty state", () => {
     expect(html).toContain("Nenhum lançamento registrado");
   });
 
+  it("renders lancamento table rows with XSS-escaped values (non-empty case)", () => {
+    const html = renderPdfTemplate({
+      title: "T",
+      chains: [
+        {
+          titulo: "Seção",
+          documentos: [
+            {
+              tipo: "MATRÍCULA",
+              numero: "1",
+              lancamentos: [
+                {
+                  tipo: "REGISTRO <hack>",
+                  cartorio: "1º Cartório \"X\"",
+                  data: "2026-06-04",
+                  descricao: "A&B 'evil'"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+    // Table rendered (and not the empty placeholder)
+    expect(html).toContain('<table class="lancamentos">');
+    expect(html).not.toContain("Nenhum lançamento registrado");
+    // Header columns
+    expect(html).toContain("<th>Tipo</th>");
+    expect(html).toContain("<th>Cartório</th>");
+    expect(html).toContain("<th>Data</th>");
+    expect(html).toContain("<th>Descrição</th>");
+    // Escaped values present
+    expect(html).toContain("REGISTRO &lt;hack&gt;");
+    expect(html).toContain("1º Cartório &quot;X&quot;");
+    expect(html).toContain("A&amp;B &#39;evil&#39;");
+    // Raw forms absent (negative assertion on each attack vector)
+    expect(html).not.toContain("REGISTRO <hack>");
+    expect(html).not.toContain("1º Cartório \"X\"");
+    expect(html).not.toContain("A&B 'evil'");
+  });
+
   it("emits the 'Nenhum documento nesta seção' placeholder for an empty section", () => {
     const html = renderPdfTemplate({
       title: "T",
