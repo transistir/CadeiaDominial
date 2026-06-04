@@ -32,6 +32,7 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { cri } from "./cri";
+import { auditLog } from "./audit_log";
 
 export const documento = sqliteTable(
   "documento",
@@ -78,9 +79,15 @@ export const documento = sqliteTable(
     /** Q2=B: soft-delete. NULL = active. */
     deletedAt: text("deleted_at"),
     /** Q9+C: provenance of the soft-delete. SET NULL if audit purged. */
-    deleteOperationId: integer("delete_operation_id"),
+    deleteOperationId: integer("delete_operation_id").references(
+      () => auditLog.id,
+      { onDelete: "set null" }
+    ),
     /** Q9+C: provenance of the creation. */
-    createOperationId: integer("create_operation_id"),
+    createOperationId: integer("create_operation_id").references(
+      () => auditLog.id,
+      { onDelete: "set null" }
+    ),
   },
   (table) => ({
     /**

@@ -25,7 +25,7 @@ function getLocalD1DB() {
 
 export default defineConfig({
   dialect: "sqlite",
-  schema: "./drizzle/schema.ts",
+  schema: "./drizzle/schema/index.ts",
   out: "./drizzle/migrations",
   dbCredentials: {
     url: getLocalD1DB() ?? "file:./local.sqlite",

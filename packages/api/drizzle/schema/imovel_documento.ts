@@ -28,6 +28,7 @@ import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core";
 import { imovel } from "./imovel";
 import { documento } from "./documento";
+import { auditLog } from "./audit_log";
 
 export const imovelDocumento = sqliteTable(
   "imovel_documento",
@@ -56,9 +57,15 @@ export const imovelDocumento = sqliteTable(
      */
     deletedAt: text("deleted_at"),
     /** Q9+C/Q8=A: provenance of the soft-delete (junction unlink). */
-    deleteOperationId: integer("delete_operation_id"),
+    deleteOperationId: integer("delete_operation_id").references(
+      () => auditLog.id,
+      { onDelete: "set null" }
+    ),
     /** Q9+C: provenance of the chain-membership creation. */
-    createOperationId: integer("create_operation_id"),
+    createOperationId: integer("create_operation_id").references(
+      () => auditLog.id,
+      { onDelete: "set null" }
+    ),
   },
   (table) => ({
     /**

@@ -20,10 +20,16 @@
  *
  * T3 (SQLite/D1): booleans as INTEGER 0/1 with CHECK; dates as TEXT ISO8601.
  * UF is checked in app layer; v2 has 27 federative units.
+ *
+ * NOTE on DB-level constraints: `*.sql` migrations are git-ignored by
+ * project policy. The CHECK constraint for `tipo` (and the `enum: []`
+ * for `uf` etc.) is declared via Drizzle's `check()` API in this file
+ * and emitted into the generated migration by `drizzle-kit generate`
+ * (run on-the-fly in CI; not committed to git).
  */
 
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core";
 
 export const cri = sqliteTable(
   "cri",
@@ -39,7 +45,8 @@ export const cri = sqliteTable(
     /**
      * T-100: parity with Django `Cartorios.tipo`. Minimal subset
      * ('CRI' | 'OUTRO') — see T-100 addendum in `SCHEMA_DECISOES_PENDENTES.md`.
-     * CHECK enforced in migration.
+     * DB-level CHECK emitted by `drizzle-kit generate` from the `check()`
+     * below (migrations are git-ignored; see JSDoc header).
      */
     tipo: text("tipo", { enum: ["CRI", "OUTRO"] })
       .notNull()
@@ -66,6 +73,15 @@ export const cri = sqliteTable(
     cnsCodigoActiveUnique: uniqueIndex("uq_cri_cns_codigo_active")
       .on(table.cnsCodigo)
       .where(sql`${table.cnsCodigo} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+    /**
+     * T-100: DB-level CHECK for `tipo`. The Drizzle `enum: []` above is
+     * TS-level only; this `check()` produces the actual SQL CHECK in the
+     * generated migration (which is git-ignored by project policy).
+     */
+    tipoCheck: check(
+      "cri_tipo_check",
+      sql`${table.tipo} IN ('CRI', 'OUTRO')`
+    ),
   })
 );
 

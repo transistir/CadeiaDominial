@@ -19,7 +19,7 @@
  *  - `sigla_patrimonio_publico`: REQUIRED when tipo_fim_cadeia = 'destacamento_publico'
  */
 
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { origem } from "./origem";
 
 export const origemFimCadeia = sqliteTable(
@@ -47,14 +47,8 @@ export const origemFimCadeia = sqliteTable(
     siglaPatrimonioPublico: text("sigla_patrimonio_publico"),
   },
   (table) => ({
-    /**
-     * Defensive duplicate of the column-level UNIQUE for clarity in
-     * migration diffs. Drizzle dedupes; the column `.unique()` is enough.
-     * Kept as a no-op pattern for future partial UNIQUE work.
-     */
-    _origemIdUniqueIndex: uniqueIndex("uq_origem_fim_cadeia_origem").on(
-      table.origemId
-    ),
+    // The 1:1 UNIQUE on origem_id is enforced by the column-level
+    // `.unique()` above; no separate index needed here.
   })
 );
 

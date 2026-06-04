@@ -32,6 +32,7 @@ import { integer, sqliteTable, text, check, index } from "drizzle-orm/sqlite-cor
 import { lancamento } from "./lancamento";
 import { documento } from "./documento";
 import { user } from "./user";
+import { auditLog } from "./audit_log";
 
 export const lancamentoMoveEvent = sqliteTable(
   "lancamento_move_event",
@@ -55,7 +56,9 @@ export const lancamentoMoveEvent = sqliteTable(
     /** ISO8601 UTC TEXT, generated in app layer. */
     movedAt: text("moved_at").notNull(),
     /** FK to audit_log row with action='MOVE' (Q9+C). */
-    auditLogId: integer("audit_log_id"),
+    auditLogId: integer("audit_log_id").references(() => auditLog.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => ({
     /**

@@ -40,6 +40,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { imovelDocumento } from "./imovel_documento";
 import { user } from "./user";
+import { auditLog } from "./audit_log";
 
 export const anotacaoVersao = sqliteTable(
   "anotacao_versao",
@@ -77,7 +78,9 @@ export const anotacaoVersao = sqliteTable(
       onDelete: "set null",
     }),
     /** Q9+C: provenance (audit log id). SET NULL if audit purged. */
-    operationId: integer("operation_id"),
+    operationId: integer("operation_id").references(() => auditLog.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => ({
     /**

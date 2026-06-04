@@ -26,9 +26,10 @@
  */
 
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, check } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core";
 import { cri } from "./cri";
 import { pessoa } from "./pessoa";
+import { auditLog } from "./audit_log";
 
 export const imovel = sqliteTable(
   "imovel",
@@ -65,8 +66,11 @@ export const imovel = sqliteTable(
       .$onUpdate(() => new Date().toISOString()),
     /** Q2=B: soft-delete. */
     deletedAt: text("deleted_at"),
-    /** Q9=C+Q8=A: provenance of the soft-delete. SET NULL if audit purged. */
-    deleteOperationId: integer("delete_operation_id"),
+    /** Q9+C+Q8=A: provenance of the soft-delete. SET NULL if audit purged. */
+    deleteOperationId: integer("delete_operation_id").references(
+      () => auditLog.id,
+      { onDelete: "set null" }
+    ),
   },
   (table) => ({
     arquivadoCheck: check("imovel_arquivado_check", sql`${table.arquivado} IN (0, 1)`),
