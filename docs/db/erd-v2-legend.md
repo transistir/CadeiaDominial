@@ -57,7 +57,8 @@ O formato e do tipo: `A ||--o{ B : rotulo`
   - Cada origem pertence a **um** lancamento.
   - Cada origem pode ter (zero ou um) `origem_fim_cadeia` independente (classificacao por origem).
 
-- `origem ||--o| origem_fim_cadeia : fim_cadeia (Q3=B)` — uma origem pode ter zero ou um registro de fim de cadeia (1:1 parcial).
+- `origem o|--o{ origem_fim_cadeia : "?"` (na verdade e 1:1)
+  - Ver: `origem ||--o| origem_fim_cadeia : fim_cadeia` — uma origem pode ter zero ou um registro de fim de cadeia.
 
 ## 3) Significado dos rotulos (texto nas linhas)
 
@@ -97,7 +98,7 @@ O formato e do tipo: `A ||--o{ B : rotulo`
 - **lancamento_move_event (Q14=B)**: append-only. Registra MOVE cross-chain. Lancamento NAO e mutado. `from_documento_id` e `to_documento_id` sao os D origem e destino.
 - **anotacao_versao.autor_original_id (Q9=C, F1)**: `user` (pesquisador) que criou a anotação. **IMUTÁVEL** (só o editor `created_by_id` muda entre versões, não o autor). **Round 2 corrigiu: era `pessoa` na v1/legado; foi movido para `user` porque Q9=C fala de pesquisador criando anotação, não de cartório.**
 - **anotacao_versao.is_current (Q9=C)**: marca a versão atual da anotação (`integer`, 0/1, com `partial UNIQUE (imovel_documento_id) WHERE is_current=1` garantindo no máximo 1 versão "atual" por junction). `is_current=0` = versão antiga, mantida no histórico (F2). `is_current=1` (junto com `deleted_at IS NULL`) = versão visível na UI. (Não existe coluna `current_marker` — a flag é `is_current`.)
-- **deleted_at (Q2=B)**: presente em imovel, documento, lancamento, lancamento_pessoa, imovel_documento, pessoa, anotacao_versao, user, origem, cri. Soft-delete e a estrategia padrao. Hard-delete admin-only. (NÃO confundir com `lancamento_move_event` (append-only, Q14=B) nem `audit_log` (append-only imutável, Q2=B exceção explícita).)
+- **deleted_at (Q2=B)**: presente em imovel, documento, lancamento, lancamento_pessoa, imovel_documento, pessoa, anotacao_versao, cri. Soft-delete e a estrategia padrao. Hard-delete admin-only.
 
 ## 5) Observacoes sobre obrigatoriedade
 

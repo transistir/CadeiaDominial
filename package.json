@@ -12,7 +12,7 @@
     "db:migrate:local": "pnpm --filter @cadeia/api db:migrate:local",
     "db:studio": "pnpm --filter @cadeia/api db:studio",
     "test": "pnpm test:unit && pnpm test:e2e",
-    "test:unit": "turbo run test",
+    "test:unit": "turbo run test:unit",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --check .",
