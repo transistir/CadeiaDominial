@@ -7,7 +7,8 @@
   },
   "scripts": {
     "lint": "eslint src --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "echo 'No unit tests in @cadeia/shared — types only (Zod schemas, no runtime logic to test)'"
   },
   "dependencies": {
     "zod": "^4.1.5"
