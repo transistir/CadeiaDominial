@@ -33,19 +33,19 @@ Phase 0: Decisions ──┐
 > Nothing in Phase 1 can start until all 6 decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered.
 
 ### T-000 — Read the pending decisions
-- **Status:** open
+- **Status:** ✅ done (2026-06-02/03, Luandro + Hiure)
 - **Owner:** anyone (Luandro, Hiure, or reviewer)
 - **Description:** Read `docs/db/SCHEMA_DECISOES_PENDENTES.md` end-to-end. For each of the 6 questions (Q1–Q6), understand the trade-offs, especially the visual impact on the React Flow graph.
-- **Acceptance:** Decision-maker can articulate each question + at least one option's DB/chain-graph consequence without re-reading the doc.
+- **Acceptance:** Decision-maker can articulate each question + at least one option's DB/chain-graph consequence without re-reading the doc. ✅
 - **Depends on:** nothing.
 - **Blocks:** T-001.
 
 ### T-001 — Answer Q1–Q6
-- **Status:** blocked on T-000
+- **Status:** ✅ done (PR #24 merged). Extended to Q1-Q15 + Q11b.
 - **Owner:** Luandro (project lead)
-- **Description:** Provide a decision for each of Q1 (cascade on Imovel delete), Q2 (soft vs hard delete), Q3 (OrigemFimCadeia cardinality), Q4 (PII encryption at rest), Q5 (CNPJ/CPF validation location), Q6 (OrigemFimCadeia in React Flow — current vs full provenance).
-- **Output:** A `## Decisões` section appended to `docs/db/SCHEMA_DECISOES_PENDENTES.md` with the chosen option for each Q, plus rationale (one paragraph max per Q).
-- **Acceptance:** All 6 questions have a chosen option recorded; no "?" or "TBD" remains in the answers section.
+- **Description:** Provide a decision for each of Q1 through Q15 + Q11b. Codex gpt-5.5 xhigh 5/5 APROVA. Opus 4.8 5/5 APROVA.
+- **Output:** `docs/db/SCHEMA_DECISOES_PENDENTES.md` with all answers + rationale.
+- **Acceptance:** All questions answered, no TBDs remain. ✅
 - **Blocks:** all of Phase 1.
 
 ---
@@ -53,27 +53,19 @@ Phase 0: Decisions ──┐
 ## Phase 1 — Schema (after decisions)
 
 ### T-100 — Re-draw the ERD
-- **Status:** blocked on T-001
-- **Worktree branch:** `docs/erd-v2-rev1`
-- **Files:** `docs/ERD_CADEIA_DOMINIAL.md`, `docs/ERD_CADEIA_DOMINIAL.png`
-- **Description:** Apply the fixes from §1.2 of the blindspot review (missing FKs, missing columns, OrigemFimCadeia placement, etc.). Reflect the Q1–Q6 decisions. Re-render the PNG.
-- **Acceptance:**
-  - ERD matches Django `03-database-models.md` 1:1 on every table
-  - All FKs and unique constraints from §"Database Constraints" present
-  - PNG is regenerated and ≤ 1MB
-  - Diff is schema-only (no doc tangents)
+- **Status:** ✅ done (PR #26 merged). Codex 5/5 APROVA.
+- **Worktree branch:** `docs/erd-v2-rev1` (merged + cleaned)
+- **Files:** `docs/db/erd-v2.mmd`, `docs/db/erd-v2-legend.md`
+- **Description:** ERD v2 redraw + 1:1 sync com Drizzle schema. `cri.tipo` (CHECK CRI/OUTRO), area columns matching DB names (`valor_transacao_centavos`, `area_centiares`, `area_ha_centiares`), `origem.deleted_at` no inventário.
+- **Acceptance:** ✅ All FKs, columns, CHECKs, and soft-delete annotations verified byte-identical between ERD and Drizzle schema files.
 - **Blocks:** T-101.
 
 ### T-101 — Author the Drizzle schema
-- **Status:** blocked on T-100
-- **Worktree branch:** `feat/drizzle-schema-v2`
-- **Files:** `packages/api/drizzle/schema.ts`, generated `packages/api/drizzle/migrations/*.sql`
-- **Description:** Translate the Django models to Drizzle. 13 tables, all FKs, all columns, all unique constraints. **Opt in to FK enforcement** (D1/SQLite requires `PRAGMA foreign_keys = ON` per connection).
-- **Acceptance:**
-  - `pnpm db:generate` produces a clean migration
-  - `pnpm db:migrate:local` runs without error on an empty D1
-  - All FKs are declared with `references()` and a clear cascade strategy per Q1
-  - 100% type-safe (no `any` columns)
+- **Status:** ✅ done (PR #25 merged). Codex 5/5 APROVA (round 4).
+- **Worktree branch:** `feat/drizzle-schema-v2` (merged + cleaned)
+- **Files:** `packages/api/drizzle/schema/` (19 files), `packages/api/drizzle/migrations/0000_real_quentin_quire.sql` (297 linhas, 17 tables + 2 views + 13 indexes)
+- **Description:** Translate Django models → Drizzle ORM. All Q1-Q15 decisions implemented. PII removed (Q5), soft-delete on all tables (Q2), `cri` table with `tipo` CHECK (Q11b), N:N junction `imovel_documento` (Q13), `lancamento_move_event` append-only (Q14), `audit_log` (Q9).
+- **Acceptance:** ✅ `db:generate` clean, `db:migrate:local` clean, 100% type-safe, CI 4/4 green.
 - **Blocks:** T-200, T-201, T-300.
 
 ---
@@ -81,7 +73,7 @@ Phase 0: Decisions ──┐
 ## Phase 2 — Data generation
 
 ### T-200 — Chain topology generator
-- **Status:** blocked on T-101
+- **Status:** 📋 **ready to start** (T-101 merged, dependency met)
 - **Worktree branch:** `feat/chain-topology-generator`
 - **Files:** `scripts/seed/chain-topology.ts`, `scripts/seed/__tests__/chain-topology.test.ts`
 - **Description:** Deterministic generator that produces a **valid** chain graph shape: exactly one `inicio_matricula` per chain, every Registro with ≥ 1 origin, every Averbação with no origin, every chain ending in a `FimCadeia` (when Q3 = "many-per-chain"). Pure function: `(seed: number, n: number) => TopologyGraph`.
@@ -92,7 +84,7 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-202.
 
 ### T-201 — Field filler
-- **Status:** blocked on T-101 (can run in parallel with T-200)
+- **Status:** 📋 **ready to start** (T-101 merged, can run in parallel with T-200)
 - **Worktree branch:** `feat/field-filler`
 - **Files:** `scripts/seed/field-filler.ts`
 - **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q6 (e.g. CNPJ/CPF format if Q5 = DB-level).
@@ -131,64 +123,37 @@ Phase 0: Decisions ──┐
 ## Phase 4 — Cleanup (parallelizable)
 
 ### T-400 — Commit the uncommitted ERD files
-- **Status:** open (independent of phases above)
-- **Worktree branch:** `chore/commit-erd-files`
-- **Files:** `docs/ERD_CADEIA_DOMINIAL.md`, `docs/ERD_CADEIA_DOMINIAL.png` (the two uncommitted files in the main `v2` worktree)
-- **Description:** Stage and commit the existing uncommitted ERD files as a `docs:` chore commit on their own.
-- **Acceptance:** `git status` on `v2` is clean.
+- **Status:** ✅ done (PR #22)
 
 ### T-401 — Update BOOTSTRAP_PROGRESS.md
-- **Status:** open
-- **Worktree branch:** `docs/refresh-bootstrap-progress`
-- **Files:** `BOOTSTRAP_PROGRESS.md`
-- **Description:** Refresh to reflect the v2 state, link to this TASKS.md, mark completed bootstrap items.
-- **Acceptance:** Mentions TASKS.md and the schema decision phase.
+- **Status:** ✅ done — replaced by PROGRESS.md
 
 ### T-402 — Triage stale PRs
-- **Status:** open
-- **Files:** (no local work; use `gh pr list`)
-- **Description:** For each of: #6 (cleanup/clean), #7 (cleanup/unused-python-files), #8 (docker-containerization), decide: merge, close, or rebase onto `v2`. Document decision in PR comments.
+- **Status:** ✅ done — PRs #7, #10, #11, #12 kept open intentionally (target `main`, content absorbed by v2)
 
 ### T-403 — Organize `docs/` structure
-- **Status:** in-progress (PR #17)
-- **Worktree branch:** `docs/organize-docs-structure`
-- **Files:** `docs/README.md` (new), `docs/domain/` (renamed from `docs/cadeia-dominial/`), `docs/db/README.md` (new), `docs/prd/README.md` (new), `docs/db/erd-v2.{mmd,-legend.md}` (renamed), `docs/domain/react-flow-quick-reference.md` (moved from root)
-- **Description:** Reorganize `docs/` to fix navigation, naming, and discoverability. No content or schemas changed.
-- **Scope:**
-  - Rename `docs/cadeia-dominial/` → `docs/domain/` (English, cleaner)
-  - 7 internal files to kebab-case
-  - Move `docs/react-flow.md` → `docs/domain/react-flow-quick-reference.md`
-  - Rename `docs/db/SCHEMA_CONSOLIDATED_ERD.mmd` → `erd-v2.mmd` and its legend
-  - Add 4 index files (root + domain + db + prd)
-  - Cross-link `MIGRATION_GUIDE.md` ↔ `MIGRATION_CHECKLIST.md`
-  - Fix 3 broken internal cross-references
-- **Acceptance:**
-  - All cross-references verified — zero broken links after renames
-  - Git history preserved (used `git mv` for all renames)
-  - No source code or schema changes
-  - PR opened against `v2`
-- **Out of scope:** untracked `docs/ERD_CADEIA_DOMINIAL.{md,png}` (handled separately — see related documents), `db/legacy/`, `legacy-django/`, PRD JSON filenames.
+- **Status:** ✅ done (PR #17)
 
 ---
 
 ## Status summary
 
-| Task | Status | Blocker |
+| Task | Status | PR |
 |---|---|---|
-| T-000 | open | — |
-| T-001 | blocked | T-000 |
-| T-100 | blocked | T-001 |
-| T-101 | blocked | T-100 |
-| T-200 | blocked | T-101 |
-| T-201 | blocked | T-101 |
-| T-202 | blocked | T-200, T-201 |
-| T-300 | blocked | T-101, T-202 |
-| T-400 | open | — |
-| T-401 | open | — |
-| T-402 | open | — |
-| T-403 | in-progress (PR #17) | — |
+| T-000 | ✅ done | — |
+| T-001 | ✅ done | #24 |
+| T-100 | ✅ done | #26 |
+| T-101 | ✅ done | #25 |
+| T-200 | 📋 **ready** | — |
+| T-201 | 📋 **ready** | — |
+| T-202 | blocked (T-200, T-201) | — |
+| T-300 | blocked (T-101, T-202) | — |
+| T-400 | ✅ done | #22 |
+| T-401 | ✅ done | — |
+| T-402 | ✅ done | — |
+| T-403 | ✅ done | #17 |
 
-**Current gate: T-000 → T-001.** Nothing else matters until Luandro reads the decision doc and answers Q1–Q6.
+**Current gate: Phase 2 — T-200 + T-201 ready to start.** Pick lowest-id open task whose dependencies are met. T-200 and T-201 can run in parallel.
 
 ---
 
