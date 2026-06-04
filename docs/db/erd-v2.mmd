@@ -199,7 +199,7 @@ erDiagram
         int autor_original_id FK "USER pesquisador que criou originalmente (F1: era pessoa, Q9=C imutavel)"
         integer versao "1, 2, 3..."
         text texto "anotacao analitica do pesquisador"
-        integer is_current "0/1, partial UNIQUE garante 1 current per junction. is_current=0 = versao antiga, mantida no historico (F2)"
+        integer is_current "0/1, partial UNIQUE (imovel_documento_id) WHERE is_current=1 AND deleted_at IS NULL garante 1 current per junction. is_current=0 = versao antiga, mantida no historico (F2)"
         text created_at
         text deleted_at "F2: soft-delete da anotacao INTEIRA (todas versoes). NAO confundir com is_current=0 que so marca versao"
         int created_by_id FK "USER editor desta versao (D3, pode diferir do autor_original)"

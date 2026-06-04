@@ -1008,7 +1008,7 @@ Para o schema Drizzle/T-101, as seguintes convenções de tipos são obrigatóri
 | Datetime | `datetime`, `timestamp` | `TEXT` ISO8601 (`'2026-06-03T14:30:00Z'`) |
 | Money | `decimal`, `numeric`, `real` | `INTEGER` em **centavos** (evita rounding errors) |
 | Area | `decimal`, `real` | `INTEGER` em **centiares** (1 are = 100 m²) ou `TEXT` decimal com escala fixa |
-| Enum (ex: `tipo_cartorio`) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))` |
+| Enum (ex: `cri.tipo`, T-100) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','OUTRO'))` (T-100: paridade com Django Cartorios.tipo). NOTA: Q11b+round-3 havia riscado `cri.tipo_cartorio` (valores amplos CRI/NOTAS/CIVIL/TRANSMISSAO/OUTRO) por estar fora de escopo; o T-100 reintroduz um subconjunto mínimo porque a entidade `cri` é especificamente o cartório de registro de imóveis, não um cartório genérico. Ver T-100 addendum abaixo. |
 | UUID (operation_id) | n/a | `TEXT` (Drizzle gera UUID v4) |
 | Encrypted blob | n/a | `BLOB` (AES-256-GCM) — **N/A no v2** (Q4=A + Q5=REMOVER PII de Pessoa; v2 não armazena PII) |
 | Hash (cpf_hash) | n/a | `TEXT` (SHA-256 hex) — **N/A no v2** (sem PII para hashear) |
