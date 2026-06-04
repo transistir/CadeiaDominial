@@ -51,7 +51,7 @@
 |---|---|---|
 | `CadeiaDominial/` | `v2` | Main checkout |
 | `worktrees/decisions/` | `docs/roadmap-and-pending-decisions` | Long-lived decisions branch |
-| `worktrees/ci-pnpm-baseline/` | `fix/ci-pnpm-baseline` | CI fix (pnpm v9→v10). Ready to push |
+| `worktrees/ci-pnpm-baseline/` | `fix/ci-pnpm-baseline` | CI fix (pnpm v9→v10, frozen-lockfile, composite action, shared tests). PR #27 in review (Codex must APROVA 5/5) |
 | `worktrees/t-001-v2/` | `feat/t-001-schema-decisions-v2` | PR #24 source. Merge candidate |
 | `worktrees/t-100-erd/` | `docs/erd-v2-rev1` | T-100 ERD redraw. Rebased on `feat/t-001-schema-decisions-v2` (05eeee9) |
 | `worktrees/t-101-drizzle/` | `feat/drizzle-schema-v2` | T-101 Drizzle schema. Rebased on `feat/t-001-schema-decisions-v2` (05eeee9) |
