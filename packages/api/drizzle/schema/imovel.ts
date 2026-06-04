@@ -26,7 +26,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, check } from "drizzle-orm/sqlite-core";
 import { cri } from "./cri";
 import { pessoa } from "./pessoa";
 import { auditLog } from "./audit_log";

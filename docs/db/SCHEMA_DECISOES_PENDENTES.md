@@ -705,7 +705,7 @@ R3-5 (round 3) tinha **riscado** uma proposta anterior de `cri.tipo_cartorio` po
 
 1. **T-300 legacy-fit precisa do campo** — o legado Django `dominial_cartorios.tipo` é uma das 5 colunas da tabela Cartorios no Postgres. Sem `cri.tipo`, T-300 não consegue mapear 1:1 e perde informação na migração.
 2. **A semântica é diferente do que R3-5 riscou** — R3-5 riscou "cri.tipo_cartorio" como "fora de escopo Q1-Q15". T-100 adiciona `cri.tipo` (sem `_cartorio`) com semântica específica do legado (CRI/OUTRO), não generalização para "qualquer cartório".
-3. **É a única divergência entre o ERD canônico (T-100) e o Drizzle schema (T-101)** — T-101 NÃO tem `cri.tipo` no momento. **Resolver em T-101 fix round 1**: adicionar `cri.tipo` no schema + migration (próximo bloco).
+3. **Era a única divergência entre o ERD canônico (T-100) e o Drizzle schema (T-101)** — ✅ **RESOLVIDO no T-101 round 5**: `cri.tipo: text('tipo', { enum: ['CRI', 'OUTRO'] }).notNull().default('CRI')` agora está em `packages/api/drizzle/schema/cri.ts:52-54` com CHECK em `:80-83`. Divergência ERD↔schema fechada.
 
 ### Implicações
 - **Drizzle schema (T-101):** adicionar `cri.tipo: text('tipo', { enum: ['CRI', 'OUTRO'] }).notNull().default('CRI')` em `packages/api/drizzle/schema/cri.ts` + CHECK constraint na migration
@@ -831,43 +831,31 @@ Regra UI-only ("L aparece na chain de D' se existe move event mais recente com `
 ```sql
 CREATE VIEW v_lancamento_current_location AS
 SELECT
-  l.id AS lancamento_id,
-  COALESCE(last_move.to_documento_id, l.documento_id) AS current_documento_id,
-  CASE
-    WHEN last_move.lancamento_id IS NULL THEN 'ORIGINAL'
-    WHEN last_move.to_documento_id IS NULL THEN 'PRESO'
-    ELSE 'MOVED'
-  END AS location_state
-FROM lancamento l
-LEFT JOIN (
-  -- Most recent MOVE event per Lancamento (append-only, Q14=B)
-  SELECT me.lancamento_id, me.to_documento_id
-  FROM lancamento_move_event me
-  WHERE me.id = (
-    SELECT me2.id
-    FROM lancamento_move_event me2
-    WHERE me2.lancamento_id = me.lancamento_id
-    ORDER BY me2.moved_at DESC, me2.id DESC
-    LIMIT 1
-  )
-) last_move ON last_move.lancamento_id = l.id
-INNER JOIN documento d ON d.id = COALESCE(last_move.to_documento_id, l.documento_id)
-WHERE l.deleted_at IS NULL
-  AND d.deleted_at IS NULL
-  -- Distinguish "no move event" (l.documento_id is canonical, ORIGINAL)
-  -- from "move event with target NULL" (PRESO state, Q15=🅳️):
-  -- exclude rows whose current move target is NULL.
-  -- A Lancamento sem move event aparece com current_documento_id = l.documento_id.
-  -- Um Lancamento com move event aparece com current_documento_id = me.to_documento_id.
-  -- Um Lancamento "preso" (último MOVE com to_documento_id NULL) NÃO aparece nesta view.
-  AND (last_move.lancamento_id IS NULL OR last_move.to_documento_id IS NOT NULL);
+  inner_q.lancamento_id,
+  inner_q.current_documento_id
+FROM (
+  SELECT
+    l.id AS lancamento_id,
+    COALESCE(
+      (SELECT me.to_documento_id
+       FROM lancamento_move_event me
+       WHERE me.lancamento_id = l.id
+       ORDER BY me.moved_at DESC, me.id DESC
+       LIMIT 1),
+      l.documento_id
+    ) AS current_documento_id
+  FROM lancamento l
+  WHERE l.deleted_at IS NULL
+) inner_q
+INNER JOIN documento d ON d.id = inner_q.current_documento_id
+WHERE d.deleted_at IS NULL;
 ```
 
 **Como a UI consome:**
 - "Mostrar L na chain de D" → `JOIN lancamento l ON l.id = ? JOIN v_lancamento_current_location v ON v.lancamento_id = l.id WHERE v.current_documento_id = D`
 - "Quais L's estão em D'?" → query acima
 - "Histórico de moves do L" → `SELECT * FROM lancamento_move_event WHERE lancamento_id = L ORDER BY moved_at, id`
-- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los: `SELECT l.* FROM lancamento l INNER JOIN lancamento_move_event me ON me.id = (SELECT id FROM lancamento_move_event me2 WHERE me2.lancamento_id = l.id ORDER BY me2.moved_at DESC, me2.id DESC LIMIT 1) WHERE me.to_documento_id IS NULL AND l.deleted_at IS NULL` (o `INNER JOIN` é proposital — exige que exista pelo menos 1 move event; sem move, L aparece como ORIGINAL na view, não como PRESO). A coluna `location_state` (`ORIGINAL` / `MOVED` / `PRESO`) explicita a origem do `current_documento_id` retornado — use-a em vez de inferir do NULL/NOT NULL.
+- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los, faça um UNION com `SELECT l.* FROM lancamento l WHERE l.deleted_at IS NULL AND l.id NOT IN (SELECT lancamento_id FROM v_lancamento_current_location)` (ver edge case abaixo). O view expõe apenas `lancamento_id` e `current_documento_id` — não há coluna `location_state`; o estado é **derivado** da presença/ausência em `v_lancamento_current_location` (ausente + existe em `lancamento_move_event` = PRESO; ausente + zero moves = ORIGINAL sem destino).
 
 **D1/SQLite support:** `CREATE VIEW` totalmente suportado. Custo: index em `lancamento_move_event(lancamento_id, moved_at DESC, id DESC)` para performance (Drizzle adiciona via `CREATE INDEX` na migration T-101).
 
