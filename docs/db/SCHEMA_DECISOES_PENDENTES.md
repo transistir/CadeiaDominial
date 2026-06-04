@@ -807,7 +807,7 @@ Regra UI-only ("L aparece na chain de D' se existe move event mais recente com `
 CREATE VIEW v_lancamento_current_location AS
 SELECT
   l.id AS lancamento_id,
-  last_move.to_documento_id AS current_documento_id,
+  COALESCE(last_move.to_documento_id, l.documento_id) AS current_documento_id,
   CASE
     WHEN last_move.lancamento_id IS NULL THEN 'ORIGINAL'
     WHEN last_move.to_documento_id IS NULL THEN 'PRESO'
@@ -842,7 +842,7 @@ WHERE l.deleted_at IS NULL
 - "Mostrar L na chain de D" → `JOIN lancamento l ON l.id = ? JOIN v_lancamento_current_location v ON v.lancamento_id = l.id WHERE v.current_documento_id = D`
 - "Quais L's estão em D'?" → query acima
 - "Histórico de moves do L" → `SELECT * FROM lancamento_move_event WHERE lancamento_id = L ORDER BY moved_at, id`
-- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los: `SELECT l.* FROM lancamento l LEFT JOIN lancamento_move_event me ON me.id = (SELECT id FROM lancamento_move_event me2 WHERE me2.lancamento_id = l.id ORDER BY me2.moved_at DESC, me2.id DESC LIMIT 1) WHERE me.to_documento_id IS NULL AND l.deleted_at IS NULL`. A coluna `location_state` (`ORIGINAL` / `MOVED` / `PRESO`) explicita a origem do `current_documento_id` retornado — use-a em vez de inferir do NULL/NOT NULL.
+- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los: `SELECT l.* FROM lancamento l INNER JOIN lancamento_move_event me ON me.id = (SELECT id FROM lancamento_move_event me2 WHERE me2.lancamento_id = l.id ORDER BY me2.moved_at DESC, me2.id DESC LIMIT 1) WHERE me.to_documento_id IS NULL AND l.deleted_at IS NULL` (o `INNER JOIN` é proposital — exige que exista pelo menos 1 move event; sem move, L aparece como ORIGINAL na view, não como PRESO). A coluna `location_state` (`ORIGINAL` / `MOVED` / `PRESO`) explicita a origem do `current_documento_id` retornado — use-a em vez de inferir do NULL/NOT NULL.
 
 **D1/SQLite support:** `CREATE VIEW` totalmente suportado. Custo: index em `lancamento_move_event(lancamento_id, moved_at DESC, id DESC)` para performance (Drizzle adiciona via `CREATE INDEX` na migration T-101).
 
