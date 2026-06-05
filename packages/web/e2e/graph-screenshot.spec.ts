@@ -3,11 +3,13 @@ import { mkdir, stat } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
-// Convention: e2e specs live in packages/web/e2e/ (one folder per app package)
-// so the workspace can be opened in isolation. See AGENTS.md §"Build, Test,
-// and Development Commands" for the full layout.
+// Convention: e2e specs live in packages/web/e2e/. Documented in
+// docs/ARCHITECTURE_DECISIONS.md ADR-006 ("Mapped files" section).
+// Saving the baseline PNG is gated on SAVE_BASELINE=1 so that routine
+// `pnpm test:e2e` runs do not rewrite screenshots/basic-graph.png — only
+// the explicit `pnpm graph:screenshot` command does.
 
-test("graph preview renders and screenshot is saved", async ({ page }) => {
+test("graph preview renders", async ({ page }) => {
   // Route health check to avoid API dependency
   await page.route("**/health", async (route) => {
     await route.fulfill({
@@ -34,14 +36,19 @@ test("graph preview renders and screenshot is saved", async ({ page }) => {
   const screenshotsDir = join(__dirname, "..", "..", "..", "screenshots");
   await mkdir(screenshotsDir, { recursive: true });
 
-  // Take screenshot
-  const screenshotPath = join(screenshotsDir, "basic-graph.png");
-  await page.screenshot({
-    path: screenshotPath,
-    fullPage: false
-  });
+  // Save the committed baseline PNG only when explicitly asked. This way
+  // `pnpm test:e2e` is safe to run as a smoke check; only the dedicated
+  // `pnpm graph:screenshot` command (which sets SAVE_BASELINE=1) actually
+  // overwrites the committed screenshot.
+  if (process.env.SAVE_BASELINE === "1") {
+    const screenshotPath = join(screenshotsDir, "basic-graph.png");
+    await page.screenshot({
+      path: screenshotPath,
+      fullPage: false
+    });
 
-  // Verify screenshot file exists and is non-empty
-  const fileStats = await stat(screenshotPath);
-  expect(fileStats.size).toBeGreaterThan(0);
+    // Verify screenshot file exists and is non-empty
+    const fileStats = await stat(screenshotPath);
+    expect(fileStats.size).toBeGreaterThan(0);
+  }
 });

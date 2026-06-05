@@ -51,6 +51,16 @@ module.exports = [
       }
     }
   },
+  // E2E specs (Playwright runs in Node, not the browser)
+  {
+    files: ["packages/web/e2e/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser
+      }
+    }
+  },
   // API files (Node.js)
   {
     files: ["packages/api/**/*.{ts,tsx}"],

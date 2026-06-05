@@ -20,9 +20,14 @@ Regression-baseline PNGs for the `pnpm graph:screenshot` command.
 ## How to regenerate
 
 ```bash
-pnpm install         # if node_modules is missing
-pnpm graph:screenshot
+pnpm install               # if node_modules is missing
+pnpm graph:screenshot      # sets SAVE_BASELINE=1 internally
 ```
+
+The `graph:screenshot` script sets `SAVE_BASELINE=1` for the Playwright
+invocation. Routine `pnpm test:e2e` runs do **not** set this variable, so
+they will not rewrite the committed baseline — they're a smoke check that
+the graph route still renders 3 nodes, not a baseline regeneration.
 
 The new PNG overwrites `basic-graph.png`. Review the diff (e.g. open the new
 PNG against the old one in any image viewer) and commit the new baseline if
