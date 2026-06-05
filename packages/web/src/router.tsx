@@ -6,6 +6,12 @@ import { fetchHealth } from "./api";
 const GraphRoute = lazy(() => import("./routes/graph"));
 
 const rootRoute = createRootRoute({
+  component: () => <Outlet />
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
   component: () => {
     const { data, isLoading, error } = useQuery({
       queryKey: ["health"],
@@ -53,16 +59,9 @@ const rootRoute = createRootRoute({
             </dl>
           )}
         </section>
-        <Outlet />
       </div>
     );
   }
-});
-
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: () => null
 });
 
 const graphRoute = createRoute({

@@ -100,7 +100,11 @@ docs/db/erd-v2.png
 
 # Backup files
 backups/
+backup_producao.sh
+restaurar_backup.sh
+restaurar_backup_dev.sh
 old/
+docs/livro/
 
 # Database dumps / exports (never commit)
 *.sql
@@ -121,3 +125,4 @@ packages/api/drizzle/migrations/*_snapshot.json
 db.sqlite3
 db.sqlite3.new
 .d1_chunks/
+

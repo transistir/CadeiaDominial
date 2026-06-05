@@ -47,8 +47,10 @@ vi.mock("@xyflow/react", () => ({
       </div>
     );
   },
-  Background: () => <div data-testid="reactflow-background" />,
-  Controls: () => <div data-testid="reactflow-controls" />
+  ReactFlowProvider: ({ children }: { children: ReactNode }): ReactElement => (
+    <div data-testid="reactflow-provider">{children}</div>
+  ),
+  Background: () => <div data-testid="reactflow-background" />
 }));
 
 describe("GraphRoute", () => {
@@ -90,7 +92,6 @@ describe("GraphRoute", () => {
     if (originalClientWidth) {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
     } else {
-      // Restore default JSDOM-like behavior
       Object.defineProperty(HTMLElement.prototype, "clientWidth", {
         configurable: true,
         get: () => 0
@@ -99,7 +100,6 @@ describe("GraphRoute", () => {
     if (originalClientHeight) {
       Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
     } else {
-      // Restore default JSDOM-like behavior
       Object.defineProperty(HTMLElement.prototype, "clientHeight", {
         configurable: true,
         get: () => 0
@@ -108,24 +108,17 @@ describe("GraphRoute", () => {
     HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   });
 
-  it("mounts the graph and renders nodes, edges, and fitView", () => {
+  it("mounts the graph preview and renders nodes, edges, and fitView", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const { container } = render(<GraphRoute />);
+    render(<GraphRoute />);
 
-    const graphShell = container.querySelector(".graph-shell") as HTMLElement | null;
-    expect(graphShell).not.toBeNull();
+    const graphPreview = screen.getByTestId("graph-preview");
+    expect(graphPreview).toBeInTheDocument();
 
-    if (!graphShell) {
-      throw new Error("Graph shell not found");
-    }
-
-    const rect = graphShell.getBoundingClientRect();
-    expect(rect.width).toBeGreaterThan(0);
-    expect(rect.height).toBeGreaterThan(0);
-
-    expect(screen.getByText("Parcel 451")).toBeInTheDocument();
-    expect(screen.getByText("parcel-transfer")).toBeInTheDocument();
+    expect(screen.getByText("Field Data")).toBeInTheDocument();
+    expect(screen.getByText("Legal Analysis")).toBeInTheDocument();
+    expect(screen.getByText("Final Report")).toBeInTheDocument();
     expect(fitViewSpy).toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
   });
