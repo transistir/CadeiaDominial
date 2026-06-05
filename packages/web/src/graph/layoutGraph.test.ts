@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { layoutGraph } from "./layoutGraph";
+import { validateGraph } from "./validateGraph";
 import type { GraphJson } from "./types";
+
+// Frozen copies so the canonical fixture can't be mutated by tests.
+import basicGraphFixture from "./fixtures/basic-graph.json";
+
+const basicGraph: GraphJson = validateGraph(basicGraphFixture);
 
 describe("layoutGraph", () => {
   const graph: GraphJson = {
@@ -52,5 +58,34 @@ describe("layoutGraph", () => {
     // LR layout: a.x < b.x < c.x
     expect(nodeB!.position.x).toBeGreaterThan(nodeA!.position.x);
     expect(nodeC!.position.x).toBeGreaterThan(nodeB!.position.x);
+  });
+
+  // Golden test for the canonical fixture. The expected positions lock down
+  // the deterministic LR layout so any unintended shift (dagre version bump,
+  // constant change) is caught here, not by silent visual drift in the
+  // committed screenshot.
+  it("golden positions for canonical basic-graph fixture", () => {
+    const result = layoutGraph(basicGraph);
+
+    // Sanity: all 3 nodes + 2 edges from the fixture are present.
+    expect(result.nodes).toHaveLength(3);
+    expect(result.edges).toHaveLength(2);
+
+    // Field Data (source) is leftmost, Final Report (output) is rightmost.
+    const field = result.nodes.find((n) => n.label === "Field Data")!;
+    const analysis = result.nodes.find((n) => n.label === "Legal Analysis")!;
+    const report = result.nodes.find((n) => n.label === "Final Report")!;
+    expect(field.position.x).toBeLessThan(analysis.position.x);
+    expect(analysis.position.x).toBeLessThan(report.position.x);
+
+    // All three nodes share the same y-coordinate (single rank, LR layout).
+    expect(analysis.position.y).toBeCloseTo(field.position.y, 5);
+    expect(report.position.y).toBeCloseTo(field.position.y, 5);
+
+    // Exact x-positions are deterministic — locked down to catch layout shifts.
+    // (ranksep=80, node width=180, so each subsequent node is 260 to the right.)
+    expect(field.position.x).toBeCloseTo(0, 5);
+    expect(analysis.position.x).toBeCloseTo(260, 5);
+    expect(report.position.x).toBeCloseTo(520, 5);
   });
 });
