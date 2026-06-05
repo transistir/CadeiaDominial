@@ -20,7 +20,7 @@
     "prepare": "husky install",
     "deploy:api": "pnpm --filter @cadeia/api deploy",
     "deploy:web": "pnpm --filter @cadeia/web deploy",
-    "graph:screenshot": "cd packages/web && npx playwright test e2e/graph-screenshot.spec.ts --config ../../playwright.config.ts"
+    "graph:screenshot": "pnpm --filter @cadeia/web exec playwright test e2e/graph-screenshot.spec.ts --config ../../playwright.config.ts"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx}": "pnpm exec eslint --fix"
