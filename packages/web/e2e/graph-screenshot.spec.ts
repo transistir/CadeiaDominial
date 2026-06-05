@@ -3,6 +3,10 @@ import { mkdir, stat } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
+// Convention: e2e specs live in packages/web/e2e/ (one folder per app package)
+// so the workspace can be opened in isolation. See AGENTS.md §"Build, Test,
+// and Development Commands" for the full layout.
+
 test("graph preview renders and screenshot is saved", async ({ page }) => {
   // Route health check to avoid API dependency
   await page.route("**/health", async (route) => {

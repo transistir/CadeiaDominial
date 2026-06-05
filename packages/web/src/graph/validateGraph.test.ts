@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateGraph } from "./validateGraph";
 import type { GraphJson } from "./types";
+import basicGraphFixture from "./fixtures/basic-graph.json";
 
 describe("validateGraph", () => {
   const validGraph: GraphJson = {
@@ -109,5 +110,19 @@ describe("validateGraph", () => {
     );
     const result = validateGraph(json);
     expect(result.nodes[0].id).toBe("x");
+  });
+
+  it("accepts the committed basic-graph fixture as a GraphJson", () => {
+    // The committed fixture is the happy path — validateGraph should
+    // pass it through unchanged. This guards against accidental schema
+    // drift between the fixture file and the type contract.
+    const validated = validateGraph(basicGraphFixture);
+    expect(validated.nodes).toHaveLength(3);
+    expect(validated.edges).toHaveLength(2);
+    // Type contract sanity: labels and types match the README description.
+    const labels = validated.nodes.map((n) => n.label).sort();
+    expect(labels).toEqual(["Field Data", "Final Report", "Legal Analysis"]);
+    const types = new Set(validated.nodes.map((n) => n.type));
+    expect(types).toEqual(new Set(["source", "process", "output"]));
   });
 });
