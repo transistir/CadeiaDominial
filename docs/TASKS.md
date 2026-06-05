@@ -76,7 +76,9 @@ Phase 0: Decisions ──┐
 >
 > **Key docs:** `docs/domain/react-flow-quick-reference.md` (canonical mapping), `docs/domain/tree-model.md` (DAG semantics), `docs/domain/fim-de-cadeia.md` (end-of-chain), `docs/domain/lancamento-tipos.md` (lancamento types).
 >
-> **Current state:** `@xyflow/react ^12.10.0` installed, skeleton `routes/graph.tsx` with 3 hardcoded nodes exists. TanStack Router + React Query wired. No custom nodes, no graph logic, no API endpoint.
+> **Current state (post PR #29, 2026-06-05):** minimal pipeline in place — `@xyflow/react ^12.10.0`, `routes/graph.tsx` → `GraphPreview` → `validateGraph` (accepts `unknown`, returns `GraphJson`) → `layoutGraph` (dagre LR, deterministic) → `<ReactFlow>`. `pnpm graph:screenshot` renders the canonical 3-node basic-graph.json fixture and writes `screenshots/basic-graph.png` (1280×720) for regression-baseline comparison. 26 unit tests including golden positions for the canonical fixture. Custom `DocumentoNode` / `FimCadeiaNode` / `OrigemEdge` components NOT yet shipped (current demo uses the default `default` node type). No API endpoint, mock generators, or `generateMockGraph('linear'|'branching'|'merge')` yet.
+
+> **Status symbols:** ✅ done · 🔧 in-progress (partially shipped) · 📋 ready/planned · 🚫 blocked (see Depends on)
 
 ### T-500 — Custom node + edge types
 - **Status:** 📋 **ready to start**
@@ -87,6 +89,7 @@ Phase 0: Decisions ──┐
   - `FimCadeiaNode` — synthetic leaf (color-coded: origem lídima green, sem origem red, inconclusa yellow)
   - `OrigemEdge` — edge type with origin label (matrícula/transcrição/fim_cadeia)
   - Styling: type-based color scheme matching legacy D3 (matrícula=blue, transcrição=purple, registro=teal)
+  - **Note:** the current 3-node demo (PR #28+#29) uses the default `default` node type — no custom components yet. T-500 ships them.
 - **Acceptance:**
   - Storybook or standalone page renders all 3 node types with sample data
   - Nodes are responsive (readable at 50%-200% zoom)
@@ -96,7 +99,7 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-501
 
 ### T-501 — Graph data layer (types + mock builder)
-- **Status:** blocked on T-500
+- **Status:** 🔧 in-progress (partial: PR #28+#29 landed the types + validate + layout + fixture; mock builders + 100% coverage still pending)
 - **Worktree branch:** `feat/xyflow-graph-data`
 - **Files:** `packages/web/src/lib/graph/`
 - **Description:** Pure TypeScript library that builds `{ nodes, edges }` from domain data:
@@ -104,6 +107,7 @@ Phase 0: Decisions ──┐
   - `builder.ts` — `buildGraph(chainData): GraphData` — maps documentos → nodes, origens → edges, adds synthetic fim-cadeia leaves
   - `layout.ts` — `applyLayout(graphData): GraphData` — BFS from root, `x = depth * 300`, `y = indexWithinDepth * 120`. DAG-aware (nodes can have multiple parents)
   - `mock.ts` — `generateMockGraph(shape): GraphData` — produces 3+ chain shapes (linear, branching, with merge) for development without a backend
+  - **Shipped so far (PR #28+#29):** `types.ts` (named `types.ts` with `GraphJson`/`GraphNode`/`GraphEdge`/`LayoutedNode`), `validateGraph.ts` (accepts `unknown`, validates shape + integrity, returns typed `GraphJson`), `layoutGraph.ts` (dagre LR, deterministic), `toReactFlow.ts` (`graphToReactFlow` adapter), `fixtures/basic-graph.json` (3-node canonical), `validateGraph.test.ts` (13 cases incl. shape validation + canonical fixture happy path), `layoutGraph.test.ts` (7 cases incl. golden positions x=0, 260, 520), `toReactFlow.test.ts` (2 cases), `packages/web/src/graph/README.md` (pipeline docs).
 - **Acceptance:**
   - `buildGraph()` produces valid `{ nodes, edges }` from typed input
   - `applyLayout()` produces non-overlapping positions for graphs up to 100 nodes
@@ -113,7 +117,7 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-502
 
 ### T-502 — Graph page integration
-- **Status:** blocked on T-501
+- **Status:** 🔧 in-progress (partial: PR #28+#29 wired `/graph` → `GraphPreview` → pipeline → React Flow with the canonical 3-node demo; full graph view with detail panel, multi-chain mock, and Lighthouse ≥ 90 still pending)
 - **Worktree branch:** `feat/xyflow-graph-page`
 - **Files:** `packages/web/src/routes/graph.tsx` (rewrite), `packages/web/src/components/graph/GraphView.tsx`
 - **Description:** Replace the hardcoded skeleton with a full-featured graph page:
@@ -122,6 +126,7 @@ Phase 0: Decisions ──┐
   - Interaction: pan, zoom, node click → detail panel (collapsible sidebar or drawer)
   - Fim-de-cadeia: synthetic leaf nodes rendered with classification colors
   - Responsive: works on desktop (1200px+) and tablet (768px+)
+  - **Shipped so far (PR #28+#29):** `routes/graph.tsx` rewritten to use `GraphPreview` + canonical fixture (typed as `unknown`, validated at render time, no `as GraphJson` cast), `packages/web/e2e/graph-screenshot.spec.ts` (Playwright smoke + gated `SAVE_BASELINE=1` write), `packages/web/e2e/graph.spec.ts` (asserts `Field Data` / `Legal Analysis` / `Final Report` text is visible at `/graph`), `screenshots/basic-graph.png` (1280×720 regression baseline, 288 KB), `screenshots/README.md` (regeneration docs).
 - **Acceptance:**
   - `/graph` renders a multi-chain mock graph with 20+ nodes
   - All 3 node types render correctly
@@ -222,8 +227,8 @@ Phase 0: Decisions ──┐
 | T-100 | ✅ done | #26 |
 | T-101 | ✅ done | #25 |
 | **T-500** | 📋 **ready** | — |
-| T-501 | blocked (T-500) | — |
-| T-502 | blocked (T-501) | — |
+| T-501 | 🔧 in-progress (partial: PR #28+#29) | — |
+| T-502 | 🔧 in-progress (partial: PR #28+#29) | — |
 | T-503 | blocked (T-502, T-202) | — |
 | T-200 | 📋 ready | — |
 | T-201 | 📋 ready | — |
@@ -234,7 +239,7 @@ Phase 0: Decisions ──┐
 | T-402 | ✅ done | — |
 | T-403 | ✅ done | #17 |
 
-**Current gate: Phase 1.5 — T-500 ready to start.** Custom node/edge types for `@xyflow/react` graph. Phase 2 (T-200, T-201) can run in parallel if desired.
+**Current gate: Phase 1.5 — T-500 ready to start** (custom node/edge components). T-501 and T-502 partially shipped via PR #28+#29 (pipeline + 3-node demo). Phase 2 (T-200, T-201) can run in parallel if desired.
 
 ---
 

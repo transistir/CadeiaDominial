@@ -16,6 +16,8 @@
 - **PR #25** — T-101 Drizzle v2 schema (19 files, 17 tables + 2 views). Codex 5/5 R4 ✅ MERGED
 - **PR #26** — T-100 ERD v2 rev1 (schema drift fixes). Codex 5/5 R1 ✅ MERGED
 - **PR #27** — CI fix: pnpm v9→v10, frozen-lockfile, composite action, shared Vitest suite ✅ MERGED
+- **PR #28** — feat(web): minimal React Flow screenshot harness (3-node demo, `pnpm graph:screenshot`, e2e baseline PNG). Codex 5/5 R2 ✅ MERGED
+- **PR #29** — chore(graph): post-merge polish (end-to-end verified, golden positions, fixture happy-path, docu...[truncated]
 
 ## Task Status
 
@@ -29,11 +31,11 @@
 - **T-100** ✅ done — ERD v2 redraw + 1:1 sync. Codex 5/5 APROVA. Branch `docs/erd-v2-rev1` (merged + cleaned)
 - **T-101** ✅ done — Drizzle v2 schema. 19 arquivos em `packages/api/drizzle/schema/` + migration. Codex 5/5 APROVA (round 4). Branch `feat/drizzle-schema-v2` (merged + cleaned)
 
-### Phase 1.5 — Visualization (next)
+### Phase 1.5 — Visualization (in progress)
 
-- **T-500** 📋 ready — Custom node + edge types for `@xyflow/react` graph. **Ready to start**
-- **T-501** 📋 planned — Graph data layer (types, builder, layout, mock)
-- **T-502** 📋 planned — Graph page integration (replace skeleton with full graph view)
+- **T-500** 📋 ready — Custom node + edge types for `@xyflow/react` graph. **Ready to start** (no custom components shipped yet — current demo uses the default node type)
+- **T-501** 🔧 in-progress — Graph data layer partially shipped (PR #28+#29). `types.ts`, `validateGraph` (shape + integrity), `layoutGraph` (dagre LR), `basic-graph.json` fixture, golden positions test, fixture happy-path test. **Still to do:** `generateMockGraph('linear'|'branching'|'merge')`, 100% unit test coverage
+- **T-502** 🔧 in-progress — Graph page partially wired (PR #28+#29). `/graph` route → `GraphPreview` → `validateGraph` → `layoutGraph` → React Flow. **Still to do:** multi-chain mock, node selection, pan/zoom polish, detail panel, Lighthouse ≥ 90
 - **T-503** 📋 planned — API endpoint + real data wiring (blocked on T-202)
 
 ### Phase 2 — Data
@@ -57,10 +59,11 @@
 
 | Worktree | Branch | Status |
 |---|---|---|
-| `CadeiaDominial/` | `v2` | Main checkout |
-| `worktrees/decisions/` | `docs/roadmap-and-pending-decisions` | Long-lived decisions branch |
+| `CadeiaDominial/` | `v2` | Main checkout (clean) |
+| `worktrees/decisions/` | `docs/roadmap-and-pending-decisions` | Long-lived decisions branch (1f69d94) |
+| `worktrees/t-001-v2/` | `feat/t-001-schema-decisions-v2` | T-001 follow-up: 3 unpushed commits (rounds 4-6 review fixes) — out of scope here, owned by Hiure |
 
-All task worktrees cleaned up after merge.
+Graph-harness worktree (PR #28+#29) merged and cleaned up.
 
 ## Key Decisions Summary (Q1-Q15)
 
