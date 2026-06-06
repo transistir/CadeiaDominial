@@ -13,7 +13,19 @@ export default defineConfig({
     },
   },
   test: {
+    exclude: ["**/e2e/**", "**/node_modules/**"],
     environment: "jsdom",
     globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov"],
+      lines: 80,
+      functions: 80,
+      branches: 80,
+      statements: 80,
+      exclude: ["**/e2e/**", "**/node_modules/**", "src/test/**"],
+    },
   },
 });
