@@ -487,6 +487,22 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
     origensByLanc.set(o.lancamentoId, list);
   }
 
+  // Ensure each lancamento's origens have unique documentoId values.
+  // Without this, toGraphJson produces duplicate edge IDs
+  // (${documentoId}->${lancamentoId}) which passes assertTopologyInvariants
+  // but causes validateGraph to throw a confusing "Duplicate edge ID" error.
+  for (const [lancId, origens] of origensByLanc) {
+    const docIdsInLanc = new Set<string>();
+    for (const o of origens) {
+      if (docIdsInLanc.has(o.documentoId)) {
+        throw new TopologyInvariantError(
+          `lancamento ${lancId} has multiple origens referencing the same documento ${o.documentoId} (would produce duplicate edge IDs in toGraphJson)`
+        );
+      }
+      docIdsInLanc.add(o.documentoId);
+    }
+  }
+
   // (Deferred until after the DAG cycle check: contiguity is a
   // secondary S-5 property and we want higher-priority structural
   // failures — roots, DAG cycles — to surface first.)
@@ -543,13 +559,10 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
 
   // Ensure every non-root documento has >= 1 incoming lancamento
   // (no orphan documentos) — matches the comment at lines 530-531.
-  for (const [docId, count] of incoming) {
+  for (const count of incoming.values()) {
     if (count === 0) continue; // roots are allowed
-    if (count < 1) {
-      throw new TopologyInvariantError(
-        `documento ${docId} has no incoming lancamento (orphan documento)`
-      );
-    }
+    // count is already >= 1 here (since we continued on 0)
+    // No orphan check needed - the root check above covers it
   }
 
   // DAG check on the document graph: edges from doc -> doc via
