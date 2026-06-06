@@ -3,10 +3,8 @@ import type { GraphJson } from "./types";
 /**
  * Re-export the chain-topology generator so the web app can import it
  * from `@cadeia/web/src/graph` (or via the package barrel `index.ts`).
- * The implementation lives in `scripts/seed/chain-topology.ts`; the web
- * package depends on the same source via a relative path. Keeping the
- * implementation in `scripts/seed/` means the seed script and its tests
- * own the contract, and the web package is a thin consumer.
+ * The implementation lives in `@cadeia/chain-topology` (scripts/seed);
+ * the web package depends on it via the workspace protocol.
  */
 export {
   generateChainTopology,
@@ -19,10 +17,10 @@ export {
   type TopologyFimCadeia,
   type ChainShape,
   type GenerateChainTopologyOptions,
-} from "../../../../scripts/seed/chain-topology";
+} from "@cadeia/chain-topology";
 
-import type { TopologyGraph } from "../../../../scripts/seed/chain-topology";
-import { toGraphJson as seedToGraphJson } from "../../../../scripts/seed/chain-topology";
+import type { TopologyGraph } from "@cadeia/chain-topology";
+import { toGraphJson as seedToGraphJson } from "@cadeia/chain-topology";
 
 /**
  * Convert a `TopologyGraph` (the rich seed-script output) into the minimal

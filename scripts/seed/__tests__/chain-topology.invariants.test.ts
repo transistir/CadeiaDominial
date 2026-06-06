@@ -212,7 +212,9 @@ describe("chain-topology.invariants", () => {
       );
     });
 
-    it("assertTopologyInvariants throws when lancamentos.length !== documentos.length - 1", () => {
+    it("assertTopologyInvariants throws on a 2-doc bidirectional cycle", () => {
+      // 2-doc graph where each doc points to the other via lancamentos.
+      // The invariant checker should detect the cycle.
       const bad: TopologyGraph = {
         chainId: "chain-bad",
         documentos: [

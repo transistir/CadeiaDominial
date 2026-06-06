@@ -540,21 +540,18 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
       `topology has no root (every documento has >= 1 incoming lancamento)`
     );
   }
-  for (const d of graph.documentos) {
-    // After the rootCount check above, every non-root doc has
-    // incoming >= 1 by construction (we increment incoming only via
-    // lancamentos that reference valid doc ids). So no per-doc orphan
-    // check is needed — the global rootCount check is sufficient.
-    if ((incoming.get(d.id) ?? 0) === 0) continue; // root
-  }
 
   // DAG check on the document graph: edges from doc -> doc via
   // (doc -> lanc -> doc). A cycle here would mean a document is both
   // an ancestor and a descendant of itself.
   const adj = new Map<string, string[]>();
   for (const d of graph.documentos) adj.set(d.id, []);
+  // Build O(1) lancamento lookup to avoid O(n²) .find() in the loop.
+  const lancById = new Map<string, TopologyLancamento>();
+  for (const l of graph.lancamentos) lancById.set(l.id, l);
   for (const o of graph.origens) {
-    const l = graph.lancamentos.find((x) => x.id === o.lancamentoId)!;
+    const l = lancById.get(o.lancamentoId);
+    if (!l) continue; // Missing-lancamento check happens earlier
     adj.get(o.documentoId)!.push(l.documentoId);
   }
   const visiting = new Set<string>();
