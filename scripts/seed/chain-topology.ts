@@ -541,6 +541,17 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
     );
   }
 
+  // Ensure every non-root documento has >= 1 incoming lancamento
+  // (no orphan documentos) — matches the comment at lines 530-531.
+  for (const [docId, count] of incoming) {
+    if (count === 0) continue; // roots are allowed
+    if (count < 1) {
+      throw new TopologyInvariantError(
+        `documento ${docId} has no incoming lancamento (orphan documento)`
+      );
+    }
+  }
+
   // DAG check on the document graph: edges from doc -> doc via
   // (doc -> lanc -> doc). A cycle here would mean a document is both
   // an ancestor and a descendant of itself.
