@@ -5,7 +5,7 @@ import {
   assertTopologyInvariants,
   TopologyInvariantError,
   type ChainShape,
-  type TopologyGraph,
+  type TopologyGraph
 } from "../chain-topology";
 
 const SHAPES: ChainShape[] = ["linear", "branching", "merge"];
@@ -95,7 +95,7 @@ describe("chain-topology.invariants", () => {
         ...g.documentos.map((d) => d.id),
         ...g.lancamentos.map((l) => l.id),
         ...g.origens.map((o) => o.id),
-        ...g.fimCadeias.map((f) => f.id),
+        ...g.fimCadeias.map((f) => f.id)
       ];
       expect(new Set(allIds).size).toBe(allIds.length);
     });
@@ -159,41 +159,33 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-cyclic",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-1", tipo: "registro" },
+          { id: "lanc-2", documentoId: "doc-1", tipo: "registro" }
         ],
         origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-{ id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2" , indice: 0},
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2", indice: 0 }
         ],
         fimCadeias: [
           { id: "fim-1", origemId: "ori-1" },
-          { id: "fim-2", origemId: "ori-2" },
-        ],
+          { id: "fim-2", origemId: "ori-2" }
+        ]
       };
-      expect(() => assertTopologyInvariants(cyclic)).toThrow(
-        TopologyInvariantError
-      );
+      expect(() => assertTopologyInvariants(cyclic)).toThrow(TopologyInvariantError);
     });
 
     it("assertTopologyInvariants throws on an orphan edge (lancamento references missing doc)", () => {
       const orphan: TopologyGraph = {
         chainId: "chain-orphan",
         documentos: [{ id: "doc-1", tipo: "matricula" }],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-ghost", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
-        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-ghost", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
       };
-      expect(() => assertTopologyInvariants(orphan)).toThrow(
-        TopologyInvariantError
-      );
+      expect(() => assertTopologyInvariants(orphan)).toThrow(TopologyInvariantError);
     });
 
     it("assertTopologyInvariants throws on duplicate IDs", () => {
@@ -201,15 +193,13 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dup",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-1", tipo: "matricula" }
         ],
         lancamentos: [],
         origens: [],
-        fimCadeias: [],
+        fimCadeias: []
       };
-      expect(() => assertTopologyInvariants(dup)).toThrow(
-        TopologyInvariantError
-      );
+      expect(() => assertTopologyInvariants(dup)).toThrow(TopologyInvariantError);
     });
 
     it("assertTopologyInvariants throws on a 2-doc bidirectional cycle", () => {
@@ -219,21 +209,19 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-bad",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-1", tipo: "registro" },
+          { id: "lanc-2", documentoId: "doc-1", tipo: "registro" }
         ],
         origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-{ id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2" , indice: 0},
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2", indice: 0 }
         ],
-        fimCadeias: [],
+        fimCadeias: []
       };
-      expect(() => assertTopologyInvariants(bad)).toThrow(
-        TopologyInvariantError
-      );
+      expect(() => assertTopologyInvariants(bad)).toThrow(TopologyInvariantError);
     });
 
     it("assertTopologyInvariants throws on a cycle in the document graph", () => {
@@ -248,19 +236,19 @@ describe("chain-topology.invariants", () => {
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
           { id: "lanc-2", documentoId: "doc-2", tipo: "registro" },
-          { id: "lanc-3", documentoId: "doc-1", tipo: "registro" }, // back-edge
+          { id: "lanc-3", documentoId: "doc-1", tipo: "registro" } // back-edge
         ],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
           { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-1", indice: 0 },
-          { id: "ori-3", lancamentoId: "lanc-3", documentoId: "doc-2", indice: 0 },
+          { id: "ori-3", lancamentoId: "lanc-3", documentoId: "doc-2", indice: 0 }
         ],
-        fimCadeias: [],
+        fimCadeias: []
       };
       expect(() => assertTopologyInvariants(cyclic)).toThrow(/cycle/i);
     });
@@ -273,24 +261,23 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-rootless",
         documentos: [
           { id: "doc-0", tipo: "matricula" },
-          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-1", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-0", tipo: "registro" },
+          { id: "lanc-2", documentoId: "doc-0", tipo: "registro" }
         ],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
-          { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-1", indice: 0 }
         ],
         fimCadeias: [
           { id: "fim-1", origemId: "ori-1" },
-          { id: "fim-2", origemId: "ori-2" },
-        ],
+          { id: "fim-2", origemId: "ori-2" }
+        ]
       };
       expect(() => assertTopologyInvariants(rootless)).toThrow(/no root/i);
     });
-
 
     it("assertTopologyInvariants throws when a terminal origem has zero fims", () => {
       // Linear 2-doc chain. ori-1 (target doc-2, terminal) has 0 fims.
@@ -299,19 +286,13 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-no-fim",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
-        fimCadeias: [],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: []
       };
-      expect(() => assertTopologyInvariants(noFim)).toThrow(
-        /must have exactly 1 fim/i
-      );
+      expect(() => assertTopologyInvariants(noFim)).toThrow(/must have exactly 1 fim/i);
     });
 
     it("assertTopologyInvariants throws when a non-terminal origem has a fim", () => {
@@ -323,24 +304,22 @@ describe("chain-topology.invariants", () => {
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" },
-          { id: "doc-3", tipo: "matricula" },
+          { id: "doc-3", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-3", tipo: "registro" },
+          { id: "lanc-2", documentoId: "doc-3", tipo: "registro" }
         ],
         origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-{ id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2" , indice: 0},
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2", indice: 0 }
         ],
         fimCadeias: [
           { id: "fim-1", origemId: "ori-1" },
-          { id: "fim-2", origemId: "ori-2" },
-        ],
+          { id: "fim-2", origemId: "ori-2" }
+        ]
       };
-      expect(() => assertTopologyInvariants(extraFim)).toThrow(
-        /must have 0 fim/i
-      );
+      expect(() => assertTopologyInvariants(extraFim)).toThrow(/must have 0 fim/i);
     });
 
     it("assertTopologyInvariants throws when a Registro has zero origens", () => {
@@ -352,17 +331,17 @@ describe("chain-topology.invariants", () => {
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" },
-          { id: "doc-3", tipo: "matricula" },
+          { id: "doc-3", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-3", tipo: "registro" },
+          { id: "lanc-2", documentoId: "doc-3", tipo: "registro" }
         ],
         origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }
           // lanc-2 has no origem → S-3 violation
         ],
-        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
       };
       expect(() => assertTopologyInvariants(registroSemOrigem)).toThrow(
         /must have at least 1 origem/i
@@ -375,15 +354,11 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-averbacao-com-origem",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "averbacao" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
-        fimCadeias: [],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "averbacao" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: []
       };
       expect(() => assertTopologyInvariants(averbacaoComOrigem)).toThrow(
         /averbação.*must have 0 origens/i
@@ -395,20 +370,16 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dup-lanc",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
           { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-          { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-1", tipo: "registro" }
         ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
-        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
       };
-      expect(() => assertTopologyInvariants(dupLanc)).toThrow(
-        /duplicate lancamento id/i
-      );
+      expect(() => assertTopologyInvariants(dupLanc)).toThrow(/duplicate lancamento id/i);
     });
 
     it("assertTopologyInvariants throws on duplicate origem id", () => {
@@ -416,20 +387,16 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dup-ori",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
         origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 1},
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 1 }
         ],
-        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
       };
-      expect(() => assertTopologyInvariants(dupOri)).toThrow(
-        /duplicate origem id/i
-      );
+      expect(() => assertTopologyInvariants(dupOri)).toThrow(/duplicate origem id/i);
     });
 
     it("assertTopologyInvariants throws on duplicate fim_cadeia id", () => {
@@ -437,22 +404,16 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dup-fim",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
         fimCadeias: [
           { id: "fim-1", origemId: "ori-1" },
-          { id: "fim-1", origemId: "ori-1" },
-        ],
+          { id: "fim-1", origemId: "ori-1" }
+        ]
       };
-      expect(() => assertTopologyInvariants(dupFim)).toThrow(
-        /duplicate fim_cadeia id/i
-      );
+      expect(() => assertTopologyInvariants(dupFim)).toThrow(/duplicate fim_cadeia id/i);
     });
 
     it("assertTopologyInvariants throws when an origem references a missing lancamento", () => {
@@ -460,19 +421,13 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dangling-ori",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-missing", documentoId: "doc-1" , indice: 0},
-        ],
-        fimCadeias: [],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-missing", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: []
       };
-      expect(() => assertTopologyInvariants(danglingOri)).toThrow(
-        /references missing lancamento/i
-      );
+      expect(() => assertTopologyInvariants(danglingOri)).toThrow(/references missing lancamento/i);
     });
 
     it("assertTopologyInvariants throws when an origem references a missing documento", () => {
@@ -480,15 +435,11 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dangling-doc",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-ghost" , indice: 0},
-        ],
-        fimCadeias: [],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-ghost", indice: 0 }],
+        fimCadeias: []
       };
       expect(() => assertTopologyInvariants(danglingDoc)).toThrow(
         /origem.*references missing documento/i
@@ -500,15 +451,11 @@ describe("chain-topology.invariants", () => {
         chainId: "chain-dangling-fim",
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
-        fimCadeias: [{ id: "fim-1", origemId: "ori-missing" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-missing" }]
       };
       expect(() => assertTopologyInvariants(danglingFim)).toThrow(
         /fim_cadeia.*references missing origem/i
@@ -516,53 +463,70 @@ describe("chain-topology.invariants", () => {
     });
 
     it("assertTopologyInvariants throws when origens have non-contiguous indices", () => {
-      // 3-doc linear, 2 lancs. lanc-1 has 2 origens with indices
       // [0, 2] (gap at 1) — should fail the contiguity check.
+      // Acyclic graph: doc-0 -> doc-2, doc-1 -> doc-2 (two sources to same target)
+      // Both origens point to the SAME lancamento (lanc-1) with indices 0 and 2.
       const gapIndices: TopologyGraph = {
         chainId: "chain-gap",
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-2", tipo: "registro" },
-        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
-          { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 2 }, // gap
-          { id: "ori-3", lancamentoId: "lanc-2", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 2 } // gap at index 1
         ],
-        fimCadeias: [],
+        fimCadeias: []
       };
-      expect(() => assertTopologyInvariants(gapIndices)).toThrow(
-        /non-contiguous indices/i
-      );
+      expect(() => assertTopologyInvariants(gapIndices)).toThrow(/non-contiguous indices/i);
     });
 
     it("assertTopologyInvariants throws when origens have duplicate indices", () => {
-      // Same as above but indices [0, 0] — duplicate.
+      // Indices [0, 0] — duplicate.
+      // Acyclic graph: doc-0 -> doc-2, doc-1 -> doc-2 (two sources to same target)
+      // Both origens point to the SAME lancamento with index 0.
       const dupIndices: TopologyGraph = {
         chainId: "chain-dup-idx",
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
-          { id: "lanc-2", documentoId: "doc-2", tipo: "registro" },
-        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
-          { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 }, // duplicate
-          { id: "ori-3", lancamentoId: "lanc-2", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 } // duplicate index 0
         ],
-        fimCadeias: [],
+        fimCadeias: []
       };
-      expect(() => assertTopologyInvariants(dupIndices)).toThrow(
-        /non-contiguous indices/i
+      expect(() => assertTopologyInvariants(dupIndices)).toThrow(/non-contiguous indices/i);
+    });
+
+    it("assertTopologyInvariants throws when multiple origens in the same lancamento reference the same documentoId", () => {
+      // This is the edge case flagged by Greptile: two origens in the same
+      // lancamento sharing a documentoId (indices 0 and 1 are contiguous,
+      // so the contiguity check passes). The toGraphJson edge ID scheme
+      // ${documentoId}->${lancamentoId} would produce duplicate edge IDs,
+      // causing validateGraph to throw a confusing "Duplicate edge ID" error.
+      // The invariant checker must catch this with a clear diagnostic.
+      const dupDocumentoId: TopologyGraph = {
+        chainId: "chain-dup-docid",
+        documentos: [
+          { id: "doc-0", tipo: "matricula" },
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 1 } // SAME documentoId, different index
+        ],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(dupDocumentoId)).toThrow(
+        /multiple origens referencing the same documento.*would produce duplicate edge IDs/i
       );
     });
   });
