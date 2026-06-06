@@ -514,7 +514,7 @@ describe("chain-topology.invariants", () => {
         /fim_cadeia.*references missing origem/i
       );
     });
-  });
+
     it("assertTopologyInvariants throws when origens have non-contiguous indices", () => {
       // 3-doc linear, 2 lancs. lanc-1 has 2 origens with indices
       // [0, 2] (gap at 1) — should fail the contiguity check.
@@ -565,5 +565,5 @@ describe("chain-topology.invariants", () => {
         /non-contiguous indices/i
       );
     });
-
+  });
 });
