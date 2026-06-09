@@ -606,12 +606,39 @@ describe("chain-topology.invariants", () => {
       const single: TopologyGraph = {
         chainId: "chain-single",
         imovel: { id: "imovel-single", seq: 1 },
-        imovelDocumentos: [],        documentos: [{ id: "doc-1", tipo: "matricula" }],
+        imovelDocumentos: [],
+        documentos: [{ id: "doc-1", tipo: "matricula" }],
         lancamentos: [],
         origens: [],
         fimCadeias: []
       };
       expect(() => assertTopologyInvariants(single)).not.toThrow();
+    });
+
+    it("assertTopologyInvariants throws when imovel_documento coverage is incomplete (chain with lancamentos but missing rows)", () => {
+      // Round-3 review M-1: the Q13/S-3 membership invariant
+      // was incomplete — it validated present rows but didn't
+      // require every documento to have a row. A connected
+      // chain with 3 docs and `imovelDocumentos: []` is a real
+      // bug (membership is a structural property, not
+      // optional). The fix adds a coverage check that runs
+      // only when the chain has both documentos and lancamentos
+      // (the degenerate n=1 case is exempt).
+      const missingRows: TopologyGraph = {
+        chainId: "chain-missing-rows",
+        imovel: { id: "imovel-x", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
+      };
+      expect(() => assertTopologyInvariants(missingRows)).toThrow(
+        /imovel_documento row count.*must equal documento count/i
+      );
     });
 
     it("assertTopologyInvariants throws on a cross-collection node id collision", () => {
@@ -626,10 +653,18 @@ describe("chain-topology.invariants", () => {
       const collision: TopologyGraph = {
         chainId: "chain-collision",
         imovel: { id: "imovel-collision", seq: 1 },
-        imovelDocumentos: [],        documentos: [
+        imovelDocumentos: [],
+        documentos: [
           { id: "shared-id", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
+        // The colliding id is "shared-id" (reused as a lanc
+        // id) — toGraphJson emits documentos + lancamentos into
+        // a single node namespace, so a documento id and a
+        // lancamento id cannot share a string. The previous
+        // inline comment said "lanc-1 collides" but the
+        // colliding id is actually "shared-id"; round-3 review
+        // NICE-1 caught that wording.
         lancamentos: [{ id: "shared-id", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "shared-id", documentoId: "shared-id", indice: 0 }],
         fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]

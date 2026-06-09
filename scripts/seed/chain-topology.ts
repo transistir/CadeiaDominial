@@ -647,48 +647,13 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
     );
   }
 
-  // S-3 / S-5 / Q13 invariants on the chain membership and the
-  // `inicio_matricula` contract:
-  //   - When the graph has at least 1 lancamento, it must have
-  //     exactly 1 lancamento of tipo `inicio_matricula` (per plan
-  //     S-3 acceptance: "exactly one inicio_matricula per chain").
-  //     When the graph has 0 lancamentos (e.g. n=1 linear with
-  //     degenerate "1 doc, 0 lanc" topology, or negative-test
-  //     fixtures), the count requirement is skipped.
-  //   - Every imovel_documento row references the chain's imovel
-  //     and an existing documento id.
-  //   - No duplicate imovel_documento rows.
-  const inicioLancs = graph.lancamentos.filter(
-    (l) => l.tipo === "inicio_matricula"
-  );
-  if (graph.lancamentos.length > 0 && inicioLancs.length !== 1) {
-    throw new TopologyInvariantError(
-      `chain must have exactly 1 inicio_matricula lancamento (when lancamentos exist), has ${inicioLancs.length}`
-    );
-  }
-  const seenImovelDocPairs = new Set<string>();
-  // Reuse the `docIds` set built by the duplicate-id check above
-  // (line 529) — same shape: Set of documento ids. No need to
-  // recompute.
-  for (const row of graph.imovelDocumentos) {
-    if (row.imovelId !== graph.imovel.id) {
-      throw new TopologyInvariantError(
-        `imovel_documento row references unknown imovel ${row.imovelId} (expected ${graph.imovel.id})`
-      );
-    }
-    if (!docIds.has(row.documentoId)) {
-      throw new TopologyInvariantError(
-        `imovel_documento row references unknown documento ${row.documentoId}`
-      );
-    }
-    const key = `${row.imovelId}/${row.documentoId}`;
-    if (seenImovelDocPairs.has(key)) {
-      throw new TopologyInvariantError(
-        `duplicate imovel_documento row ${key}`
-      );
-    }
-    seenImovelDocPairs.add(key);
-  }
+  // (S-3 / S-5 / Q13 invariants on chain membership and the
+  // `inicio_matricula` contract are run at the very end of this
+  // function, after all other structural checks. This ordering
+  // matters: a negative test that creates a cycle, non-contiguous
+  // indices, or missing terminal fim should still fire its
+  // SPECIFIC error, not get masked by an "imovel_documento row
+  // count" or "inicio_matricula count" complaint.)
   // (Connectivity / no-orphan check is performed below, after
   // `adj` is built, since it needs the document graph edges.)
 
@@ -853,5 +818,54 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
         );
       }
     }
+  }
+
+  // S-3 / S-5 / Q13 invariants (run LAST, after all other
+  // structural checks, so each negative test fires its SPECIFIC
+  // error rather than getting masked by these newer checks).
+  //   - Exactly 1 inicio_matricula per chain (when chain has
+  //     lancamentos). S-3 acceptance.
+  //   - Chain membership coverage: when chain has both docs and
+  //     lancs, every doc must have a matching imovel_documento
+  //     row. S-3 / Q13.
+  //   - Every imovel_documento row references the chain's imovel
+  //     and an existing documento id.
+  //   - No duplicate imovel_documento rows.
+  const inicioLancs = graph.lancamentos.filter(
+    (l) => l.tipo === "inicio_matricula"
+  );
+  if (graph.lancamentos.length > 0 && inicioLancs.length !== 1) {
+    throw new TopologyInvariantError(
+      `chain must have exactly 1 inicio_matricula lancamento (when lancamentos exist), has ${inicioLancs.length}`
+    );
+  }
+  if (
+    graph.documentos.length > 0 &&
+    graph.lancamentos.length > 0 &&
+    graph.imovelDocumentos.length !== graph.documentos.length
+  ) {
+    throw new TopologyInvariantError(
+      `imovel_documento row count (${graph.imovelDocumentos.length}) must equal documento count (${graph.documentos.length}) when the chain has lancamentos`
+    );
+  }
+  const seenImovelDocPairs = new Set<string>();
+  for (const row of graph.imovelDocumentos) {
+    if (row.imovelId !== graph.imovel.id) {
+      throw new TopologyInvariantError(
+        `imovel_documento row references unknown imovel ${row.imovelId} (expected ${graph.imovel.id})`
+      );
+    }
+    if (!docIds.has(row.documentoId)) {
+      throw new TopologyInvariantError(
+        `imovel_documento row references unknown documento ${row.documentoId}`
+      );
+    }
+    const key = `${row.imovelId}/${row.documentoId}`;
+    if (seenImovelDocPairs.has(key)) {
+      throw new TopologyInvariantError(
+        `duplicate imovel_documento row ${key}`
+      );
+    }
+    seenImovelDocPairs.add(key);
   }
 }
