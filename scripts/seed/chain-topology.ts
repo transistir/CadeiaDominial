@@ -841,11 +841,17 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   }
   if (
     graph.documentos.length > 0 &&
-    graph.lancamentos.length > 0 &&
     graph.imovelDocumentos.length !== graph.documentos.length
   ) {
+    // Per S-3 / Q13: chain membership is recorded ONLY in
+    // `imovel_documento` rows, never on the documentos. The
+    // generator emits exactly one row per documento, so a
+    // well-formed graph (with at least 1 documento) must have
+    // exactly `documentos.length` rows in `imovelDocumentos`.
+    // This applies for n=1 linear degenerate chains too
+    // (1 doc, 0 lancamentos, 1 imovel_documento row).
     throw new TopologyInvariantError(
-      `imovel_documento row count (${graph.imovelDocumentos.length}) must equal documento count (${graph.documentos.length}) when the chain has lancamentos`
+      `imovel_documento row count (${graph.imovelDocumentos.length}) must equal documento count (${graph.documentos.length})`
     );
   }
   const seenImovelDocPairs = new Set<string>();

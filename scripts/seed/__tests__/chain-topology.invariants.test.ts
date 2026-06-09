@@ -598,21 +598,46 @@ describe("chain-topology.invariants", () => {
       );
     });
 
-    it("assertTopologyInvariants allows a single isolated documento (linear n=1)", () => {
+    it("assertTopologyInvariants allows a single isolated documento (linear n=1) WITH its imovel_documento row", () => {
       // n=1 linear legitimately produces a graph with one doc,
-      // zero lancamentos, zero origens, zero fims. This is not
-      // an orphan — it's the degenerate single-doc case. The
-      // "orphan" check should NOT fire here.
+      // zero lancamentos, zero origens, zero fims. The "orphan"
+      // check should NOT fire here. The generator emits one
+      // `imovel_documento` row per documento (S-3 / Q13), so
+      // n=1 = 1 row. The invariant requires this coverage even
+      // for degenerate single-doc chains — Codex round-4
+      // finding 3381908845.
       const single: TopologyGraph = {
         chainId: "chain-single",
         imovel: { id: "imovel-single", seq: 1 },
-        imovelDocumentos: [],
+        imovelDocumentos: [
+          { imovelId: "imovel-single", documentoId: "doc-1" }
+        ],
         documentos: [{ id: "doc-1", tipo: "matricula" }],
         lancamentos: [],
         origens: [],
         fimCadeias: []
       };
       expect(() => assertTopologyInvariants(single)).not.toThrow();
+    });
+
+    it("assertTopologyInvariants throws on n=1 linear without its imovel_documento row", () => {
+      // Counterpart to the test above: a degenerate n=1
+      // single-doc graph with NO imovel_documento row is
+      // incomplete. The Q13 chain-membership invariant
+      // requires every documento to have its row, even when
+      // there are zero lancamentos. Codex round-4 3381908845.
+      const missing: TopologyGraph = {
+        chainId: "chain-single-orphan",
+        imovel: { id: "imovel-orphan", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [{ id: "doc-1", tipo: "matricula" }],
+        lancamentos: [],
+        origens: [],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(missing)).toThrow(
+        /imovel_documento row count.*must equal documento count/i
+      );
     });
 
     it("assertTopologyInvariants throws when imovel_documento coverage is incomplete (chain with lancamentos but missing rows)", () => {
