@@ -208,7 +208,7 @@ describe("chain-topology.invariants", () => {
       expect(() => assertTopologyInvariants(dup)).toThrow(TopologyInvariantError);
     });
 
-    it("assertTopologyInvariants throws on a 2-doc bidirectional cycle", () => {
+    it("assertTopologyInvariants throws on a rootless graph (2-doc bidirectional cycle makes every doc have >=1 incoming)", () => {
       // 2-doc graph where each doc points to the other via lancamentos.
       // The invariant checker should detect the cycle.
       const bad: TopologyGraph = {
