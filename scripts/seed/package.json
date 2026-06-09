@@ -1,0 +1,17 @@
+{
+  "name": "@cadeia/chain-topology",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./chain-topology.ts",
+  "types": "./chain-topology.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18",
+    "typescript": "^5.9.3"
+  }
+}

@@ -6,7 +6,8 @@ yarn-error.log*
 pnpm-debug.log*
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+# pnpm-lock.yaml is INTENTIONALLY committed (see PR #25): we need --frozen-lockfile
+# in CI for deterministic installs. Other lockfiles remain ignored (we use pnpm only).
 
 # TypeScript
 *.tsbuildinfo
@@ -84,9 +85,11 @@ out/
 .cache/
 .turbo/
 
-# Generated Mermaid diagrams
+# Generated Mermaid diagrams (render with mmdr --out elsewhere)
 docs/DEVELOPMENT_FLOW.svg
 docs/DEVELOPMENT_FLOW.png
+docs/ERD_*.png
+docs/db/erd-v2.png
 
 # Temporary files
 *.tmp
@@ -97,15 +100,29 @@ docs/DEVELOPMENT_FLOW.png
 
 # Backup files
 backups/
+backup_producao.sh
+restaurar_backup.sh
+restaurar_backup_dev.sh
 old/
+docs/livro/
 
 # Database dumps / exports (never commit)
 *.sql
 *.SQL
 *.dump
+
+# Drizzle migrations: generated on-the-fly in CI by `drizzle-kit generate`.
+# The .sql, .json (snapshots) and meta/ files are NOT the source of truth —
+# the TypeScript schema files in packages/api/drizzle/schema/ are.
+# Committing migrations creates drift between TS and SQL (Codex REJECTED
+# round 4 of T-101 for exactly this reason).
+packages/api/drizzle/migrations/*.sql
+packages/api/drizzle/migrations/*_snapshot.json
+**/drizzle/migrations/meta/
 *.sqlite
 *.sqlite3
 *.sqlite3.*
 db.sqlite3
 db.sqlite3.new
 .d1_chunks/
+

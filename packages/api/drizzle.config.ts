@@ -25,7 +25,10 @@ function getLocalD1DB() {
 
 export default defineConfig({
   dialect: "sqlite",
-  schema: "./drizzle/schema.ts",
+  // R5-2 (Codex round 5 MUST-FIX): load BOTH the v2 schema (index.ts)
+  // AND the legacy scaffold tables (schema.ts) so migrations include
+  // `users` + `health_checks` — required by `/auth/login` bootstrap.
+  schema: ["./drizzle/schema.ts", "./drizzle/schema/index.ts"],
   out: "./drizzle/migrations",
   dbCredentials: {
     url: getLocalD1DB() ?? "file:./local.sqlite",

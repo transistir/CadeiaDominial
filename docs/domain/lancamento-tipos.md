@@ -449,7 +449,7 @@ Quando a cadeia chega ao fim, o sistema **deve pedir** para marcar uma das opç�
 - Se ficar ilegível, não tem problema, mas essa informação sobre a origem (lídima, sem origem ou inconclusa) será o principal
 - Em algum lugar, precisa aparecer uma **lista de imóveis com essa condição**
 
-> **📋 Documentação Complementar:** Para informações detalhadas sobre fim de cadeia, tipos, classificações e implementação, consulte o documento: [`FIM_DE_CADEIA.md`](./FIM_DE_CADEIA.md).
+> **📋 Documentação Complementar:** Para informações detalhadas sobre fim de cadeia, tipos, classificações e implementação, consulte o documento: [`fim-de-cadeia.md`](./fim-de-cadeia.md).
 
 ### Exemplos de Uso
 
