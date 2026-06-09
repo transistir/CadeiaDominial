@@ -28,10 +28,12 @@ import { validateGraph } from "./validateGraph";
  * `GraphJson` shape consumed by `validateGraph`, `layoutGraph`, and
  * `GraphPreview`. Validates the converted output via `validateGraph` so
  * that callers receive a graph guaranteed to be renderable; throws
- * `TopologyInvariantError` (re-exported from the seed module) if the
- * topology violates structural invariants the validator checks. Run
- * `assertTopologyInvariants(top)` first if you want the deeper
- * structural checks (DAG, contiguity, terminal fims) before converting.
+ * `Error` (from `validateGraph`) on structural issues with the converted
+ * graph (duplicate node/edge ids, edges referencing missing nodes, etc.).
+ * Callers who want the deeper `assertTopologyInvariants` checks (DAG,
+ * contiguity, terminal fims, weak connectivity, S-3/Q13) should run
+ * `assertTopologyInvariants(top)` separately — those throw
+ * `TopologyInvariantError` and are NOT triggered by this function.
  */
 export function topologyToGraphJson(top: TopologyGraph): GraphJson {
   const json = seedToGraphJson(top) as GraphJson;

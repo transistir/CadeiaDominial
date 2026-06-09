@@ -31,20 +31,15 @@ describe("chain-topology", () => {
     });
 
     it("should throw RangeError for n = NaN, Infinity, or non-integer", () => {
+      // Without Number.isSafeInteger, NaN < 1 is false (passes), and
+      // the for loop "for (let i = 1; i <= NaN; i++)" simply never
+      // executes, returning an empty graph. With Infinity, the loop
+      // would hang trying to allocate 2^53 documents.
       expect(() => generateChainTopology(12345, NaN)).toThrow(RangeError);
       expect(() => generateChainTopology(12345, Infinity)).toThrow(RangeError);
       expect(() => generateChainTopology(12345, -Infinity)).toThrow(RangeError);
       expect(() => generateChainTopology(12345, 2.5)).toThrow(RangeError);
       expect(() => generateChainTopology(12345, 1.0001)).toThrow(RangeError);
-    });
-
-    it("should reject non-integer n values (catches the NaN/Infinity hang bug)", () => {
-      // Without Number.isSafeInteger, NaN < 1 is false (passes), and
-      // the for loop "for (let i = 1; i <= NaN; i++)" simply never
-      // executes, returning an empty graph. With Infinity, the loop
-      // would hang trying to allocate 2^53 documents.
-      expect(() => generateChainTopology(1, NaN)).toThrow(RangeError);
-      expect(() => generateChainTopology(1, Infinity)).toThrow(RangeError);
     });
 
     it("should throw RangeError for branching with n < 3", () => {
