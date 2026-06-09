@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateChainTopology, topologyToGraphJson } from "./topology-adapter";
 import { validateGraph } from "./validateGraph";
 import { layoutGraph } from "./layoutGraph";
+import type { TopologyGraph } from "@cadeia/chain-topology";
 
 describe("topology-adapter", () => {
   it("topologyToGraphJson for linear n=3 passes validateGraph", () => {
@@ -61,5 +62,36 @@ describe("topology-adapter", () => {
       expect(ids.has(edge.source)).toBe(true);
       expect(ids.has(edge.target)).toBe(true);
     }
+  });
+
+  it("topologyToGraphJson throws on a malformed topology (cross-collection id collision)", () => {
+    // Pre-PR review NICE-2: the adapter's `topologyToGraphJson`
+    // was a cast-only wrapper. The fix added a real
+    // `validateGraph(json)` call so a malformed topology surfaces
+    // an error at the adapter boundary instead of bubbling a
+    // confusing JSON-level validation error later. This test
+    // crafts a topology with a cross-collection node-id
+    // collision (`doc-1` reused as a lanc id) and asserts the
+    // adapter rejects it.
+    const malformed: TopologyGraph = {
+      imovel: { id: "imovel-1", seq: 1 },
+      imovelDocumentos: [
+        { imovelId: "imovel-1", documentoId: "doc-1" },
+        { imovelId: "imovel-1", documentoId: "doc-2" }
+      ],
+      documentos: [
+        { id: "doc-1", tipo: "matricula" },
+        { id: "doc-2", tipo: "matricula" }
+      ],
+      // `lanc-1` collides with the documento id `doc-1` in the
+      // resulting graph's node namespace. `toGraphJson` emits
+      // each collection into a single node id space, so a
+      // documento id and a lancamento id cannot share a string.
+      lancamentos: [{ id: "doc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
+      origens: [{ id: "ori-1", lancamentoId: "doc-1", documentoId: "doc-1", indice: 0 }],
+      fimCadeias: [{ id: "fim-1", origemId: "ori-1" }],
+      chainId: "chain-bad-collision"
+    };
+    expect(() => topologyToGraphJson(malformed)).toThrow();
   });
 });

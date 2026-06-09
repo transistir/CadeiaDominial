@@ -73,7 +73,8 @@ describe("chain-topology", () => {
       // exists for robustness.
       const graph: TopologyGraph = {
         chainId: "chain-defensive-1",
-        documentos: [
+        imovel: { id: "imovel-defensive-1", seq: 1 },
+        imovelDocumentos: [],        documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" },
         ],
@@ -102,7 +103,8 @@ describe("chain-topology", () => {
       // origem references a lancamento that doesn't exist in the graph.
       const graph: TopologyGraph = {
         chainId: "chain-defensive-2",
-        documentos: [
+        imovel: { id: "imovel-defensive-2", seq: 1 },
+        imovelDocumentos: [],        documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" },
         ],
