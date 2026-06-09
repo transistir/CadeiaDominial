@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateGraph } from "./validateGraph";
 import type { GraphJson } from "./types";
-import basicGraphFixture from "./fixtures/basic-graph.json";
 
 describe("validateGraph", () => {
   const validGraph: GraphJson = {
@@ -176,12 +175,6 @@ describe("validateGraph", () => {
     );
     const result = validateGraph(json);
     expect(result.nodes[0].id).toBe("doc-x");
-  });
-
-  it("rejects the committed basic-graph fixture until Item 5 updates it", () => {
-    expect(() => validateGraph(basicGraphFixture)).toThrow(
-      /nodes\[0\]\.type: invalid value 'source'/
-    );
   });
 
   it("accepts a documento node with all required fields", () => {

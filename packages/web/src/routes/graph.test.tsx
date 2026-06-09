@@ -25,10 +25,16 @@ vi.mock("@xyflow/react", () => ({
       <div data-testid="reactflow">
         <div data-testid="nodes">
           {nodes.map((node: unknown) => {
-            const n = node as { id: string; data?: { label?: string } };
+            const n = node as {
+              id: string;
+              type?: string;
+              data?: { label?: string; numero?: string };
+            };
             return (
               <div key={n.id} data-node-id={n.id}>
-                {n.data?.label ?? n.id}
+                {n.data?.numero ??
+                  n.data?.label ??
+                  (n.type === "fimCadeia" ? "Fim de cadeia" : n.id)}
               </div>
             );
           })}
@@ -116,9 +122,9 @@ describe("GraphRoute", () => {
     const graphPreview = screen.getByTestId("graph-preview");
     expect(graphPreview).toBeInTheDocument();
 
-    expect(screen.getByText("Field Data")).toBeInTheDocument();
-    expect(screen.getByText("Legal Analysis")).toBeInTheDocument();
-    expect(screen.getByText("Final Report")).toBeInTheDocument();
+    expect(screen.getByText("M1234")).toBeInTheDocument();
+    expect(screen.getByText("T5678")).toBeInTheDocument();
+    expect(screen.getByText("Fim de cadeia")).toBeInTheDocument();
     expect(fitViewSpy).toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
   });

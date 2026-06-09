@@ -11,6 +11,7 @@ export interface LayoutedNode {
   label: string;
   type: string;
   position: { x: number; y: number };
+  data?: unknown;
 }
 
 export interface LayoutedGraph {
@@ -57,13 +58,14 @@ export function layoutGraph(graph: GraphJson): LayoutedGraph {
       type: node.type,
       position: {
         x: pos.x - NODE_WIDTH / 2,
-        y: pos.y - NODE_HEIGHT / 2,
+        y: pos.y - NODE_HEIGHT / 2
       },
+      data: node.data
     };
   });
 
   return {
     nodes: layoutedNodes,
-    edges: graph.edges,
+    edges: graph.edges
   };
 }

@@ -1,11 +1,46 @@
 {
   "nodes": [
-    { "id": "field-data", "label": "Field Data", "type": "source" },
-    { "id": "analysis", "label": "Legal Analysis", "type": "process" },
-    { "id": "report", "label": "Final Report", "type": "output" }
+    {
+      "id": "doc-1",
+      "type": "documento",
+      "label": "M1234",
+      "data": {
+        "numero": "M1234",
+        "tipo": "matricula",
+        "cartorioId": "cartorio-sp-1",
+        "data": "2020-03-15"
+      }
+    },
+    {
+      "id": "doc-2",
+      "type": "documento",
+      "label": "T5678",
+      "data": {
+        "numero": "T5678",
+        "tipo": "transcricao",
+        "cartorioId": "cartorio-rj-2",
+        "data": "2022-07-22"
+      }
+    },
+    {
+      "id": "fim-1",
+      "type": "fimCadeia",
+      "label": "Fim de cadeia",
+      "data": { "classificacao": "origem_lidima" }
+    }
   ],
   "edges": [
-    { "id": "field-data-analysis", "source": "field-data", "target": "analysis" },
-    { "id": "analysis-report", "source": "analysis", "target": "report" }
+    {
+      "id": "lanc-1",
+      "source": "doc-1",
+      "target": "doc-2",
+      "data": { "tipoOrigem": "matricula" }
+    },
+    {
+      "id": "lanc-2",
+      "source": "doc-2",
+      "target": "fim-1",
+      "data": { "tipoOrigem": "fim_cadeia" }
+    }
   ]
 }

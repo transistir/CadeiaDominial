@@ -426,12 +426,14 @@ export interface SeedGraphNode {
   id: string;
   label: string;
   type: string;
+  data?: Record<string, unknown>;
 }
 
 export interface SeedGraphEdge {
   id: string;
   source: string;
   target: string;
+  data?: Record<string, unknown>;
 }
 
 export interface SeedGraphJson {
@@ -440,11 +442,9 @@ export interface SeedGraphJson {
 }
 
 /**
- * Convert a TopologyGraph into a minimal node/edge JSON payload suitable
- * for the web graph renderer. Uses only id/label/type for nodes and
- * id/source/target for edges. Richer metadata (lancamento/documento
- * tipo, chain membership) stays on the TopologyGraph until T-201 fills
- * human labels.
+ * Convert a TopologyGraph into node/edge JSON suitable for the web graph
+ * renderer. Lancamentos are emitted as direct edges between documentos,
+ * not intermediate nodes.
  */
 export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
   const nodes: SeedGraphNode[] = [];
@@ -452,21 +452,24 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
 
   for (const doc of graph.documentos) {
     const idx = doc.id.replace(/^doc-/, "");
-    nodes.push({ id: doc.id, label: `Documento ${idx}`, type: "documento" });
-  }
-  for (const lanc of graph.lancamentos) {
-    const idx = lanc.id.replace(/^lanc-/, "");
     nodes.push({
-      id: lanc.id,
-      label: `Lançamento ${idx}`,
-      type: "lancamento"
+      id: doc.id,
+      label: `Documento ${idx}`,
+      type: "documento",
+      data: {
+        numero: `${doc.tipo === "transcricao" ? "T" : "M"}${idx}`,
+        tipo: doc.tipo === "transcricao" ? "transcricao" : "matricula",
+        cartorioId: "cartorio-1",
+        data: "2024-01-01"
+      }
     });
   }
   for (const fim of graph.fimCadeias) {
     nodes.push({
       id: fim.id,
       label: "Fim de cadeia",
-      type: "fim_cadeia"
+      type: "fimCadeia",
+      data: { classificacao: "inconclusa" }
     });
   }
 
@@ -479,19 +482,20 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
   for (const l of graph.lancamentos) lancById.set(l.id, l);
   const origemById = new Map<string, TopologyOrigem>();
   for (const o of graph.origens) origemById.set(o.id, o);
+  const docById = new Map<string, TopologyDocumento>();
+  for (const d of graph.documentos) docById.set(d.id, d);
 
   for (const ori of graph.origens) {
+    const lanc = lancById.get(ori.lancamentoId);
+    if (!lanc) continue;
+    const sourceDoc = docById.get(ori.documentoId);
     edges.push({
-      id: `${ori.documentoId}->${ori.lancamentoId}`,
+      id: `${ori.documentoId}->${lanc.documentoId}`,
       source: ori.documentoId,
-      target: ori.lancamentoId
-    });
-  }
-  for (const lanc of graph.lancamentos) {
-    edges.push({
-      id: `${lanc.id}->${lanc.documentoId}`,
-      source: lanc.id,
-      target: lanc.documentoId
+      target: lanc.documentoId,
+      data: {
+        tipoOrigem: sourceDoc?.tipo === "transcricao" ? "transcricao" : "matricula"
+      }
     });
   }
   for (const fim of graph.fimCadeias) {
@@ -502,7 +506,8 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     edges.push({
       id: `${lanc.documentoId}->${fim.id}`,
       source: lanc.documentoId,
-      target: fim.id
+      target: fim.id,
+      data: { tipoOrigem: "fim_cadeia" }
     });
   }
 

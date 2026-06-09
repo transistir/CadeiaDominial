@@ -51,6 +51,7 @@ describe("layoutGraph", () => {
     const nodeA = result.nodes.find((n) => n.id === "doc-a");
     expect(nodeA?.label).toBe("Node A");
     expect(nodeA?.type).toBe("documento");
+    expect(nodeA?.data).toEqual(graph.nodes[0].data);
   });
 
   it("preserves edges", () => {
@@ -86,21 +87,21 @@ describe("layoutGraph", () => {
     expect(result.nodes).toHaveLength(3);
     expect(result.edges).toHaveLength(2);
 
-    // Field Data (source) is leftmost, Final Report (output) is rightmost.
-    const field = result.nodes.find((n) => n.label === "Field Data")!;
-    const analysis = result.nodes.find((n) => n.label === "Legal Analysis")!;
-    const report = result.nodes.find((n) => n.label === "Final Report")!;
-    expect(field.position.x).toBeLessThan(analysis.position.x);
-    expect(analysis.position.x).toBeLessThan(report.position.x);
+    // M1234 is leftmost, Fim de cadeia is rightmost.
+    const matricula = result.nodes.find((n) => n.label === "M1234")!;
+    const transcricao = result.nodes.find((n) => n.label === "T5678")!;
+    const fim = result.nodes.find((n) => n.label === "Fim de cadeia")!;
+    expect(matricula.position.x).toBeLessThan(transcricao.position.x);
+    expect(transcricao.position.x).toBeLessThan(fim.position.x);
 
     // All three nodes share the same y-coordinate (single rank, LR layout).
-    expect(analysis.position.y).toBeCloseTo(field.position.y, 5);
-    expect(report.position.y).toBeCloseTo(field.position.y, 5);
+    expect(transcricao.position.y).toBeCloseTo(matricula.position.y, 5);
+    expect(fim.position.y).toBeCloseTo(matricula.position.y, 5);
 
     // Exact x-positions are deterministic — locked down to catch layout shifts.
     // (ranksep=80, node width=180, so each subsequent node is 260 to the right.)
-    expect(field.position.x).toBeCloseTo(0, 5);
-    expect(analysis.position.x).toBeCloseTo(260, 5);
-    expect(report.position.x).toBeCloseTo(520, 5);
+    expect(matricula.position.x).toBeCloseTo(0, 5);
+    expect(transcricao.position.x).toBeCloseTo(260, 5);
+    expect(fim.position.x).toBeCloseTo(520, 5);
   });
 });
