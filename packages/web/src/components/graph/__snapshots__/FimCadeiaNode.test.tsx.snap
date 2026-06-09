@@ -1,0 +1,91 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FimCadeiaNode > matches snapshot for inconclusa classification 1`] = `
+<div
+  class="fim-cadeia-node fim-cadeia-node--inconclusa"
+  data-classificacao="inconclusa"
+  data-testid="fim-cadeia-node"
+>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    aria-hidden="true"
+    class="fim-cadeia-node__icon"
+  >
+    ⏹
+  </div>
+  <div
+    class="fim-cadeia-node__label"
+  >
+    Fim de Cadeia
+  </div>
+  <div
+    class="fim-cadeia-node__classification"
+  >
+    Inconclusa
+  </div>
+</div>
+`;
+
+exports[`FimCadeiaNode > matches snapshot for origem_lidima classification 1`] = `
+<div
+  class="fim-cadeia-node fim-cadeia-node--origem_lidima"
+  data-classificacao="origem_lidima"
+  data-testid="fim-cadeia-node"
+>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    aria-hidden="true"
+    class="fim-cadeia-node__icon"
+  >
+    ⏹
+  </div>
+  <div
+    class="fim-cadeia-node__label"
+  >
+    Fim de Cadeia
+  </div>
+  <div
+    class="fim-cadeia-node__classification"
+  >
+    Origem Lídima
+  </div>
+</div>
+`;
+
+exports[`FimCadeiaNode > matches snapshot for sem_origem classification 1`] = `
+<div
+  class="fim-cadeia-node fim-cadeia-node--sem_origem"
+  data-classificacao="sem_origem"
+  data-testid="fim-cadeia-node"
+>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    aria-hidden="true"
+    class="fim-cadeia-node__icon"
+  >
+    ⏹
+  </div>
+  <div
+    class="fim-cadeia-node__label"
+  >
+    Fim de Cadeia
+  </div>
+  <div
+    class="fim-cadeia-node__classification"
+  >
+    Sem Origem
+  </div>
+</div>
+`;
