@@ -8,7 +8,7 @@ export interface TopologyDocumento {
   tipo: DocumentoTipo;
 }
 
-export type LancamentoTipo = "registro" | "averbacao";
+export type LancamentoTipo = "registro" | "averbacao" | "inicio_matricula";
 
 export interface TopologyLancamento {
   id: string;
@@ -21,7 +21,7 @@ export interface TopologyOrigem {
   /** 0-based contiguous index of this origem within its lancamento (per plan
    *  S-5 / `docs/db/SCHEMA_CONSOLIDATED.md:197` — must be 0..k-1 with no
    *  duplicates or gaps inside a given `lancamentoId`). */
-    indice: number;
+  indice: number;
   lancamentoId: string;
   documentoId: string;
 }
@@ -31,7 +31,30 @@ export interface TopologyFimCadeia {
   origemId: string;
 }
 
+/** One `imovel` per generated chain. The plan (S-3) calls for exactly
+ *  one imovel per chain; the model supports N imovels per chain in
+ *  principle, but the S-3 generator emits exactly one. The chain's
+ *  imovel has a stable id derived from the seed (`imovel-<seed>`). */
+export interface TopologyImovel {
+  id: string;
+  /** Sequence number within the chain; the S-3 generator emits 1. */
+  seq: number;
+}
+
+/** Many-to-many membership rows linking imovels to documentos (per
+ *  Q13: chain membership is N:N via `imovel_documento`; do NOT put
+ *  `imovelId` or `isDocumentoAtual` on `documento`). A documento
+ *  appears once per imovel-documento row. */
+export interface TopologyImovelDocumento {
+  imovelId: string;
+  documentoId: string;
+}
+
 export interface TopologyGraph {
+  /** One imovel per generated chain. S-3 emits exactly 1. */
+  imovel: TopologyImovel;
+  /** N:N imovel-documento membership rows. S-3 emits one per doc. */
+  imovelDocumentos: TopologyImovelDocumento[];
   documentos: TopologyDocumento[];
   lancamentos: TopologyLancamento[];
   origens: TopologyOrigem[];
@@ -45,10 +68,7 @@ export interface GenerateChainTopologyOptions {
   shape?: ChainShape;
 }
 
-const DOCUMENTO_TIPOS: readonly DocumentoTipo[] = [
-  "matricula",
-  "transcricao",
-] as const;
+const DOCUMENTO_TIPOS: readonly DocumentoTipo[] = ["matricula", "transcricao"] as const;
 
 export function generateChainTopology(
   seed: number,
@@ -57,8 +77,8 @@ export function generateChainTopology(
 ): TopologyGraph {
   const shape = options?.shape ?? "linear";
 
-  if (n < 1) {
-    throw new RangeError(`n must be >= 1, got ${n}`);
+  if (!Number.isSafeInteger(n) || n < 1) {
+    throw new RangeError(`n must be a safe integer >= 1, got ${n}`);
   }
 
   if ((shape === "branching" || shape === "merge") && n < 3) {
@@ -67,14 +87,15 @@ export function generateChainTopology(
 
   const rng = createRng(seed);
   const chainId = `chain-${seed}`;
+  const imovelId = `imovel-${seed}`;
 
   if (shape === "linear") {
-    return generateLinear(n, rng, chainId);
+    return generateLinear(n, rng, chainId, imovelId);
   }
   if (shape === "branching") {
-    return generateBranching(n, rng, chainId);
+    return generateBranching(n, rng, chainId, imovelId);
   }
-  return generateMerge(n, rng, chainId);
+  return generateMerge(n, rng, chainId, imovelId);
 }
 
 /**
@@ -134,7 +155,8 @@ function computeTerminalFims(
 function generateLinear(
   n: number,
   rng: () => number,
-  chainId: string
+  chainId: string,
+  imovelId: string
 ): TopologyGraph {
   const documentos: TopologyDocumento[] = [];
   for (let i = 1; i <= n; i++) {
@@ -148,35 +170,58 @@ function generateLinear(
   // The Averbação variant is reserved for faker-driven generators in
   // later tasks; assertTopologyInvariants still enforces the rule
   // (Averbação has zero origens) via the negative tests.
+  //
+  // Per the plan (S-3 acceptance: "exactly one inicio_matricula per
+  // chain") the first lancamento is an `inicio_matricula`; the rest
+  // are `registro`. The first lancamento still has one origem (the
+  // origem from doc-1) and the regular S-3/S-5 rules apply.
   const lancamentos: TopologyLancamento[] = [];
   const origens: TopologyOrigem[] = [];
   for (let i = 1; i <= n - 1; i++) {
     lancamentos.push({
       id: `lanc-${i}`,
       documentoId: `doc-${i + 1}`,
-      tipo: "registro",
+      tipo: i === 1 ? "inicio_matricula" : "registro"
     });
     origens.push({
       id: `ori-${i}`,
       lancamentoId: `lanc-${i}`,
       documentoId: `doc-${i}`,
-      indice: 0,
+      indice: 0
     });
   }
 
   // In a linear chain, only the last lancamento produces a terminal
   // origem (its target doc has no outgoing origem), so exactly one
   // fim_cadeia. For n=1 there are no lancamentos and no fims.
-  const fimCadeias: TopologyFimCadeia[] =
-    n >= 2 ? computeTerminalFims(lancamentos, origens) : [];
+  const fimCadeias: TopologyFimCadeia[] = n >= 2 ? computeTerminalFims(lancamentos, origens) : [];
 
-  return { documentos, lancamentos, origens, fimCadeias, chainId };
+  // Imovel membership: one imovel per chain, one imovel_documento row
+  // per documento. Per Q13 the membership is N:N via imovel_documento;
+  // the S-3 generator emits one row per documento and exactly one
+  // imovel per chain.
+  const imovel: TopologyImovel = { id: imovelId, seq: 1 };
+  const imovelDocumentos: TopologyImovelDocumento[] = documentos.map((d) => ({
+    imovelId,
+    documentoId: d.id
+  }));
+
+  return {
+    imovel,
+    imovelDocumentos,
+    documentos,
+    lancamentos,
+    origens,
+    fimCadeias,
+    chainId
+  };
 }
 
 function generateBranching(
   n: number,
   rng: () => number,
-  chainId: string
+  chainId: string,
+  imovelId: string
 ): TopologyGraph {
   // Linear prefix of (n-2) docs, then 1 branch point (= last prefix doc) with
   // 2 outgoing lancamentos into 2 parallel children.
@@ -194,45 +239,54 @@ function generateBranching(
   const lancamentos: TopologyLancamento[] = [];
   const origens: TopologyOrigem[] = [];
 
-  // Prefix lancs are all Registro: deterministic, one origem per
-  // lancamento. See generateLinear for rationale.
+  // Prefix lancs: the FIRST prefix lanc is the chain's
+  // `inicio_matricula`; the rest are `registro`. See generateLinear
+  // for the same S-3 contract.
   for (let i = 1; i <= prefixLen - 1; i++) {
     lancamentos.push({
       id: `lanc-${i}`,
       documentoId: `doc-${i + 1}`,
-      tipo: "registro",
+      tipo: i === 1 ? "inicio_matricula" : "registro"
     });
     origens.push({
       id: `ori-${i}`,
       lancamentoId: `lanc-${i}`,
       documentoId: `doc-${i}`,
-      indice: 0,
+      indice: 0
     });
   }
 
   const leftIdx = prefixLen;
   const rightIdx = prefixLen + 1;
+  // For branching n=3, prefixLen=1, so the prefix loop is empty
+  // and the chain's first lancamento is one of the two branch
+  // lancs. Per S-3 ("exactly one inicio_matricula per chain"),
+  // the left branch (the one that flows doc-n-1 -> doc-n) is
+  // the chain's head; the right branch is a `registro`.
+  // For n>=4 the prefix loop already emits an `inicio_matricula`
+  // (the first prefix lanc), so both branch lancs are `registro`.
+  const branchLeftTipo = prefixLen === 1 ? "inicio_matricula" : "registro";
   lancamentos.push({
     id: `lanc-${leftIdx}`,
     documentoId: leftChildId,
-    tipo: "registro",
+    tipo: branchLeftTipo
   });
   origens.push({
     id: `ori-${leftIdx}`,
     lancamentoId: `lanc-${leftIdx}`,
     documentoId: branchPointId,
-    indice: 0,
+    indice: 0
   });
   lancamentos.push({
     id: `lanc-${rightIdx}`,
     documentoId: rightChildId,
-    tipo: "registro",
+    tipo: "registro"
   });
   origens.push({
     id: `ori-${rightIdx}`,
     lancamentoId: `lanc-${rightIdx}`,
     documentoId: branchPointId,
-    indice: 0,
+    indice: 0
   });
 
   // Per Q3 + plan S-5: every terminal origem (per the DAG-terminal
@@ -251,13 +305,27 @@ function generateBranching(
   // point) is non-terminal. See computeTerminalFims for the precise
   // rule; the test cases for branching n=3 / n=6 / n=4 pin the counts.
   const fimCadeias = computeTerminalFims(lancamentos, origens);
-  return { documentos, lancamentos, origens, fimCadeias, chainId };
+  const imovel: TopologyImovel = { id: imovelId, seq: 1 };
+  const imovelDocumentos: TopologyImovelDocumento[] = documentos.map((d) => ({
+    imovelId,
+    documentoId: d.id
+  }));
+  return {
+    imovel,
+    imovelDocumentos,
+    documentos,
+    lancamentos,
+    origens,
+    fimCadeias,
+    chainId
+  };
 }
 
 function generateMerge(
   n: number,
   rng: () => number,
-  chainId: string
+  chainId: string,
+  imovelId: string
 ): TopologyGraph {
   // Plan S-4: merge where one Registro has two or more origins.
   // 1 lancamento at the merge point: lanc-1 (Registro) targeting doc-3 with
@@ -273,23 +341,27 @@ function generateMerge(
   const lancamentos: TopologyLancamento[] = [];
   const origens: TopologyOrigem[] = [];
 
-  // Merge point: 1 Registro with 2 origens.
+  // Merge point: the chain's `inicio_matricula` (per S-3, exactly one
+  // inicio_matricula per chain). The merge point has 2 origens (from
+  // doc-1 and doc-2), but only one is the chain's head — we treat the
+  // first one (indice 0, from doc-1) as the chain's entry, matching
+  // the linear and branching generators' "first lanc is inicio".
   lancamentos.push({
     id: `lanc-1`,
     documentoId: `doc-3`,
-    tipo: "registro",
+    tipo: "inicio_matricula"
   });
   origens.push({
     id: `ori-1`,
     lancamentoId: `lanc-1`,
     documentoId: `doc-1`,
-    indice: 0,
+    indice: 0
   });
   origens.push({
     id: `ori-2`,
     lancamentoId: `lanc-1`,
     documentoId: `doc-2`,
-    indice: 1,
+    indice: 1
   });
 
   // Linear suffix: doc-3 -> doc-4 -> ... -> doc-n.
@@ -305,13 +377,13 @@ function generateMerge(
     lancamentos.push({
       id: `lanc-${lancIdx}`,
       documentoId: `doc-${docIdx}`,
-      tipo: "registro",
+      tipo: "registro"
     });
     origens.push({
       id: `ori-${oriIdx}`,
       lancamentoId: `lanc-${lancIdx}`,
       documentoId: `doc-${docIdx - 1}`,
-      indice: 0,
+      indice: 0
     });
   }
 
@@ -326,7 +398,21 @@ function generateMerge(
   //     terminal one → 1 fim.
   const fimCadeias = computeTerminalFims(lancamentos, origens);
 
-  return { documentos, lancamentos, origens, fimCadeias, chainId };
+  const imovel: TopologyImovel = { id: imovelId, seq: 1 };
+  const imovelDocumentos: TopologyImovelDocumento[] = documentos.map((d) => ({
+    imovelId,
+    documentoId: d.id
+  }));
+
+  return {
+    imovel,
+    imovelDocumentos,
+    documentos,
+    lancamentos,
+    origens,
+    fimCadeias,
+    chainId
+  };
 }
 
 /**
@@ -373,14 +459,14 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     nodes.push({
       id: lanc.id,
       label: `Lançamento ${idx}`,
-      type: "lancamento",
+      type: "lancamento"
     });
   }
   for (const fim of graph.fimCadeias) {
     nodes.push({
       id: fim.id,
       label: "Fim de cadeia",
-      type: "fim_cadeia",
+      type: "fim_cadeia"
     });
   }
 
@@ -398,14 +484,14 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     edges.push({
       id: `${ori.documentoId}->${ori.lancamentoId}`,
       source: ori.documentoId,
-      target: ori.lancamentoId,
+      target: ori.lancamentoId
     });
   }
   for (const lanc of graph.lancamentos) {
     edges.push({
       id: `${lanc.id}->${lanc.documentoId}`,
       source: lanc.id,
-      target: lanc.documentoId,
+      target: lanc.documentoId
     });
   }
   for (const fim of graph.fimCadeias) {
@@ -416,7 +502,7 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     edges.push({
       id: `${lanc.documentoId}->${fim.id}`,
       source: lanc.documentoId,
-      target: fim.id,
+      target: fim.id
     });
   }
 
@@ -520,6 +606,12 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   }
 
   // S-5: each Registro has origens.length >= 1; each Averbação has none.
+  // `inicio_matricula` is the chain's head record — it has 0 origens
+  // in the merge shape (sits on doc-1, the chain's root) and 1+
+  // origens in the linear / branching shapes (sits on doc-2 with
+  // doc-1 flowing in). Both are valid; we don't enforce an
+  // origem-count for inicio_matricula here — the shape-specific
+  // generator contract is the source of truth.
   for (const l of graph.lancamentos) {
     const origensForLanc = origensByLanc.get(l.id) ?? [];
     if (l.tipo === "averbacao") {
@@ -528,13 +620,14 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
           `averbação ${l.id} must have 0 origens, has ${origensForLanc.length}`
         );
       }
-    } else {
+    } else if (l.tipo === "registro") {
       if (origensForLanc.length < 1) {
         throw new TopologyInvariantError(
           `registro ${l.id} must have at least 1 origem, has ${origensForLanc.length}`
         );
       }
     }
+    // inicio_matricula: no cardinality check here.
   }
 
   // Cardinality: not strictly lancamentos === documentos - 1 (that
@@ -557,13 +650,15 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
     );
   }
 
-  // Ensure every non-root documento has >= 1 incoming lancamento
-  // (no orphan documentos) — matches the comment at lines 530-531.
-  for (const count of incoming.values()) {
-    if (count === 0) continue; // roots are allowed
-    // count is already >= 1 here (since we continued on 0)
-    // No orphan check needed - the root check above covers it
-  }
+  // (S-3 / S-5 / Q13 invariants on chain membership and the
+  // `inicio_matricula` contract are run at the very end of this
+  // function, after all other structural checks. This ordering
+  // matters: a negative test that creates a cycle, non-contiguous
+  // indices, or missing terminal fim should still fire its
+  // SPECIFIC error, not get masked by an "imovel_documento row
+  // count" or "inicio_matricula count" complaint.)
+  // (Connectivity / no-orphan check is performed below, after
+  // `adj` is built, since it needs the document graph edges.)
 
   // DAG check on the document graph: edges from doc -> doc via
   // (doc -> lanc -> doc). A cycle here would mean a document is both
@@ -583,9 +678,7 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   function dfs(node: string): void {
     if (visited.has(node)) return;
     if (visiting.has(node)) {
-      throw new TopologyInvariantError(
-        `cycle detected involving document ${node}`
-      );
+      throw new TopologyInvariantError(`cycle detected involving document ${node}`);
     }
     visiting.add(node);
     for (const next of adj.get(node) ?? []) dfs(next);
@@ -593,6 +686,81 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
     visited.add(node);
   }
   for (const id of adj.keys()) dfs(id);
+
+  // Connectivity / no-orphan check. The "no root" check above
+  // verifies `rootCount >= 1`; the DAG DFS verifies the
+  // document graph is acyclic. But neither catches the
+  // "one chain plus an isolated documento" case: a graph
+  // with `doc-1 -> doc-2` plus `doc-3` (no incoming, no
+  // outgoing) satisfies `rootCount >= 1` (doc-3 is a root),
+  // passes the DFS (doc-3 is a trivial node with empty adj
+  // list), and passes the S-3/S-5/terminal-fim checks. We
+  // catch it here with an explicit weak-connectivity check:
+  // the document graph (with edges doc->doc via
+  // origem->lanc->doc) must have a single weakly connected
+  // component. We compute connected components via BFS from
+  // each unvisited node, then assert exactly 1 component.
+  const component = new Map<string, number>();
+  let components = 0;
+  for (const id of adj.keys()) {
+    if (component.has(id)) continue;
+    components += 1;
+    if (components > 1) {
+      throw new TopologyInvariantError(
+        `orphan documento(s): document graph has ${components} weakly connected components (expected 1)`
+      );
+    }
+    // BFS from `id` over the undirected projection of the adj graph.
+    const queue: string[] = [id];
+    component.set(id, components);
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      // Outgoing edges (from adj).
+      for (const next of adj.get(cur) ?? []) {
+        if (!component.has(next)) {
+          component.set(next, components);
+          queue.push(next);
+        }
+      }
+      // Incoming edges (reverse BFS). Scan all adj entries
+      // for predecessors; O(n²) worst case but the graph is
+      // small and this is an invariant check, not hot path.
+      for (const [pred, succs] of adj) {
+        if (succs.includes(cur) && !component.has(pred)) {
+          component.set(pred, components);
+          queue.push(pred);
+        }
+      }
+    }
+  }
+  // For n=1 linear, components === 1 with one node; passes.
+
+  // Cross-collection uniqueness: `toGraphJson` emits
+  // documentos, lancamentos, and fimCadeias into one node
+  // namespace, so IDs that are unique WITHIN their collection
+  // (e.g. "doc-1" and "lanc-1") can still collide across
+  // collections in the resulting graph (a doc id equals a
+  // lanc id). The check below ensures every node id in the
+  // resulting graph is unique.
+  const nodeIds = new Set<string>();
+  for (const d of graph.documentos) {
+    if (nodeIds.has(d.id)) {
+      throw new TopologyInvariantError(`node id ${d.id} (documento) collides with another node`);
+    }
+    nodeIds.add(d.id);
+  }
+  for (const l of graph.lancamentos) {
+    if (nodeIds.has(l.id)) {
+      throw new TopologyInvariantError(`node id ${l.id} (lancamento) collides with another node`);
+    }
+    nodeIds.add(l.id);
+  }
+  for (const f of graph.fimCadeias) {
+    if (nodeIds.has(f.id)) {
+      throw new TopologyInvariantError(`node id ${f.id} (fim_cadeia) collides with another node`);
+    }
+    nodeIds.add(f.id);
+  }
 
   // S-5 contiguity: per-lancamento, the origens' `indice` values must be
   // a contiguous 0..k-1 sequence with no duplicates (per plan S-5 and
@@ -645,5 +813,53 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
         );
       }
     }
+  }
+
+  // S-3 / S-5 / Q13 invariants (run LAST, after all other
+  // structural checks, so each negative test fires its SPECIFIC
+  // error rather than getting masked by these newer checks).
+  //   - Exactly 1 inicio_matricula per chain (when chain has
+  //     lancamentos). S-3 acceptance.
+  //   - Chain membership coverage: when chain has both docs and
+  //     lancs, every doc must have a matching imovel_documento
+  //     row. S-3 / Q13.
+  //   - Every imovel_documento row references the chain's imovel
+  //     and an existing documento id.
+  //   - No duplicate imovel_documento rows.
+  const inicioLancs = graph.lancamentos.filter((l) => l.tipo === "inicio_matricula");
+  if (graph.lancamentos.length > 0 && inicioLancs.length !== 1) {
+    throw new TopologyInvariantError(
+      `chain must have exactly 1 inicio_matricula lancamento (when lancamentos exist), has ${inicioLancs.length}`
+    );
+  }
+  if (graph.documentos.length > 0 && graph.imovelDocumentos.length !== graph.documentos.length) {
+    // Per S-3 / Q13: chain membership is recorded ONLY in
+    // `imovel_documento` rows, never on the documentos. The
+    // generator emits exactly one row per documento, so a
+    // well-formed graph (with at least 1 documento) must have
+    // exactly `documentos.length` rows in `imovelDocumentos`.
+    // This applies for n=1 linear degenerate chains too
+    // (1 doc, 0 lancamentos, 1 imovel_documento row).
+    throw new TopologyInvariantError(
+      `imovel_documento row count (${graph.imovelDocumentos.length}) must equal documento count (${graph.documentos.length})`
+    );
+  }
+  const seenImovelDocPairs = new Set<string>();
+  for (const row of graph.imovelDocumentos) {
+    if (row.imovelId !== graph.imovel.id) {
+      throw new TopologyInvariantError(
+        `imovel_documento row references unknown imovel ${row.imovelId} (expected ${graph.imovel.id})`
+      );
+    }
+    if (!docIds.has(row.documentoId)) {
+      throw new TopologyInvariantError(
+        `imovel_documento row references unknown documento ${row.documentoId}`
+      );
+    }
+    const key = `${row.imovelId}/${row.documentoId}`;
+    if (seenImovelDocPairs.has(key)) {
+      throw new TopologyInvariantError(`duplicate imovel_documento row ${key}`);
+    }
+    seenImovelDocPairs.add(key);
   }
 }

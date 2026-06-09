@@ -157,12 +157,14 @@ describe("chain-topology.invariants", () => {
       // -> doc-1. The invariant checker should detect the cycle.
       const cyclic: TopologyGraph = {
         chainId: "chain-cyclic",
+        imovel: { id: "imovel-cyclic", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" },
           { id: "lanc-2", documentoId: "doc-1", tipo: "registro" }
         ],
         origens: [
@@ -180,8 +182,10 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws on an orphan edge (lancamento references missing doc)", () => {
       const orphan: TopologyGraph = {
         chainId: "chain-orphan",
+        imovel: { id: "imovel-orphan", seq: 1 },
+        imovelDocumentos: [],
         documentos: [{ id: "doc-1", tipo: "matricula" }],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-ghost", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-ghost", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
         fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
       };
@@ -191,6 +195,8 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws on duplicate IDs", () => {
       const dup: TopologyGraph = {
         chainId: "chain-dup",
+        imovel: { id: "imovel-dup", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" }
@@ -207,12 +213,14 @@ describe("chain-topology.invariants", () => {
       // The invariant checker should detect the cycle.
       const bad: TopologyGraph = {
         chainId: "chain-bad",
+        imovel: { id: "imovel-bad", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" },
           { id: "lanc-2", documentoId: "doc-1", tipo: "registro" }
         ],
         origens: [
@@ -233,13 +241,15 @@ describe("chain-topology.invariants", () => {
       // earlier invariant fires.
       const cyclic: TopologyGraph = {
         chainId: "chain-cycle",
+        imovel: { id: "imovel-cycle", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-1", tipo: "inicio_matricula" },
           { id: "lanc-2", documentoId: "doc-2", tipo: "registro" },
           { id: "lanc-3", documentoId: "doc-1", tipo: "registro" } // back-edge
         ],
@@ -259,12 +269,14 @@ describe("chain-topology.invariants", () => {
       // "no root" check fires.
       const rootless: TopologyGraph = {
         chainId: "chain-rootless",
+        imovel: { id: "imovel-rootless", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-1", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-1", tipo: "inicio_matricula" },
           { id: "lanc-2", documentoId: "doc-0", tipo: "registro" }
         ],
         origens: [
@@ -284,11 +296,13 @@ describe("chain-topology.invariants", () => {
       // The terminal-must-have-1-fim check (line 588) should fire.
       const noFim: TopologyGraph = {
         chainId: "chain-no-fim",
+        imovel: { id: "imovel-no-fim", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
         fimCadeias: []
       };
@@ -301,13 +315,15 @@ describe("chain-topology.invariants", () => {
       // fim triggers line 594.
       const extraFim: TopologyGraph = {
         chainId: "chain-extra-fim",
+        imovel: { id: "imovel-extra-fim", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" },
           { id: "doc-3", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" },
           { id: "lanc-2", documentoId: "doc-3", tipo: "registro" }
         ],
         origens: [
@@ -328,13 +344,15 @@ describe("chain-topology.invariants", () => {
       // Then add a 3rd doc with a lanc that has 0 origens.
       const registroSemOrigem: TopologyGraph = {
         chainId: "chain-registro-sem-origem",
+        imovel: { id: "imovel-registro-sem-origem", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" },
           { id: "doc-3", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" },
           { id: "lanc-2", documentoId: "doc-3", tipo: "registro" }
         ],
         origens: [
@@ -352,6 +370,8 @@ describe("chain-topology.invariants", () => {
       // Line 498: averbação lanc with origens → S-3 violation.
       const averbacaoComOrigem: TopologyGraph = {
         chainId: "chain-averbacao-com-origem",
+        imovel: { id: "imovel-averbacao-com-origem", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
@@ -368,12 +388,14 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws on duplicate lancamento id", () => {
       const dupLanc: TopologyGraph = {
         chainId: "chain-dup-lanc",
+        imovel: { id: "imovel-dup-lanc", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
         lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
+          { id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" },
           { id: "lanc-1", documentoId: "doc-1", tipo: "registro" }
         ],
         origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
@@ -385,11 +407,13 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws on duplicate origem id", () => {
       const dupOri: TopologyGraph = {
         chainId: "chain-dup-ori",
+        imovel: { id: "imovel-dup-ori", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 1 }
@@ -402,11 +426,13 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws on duplicate fim_cadeia id", () => {
       const dupFim: TopologyGraph = {
         chainId: "chain-dup-fim",
+        imovel: { id: "imovel-dup-fim", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
         fimCadeias: [
           { id: "fim-1", origemId: "ori-1" },
@@ -419,11 +445,13 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws when an origem references a missing lancamento", () => {
       const danglingOri: TopologyGraph = {
         chainId: "chain-dangling-ori",
+        imovel: { id: "imovel-dangling-ori", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "lanc-missing", documentoId: "doc-1", indice: 0 }],
         fimCadeias: []
       };
@@ -433,11 +461,13 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws when an origem references a missing documento", () => {
       const danglingDoc: TopologyGraph = {
         chainId: "chain-dangling-doc",
+        imovel: { id: "imovel-dangling-doc", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-ghost", indice: 0 }],
         fimCadeias: []
       };
@@ -449,11 +479,13 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws when a fim_cadeia references a missing origem", () => {
       const danglingFim: TopologyGraph = {
         chainId: "chain-dangling-fim",
+        imovel: { id: "imovel-dangling-fim", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
         fimCadeias: [{ id: "fim-1", origemId: "ori-missing" }]
       };
@@ -468,12 +500,14 @@ describe("chain-topology.invariants", () => {
       // Both origens point to the SAME lancamento (lanc-1) with indices 0 and 2.
       const gapIndices: TopologyGraph = {
         chainId: "chain-gap",
+        imovel: { id: "imovel-gap", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
           { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 2 } // gap at index 1
@@ -489,12 +523,14 @@ describe("chain-topology.invariants", () => {
       // Both origens point to the SAME lancamento with index 0.
       const dupIndices: TopologyGraph = {
         chainId: "chain-dup-idx",
+        imovel: { id: "imovel-dup-idx", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
           { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 } // duplicate index 0
@@ -513,12 +549,14 @@ describe("chain-topology.invariants", () => {
       // The invariant checker must catch this with a clear diagnostic.
       const dupDocumentoId: TopologyGraph = {
         chainId: "chain-dup-docid",
+        imovel: { id: "imovel-dup-docid", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-0", tipo: "matricula" },
           { id: "doc-1", tipo: "matricula" },
           { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
         origens: [
           { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 0 },
           { id: "ori-2", lancamentoId: "lanc-1", documentoId: "doc-0", indice: 1 } // SAME documentoId, different index
@@ -527,6 +565,233 @@ describe("chain-topology.invariants", () => {
       };
       expect(() => assertTopologyInvariants(dupDocumentoId)).toThrow(
         /multiple origens referencing the same documento.*would produce duplicate edge IDs/i
+      );
+    });
+
+    it("assertTopologyInvariants throws on an orphan graph (2+ documentos, 0 lancamentos)", () => {
+      // Pre-PR bug: the orphan-documento check loop was a no-op, so a
+      // graph with two disconnected documentos and zero lancamentos
+      // would pass the root check (rootCount >= 1) but violate the
+      // single-chain connectivity contract. The fix added an explicit
+      // "n > 1 lancamentos >= 1" check; the round-2 fix replaces it
+      // with a proper weak-connectivity check that ALSO catches
+      // "chain + isolated doc" cases.
+      const orphan: TopologyGraph = {
+        chainId: "chain-orphan-lanc",
+        imovel: { id: "imovel-orphan-lanc", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        lancamentos: [],
+        origens: [],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(orphan)).toThrow(/weakly connected components/i);
+    });
+
+    it("assertTopologyInvariants throws on a chain plus an isolated documento", () => {
+      // Round-2 review finding: my round-1 check (n>1, lancamentos>=1)
+      // only catches the zero-lancamento case. A graph with a real
+      // chain `doc-1 -> doc-2` plus an isolated `doc-3` would pass
+      // round-1: doc-3 is a root (rootCount=2 >= 1), the DFS visits
+      // it as a trivial node, no contiguity or terminal-fim violation.
+      // The round-2 fix adds a weak-connectivity check that catches
+      // this with a clear "weakly connected components" diagnostic.
+      const chainPlusOrphan: TopologyGraph = {
+        chainId: "chain-plus-orphan",
+        imovel: { id: "imovel-plus-orphan", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-3", tipo: "matricula" }
+        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
+      };
+      expect(() => assertTopologyInvariants(chainPlusOrphan)).toThrow(
+        /weakly connected components/i
+      );
+    });
+
+    it("assertTopologyInvariants allows a single isolated documento (linear n=1) WITH its imovel_documento row", () => {
+      // n=1 linear legitimately produces a graph with one doc,
+      // zero lancamentos, zero origens, zero fims. The "orphan"
+      // check should NOT fire here. The generator emits one
+      // `imovel_documento` row per documento (S-3 / Q13), so
+      // n=1 = 1 row. The invariant requires this coverage even
+      // for degenerate single-doc chains — Codex round-4
+      // finding 3381908845.
+      const single: TopologyGraph = {
+        chainId: "chain-single",
+        imovel: { id: "imovel-single", seq: 1 },
+        imovelDocumentos: [{ imovelId: "imovel-single", documentoId: "doc-1" }],
+        documentos: [{ id: "doc-1", tipo: "matricula" }],
+        lancamentos: [],
+        origens: [],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(single)).not.toThrow();
+    });
+
+    it("assertTopologyInvariants throws on n=1 linear without its imovel_documento row", () => {
+      // Counterpart to the test above: a degenerate n=1
+      // single-doc graph with NO imovel_documento row is
+      // incomplete. The Q13 chain-membership invariant
+      // requires every documento to have its row, even when
+      // there are zero lancamentos. Codex round-4 3381908845.
+      const missing: TopologyGraph = {
+        chainId: "chain-single-orphan",
+        imovel: { id: "imovel-orphan", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [{ id: "doc-1", tipo: "matricula" }],
+        lancamentos: [],
+        origens: [],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(missing)).toThrow(
+        /imovel_documento row count.*must equal documento count/i
+      );
+    });
+
+    it("assertTopologyInvariants throws when chain has ZERO inicio_matricula lancamentos", () => {
+      // PR-readiness Codex round: direct negative test for
+      // the S-3 "exactly 1 inicio_matricula per chain" rule.
+      // A linear chain (3 docs, 2 lancs) with NO
+      // inicio_matricula should be rejected.
+      const noInicio: TopologyGraph = {
+        chainId: "chain-no-inicio",
+        imovel: { id: "imovel-no-inicio", seq: 1 },
+        imovelDocumentos: [
+          { imovelId: "imovel-no-inicio", documentoId: "doc-1" },
+          { imovelId: "imovel-no-inicio", documentoId: "doc-2" },
+          { imovelId: "imovel-no-inicio", documentoId: "doc-3" }
+        ],
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-3", tipo: "matricula" }
+        ],
+        lancamentos: [
+          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
+          { id: "lanc-2", documentoId: "doc-3", tipo: "registro" }
+        ],
+        origens: [
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
+          { id: "ori-2", lancamentoId: "lanc-2", documentoId: "doc-2", indice: 0 }
+        ],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-2" }]
+      };
+      expect(() => assertTopologyInvariants(noInicio)).toThrow(
+        /chain must have exactly 1 inicio_matricula lancamento/i
+      );
+    });
+
+    it("assertTopologyInvariants throws when chain has MULTIPLE inicio_matricula lancamentos", () => {
+      // PR-readiness Codex round: direct negative test for
+      // the S-3 "exactly 1 inicio_matricula per chain" rule.
+      // A chain with 2 inicio_matricula is a structural
+      // violation. The fixture is a 3-doc linear chain
+      // (doc-1 → doc-2 via lanc-1; doc-2 → doc-3 via
+      // lanc-2) where BOTH lancamentos are
+      // `inicio_matricula` — a 2-count is the violation.
+      const twoInicios: TopologyGraph = {
+        chainId: "chain-two-inicios",
+        imovel: { id: "imovel-two", seq: 1 },
+        imovelDocumentos: [
+          { imovelId: "imovel-two", documentoId: "doc-1" },
+          { imovelId: "imovel-two", documentoId: "doc-2" },
+          { imovelId: "imovel-two", documentoId: "doc-3" }
+        ],
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-3", tipo: "matricula" }
+        ],
+        lancamentos: [
+          { id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" },
+          { id: "lanc-2", documentoId: "doc-3", tipo: "inicio_matricula" }
+        ],
+        origens: [
+          {
+            id: "ori-1",
+            lancamentoId: "lanc-1",
+            documentoId: "doc-1",
+            indice: 0
+          },
+          {
+            id: "ori-2",
+            lancamentoId: "lanc-2",
+            documentoId: "doc-2",
+            indice: 0
+          }
+        ],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-2" }]
+      };
+      expect(() => assertTopologyInvariants(twoInicios)).toThrow(
+        /chain must have exactly 1 inicio_matricula lancamento/i
+      );
+    });
+
+    it("assertTopologyInvariants throws when imovel_documento coverage is incomplete (chain with lancamentos but missing rows)", () => {
+      // Round-3 review M-1: the Q13/S-3 membership invariant
+      // was incomplete — it validated present rows but didn't
+      // require every documento to have a row. A connected
+      // chain with 3 docs and `imovelDocumentos: []` is a real
+      // bug (membership is a structural property, not
+      // optional). The fix adds a coverage check that runs
+      // only when the chain has both documentos and lancamentos
+      // (the degenerate n=1 case is exempt).
+      const missingRows: TopologyGraph = {
+        chainId: "chain-missing-rows",
+        imovel: { id: "imovel-x", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "inicio_matricula" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
+      };
+      expect(() => assertTopologyInvariants(missingRows)).toThrow(
+        /imovel_documento row count.*must equal documento count/i
+      );
+    });
+
+    it("assertTopologyInvariants throws on a cross-collection node id collision", () => {
+      // Pre-PR bug: duplicate-id checks were per-collection. A
+      // documento id that equals a lancamento id (or fim id) would
+      // pass invariants but produce a `validateGraph` failure with
+      // a confusing "Duplicate edge ID" error. The fix adds a
+      // global node-id uniqueness check.
+      // Set up a graph that satisfies the S-3/S-5 contracts (registro
+      // has >= 1 origem, indices contiguous, terminal origem has a
+      // fim) but has a colliding node id between collections.
+      const collision: TopologyGraph = {
+        chainId: "chain-collision",
+        imovel: { id: "imovel-collision", seq: 1 },
+        imovelDocumentos: [],
+        documentos: [
+          { id: "shared-id", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        // The colliding id is "shared-id" (reused as a lanc
+        // id) — toGraphJson emits documentos + lancamentos into
+        // a single node namespace, so a documento id and a
+        // lancamento id cannot share a string. The previous
+        // inline comment said "lanc-1 collides" but the
+        // colliding id is actually "shared-id"; round-3 review
+        // NICE-1 caught that wording.
+        lancamentos: [{ id: "shared-id", documentoId: "doc-2", tipo: "inicio_matricula" }],
+        origens: [{ id: "ori-1", lancamentoId: "shared-id", documentoId: "shared-id", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
+      };
+      expect(() => assertTopologyInvariants(collision)).toThrow(
+        /node id shared-id \(lancamento\) collides/i
       );
     });
   });

@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  generateChainTopology,
-  toGraphJson,
-  TopologyGraph,
-} from "../chain-topology";
+import { generateChainTopology, toGraphJson, TopologyGraph } from "../chain-topology";
 
 describe("chain-topology", () => {
   describe("exports topology contract", () => {
@@ -30,16 +26,24 @@ describe("chain-topology", () => {
       expect(() => generateChainTopology(12345, -1)).toThrow(RangeError);
     });
 
+    it("should throw RangeError for n = NaN, Infinity, or non-integer", () => {
+      // Without Number.isSafeInteger, NaN < 1 is false (passes), and
+      // the for loop "for (let i = 1; i <= NaN; i++)" simply never
+      // executes, returning an empty graph. With Infinity, the loop
+      // would hang trying to allocate 2^53 documents.
+      expect(() => generateChainTopology(12345, NaN)).toThrow(RangeError);
+      expect(() => generateChainTopology(12345, Infinity)).toThrow(RangeError);
+      expect(() => generateChainTopology(12345, -Infinity)).toThrow(RangeError);
+      expect(() => generateChainTopology(12345, 2.5)).toThrow(RangeError);
+      expect(() => generateChainTopology(12345, 1.0001)).toThrow(RangeError);
+    });
+
     it("should throw RangeError for branching with n < 3", () => {
-      expect(() => generateChainTopology(12345, 2, { shape: "branching" })).toThrow(
-        RangeError
-      );
+      expect(() => generateChainTopology(12345, 2, { shape: "branching" })).toThrow(RangeError);
     });
 
     it("should throw RangeError for merge with n < 3", () => {
-      expect(() => generateChainTopology(12345, 2, { shape: "merge" })).toThrow(
-        RangeError
-      );
+      expect(() => generateChainTopology(12345, 2, { shape: "merge" })).toThrow(RangeError);
     });
 
     it("should default to linear shape when not specified", () => {
@@ -56,20 +60,18 @@ describe("chain-topology", () => {
       // exists for robustness.
       const graph: TopologyGraph = {
         chainId: "chain-defensive-1",
+        imovel: { id: "imovel-defensive-1", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
-        origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 }],
         fimCadeias: [
           { id: "fim-1", origemId: "ori-1" },
-          { id: "fim-orphan", origemId: "ori-missing" },
-        ],
+          { id: "fim-orphan", origemId: "ori-missing" }
+        ]
       };
       const json = toGraphJson(graph);
       // fim-orphan node still appears (it's a node, not an edge), but
@@ -85,20 +87,18 @@ describe("chain-topology", () => {
       // origem references a lancamento that doesn't exist in the graph.
       const graph: TopologyGraph = {
         chainId: "chain-defensive-2",
+        imovel: { id: "imovel-defensive-2", seq: 1 },
+        imovelDocumentos: [],
         documentos: [
           { id: "doc-1", tipo: "matricula" },
-          { id: "doc-2", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
         ],
-        lancamentos: [
-          { id: "lanc-1", documentoId: "doc-2", tipo: "registro" },
-        ],
+        lancamentos: [{ id: "lanc-1", documentoId: "doc-2", tipo: "registro" }],
         origens: [
-{ id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1" , indice: 0},
-{ id: "ori-orphan", lancamentoId: "lanc-missing", documentoId: "doc-2" , indice: 0},
+          { id: "ori-1", lancamentoId: "lanc-1", documentoId: "doc-1", indice: 0 },
+          { id: "ori-orphan", lancamentoId: "lanc-missing", documentoId: "doc-2", indice: 0 }
         ],
-        fimCadeias: [
-          { id: "fim-orphan", origemId: "ori-orphan" },
-        ],
+        fimCadeias: [{ id: "fim-orphan", origemId: "ori-orphan" }]
       };
       const json = toGraphJson(graph);
       const fimOrphanEdge = json.edges.find((e) => e.target === "fim-orphan");

@@ -11,6 +11,8 @@ export {
   assertTopologyInvariants,
   TopologyInvariantError,
   type TopologyGraph,
+  type TopologyImovel,
+  type TopologyImovelDocumento,
   type TopologyDocumento,
   type TopologyLancamento,
   type TopologyOrigem,
@@ -21,15 +23,21 @@ export {
 
 import type { TopologyGraph } from "@cadeia/chain-topology";
 import { toGraphJson as seedToGraphJson } from "@cadeia/chain-topology";
+import { validateGraph } from "./validateGraph";
 
 /**
  * Convert a `TopologyGraph` (the rich seed-script output) into the minimal
  * `GraphJson` shape consumed by `validateGraph`, `layoutGraph`, and
- * `GraphPreview`. The seed module's `toGraphJson` does the same conversion
- * with a structural type; this wrapper exposes it under the canonical
- * `GraphJson` name from `packages/web/src/graph/types.ts` and lets web
- * consumers stay decoupled from the seed module's internal type.
+ * `GraphPreview`. Validates the converted output via `validateGraph` so
+ * that callers receive a graph guaranteed to be renderable; throws
+ * `Error` (from `validateGraph`) on structural issues with the converted
+ * graph (duplicate node/edge ids, edges referencing missing nodes, etc.).
+ * Callers who want the deeper `assertTopologyInvariants` checks (DAG,
+ * contiguity, terminal fims, weak connectivity, S-3/Q13) should run
+ * `assertTopologyInvariants(top)` separately — those throw
+ * `TopologyInvariantError` and are NOT triggered by this function.
  */
 export function topologyToGraphJson(top: TopologyGraph): GraphJson {
-  return seedToGraphJson(top) as GraphJson;
+  const json = seedToGraphJson(top) as GraphJson;
+  return validateGraph(json);
 }

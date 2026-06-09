@@ -3,7 +3,7 @@ import {
   generateChainTopology,
   toGraphJson,
   assertTopologyInvariants,
-  type TopologyGraph,
+  type TopologyGraph
 } from "../chain-topology";
 
 describe("chain-topology.branching", () => {
@@ -30,8 +30,7 @@ describe("chain-topology.branching", () => {
     const outgoing = new Map<string, number>();
     for (const d of g.documentos) outgoing.set(d.id, 0);
     for (const l of g.lancamentos) {
-      const sourceDoc = g.origens.find((o) => o.lancamentoId === l.id)!
-        .documentoId;
+      const sourceDoc = g.origens.find((o) => o.lancamentoId === l.id)!.documentoId;
       outgoing.set(sourceDoc, (outgoing.get(sourceDoc) ?? 0) + 1);
     }
     const twoOut = [...outgoing.entries()].filter(([, n]) => n === 2);
@@ -44,8 +43,7 @@ describe("chain-topology.branching", () => {
     const outgoing = new Map<string, number>();
     for (const d of g.documentos) outgoing.set(d.id, 0);
     for (const l of g.lancamentos) {
-      const sourceDoc = g.origens.find((o) => o.lancamentoId === l.id)!
-        .documentoId;
+      const sourceDoc = g.origens.find((o) => o.lancamentoId === l.id)!.documentoId;
       outgoing.set(sourceDoc, (outgoing.get(sourceDoc) ?? 0) + 1);
     }
     const twoOut = [...outgoing.entries()].filter(([, n]) => n === 2);
@@ -65,21 +63,17 @@ describe("chain-topology.branching", () => {
 
   it("branching is deterministic for same seed", () => {
     const a: TopologyGraph = generateChainTopology(99, 7, {
-      shape: "branching",
+      shape: "branching"
     });
     const b: TopologyGraph = generateChainTopology(99, 7, {
-      shape: "branching",
+      shape: "branching"
     });
     expect(a).toEqual(b);
   });
 
   it("branching throws RangeError for n < 3", () => {
-    expect(() =>
-      generateChainTopology(42, 1, { shape: "branching" })
-    ).toThrow(RangeError);
-    expect(() =>
-      generateChainTopology(42, 2, { shape: "branching" })
-    ).toThrow(RangeError);
+    expect(() => generateChainTopology(42, 1, { shape: "branching" })).toThrow(RangeError);
+    expect(() => generateChainTopology(42, 2, { shape: "branching" })).toThrow(RangeError);
   });
 });
 
@@ -122,10 +116,7 @@ describe("chain-topology.merge", () => {
       // An origem targets a doc indirectly via its lancamento. Find
       // the lanc's target documentoId and count it.
       const lanc = g.lancamentos.find((l) => l.id === o.lancamentoId)!;
-      incomingOrigens.set(
-        lanc.documentoId,
-        (incomingOrigens.get(lanc.documentoId) ?? 0) + 1
-      );
+      incomingOrigens.set(lanc.documentoId, (incomingOrigens.get(lanc.documentoId) ?? 0) + 1);
     }
     const twoIn = [...incomingOrigens.entries()].filter(([, n]) => n === 2);
     expect(twoIn).toHaveLength(1);
@@ -142,10 +133,7 @@ describe("chain-topology.merge", () => {
     for (const d of g.documentos) incomingOrigens.set(d.id, 0);
     for (const o of g.origens) {
       const lanc = g.lancamentos.find((l) => l.id === o.lancamentoId)!;
-      incomingOrigens.set(
-        lanc.documentoId,
-        (incomingOrigens.get(lanc.documentoId) ?? 0) + 1
-      );
+      incomingOrigens.set(lanc.documentoId, (incomingOrigens.get(lanc.documentoId) ?? 0) + 1);
     }
     expect(incomingOrigens.get("doc-3")).toBe(2);
   });
@@ -177,12 +165,8 @@ describe("chain-topology.merge", () => {
   });
 
   it("merge throws RangeError for n < 3", () => {
-    expect(() => generateChainTopology(42, 1, { shape: "merge" })).toThrow(
-      RangeError
-    );
-    expect(() => generateChainTopology(42, 2, { shape: "merge" })).toThrow(
-      RangeError
-    );
+    expect(() => generateChainTopology(42, 1, { shape: "merge" })).toThrow(RangeError);
+    expect(() => generateChainTopology(42, 2, { shape: "merge" })).toThrow(RangeError);
   });
 });
 
@@ -205,10 +189,7 @@ describe("chain-topology.shapes differ", () => {
     for (const d of m.documentos) mIncomingOrigens.set(d.id, 0);
     for (const o of m.origens) {
       const lanc = m.lancamentos.find((l) => l.id === o.lancamentoId)!;
-      mIncomingOrigens.set(
-        lanc.documentoId,
-        (mIncomingOrigens.get(lanc.documentoId) ?? 0) + 1
-      );
+      mIncomingOrigens.set(lanc.documentoId, (mIncomingOrigens.get(lanc.documentoId) ?? 0) + 1);
     }
     // Branch has 1 doc with 2 outgoing lancs; merge has 0 such docs.
     expect([...bOutgoing.values()].filter((n) => n === 2)).toHaveLength(1);
