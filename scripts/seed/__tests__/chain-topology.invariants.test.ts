@@ -529,5 +529,65 @@ describe("chain-topology.invariants", () => {
         /multiple origens referencing the same documento.*would produce duplicate edge IDs/i
       );
     });
+
+    it("assertTopologyInvariants throws on an orphan graph (2+ documentos, 0 lancamentos)", () => {
+      // Pre-PR bug: the orphan-documento check loop was a no-op, so a
+      // graph with two disconnected documentos and zero lancamentos
+      // would pass the root check (rootCount >= 1) but violate the
+      // single-chain connectivity contract. The fix adds an explicit
+      // "n > 1 lancamentos >= 1" check.
+      const orphan: TopologyGraph = {
+        chainId: "chain-orphan-lanc",
+        documentos: [
+          { id: "doc-1", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        lancamentos: [],
+        origens: [],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(orphan)).toThrow(
+        /orphan graph.*0 lancamentos/i
+      );
+    });
+
+    it("assertTopologyInvariants allows a single isolated documento (linear n=1)", () => {
+      // n=1 linear legitimately produces a graph with one doc,
+      // zero lancamentos, zero origens, zero fims. This is not
+      // an orphan — it's the degenerate single-doc case. The
+      // "orphan" check should NOT fire here.
+      const single: TopologyGraph = {
+        chainId: "chain-single",
+        documentos: [{ id: "doc-1", tipo: "matricula" }],
+        lancamentos: [],
+        origens: [],
+        fimCadeias: []
+      };
+      expect(() => assertTopologyInvariants(single)).not.toThrow();
+    });
+
+    it("assertTopologyInvariants throws on a cross-collection node id collision", () => {
+      // Pre-PR bug: duplicate-id checks were per-collection. A
+      // documento id that equals a lancamento id (or fim id) would
+      // pass invariants but produce a `validateGraph` failure with
+      // a confusing "Duplicate edge ID" error. The fix adds a
+      // global node-id uniqueness check.
+      // Set up a graph that satisfies the S-3/S-5 contracts (registro
+      // has >= 1 origem, indices contiguous, terminal origem has a
+      // fim) but has a colliding node id between collections.
+      const collision: TopologyGraph = {
+        chainId: "chain-collision",
+        documentos: [
+          { id: "shared-id", tipo: "matricula" },
+          { id: "doc-2", tipo: "matricula" }
+        ],
+        lancamentos: [{ id: "shared-id", documentoId: "doc-2", tipo: "registro" }],
+        origens: [{ id: "ori-1", lancamentoId: "shared-id", documentoId: "shared-id", indice: 0 }],
+        fimCadeias: [{ id: "fim-1", origemId: "ori-1" }]
+      };
+      expect(() => assertTopologyInvariants(collision)).toThrow(
+        /node id shared-id \(lancamento\) collides/i
+      );
+    });
   });
 });

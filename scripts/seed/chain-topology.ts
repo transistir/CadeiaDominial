@@ -57,8 +57,8 @@ export function generateChainTopology(
 ): TopologyGraph {
   const shape = options?.shape ?? "linear";
 
-  if (n < 1) {
-    throw new RangeError(`n must be >= 1, got ${n}`);
+  if (!Number.isSafeInteger(n) || n < 1) {
+    throw new RangeError(`n must be a safe integer >= 1, got ${n}`);
   }
 
   if ((shape === "branching" || shape === "merge") && n < 3) {
@@ -558,11 +558,57 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   }
 
   // Ensure every non-root documento has >= 1 incoming lancamento
-  // (no orphan documentos) — matches the comment at lines 530-531.
-  for (const count of incoming.values()) {
-    if (count === 0) continue; // roots are allowed
-    // count is already >= 1 here (since we continued on 0)
-    // No orphan check needed - the root check above covers it
+  // (no orphan documentos connected to a root but unreachable from
+  // it). The "no root" check above only verifies `rootCount >= 1`;
+  // a graph with one root plus an isolated documento (0 incoming,
+  // 0 outgoing) would still pass that check. We catch it here:
+  // the count of non-root documentos is `documentos.length -
+  // rootCount` and must equal the count of incoming slots
+  // consumed by lancamentos (`lancamentos.length`, modulo
+  // 1:N for merge which has 2 origens per merge lancamento).
+  //
+  // Simpler invariant: every documento that has 0 incoming AND 0
+  // outgoing is an orphan. Equivalently: if `documentos.length >
+  // 1`, there must be at least one lancamento connecting them.
+  if (graph.documentos.length > 1 && graph.lancamentos.length === 0) {
+    throw new TopologyInvariantError(
+      `orphan graph: ${graph.documentos.length} documentos with 0 lancamentos`
+    );
+  }
+  // For n=1 linear, documentos=[doc-1], lancamentos=[], origens=[],
+  // fims=[] is the legitimate degenerate case. No throw.
+
+  // Cross-collection uniqueness: `toGraphJson` emits
+  // documentos, lancamentos, and fimCadeias into one node
+  // namespace, so IDs that are unique WITHIN their collection
+  // (e.g. "doc-1" and "lanc-1") can still collide across
+  // collections in the resulting graph (a doc id equals a
+  // lanc id). The check below ensures every node id in the
+  // resulting graph is unique.
+  const nodeIds = new Set<string>();
+  for (const d of graph.documentos) {
+    if (nodeIds.has(d.id)) {
+      throw new TopologyInvariantError(
+        `node id ${d.id} (documento) collides with another node`
+      );
+    }
+    nodeIds.add(d.id);
+  }
+  for (const l of graph.lancamentos) {
+    if (nodeIds.has(l.id)) {
+      throw new TopologyInvariantError(
+        `node id ${l.id} (lancamento) collides with another node`
+      );
+    }
+    nodeIds.add(l.id);
+  }
+  for (const f of graph.fimCadeias) {
+    if (nodeIds.has(f.id)) {
+      throw new TopologyInvariantError(
+        `node id ${f.id} (fim_cadeia) collides with another node`
+      );
+    }
+    nodeIds.add(f.id);
   }
 
   // DAG check on the document graph: edges from doc -> doc via
