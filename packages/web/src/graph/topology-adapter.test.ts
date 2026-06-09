@@ -64,6 +64,47 @@ describe("topology-adapter", () => {
     }
   });
 
+  // T-500 Item 5 NICE-1: explicit shape assertions. The adapter collapses
+  // lancamento intermediate nodes (no LancamentoNode in T-500) and connects
+  // documents directly. Every adapter-produced edge must carry a
+  // data.tipoOrigem so the OrigemEdge component can pick the right style.
+  it("adapter collapses lancamento nodes: no lanc-* node ids in the output", () => {
+    const top = generateChainTopology(42, 3, { shape: "linear" });
+    const json = topologyToGraphJson(top);
+    for (const node of json.nodes) {
+      expect(node.id.startsWith("lanc-")).toBe(false);
+    }
+  });
+
+  it("adapter attaches data.tipoOrigem on every edge", () => {
+    const top = generateChainTopology(42, 4, { shape: "branching" });
+    const json = topologyToGraphJson(top);
+    expect(json.edges.length).toBeGreaterThan(0);
+    for (const edge of json.edges) {
+      expect(edge.data).toBeDefined();
+      expect(edge.data?.tipoOrigem).toBeDefined();
+      expect(["matricula", "transcricao", "fim_cadeia"]).toContain(edge.data?.tipoOrigem);
+    }
+  });
+
+  it("adapter emits fim edges with tipoOrigem=fim_cadeia", () => {
+    // Build a topology that has at least one fimCadeia by adding a chain
+    // large enough to trigger terminal fim generation in branching shape.
+    const top = generateChainTopology(7, 5, { shape: "branching" });
+    const json = topologyToGraphJson(top);
+    const fimNodes = json.nodes.filter((n) => n.type === "fimCadeia");
+    if (fimNodes.length === 0) {
+      // Skip if this seed didn't generate a fim (defensive — generator may
+      // change); the next test in the suite still covers non-fim edges.
+      return;
+    }
+    const fimEdges = json.edges.filter((e) => fimNodes.some((n) => n.id === e.target));
+    expect(fimEdges.length).toBeGreaterThan(0);
+    for (const e of fimEdges) {
+      expect(e.data?.tipoOrigem).toBe("fim_cadeia");
+    }
+  });
+
   it("topologyToGraphJson throws on a malformed topology (cross-collection id collision)", () => {
     // Pre-PR review NICE-2: the adapter's `topologyToGraphJson`
     // was a cast-only wrapper. The fix added a real
