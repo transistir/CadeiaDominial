@@ -20,7 +20,7 @@ export interface LayoutedGraph {
 }
 
 const NODE_WIDTH = 180;
-const NODE_HEIGHT = 40;
+const NODE_HEIGHT = 80;
 
 /**
  * Run a deterministic left-to-right dagre layout over a `GraphJson`.

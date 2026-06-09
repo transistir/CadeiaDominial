@@ -490,7 +490,7 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     if (!lanc) continue;
     const sourceDoc = docById.get(ori.documentoId);
     edges.push({
-      id: `${ori.documentoId}->${lanc.documentoId}`,
+      id: ori.id,
       source: ori.documentoId,
       target: lanc.documentoId,
       data: {
@@ -579,9 +579,9 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   }
 
   // Ensure each lancamento's origens have unique documentoId values.
-  // Without this, toGraphJson produces duplicate edge IDs
-  // (${documentoId}->${lancamentoId}) which passes assertTopologyInvariants
-  // but causes validateGraph to throw a confusing "Duplicate edge ID" error.
+  // Without this, toGraphJson would create two origens with different
+  // origem.id values but the same source→target pair, producing a
+  // semantically duplicate edge in the rendered graph.
   for (const [lancId, origens] of origensByLanc) {
     const docIdsInLanc = new Set<string>();
     for (const o of origens) {

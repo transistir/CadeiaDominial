@@ -87,7 +87,7 @@ export function topologyToGraphJson(top: TopologyGraph): GraphJson {
         const sourceDoc = documentosById.get(origem.documentoId);
         return [
           {
-            id: `${origem.documentoId}->${lancamento.documentoId}`,
+            id: origem.id,
             source: origem.documentoId,
             target: lancamento.documentoId,
             data: {
