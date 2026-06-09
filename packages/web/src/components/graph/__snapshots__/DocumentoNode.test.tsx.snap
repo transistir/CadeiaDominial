@@ -1,0 +1,130 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DocumentoNode > matches snapshot for averbacao tipo 1`] = `
+<div
+  class="documento-node documento-node--averbacao"
+  data-testid="documento-node"
+>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="documento-node__badge"
+    data-tipo="averbacao"
+  >
+    averbacao
+  </div>
+  <div
+    class="documento-node__numero"
+  >
+    AV7
+  </div>
+  <div
+    class="documento-node__meta"
+  >
+    <span
+      class="documento-node__cartorio"
+    >
+      cartorio-1
+    </span>
+    <span
+      class="documento-node__data"
+    >
+      2024-01-15
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`DocumentoNode > matches snapshot for matricula tipo 1`] = `
+<div
+  class="documento-node documento-node--matricula"
+  data-testid="documento-node"
+>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="documento-node__badge"
+    data-tipo="matricula"
+  >
+    matricula
+  </div>
+  <div
+    class="documento-node__numero"
+  >
+    M123
+  </div>
+  <div
+    class="documento-node__meta"
+  >
+    <span
+      class="documento-node__cartorio"
+    >
+      cartorio-1
+    </span>
+    <span
+      class="documento-node__data"
+    >
+      2024-01-15
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`DocumentoNode > matches snapshot for transcricao tipo 1`] = `
+<div
+  class="documento-node documento-node--transcricao"
+  data-testid="documento-node"
+>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="documento-node__badge"
+    data-tipo="transcricao"
+  >
+    transcricao
+  </div>
+  <div
+    class="documento-node__numero"
+  >
+    T456
+  </div>
+  <div
+    class="documento-node__meta"
+  >
+    <span
+      class="documento-node__cartorio"
+    >
+      cartorio-1
+    </span>
+    <span
+      class="documento-node__data"
+    >
+      2024-01-15
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
