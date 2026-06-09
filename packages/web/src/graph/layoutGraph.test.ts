@@ -11,14 +11,29 @@ const basicGraph: GraphJson = validateGraph(basicGraphFixture);
 describe("layoutGraph", () => {
   const graph: GraphJson = {
     nodes: [
-      { id: "a", label: "Node A", type: "default" },
-      { id: "b", label: "Node B", type: "default" },
-      { id: "c", label: "Node C", type: "default" },
+      {
+        id: "doc-a",
+        label: "Node A",
+        type: "documento",
+        data: { numero: "M123", tipo: "matricula", cartorioId: "cartorio-1", data: "2024-01-15" }
+      },
+      {
+        id: "doc-b",
+        label: "Node B",
+        type: "documento",
+        data: { numero: "T456", tipo: "transcricao", cartorioId: "cartorio-2", data: "2024-01-16" }
+      },
+      {
+        id: "fim-c",
+        label: "Node C",
+        type: "fimCadeia",
+        data: { classificacao: "inconclusa" }
+      }
     ],
     edges: [
-      { id: "a-b", source: "a", target: "b" },
-      { id: "b-c", source: "b", target: "c" },
-    ],
+      { id: "lanc-a-b", source: "doc-a", target: "doc-b" },
+      { id: "lanc-b-c", source: "doc-b", target: "fim-c" }
+    ]
   };
 
   it("returns all nodes with positions", () => {
@@ -33,9 +48,9 @@ describe("layoutGraph", () => {
 
   it("preserves node properties", () => {
     const result = layoutGraph(graph);
-    const nodeA = result.nodes.find((n) => n.id === "a");
+    const nodeA = result.nodes.find((n) => n.id === "doc-a");
     expect(nodeA?.label).toBe("Node A");
-    expect(nodeA?.type).toBe("default");
+    expect(nodeA?.type).toBe("documento");
   });
 
   it("preserves edges", () => {
@@ -52,9 +67,9 @@ describe("layoutGraph", () => {
 
   it("layouts nodes in left-to-right direction", () => {
     const result = layoutGraph(graph);
-    const nodeA = result.nodes.find((n) => n.id === "a");
-    const nodeB = result.nodes.find((n) => n.id === "b");
-    const nodeC = result.nodes.find((n) => n.id === "c");
+    const nodeA = result.nodes.find((n) => n.id === "doc-a");
+    const nodeB = result.nodes.find((n) => n.id === "doc-b");
+    const nodeC = result.nodes.find((n) => n.id === "fim-c");
     // LR layout: a.x < b.x < c.x
     expect(nodeB!.position.x).toBeGreaterThan(nodeA!.position.x);
     expect(nodeC!.position.x).toBeGreaterThan(nodeB!.position.x);

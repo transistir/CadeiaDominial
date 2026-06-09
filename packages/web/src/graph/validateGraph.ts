@@ -1,4 +1,13 @@
-import type { GraphJson, GraphNode, GraphEdge } from "./types";
+import type {
+  DocumentoData,
+  DocumentoTipo,
+  FimCadeiaClassificacao,
+  FimCadeiaData,
+  GraphEdge,
+  GraphJson,
+  GraphNode,
+  OrigemTipo
+} from "./types";
 
 /**
  * Validate a graph JSON payload from an untrusted source (loader, network, file).
@@ -7,66 +16,42 @@ import type { GraphJson, GraphNode, GraphEdge } from "./types";
  * Throws on:
  * - non-object payloads
  * - missing or non-array `nodes` / `edges`
- * - nodes / edges missing required string fields
+ * - nodes / edges missing required string fields or domain data
  * - duplicate node or edge IDs
  * - edge endpoints that don't reference an existing node
  */
 export function validateGraph(input: unknown): GraphJson {
-  if (input === null || typeof input !== "object") {
+  if (!isRecord(input)) {
     throw new Error("Graph must be an object");
   }
-  const obj = input as Record<string, unknown>;
 
-  if (!Array.isArray(obj.nodes)) {
+  if (!Array.isArray(input.nodes)) {
     throw new Error("Graph.nodes must be an array");
   }
-  if (!Array.isArray(obj.edges)) {
+  if (!Array.isArray(input.edges)) {
     throw new Error("Graph.edges must be an array");
   }
 
   const nodes: GraphNode[] = [];
-  for (const [i, raw] of obj.nodes.entries()) {
-    if (raw === null || typeof raw !== "object") {
+  const nodeIds = new Set<string>();
+  for (const [i, raw] of input.nodes.entries()) {
+    if (!isRecord(raw)) {
       throw new Error(`nodes[${i}] must be an object`);
     }
-    const n = raw as Record<string, unknown>;
-    if (typeof n.id !== "string" || n.id.length === 0) {
-      throw new Error(`nodes[${i}].id must be a non-empty string`);
+    const id = requireNonEmptyString(raw.id, `nodes[${i}].id`);
+    if (nodeIds.has(id)) {
+      throw new Error(`Duplicate node ID: ${id}`);
     }
-    if (typeof n.label !== "string") {
-      throw new Error(`nodes[${i}].label must be a string`);
-    }
-    if (typeof n.type !== "string") {
-      throw new Error(`nodes[${i}].type must be a string`);
-    }
-    nodes.push({ id: n.id, label: n.label, type: n.type });
+    nodeIds.add(id);
+    nodes.push(validateNode(raw, i));
   }
 
   const edges: GraphEdge[] = [];
-  for (const [i, raw] of obj.edges.entries()) {
-    if (raw === null || typeof raw !== "object") {
+  for (const [i, raw] of input.edges.entries()) {
+    if (!isRecord(raw)) {
       throw new Error(`edges[${i}] must be an object`);
     }
-    const e = raw as Record<string, unknown>;
-    if (typeof e.id !== "string" || e.id.length === 0) {
-      throw new Error(`edges[${i}].id must be a non-empty string`);
-    }
-    if (typeof e.source !== "string" || e.source.length === 0) {
-      throw new Error(`edges[${i}].source must be a non-empty string`);
-    }
-    if (typeof e.target !== "string" || e.target.length === 0) {
-      throw new Error(`edges[${i}].target must be a non-empty string`);
-    }
-    edges.push({ id: e.id, source: e.source, target: e.target });
-  }
-
-  // Integrity: unique node IDs
-  const nodeIds = new Set<string>();
-  for (const node of nodes) {
-    if (nodeIds.has(node.id)) {
-      throw new Error(`Duplicate node ID: ${node.id}`);
-    }
-    nodeIds.add(node.id);
+    edges.push(validateEdge(raw, i));
   }
 
   // Integrity: unique edge IDs and valid endpoint references
@@ -86,4 +71,151 @@ export function validateGraph(input: unknown): GraphJson {
   }
 
   return { nodes, edges };
+}
+
+function validateNode(raw: Record<string, unknown>, index: number): GraphNode {
+  const path = `nodes[${index}]`;
+  const id = requireNonEmptyString(raw.id, `${path}.id`);
+  const label = requireString(raw.label, `${path}.label`);
+
+  if (raw.type !== "documento" && raw.type !== "fimCadeia") {
+    throw new Error(`${path}.type: invalid value ${formatValue(raw.type)}`);
+  }
+
+  if (raw.type === "documento") {
+    requirePrefix(id, "doc-", `${path}.id`);
+    return {
+      id,
+      label,
+      type: "documento",
+      data: validateDocumentoData(raw.data, `${path}.data`)
+    };
+  }
+
+  requirePrefix(id, "fim-", `${path}.id`);
+  return {
+    id,
+    label,
+    type: "fimCadeia",
+    data: validateFimCadeiaData(raw.data, `${path}.data`)
+  };
+}
+
+function validateDocumentoData(raw: unknown, path: string): DocumentoData {
+  if (!isRecord(raw)) {
+    throw new Error(`${path} must be an object`);
+  }
+
+  const numero = requireString(raw.numero, `${path}.numero`);
+  const tipo = requireDocumentoTipo(raw.tipo, `${path}.tipo`);
+  const cartorioId = requireString(raw.cartorioId, `${path}.cartorioId`);
+  const data = requireIsoDateString(raw.data, `${path}.data`);
+
+  return { numero, tipo, cartorioId, data };
+}
+
+function validateFimCadeiaData(raw: unknown, path: string): FimCadeiaData {
+  if (!isRecord(raw)) {
+    throw new Error(`${path} must be an object`);
+  }
+
+  return {
+    classificacao: requireFimCadeiaClassificacao(raw.classificacao, `${path}.classificacao`)
+  };
+}
+
+function validateEdge(raw: Record<string, unknown>, index: number): GraphEdge {
+  const path = `edges[${index}]`;
+  const id = requireNonEmptyString(raw.id, `${path}.id`);
+  const source = requireNonEmptyString(raw.source, `${path}.source`);
+  const target = requireNonEmptyString(raw.target, `${path}.target`);
+
+  if (raw.data === undefined) {
+    return { id, source, target };
+  }
+
+  if (!isRecord(raw.data)) {
+    throw new Error(`${path}.data must be an object`);
+  }
+
+  return {
+    id,
+    source,
+    target,
+    data: { tipoOrigem: requireOrigemTipo(raw.data.tipoOrigem, `${path}.data.tipoOrigem`) }
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function requireString(value: unknown, path: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${path} must be a string`);
+  }
+  return value;
+}
+
+function requireNonEmptyString(value: unknown, path: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${path} must be a non-empty string`);
+  }
+  return value;
+}
+
+function requirePrefix(value: string, prefix: "doc-" | "fim-", path: string): void {
+  if (!value.startsWith(prefix)) {
+    throw new Error(`${path}: expected prefix '${prefix}', got '${value}'`);
+  }
+}
+
+function requireDocumentoTipo(value: unknown, path: string): DocumentoTipo {
+  if (value === "matricula" || value === "transcricao" || value === "averbacao") {
+    return value;
+  }
+  throw new Error(`${path}: invalid value ${formatValue(value)}`);
+}
+
+function requireFimCadeiaClassificacao(value: unknown, path: string): FimCadeiaClassificacao {
+  if (value === "origem_lidima" || value === "sem_origem" || value === "inconclusa") {
+    return value;
+  }
+  throw new Error(`${path}: invalid value ${formatValue(value)}`);
+}
+
+function requireOrigemTipo(value: unknown, path: string): OrigemTipo {
+  if (value === "matricula" || value === "transcricao" || value === "fim_cadeia") {
+    return value;
+  }
+  throw new Error(`${path}: invalid value ${formatValue(value)}`);
+}
+
+function requireIsoDateString(value: unknown, path: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${path} must be a string`);
+  }
+  if (!isIsoDateString(value)) {
+    throw new Error(`${path}: invalid ISO date ${formatValue(value)}`);
+  }
+  return value;
+}
+
+function isIsoDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(value)) {
+    return false;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp);
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === "string") {
+    return `'${value}'`;
+  }
+  if (value === undefined) {
+    return "undefined";
+  }
+  return JSON.stringify(value);
 }

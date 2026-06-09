@@ -5,7 +5,16 @@ export { toReactFlow } from "./toReactFlow";
 export { topologyToGraphJson } from "./topology-adapter";
 export { generateChainTopology } from "./topology-adapter";
 export { assertTopologyInvariants, TopologyInvariantError } from "./topology-adapter";
-export type { GraphJson, GraphNode, GraphEdge } from "./types";
+export type {
+  DocumentoData,
+  DocumentoTipo,
+  FimCadeiaClassificacao,
+  FimCadeiaData,
+  GraphEdge,
+  GraphJson,
+  GraphNode,
+  OrigemTipo
+} from "./types";
 export type {
   TopologyGraph,
   TopologyDocumento,
@@ -13,5 +22,5 @@ export type {
   TopologyOrigem,
   TopologyFimCadeia,
   ChainShape,
-  GenerateChainTopologyOptions,
+  GenerateChainTopologyOptions
 } from "./topology-adapter";
