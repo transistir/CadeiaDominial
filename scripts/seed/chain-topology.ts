@@ -21,7 +21,7 @@ export interface TopologyOrigem {
   /** 0-based contiguous index of this origem within its lancamento (per plan
    *  S-5 / `docs/db/SCHEMA_CONSOLIDATED.md:197` — must be 0..k-1 with no
    *  duplicates or gaps inside a given `lancamentoId`). */
-    indice: number;
+  indice: number;
   lancamentoId: string;
   documentoId: string;
 }
@@ -68,10 +68,7 @@ export interface GenerateChainTopologyOptions {
   shape?: ChainShape;
 }
 
-const DOCUMENTO_TIPOS: readonly DocumentoTipo[] = [
-  "matricula",
-  "transcricao",
-] as const;
+const DOCUMENTO_TIPOS: readonly DocumentoTipo[] = ["matricula", "transcricao"] as const;
 
 export function generateChainTopology(
   seed: number,
@@ -184,21 +181,20 @@ function generateLinear(
     lancamentos.push({
       id: `lanc-${i}`,
       documentoId: `doc-${i + 1}`,
-      tipo: i === 1 ? "inicio_matricula" : "registro",
+      tipo: i === 1 ? "inicio_matricula" : "registro"
     });
     origens.push({
       id: `ori-${i}`,
       lancamentoId: `lanc-${i}`,
       documentoId: `doc-${i}`,
-      indice: 0,
+      indice: 0
     });
   }
 
   // In a linear chain, only the last lancamento produces a terminal
   // origem (its target doc has no outgoing origem), so exactly one
   // fim_cadeia. For n=1 there are no lancamentos and no fims.
-  const fimCadeias: TopologyFimCadeia[] =
-    n >= 2 ? computeTerminalFims(lancamentos, origens) : [];
+  const fimCadeias: TopologyFimCadeia[] = n >= 2 ? computeTerminalFims(lancamentos, origens) : [];
 
   // Imovel membership: one imovel per chain, one imovel_documento row
   // per documento. Per Q13 the membership is N:N via imovel_documento;
@@ -207,7 +203,7 @@ function generateLinear(
   const imovel: TopologyImovel = { id: imovelId, seq: 1 };
   const imovelDocumentos: TopologyImovelDocumento[] = documentos.map((d) => ({
     imovelId,
-    documentoId: d.id,
+    documentoId: d.id
   }));
 
   return {
@@ -217,7 +213,7 @@ function generateLinear(
     lancamentos,
     origens,
     fimCadeias,
-    chainId,
+    chainId
   };
 }
 
@@ -250,13 +246,13 @@ function generateBranching(
     lancamentos.push({
       id: `lanc-${i}`,
       documentoId: `doc-${i + 1}`,
-      tipo: i === 1 ? "inicio_matricula" : "registro",
+      tipo: i === 1 ? "inicio_matricula" : "registro"
     });
     origens.push({
       id: `ori-${i}`,
       lancamentoId: `lanc-${i}`,
       documentoId: `doc-${i}`,
-      indice: 0,
+      indice: 0
     });
   }
 
@@ -273,24 +269,24 @@ function generateBranching(
   lancamentos.push({
     id: `lanc-${leftIdx}`,
     documentoId: leftChildId,
-    tipo: branchLeftTipo,
+    tipo: branchLeftTipo
   });
   origens.push({
     id: `ori-${leftIdx}`,
     lancamentoId: `lanc-${leftIdx}`,
     documentoId: branchPointId,
-    indice: 0,
+    indice: 0
   });
   lancamentos.push({
     id: `lanc-${rightIdx}`,
     documentoId: rightChildId,
-    tipo: "registro",
+    tipo: "registro"
   });
   origens.push({
     id: `ori-${rightIdx}`,
     lancamentoId: `lanc-${rightIdx}`,
     documentoId: branchPointId,
-    indice: 0,
+    indice: 0
   });
 
   // Per Q3 + plan S-5: every terminal origem (per the DAG-terminal
@@ -312,7 +308,7 @@ function generateBranching(
   const imovel: TopologyImovel = { id: imovelId, seq: 1 };
   const imovelDocumentos: TopologyImovelDocumento[] = documentos.map((d) => ({
     imovelId,
-    documentoId: d.id,
+    documentoId: d.id
   }));
   return {
     imovel,
@@ -321,7 +317,7 @@ function generateBranching(
     lancamentos,
     origens,
     fimCadeias,
-    chainId,
+    chainId
   };
 }
 
@@ -353,19 +349,19 @@ function generateMerge(
   lancamentos.push({
     id: `lanc-1`,
     documentoId: `doc-3`,
-    tipo: "inicio_matricula",
+    tipo: "inicio_matricula"
   });
   origens.push({
     id: `ori-1`,
     lancamentoId: `lanc-1`,
     documentoId: `doc-1`,
-    indice: 0,
+    indice: 0
   });
   origens.push({
     id: `ori-2`,
     lancamentoId: `lanc-1`,
     documentoId: `doc-2`,
-    indice: 1,
+    indice: 1
   });
 
   // Linear suffix: doc-3 -> doc-4 -> ... -> doc-n.
@@ -381,13 +377,13 @@ function generateMerge(
     lancamentos.push({
       id: `lanc-${lancIdx}`,
       documentoId: `doc-${docIdx}`,
-      tipo: "registro",
+      tipo: "registro"
     });
     origens.push({
       id: `ori-${oriIdx}`,
       lancamentoId: `lanc-${lancIdx}`,
       documentoId: `doc-${docIdx - 1}`,
-      indice: 0,
+      indice: 0
     });
   }
 
@@ -405,7 +401,7 @@ function generateMerge(
   const imovel: TopologyImovel = { id: imovelId, seq: 1 };
   const imovelDocumentos: TopologyImovelDocumento[] = documentos.map((d) => ({
     imovelId,
-    documentoId: d.id,
+    documentoId: d.id
   }));
 
   return {
@@ -415,7 +411,7 @@ function generateMerge(
     lancamentos,
     origens,
     fimCadeias,
-    chainId,
+    chainId
   };
 }
 
@@ -463,14 +459,14 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     nodes.push({
       id: lanc.id,
       label: `Lançamento ${idx}`,
-      type: "lancamento",
+      type: "lancamento"
     });
   }
   for (const fim of graph.fimCadeias) {
     nodes.push({
       id: fim.id,
       label: "Fim de cadeia",
-      type: "fim_cadeia",
+      type: "fim_cadeia"
     });
   }
 
@@ -488,14 +484,14 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     edges.push({
       id: `${ori.documentoId}->${ori.lancamentoId}`,
       source: ori.documentoId,
-      target: ori.lancamentoId,
+      target: ori.lancamentoId
     });
   }
   for (const lanc of graph.lancamentos) {
     edges.push({
       id: `${lanc.id}->${lanc.documentoId}`,
       source: lanc.id,
-      target: lanc.documentoId,
+      target: lanc.documentoId
     });
   }
   for (const fim of graph.fimCadeias) {
@@ -506,7 +502,7 @@ export function toGraphJson(graph: TopologyGraph): SeedGraphJson {
     edges.push({
       id: `${lanc.documentoId}->${fim.id}`,
       source: lanc.documentoId,
-      target: fim.id,
+      target: fim.id
     });
   }
 
@@ -610,6 +606,12 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   }
 
   // S-5: each Registro has origens.length >= 1; each Averbação has none.
+  // `inicio_matricula` is the chain's head record — it has 0 origens
+  // in the merge shape (sits on doc-1, the chain's root) and 1+
+  // origens in the linear / branching shapes (sits on doc-2 with
+  // doc-1 flowing in). Both are valid; we don't enforce an
+  // origem-count for inicio_matricula here — the shape-specific
+  // generator contract is the source of truth.
   for (const l of graph.lancamentos) {
     const origensForLanc = origensByLanc.get(l.id) ?? [];
     if (l.tipo === "averbacao") {
@@ -618,13 +620,14 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
           `averbação ${l.id} must have 0 origens, has ${origensForLanc.length}`
         );
       }
-    } else {
+    } else if (l.tipo === "registro") {
       if (origensForLanc.length < 1) {
         throw new TopologyInvariantError(
           `registro ${l.id} must have at least 1 origem, has ${origensForLanc.length}`
         );
       }
     }
+    // inicio_matricula: no cardinality check here.
   }
 
   // Cardinality: not strictly lancamentos === documentos - 1 (that
@@ -675,9 +678,7 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   function dfs(node: string): void {
     if (visited.has(node)) return;
     if (visiting.has(node)) {
-      throw new TopologyInvariantError(
-        `cycle detected involving document ${node}`
-      );
+      throw new TopologyInvariantError(`cycle detected involving document ${node}`);
     }
     visiting.add(node);
     for (const next of adj.get(node) ?? []) dfs(next);
@@ -744,25 +745,19 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   const nodeIds = new Set<string>();
   for (const d of graph.documentos) {
     if (nodeIds.has(d.id)) {
-      throw new TopologyInvariantError(
-        `node id ${d.id} (documento) collides with another node`
-      );
+      throw new TopologyInvariantError(`node id ${d.id} (documento) collides with another node`);
     }
     nodeIds.add(d.id);
   }
   for (const l of graph.lancamentos) {
     if (nodeIds.has(l.id)) {
-      throw new TopologyInvariantError(
-        `node id ${l.id} (lancamento) collides with another node`
-      );
+      throw new TopologyInvariantError(`node id ${l.id} (lancamento) collides with another node`);
     }
     nodeIds.add(l.id);
   }
   for (const f of graph.fimCadeias) {
     if (nodeIds.has(f.id)) {
-      throw new TopologyInvariantError(
-        `node id ${f.id} (fim_cadeia) collides with another node`
-      );
+      throw new TopologyInvariantError(`node id ${f.id} (fim_cadeia) collides with another node`);
     }
     nodeIds.add(f.id);
   }
@@ -831,18 +826,13 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
   //   - Every imovel_documento row references the chain's imovel
   //     and an existing documento id.
   //   - No duplicate imovel_documento rows.
-  const inicioLancs = graph.lancamentos.filter(
-    (l) => l.tipo === "inicio_matricula"
-  );
+  const inicioLancs = graph.lancamentos.filter((l) => l.tipo === "inicio_matricula");
   if (graph.lancamentos.length > 0 && inicioLancs.length !== 1) {
     throw new TopologyInvariantError(
       `chain must have exactly 1 inicio_matricula lancamento (when lancamentos exist), has ${inicioLancs.length}`
     );
   }
-  if (
-    graph.documentos.length > 0 &&
-    graph.imovelDocumentos.length !== graph.documentos.length
-  ) {
+  if (graph.documentos.length > 0 && graph.imovelDocumentos.length !== graph.documentos.length) {
     // Per S-3 / Q13: chain membership is recorded ONLY in
     // `imovel_documento` rows, never on the documentos. The
     // generator emits exactly one row per documento, so a
@@ -868,9 +858,7 @@ export function assertTopologyInvariants(graph: TopologyGraph): void {
     }
     const key = `${row.imovelId}/${row.documentoId}`;
     if (seenImovelDocPairs.has(key)) {
-      throw new TopologyInvariantError(
-        `duplicate imovel_documento row ${key}`
-      );
+      throw new TopologyInvariantError(`duplicate imovel_documento row ${key}`);
     }
     seenImovelDocPairs.add(key);
   }

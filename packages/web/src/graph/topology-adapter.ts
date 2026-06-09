@@ -11,6 +11,8 @@ export {
   assertTopologyInvariants,
   TopologyInvariantError,
   type TopologyGraph,
+  type TopologyImovel,
+  type TopologyImovelDocumento,
   type TopologyDocumento,
   type TopologyLancamento,
   type TopologyOrigem,
