@@ -1,7 +1,6 @@
 import { faker } from "@faker-js/faker";
 import type {
   TopologyGraph,
-  DocumentoTipo,
 } from "./chain-topology.js";
 
 /**
@@ -58,9 +57,10 @@ export function generateCpf(invalid = false): string {
   let digit11 = (sum * 10) % 11;
   if (digit11 >= 10) digit11 = 0;
 
-  // If invalid flag is set, corrupt one of the check digits
+  // If invalid flag is set, corrupt a data digit (not a check digit)
   if (invalid) {
-    digit11 = (digit11 + 1) % 10;
+    // Flip one of the first 9 digits to guarantee invalid CPF
+    digits[0] = (digits[0] + 1) % 10;
   }
 
   const allDigits = [...digits, digit10, digit11];
@@ -271,14 +271,6 @@ function randomUf(): string {
   return faker.helpers.arrayElement(ufs);
 }
 
-/**
- * Generate a document number based on tipo.
- * M-XXXXX for matricula, T-XXXXX for transcricao.
- */
-function generateNumero(tipo: DocumentoTipo, index: number): string {
-  const prefix = tipo === "transcricao" ? "T" : "M";
-  return `${prefix}-${String(index + 1).padStart(5, "0")}`;
-}
 
 /**
  * Fill non-structural fields in a topology graph with realistic values.
@@ -303,30 +295,20 @@ export function fillFields(topology: TopologyGraph, seed?: number): FilledChain 
   const pessoas: FilledPessoa[] = [];
   const imoveis: FilledImovel[] = [];
 
-  // Track used numbers to ensure uniqueness within chain
-  const usedMatriculaNumbers = new Set<number>();
-  const usedTranscricaoNumbers = new Set<number>();
+  // Type-specific sequential counters (no gaps)
+  let matriculaCounter = 1;
+  let transcricaoCounter = 1;
 
   // Generate documentos with monotonically increasing dates
   let currentDate = randomDate();
   for (let i = 0; i < topology.documentos.length; i++) {
     const doc = topology.documentos[i];
 
-    // Generate unique number based on tipo
-    let numberIndex = i;
-    if (doc.tipo === "matricula") {
-      while (usedMatriculaNumbers.has(numberIndex)) {
-        numberIndex++;
-      }
-      usedMatriculaNumbers.add(numberIndex);
-    } else {
-      while (usedTranscricaoNumbers.has(numberIndex)) {
-        numberIndex++;
-      }
-      usedTranscricaoNumbers.add(numberIndex);
-    }
+    // Generate sequential number based on tipo
+    const numero = doc.tipo === "matricula"
+      ? `M-${String(matriculaCounter++).padStart(5, "0")}`
+      : `T-${String(transcricaoCounter++).padStart(5, "0")}`;
 
-    const numero = generateNumero(doc.tipo, numberIndex);
     const data = formatDate(currentDate);
 
     // Randomly decide whether to include a description (30% chance)
@@ -378,8 +360,10 @@ export function fillFields(topology: TopologyGraph, seed?: number): FilledChain 
   if (hasReservaLegal) {
     // Legal reserve is 20-35% of total area
     const reservaPercentage = faker.number.float({ min: 0.20, max: 0.35, fractionDigits: 2 });
-    areaReservaLegal = Math.round(areaTotal * reservaPercentage * 100) / 100;
-    areaDemais = Math.round((areaTotal - areaReservaLegal) * 100) / 100;
+    const rawReserva = areaTotal * reservaPercentage;
+    areaReservaLegal = Math.round(rawReserva * 100) / 100;
+    // areaDemais is the remainder, rounded once to avoid float precision issues
+    areaDemais = +(areaTotal - areaReservaLegal).toFixed(2);
   }
 
   imoveis.push({
