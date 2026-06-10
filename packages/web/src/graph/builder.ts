@@ -133,6 +133,7 @@ function ensureDocPrefix(id: string): string {
  * Follows the convention from `topology-adapter.ts`:
  * - transcricao → "transcricao"
  * - matricula or averbacao → "matricula" (averbacao coerces to matricula)
+ * TODO: Revisit this coercion — averbacao may need distinct handling
  */
 function inferOrigemTipo(sourceDocTipo: DocumentoTipo): OrigemTipo {
   return sourceDocTipo === "transcricao" ? "transcricao" : "matricula";

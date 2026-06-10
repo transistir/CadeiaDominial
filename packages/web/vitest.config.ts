@@ -30,8 +30,8 @@ export default defineConfig({
       functions: 80,
       branches: 80,
       statements: 80,
-      perFile: true,
       thresholds: {
+        perFile: true,
         "src/graph/builder.ts": {
           lines: 100,
           functions: 100,
