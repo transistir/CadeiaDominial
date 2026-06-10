@@ -26,5 +26,6 @@ function toNodeData(data: unknown, label: string): Record<string, unknown> {
   if (data !== null && typeof data === "object" && !Array.isArray(data)) {
     return data as Record<string, unknown>;
   }
+  // Defensive: graphs from sources that bypass validateGraph may lack data
   return { label };
 }

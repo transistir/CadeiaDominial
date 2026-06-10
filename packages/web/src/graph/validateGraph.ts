@@ -84,6 +84,9 @@ function validateNode(raw: Record<string, unknown>, index: number): GraphNode {
 
   if (raw.type === "documento") {
     requirePrefix(id, "doc-", `${path}.id`);
+    if (raw.data === undefined) {
+      throw new Error(`${path}.data: documento nodes must have a data object with numero, tipo, cartorioId, and data`);
+    }
     return {
       id,
       label,
@@ -93,6 +96,9 @@ function validateNode(raw: Record<string, unknown>, index: number): GraphNode {
   }
 
   requirePrefix(id, "fim-", `${path}.id`);
+  if (raw.data === undefined) {
+    throw new Error(`${path}.data: fimCadeia nodes must have a data object with classificacao`);
+  }
   return {
     id,
     label,
