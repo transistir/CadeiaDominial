@@ -5,6 +5,8 @@ export { toReactFlow } from "./toReactFlow";
 export { topologyToGraphJson } from "./topology-adapter";
 export { generateChainTopology } from "./topology-adapter";
 export { assertTopologyInvariants, TopologyInvariantError } from "./topology-adapter";
+export { buildGraph, type ChainData } from "./builder";
+export { generateMockGraph, type MockShape } from "./mock";
 export {
   DocumentoNode,
   type DocumentoNodeData,

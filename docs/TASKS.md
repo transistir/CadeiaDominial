@@ -99,7 +99,7 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-501
 
 ### T-501 — Graph data layer (types + mock builder)
-- **Status:** 🔧 in-progress (partial: PR #28+#29 landed the types + validate + layout + fixture; mock builders + 100% coverage still pending)
+- **Status:** 🔧 ready for review (builder + generateMockGraph + 100% coverage on new files; awaiting PR)
 - **Worktree branch:** `feat/xyflow-graph-data`
 - **Files:** `packages/web/src/lib/graph/`
 - **Description:** Pure TypeScript library that builds `{ nodes, edges }` from domain data:
@@ -227,7 +227,7 @@ Phase 0: Decisions ──┐
 | T-100 | ✅ done | #26 |
 | T-101 | ✅ done | #25 |
 | **T-500** | 📋 **ready** | — |
-| T-501 | 🔧 in-progress (partial: PR #28+#29) | — |
+| T-501 | 🔧 ready for review (builder + generateMockGraph + 100% coverage) | — |
 | T-502 | 🔧 in-progress (partial: PR #28+#29) | — |
 | T-503 | blocked (T-502, T-202) | — |
 | T-200 | 📋 ready | — |
