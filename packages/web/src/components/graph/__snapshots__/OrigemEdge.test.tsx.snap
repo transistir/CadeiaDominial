@@ -1,0 +1,69 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`OrigemEdge > matches snapshot for fim_cadeia edge (dashed style) 1`] = `
+<div
+  class="react-flow"
+>
+  <svg>
+    <path
+      class="react-flow__edge-path origem-edge origem-edge--fim_cadeia"
+      d="M0,0 C50,0 50,100 100,100"
+      fill="none"
+      id="e1"
+    />
+    <path
+      class="react-flow__edge-interaction"
+      d="M0,0 C50,0 50,100 100,100"
+      fill="none"
+      stroke-opacity="0"
+      stroke-width="20"
+    />
+  </svg>
+  <div
+    class="react-flow__edgelabel-renderer"
+  >
+    <div
+      class="origem-edge__label origem-edge--fim_cadeia"
+      data-testid="origem-edge-label"
+      data-tipo="fim_cadeia"
+      style="position: absolute; transform: translate(-50%, -50%) translate(50px, 50px);"
+    >
+      Fim
+    </div>
+  </div>
+</div>
+`;
+
+exports[`OrigemEdge > matches snapshot for matricula edge 1`] = `
+<div
+  class="react-flow"
+>
+  <svg>
+    <path
+      class="react-flow__edge-path origem-edge origem-edge--matricula"
+      d="M0,0 C50,0 50,100 100,100"
+      fill="none"
+      id="e1"
+    />
+    <path
+      class="react-flow__edge-interaction"
+      d="M0,0 C50,0 50,100 100,100"
+      fill="none"
+      stroke-opacity="0"
+      stroke-width="20"
+    />
+  </svg>
+  <div
+    class="react-flow__edgelabel-renderer"
+  >
+    <div
+      class="origem-edge__label origem-edge--matricula"
+      data-testid="origem-edge-label"
+      data-tipo="matricula"
+      style="position: absolute; transform: translate(-50%, -50%) translate(50px, 50px);"
+    >
+      M
+    </div>
+  </div>
+</div>
+`;

@@ -1,0 +1,46 @@
+.origem-edge {
+  stroke: #6b7280;
+  stroke-width: 1.5;
+}
+
+.origem-edge--matricula {
+  stroke: #2563eb;
+}
+
+.origem-edge--transcricao {
+  stroke: #7c3aed;
+}
+
+.origem-edge--fim_cadeia {
+  stroke: #6b7280;
+  stroke-dasharray: 4 3;
+}
+
+.origem-edge__label {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.origem-edge__label.origem-edge--matricula {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.origem-edge__label.origem-edge--transcricao {
+  border-color: #7c3aed;
+  color: #7c3aed;
+}
+
+.origem-edge__label.origem-edge--fim_cadeia {
+  border-color: #6b7280;
+  color: #6b7280;
+}

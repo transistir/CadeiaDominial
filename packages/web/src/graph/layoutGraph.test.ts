@@ -11,14 +11,29 @@ const basicGraph: GraphJson = validateGraph(basicGraphFixture);
 describe("layoutGraph", () => {
   const graph: GraphJson = {
     nodes: [
-      { id: "a", label: "Node A", type: "default" },
-      { id: "b", label: "Node B", type: "default" },
-      { id: "c", label: "Node C", type: "default" },
+      {
+        id: "doc-a",
+        label: "Node A",
+        type: "documento",
+        data: { numero: "M123", tipo: "matricula", cartorioId: "cartorio-1", data: "2024-01-15" }
+      },
+      {
+        id: "doc-b",
+        label: "Node B",
+        type: "documento",
+        data: { numero: "T456", tipo: "transcricao", cartorioId: "cartorio-2", data: "2024-01-16" }
+      },
+      {
+        id: "fim-c",
+        label: "Node C",
+        type: "fimCadeia",
+        data: { classificacao: "inconclusa" }
+      }
     ],
     edges: [
-      { id: "a-b", source: "a", target: "b" },
-      { id: "b-c", source: "b", target: "c" },
-    ],
+      { id: "lanc-a-b", source: "doc-a", target: "doc-b" },
+      { id: "lanc-b-c", source: "doc-b", target: "fim-c" }
+    ]
   };
 
   it("returns all nodes with positions", () => {
@@ -33,9 +48,10 @@ describe("layoutGraph", () => {
 
   it("preserves node properties", () => {
     const result = layoutGraph(graph);
-    const nodeA = result.nodes.find((n) => n.id === "a");
+    const nodeA = result.nodes.find((n) => n.id === "doc-a");
     expect(nodeA?.label).toBe("Node A");
-    expect(nodeA?.type).toBe("default");
+    expect(nodeA?.type).toBe("documento");
+    expect(nodeA?.data).toEqual(graph.nodes[0].data);
   });
 
   it("preserves edges", () => {
@@ -52,9 +68,9 @@ describe("layoutGraph", () => {
 
   it("layouts nodes in left-to-right direction", () => {
     const result = layoutGraph(graph);
-    const nodeA = result.nodes.find((n) => n.id === "a");
-    const nodeB = result.nodes.find((n) => n.id === "b");
-    const nodeC = result.nodes.find((n) => n.id === "c");
+    const nodeA = result.nodes.find((n) => n.id === "doc-a");
+    const nodeB = result.nodes.find((n) => n.id === "doc-b");
+    const nodeC = result.nodes.find((n) => n.id === "fim-c");
     // LR layout: a.x < b.x < c.x
     expect(nodeB!.position.x).toBeGreaterThan(nodeA!.position.x);
     expect(nodeC!.position.x).toBeGreaterThan(nodeB!.position.x);
@@ -71,21 +87,21 @@ describe("layoutGraph", () => {
     expect(result.nodes).toHaveLength(3);
     expect(result.edges).toHaveLength(2);
 
-    // Field Data (source) is leftmost, Final Report (output) is rightmost.
-    const field = result.nodes.find((n) => n.label === "Field Data")!;
-    const analysis = result.nodes.find((n) => n.label === "Legal Analysis")!;
-    const report = result.nodes.find((n) => n.label === "Final Report")!;
-    expect(field.position.x).toBeLessThan(analysis.position.x);
-    expect(analysis.position.x).toBeLessThan(report.position.x);
+    // M1234 is leftmost, Fim de cadeia is rightmost.
+    const matricula = result.nodes.find((n) => n.label === "M1234")!;
+    const transcricao = result.nodes.find((n) => n.label === "T5678")!;
+    const fim = result.nodes.find((n) => n.label === "Fim de cadeia")!;
+    expect(matricula.position.x).toBeLessThan(transcricao.position.x);
+    expect(transcricao.position.x).toBeLessThan(fim.position.x);
 
     // All three nodes share the same y-coordinate (single rank, LR layout).
-    expect(analysis.position.y).toBeCloseTo(field.position.y, 5);
-    expect(report.position.y).toBeCloseTo(field.position.y, 5);
+    expect(transcricao.position.y).toBeCloseTo(matricula.position.y, 5);
+    expect(fim.position.y).toBeCloseTo(matricula.position.y, 5);
 
     // Exact x-positions are deterministic — locked down to catch layout shifts.
     // (ranksep=80, node width=180, so each subsequent node is 260 to the right.)
-    expect(field.position.x).toBeCloseTo(0, 5);
-    expect(analysis.position.x).toBeCloseTo(260, 5);
-    expect(report.position.x).toBeCloseTo(520, 5);
+    expect(matricula.position.x).toBeCloseTo(0, 5);
+    expect(transcricao.position.x).toBeCloseTo(260, 5);
+    expect(fim.position.x).toBeCloseTo(520, 5);
   });
 });

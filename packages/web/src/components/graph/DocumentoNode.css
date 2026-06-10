@@ -1,0 +1,70 @@
+.documento-node {
+  background: #ffffff;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 180px;
+  max-width: 240px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.documento-node--matricula {
+  border-color: #2563eb;
+}
+
+.documento-node--matricula .documento-node__badge {
+  background: #2563eb;
+}
+
+.documento-node--transcricao {
+  border-color: #7c3aed;
+}
+
+.documento-node--transcricao .documento-node__badge {
+  background: #7c3aed;
+}
+
+.documento-node--averbacao {
+  border-color: #0d9488;
+}
+
+.documento-node--averbacao .documento-node__badge {
+  background: #0d9488;
+}
+
+.documento-node__badge {
+  display: inline-block;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.documento-node__numero {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.documento-node__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #6b7280;
+  gap: 8px;
+}
+
+.documento-node__cartorio {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

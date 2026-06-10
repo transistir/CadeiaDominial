@@ -543,10 +543,10 @@ describe("chain-topology.invariants", () => {
     it("assertTopologyInvariants throws when multiple origens in the same lancamento reference the same documentoId", () => {
       // This is the edge case flagged by Greptile: two origens in the same
       // lancamento sharing a documentoId (indices 0 and 1 are contiguous,
-      // so the contiguity check passes). The toGraphJson edge ID scheme
-      // ${documentoId}->${lancamentoId} would produce duplicate edge IDs,
-      // causing validateGraph to throw a confusing "Duplicate edge ID" error.
-      // The invariant checker must catch this with a clear diagnostic.
+      // so the contiguity check passes). Even though edge IDs now use
+      // origem.id (guaranteed unique across all origens), duplicate
+      // source→target pairs produce semantically duplicate edges in the
+      // rendered graph, which the invariant checker must catch.
       const dupDocumentoId: TopologyGraph = {
         chainId: "chain-dup-docid",
         imovel: { id: "imovel-dup-docid", seq: 1 },
@@ -766,7 +766,7 @@ describe("chain-topology.invariants", () => {
       // Pre-PR bug: duplicate-id checks were per-collection. A
       // documento id that equals a lancamento id (or fim id) would
       // pass invariants but produce a `validateGraph` failure with
-      // a confusing "Duplicate edge ID" error. The fix adds a
+      // a confusing "Duplicate node ID" error. The fix adds a
       // global node-id uniqueness check.
       // Set up a graph that satisfies the S-3/S-5 contracts (registro
       // has >= 1 origem, indices contiguous, terminal origem has a

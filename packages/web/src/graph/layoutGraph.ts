@@ -11,6 +11,7 @@ export interface LayoutedNode {
   label: string;
   type: string;
   position: { x: number; y: number };
+  data?: unknown;
 }
 
 export interface LayoutedGraph {
@@ -19,7 +20,7 @@ export interface LayoutedGraph {
 }
 
 const NODE_WIDTH = 180;
-const NODE_HEIGHT = 40;
+const NODE_HEIGHT = 80;
 
 /**
  * Run a deterministic left-to-right dagre layout over a `GraphJson`.
@@ -57,13 +58,14 @@ export function layoutGraph(graph: GraphJson): LayoutedGraph {
       type: node.type,
       position: {
         x: pos.x - NODE_WIDTH / 2,
-        y: pos.y - NODE_HEIGHT / 2,
+        y: pos.y - NODE_HEIGHT / 2
       },
+      data: node.data
     };
   });
 
   return {
     nodes: layoutedNodes,
-    edges: graph.edges,
+    edges: graph.edges
   };
 }

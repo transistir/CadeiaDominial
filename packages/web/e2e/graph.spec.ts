@@ -12,7 +12,18 @@ test("graph page loads and renders core content", async ({ page }) => {
   await page.goto("/graph");
 
   await expect(page.getByTestId("graph-preview")).toBeVisible();
-  await expect(page.getByText("Field Data")).toBeVisible();
-  await expect(page.getByText("Legal Analysis")).toBeVisible();
-  await expect(page.getByText("Final Report")).toBeVisible();
+
+  // Check for structural elements using data-testid (not hardcoded fixture values)
+  const documentoNodes = page.getByTestId("documento-node");
+  await expect(documentoNodes).toHaveCount(2);
+
+  const fimCadeiaNode = page.getByTestId("fim-cadeia-node");
+  await expect(fimCadeiaNode).toHaveCount(1);
+
+  const edgeLabels = page.getByTestId("origem-edge-label");
+  await expect(edgeLabels).toHaveCount(2);
+
+  // Verify edge labels have tipo attributes (structural check)
+  await expect(page.locator('[data-testid="origem-edge-label"][data-tipo="matricula"]')).toHaveCount(1);
+  await expect(page.locator('[data-testid="origem-edge-label"][data-tipo="fim_cadeia"]')).toHaveCount(1);
 });

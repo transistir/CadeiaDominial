@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  generateChainTopology,
-  toGraphJson,
-  type TopologyGraph,
-} from "../chain-topology";
+import { generateChainTopology, toGraphJson, type TopologyGraph } from "../chain-topology";
 
 describe("chain-topology.linear", () => {
   it("3-document linear produces 3 docs, 2 lancamentos, 1 fim", () => {
@@ -41,32 +37,17 @@ describe("chain-topology.linear", () => {
 
   it("document IDs follow the doc-${i} pattern", () => {
     const g = generateChainTopology(42, 5, { shape: "linear" });
-    expect(g.documentos.map((d) => d.id)).toEqual([
-      "doc-1",
-      "doc-2",
-      "doc-3",
-      "doc-4",
-      "doc-5",
-    ]);
+    expect(g.documentos.map((d) => d.id)).toEqual(["doc-1", "doc-2", "doc-3", "doc-4", "doc-5"]);
   });
 
   it("lancamento IDs follow the lanc-${i} pattern", () => {
     const g = generateChainTopology(42, 5, { shape: "linear" });
-    expect(g.lancamentos.map((l) => l.id)).toEqual([
-      "lanc-1",
-      "lanc-2",
-      "lanc-3",
-      "lanc-4",
-    ]);
+    expect(g.lancamentos.map((l) => l.id)).toEqual(["lanc-1", "lanc-2", "lanc-3", "lanc-4"]);
   });
 
   it("origem IDs follow the ori-${i} pattern", () => {
     const g = generateChainTopology(42, 4, { shape: "linear" });
-    expect(g.origens.map((o) => o.id)).toEqual([
-      "ori-1",
-      "ori-2",
-      "ori-3",
-    ]);
+    expect(g.origens.map((o) => o.id)).toEqual(["ori-1", "ori-2", "ori-3"]);
   });
 
   it("first lancamento creates doc-2 and originates from doc-1", () => {
@@ -109,10 +90,10 @@ describe("chain-topology.linear", () => {
 
   it("same seed produces deep-equal output", () => {
     const a: TopologyGraph = generateChainTopology(12345, 5, {
-      shape: "linear",
+      shape: "linear"
     });
     const b: TopologyGraph = generateChainTopology(12345, 5, {
-      shape: "linear",
+      shape: "linear"
     });
     expect(a).toEqual(b);
   });
@@ -128,12 +109,13 @@ describe("chain-topology.linear", () => {
   it("toGraphJson produces structurally valid node/edge JSON", () => {
     const g = generateChainTopology(42, 3, { shape: "linear" });
     const json = toGraphJson(g);
-    expect(json.nodes).toHaveLength(3 + 2 + 1);
-    expect(json.edges).toHaveLength(2 + 2 + 1);
+    expect(json.nodes).toHaveLength(3 + 1);
+    expect(json.edges).toHaveLength(2 + 1);
     for (const node of json.nodes) {
       expect(node.id).toBeTruthy();
       expect(typeof node.label).toBe("string");
       expect(typeof node.type).toBe("string");
+      expect(node.data).toBeDefined();
     }
     for (const edge of json.edges) {
       expect(edge.id).toBeTruthy();

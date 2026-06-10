@@ -1,0 +1,62 @@
+.fim-cadeia-node {
+  border: 2px dashed #6b7280;
+  border-radius: 16px;
+  padding: 8px 14px;
+  min-width: 140px;
+  max-width: 200px;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+}
+
+.fim-cadeia-node--origem_lidima {
+  border-color: #28a745;
+  background: #f0fdf4;
+}
+
+.fim-cadeia-node--origem_lidima .fim-cadeia-node__icon {
+  color: #28a745;
+}
+
+.fim-cadeia-node--sem_origem {
+  border-color: #dc3545;
+  background: #fef2f2;
+}
+
+.fim-cadeia-node--sem_origem .fim-cadeia-node__icon {
+  color: #dc3545;
+}
+
+.fim-cadeia-node--inconclusa {
+  border-color: #ffc107;
+  background: #fffbeb;
+}
+
+.fim-cadeia-node--inconclusa .fim-cadeia-node__icon {
+  color: #d97706;
+}
+
+.fim-cadeia-node__icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+.fim-cadeia-node__label {
+  font-weight: 600;
+  font-size: 12px;
+  color: #4b5563;
+  margin-bottom: 2px;
+}
+
+.fim-cadeia-node__classification {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+}
