@@ -18,6 +18,8 @@ graph JSON  →  validateGraph  →  layoutGraph  →  toReactFlow  →  <ReactF
 | `layoutGraph.ts` | Deterministic dagre LR layout. Trust contract: caller has already validated. | `GraphJson` → `LayoutedGraph` |
 | `toReactFlow.ts` | Adapts the layouted graph into React Flow's `Node`/`Edge` shapes. | `LayoutedGraph` → `{ nodes, edges }` |
 | `GraphPreview.tsx` | The React Flow renderer. Memoizes the pipeline on the input ref. | `unknown` → rendered React Flow |
+| `builder.ts` | Builds `{ nodes, edges }` from typed domain input (ChainData). | `ChainData` → `GraphJson` |
+| `mock.ts` | Deterministic mock generators for development. | `MockShape` → `GraphJson` |
 | `fixtures/basic-graph.json` | Canonical 3-node / 2-edge fixture (source → process → output). | — |
 | `index.ts` | Public barrel. | — |
 
@@ -50,3 +52,37 @@ shape will throw at the first render — that's intentional.
 graph, radial) is a new function with the same signature, then a small
 switch in `GraphPreview` if both are exposed. Don't try to make `layoutGraph`
 itself pluggable — the contract is "dagre LR for now".
+
+## Building graphs from domain data
+
+`buildGraph()` takes a typed `ChainData` input and produces a `GraphJson`:
+
+```typescript
+import { buildGraph } from "@cadeia/web/src/graph";
+
+const graph = buildGraph({
+  documentos: [
+    { id: "doc-1", numero: "M123", tipo: "matricula", cartorioId: "cartorio-1", data: "2024-01-15" }
+  ],
+  lancamentos: [
+    { id: "lanc-1", documentoId: "doc-1", tipo: "registro" }
+  ],
+  origens: []
+});
+```
+
+It maps `documentos` → nodes, `origens` → edges, and adds synthetic `fim-cadeia` leaves for documents with no outgoing origens.
+
+## Mock data for development
+
+`generateMockGraph()` produces deterministic mock graphs in three shapes:
+
+```typescript
+import { generateMockGraph } from "@cadeia/web/src/graph";
+
+const linear = generateMockGraph("linear");   // 6 nodes, 5 edges
+const branching = generateMockGraph("branching"); // 6 nodes, 5 edges
+const merge = generateMockGraph("merge");     // 4 nodes, 3 edges
+```
+
+Same shape → byte-identical output. No PRNG.
