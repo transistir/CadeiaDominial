@@ -1,4 +1,4 @@
-import { faker } from "@faker-js/faker";
+import { Faker, pt_BR, type Faker as FakerType } from "@faker-js/faker";
 import type {
   TopologyGraph,
 } from "./chain-topology.js";
@@ -17,54 +17,48 @@ function hashString(str: string): number {
   return Math.abs(hash);
 }
 
-/**
- * Generate a valid Brazilian CPF with correct check digits.
- *
- * CPF format: ddd.ddd.ddd-dd
- * The last two digits are check digits computed from the first nine.
- *
- * Algorithm:
- * 1. Generate 9 random digits (d1..d9)
- * 2. Compute first check digit (d10):
- *    - Multiply d1×10, d2×9, ..., d9×2
- *    - Sum the products
- *    - d10 = (sum × 10) % 11; if >= 10, use 0
- * 3. Compute second check digit (d11):
- *    - Multiply d1×11, d2×10, ..., d9×3, d10×2
- *    - Sum the products
- *    - d11 = (sum × 10) % 11; if >= 10, use 0
- *
- * @param invalid - If true, generate an INVALID CPF (for negative tests)
- */
-export function generateCpf(invalid = false): string {
-  // Generate 9 random digits
-  const digits = Array.from({ length: 9 }, () => faker.number.int({ min: 0, max: 9 }));
+// ── Fixed date range for deterministic cross-run output ──
+// Anchor to a fixed window (2010–2020) instead of wall-clock time,
+// so that the same seed always produces the same output regardless
+// of when the process runs.  Greptile P1.
+const FIXED_DATE_START = new Date("2010-01-01");
+const FIXED_DATE_END = new Date("2020-12-31");
 
-  // Compute first check digit
+// ── CPF helpers (algorithm — faker-independent) ──
+
+function computeCpfCheckDigits(digits: number[]): [number, number] {
   let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += digits[i] * (10 - i);
-  }
-  let digit10 = (sum * 10) % 11;
-  if (digit10 >= 10) digit10 = 0;
+  for (let i = 0; i < 9; i++) sum += digits[i] * (10 - i);
+  let d10 = (sum * 10) % 11;
+  if (d10 >= 10) d10 = 0;
 
-  // Compute second check digit
   sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += digits[i] * (11 - i);
-  }
-  sum += digit10 * 2;
-  let digit11 = (sum * 10) % 11;
-  if (digit11 >= 10) digit11 = 0;
+  for (let i = 0; i < 9; i++) sum += digits[i] * (11 - i);
+  sum += d10 * 2;
+  let d11 = (sum * 10) % 11;
+  if (d11 >= 10) d11 = 0;
 
-  // If invalid flag is set, corrupt a data digit (not a check digit)
+  return [d10, d11];
+}
+
+function generateCpfWithFaker(faker: FakerType, invalid = false): string {
+  const digits = Array.from({ length: 9 }, () => faker.number.int({ min: 0, max: 9 }));
+  const [d10, d11] = computeCpfCheckDigits(digits);
+
   if (invalid) {
-    // Flip one of the first 9 digits to guarantee invalid CPF
     digits[0] = (digits[0] + 1) % 10;
   }
 
-  const allDigits = [...digits, digit10, digit11];
-  return `${allDigits.slice(0, 3).join("")}.${allDigits.slice(3, 6).join("")}.${allDigits.slice(6, 9).join("")}-${allDigits[9]}${allDigits[10]}`;
+  const all = [...digits, d10, d11];
+  return `${all.slice(0, 3).join("")}.${all.slice(3, 6).join("")}.${all.slice(6, 9).join("")}-${all[9]}${all[10]}`;
+}
+
+/**
+ * Generate a valid Brazilian CPF with correct check digits.
+ * Uses a dedicated faker instance for isolation — see generateCpfIsolated.
+ */
+export function generateCpf(invalid = false): string {
+  return generateCpfWithFaker(new Faker({ locale: pt_BR }), invalid);
 }
 
 /**
@@ -77,62 +71,46 @@ export function validateCpf(cpf: string): boolean {
 
   const nums = digits.split("").map(Number);
 
-  // Check if all digits are the same (invalid CPF pattern)
+  // Reject CPFs with all identical digits (e.g., 111.111.111-11)
   if (nums.every((d) => d === nums[0])) return false;
 
-  // Compute first check digit
+  const [expectedD10, expectedD11] = computeCpfCheckDigits(nums.slice(0, 9));
+  return nums[9] === expectedD10 && nums[10] === expectedD11;
+}
+
+// ── CNPJ helpers (algorithm — faker-independent) ──
+
+const CNPJ_WEIGHTS1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+const CNPJ_WEIGHTS2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+function computeCnpjCheckDigits(digits: number[]): [number, number] {
   let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += nums[i] * (10 - i);
-  }
-  const digit10 = (sum * 10) % 11;
-  const expectedDigit10 = digit10 >= 10 ? 0 : digit10;
-  if (nums[9] !== expectedDigit10) return false;
+  for (let i = 0; i < 12; i++) sum += digits[i] * CNPJ_WEIGHTS1[i];
+  const rem1 = sum % 11;
+  const d13 = rem1 < 2 ? 0 : 11 - rem1;
 
-  // Compute second check digit
   sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += nums[i] * (11 - i);
-  }
-  sum += nums[9] * 2;
-  const digit11 = (sum * 10) % 11;
-  const expectedDigit11 = digit11 >= 10 ? 0 : digit11;
-  if (nums[10] !== expectedDigit11) return false;
+  for (let i = 0; i < 12; i++) sum += digits[i] * CNPJ_WEIGHTS2[i];
+  sum += d13 * CNPJ_WEIGHTS2[12];
+  const rem2 = sum % 11;
+  const d14 = rem2 < 2 ? 0 : 11 - rem2;
 
-  return true;
+  return [d13, d14];
+}
+
+function generateCnpjWithFaker(faker: FakerType): string {
+  const base = Array.from({ length: 12 }, () => faker.number.int({ min: 0, max: 9 }));
+  const [d13, d14] = computeCnpjCheckDigits(base);
+  const all = [...base, d13, d14];
+  return `${all.slice(0, 2).join("")}.${all.slice(2, 5).join("")}.${all.slice(5, 8).join("")}/${all.slice(8, 12).join("")}-${all[12]}${all[13]}`;
 }
 
 /**
  * Generate a valid Brazilian CNPJ with correct check digits.
- *
- * CNPJ format: dd.ddd.ddd/dddd-dd
- * The last two digits are check digits computed from the first twelve.
+ * Uses a dedicated faker instance for isolation.
  */
 export function generateCnpj(): string {
-  // Generate 12 random digits (first 8 are the registration number, next 4 are branch number)
-  const baseDigits = Array.from({ length: 12 }, () => faker.number.int({ min: 0, max: 9 }));
-
-  // Compute first check digit (d13)
-  let sum = 0;
-  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  for (let i = 0; i < 12; i++) {
-    sum += baseDigits[i] * weights1[i];
-  }
-  let remainder = sum % 11;
-  const digit13 = remainder < 2 ? 0 : 11 - remainder;
-
-  // Compute second check digit (d14)
-  sum = 0;
-  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  const allButLast = [...baseDigits, digit13];
-  for (let i = 0; i < 13; i++) {
-    sum += allButLast[i] * weights2[i];
-  }
-  remainder = sum % 11;
-  const digit14 = remainder < 2 ? 0 : 11 - remainder;
-
-  const allDigits = [...baseDigits, digit13, digit14];
-  return `${allDigits.slice(0, 2).join("")}.${allDigits.slice(2, 5).join("")}.${allDigits.slice(5, 8).join("")}/${allDigits.slice(8, 12).join("")}-${allDigits[12]}${allDigits[13]}`;
+  return generateCnpjWithFaker(new Faker({ locale: pt_BR }));
 }
 
 /**
@@ -145,139 +123,80 @@ export function validateCnpj(cnpj: string): boolean {
 
   const nums = digits.split("").map(Number);
 
-  // Check if all digits are the same (invalid CNPJ pattern)
   if (nums.every((d) => d === nums[0])) return false;
 
-  // Compute first check digit
-  let sum = 0;
-  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  for (let i = 0; i < 12; i++) {
-    sum += nums[i] * weights1[i];
-  }
-  let remainder = sum % 11;
-  const digit13 = remainder < 2 ? 0 : 11 - remainder;
-  if (nums[12] !== digit13) return false;
-
-  // Compute second check digit
-  sum = 0;
-  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  for (let i = 0; i < 13; i++) {
-    sum += nums[i] * weights2[i];
-  }
-  remainder = sum % 11;
-  const digit14 = remainder < 2 ? 0 : 11 - remainder;
-  if (nums[13] !== digit14) return false;
-
-  return true;
+  const [expectedD13, expectedD14] = computeCnpjCheckDigits(nums.slice(0, 12));
+  return nums[12] === expectedD13 && nums[13] === expectedD14;
 }
 
-/**
- * Filled documento with realistic field values.
- */
+// ── Filled types ──
+
 export interface FilledDocumento {
-  /** The documento's topology ID (doc.id) */
   topologyId: string;
-  /** Document number (e.g. "M-12345" or "T-67890") */
   numero: string;
-  /** ISO date string (YYYY-MM-DD) */
   data: string;
-  /** Optional description */
   descricao?: string;
 }
 
-/**
- * Filled pessoa (person or legal entity) with realistic field values.
- */
 export interface FilledPessoa {
-  /** The pessoa's topology ID (referenced entity id) */
   topologyId: string;
-  /** Full name (person) or company name (legal entity) */
   nome: string;
-  /** Valid CPF or CNPJ */
   cpfCnpj: string;
-  /** "pf" for pessoa física (person), "pj" for pessoa jurídica (legal entity) */
   tipo: "pf" | "pj";
 }
 
-/**
- * Filled imovel (property) with realistic field values.
- */
 export interface FilledImovel {
-  /** The imovel's topology ID */
   topologyId: string;
-  /** Property denomination (e.g. "Fazenda São José") */
   denominacao: string;
-  /** Total area in hectares */
   areaTotal: number;
-  /** Legal reserve area in hectares (optional) */
   areaReservaLegal?: number;
-  /** Remaining area in hectares (optional) */
   areaDemais?: number;
-  /** Municipality name */
   municipio: string;
-  /** State abbreviation (UF) */
   uf: string;
 }
 
-/**
- * Filled chain with all entities enriched with realistic field values.
- */
 export interface FilledChain {
-  /** Chain ID from topology */
   chainId: string;
-  /** Filled documentos */
   documentos: FilledDocumento[];
-  /** Filled pessoas (persons and legal entities) */
   pessoas: FilledPessoa[];
-  /** Filled imoveis (properties) */
   imoveis: FilledImovel[];
 }
 
-/**
- * Generate a random date within the last 10 years.
- */
-function randomDate(): Date {
-  const end = new Date();
-  const start = new Date();
-  start.setFullYear(end.getFullYear() - 10);
-  return faker.date.between({ from: start, to: end });
+// ── Internal helpers (all accept a local faker for isolation) ──
+
+function randomDate(faker: FakerType): Date {
+  return faker.date.between({ from: FIXED_DATE_START, to: FIXED_DATE_END });
 }
 
-/**
- * Add a random number of days (30-365) to a date.
- */
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
-/**
- * Format a Date as ISO string (YYYY-MM-DD).
- */
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
-/**
- * Get a Brazilian state abbreviation (UF).
- */
-function randomUf(): string {
-  const ufs = [
-    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
-    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
-    "SP", "SE", "TO",
-  ];
-  return faker.helpers.arrayElement(ufs);
-}
+const BRAZILIAN_UFS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO",
+];
 
+function randomUf(faker: FakerType): string {
+  return faker.helpers.arrayElement(BRAZILIAN_UFS);
+}
 
 /**
  * Fill non-structural fields in a topology graph with realistic values.
  *
- * This function takes a TopologyGraph (from chain-topology.ts) and enriches
- * it with realistic field values for documents, persons, and properties using
- * @faker-js/faker with Portuguese locale.
+ * Uses a **local** Faker instance (not the global singleton) so that
+ * concurrent calls (e.g. parallel Vitest files) cannot corrupt each
+ * other's PRNG streams.  Greptile P3.
+ *
+ * The date range is anchored to a fixed 2010–2020 window so that
+ * the same seed produces identical output across runs.  Greptile P1.
  *
  * @param topology - The topology graph to fill
  * @param seed - Optional seed for deterministic output. If not provided,
@@ -285,33 +204,29 @@ function randomUf(): string {
  * @returns Filled chain with all entities enriched with realistic values
  */
 export function fillFields(topology: TopologyGraph, seed?: number): FilledChain {
-  // Derive seed from chainId if not provided
   const actualSeed = seed ?? hashString(topology.chainId);
 
-  // Seed faker for deterministic output
+  // Local faker instance — isolates PRNG state from concurrent callers
+  const faker = new Faker({ locale: pt_BR });
   faker.seed(actualSeed);
 
   const documentos: FilledDocumento[] = [];
   const pessoas: FilledPessoa[] = [];
   const imoveis: FilledImovel[] = [];
 
-  // Type-specific sequential counters (no gaps)
   let matriculaCounter = 1;
   let transcricaoCounter = 1;
 
-  // Generate documentos with monotonically increasing dates
-  let currentDate = randomDate();
+  let currentDate = randomDate(faker);
   for (let i = 0; i < topology.documentos.length; i++) {
     const doc = topology.documentos[i];
 
-    // Generate sequential number based on tipo
     const numero = doc.tipo === "matricula"
       ? `M-${String(matriculaCounter++).padStart(5, "0")}`
       : `T-${String(transcricaoCounter++).padStart(5, "0")}`;
 
     const data = formatDate(currentDate);
 
-    // Randomly decide whether to include a description (30% chance)
     const descricao = faker.datatype.boolean({ probability: 0.3 })
       ? faker.lorem.sentence({ min: 5, max: 15 })
       : undefined;
@@ -323,34 +238,31 @@ export function fillFields(topology: TopologyGraph, seed?: number): FilledChain 
       descricao,
     });
 
-    // Move to next date (30-365 days later)
     const daysToAdd = faker.number.int({ min: 30, max: 365 });
     currentDate = addDays(currentDate, daysToAdd);
   }
 
-  // Generate pessoas (3-5 per chain)
   const pessoaCount = faker.number.int({ min: 3, max: 5 });
   for (let i = 0; i < pessoaCount; i++) {
-    const isPessoaFisica = faker.datatype.boolean({ probability: 0.7 }); // 70% PF, 30% PJ
+    const isPessoaFisica = faker.datatype.boolean({ probability: 0.7 });
 
     if (isPessoaFisica) {
       pessoas.push({
         topologyId: `pessoa-pf-${i + 1}`,
         nome: faker.person.fullName(),
-        cpfCnpj: generateCpf(),
+        cpfCnpj: generateCpfWithFaker(faker),
         tipo: "pf",
       });
     } else {
       pessoas.push({
         topologyId: `pessoa-pj-${i + 1}`,
         nome: faker.company.name(),
-        cpfCnpj: generateCnpj(),
+        cpfCnpj: generateCnpjWithFaker(faker),
         tipo: "pj",
       });
     }
   }
 
-  // Generate imovel (exactly 1 per chain per S-3)
   const areaTotal = faker.number.float({ min: 10, max: 10000, fractionDigits: 2 });
   const hasReservaLegal = faker.datatype.boolean({ probability: 0.8 });
 
@@ -358,11 +270,9 @@ export function fillFields(topology: TopologyGraph, seed?: number): FilledChain 
   let areaDemais: number | undefined;
 
   if (hasReservaLegal) {
-    // Legal reserve is 20-35% of total area
     const reservaPercentage = faker.number.float({ min: 0.20, max: 0.35, fractionDigits: 2 });
     const rawReserva = areaTotal * reservaPercentage;
     areaReservaLegal = Math.round(rawReserva * 100) / 100;
-    // areaDemais is the remainder, rounded once to avoid float precision issues
     areaDemais = +(areaTotal - areaReservaLegal).toFixed(2);
   }
 
@@ -375,7 +285,7 @@ export function fillFields(topology: TopologyGraph, seed?: number): FilledChain 
     areaReservaLegal,
     areaDemais,
     municipio: faker.location.city(),
-    uf: randomUf(),
+    uf: randomUf(faker),
   });
 
   return {
