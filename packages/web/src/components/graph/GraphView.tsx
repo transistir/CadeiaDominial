@@ -86,6 +86,7 @@ export function GraphView({ graph }: { graph: unknown }) {
             className="graph-view__panel-close"
             data-testid="detail-panel-close"
             type="button"
+            aria-label="Fechar"
           >
             ×
           </button>

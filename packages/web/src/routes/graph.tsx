@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { GraphView } from "../graph";
 import { generateMockGraph, type MockShape } from "../graph/mock";
 import "./graph.css";
@@ -6,12 +6,14 @@ import "./graph.css";
 function GraphRoute() {
   const [shape, setShape] = useState<MockShape>("complex");
 
-  const graph = generateMockGraph(shape);
+  const graph = useMemo(() => generateMockGraph(shape), [shape]);
 
   return (
     <div className="graph-page">
       <div className="graph-page__toolbar">
+        <label htmlFor="mock-shape-select">Cadeia:</label>
         <select
+          id="mock-shape-select"
           data-testid="mock-shape-select"
           value={shape}
           onChange={(e) => setShape(e.target.value as MockShape)}
