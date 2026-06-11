@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("graph page loads and renders core content", async ({ page }) => {
+test("graph page loads with complex mock by default", async ({ page }) => {
   await page.route("**/health", async (route) => {
     await route.fulfill({
       status: 200,
@@ -11,19 +11,86 @@ test("graph page loads and renders core content", async ({ page }) => {
 
   await page.goto("/graph");
 
-  await expect(page.getByTestId("graph-preview")).toBeVisible();
+  await expect(page.getByTestId("graph-view")).toBeVisible();
 
-  // Check for structural elements using data-testid (not hardcoded fixture values)
   const documentoNodes = page.getByTestId("documento-node");
-  await expect(documentoNodes).toHaveCount(2);
+  await expect(documentoNodes).toHaveCount(16);
 
-  const fimCadeiaNode = page.getByTestId("fim-cadeia-node");
-  await expect(fimCadeiaNode).toHaveCount(1);
+  const fimCadeiaNodes = page.getByTestId("fim-cadeia-node");
+  await expect(fimCadeiaNodes).toHaveCount(5);
+});
 
-  const edgeLabels = page.getByTestId("origem-edge-label");
-  await expect(edgeLabels).toHaveCount(2);
+test("mock shape selector switches between shapes", async ({ page }) => {
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, timestamp: "2026-01-26T00:00:00.000Z" })
+    });
+  });
 
-  // Verify edge labels have tipo attributes (structural check)
-  await expect(page.locator('[data-testid="origem-edge-label"][data-tipo="matricula"]')).toHaveCount(1);
-  await expect(page.locator('[data-testid="origem-edge-label"][data-tipo="fim_cadeia"]')).toHaveCount(1);
+  await page.goto("/graph");
+
+  const select = page.getByTestId("mock-shape-select");
+  await expect(select).toBeVisible();
+
+  await select.selectOption("linear");
+  await expect(page.getByTestId("documento-node")).toHaveCount(5);
+  await expect(page.getByTestId("fim-cadeia-node")).toHaveCount(1);
+
+  await select.selectOption("branching");
+  await expect(page.getByTestId("documento-node")).toHaveCount(4);
+  await expect(page.getByTestId("fim-cadeia-node")).toHaveCount(2);
+
+  await select.selectOption("merge");
+  await expect(page.getByTestId("documento-node")).toHaveCount(3);
+  await expect(page.getByTestId("fim-cadeia-node")).toHaveCount(1);
+
+  await select.selectOption("complex");
+  await expect(page.getByTestId("documento-node")).toHaveCount(16);
+  await expect(page.getByTestId("fim-cadeia-node")).toHaveCount(5);
+});
+
+test("node click opens detail panel", async ({ page }) => {
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, timestamp: "2026-01-26T00:00:00.000Z" })
+    });
+  });
+
+  await page.goto("/graph");
+
+  const panel = page.getByTestId("detail-panel");
+  await expect(panel).toHaveClass(/graph-view__panel--closed/);
+
+  const firstDocNode = page.getByTestId("documento-node").first();
+  await firstDocNode.click();
+
+  await expect(panel).toHaveClass(/graph-view__panel--open/);
+  await expect(panel.getByText("Número")).toBeVisible();
+  await expect(panel.getByText("Tipo")).toBeVisible();
+  await expect(panel.getByText("Cartório")).toBeVisible();
+  await expect(panel.getByText("Data")).toBeVisible();
+
+  const closeButton = page.getByTestId("detail-panel-close");
+  await closeButton.click();
+
+  await expect(panel).toHaveClass(/graph-view__panel--closed/);
+});
+
+test("minimap and controls are rendered", async ({ page }) => {
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, timestamp: "2026-01-26T00:00:00.000Z" })
+    });
+  });
+
+  await page.goto("/graph");
+
+  await expect(page.locator(".react-flow__minimap")).toBeVisible();
+  await expect(page.locator(".react-flow__controls")).toBeVisible();
 });
