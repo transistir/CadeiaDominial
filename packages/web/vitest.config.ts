@@ -20,18 +20,16 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "html", "lcov"],
-      // Global thresholds kept at 80% because legacy files
-      // (validateGraph.ts, topology-adapter.ts) have throw-path gaps
-      // (Pitfall #15 in .hermes/plans/T-501.md). Per-file thresholds
-      // enforce the T-501 spec gate ("100% unit test coverage on pure
-      // functions") for the new pure-function files only.
-      lines: 80,
-      functions: 80,
-      branches: 80,
-      statements: 80,
+      reporter: [["text", { skipFull: false }], "html", "lcov"],
+      // Global thresholds live under coverage.thresholds in Vitest 4.
+      // Keep them at 80% because legacy files have known throw-path gaps,
+      // while file-specific thresholds enforce the T-501 100% gate for the
+      // new pure-function files.
       thresholds: {
-        perFile: true,
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
         "src/graph/builder.ts": {
           lines: 100,
           functions: 100,
