@@ -144,6 +144,63 @@ describe("buildGraph", () => {
     expect(result.edges[3].target).toBe("fim-3");
   });
 
+  it("diamond DAG (1→2, 1→3, 2→4, 3→4) → does not report a cycle", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+        {
+          id: "2",
+          numero: "M2",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-02",
+        },
+        {
+          id: "3",
+          numero: "M3",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-03",
+        },
+        {
+          id: "4",
+          numero: "M4",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-04",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "2", tipo: "registro" as LancamentoTipo },
+        { id: "lanc-2", documentoId: "3", tipo: "registro" as LancamentoTipo },
+        { id: "lanc-3", documentoId: "4", tipo: "registro" as LancamentoTipo },
+        { id: "lanc-4", documentoId: "4", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        { id: "orig-1", lancamentoId: "lanc-1", documentoId: "1" },
+        { id: "orig-2", lancamentoId: "lanc-2", documentoId: "1" },
+        { id: "orig-3", lancamentoId: "lanc-3", documentoId: "2" },
+        { id: "orig-4", lancamentoId: "lanc-4", documentoId: "3" },
+      ],
+    };
+
+    const result = buildGraph(chainData);
+
+    expect(result.nodes.map((n) => n.id)).toEqual([
+      "doc-1",
+      "doc-2",
+      "doc-3",
+      "doc-4",
+      "fim-4",
+    ]);
+  });
+
   // --- Edge mapping (3 cases + MUST-FIX #2) ---
 
   it("edge with tipoOrigem provided → uses provided value", () => {
@@ -495,5 +552,64 @@ describe("buildGraph", () => {
     const fimNode = result.nodes.find((n) => n.type === "fimCadeia");
     expect(fimNode).toBeDefined();
     expect(fimNode?.data.classificacao).toBe("inconclusa");
+  });
+
+  // --- Cycle detection (2 cases) ---
+
+  it("self-loop (documento with origem pointing to itself) → throws cycle error", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "1", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        { id: "orig-1", lancamentoId: "lanc-1", documentoId: "1" }, // Self-loop
+      ],
+    };
+
+    expect(() => buildGraph(chainData)).toThrow(
+      /Cycle detected in chain data: doc-1 -> doc-1/
+    );
+  });
+
+  it("2-node cycle (doc-1 → doc-2 → doc-1) → throws cycle error", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+        {
+          id: "2",
+          numero: "M2",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-02",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "2", tipo: "registro" as LancamentoTipo },
+        { id: "lanc-2", documentoId: "1", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        { id: "orig-1", lancamentoId: "lanc-1", documentoId: "1" }, // 1 → 2
+        { id: "orig-2", lancamentoId: "lanc-2", documentoId: "2" }, // 2 → 1 (cycle)
+      ],
+    };
+
+    expect(() => buildGraph(chainData)).toThrow(
+      /Cycle detected in chain data: (doc-1 -> doc-2 -> doc-1|doc-2 -> doc-1 -> doc-2)/
+    );
   });
 });

@@ -123,7 +123,7 @@ function generateBranching(): GraphJson {
     ],
     edges: [
       { id: "orig-1", source: "doc-1", target: "doc-2", data: { tipoOrigem: "matricula" } },
-      { id: "orig-2", source: "doc-2", target: "doc-3", data: { tipoOrigem: "transcricao" } },
+      { id: "orig-2", source: "doc-2", target: "doc-3", data: { tipoOrigem: "matricula" } },
       { id: "orig-3", source: "doc-2", target: "doc-4", data: { tipoOrigem: "matricula" } },
       { id: "doc-3->fim-3", source: "doc-3", target: "fim-3", data: { tipoOrigem: "fim_cadeia" } },
       { id: "doc-4->fim-4", source: "doc-4", target: "fim-4", data: { tipoOrigem: "fim_cadeia" } },

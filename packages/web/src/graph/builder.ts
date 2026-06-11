@@ -116,6 +116,11 @@ export function buildGraph(chainData: ChainData): GraphJson {
     }
   }
 
+  detectCycles(
+    edges,
+    chainData.documentos.map((d) => ensureDocPrefix(d.id))
+  );
+
   return validateGraph({ nodes, edges });
 }
 
@@ -137,4 +142,67 @@ function ensureDocPrefix(id: string): string {
  */
 function inferOrigemTipo(sourceDocTipo: DocumentoTipo): OrigemTipo {
   return sourceDocTipo === "transcricao" ? "transcricao" : "matricula";
+}
+
+/**
+ * Detects cycles in the documento graph using iterative DFS.
+ * Throws if a cycle is found, listing the involved documento IDs.
+ *
+ * Only considers documento→documento edges (not synthetic fim edges).
+ */
+function detectCycles(edges: GraphEdge[], docIds: string[]): void {
+  const adjacency = new Map<string, string[]>();
+  for (const docId of docIds) {
+    adjacency.set(docId, []);
+  }
+
+  for (const edge of edges) {
+    if (!edge.source.startsWith("doc-") || !edge.target.startsWith("doc-")) {
+      continue;
+    }
+
+    adjacency.get(edge.source)?.push(edge.target);
+  }
+
+  const states = new Map<string, "visiting" | "visited">();
+
+  for (const startNode of docIds) {
+    if (states.has(startNode)) {
+      continue;
+    }
+
+    const path: string[] = [startNode];
+    const stack: Array<{ node: string; nextNeighborIndex: number }> = [
+      { node: startNode, nextNeighborIndex: 0 },
+    ];
+    states.set(startNode, "visiting");
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const neighbors = adjacency.get(frame.node);
+
+      if (neighbors === undefined || frame.nextNeighborIndex >= neighbors.length) {
+        states.set(frame.node, "visited");
+        stack.pop();
+        path.pop();
+        continue;
+      }
+
+      const neighbor = neighbors[frame.nextNeighborIndex];
+      frame.nextNeighborIndex += 1;
+
+      const neighborState = states.get(neighbor);
+      if (neighborState === "visiting") {
+        const cycleStartIndex = path.indexOf(neighbor);
+        const cycle = path.slice(cycleStartIndex).concat(neighbor);
+        throw new Error(`Cycle detected in chain data: ${cycle.join(" -> ")}`);
+      }
+
+      if (neighborState === undefined) {
+        states.set(neighbor, "visiting");
+        path.push(neighbor);
+        stack.push({ node: neighbor, nextNeighborIndex: 0 });
+      }
+    }
+  }
 }
