@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import GraphRoute from "./graph";
 
@@ -264,12 +264,16 @@ describe("GraphRoute", () => {
 
     expect(screen.getByText("M1")).toBeInTheDocument();
     expect(screen.getByText("T1")).toBeInTheDocument();
+    expect(screen.getByText("T7")).toBeInTheDocument();
+    expect(screen.getByTestId("nodes").children).toHaveLength(21);
+    expect(screen.getAllByText("Fim de cadeia")).toHaveLength(5);
 
     const select = screen.getByTestId("mock-shape-select");
-    select.click();
+    fireEvent.change(select, { target: { value: "linear" } });
 
-    const linearOption = screen.getByRole("option", { name: "Linear" });
-    linearOption.click();
+    expect(screen.getByTestId("nodes").children).toHaveLength(6);
+    expect(screen.queryByText("T7")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Fim de cadeia")).toHaveLength(1);
 
     expect(consoleError).not.toHaveBeenCalled();
   });

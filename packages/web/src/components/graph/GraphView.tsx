@@ -27,8 +27,10 @@ const edgeTypes: EdgeTypes = {
   origem: OrigemEdge
 };
 
+const defaultEdgeOptions = { animated: false };
+
 export function GraphView({ graph }: { graph: unknown }) {
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const { nodes, edges } = useMemo(() => {
     const validated = validateGraph(graph);
@@ -36,16 +38,29 @@ export function GraphView({ graph }: { graph: unknown }) {
     return toReactFlow(layouted);
   }, [graph]);
 
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId),
+    [nodes, selectedNodeId]
+  );
+
+  const flowKey = useMemo(
+    () =>
+      `${nodes.map((node) => node.id).join("|")}::${edges
+        .map((edge) => edge.id)
+        .join("|")}`,
+    [edges, nodes]
+  );
+
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    setSelectedNode(node);
+    setSelectedNodeId(node.id);
   }, []);
 
   const handlePaneClick = useCallback(() => {
-    setSelectedNode(null);
+    setSelectedNodeId(null);
   }, []);
 
   const handleClosePanel = useCallback(() => {
-    setSelectedNode(null);
+    setSelectedNodeId(null);
   }, []);
 
   const panelClass = selectedNode
@@ -57,6 +72,7 @@ export function GraphView({ graph }: { graph: unknown }) {
       <div className="graph-view__flow">
         <ReactFlowProvider>
           <ReactFlow
+            key={flowKey}
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
@@ -66,7 +82,7 @@ export function GraphView({ graph }: { graph: unknown }) {
             nodesConnectable={false}
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
-            defaultEdgeOptions={{ animated: false }}
+            defaultEdgeOptions={defaultEdgeOptions}
           >
             <Background />
             <Controls />
@@ -78,6 +94,8 @@ export function GraphView({ graph }: { graph: unknown }) {
       <aside
         className={panelClass}
         data-testid="detail-panel"
+        aria-hidden={!selectedNode}
+        aria-label="Detalhes do nó"
       >
         <header className="graph-view__panel-header">
           <h2>Detalhes</h2>
@@ -87,6 +105,7 @@ export function GraphView({ graph }: { graph: unknown }) {
             data-testid="detail-panel-close"
             type="button"
             aria-label="Fechar"
+            tabIndex={selectedNode ? undefined : -1}
           >
             ×
           </button>

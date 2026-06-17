@@ -3,7 +3,7 @@ import { generateMockGraph } from "./mock";
 import { validateGraph } from "./validateGraph";
 
 describe("generateMockGraph", () => {
-  // --- Determinism (3 cases) ---
+  // --- Determinism (4 cases) ---
 
   it("linear shape → byte-identical output across calls", () => {
     const first = generateMockGraph("linear");
@@ -37,7 +37,7 @@ describe("generateMockGraph", () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
 
-  // --- Shape verification (3 cases) ---
+  // --- Shape verification (4 cases) ---
 
   it("linear shape → 6 nodes, 5 edges", () => {
     const graph = generateMockGraph("linear");

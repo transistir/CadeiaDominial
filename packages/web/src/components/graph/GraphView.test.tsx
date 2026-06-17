@@ -132,6 +132,9 @@ describe("GraphView", () => {
     expect(detailPanel).toBeInTheDocument();
     expect(detailPanel).toHaveClass("graph-view__panel--closed");
     expect(detailPanel).not.toHaveClass("graph-view__panel--open");
+    expect(detailPanel).toHaveAttribute("aria-hidden", "true");
+    expect(detailPanel).toHaveAttribute("aria-label", "Detalhes do nó");
+    expect(screen.getByTestId("detail-panel-close")).toHaveAttribute("tabindex", "-1");
   });
 
   it("opens detail panel when node is clicked", () => {
@@ -148,6 +151,8 @@ describe("GraphView", () => {
       
       expect(detailPanel).toHaveClass("graph-view__panel--open");
       expect(detailPanel).not.toHaveClass("graph-view__panel--closed");
+      expect(detailPanel).toHaveAttribute("aria-hidden", "false");
+      expect(screen.getByTestId("detail-panel-close")).not.toHaveAttribute("tabindex");
     }
   });
 

@@ -65,7 +65,11 @@ test("node click opens detail panel", async ({ page }) => {
   const panel = page.getByTestId("detail-panel");
   await expect(panel).toHaveClass(/graph-view__panel--closed/);
 
+  const select = page.getByTestId("mock-shape-select");
+  await select.selectOption("linear");
+
   const firstDocNode = page.getByTestId("documento-node").first();
+  await expect(firstDocNode).toBeVisible();
   await firstDocNode.click();
 
   await expect(panel).toHaveClass(/graph-view__panel--open/);
