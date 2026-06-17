@@ -22,13 +22,13 @@ test("graph preview renders", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/graph");
 
-  // Wait for graph preview to be visible
-  const graphPreview = page.getByTestId("graph-preview");
-  await expect(graphPreview).toBeVisible();
+  // Wait for graph view to be visible
+  const graphView = page.getByTestId("graph-view");
+  await expect(graphView).toBeVisible();
 
   // Wait for React Flow nodes to render
   const nodes = page.locator(".react-flow__node");
-  await expect(nodes).toHaveCount(3);
+  await expect(nodes).toHaveCount(21);
   await expect(nodes.first()).toBeVisible();
 
   // Ensure screenshots directory exists (relative to repo root)

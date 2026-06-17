@@ -18,6 +18,7 @@ export {
   type FimCadeiaReactFlowNode
 } from "../components/graph/FimCadeiaNode";
 export { OrigemEdge, type OrigemEdgeData } from "../components/graph/OrigemEdge";
+export { GraphView } from "../components/graph/GraphView";
 export type {
   DocumentoData,
   DocumentoTipo,

@@ -3,7 +3,7 @@ import { generateMockGraph } from "./mock";
 import { validateGraph } from "./validateGraph";
 
 describe("generateMockGraph", () => {
-  // --- Determinism (3 cases) ---
+  // --- Determinism (4 cases) ---
 
   it("linear shape → byte-identical output across calls", () => {
     const first = generateMockGraph("linear");
@@ -29,7 +29,15 @@ describe("generateMockGraph", () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
 
-  // --- Shape verification (3 cases) ---
+  it("complex shape → byte-identical output across calls", () => {
+    const first = generateMockGraph("complex");
+    const second = generateMockGraph("complex");
+
+    expect(first).toEqual(second);
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+  });
+
+  // --- Shape verification (4 cases) ---
 
   it("linear shape → 6 nodes, 5 edges", () => {
     const graph = generateMockGraph("linear");
@@ -112,14 +120,42 @@ describe("generateMockGraph", () => {
     expect(docToFimEdges).toHaveLength(1);
   });
 
+  it("complex shape → 21 nodes, 20 edges", () => {
+    const graph = generateMockGraph("complex");
+
+    expect(graph.nodes).toHaveLength(21);
+    expect(graph.edges).toHaveLength(20);
+
+    // 16 documento nodes + 5 synthetic fims
+    const docNodes = graph.nodes.filter((n) => n.type === "documento");
+    const fimNodes = graph.nodes.filter((n) => n.type === "fimCadeia");
+    expect(docNodes).toHaveLength(16);
+    expect(fimNodes).toHaveLength(5);
+
+    // 15 doc→doc edges + 5 doc→fim edges
+    const docToDocEdges = graph.edges.filter(
+      (e) =>
+        graph.nodes.find((n) => n.id === e.source)?.type === "documento" &&
+        graph.nodes.find((n) => n.id === e.target)?.type === "documento"
+    );
+    const docToFimEdges = graph.edges.filter(
+      (e) =>
+        graph.nodes.find((n) => n.id === e.source)?.type === "documento" &&
+        graph.nodes.find((n) => n.id === e.target)?.type === "fimCadeia"
+    );
+    expect(docToDocEdges).toHaveLength(15);
+    expect(docToFimEdges).toHaveLength(5);
+  });
+
   // --- Node data completeness (1 case) ---
 
   it("all nodes have required data fields", () => {
     const linear = generateMockGraph("linear");
     const branching = generateMockGraph("branching");
     const merge = generateMockGraph("merge");
+    const complex = generateMockGraph("complex");
 
-    [linear, branching, merge].forEach((graph) => {
+    [linear, branching, merge, complex].forEach((graph) => {
       // Every documento node has numero, tipo, cartorioId, data
       const docNodes = graph.nodes.filter((n) => n.type === "documento");
       docNodes.forEach((node) => {
@@ -147,9 +183,11 @@ describe("generateMockGraph", () => {
     const linear = generateMockGraph("linear");
     const branching = generateMockGraph("branching");
     const merge = generateMockGraph("merge");
+    const complex = generateMockGraph("complex");
 
     expect(() => validateGraph(linear)).not.toThrow();
     expect(() => validateGraph(branching)).not.toThrow();
     expect(() => validateGraph(merge)).not.toThrow();
+    expect(() => validateGraph(complex)).not.toThrow();
   });
 });
