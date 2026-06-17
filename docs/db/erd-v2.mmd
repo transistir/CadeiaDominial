@@ -17,34 +17,33 @@ erDiagram
     imovel ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     documento ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     imovel_documento ||--o{ anotacao_versao : "anotado_em (Q9=C)"
-    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, era pessoa)"
-    user ||--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original)"
-    user ||--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa)"
-    user ||--o{ audit_log : "actor (D3, user NAO pessoa)"
-    pessoa ||--o{ imovel : "proprietario (pode ser NULL se anonimizado LGPD)"
-    pessoa ||--o{ lancamento_pessoa : "participa (Q2=B, nome_verbatim preservado)"
-    lancamento ||--o{ lancamento_pessoa : "envolve"
-    lancamento_tipo ||--o{ lancamento : "classifica (tipo_id, F3)"
-    documento ||--o{ lancamento : "gera"
+    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, RESTRICT — autor nunca vira NULL, mesmo com LGPD do editor)"
+    user o|--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original, SET NULL)"
+    user o|--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa, SET NULL)"
+    user o|--o{ audit_log : "actor (D3, user NAO pessoa, SET NULL on LGPD)"
+    pessoa o|--o{ imovel : "proprietario (SET NULL se anonimizado LGPD, imovel preservado)"
+    pessoa o|--o{ lancamento_pessoa : "participa (Q2=B, SET NULL on LGPD, nome_verbatim preservado)"
+    lancamento ||--o{ lancamento_pessoa : "envolve (NOT NULL, CASCADE)"
+    lancamento_tipo ||--o{ lancamento : "classifica (tipo_id, F3, NOT NULL, RESTRICT)"
+    documento o|--o{ lancamento : "gera (SET NULL on documento delete, L preservado orfao — Q7b=B)"
     documento o|--o{ origem : "origem_doc (opcional)"
-    lancamento ||--o{ origem : "possui (1:N, Q3=B)"
-    origem ||--o| origem_fim_cadeia : "fim_cadeia (Q3=B, 1:1 por origem)"
-    cri o|--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id)"
-    lancamento ||--o{ lancamento_move_event : "movido (Q14=B, append-only)"
-    documento ||--o{ lancamento_move_event : "from_doc"
-    documento ||--o{ lancamento_move_event : "to_doc"
-    audit_log ||--o{ lancamento_move_event : "registra"
+    lancamento ||--o{ origem : "possui (1:N, Q3=B, NOT NULL, RESTRICT)"
+    origem ||--o| origem_fim_cadeia : "fim_cadeia (Q3=B, 1:1 por origem, CASCADE)"
+    cri ||--o{ origem : "cri_origem (Q11b=A, este campo é o cri_origem_id, RESTRICT — cadeia forense protegida, Q3 round-3)"
+    lancamento ||--o{ lancamento_move_event : "movido (Q14=B, append-only, NOT NULL, RESTRICT)"
+    documento o|--o{ lancamento_move_event : "from_doc (SET NULL)"
+    documento o|--o{ lancamento_move_event : "to_doc (SET NULL)"
+    audit_log o|--o{ lancamento_move_event : "registra (SET NULL on audit purge)"
     imovel ||--o{ tis_imovel : "vincula_TI"
     tis ||--o{ tis_imovel : "vincula_TI"
     terra_indigena_referencia ||--o{ tis : "referencia"
 
     cri {
         int id PK
-        text tipo "CRI ou OUTRO (CHECK tipo IN (CRI,OUTRO), DEFAULT CRI). T-100: parity com Django Cartorios.tipo"
         text nome "1o Cartorio de Registro de Imoveis de Salvador"
         text cns_codigo "Cadastro Nacional de Serventia, TBD"
         text cidade
-        text uf "app-layer CHECK (27 UFs). DB: plain text, sem CHECK constraint"
+        text uf "CHECK uf in 27 valores"
         text endereco
         text created_at "ISO8601"
         text updated_at "ISO8601"
@@ -134,8 +133,8 @@ erDiagram
     lancamento {
         int id PK
         text data "ISO8601"
-        integer valor_transacao_centavos "em CENTAVOS (evita rounding errors). DB col: valor_transacao_centavos"
-        integer area_centiares "em CENTIARES (1 are = 100 m2). DB col: area_centiares"
+        integer valor_transacao "em CENTAVOS (evita rounding errors)"
+        integer area "em CENTIARES (1 are = 100 m2)"
         text detalhes
         text observacoes
         text data_cadastro
@@ -168,7 +167,7 @@ erDiagram
     origem {
         int id PK
         int lancamento_id FK
-        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id)"
+        int cri_id FK "CRI de origem (Q11b=A: este campo ja e o cri_origem_id, RESTRICT)"
         int documento_id FK "opcional, NULL se tipo=fim_cadeia"
         int indice "0, 1, 2..., CHECK >= 0, contiguo por lancamento"
         text tipo "CHECK in (matricula, transcricao, fim_cadeia)"
@@ -178,8 +177,8 @@ erDiagram
         text folha
         text data
         text observacoes
-        text created_at "ISO8601"
-        text deleted_at "soft-delete (Q2=B)"
+        text created_at
+        text deleted_at "soft-delete (Q2=B). Origem preserva evidencia de divergencia entre certidoes (Q3 round-3)"
         text UNIQUE_NOTE "UNIQUE (lancamento_id, indice)"
     }
 
@@ -234,7 +233,7 @@ erDiagram
         text etnia
         text data_cadastro
         int terra_referencia_id FK
-        integer area_centiares "em centiares (1 are = 100 m2). DB col: area_centiares"
+        integer area "em centiares"
         text estado
         text nome
     }
@@ -253,7 +252,7 @@ erDiagram
         text etnia
         text estado
         text municipio
-        integer area_ha_centiares "em centiares. DB col: area_ha_centiares"
+        integer area_ha "em centiares (1 ha = 100 are = 10000 m2)"
         text fase
         text modalidade
         text coordenacao_regional

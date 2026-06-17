@@ -30,7 +30,7 @@ Phase 0: Decisions ──┐
 
 ## Phase 0 — Decisions (BLOCKING)
 
-> Nothing in Phase 1 can start until all 6 decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered.
+> Nothing in Phase 1 can start until all 6 decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered. **Decisions are recorded; this phase is closed.**
 
 ### T-000 — Read the pending decisions
 - **Status:** ✅ done (2026-06-02/03, Luandro + Hiure)
@@ -46,7 +46,7 @@ Phase 0: Decisions ──┐
 - **Description:** Provide a decision for each of Q1 through Q15 + Q11b. Codex gpt-5.5 xhigh 5/5 APROVA. Opus 4.8 5/5 APROVA.
 - **Output:** `docs/db/SCHEMA_DECISOES_PENDENTES.md` with all answers + rationale.
 - **Acceptance:** All questions answered, no TBDs remain. ✅
-- **Blocks:** all of Phase 1.
+- **Blocks:** all of Phase 1. **Unblocked now.**
 
 ---
 
@@ -246,7 +246,9 @@ Phase 0: Decisions ──┐
 ## Related documents
 
 - `docs/SCHEMA_V2_BLINDSPOT_REVIEW.md` — the 27-issue audit (PR #15)
-- `docs/db/SCHEMA_DECISOES_PENDENTES.md` — the 6 blocking decisions (in pt-BR, this PR)
+- `docs/db/SCHEMA_DECISOES_PENDENTES.md` — **architecture decisions** Q1–Q15 + Q11b (this PR)
+- `docs/db/SCHEMA_QUESTOES.md` — **detailed column-level questions** Q1–Q25
+- `docs/db/SCHEMA_RESPOSTAS.md` — **answers** to the detailed column-level questions
 - `docs/ERD_CADEIA_DOMINIAL.md` — the schema draft (target of T-100). **Note:** as of the docs/ restructure (T-403, PR #17), the v2 ERD is at `docs/db/erd-v2.mmd` and the legacy Django ERD will be moved to `docs/legacy-django/erd-modelo-antigo.md` in a follow-up.
 - `docs/legacy-django/03-database-models.md` — Django source of truth
 - `docs/MIGRATION_GUIDE.md` — overall migration architecture

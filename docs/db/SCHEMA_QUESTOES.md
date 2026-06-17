@@ -1,7 +1,9 @@
-# Questoes abertas e decisoes pendentes (Schema Consolidado)
+# Questões detalhadas do schema (Q1–Q25)
 
-Este documento consolida pontos ambiguos, riscos e decisoes pendentes do schema.  
-Use-o para registrar respostas e alinhar o time.
+Este documento lista **perguntas técnicas e de coluna** levantadas durante a revisão cega do schema v2. As respostas estão em `docs/db/SCHEMA_RESPOSTAS.md`.
+
+> 📌 **Decisões de arquitetura de alto nível** (Q1–Q6: cascade, soft-delete, cardinalidade de fim de cadeia, criptografia, validação de CPF/CNPJ, visualização no React Flow) estão em `docs/db/SCHEMA_DECISOES_PENDENTES.md`. Não confunda os dois documentos — este aqui é o detalhamento, o outro é a arquitetura.
+
 Status: **resolvidas** em `docs/db/SCHEMA_RESPOSTAS.md`.
 
 Formato sugerido para responder cada item:
