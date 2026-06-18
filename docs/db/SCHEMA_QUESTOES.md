@@ -2,7 +2,7 @@
 
 Este documento lista **perguntas técnicas e de coluna** levantadas durante a revisão cega do schema v2. As respostas estão em `docs/db/SCHEMA_RESPOSTAS.md`.
 
-> 📌 **Decisões de arquitetura de alto nível** (Q1–Q6: cascade, soft-delete, cardinalidade de fim de cadeia, criptografia, validação de CPF/CNPJ, visualização no React Flow) estão em `docs/db/SCHEMA_DECISOES_PENDENTES.md`. Não confunda os dois documentos — este aqui é o detalhamento, o outro é a arquitetura.
+> 📌 **Decisões de arquitetura de alto nível** (Q1–Q15 + Q11b: cascade, soft-delete, cardinalidade de fim de cadeia, criptografia, validação de CPF/CNPJ, visualização no React Flow, MOVE, delete compartilhado, etc.) estão em `docs/db/SCHEMA_DECISOES_PENDENTES.md`. Não confunda os dois documentos — este aqui é o detalhamento, o outro é a arquitetura.
 
 Status: **resolvidas** em `docs/db/SCHEMA_RESPOSTAS.md`.
 

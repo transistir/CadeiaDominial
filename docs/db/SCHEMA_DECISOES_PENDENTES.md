@@ -616,8 +616,9 @@ cri {
   int id PK
   text nome "1º Cartório de Registro de Imóveis de Salvador"
   text cidade
-  text uf
-  text CNS_codigo "Cadastro Nacional de Serventia (TBD)"
+  text uf "27 UFs, validado na app (sem CHECK no DB)"
+  text cns_codigo "Cadastro Nacional de Serventia (TBD)"
+  text tipo "CHECK in (CRI, OUTRO), DEFAULT CRI (T-100)"
   // ... outros campos espelhando API do Sistema Nacional de Cartórios
   text created_at
   text updated_at
@@ -809,12 +810,7 @@ Regra UI-only ("L aparece na chain de D' se existe move event mais recente com `
 CREATE VIEW v_lancamento_current_location AS
 SELECT
   l.id AS lancamento_id,
-  COALESCE(last_move.to_documento_id, l.documento_id) AS current_documento_id,
-  CASE
-    WHEN last_move.lancamento_id IS NULL THEN 'ORIGINAL'
-    WHEN last_move.to_documento_id IS NULL THEN 'PRESO'
-    ELSE 'MOVED'
-  END AS location_state
+  COALESCE(last_move.to_documento_id, l.documento_id) AS current_documento_id
 FROM lancamento l
 LEFT JOIN (
   -- Most recent MOVE event per Lancamento (append-only, Q14=B)
@@ -844,7 +840,7 @@ WHERE l.deleted_at IS NULL
 - "Mostrar L na chain de D" → `JOIN lancamento l ON l.id = ? JOIN v_lancamento_current_location v ON v.lancamento_id = l.id WHERE v.current_documento_id = D`
 - "Quais L's estão em D'?" → query acima
 - "Histórico de moves do L" → `SELECT * FROM lancamento_move_event WHERE lancamento_id = L ORDER BY moved_at, id`
-- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los: `SELECT l.* FROM lancamento l INNER JOIN lancamento_move_event me ON me.id = (SELECT id FROM lancamento_move_event me2 WHERE me2.lancamento_id = l.id ORDER BY me2.moved_at DESC, me2.id DESC LIMIT 1) WHERE me.to_documento_id IS NULL AND l.deleted_at IS NULL` (o `INNER JOIN` é proposital — exige que exista pelo menos 1 move event; sem move, L aparece como ORIGINAL na view, não como PRESO). A coluna `location_state` (`ORIGINAL` / `MOVED` / `PRESO`) explicita a origem do `current_documento_id` retornado — use-a em vez de inferir do NULL/NOT NULL.
+- **Lançamentos "presos"** (último MOVE com `to_documento_id = NULL`, Q15=🅳️) **NÃO aparecem** nesta view. Para listá-los: `SELECT l.* FROM lancamento l INNER JOIN lancamento_move_event me ON me.id = (SELECT id FROM lancamento_move_event me2 WHERE me2.lancamento_id = l.id ORDER BY me2.moved_at DESC, me2.id DESC LIMIT 1) WHERE me.to_documento_id IS NULL AND l.deleted_at IS NULL` (o `INNER JOIN` é proposital — exige que exista pelo menos 1 move event; sem move, L aparece com `current_documento_id = l.documento_id` na view, não como PRESO). O estado (`ORIGINAL` / `MOVED` / `PRESO`) deve ser inferido pelo consumidor: `ORIGINAL` quando não há move event, `MOVED` quando `current_documento_id` veio de `to_documento_id`, e `PRESO` quando o último move event tem `to_documento_id IS NULL`.
 
 **D1/SQLite support:** `CREATE VIEW` totalmente suportado. Custo: index em `lancamento_move_event(lancamento_id, moved_at DESC, id DESC)` para performance (Drizzle adiciona via `CREATE INDEX` na migration T-101).
 
