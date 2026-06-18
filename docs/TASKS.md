@@ -40,7 +40,7 @@ Phase 0: Decisions ──┐
 - **Depends on:** nothing.
 - **Blocks:** T-001.
 
-### T-001 — Answer Q1–Q6
+### T-001 — Answer Q1–Q15 + Q11b
 - **Status:** ✅ done (PR #24 merged). Extended to Q1-Q15 + Q11b.
 - **Owner:** Luandro (project lead)
 - **Description:** Provide a decision for each of Q1 through Q15 + Q11b. Codex gpt-5.5 xhigh 5/5 APROVA. Opus 4.8 5/5 APROVA.

@@ -622,6 +622,7 @@ cri {
   // ... outros campos espelhando API do Sistema Nacional de Cartórios
   text created_at
   text updated_at
+  text deleted_at "soft-delete (Q2=B)"
 }
 
 documento {
