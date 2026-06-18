@@ -982,7 +982,7 @@ Para o schema Drizzle/T-101, as seguintes convenções de tipos são obrigatóri
 | Datetime | `datetime`, `timestamp` | `TEXT` ISO8601 (`'2026-06-03T14:30:00Z'`) |
 | Money | `decimal`, `numeric`, `real` | `INTEGER` em **centavos** (evita rounding errors) |
 | Area | `decimal`, `real` | `INTEGER` em **centiares** (1 are = 100 m²) ou `TEXT` decimal com escala fixa |
-| Enum (ex: `tipo_cartorio`) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))` |
+| Enum (ex: `cri.tipo`) | `enum` nativo Postgres | `TEXT` com `CHECK (col IN ('CRI','OUTRO'))` |
 | UUID (operation_id) | n/a | `TEXT` (Drizzle gera UUID v4) |
 | Encrypted blob | n/a | `BLOB` (AES-256-GCM) — **N/A no v2** (Q4=A + Q5=REMOVER PII de Pessoa; v2 não armazena PII) |
 | Hash (cpf_hash) | n/a | `TEXT` (SHA-256 hex) — **N/A no v2** (sem PII para hashear) |

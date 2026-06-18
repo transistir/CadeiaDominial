@@ -7,11 +7,12 @@
 %% Nomes de entidade no .mmd vs SQL: a entidade `v2_user` é a tabela `v2_user` (pesquisador).
 %%   Há também uma tabela scaffold `users` (auth JWT) em schema.ts que NÃO aparece neste ERD de domínio.
 %% ============================================================================
-%% ⚠️ T4 — Mermaid NÃO é schema. UNIQUE_NOTE é só documentação visual.
-%%    A versão canônica é a Drizzle migration (T-101). Partial UNIQUE indexes
-%%    (`WHERE deleted_at IS NULL`), CHECK constraints, FTS5 sync triggers,
-%%    e a view v_lancamento_current_location (T2) NÃO aparecem no .mmd —
-%%    aplicar via migration Drizzle + SQL DDL.
+%% ⚠️ T4 — Mermaid NAO e schema. UNIQUE_NOTE e so documentacao visual.
+%%    A versao canonica e a Drizzle migration (T-101). Partial UNIQUE indexes
+%%    (`WHERE deleted_at IS NULL`), CHECK constraints, e views
+%%    (`v_lancamento_current_location`, `v_documento_orfao`) NAO aparecem no .mmd
+%%    — aplicar via migration Drizzle + SQL DDL.
+%%    FTS5 sync triggers sao tarefa futura (nao implementados em T-101).
 %% ============================================================================
 erDiagram
     cri ||--o{ imovel : "registra (fixo, Q11b=B)"
@@ -38,7 +39,7 @@ erDiagram
     audit_log o|--o{ lancamento_move_event : "registra (SET NULL on audit purge)"
     imovel ||--o{ tis_imovel : "vincula_TI"
     tis ||--o{ tis_imovel : "vincula_TI"
-    terra_indigena_referencia ||--o{ tis : "referencia"
+    terra_indigena_referencia o|--o{ tis : "referencia (opcional)"
 
     cri {
         int id PK
