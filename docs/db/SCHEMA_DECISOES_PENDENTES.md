@@ -1143,7 +1143,7 @@ CREATE UNIQUE INDEX uq_origem_fim_cadeia_origem
   WHERE origem_id IS NOT NULL;
 ```
 
-Drizzle não tem DSL pra `WHERE` em `uniqueIndex` ainda (issue #2456); workaround: `sql.raw` no migration ou Drizzle `index().where()`. Verificar na implementação T-101 qual a melhor forma.
+Drizzle 0.45+ suporta `uniqueIndex(...).where(...)` para partial UNIQUE; a migration T-101 usa essa DSL. Para versões anteriores, fallback via `sql.raw` no migration.
 
 ### Datas parciais (cartório tem data incompleta)
 
@@ -1164,18 +1164,21 @@ Cartórios frequentemente registram data incompleta ("15/06/1950" sem hora, ou "
 
 ### CHECK constraints
 
-Aplicar via migration Drizzle em todos os enums:
+Aplicar via migration Drizzle em todos os enums e constraints:
 
-- ~~`cri.tipo_cartorio` → `CHECK (tipo_cartorio IN ('CRI','NOTAS','CIVIL','TRANSMISSAO','OUTRO'))`~~ **REMOVIDO (round 3)**: a coluna `tipo_cartorio` não existe no ERD (`cri` tem só `nome`, `cns_codigo`, `cidade`, `uf`, `endereco`). Adicionar essa coluna é fora de escopo das decisões Q1-Q15 — `cri` é especificamente o cartório de registro de imóveis, não um cartório genérico.
+- `cri.tipo` → `CHECK (tipo IN ('CRI','OUTRO'))` (T-100)
 - `lancamento_tipo.tipo` → `CHECK (tipo IN ('inicio_matricula','registro','averbacao'))`
 - `documento.tipo` → `CHECK (tipo IN ('matricula','transcricao'))`
 - `origem.tipo` → `CHECK (tipo IN ('matricula','transcricao','fim_cadeia'))`
+- `origem.indice` → `CHECK (indice >= 0)`
 - `lancamento_pessoa.papel` → `CHECK (papel IN ('transmitente','adquirente','outorgante','outorgado','anuente','testemunha'))`
 - `audit_log.action` → `CHECK (action IN ('CREATE','EDIT','SOFT_DELETE','RESTORE','MOVE','ANNOTATE','EXPORT'))`
 - `imovel.arquivado` → `CHECK (arquivado IN (0,1))`
 - `imovel_documento.is_documento_atual` → `CHECK (is_documento_atual IN (0,1))`
 - `anotacao_versao.is_current` → `CHECK (is_current IN (0,1))`
-- `user.deleted_at IS NULL OR deleted_at GLOB '[0-9]*'` (data válida)
+- `lancamento.numero_lancamento` → `CHECK (numero_lancamento > 0)` (parcial: WHERE NOT NULL)
+- `lancamento_move_event.reason` → `CHECK (length(reason) > 0)` (Q12=D)
+- `v2_user.deleted_at IS NULL OR deleted_at GLOB '[0-9]*'` (data válida, opcional)
 
 > **Nota sobre Mermaid ERD (T4):** o .mmd (`erd-v2.mmd`) é **documentação visual**, NÃO schema canônico. Tipos `text` no Mermaid correspondem a `TEXT` no D1, mas a versão executável é a Drizzle migration (T-101). `UNIQUE_NOTE` é só annotation visual — partial UNIQUE indexes (`WHERE deleted_at IS NULL`), CHECK constraints, FTS5 sync triggers, e views (`v_lancamento_current_location`, `v_documento_orfao`) NÃO aparecem no .mmd; aplicar via migration Drizzle + SQL DDL. **Mermaid interpreta `--` e `|` em comentários como relações**, então CHECK constraints detalhados vão no .md, não no .mmd.
 

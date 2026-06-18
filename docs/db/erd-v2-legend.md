@@ -12,6 +12,7 @@ Este diagrama mostra **tabelas** (caixas) e **relacionamentos** (linhas) entre e
 - Dentro da caixa estao os **campos** (colunas) com seu tipo (`int`, `text`, `integer`).
 - `PK` = **Primary Key** (identificador unico da linha).
 - `FK` = **Foreign Key** (campo que aponta para outra tabela).
+- A entidade `v2_user` no ERD corresponde à tabela SQL `v2_user` (pesquisador). Há também uma tabela scaffold `users` (auth JWT) em `packages/api/drizzle/schema.ts` que não aparece neste diagrama de domínio.
 
 ### Tipos no ERD (convencao SQLite/D1 — ver Apêndice em SCHEMA_DECISOES_PENDENTES.md)
 

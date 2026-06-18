@@ -4,6 +4,8 @@
 %% Convenções SQLite/D1: TEXT ISO8601 p/ datas, INTEGER 0/1 p/ bool, INTEGER centavos p/ money
 %% CHECK constraints vão via migration Drizzle (Mermaid interpreta -- e | em comentários)
 %% Soft-delete: deleted_at TEXT NULL em todas as tabelas relevantes (Q2=B)
+%% Nomes de entidade no .mmd vs SQL: a entidade `v2_user` é a tabela `v2_user` (pesquisador).
+%%   Há também uma tabela scaffold `users` (auth JWT) em schema.ts que NÃO aparece neste ERD de domínio.
 %% ============================================================================
 %% ⚠️ T4 — Mermaid NÃO é schema. UNIQUE_NOTE é só documentação visual.
 %%    A versão canônica é a Drizzle migration (T-101). Partial UNIQUE indexes
@@ -17,10 +19,10 @@ erDiagram
     imovel ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     documento ||--o{ imovel_documento : "pertence (Q13=B, N:N)"
     imovel_documento ||--o{ anotacao_versao : "anotado_em (Q9=C)"
-    user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, RESTRICT — autor nunca vira NULL, mesmo com LGPD do editor)"
-    user o|--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original, SET NULL)"
-    user o|--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa, SET NULL)"
-    user o|--o{ audit_log : "actor (D3, user NAO pessoa, SET NULL on LGPD)"
+    v2_user ||--o{ anotacao_versao : "autor_original (Q9=C, F1: imutavel, RESTRICT — autor nunca vira NULL, mesmo com LGPD do editor)"
+    v2_user o|--o{ anotacao_versao : "created_by (D3, F1: editor, pode diferir do autor original, SET NULL)"
+    v2_user o|--o{ lancamento_move_event : "moved_by (D3, user NAO pessoa, SET NULL)"
+    v2_user o|--o{ audit_log : "actor (D3, user NAO pessoa, SET NULL on LGPD)"
     pessoa o|--o{ imovel : "proprietario (SET NULL se anonimizado LGPD, imovel preservado)"
     pessoa o|--o{ lancamento_pessoa : "participa (Q2=B, SET NULL on LGPD, nome_verbatim preservado)"
     lancamento ||--o{ lancamento_pessoa : "envolve (NOT NULL, CASCADE)"
@@ -52,9 +54,9 @@ erDiagram
         text UNIQUE_NOTE "D1: UNIQUE (cns_codigo) WHERE cns_codigo IS NOT NULL AND deleted_at IS NULL (partial UNIQUE). Duplicatas de nome aceitas (cidade tem 2 1o Cartorio)."
     }
 
-    user {
+    v2_user {
         int id PK
-        text email "UNIQUE, login do pesquisador"
+        text email "UNIQUE (parcial: WHERE deleted_at IS NULL), login do pesquisador"
         text nome "nome de exibicao do pesquisador"
         text created_at "ISO8601"
         text updated_at "ISO8601"
@@ -237,12 +239,15 @@ erDiagram
         integer area_centiares "em centiares"
         text estado
         text nome
+        text created_at "ISO8601"
+        text updated_at "ISO8601"
     }
 
     tis_imovel {
         int id PK
         int tis_id FK
         int imovel_id FK
+        text created_at "ISO8601"
         text UNIQUE_NOTE "UNIQUE (tis_id, imovel_id)"
     }
 
@@ -262,4 +267,6 @@ erDiagram
         text data_declarada
         text data_delimitada
         text data_em_estudo
+        text created_at "ISO8601"
+        text updated_at "ISO8601"
     }

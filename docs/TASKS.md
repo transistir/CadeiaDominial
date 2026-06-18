@@ -30,12 +30,12 @@ Phase 0: Decisions ──┐
 
 ## Phase 0 — Decisions (BLOCKING)
 
-> Nothing in Phase 1 can start until all 6 decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered. **Decisions are recorded; this phase is closed.**
+> Nothing in Phase 1 can start until all Q1–Q15 + Q11b decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered. **Decisions are recorded; this phase is closed.**
 
 ### T-000 — Read the pending decisions
 - **Status:** ✅ done (2026-06-02/03, Luandro + Hiure)
 - **Owner:** anyone (Luandro, Hiure, or reviewer)
-- **Description:** Read `docs/db/SCHEMA_DECISOES_PENDENTES.md` end-to-end. For each of the 6 questions (Q1–Q6), understand the trade-offs, especially the visual impact on the React Flow graph.
+- **Description:** Read `docs/db/SCHEMA_DECISOES_PENDENTES.md` end-to-end. For each of the questions (Q1–Q15 + Q11b), understand the trade-offs, especially the visual impact on the React Flow graph.
 - **Acceptance:** Decision-maker can articulate each question + at least one option's DB/chain-graph consequence without re-reading the doc. ✅
 - **Depends on:** nothing.
 - **Blocks:** T-001.
@@ -169,7 +169,7 @@ Phase 0: Decisions ──┐
 - **Status:** 📋 **ready to start** (T-101 merged, can run in parallel with T-200)
 - **Worktree branch:** `feat/field-filler`
 - **Files:** `scripts/seed/field-filler.ts`
-- **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q6 (e.g. CNPJ/CPF format if Q5 = DB-level).
+- **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q15 + Q11b (e.g. CNPJ/CPF format if Q5 = DB-level).
 - **Acceptance:**
   - `field-filler(topology)` produces rows that insert without error into the Drizzle schema
   - If Q4 = "encrypt at rest", produces ciphertext + provides decryption key path
