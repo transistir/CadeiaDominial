@@ -4,7 +4,7 @@ Este diagrama mostra **tabelas** (caixas) e **relacionamentos** (linhas) entre e
 
 > **Decisoes de design** (Q1-Q15, Q11b, D1-D4, T1-T4) que ancoram este ERD: `docs/db/SCHEMA_DECISOES_PENDENTES.md`. **Schema canonico** (colunas, constraints, tipos SQLite/D1): **`docs/db/SCHEMA_CONSOLIDATED.md` ESTÁ SUPERSEDED — ver aviso no topo desse arquivo; usar `docs/db/SCHEMA_DECISOES_PENDENTES.md` + `erd-v2.mmd` como referência canônica até a migration T-101 ser aplicada**. **Critica completa do Codex gpt-5.5 (xhigh)**: `docs/db/CODEX_CRITIQUE_2026-06-03.md` (round 1) e `docs/db/CODEX_CRITIQUE_2026-06-03_ROUND2.md` (round 2) e triage round 3 em "Próximos passos" do decisions doc.
 >
-> **T4 — Mermaid NAO e schema.** O `.mmd` e documentacao visual. UNIQUE_NOTE, comentarios inline, e tipos no Mermaid nao sao enforcem em SQL. A versao canonica e a Drizzle migration (T-101) com partial UNIQUE indexes, CHECK constraints, FTS5 sync triggers, e views.
+> **T4 — Mermaid NAO e schema.** O `.mmd` e documentacao visual. UNIQUE_NOTE, comentarios inline, e tipos no Mermaid nao sao enforcem em SQL. A versao canonica e a Drizzle migration (T-101) com partial UNIQUE indexes, CHECK constraints, e views. FTS5 sync triggers sao **tarefa futura** (nao implementados em T-101).
 
 ## 1) O que e cada caixa (tabela)
 

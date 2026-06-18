@@ -63,7 +63,7 @@ Phase 0: Decisions ──┐
 ### T-101 — Author the Drizzle schema
 - **Status:** ✅ done (PR #25 merged). Codex 5/5 APROVA (round 4).
 - **Worktree branch:** `feat/drizzle-schema-v2` (merged + cleaned)
-- **Files:** `packages/api/drizzle/schema/` (19 files), `packages/api/drizzle/migrations/0000_real_quentin_quire.sql` (297 linhas, 17 tables + 2 views + 13 indexes)
+- **Files:** `packages/api/drizzle/schema/` (19 arquivos `.ts` incluindo views). Migrations SQL são geradas on-demand (`pnpm db:generate`) e **não estão commitadas** no repo (apenas `.gitkeep`).
 - **Description:** Translate Django models → Drizzle ORM. All Q1-Q15 decisions implemented. PII removed (Q5), soft-delete on all tables (Q2), `cri` table with `tipo` CHECK (Q11b), N:N junction `imovel_documento` (Q13), `lancamento_move_event` append-only (Q14), `audit_log` (Q9).
 - **Acceptance:** ✅ `db:generate` clean, `db:migrate:local` clean, 100% type-safe, CI 4/4 green.
 - **Blocks:** T-200, T-201, T-300.

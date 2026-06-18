@@ -1101,7 +1101,7 @@ WHERE pessoa_fts MATCH 'joao silva*'
 ORDER BY rank;
 ```
 
-**Drizzle:** a tabela virtual FTS5 e os triggers vão via `sql.raw` na migration (Drizzle não tem DSL nativo pra FTS5). Helper: `scripts/db/fts5-helper.ts` (a criar em T-101) que gera SQL parametrizado pelo schema.
+**Drizzle:** a tabela virtual FTS5 e os triggers vão via `sql.raw` na migration quando implementados. **FTS5 não está na migration T-101** — é tarefa futura (ver comentários em `documento.ts`, `pessoa.ts`, `anotacao_versao.ts`). Helper: `scripts/db/fts5-helper.ts` (a criar).
 
 **Aplicar a:**
 - `pessoa.nome` (Q4=A, sem criptografia)
@@ -1168,19 +1168,22 @@ Aplicar via migration Drizzle em todos os enums e constraints:
 
 - `cri.tipo` → `CHECK (tipo IN ('CRI','OUTRO'))` (T-100)
 - `lancamento_tipo.tipo` → `CHECK (tipo IN ('inicio_matricula','registro','averbacao'))`
+- `lancamento_tipo.requer_*` → `CHECK` composto: todos os 10 booleans `IN (0,1)`
 - `documento.tipo` → `CHECK (tipo IN ('matricula','transcricao'))`
 - `origem.tipo` → `CHECK (tipo IN ('matricula','transcricao','fim_cadeia'))`
 - `origem.indice` → `CHECK (indice >= 0)`
 - `lancamento_pessoa.papel` → `CHECK (papel IN ('transmitente','adquirente','outorgante','outorgado','anuente','testemunha'))`
+- `origem_fim_cadeia.tipo_fim_cadeia` → `CHECK (tipo_fim_cadeia IS NULL OR tipo_fim_cadeia IN ('destacamento_publico','sem_origem','outra'))`
 - `audit_log.action` → `CHECK (action IN ('CREATE','EDIT','SOFT_DELETE','RESTORE','MOVE','ANNOTATE','EXPORT'))`
 - `imovel.arquivado` → `CHECK (arquivado IN (0,1))`
 - `imovel_documento.is_documento_atual` → `CHECK (is_documento_atual IN (0,1))`
 - `anotacao_versao.is_current` → `CHECK (is_current IN (0,1))`
+- `anotacao_versao.versao` → `CHECK (versao > 0)`
 - `lancamento.numero_lancamento` → `CHECK (numero_lancamento > 0)` (parcial: WHERE NOT NULL)
 - `lancamento_move_event.reason` → `CHECK (length(reason) > 0)` (Q12=D)
-- `v2_user.deleted_at IS NULL OR deleted_at GLOB '[0-9]*'` (data válida, opcional)
+- `v2_user.deleted_at IS NULL OR deleted_at GLOB '[0-9]*'` (data válida, opcional — não implementado na migration T-101)
 
-> **Nota sobre Mermaid ERD (T4):** o .mmd (`erd-v2.mmd`) é **documentação visual**, NÃO schema canônico. Tipos `text` no Mermaid correspondem a `TEXT` no D1, mas a versão executável é a Drizzle migration (T-101). `UNIQUE_NOTE` é só annotation visual — partial UNIQUE indexes (`WHERE deleted_at IS NULL`), CHECK constraints, FTS5 sync triggers, e views (`v_lancamento_current_location`, `v_documento_orfao`) NÃO aparecem no .mmd; aplicar via migration Drizzle + SQL DDL. **Mermaid interpreta `--` e `|` em comentários como relações**, então CHECK constraints detalhados vão no .md, não no .mmd.
+> **Nota sobre Mermaid ERD (T4):** o .mmd (`erd-v2.mmd`) é **documentação visual**, NÃO schema canônico. Tipos `text` no Mermaid correspondem a `TEXT` no D1, mas a versão executável é a Drizzle migration (T-101). `UNIQUE_NOTE` é só annotation visual — partial UNIQUE indexes (`WHERE deleted_at IS NULL`), CHECK constraints, views (`v_lancamento_current_location`, `v_documento_orfao`) e FTS5 sync triggers (tarefa futura) NÃO aparecem no .mmd; aplicar via migration Drizzle + SQL DDL quando implementados. **Mermaid interpreta `--` e `|` em comentários como relações**, então CHECK constraints detalhados vão no .md, não no .mmd.
 
 ---
 
