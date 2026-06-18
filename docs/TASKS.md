@@ -169,10 +169,10 @@ Phase 0: Decisions ──┐
 - **Status:** 📋 **ready to start** (T-101 merged, can run in parallel with T-200)
 - **Worktree branch:** `feat/field-filler`
 - **Files:** `scripts/seed/field-filler.ts`
-- **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q15 + Q11b (e.g. CNPJ/CPF format if Q5 = DB-level).
+- **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q15 + Q11b (e.g. ISO8601 dates, normalized numeric document numbers, INTEGER 0/1 booleans, area in centiares). **Nota:** Q5 removeu CPF/RG/email/telefone de `Pessoa`; Q4 escolheu texto puro, então não gere colunas de PII nem ciphertext.
 - **Acceptance:**
   - `field-filler(topology)` produces rows that insert without error into the Drizzle schema
-  - If Q4 = "encrypt at rest", produces ciphertext + provides decryption key path
+  - Q4=A (texto puro) e Q5=N/A (sem PII em `Pessoa`) estão refletidos no filler — nenhuma coluna de PII ou ciphertext é gerada.
 - **Blocks:** T-202.
 
 ### T-202 — Seed orchestrator
@@ -193,7 +193,7 @@ Phase 0: Decisions ──┐
 - **Status:** blocked on T-101, T-202
 - **Worktree branch:** `feat/legacy-fit-script`
 - **Files:** `scripts/migration/legacy-fit.ts`, `scripts/migration/__tests__/legacy-fit.test.ts`
-- **Description:** Loads `old/data.cleaned.core.no-auth.no-unistr.sql` (3.3MB Postgres dump) into the new Drizzle schema, then asserts: row counts match expected per table, no FK violations, no `NOT NULL` failures, no `CHECK` failures (if Q5 = DB-level). Emits a human-readable report.
+- **Description:** Loads `old/data.cleaned.core.no-auth.no-unistr.sql` (3.3MB Postgres dump) into the new Drizzle schema, then asserts: row counts match expected per table, no FK violations, no `NOT NULL` failures, no `CHECK` failures. Emits a human-readable report.
 - **Acceptance:**
   - `pnpm legacy-fit` exits 0 on a clean run
   - Report shows: ✓ row count per table, ✓ FK check, ✓ NOT NULL check, ✓ (optional) CHECK check

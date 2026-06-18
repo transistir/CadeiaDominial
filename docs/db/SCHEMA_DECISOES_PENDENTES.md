@@ -828,12 +828,7 @@ LEFT JOIN (
 INNER JOIN documento d ON d.id = COALESCE(last_move.to_documento_id, l.documento_id)
 WHERE l.deleted_at IS NULL
   AND d.deleted_at IS NULL
-  -- Distinguish "no move event" (l.documento_id is canonical, ORIGINAL)
-  -- from "move event with target NULL" (PRESO state, Q15=🅳️):
-  -- exclude rows whose current move target is NULL.
-  -- A Lancamento sem move event aparece com current_documento_id = l.documento_id.
-  -- Um Lancamento com move event aparece com current_documento_id = me.to_documento_id.
-  -- Um Lancamento "preso" (último MOVE com to_documento_id NULL) NÃO aparece nesta view.
+  -- PRESO: se o ultimo MOVE tem to_documento_id = NULL, o lancamento NAO aparece aqui
   AND (last_move.lancamento_id IS NULL OR last_move.to_documento_id IS NOT NULL);
 ```
 
