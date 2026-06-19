@@ -811,10 +811,13 @@ Regra UI-only ("L aparece na chain de D' se existe move event mais recente com `
 CREATE VIEW v_lancamento_current_location AS
 SELECT
   l.id AS lancamento_id,
-  COALESCE(last_move.to_documento_id, l.documento_id) AS current_documento_id
+  CASE
+    WHEN latest.lancamento_id IS NULL THEN l.documento_id
+    ELSE latest.to_documento_id
+  END AS current_documento_id
 FROM lancamento l
 LEFT JOIN (
-  -- Most recent MOVE event per Lancamento (append-only, Q14=B)
+  -- Most recent MOVE event por Lancamento (append-only, Q14=B)
   SELECT me.lancamento_id, me.to_documento_id
   FROM lancamento_move_event me
   WHERE me.id = (
@@ -824,12 +827,15 @@ LEFT JOIN (
     ORDER BY me2.moved_at DESC, me2.id DESC
     LIMIT 1
   )
-) last_move ON last_move.lancamento_id = l.id
-INNER JOIN documento d ON d.id = COALESCE(last_move.to_documento_id, l.documento_id)
+) latest ON latest.lancamento_id = l.id
+INNER JOIN documento d ON d.id = CASE
+  WHEN latest.lancamento_id IS NULL THEN l.documento_id
+  ELSE latest.to_documento_id
+END
 WHERE l.deleted_at IS NULL
-  AND d.deleted_at IS NULL
-  -- PRESO: se o ultimo MOVE tem to_documento_id = NULL, o lancamento NAO aparece aqui
-  AND (last_move.lancamento_id IS NULL OR last_move.to_documento_id IS NOT NULL);
+  AND d.deleted_at IS NULL;
+-- PRESO: se o ultimo MOVE tem to_documento_id = NULL, o INNER JOIN em documento falha
+-- e o lancamento NAO aparece nesta view (consistente com Q15=🅳️).
 ```
 
 **Como a UI consome:**
@@ -1124,7 +1130,7 @@ CREATE UNIQUE INDEX uq_imovel_documento_atual
   WHERE is_documento_atual = 1 AND deleted_at IS NULL;
 
 -- Q9=C + F2 round 2: no máximo 1 versão "atual" por (imovel_documento_id)
-CREATE UNIQUE INDEX uq_anotacao_versao_current
+CREATE UNIQUE INDEX uq_anotacao_versao_imovel_documento_current
   ON anotacao_versao(imovel_documento_id)
   WHERE is_current = 1 AND deleted_at IS NULL;
 
