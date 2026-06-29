@@ -1,7 +1,12 @@
 import type { ReactElement, ReactNode } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import GraphRoute from "./graph";
+
+/** Navigate jsdom to a `/graph` URL with the given query string. */
+const setSearch = (search: string) => {
+  window.history.pushState({}, "", `/graph${search}`);
+};
 
 const fitViewSpy = vi.hoisted(() => vi.fn());
 
@@ -201,6 +206,8 @@ describe("GraphRoute", () => {
   afterEach(() => {
     fitViewSpy.mockClear();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    window.history.pushState({}, "", "/graph");
 
     if (originalClientWidth) {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
@@ -221,60 +228,152 @@ describe("GraphRoute", () => {
     HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   });
 
-  it("renders graph view with complex mock by default", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  describe("mock mode (?mock=1)", () => {
+    beforeEach(() => {
+      setSearch("?mock=1");
+    });
 
-    render(<GraphRoute />);
+    it("renders graph view with complex mock", () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const graphView = screen.getByTestId("graph-view");
-    expect(graphView).toBeInTheDocument();
+      render(<GraphRoute />);
 
-    expect(screen.getByTestId("mock-shape-select")).toBeInTheDocument();
-    expect(screen.getByText("Complexo")).toBeInTheDocument();
+      const graphView = screen.getByTestId("graph-view");
+      expect(graphView).toBeInTheDocument();
 
-    expect(screen.getByText("M1")).toBeInTheDocument();
-    expect(screen.getByText("T1")).toBeInTheDocument();
-    expect(screen.getAllByText("Fim de cadeia")).toHaveLength(5);
+      expect(screen.getByTestId("mock-shape-select")).toBeInTheDocument();
+      expect(screen.getByText("Complexo")).toBeInTheDocument();
 
-    expect(screen.getByTestId("reactflow-controls")).toBeInTheDocument();
-    expect(screen.getByTestId("reactflow-minimap")).toBeInTheDocument();
+      expect(screen.getByText("M1")).toBeInTheDocument();
+      expect(screen.getByText("T1")).toBeInTheDocument();
+      expect(screen.getAllByText("Fim de cadeia")).toHaveLength(5);
 
-    expect(fitViewSpy).toHaveBeenCalled();
-    expect(consoleError).not.toHaveBeenCalled();
+      expect(screen.getByTestId("reactflow-controls")).toBeInTheDocument();
+      expect(screen.getByTestId("reactflow-minimap")).toBeInTheDocument();
+
+      expect(fitViewSpy).toHaveBeenCalled();
+      expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it("renders mock shape selector with 4 options", () => {
+      render(<GraphRoute />);
+
+      const select = screen.getByTestId("mock-shape-select");
+      expect(select).toBeInTheDocument();
+
+      const options = screen.getAllByRole("option");
+      expect(options).toHaveLength(4);
+      expect(options[0]).toHaveTextContent("Linear");
+      expect(options[1]).toHaveTextContent("Branching");
+      expect(options[2]).toHaveTextContent("Merge");
+      expect(options[3]).toHaveTextContent("Complexo");
+    });
+
+    it("switching shape re-renders graph view", () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      render(<GraphRoute />);
+
+      expect(screen.getByText("M1")).toBeInTheDocument();
+      expect(screen.getByText("T1")).toBeInTheDocument();
+      expect(screen.getByText("T7")).toBeInTheDocument();
+      expect(screen.getByTestId("nodes").children).toHaveLength(21);
+      expect(screen.getAllByText("Fim de cadeia")).toHaveLength(5);
+
+      const select = screen.getByTestId("mock-shape-select");
+      fireEvent.change(select, { target: { value: "linear" } });
+
+      expect(screen.getByTestId("nodes").children).toHaveLength(6);
+      expect(screen.queryByText("T7")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Fim de cadeia")).toHaveLength(1);
+
+      expect(consoleError).not.toHaveBeenCalled();
+    });
   });
 
-  it("renders mock shape selector with 4 options", () => {
-    render(<GraphRoute />);
+  describe("real mode (default)", () => {
+    // A small, referentially-complete ChainData: doc-1 → doc-2, with doc-2
+    // becoming a synthetic fim-cadeia leaf via buildGraph.
+    const chainData = {
+      documentos: [
+        { id: "1", numero: "M1", tipo: "matricula", cartorioId: "1", data: "2024-01-01" },
+        { id: "2", numero: "M2", tipo: "matricula", cartorioId: "1", data: "2024-01-02" }
+      ],
+      lancamentos: [{ id: "10", documentoId: "2", tipo: "registro" }],
+      origens: [{ id: "100", lancamentoId: "10", documentoId: "1", tipoOrigem: "matricula" }]
+    };
 
-    const select = screen.getByTestId("mock-shape-select");
-    expect(select).toBeInTheDocument();
+    it("fetches /api/graph/4 and renders the real chain by default", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => chainData
+      }));
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
-    const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(4);
-    expect(options[0]).toHaveTextContent("Linear");
-    expect(options[1]).toHaveTextContent("Branching");
-    expect(options[2]).toHaveTextContent("Merge");
-    expect(options[3]).toHaveTextContent("Complexo");
-  });
+      render(<GraphRoute />);
 
-  it("switching shape re-renders graph view", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await screen.findByTestId("graph-view")).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/graph/4",
+        expect.objectContaining({ headers: expect.any(Object) })
+      );
+      // No mock shape selector in real mode.
+      expect(screen.queryByTestId("mock-shape-select")).not.toBeInTheDocument();
+      // buildGraph ran on the response: doc-1 and the synthetic fim leaf render.
+      expect(screen.getByText("M1")).toBeInTheDocument();
+      expect(screen.getByText("Fim de cadeia")).toBeInTheDocument();
+      expect(consoleError).not.toHaveBeenCalled();
+    });
 
-    render(<GraphRoute />);
+    it("respects the ?imovelId query param", async () => {
+      setSearch("?imovelId=42");
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => chainData
+      }));
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
-    expect(screen.getByText("M1")).toBeInTheDocument();
-    expect(screen.getByText("T1")).toBeInTheDocument();
-    expect(screen.getByText("T7")).toBeInTheDocument();
-    expect(screen.getByTestId("nodes").children).toHaveLength(21);
-    expect(screen.getAllByText("Fim de cadeia")).toHaveLength(5);
+      render(<GraphRoute />);
 
-    const select = screen.getByTestId("mock-shape-select");
-    fireEvent.change(select, { target: { value: "linear" } });
+      await screen.findByTestId("graph-view");
+      expect(fetchMock).toHaveBeenCalledWith("/api/graph/42", expect.anything());
+    });
 
-    expect(screen.getByTestId("nodes").children).toHaveLength(6);
-    expect(screen.queryByText("T7")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Fim de cadeia")).toHaveLength(1);
+    it("attaches a bearer token from localStorage when present", async () => {
+      window.localStorage.setItem("token", "jwt-abc");
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => chainData
+      }));
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
-    expect(consoleError).not.toHaveBeenCalled();
+      render(<GraphRoute />);
+
+      await screen.findByTestId("graph-view");
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/graph/4",
+        expect.objectContaining({
+          headers: { Authorization: "Bearer jwt-abc" }
+        })
+      );
+      window.localStorage.removeItem("token");
+    });
+
+    it("shows an error message when the request fails", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      render(<GraphRoute />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("graph-error")).toBeInTheDocument();
+      });
+      expect(screen.getByTestId("graph-error")).toHaveTextContent("HTTP 401");
+      expect(screen.queryByTestId("graph-view")).not.toBeInTheDocument();
+    });
   });
 });

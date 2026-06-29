@@ -20,7 +20,9 @@ test("graph preview renders", async ({ page }) => {
   });
 
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto("/graph");
+  // `?mock=1` renders the deterministic complex mock (21 nodes) without an
+  // API dependency — the real chain now loads from GET /api/graph/:imovelId.
+  await page.goto("/graph?mock=1");
 
   // Wait for graph view to be visible
   const graphView = page.getByTestId("graph-view");
