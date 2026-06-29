@@ -4,7 +4,7 @@ Este diagrama mostra **tabelas** (caixas) e **relacionamentos** (linhas) entre e
 
 > **Decisoes de design** (Q1-Q15, Q11b, D1-D4, T1-T4) que ancoram este ERD: `docs/db/SCHEMA_DECISOES_PENDENTES.md`. **Schema canonico** (colunas, constraints, tipos SQLite/D1): **`docs/db/SCHEMA_CONSOLIDATED.md` ESTÁ SUPERSEDED — ver aviso no topo desse arquivo; usar `docs/db/SCHEMA_DECISOES_PENDENTES.md` + `erd-v2.mmd` como referência canônica até a migration T-101 ser aplicada**. **Critica completa do Codex gpt-5.5 (xhigh)**: `docs/db/CODEX_CRITIQUE_2026-06-03.md` (round 1) e `docs/db/CODEX_CRITIQUE_2026-06-03_ROUND2.md` (round 2) e triage round 3 em "Próximos passos" do decisions doc.
 >
-> **T4 — Mermaid NAO e schema.** O `.mmd` e documentacao visual. UNIQUE_NOTE, comentarios inline, e tipos no Mermaid nao sao enforcem em SQL. A versao canonica e a Drizzle migration (T-101) com partial UNIQUE indexes, CHECK constraints, FTS5 sync triggers, e views.
+> **T4 — Mermaid NAO e schema.** O `.mmd` e documentacao visual. UNIQUE_NOTE, comentarios inline, e tipos no Mermaid nao sao enforcem em SQL. A versao canonica e a Drizzle migration (T-101) com partial UNIQUE indexes, CHECK constraints, e views. FTS5 sync triggers sao **tarefa futura** (nao implementados em T-101).
 
 ## 1) O que e cada caixa (tabela)
 
@@ -12,6 +12,7 @@ Este diagrama mostra **tabelas** (caixas) e **relacionamentos** (linhas) entre e
 - Dentro da caixa estao os **campos** (colunas) com seu tipo (`int`, `text`, `integer`).
 - `PK` = **Primary Key** (identificador unico da linha).
 - `FK` = **Foreign Key** (campo que aponta para outra tabela).
+- A entidade `v2_user` no ERD corresponde à tabela SQL `v2_user` (pesquisador). Há também uma tabela scaffold `users` (auth JWT) em `packages/api/drizzle/schema.ts` que não aparece neste diagrama de domínio.
 
 ### Tipos no ERD (convencao SQLite/D1 — ver Apêndice em SCHEMA_DECISOES_PENDENTES.md)
 
@@ -57,8 +58,7 @@ O formato e do tipo: `A ||--o{ B : rotulo`
   - Cada origem pertence a **um** lancamento.
   - Cada origem pode ter (zero ou um) `origem_fim_cadeia` independente (classificacao por origem).
 
-- `origem o|--o{ origem_fim_cadeia : "?"` (na verdade e 1:1)
-  - Ver: `origem ||--o| origem_fim_cadeia : fim_cadeia` — uma origem pode ter zero ou um registro de fim de cadeia.
+- `origem ||--o| origem_fim_cadeia : fim_cadeia (Q3=B)` — uma origem pode ter zero ou um registro de fim de cadeia (1:1 parcial).
 
 ## 3) Significado dos rotulos (texto nas linhas)
 

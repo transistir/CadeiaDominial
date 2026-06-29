@@ -30,23 +30,23 @@ Phase 0: Decisions ──┐
 
 ## Phase 0 — Decisions (BLOCKING)
 
-> Nothing in Phase 1 can start until all 6 decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered.
+> Nothing in Phase 1 can start until all Q1–Q15 + Q11b decisions in `docs/db/SCHEMA_DECISOES_PENDENTES.md` are answered. **Decisions are recorded; this phase is closed.**
 
 ### T-000 — Read the pending decisions
 - **Status:** ✅ done (2026-06-02/03, Luandro + Hiure)
 - **Owner:** anyone (Luandro, Hiure, or reviewer)
-- **Description:** Read `docs/db/SCHEMA_DECISOES_PENDENTES.md` end-to-end. For each of the 6 questions (Q1–Q6), understand the trade-offs, especially the visual impact on the React Flow graph.
+- **Description:** Read `docs/db/SCHEMA_DECISOES_PENDENTES.md` end-to-end. For each of the questions (Q1–Q15 + Q11b), understand the trade-offs, especially the visual impact on the React Flow graph.
 - **Acceptance:** Decision-maker can articulate each question + at least one option's DB/chain-graph consequence without re-reading the doc. ✅
 - **Depends on:** nothing.
 - **Blocks:** T-001.
 
-### T-001 — Answer Q1–Q6
+### T-001 — Answer Q1–Q15 + Q11b
 - **Status:** ✅ done (PR #24 merged). Extended to Q1-Q15 + Q11b.
 - **Owner:** Luandro (project lead)
 - **Description:** Provide a decision for each of Q1 through Q15 + Q11b. Codex gpt-5.5 xhigh 5/5 APROVA. Opus 4.8 5/5 APROVA.
 - **Output:** `docs/db/SCHEMA_DECISOES_PENDENTES.md` with all answers + rationale.
 - **Acceptance:** All questions answered, no TBDs remain. ✅
-- **Blocks:** all of Phase 1.
+- **Blocks:** all of Phase 1. **Unblocked now.**
 
 ---
 
@@ -63,7 +63,7 @@ Phase 0: Decisions ──┐
 ### T-101 — Author the Drizzle schema
 - **Status:** ✅ done (PR #25 merged). Codex 5/5 APROVA (round 4).
 - **Worktree branch:** `feat/drizzle-schema-v2` (merged + cleaned)
-- **Files:** `packages/api/drizzle/schema/` (19 files), `packages/api/drizzle/migrations/0000_real_quentin_quire.sql` (297 linhas, 17 tables + 2 views + 13 indexes)
+- **Files:** `packages/api/drizzle/schema/` (19 arquivos `.ts` incluindo views). Migrations SQL são geradas on-demand (`pnpm db:generate`) e **não estão commitadas** no repo (apenas `.gitkeep`).
 - **Description:** Translate Django models → Drizzle ORM. All Q1-Q15 decisions implemented. PII removed (Q5), soft-delete on all tables (Q2), `cri` table with `tipo` CHECK (Q11b), N:N junction `imovel_documento` (Q13), `lancamento_move_event` append-only (Q14), `audit_log` (Q9).
 - **Acceptance:** ✅ `db:generate` clean, `db:migrate:local` clean, 100% type-safe, CI 4/4 green.
 - **Blocks:** T-200, T-201, T-300.
@@ -169,10 +169,10 @@ Phase 0: Decisions ──┐
 - **Status:** 📋 **ready to start** (T-101 merged, can run in parallel with T-200)
 - **Worktree branch:** `feat/field-filler`
 - **Files:** `scripts/seed/field-filler.ts`
-- **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q6 (e.g. CNPJ/CPF format if Q5 = DB-level).
+- **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q15 + Q11b (e.g. ISO8601 dates, normalized numeric document numbers, INTEGER 0/1 booleans, area in centiares). **Nota:** Q5 removeu CPF/RG/email/telefone de `Pessoa`; Q4 escolheu texto puro, então não gere colunas de PII nem ciphertext.
 - **Acceptance:**
   - `field-filler(topology)` produces rows that insert without error into the Drizzle schema
-  - If Q4 = "encrypt at rest", produces ciphertext + provides decryption key path
+  - Q4=A (texto puro) e Q5=N/A (sem PII em `Pessoa`) estão refletidos no filler — nenhuma coluna de PII ou ciphertext é gerada.
 - **Blocks:** T-202.
 
 ### T-202 — Seed orchestrator
@@ -193,7 +193,7 @@ Phase 0: Decisions ──┐
 - **Status:** blocked on T-101, T-202
 - **Worktree branch:** `feat/legacy-fit-script`
 - **Files:** `scripts/migration/legacy-fit.ts`, `scripts/migration/__tests__/legacy-fit.test.ts`
-- **Description:** Loads `old/data.cleaned.core.no-auth.no-unistr.sql` (3.3MB Postgres dump) into the new Drizzle schema, then asserts: row counts match expected per table, no FK violations, no `NOT NULL` failures, no `CHECK` failures (if Q5 = DB-level). Emits a human-readable report.
+- **Description:** Loads `old/data.cleaned.core.no-auth.no-unistr.sql` (3.3MB Postgres dump) into the new Drizzle schema, then asserts: row counts match expected per table, no FK violations, no `NOT NULL` failures, no `CHECK` failures. Emits a human-readable report.
 - **Acceptance:**
   - `pnpm legacy-fit` exits 0 on a clean run
   - Report shows: ✓ row count per table, ✓ FK check, ✓ NOT NULL check, ✓ (optional) CHECK check
@@ -246,7 +246,9 @@ Phase 0: Decisions ──┐
 ## Related documents
 
 - `docs/SCHEMA_V2_BLINDSPOT_REVIEW.md` — the 27-issue audit (PR #15)
-- `docs/db/SCHEMA_DECISOES_PENDENTES.md` — the 6 blocking decisions (in pt-BR, this PR)
+- `docs/db/SCHEMA_DECISOES_PENDENTES.md` — **architecture decisions** Q1–Q15 + Q11b (this PR)
+- `docs/db/SCHEMA_QUESTOES.md` — **detailed column-level questions** Q1–Q25
+- `docs/db/SCHEMA_RESPOSTAS.md` — **answers** to the detailed column-level questions
 - `docs/ERD_CADEIA_DOMINIAL.md` — the schema draft (target of T-100). **Note:** as of the docs/ restructure (T-403, PR #17), the v2 ERD is at `docs/db/erd-v2.mmd` and the legacy Django ERD will be moved to `docs/legacy-django/erd-modelo-antigo.md` in a follow-up.
 - `docs/legacy-django/03-database-models.md` — Django source of truth
 - `docs/MIGRATION_GUIDE.md` — overall migration architecture
