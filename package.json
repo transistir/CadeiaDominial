@@ -11,6 +11,7 @@
     "db:generate": "pnpm --filter @cadeia/api db:generate",
     "db:migrate:local": "pnpm --filter @cadeia/api db:migrate:local",
     "db:studio": "pnpm --filter @cadeia/api db:studio",
+    "legacy-fit": "pnpm --filter @cadeia/legacy-fit legacy-fit",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "turbo run test:unit",
     "lint": "turbo run lint",

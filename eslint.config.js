@@ -69,5 +69,14 @@ module.exports = [
         ...globals.node
       }
     }
+  },
+  // Scripts (Node.js — migration tooling, seeds)
+  {
+    files: ["scripts/**/*.{ts,tsx,js}"],
+    languageOptions: {
+      globals: {
+        ...globals.node
+      }
+    }
   }
 ];

@@ -125,4 +125,6 @@ packages/api/drizzle/migrations/*_snapshot.json
 db.sqlite3
 db.sqlite3.new
 .d1_chunks/
+# Legacy-fit run artifacts (generated reports, machine-specific paths)
+migration_workspace/
 
