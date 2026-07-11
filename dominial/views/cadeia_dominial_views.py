@@ -540,7 +540,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
                         ws.cell(row=row, column=13, value=lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else "-").border = border
                     
                     # Área, Origem, Observações
-                    ws.cell(row=row, column=14, value="").border = border  # Área (não implementado)
+                    ws.cell(row=row, column=14, value=lancamento.area if lancamento.area is not None else "-").border = border
                     ws.cell(row=row, column=15, value=lancamento.origem or "-").border = border
                     ws.cell(row=row, column=16, value=lancamento.observacoes or "-").border = border
                     
