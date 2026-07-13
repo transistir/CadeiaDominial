@@ -218,6 +218,21 @@ function converterParaArvoreD3(data) {
     let iteracoes = 0;
     const limiteIteracoes = data.documentos.length * data.conexoes.length + data.documentos.length;
 
+    // Impede que uma citação cíclica (ex.: A cita B e B cita A, direta ou
+    // indiretamente) vire uma aresta primária -- senão docMap[X].children
+    // pode acabar contendo, direta ou indiretamente, o próprio X, e a
+    // recursão em ordenarFilhosPorNumeroDesc/d3.hierarchy nunca termina.
+    function criariCiclo(candidatoPai, alvo) {
+        let atual = candidatoPai;
+        let passos = 0;
+        while (atual !== undefined) {
+            if (atual === alvo) return true;
+            if (++passos > data.documentos.length) return true;
+            atual = paiPrimario.get(atual);
+        }
+        return false;
+    }
+
     while (fila.length > 0) {
         if (++iteracoes > limiteIteracoes) {
             console.warn('DEBUG: possível ciclo nas conexões, interrompendo cálculo de profundidade');
@@ -226,6 +241,8 @@ function converterParaArvoreD3(data) {
         const atual = fila.shift();
         (conexoesPorFrom.get(atual) || []).forEach(con => {
             if (!docMap[con.to]) return;
+            if (con.to === raiz.numero) return; // a raiz nunca recebe pai primário
+            if (criariCiclo(atual, con.to)) return;
             const novaProfundidade = profundidade.get(atual) + 1;
             if (!profundidade.has(con.to) || novaProfundidade > profundidade.get(con.to)) {
                 profundidade.set(con.to, novaProfundidade);
@@ -422,15 +439,23 @@ function corrigirSobreposicoes(root) {
 // Função otimizada: Aplicar espaçamento adicional para evitar sobreposições
 function ajustarPosicoesPorNivel(root) {
     // Cards de fim de cadeia continuam usando o nível calculado pelo backend.
-    // Os demais nós usam node.depth (profundidade calculada pelo d3.hierarchy
-    // a partir da estrutura de árvore que converterParaArvoreD3 já monta
-    // corretamente) -- usar node.data.nivel aqui prenderia a posição X ao
-    // nível antigo do backend, ignorando o pai primário escolhido acima.
+    // Um documento com nível ajustado manualmente (nivel_manual, endpoint
+    // ajustar-nivel) também respeita a escolha do usuário. Os demais nós
+    // usam node.depth (profundidade calculada pelo d3.hierarchy a partir da
+    // estrutura de árvore que converterParaArvoreD3 já monta corretamente)
+    // -- usar node.data.nivel para todo mundo prenderia a posição X ao nível
+    // antigo do backend, ignorando o pai primário escolhido acima.
     root.descendants().forEach(node => {
         if (node.data.is_fim_cadeia) {
             const nivel = node.data.nivel || 0;
             node.y = nivel * 200 + 120;
             console.log(`DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivel}, posição Y: ${node.y}`);
+            return;
+        }
+
+        if (node.data.nivel_manual != null) {
+            const nivel = node.data.nivel ?? node.depth;
+            node.y = nivel * 200 + 120;
             return;
         }
 
