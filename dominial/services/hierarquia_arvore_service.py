@@ -179,8 +179,14 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # Qualificar a busca por tipo (prefixo M/T) e cartório para
+                    # evitar homônimos de outros cartórios (ramos repetidos).
+                    prefixo_tipo = 'matricula' if origem_numero.startswith('M') else 'transcricao'
+                    doc_pai = Documento.objects.filter(
+                        numero=origem_numero,
+                        tipo__tipo=prefixo_tipo,
+                        cartorio=documento.cartorio,
+                    ).first()
                     
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
@@ -193,8 +199,14 @@ class HierarquiaArvoreService:
                     
                     documentos_processados.add(origem_numero)
                     
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
+                    # Qualificar a busca por tipo (prefixo M/T) e cartório para
+                    # evitar homônimos de outros cartórios (ramos repetidos).
+                    prefixo_tipo = 'matricula' if origem_numero.startswith('M') else 'transcricao'
+                    doc_pai = Documento.objects.filter(
+                        numero=origem_numero,
+                        tipo__tipo=prefixo_tipo,
+                        cartorio=documento.cartorio,
+                    ).first()
                     
                     if doc_pai:
                         documentos_pais.append(doc_pai)
