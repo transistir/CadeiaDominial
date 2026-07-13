@@ -1,0 +1,490 @@
+/* ========================================
+   SISTEMA DE CADEIA DOMINIAL - CSS DETALHES DA TI
+   ======================================== */
+
+/* ========================================
+   CONTAINER PRINCIPAL
+   ======================================== */
+.tis-detail-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 30px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e8ed;
+}
+
+/* ========================================
+   CABEÇALHO DA TI
+   ======================================== */
+.tis-header {
+    text-align: center;
+    margin-bottom: 40px;
+    padding-bottom: 30px;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.tis-header h1 {
+    color: #2c3e50;
+    margin: 0 0 15px 0;
+    font-size: 32px;
+    font-weight: 600;
+}
+
+/* ========================================
+   GRID DE INFORMAÇÕES
+   ======================================== */
+.tis-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 25px;
+}
+
+.tis-info-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    border-left: 4px solid #3498db;
+}
+
+.tis-info-card strong {
+    display: block;
+    color: #34495e;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tis-info-card span {
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* ========================================
+   TÍTULOS DE SEÇÃO
+   ======================================== */
+.section-title {
+    color: #2c3e50;
+    font-size: 24px;
+    font-weight: 600;
+    margin: 40px 0 25px 0;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #ecf0f1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-title::before {
+    content: "";
+    width: 24px;
+    height: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z' stroke='%233498db' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='9,22 9,12 15,12 15,22' stroke='%233498db' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    display: inline-block;
+    margin-right: 10px;
+}
+
+/* ========================================
+   TABELA DE IMÓVEIS
+   ======================================== */
+.imoveis-table-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    overflow: hidden;
+    border: 1px solid #e1e8ed;
+    margin-bottom: 30px;
+}
+
+.imoveis-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+/* ========================================
+   CABEÇALHO DA TABELA
+   ======================================== */
+.imoveis-table thead {
+    background: linear-gradient(135deg, #34495e, #2c3e50);
+    color: white;
+}
+
+.imoveis-table th {
+    padding: 18px 20px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    position: relative;
+}
+
+.th-matricula {
+    width: 25%;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.th-nome {
+    width: 60%;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.th-acoes {
+    width: 15%;
+    text-align: center;
+}
+
+/* ========================================
+   LINHAS DA TABELA
+   ======================================== */
+.imovel-row {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #f1f3f4;
+    background: white;
+}
+
+.imovel-row:hover {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.imovel-row:nth-child(even) {
+    background: #fafbfc;
+}
+
+.imovel-row:nth-child(even):hover {
+    background: linear-gradient(135deg, #f1f3f4, #e8eaed);
+}
+
+/* ========================================
+   CÉLULAS DA TABELA
+   ======================================== */
+.imoveis-table td {
+    padding: 16px 20px;
+    border: none;
+    vertical-align: middle;
+    position: relative;
+}
+
+.td-matricula {
+    border-right: 1px solid #f1f3f4;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+}
+
+.td-nome {
+    border-right: 1px solid #f1f3f4;
+}
+
+.td-acoes {
+    text-align: center;
+    padding: 12px 20px;
+}
+
+/* ========================================
+   VALORES DAS CÉLULAS
+   ======================================== */
+.matricula-value {
+    color: #2c3e50;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.nome-value {
+    color: #34495e;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+/* ========================================
+   AÇÕES DOS IMÓVEIS
+   ======================================== */
+.imovel-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    color: white;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.action-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.1);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.action-button:hover::before {
+    opacity: 1;
+}
+
+.action-button svg {
+    position: relative;
+    z-index: 1;
+}
+
+.edit-button {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+}
+
+.edit-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.delete-button {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.delete-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+/* ========================================
+   BOTÃO ADICIONAR IMÓVEL
+   ======================================== */
+.add-imovel-button {
+    display: inline-block;
+    padding: 16px 32px;
+    background: linear-gradient(135deg, #27ae60, #229954);
+    color: white;
+    text-align: center;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin: 20px auto;
+    border: none;
+    cursor: pointer;
+}
+
+.add-imovel-button:hover {
+    background: linear-gradient(135deg, #229954, #1e8449);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+/* ========================================
+   ESTADO VAZIO
+   ======================================== */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 12px;
+    border: 2px dashed #dee2e6;
+    margin: 30px 0;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+    opacity: 0.6;
+}
+
+.empty-state p {
+    color: #6c757d;
+    font-size: 16px;
+    margin: 0;
+    font-weight: 500;
+}
+
+/* ========================================
+   RESPONSIVIDADE
+   ======================================== */
+@media (max-width: 768px) {
+    .tis-detail-container {
+        padding: 20px;
+        margin: 10px;
+    }
+    
+    .tis-header h1 {
+        font-size: 24px;
+    }
+    
+    .tis-info-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .imoveis-table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+    }
+    
+    .imoveis-table {
+        min-width: 600px;
+    }
+    
+    .imoveis-table th,
+    .imoveis-table td {
+        padding: 12px 15px;
+        font-size: 13px;
+    }
+    
+    .th-matricula {
+        width: 30%;
+    }
+    
+    .th-nome {
+        width: 55%;
+    }
+    
+    .th-acoes {
+        width: 15%;
+    }
+    
+    .action-button {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .action-button svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .add-imovel-button {
+        width: 100%;
+        margin: 16px 0;
+    }
+}
+
+/* ========================================
+   ABAS DE NAVEGAÇÃO
+   ======================================== */
+.abas-container {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ecf0f1;
+    background: white;
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.aba {
+    flex: 1;
+    padding: 15px 20px;
+    text-align: center;
+    text-decoration: none;
+    color: #7f8c8d;
+    font-weight: 500;
+    font-size: 14px;
+    background: #f8f9fa;
+    border: none;
+    transition: all 0.2s ease;
+    position: relative;
+    border-right: 1px solid #e9ecef;
+}
+
+.aba:last-child {
+    border-right: none;
+}
+
+.aba:hover {
+    background: #e9ecef;
+    color: #2c3e50;
+    text-decoration: none;
+}
+
+.aba.ativa {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    font-weight: 600;
+}
+
+.aba.ativa::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #3498db;
+}
+
+/* ========================================
+   BOTÕES DE ARQUIVAR
+   ======================================== */
+.archive-button {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+}
+
+.archive-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
+}
+
+.unarchive-button {
+    background: linear-gradient(135deg, #27ae60, #229954);
+}
+
+.unarchive-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+/* ========================================
+   RESPONSIVIDADE DAS ABAS
+   ======================================== */
+@media (max-width: 768px) {
+    .abas-container {
+        flex-direction: column;
+        border-radius: 8px;
+    }
+    
+    .aba {
+        border-right: none;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .aba:last-child {
+        border-bottom: none;
+    }
+    
+    .aba.ativa::after {
+        display: none;
+    }
+} 

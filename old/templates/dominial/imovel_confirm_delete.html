@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'dominial/css/confirm_delete.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="delete-container">
+    <div class="delete-header">
+        <h1>{% trans 'Confirmar Exclusão' %}</h1>
+    </div>
+
+    <div class="delete-content">
+        <p>{% trans 'Você tem certeza que deseja excluir o imóvel' %} "{{ imovel.nome }}"?</p>
+        <p class="warning">{% trans 'Esta ação não pode ser desfeita.' %}</p>
+    </div>
+
+    <div class="delete-actions">
+        <a href="{% url 'tis_detail' tis_id=tis.id %}" class="delete-button cancel-button">{% trans 'Cancelar' %}</a>
+        <form method="post" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="delete-button confirm-button">{% trans 'Confirmar Exclusão' %}</button>
+        </form>
+    </div>
+</div>
+{% endblock %} 

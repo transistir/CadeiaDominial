@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+    {% if modo_edicao %}Editar Lançamento{% else %}Novo Lançamento{% endif %} - {{ imovel.nome }}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/origem_simples.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/modal.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
+    
+    <!-- Seção de Documento Importado -->
+    {% if is_documento_importado %}
+    <div class="alert alert-info documento-importado-alert">
+        <div class="documento-importado-header">
+            <i class="fas fa-download"></i>
+            <strong>Documento Importado</strong>
+        </div>
+        <div class="documento-importado-info">
+            <p>
+                <strong>Documento:</strong> {{ documento.numero }} ({{ documento.tipo.get_tipo_display }})<br>
+                <strong>Origem:</strong> {{ documento.imovel_origem.matricula }} - {{ documento.imovel_origem.nome }}<br>
+                <strong>Importado em:</strong> {{ documento.documentoimportado_set.first.data_importacao|date:"d/m/Y H:i" }}
+                {% if documento.tipo_importacao == 'referencia_lancamento' %}
+                    <br><em>via referência de lançamento</em>
+                {% elif documento.tipo_importacao == 'cadeia_dominial' %}
+                    <br><em>via cadeia dominial</em>
+                {% endif %}
+            </p>
+            <div class="documento-importado-warning">
+                <i class="fas fa-info-circle"></i>
+                <strong>Atenção:</strong> Este lançamento será criado no documento importado e aparecerá na cadeia dominial de ambos os imóveis.
+                {% if documento.tipo_importacao == 'cadeia_dominial' %}
+                    <br><em>Este documento faz parte da cadeia dominial de um documento já acessível.</em>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="field-group">
+        <h4>{{ imovel.nome }}</h4>
+        <div class="grid-3">
+            <div>
+                <strong>Matrícula:</strong> {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>SNCR:</strong> {{ imovel.sncr }}
+            </div>
+            <div>
+                <strong>Proprietário Atual:</strong> {{ imovel.proprietario.nome }}
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="lancamento-form" {% if numero_lancamento_error %}data-numero-lancamento-error="true"{% endif %}>
+        {% csrf_token %}
+        
+        <!-- Campos Básicos -->
+        {% include "dominial/components/_lancamento_basico_form.html" %}
+
+        <!-- Campos para Averbacao -->
+        {% include "dominial/components/_lancamento_averbacao_form.html" %}
+
+        <!-- Campos para Registro -->
+        {% include "dominial/components/_lancamento_registro_form.html" %}
+
+        <!-- Campos para Início de Matrícula (Transmitente e Adquirente) -->
+        <div class="field-group" id="campos-inicio-matricula">
+            <h4>Campos Específicos - Início de Matrícula</h4>
+            
+            <!-- Campos de Pessoas (Transmitente e Adquirente) -->
+            <div class="grid-2">
+                {% include "dominial/components/_pessoa_form.html" with tipo="transmitente" label="Transmitente(s)" container_id="transmitentes-container-inicio" sugestao_class="transmitente-suggestions" pessoas=transmitentes %}
+                {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container-inicio" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
+            </div>
+        </div>
+
+        <!-- Campos Opcionais de Transação -->
+        <div class="field-group hidden" id="campos-transacao">
+            <h4>
+                Transmissão
+                {% if documento.tipo.tipo == 'transcricao' %}
+                    <small class="text-muted">(Opcional para transcrições)</small>
+                {% endif %}
+            </h4>
+            
+            <div class="grid-3">
+                <div class="form-group">
+                    <label for="forma_transacao">Forma</label>
+                    <input type="text" name="forma_transacao" id="forma_transacao" placeholder="Ex: Compra e Venda, Doação, etc."
+                           value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label for="titulo_transacao">Título</label>
+                    <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro"
+                           value="{% if modo_edicao and lancamento.titulo %}{{ lancamento.titulo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label for="cartorio_transmissao_nome">Cartório</label>
+                    <div class="autocomplete-container">
+                        <input type="text" name="cartorio_transmissao_nome" id="cartorio_transmissao_nome" 
+                               placeholder="Digite o nome do cartório" autocomplete="off"
+                               value="{% if modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% elif form_data and form_data.cartorio_transmissao_nome %}{{ form_data.cartorio_transmissao_nome }}{% endif %}">
+                        <input type="hidden" name="cartorio_transmissao" id="cartorio_transmissao" 
+                               value="{% if modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.id }}{% elif form_data and form_data.cartorio_transmissao %}{{ form_data.cartorio_transmissao }}{% endif %}">
+                        <div class="autocomplete-suggestions cartorio-transmissao-suggestions"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid-3">
+                <div class="form-group">
+                    <label for="livro_transacao">Livro</label>
+                    <input type="text" name="livro_transacao" id="livro_transacao" 
+                           value="{% if modo_edicao and lancamento.livro_transacao %}{{ lancamento.livro_transacao }}{% elif form_data and form_data.livro_transacao %}{{ form_data.livro_transacao }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label for="folha_transacao">Folha</label>
+                    <input type="text" name="folha_transacao" id="folha_transacao" 
+                           value="{% if modo_edicao and lancamento.folha_transacao %}{{ lancamento.folha_transacao }}{% elif form_data and form_data.folha_transacao %}{{ form_data.folha_transacao }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label for="data_transacao">Data</label>
+                    <input type="date" name="data_transacao" id="data_transacao" 
+                           value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao and form_data.data_transacao != 'None' %}{{ form_data.data_transacao }}{% endif %}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Campo de área e origem -->
+        {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=True container_id="origens-container" %}
+
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Salvar Lançamento</button>
+            <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
+<script src="{% static 'dominial/js/origem_simples.js' %}"></script>
+<script>
+    // Variáveis para detecção de tipo de documento
+    window.isTranscricao = {% if documento.tipo.tipo == 'transcricao' %}true{% else %}false{% endif %};
+    window.documentoTipo = '{{ documento.tipo.tipo }}';
+    window.documentoNumero = '{{ documento.numero }}';
+    
+
+    
+    {% if modo_edicao %}
+    // Adicionar classe para modo de edição
+    document.body.classList.add('modo-edicao');
+    {% endif %}
+    
+    {% if documento.tipo.tipo == 'transcricao' %}
+    // Adicionar classe para documento de transcrição
+    document.body.classList.add('documento-transcricao');
+    {% endif %}
+    
+    // Bloqueio de duplicata cancelada
+    {% if duplicata_cancelada %}
+    document.addEventListener('DOMContentLoaded', function() {
+        // Marcar campos de origem e cartório como inválidos
+        const origemInputs = document.querySelectorAll('input[name*="origem"]');
+        const cartorioInputs = document.querySelectorAll('input[name*="cartorio"]');
+        
+        origemInputs.forEach(input => {
+            input.classList.add('is-invalid');
+            input.style.borderColor = '#dc3545';
+        });
+        
+        cartorioInputs.forEach(input => {
+            input.classList.add('is-invalid');
+            input.style.borderColor = '#dc3545';
+        });
+        
+        // Desabilitar botão de salvar
+        const submitBtn = document.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '❌ Altere origem/cartório para continuar';
+            submitBtn.classList.remove('btn-success');
+            submitBtn.classList.add('btn-danger');
+        }
+        
+        // Adicionar mensagem de erro
+        const form = document.getElementById('lancamento-form');
+        if (form) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger mt-3';
+            errorDiv.innerHTML = `
+                <strong>❌ Origem/cartório já existe!</strong><br>
+                Você cancelou a importação de uma duplicata. Para continuar, altere a origem ou o cartório.
+                <br><small>Origem duplicada: <strong>${'{{ duplicata_origem }}'}</strong> | Cartório: <strong>${'{{ duplicata_cartorio }}'}</strong></small>
+            `;
+            form.insertBefore(errorDiv, form.firstChild);
+        }
+        
+        // Habilitar botão quando campos são alterados
+        function checkFieldsChanged() {
+            let origemChanged = false;
+            let cartorioChanged = false;
+            
+            origemInputs.forEach(input => {
+                if (input.value !== '{{ duplicata_origem }}') {
+                    origemChanged = true;
+                }
+            });
+            
+            cartorioInputs.forEach(input => {
+                if (input.value !== '{{ duplicata_cartorio }}') {
+                    cartorioChanged = true;
+                }
+            });
+            
+            if (origemChanged || cartorioChanged) {
+                // Remover classes de erro
+                origemInputs.forEach(input => {
+                    input.classList.remove('is-invalid');
+                    input.style.borderColor = '';
+                });
+                
+                cartorioInputs.forEach(input => {
+                    input.classList.remove('is-invalid');
+                    input.style.borderColor = '';
+                });
+                
+                // Habilitar botão
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Salvar Lançamento';
+                    submitBtn.classList.remove('btn-danger');
+                    submitBtn.classList.add('btn-success');
+                }
+                
+                // Remover mensagem de erro
+                const errorDiv = document.querySelector('.alert-danger');
+                if (errorDiv) {
+                    errorDiv.remove();
+                }
+            }
+        }
+        
+        // Adicionar listeners para mudanças nos campos
+        origemInputs.forEach(input => {
+            input.addEventListener('input', checkFieldsChanged);
+        });
+        
+        cartorioInputs.forEach(input => {
+            input.addEventListener('input', checkFieldsChanged);
+        });
+    });
+    {% endif %}
+</script>
+{% endblock %} 

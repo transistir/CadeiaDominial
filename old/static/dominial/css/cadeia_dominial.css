@@ -1,0 +1,231 @@
+/* ========================================
+   SISTEMA DE CADEIA DOMINIAL - CSS ESPECÍFICO
+   ======================================== */
+
+/* ========================================
+   CONTAINER DA ÁRVORE
+   ======================================== */
+.tree-container {
+    min-height: 400px;
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+/* ========================================
+   ESTADO VAZIO
+   ======================================== */
+.empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.empty-state h3 {
+    color: var(--secondary-color);
+}
+
+.empty-state p {
+    color: var(--text-color);
+}
+
+.empty-state .btn {
+    font-size: 1.2em;
+    padding: 20px 40px;
+}
+
+/* ========================================
+   CABEÇALHO DA CRONOLOGIA
+   ======================================== */
+.timeline-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.timeline-header h3 {
+    color: var(--secondary-color);
+}
+
+/* ========================================
+   NÓS DE DOCUMENTO
+   ======================================== */
+.documento-node {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 4px solid var(--accent-color);
+}
+
+.documento-header {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
+.documento-header span {
+    font-size: 0.9em;
+    color: var(--secondary-color);
+    font-weight: normal;
+}
+
+.documento-origem {
+    font-size: 0.9em;
+    color: var(--secondary-color);
+    margin-bottom: 10px;
+}
+
+/* ========================================
+   LISTA DE LANÇAMENTOS
+   ======================================== */
+.lancamentos-list {
+    margin-left: 20px;
+}
+
+/* Container para tabela planilha com rolagem - REMOVIDO - conflitante */
+
+.lancamento-node {
+    margin: 10px 0;
+    padding: 10px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.lancamento-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lancamento-title {
+    font-weight: 500;
+    color: var(--primary-color);
+}
+
+.lancamento-date {
+    color: var(--secondary-color);
+    font-size: 0.9em;
+}
+
+.lancamento-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    margin-left: 5px;
+}
+
+.lancamento-badge.primary {
+    background: var(--accent-color);
+    color: white;
+}
+
+.lancamento-badge.warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.lancamento-badge.primary-dark {
+    background: var(--primary-color);
+    color: white;
+    padding: 2px 8px;
+    margin-left: 10px;
+}
+
+/* ========================================
+   DETALHES DO LANÇAMENTO
+   ======================================== */
+.lancamento-detail {
+    margin-top: 5px;
+    font-size: 0.9em;
+}
+
+.lancamento-detail.secondary {
+    color: var(--secondary-color);
+}
+
+.lancamento-detail.accent {
+    color: var(--accent-color);
+}
+
+.lancamento-detail.italic {
+    color: var(--secondary-color);
+    font-style: italic;
+    margin-left: 20px;
+}
+
+/* ========================================
+   ESTADO SEM LANÇAMENTOS
+   ======================================== */
+.no-lancamentos {
+    color: var(--secondary-color);
+    font-style: italic;
+    margin-left: 20px;
+}
+
+/* ========================================
+   AÇÕES
+   ======================================== */
+.tree-actions {
+    margin-top: 20px;
+}
+
+/* ========================================
+   RESPONSIVIDADE
+   ======================================== */
+@media (max-width: 768px) {
+    .lancamento-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .lancamentos-list {
+        margin-left: 10px;
+    }
+    
+    .tree-container {
+        padding: 15px;
+    }
+}
+
+/* Estilos para documentos de fim de cadeia */
+.documento-fim-cadeia-vermelho {
+    background-color: #fff5f5 !important;
+    border-left: 4px solid #dc3545 !important;
+}
+
+.documento-fim-cadeia-vermelho .documento-header {
+    color: #dc3545 !important;
+    font-weight: bold;
+}
+
+.documento-fim-cadeia-verde {
+    background-color: #f8fff9 !important;
+    border-left: 4px solid #28a745 !important;
+}
+
+.documento-fim-cadeia-verde .documento-header {
+    color: #28a745 !important;
+    font-weight: bold;
+}
+
+.lancamento-badge.fim-cadeia-vermelho {
+    background-color: #dc3545 !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+.lancamento-badge.fim-cadeia-verde {
+    background-color: #28a745 !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+.documento-normal {
+    background-color: #f8fff9 !important;
+    border-left: 4px solid #28a745 !important;
+} 

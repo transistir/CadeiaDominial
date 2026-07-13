@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% load i18n static %}
+
+{% block title %}{{ modo|title }} Documento - {{ imovel.nome }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/documento_form.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>{% if modo == 'editar' %}✏️ Editar{% else %}📄 Novo{% endif %} Documento</h1>
+    
+    <div class="field-group">
+        <h4>{{ imovel.nome }}</h4>
+        <div class="grid-3">
+            <div>
+                <strong>Matrícula:</strong> {{ imovel.matricula }}
+            </div>
+            <div>
+                <strong>Proprietário:</strong> {{ imovel.proprietario.nome }}
+            </div>
+            {% if modo == 'editar' %}
+            <div>
+                <strong>Documento:</strong> {{ documento.numero }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="post" class="form">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="numero">Número do Documento:</label>
+            <input type="text" id="numero" name="numero" value="{{ documento.numero|default:'' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="tipo">Tipo de Documento:</label>
+            <select id="tipo" name="tipo" required>
+                {% for tipo in tipos_documento %}
+                <option value="{{ tipo.id }}" {% if documento.tipo.id == tipo.id %}selected{% endif %}>
+                    {{ tipo.get_tipo_display }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="data">Data:</label>
+            <input type="date" id="data" name="data" value="{{ documento.data|date:'Y-m-d'|default:'' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="cartorio">Cartório:</label>
+            <input type="text" id="cartorio" name="cartorio" value="{{ documento.cartorio.nome|default:'' }}" placeholder="Digite o nome do cartório..." autocomplete="off">
+            <input type="hidden" id="cartorio_id" name="cartorio_id" value="{{ documento.cartorio.id|default:'' }}">
+            <div id="cartorio-sugestoes" class="sugestoes-container" style="display: none;"></div>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="livro">Livro:</label>
+                <input type="text" id="livro" name="livro" value="{{ documento.livro|default:'' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="folha">Folha:</label>
+                <input type="text" id="folha" name="folha" value="{{ documento.folha|default:'' }}">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="origem">Origem:</label>
+            <textarea id="origem" name="origem" rows="2">{{ documento.origem|default:'' }}</textarea>
+        </div>
+        
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o documento" rows=3 %}
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if modo == 'editar' %}Atualizar{% else %}Criar{% endif %} Documento
+            </button>
+            <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tipoSelect = document.getElementById('tipo');
+    const numeroInput = document.getElementById('numero');
+    
+    // Autocomplete de cartórios de imóveis
+    const cartorioInput = document.getElementById('cartorio');
+    const cartorioIdInput = document.getElementById('cartorio_id');
+    const cartorioSugestoes = document.getElementById('cartorio-sugestoes');
+    
+    let timeoutId;
+    
+    cartorioInput.addEventListener('input', function() {
+        clearTimeout(timeoutId);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            cartorioSugestoes.style.display = 'none';
+            return;
+        }
+        
+        timeoutId = setTimeout(() => {
+            fetch(`/cartorio-imoveis-autocomplete/?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    cartorioSugestoes.innerHTML = '';
+                    
+                    if (data.length > 0) {
+                        data.forEach(cartorio => {
+                            const div = document.createElement('div');
+                            div.className = 'sugestao-item';
+                            div.textContent = cartorio.nome;
+                            div.addEventListener('click', () => {
+                                cartorioInput.value = cartorio.nome;
+                                cartorioIdInput.value = cartorio.id;
+                                cartorioSugestoes.style.display = 'none';
+                            });
+                            cartorioSugestoes.appendChild(div);
+                        });
+                        cartorioSugestoes.style.display = 'block';
+                    } else {
+                        cartorioSugestoes.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar cartórios:', error);
+                });
+        }, 300);
+    });
+    
+    // Esconder sugestões quando clicar fora
+    document.addEventListener('click', function(e) {
+        if (!cartorioInput.contains(e.target) && !cartorioSugestoes.contains(e.target)) {
+            cartorioSugestoes.style.display = 'none';
+        }
+    });
+    
+    // Funcionalidade para as sugestões
+    const sugestaoBtns = document.querySelectorAll('.sugestao-btn');
+    sugestaoBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const valor = this.getAttribute('data-valor');
+            const tipo = this.getAttribute('data-tipo');
+            
+            // Selecionar o tipo de documento apropriado
+            if (tipo === 'Matrícula') {
+                tipoSelect.value = 'matricula';
+            } else if (tipo === 'Transcrição') {
+                tipoSelect.value = 'transcricao';
+            }
+            
+            // Preencher o campo número do documento
+            numeroInput.value = valor;
+            
+            // Destacar o botão clicado
+            sugestaoBtns.forEach(b => b.classList.remove('btn-success'));
+            sugestaoBtns.forEach(b => b.classList.add('btn-outline'));
+            this.classList.remove('btn-outline');
+            this.classList.add('btn-success');
+            
+            // Mostrar feedback visual
+            this.style.transform = 'scale(1.05)';
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 200);
+        });
+    });
+});
+</script>
+{% endblock %} 
