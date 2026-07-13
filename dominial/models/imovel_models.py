@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class Imovel(models.Model):
@@ -27,30 +28,39 @@ class Imovel(models.Model):
         verbose_name='Tipo do Documento Principal'
     )
     observacoes = models.TextField(null=True, blank=True) # Opcional, para observações adicionais
-    cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT, null=True, blank=True) # Cartório onde o imóvel está registrado
+    cartorio = models.ForeignKey(
+        'Cartorios',
+        on_delete=models.PROTECT,
+        help_text='Cartório obrigatório da identidade registral do imóvel.',
+    )
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel
     arquivado = models.BooleanField(default=False, verbose_name="Arquivado") # Campo para arquivar imóveis
 
     class Meta:
         verbose_name = "Imóvel"
         verbose_name_plural = "Imóveis"
-        # Constraint única: matrícula deve ser única por cartório
-        # Se cartório for NULL, a matrícula ainda precisa ser única (caso raro em produção)
+        # Constraint única: identidade registral completa (tipo + matrícula + cartório)
         constraints = [
             models.UniqueConstraint(
-                fields=['matricula', 'cartorio'],
-                name='unique_matricula_por_cartorio',
-                # Permite múltiplos registros com cartorio=NULL e mesma matrícula
-                # Na prática, cartório deve ser obrigatório no formulário
+                fields=['tipo_documento_principal', 'matricula', 'cartorio'],
+                name='unique_imovel_identidade_registral',
             ),
         ]
         # Índice para melhorar performance de buscas
         indexes = [
             models.Index(fields=['matricula', 'cartorio'], name='dom_imovel_mat_cart_idx'),
         ]
-    
+
     def __str__(self):
         return self.matricula
+
+    def clean(self):
+        if self.pk is None and not self.cartorio_id:
+            raise ValidationError('Cartório é obrigatório para identificar o imóvel.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
     
     def get_sigla_formatada(self):
         """

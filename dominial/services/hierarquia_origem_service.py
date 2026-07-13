@@ -4,6 +4,8 @@ Service especializado para processamento de origens na hierarquia
 
 from ..models import Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils.hierarquia_utils import processar_origens_para_documentos
+from ..utils.documento_identidade_utils import DocumentoIdentidade
+from .documento_identidade_service import DocumentoIdentidadeService
 from .cache_service import CacheService
 from .cri_service import CRIService
 from datetime import date
@@ -38,8 +40,13 @@ class HierarquiaOrigemService:
                 origens_processadas_info = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
                 
                 for origem_info in origens_processadas_info:
-                    # Verificar se esta origem já foi processada
-                    chave_origem = f"{origem_info['numero']}_{origem_info['tipo']}"
+                    # Verificar se esta origem já foi processada (a chave inclui
+                    # o cartório, já que a identidade nunca é só tipo+número)
+                    cartorio_da_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
+                    chave_origem = (
+                        f"{origem_info['numero']}_{origem_info['tipo']}_"
+                        f"{cartorio_da_origem.id if cartorio_da_origem else ''}"
+                    )
                     if chave_origem not in origens_processadas:
                         origem_identificada = HierarquiaOrigemService._processar_origem_individual(
                             imovel, lancamento, origem_info, criar_documentos_automaticos
@@ -51,18 +58,34 @@ class HierarquiaOrigemService:
         return origens_identificadas
     
     @staticmethod
+    def _resolver_documento(tipo, numero, cartorio):
+        """
+        Resolve um documento pela identidade completa (tipo, número
+        normalizado e cartório), nunca por número isolado. Identidades
+        ambíguas não são escolhidas.
+        """
+        if not cartorio:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
+        except (TypeError, ValueError):
+            return None
+        resultado = DocumentoIdentidadeService.resolver(identidade)
+        return resultado.documento if resultado.status == 'encontrado' else None
+
+    @staticmethod
     def _processar_origem_individual(imovel, lancamento, origem_info, criar_documentos_automaticos=False):
         """
         Processa uma origem individual
         Implementa a regra dos CRI: verifica se existe documento com CRI da origem
         """
-        # REGRA DOS CRI: Verificar se já existe um documento com esse número e CRI da origem
-        cartorio_origem = lancamento.documento.cartorio
-        documento_existente = Documento.objects.filter(
-            numero=origem_info['numero'], 
-            cartorio=cartorio_origem
-        ).first()
-        
+        # O cartório da origem vem de lancamento.cartorio_origem quando
+        # informado; só cai para o cartório do documento atual na ausência dele.
+        cartorio_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
+        documento_existente = HierarquiaOrigemService._resolver_documento(
+            origem_info['tipo'], origem_info['numero'], cartorio_origem
+        )
+
         if not documento_existente:
             if criar_documentos_automaticos:
                 # Criar o documento automaticamente com CRI da origem
@@ -88,18 +111,17 @@ class HierarquiaOrigemService:
         """
         try:
             tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
-            
-            # REGRA DOS CRI: Determinar qual cartório usar
-            # Se o documento é criado automaticamente a partir de uma origem,
-            # ele deve herdar o CRI da origem (cartório do documento que originou)
-            cartorio_origem = lancamento.documento.cartorio
-            
-            # Verificar se já existe um documento com esse número e cartório da origem
-            documento_existente = Documento.objects.filter(
-                numero=origem_info['numero'], 
-                cartorio=cartorio_origem
-            ).first()
-            
+
+            # REGRA DOS CRI: o cartório vem de lancamento.cartorio_origem
+            # quando informado; só cai para o cartório do documento atual na
+            # ausência dele.
+            cartorio_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
+
+            # Verificar se já existe um documento com esta identidade completa
+            documento_existente = HierarquiaOrigemService._resolver_documento(
+                origem_info['tipo'], origem_info['numero'], cartorio_origem
+            )
+
             if documento_existente:
                 # Se já existe, retornar como origem identificada criada
                 return HierarquiaOrigemService._criar_origem_identificada(

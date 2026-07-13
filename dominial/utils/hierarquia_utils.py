@@ -4,6 +4,40 @@ Utilitários para cálculos de hierarquia de documentos e cadeia dominial
 
 import re
 from ..models import Documento, DocumentoTipo
+from .documento_identidade_utils import DocumentoIdentidade
+
+
+def _tipo_do_codigo(codigo):
+    """Deduz o tipo documental (matricula/transcricao) do prefixo M/T de um código."""
+    if not codigo:
+        return None
+    primeiro = codigo.strip()[:1].upper()
+    if primeiro == 'M':
+        return 'matricula'
+    if primeiro == 'T':
+        return 'transcricao'
+    return None
+
+
+def _resolver_documento_por_codigo(codigo, cartorio):
+    """
+    Resolve um documento pela identidade completa (tipo, número normalizado e
+    cartório), nunca por número isolado. Sem cartório, com tipo incompatível
+    ou com identidade ambígua, não seleciona nenhum documento.
+    """
+    from ..services.documento_identidade_service import DocumentoIdentidadeService
+
+    if not cartorio:
+        return None
+    tipo = _tipo_do_codigo(codigo)
+    if not tipo:
+        return None
+    try:
+        identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
+    except (TypeError, ValueError):
+        return None
+    resultado = DocumentoIdentidadeService.resolver(identidade)
+    return resultado.documento if resultado.status == 'encontrado' else None
 
 
 def ajustar_nivel_para_nova_conexao(documentos, from_numero, to_numero):
@@ -163,59 +197,58 @@ def identificar_documentos_importados(imovel):
     """
     from ..models import Documento, Lancamento
     import re
-    
+
     # Buscar todos os lançamentos do imóvel que têm origens
     lancamentos_com_origem = Lancamento.objects.filter(
         documento__imovel=imovel,
         origem__isnull=False
     ).exclude(origem='')
-    
-    # Coletar todos os códigos de origem referenciados
-    codigos_origem = set()
+
+    # Coletar códigos de origem referenciados, cada um com o cartório do
+    # lançamento que o informou (a resolução nunca cruza cartórios)
+    codigos_origem = []
     for lancamento in lancamentos_com_origem:
         if lancamento.origem:
-            # Extrair códigos M/T dos lançamentos
             codigos = re.findall(r'[MT]\d+', lancamento.origem)
-            codigos_origem.update(codigos)
-    
-    # Buscar documentos que correspondem aos códigos e pertencem a outros imóveis
+            for codigo in codigos:
+                codigos_origem.append((codigo, lancamento.cartorio_origem))
+
     documentos_compartilhados = []
     documentos_processados = set()
-    
-    def expandir_documentos_recursivamente(codigos):
+
+    def expandir_documentos_recursivamente(codigos_com_cartorio):
         """Função recursiva para expandir documentos compartilhados"""
-        for codigo in codigos:
-            if codigo in documentos_processados:
+        for codigo, cartorio in codigos_com_cartorio:
+            chave = (codigo, cartorio.pk if cartorio else None)
+            if chave in documentos_processados:
                 continue
-                
-            doc_compartilhado = Documento.objects.filter(
-                numero=codigo
-            ).exclude(
-                imovel=imovel  # Excluir documentos do imóvel atual
-            ).select_related('cartorio', 'tipo', 'imovel').first()
-            
-            if doc_compartilhado:
-                documentos_compartilhados.append(doc_compartilhado)
-                documentos_processados.add(codigo)
-                
+            documentos_processados.add(chave)
+
+            doc_compartilhado = _resolver_documento_por_codigo(codigo, cartorio)
+
+            if doc_compartilhado and doc_compartilhado.imovel_id != imovel.id:
+                if doc_compartilhado.id not in {doc.id for doc in documentos_compartilhados}:
+                    documentos_compartilhados.append(doc_compartilhado)
+
                 # Buscar origens deste documento compartilhado
                 lancamentos_doc = doc_compartilhado.lancamentos.filter(
                     origem__isnull=False
                 ).exclude(origem='')
-                
-                codigos_origem_doc = set()
+
+                codigos_origem_doc = []
                 for lancamento in lancamentos_doc:
                     if lancamento.origem:
                         codigos_orig = re.findall(r'[MT]\d+', lancamento.origem)
-                        codigos_origem_doc.update(codigos_orig)
-                
+                        for codigo_orig in codigos_orig:
+                            codigos_origem_doc.append((codigo_orig, lancamento.cartorio_origem))
+
                 # Expandir recursivamente
                 if codigos_origem_doc:
                     expandir_documentos_recursivamente(codigos_origem_doc)
-    
+
     # Expandir recursivamente todos os documentos compartilhados
     expandir_documentos_recursivamente(codigos_origem)
-    
+
     return documentos_compartilhados
 
 
@@ -330,64 +363,61 @@ def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
         bool: True se a origem deve ser criada, False caso contrário
     """
     from ..models import Documento, Lancamento
-    
-    # CORREÇÃO: Sempre verificar se documento existe em outros imóveis primeiro
-    # Buscar documento em outros imóveis (com e sem prefixo)
-    documento_existente = Documento.objects.filter(
-        numero=numero_documento
-    ).exclude(
-        imovel=imovel_atual
-    ).first()
-    
-    # Se não encontrou com prefixo, tentar sem prefixo
-    if not documento_existente and numero_documento.startswith(('M', 'T')):
-        numero_base = numero_documento[1:]  # Remove M ou T
-        documento_existente = Documento.objects.filter(
-            numero=numero_base
-        ).exclude(
-            imovel=imovel_atual
-        ).first()
-    
+
+    cartorio_origem = lancamento.cartorio_origem if lancamento else None
+
+    # Resolver pela identidade completa (tipo, número normalizado e cartório
+    # do lançamento) - nunca por número isolado.
+    documento_existente = _resolver_documento_por_codigo(numero_documento, cartorio_origem)
+    if documento_existente and documento_existente.imovel_id == imovel_atual.id:
+        # É o próprio documento do imóvel atual, não uma origem em outro imóvel
+        documento_existente = None
+
     if documento_existente:
         # Documento existe em outro imóvel - NÃO criar duplicado
         # Em vez disso, deve importar a cadeia dominial
         print(f"AVISO: Documento {numero_documento} já existe no imóvel {documento_existente.imovel.id} (número: {documento_existente.numero}) - não criando duplicado")
         return False
-    
+
     # REGRA PÉTREA: Se é lançamento de início de matrícula e não existe em outros imóveis
     if lancamento and lancamento.tipo and lancamento.tipo.tipo == 'inicio_matricula':
-        # Verificar se não existe no imóvel atual
-        documento_no_imovel_atual = Documento.objects.filter(
-            numero=numero_documento,
-            imovel=imovel_atual
-        ).exists()
-        
+        # Verificar se não existe no imóvel atual, com a mesma identidade completa
+        documento_no_imovel_atual = (
+            cartorio_origem
+            and Documento.objects.filter(
+                tipo__tipo=_tipo_do_codigo(numero_documento),
+                numero=numero_documento,
+                cartorio=cartorio_origem,
+                imovel=imovel_atual,
+            ).exists()
+        )
+
         if documento_no_imovel_atual:
             return False
-        
+
         # Para início de matrícula, permitir criação apenas se não existe em lugar nenhum
         return True
-    
+
     # Para outros tipos de lançamento, usar validação restritiva
     # (já verificamos se existe em outros imóveis acima)
     if not documento_existente:
         return False
-    
+
     # Verificar se o documento tem lançamentos reais
     lancamentos_count = Lancamento.objects.filter(
         documento=documento_existente
     ).count()
-    
+
     if lancamentos_count == 0:
         return False
-    
+
     # Verificar se não existe no imóvel atual
     documento_no_imovel_atual = Documento.objects.filter(
         numero=numero_documento,
         imovel=imovel_atual
     ).exists()
-    
+
     if documento_no_imovel_atual:
         return False
-    
-    return True 
+
+    return True

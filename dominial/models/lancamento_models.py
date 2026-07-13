@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
+from ..utils.documento_identidade_utils import normalizar_numero_documento
+
 
 class LancamentoTipo(models.Model):
     id = models.AutoField(primary_key=True)
@@ -125,6 +127,79 @@ class Lancamento(models.Model):
         senão retorna cartorio_transacao (legado)
         """
         return self.cartorio_transmissao or self.cartorio_transacao
+
+
+class LancamentoOrigem(models.Model):
+    """Origem estruturada de um lançamento, preservando tipo e cartório próprios."""
+
+    TIPO_DOCUMENTO_CHOICES = [
+        ('matricula', 'Matrícula'),
+        ('transcricao', 'Transcrição'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    lancamento = models.ForeignKey(
+        Lancamento,
+        on_delete=models.CASCADE,
+        related_name='origens_estruturadas',
+    )
+    indice_origem = models.PositiveIntegerField(
+        help_text='Índice da origem no conjunto original do lançamento.'
+    )
+    tipo_documento = models.CharField(
+        max_length=20,
+        choices=TIPO_DOCUMENTO_CHOICES,
+        help_text='Tipo documental da origem.',
+    )
+    numero = models.CharField(
+        max_length=50,
+        help_text='Número canônico da origem, sem prefixo de apresentação.',
+    )
+    cartorio = models.ForeignKey(
+        'Cartorios',
+        on_delete=models.PROTECT,
+        related_name='lancamentos_origem_estruturada',
+        help_text='Cartório específico desta origem.',
+    )
+    livro = models.CharField(
+        max_length=50, null=True, blank=True,
+        help_text='Livro associado a esta origem.',
+    )
+    folha = models.CharField(
+        max_length=50, null=True, blank=True,
+        help_text='Folha associada a esta origem.',
+    )
+
+    class Meta:
+        verbose_name = 'Origem de Lançamento'
+        verbose_name_plural = 'Origens de Lançamento'
+        ordering = ['lancamento_id', 'indice_origem', 'id']
+        unique_together = (('lancamento', 'indice_origem'),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['lancamento', 'tipo_documento', 'numero', 'cartorio'],
+                name='unique_lancamento_origem_identidade',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['lancamento', 'indice_origem'], name='dom_lan_origem_idx'),
+            models.Index(fields=['tipo_documento', 'numero', 'cartorio'], name='dom_lan_origem_id_idx'),
+        ]
+
+    def __str__(self):
+        cartorio_nome = self.cartorio.nome if self.cartorio_id else '?'
+        return f'{self.get_tipo_documento_display()} {self.numero} - {cartorio_nome}'
+
+    def clean(self):
+        if self.livro:
+            self.livro = self.livro.strip() or None
+        if self.folha:
+            self.folha = self.folha.strip() or None
+        if self.tipo_documento and self.numero:
+            try:
+                self.numero = normalizar_numero_documento(self.numero, self.tipo_documento)
+            except (ValueError, TypeError) as erro:
+                raise ValidationError({'numero': str(erro)}) from erro
 
 
 class LancamentoPessoa(models.Model):

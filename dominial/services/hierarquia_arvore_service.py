@@ -7,6 +7,8 @@ Resolve todos os problemas identificados nos testes
 from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
+from .documento_identidade_service import DocumentoIdentidadeService
+from ..utils.documento_identidade_utils import DocumentoIdentidade
 import re
 from collections import deque
 
@@ -100,22 +102,20 @@ class HierarquiaArvoreService:
         
         # Usar busca em largura para construir a árvore
         documentos_processados = set()
-        documentos_por_numero = {}
         fila = deque([(documento_principal, 0)])  # (documento, nível)
-        
+
         while fila:
             documento_atual, nivel = fila.popleft()
-            
+
             if documento_atual.id in documentos_processados:
                 continue
-            
+
             documentos_processados.add(documento_atual.id)
-            
+
             # Criar nó do documento
             doc_node = HierarquiaArvoreService._criar_no_documento(
                 documento_atual, imovel, nivel
             )
-            documentos_por_numero[documento_atual.numero] = doc_node
             arvore['documentos'].append(doc_node)
             
             # Buscar documentos pais (origens) deste documento
@@ -147,6 +147,29 @@ class HierarquiaArvoreService:
         return arvore
     
     @staticmethod
+    def _resolver_documento_por_codigo(codigo, cartorio):
+        """
+        Resolve um documento pela identidade completa (tipo, número
+        normalizado e cartório), nunca por número isolado. Sem cartório, com
+        tipo incompatível ou com identidade ambígua, não seleciona documento.
+        """
+        if not cartorio or not codigo:
+            return None
+        primeiro = codigo.strip()[:1].upper()
+        if primeiro == 'M':
+            tipo = 'matricula'
+        elif primeiro == 'T':
+            tipo = 'transcricao'
+        else:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
+        except (TypeError, ValueError):
+            return None
+        resultado = DocumentoIdentidadeService.resolver(identidade)
+        return resultado.documento if resultado.status == 'encontrado' else None
+
+    @staticmethod
     def _buscar_documentos_pais(documento, imovel, criar_documentos_automaticos):
         """
         Busca documentos pais (origens) de um documento
@@ -154,48 +177,55 @@ class HierarquiaArvoreService:
         """
         documentos_pais = []
         documentos_processados = set()
-        
+
         # CORREÇÃO: Verificar se é o documento principal do imóvel atual
-        is_documento_principal = (documento.imovel.id == imovel.id and 
-                                 (documento.numero == imovel.matricula or 
+        is_documento_principal = (documento.imovel.id == imovel.id and
+                                 (documento.numero == imovel.matricula or
                                   documento.numero.endswith(imovel.matricula)))
-        
+
         # Buscar lançamentos com origens
         lancamentos = documento.lancamentos.filter(
             origem__isnull=False
         ).exclude(origem='')
-        
+
         for lancamento in lancamentos:
             # Extrair origens do lançamento
             origens = re.findall(r'[MT]\d+', lancamento.origem)
-            
+            cartorio_origem = lancamento.cartorio_origem or documento.cartorio
+
             # CORREÇÃO: Para documento principal, buscar apenas origens diretas
             if is_documento_principal:
                 # Para o documento principal, buscar apenas documentos que são origens diretas
                 # (documentos que estão no mesmo imóvel e são citados como origem)
                 for origem_numero in origens:
-                    if origem_numero in documentos_processados:
+                    chave = (origem_numero, cartorio_origem.pk if cartorio_origem else None)
+                    if chave in documentos_processados:
                         continue
-                    
-                    documentos_processados.add(origem_numero)
-                    
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
-                    
+
+                    documentos_processados.add(chave)
+
+                    # Resolver documento pela identidade completa
+                    doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
+                        origem_numero, cartorio_origem
+                    )
+
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
                         documentos_pais.append(doc_pai)
             else:
                 # Para outros documentos, usar lógica normal
                 for origem_numero in origens:
-                    if origem_numero in documentos_processados:
+                    chave = (origem_numero, cartorio_origem.pk if cartorio_origem else None)
+                    if chave in documentos_processados:
                         continue
-                    
-                    documentos_processados.add(origem_numero)
-                    
-                    # Buscar documento com este número
-                    doc_pai = Documento.objects.filter(numero=origem_numero).first()
-                    
+
+                    documentos_processados.add(chave)
+
+                    # Resolver documento pela identidade completa
+                    doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
+                        origem_numero, cartorio_origem
+                    )
+
                     if doc_pai:
                         documentos_pais.append(doc_pai)
                     elif criar_documentos_automaticos:
@@ -205,7 +235,7 @@ class HierarquiaArvoreService:
                         )
                         if doc_pai:
                             documentos_pais.append(doc_pai)
-        
+
         return documentos_pais
     
     @staticmethod

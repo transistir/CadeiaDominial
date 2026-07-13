@@ -78,7 +78,7 @@ class Documento(models.Model):
     class Meta:
         verbose_name = "Documento"
         verbose_name_plural = "Documentos"
-        unique_together = ('numero', 'cartorio')
+        unique_together = ('tipo', 'numero', 'cartorio')
         ordering = ['-data']
 
     def __str__(self):

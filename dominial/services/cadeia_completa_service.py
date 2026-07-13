@@ -6,6 +6,8 @@ import re
 from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento
 from ..services.hierarquia_service import HierarquiaService
+from ..services.documento_identidade_service import DocumentoIdentidadeService
+from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
 class CadeiaCompletaService:
@@ -114,31 +116,55 @@ class CadeiaCompletaService:
         # TODO: Implementar lógica de troncos secundários
         return []
     
+    @staticmethod
+    def _resolver_documento_por_codigo(codigo, cartorio):
+        """
+        Resolve um documento pela identidade completa (tipo, número
+        normalizado e cartório), nunca por número isolado. Sem cartório, com
+        tipo incompatível ou com identidade ambígua, não seleciona documento.
+        """
+        if not cartorio or not codigo:
+            return None
+        primeiro = codigo.strip()[:1].upper()
+        if primeiro == 'M':
+            tipo = 'matricula'
+        elif primeiro == 'T':
+            tipo = 'transcricao'
+        else:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
+        except (TypeError, ValueError):
+            return None
+        resultado = DocumentoIdentidadeService.resolver(identidade)
+        return resultado.documento if resultado.status == 'encontrado' else None
+
     def _expandir_todas_origens_documento(self, documento, documentos_processados=None):
         """
         Expande TODAS as origens de um documento (não apenas uma)
         """
         if documentos_processados is None:
             documentos_processados = set()
-            
+
         documentos_origem = []
-        
+
         # Buscar lançamentos com origens
         lancamentos = documento.lancamentos.filter(
             origem__isnull=False
         ).exclude(origem='')
-        
+
         for lancamento in lancamentos:
             if lancamento.origem:
                 # Extrair todas as origens (separadas por ';')
                 origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                
+                cartorio_origem = lancamento.cartorio_origem or documento.cartorio
+
                 for origem_numero in origens:
-                    # Buscar documento de origem
-                    doc_origem = Documento.objects.filter(
-                        numero=origem_numero
-                    ).select_related('cartorio', 'tipo').first()
-                    
+                    # Resolver documento de origem pela identidade completa
+                    doc_origem = CadeiaCompletaService._resolver_documento_por_codigo(
+                        origem_numero, cartorio_origem
+                    )
+
                     if doc_origem and doc_origem.id not in documentos_processados:
                         documentos_origem.append(doc_origem)
                         documentos_processados.add(doc_origem.id)
