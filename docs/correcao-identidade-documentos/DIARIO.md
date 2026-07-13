@@ -38,7 +38,8 @@ Use entradas curtas e cronológicas. Decisões não podem existir apenas em conv
 - Artefatos locais alheios (`*.sql`, bancos, caches, `node_modules`, pacotes e imagens) ficam fora do commit; a inclusão deve usar lista explícita de arquivos.
 - Últimos portões: 98 testes integrados PostgreSQL e 17 focados SQLite passaram; checks e diff passaram; suíte global manteve 47 erros e 1 falha legados em 152 testes.
 - Nenhuma migração foi aplicada ao banco compartilhado e nenhum push foi realizado.
-- Próximo passo: criar o commit de checkpoint nesta branch e registrar sua identificação neste diário.
+- Commit funcional criado: `ade9ab1` (`feat(dominial): consolida identidade canonica e origens estruturadas`).
+- Próximo passo: registrar este identificador em um commit documental final; depois, retomar pela T25.
 
 ### 2026-07-13 — T24 — leitura estruturada com fallback
 

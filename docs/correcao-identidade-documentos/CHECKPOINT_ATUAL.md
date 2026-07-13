@@ -96,6 +96,7 @@ suíte global (152 testes): 47 erros e 1 falha legados, contagem de falhas inalt
 ## Ponto seguro de versionamento
 
 - Branch de continuidade: `feature/identidade-documento-cartorio`.
+- Commit funcional seguro: `ade9ab1` (`feat(dominial): consolida identidade canonica e origens estruturadas`).
 - Estado funcional salvo: R01–R07 e T22–T24 concluídas; T25 é a próxima tarefa.
 - T07 continua em revisão exclusivamente pela homologação manual documentada.
 - `last.md` foi removido por ser uma resposta informal e desatualizada; este arquivo é a fonte oficial de retomada.
