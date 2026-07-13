@@ -105,6 +105,14 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             "/dominial/tis/10/imovel/20/cadeia-tabela/pdf/",
         )
 
+    def test_weasyprint_instalado_gera_pdf_real(self):
+        pdf = cadeia_dominial_views.HTML(
+            string='<meta charset="utf-8"><h1>Teste de geração PDF</h1>'
+        ).write_pdf()
+
+        self.assertGreater(len(pdf), 1000)
+        self.assertEqual(pdf[:4], b"%PDF")
+
     @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
     @patch.object(cadeia_dominial_views, "get_object_or_404")
     @patch.object(cadeia_dominial_views, "render_to_string")

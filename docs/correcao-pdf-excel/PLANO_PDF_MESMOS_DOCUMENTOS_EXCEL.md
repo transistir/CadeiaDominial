@@ -184,8 +184,8 @@ Os testes devem cobrir:
 Executado em 2026-07-13 na branch `fix/pdf-documentos-igual-excel`:
 
 - alteração do botão padrão para `exportar_cadeia_completa_pdf`;
-- 5 testes focados de rota, fonte de dados, ordem, XLSX e sequência
-  personalizada: passaram;
+- 6 testes focados de rota, fonte de dados, ordem, XLSX, sequência
+  personalizada e geração real pelo WeasyPrint: passaram;
 - `manage.py check`: passou;
 - `makemigrations --check --dry-run`: nenhuma mudança detectada;
 - auditoria somente leitura no banco local: 296 imóveis analisados, 104
@@ -193,6 +193,8 @@ Executado em 2026-07-13 na branch `fix/pdf-documentos-igual-excel`:
   Excel, sem erro de processamento;
 - caso de homologação local: imóvel `5`, matrícula `6700`, TI `614`; o caminho
   antigo retornou 7 IDs e a cadeia completa retornou 39 IDs.
+- smoke real do endpoint completo para um imóvel do banco local: resposta
+  `application/pdf`, 56.754 bytes e assinatura `%PDF`.
 
 O resultado confirma que o defeito ocorre antes da renderização: o PDF antigo
 recebe uma lista diferente. A nova rota recebe a mesma estrutura completa que
