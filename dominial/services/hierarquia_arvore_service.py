@@ -8,6 +8,7 @@ from ..models import Documento, Lancamento
 from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
 from .documento_identidade_service import DocumentoIdentidadeService
+from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 import re
 from collections import deque
@@ -59,19 +60,12 @@ class HierarquiaArvoreService:
         Identifica o documento principal do imóvel
         Prioridade: 1) Documento com número igual à matrícula, 2) Primeiro documento do imóvel
         """
-        # Primeiro, tentar encontrar documento com número igual à matrícula
+        # Primeiro, tentar encontrar a identidade registral exata do imóvel.
         documento_principal = Documento.objects.filter(
             imovel=imovel,
-            numero=imovel.matricula
-        ).first()
-        
-        if documento_principal:
-            return documento_principal
-        
-        # Se não encontrar, tentar encontrar documento com número que contenha a matrícula
-        documento_principal = Documento.objects.filter(
-            imovel=imovel,
-            numero__icontains=imovel.matricula
+            tipo__tipo=imovel.tipo_documento_principal,
+            numero_normalizado=imovel.matricula_normalizada,
+            cartorio_id=imovel.cartorio_id,
         ).first()
         
         if documento_principal:
@@ -102,6 +96,7 @@ class HierarquiaArvoreService:
         
         # Usar busca em largura para construir a árvore
         documentos_processados = set()
+        conexoes_processadas = set()
         fila = deque([(documento_principal, 0)])  # (documento, nível)
 
         while fila:
@@ -127,22 +122,25 @@ class HierarquiaArvoreService:
             for doc_pai in documentos_pais:
                 # Criar conexão direta: filho -> pai
                 conexao = {
-                    'from': documento_atual.numero,
-                    'to': doc_pai.numero,
+                    'from': documento_atual.id,
+                    'to': doc_pai.id,
+                    'from_numero': documento_atual.numero,
+                    'to_numero': doc_pai.numero,
                     'tipo': 'origem_lancamento'
                 }
                 
-                # Evitar duplicatas
-                if not any(c['from'] == documento_atual.numero and c['to'] == doc_pai.numero 
-                          for c in arvore['conexoes']):
+                # Evitar apenas a repetição da mesma aresta entre os mesmos IDs.
+                chave_conexao = (documento_atual.id, doc_pai.id)
+                if chave_conexao not in conexoes_processadas:
                     arvore['conexoes'].append(conexao)
+                    conexoes_processadas.add(chave_conexao)
                 
                 # Adicionar à fila se não foi processado
                 if doc_pai.id not in documentos_processados:
                     fila.append((doc_pai, nivel + 1))
         
         # Recalcular níveis baseado na hierarquia real
-        HierarquiaArvoreService._recalcular_niveis(arvore, documento_principal.numero)
+        HierarquiaArvoreService._recalcular_niveis(arvore, documento_principal.id)
         
         return arvore
     
@@ -179,26 +177,23 @@ class HierarquiaArvoreService:
         documentos_processados = set()
 
         # CORREÇÃO: Verificar se é o documento principal do imóvel atual
-        is_documento_principal = (documento.imovel.id == imovel.id and
-                                 (documento.numero == imovel.matricula or
-                                  documento.numero.endswith(imovel.matricula)))
+        is_documento_principal = (
+            documento.imovel_id == imovel.id
+            and documento.tipo.tipo == imovel.tipo_documento_principal
+            and documento.numero_normalizado == imovel.matricula_normalizada
+            and documento.cartorio_id == imovel.cartorio_id
+        )
 
         # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.filter(
-            origem__isnull=False
-        ).exclude(origem='')
+        lancamentos = documento.lancamentos.all()
 
         for lancamento in lancamentos:
-            # Extrair origens do lançamento
-            origens = re.findall(r'[MT]\d+', lancamento.origem)
-            cartorio_origem = lancamento.cartorio_origem or documento.cartorio
-
             # CORREÇÃO: Para documento principal, buscar apenas origens diretas
             if is_documento_principal:
                 # Para o documento principal, buscar apenas documentos que são origens diretas
                 # (documentos que estão no mesmo imóvel e são citados como origem)
-                for origem_numero in origens:
-                    chave = (origem_numero, cartorio_origem.pk if cartorio_origem else None)
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    chave = (origem.codigo, origem.cartorio_id)
                     if chave in documentos_processados:
                         continue
 
@@ -206,7 +201,7 @@ class HierarquiaArvoreService:
 
                     # Resolver documento pela identidade completa
                     doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
-                        origem_numero, cartorio_origem
+                        origem.codigo, origem.cartorio
                     )
 
                     if doc_pai:
@@ -214,8 +209,8 @@ class HierarquiaArvoreService:
                         documentos_pais.append(doc_pai)
             else:
                 # Para outros documentos, usar lógica normal
-                for origem_numero in origens:
-                    chave = (origem_numero, cartorio_origem.pk if cartorio_origem else None)
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    chave = (origem.codigo, origem.cartorio_id)
                     if chave in documentos_processados:
                         continue
 
@@ -223,7 +218,7 @@ class HierarquiaArvoreService:
 
                     # Resolver documento pela identidade completa
                     doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
-                        origem_numero, cartorio_origem
+                        origem.codigo, origem.cartorio
                     )
 
                     if doc_pai:
@@ -231,7 +226,7 @@ class HierarquiaArvoreService:
                     elif criar_documentos_automaticos:
                         # Criar documento automaticamente se solicitado
                         doc_pai = HierarquiaArvoreService._criar_documento_automatico(
-                            origem_numero, imovel
+                            origem.codigo, imovel
                         )
                         if doc_pai:
                             documentos_pais.append(doc_pai)
@@ -291,11 +286,13 @@ class HierarquiaArvoreService:
         # Verificar se é compartilhado
         is_compartilhado = not is_documento_atual
         
-        # Verificar se é o documento principal do imóvel atual
-        # Pode ser igual à matrícula ou conter a matrícula (ex: M6700 para matrícula 6700)
-        is_documento_principal = (is_documento_atual and 
-                                 (documento.numero == imovel_atual.matricula or 
-                                  documento.numero.endswith(imovel_atual.matricula)))
+        # Verificar a identidade registral completa do documento principal.
+        is_documento_principal = (
+            is_documento_atual
+            and documento.tipo.tipo == imovel_atual.tipo_documento_principal
+            and documento.numero_normalizado == imovel_atual.matricula_normalizada
+            and documento.cartorio_id == imovel_atual.cartorio_id
+        )
         
         return {
             'id': documento.id,
@@ -325,7 +322,7 @@ class HierarquiaArvoreService:
         }
     
     @staticmethod
-    def _recalcular_niveis(arvore, documento_principal_numero):
+    def _recalcular_niveis(arvore, documento_principal_id):
         """
         Recalcula níveis baseado na hierarquia real
         Mantém apenas conexões diretas pai-filho
@@ -348,27 +345,27 @@ class HierarquiaArvoreService:
         
         # Calcular níveis usando busca em largura a partir do documento principal
         niveis = {}
-        fila = deque([(documento_principal_numero, 0)])
+        fila = deque([(documento_principal_id, 0)])
         visitados = set()
         
         while fila:
-            doc_numero, nivel = fila.popleft()
+            documento_id, nivel = fila.popleft()
             
-            if doc_numero in visitados:
+            if documento_id in visitados:
                 continue
-            visitados.add(doc_numero)
+            visitados.add(documento_id)
             
-            niveis[doc_numero] = nivel
+            niveis[documento_id] = nivel
             
             # Adicionar pais diretos à fila (nível + 1)
-            if doc_numero in pais_por_filho:
-                for pai in pais_por_filho[doc_numero]:
+            if documento_id in pais_por_filho:
+                for pai in pais_por_filho[documento_id]:
                     if pai not in visitados:
                         fila.append((pai, nivel + 1))
         
         # Aplicar níveis aos documentos
         for doc_node in arvore['documentos']:
-            nivel_calculado = niveis.get(doc_node['numero'], 0)
+            nivel_calculado = niveis.get(doc_node['id'], 0)
             doc_node['nivel'] = doc_node['nivel_manual'] if doc_node['nivel_manual'] is not None else nivel_calculado
         
         # Calcular nível do fim de cadeia (nível máximo + 1)

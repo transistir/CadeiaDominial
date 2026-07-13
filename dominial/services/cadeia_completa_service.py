@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento
 from ..services.hierarquia_service import HierarquiaService
 from ..services.documento_identidade_service import DocumentoIdentidadeService
+from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
@@ -149,32 +150,25 @@ class CadeiaCompletaService:
         documentos_origem = []
 
         # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.filter(
-            origem__isnull=False
-        ).exclude(origem='')
+        lancamentos = documento.lancamentos.all()
 
         for lancamento in lancamentos:
-            if lancamento.origem:
-                # Extrair todas as origens (separadas por ';')
-                origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                cartorio_origem = lancamento.cartorio_origem or documento.cartorio
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                # Resolver documento de origem pela identidade completa
+                doc_origem = CadeiaCompletaService._resolver_documento_por_codigo(
+                    origem.codigo, origem.cartorio
+                )
 
-                for origem_numero in origens:
-                    # Resolver documento de origem pela identidade completa
-                    doc_origem = CadeiaCompletaService._resolver_documento_por_codigo(
-                        origem_numero, cartorio_origem
-                    )
+                if doc_origem and doc_origem.id not in documentos_processados:
+                    documentos_origem.append(doc_origem)
+                    documentos_processados.add(doc_origem.id)
 
-                    if doc_origem and doc_origem.id not in documentos_processados:
-                        documentos_origem.append(doc_origem)
-                        documentos_processados.add(doc_origem.id)
-                        
-                        # Recursivamente expandir origens deste documento
-                        sub_origens = self._expandir_todas_origens_documento(doc_origem, documentos_processados)
-                        for sub_origem in sub_origens:
-                            if sub_origem.id not in documentos_processados:
-                                documentos_origem.append(sub_origem)
-                                documentos_processados.add(sub_origem.id)
+                    # Recursivamente expandir origens deste documento
+                    sub_origens = self._expandir_todas_origens_documento(doc_origem, documentos_processados)
+                    for sub_origem in sub_origens:
+                        if sub_origem.id not in documentos_processados:
+                            documentos_origem.append(sub_origem)
+                            documentos_processados.add(sub_origem.id)
         
         return documentos_origem
     
@@ -271,10 +265,11 @@ class CadeiaCompletaService:
         origens = set()
         
         for lancamento in documento.lancamentos.all():
-            if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem:
-                # Extrair origens do campo origem
-                origens_lancamento = self._extrair_origens(lancamento.origem)
-                origens.update(origens_lancamento)
+            if lancamento.tipo.tipo == 'inicio_matricula':
+                origens.update(
+                    origem.codigo
+                    for origem in LancamentoOrigemLeituraService.obter_origens(lancamento)
+                )
         
         # Ordenar do maior para o menor número
         origens_list = list(origens)
@@ -446,4 +441,3 @@ class CadeiaCompletaService:
         
         return documentos_ordenados
     
-

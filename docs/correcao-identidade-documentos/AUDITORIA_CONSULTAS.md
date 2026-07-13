@@ -67,3 +67,51 @@ A view ativa importa `services.hierarquia_arvore_service.HierarquiaArvoreService
 ## Conclusão
 
 O problema é sistêmico e alcança tabela, importação, cadeia completa, árvore e criação automática. A ordem T06 → T07/T09/T11/T13 → T14 reduz o risco porque fornece uma única resolução antes de substituir consultas. A auditoria final T28 deve repetir esta busca e classificar qualquer ocorrência nova.
+
+## Reavaliação em 2026-07-13
+
+A revisão do commit `0ff36d3` confirmou que as consultas ORM mais críticas
+catalogadas acima foram substituídas nos serviços alterados, mas encontrou
+identidade implícita por número em estruturas Python ainda ativas:
+
+| Local | Comportamento restante | Correção |
+|---|---|---|
+| `utils/hierarquia_utils.py` — tronco principal | escolhe o próximo documento com `doc.numero == codigo` | R03 |
+| `services/hierarquia_arvore_service.py` — conexões | `from`, `to` e deduplicação usam número | R04 |
+| `services/hierarquia_arvore_service.py` — níveis | mapas e visitados usam número | R04 |
+
+Por isso T14 voltou para `EM REVISÃO`. A auditoria T28 continua pendente e deve
+examinar tanto consultas ORM quanto chaves, conjuntos, mapas e payloads de
+conexão.
+
+Reavaliação após R03/R04: os três comportamentos da tabela acima foram
+corrigidos. O tronco resolve a identidade contextual; o serviço ativo e seu
+consumidor D3 usam IDs em conexões, deduplicação, visitados e níveis. T14
+permanece `EM REVISÃO` somente até a regressão consolidada da R07; as
+implementações alternativas continuam fora do fluxo ativo e serão
+reclassificadas na T28.
+
+## Fechamento R07 em 2026-07-13
+
+A repetição da busca estática e da regressão confirmou que os fluxos ativos
+reabertos não resolvem relacionamentos nem indexam arestas/níveis por número
+isolado. O tronco usa identidade contextual; arestas, deduplicação, visitados e
+níveis usam IDs; a criação e a verificação usam tipo, número canônico e cartório.
+
+As ocorrências restantes foram classificadas sem ampliação indevida da R07:
+
+- buscas administrativas, textuais e comandos de diagnóstico que retornam ou inspecionam coleções, sem criar relacionamento;
+- `hierarquia_arvore_service_backup.py`, `hierarquia_arvore_service_corrigido.py` e `hierarquia_arvore_service_melhorado.py`, que não são importados pelo fluxo ativo e continuam reservados à decisão da T28;
+- pontos funcionais não reabertos, como escrita estruturada e serviços legados auxiliares, que permanecem catalogados para T22–T28.
+
+Com os testes CR-01 a CR-09 e CT-08/CT-18 aprovados, T14 pode voltar a
+`CONCLUÍDA`. Esta conclusão não substitui a auditoria final T28, que deve decidir
+remoção ou desativação formal das implementações alternativas e repetir a busca
+em todo o código produzido por T22–T27.
+
+Reavaliação T24: os consumidores relacionais ativos de duplicata/importação,
+tronco, árvore, cadeia completa, tabela e hierarquia passaram a usar
+`LancamentoOrigemLeituraService`. Havendo estrutura, o texto contraditório é
+ignorado; sem estrutura, o fallback textual mantém o contexto explícito do
+cartório do lançamento. Apresentação, comandos legados e implementações
+alternativas continuam reservados à T25–T28.

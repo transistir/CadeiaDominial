@@ -20,8 +20,7 @@ class DocumentoIdentidadeMigrationTest(TransactionTestCase):
     def tearDown(self):
         # Remover dados de cada cenário antes de restaurar o schema mais novo.
         executor = MigrationExecutor(connection)
-        estado_atual = executor.loader.project_state().apps
-        estado_atual.get_model('dominial', 'Documento').objects.all().delete()
+        self.apps_antes.get_model('dominial', 'Documento').objects.all().delete()
         executor.migrate(self.migrate_to)
         super().tearDown()
 

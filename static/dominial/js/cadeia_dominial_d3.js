@@ -179,11 +179,11 @@ function ordenarFilhosPorNumeroDesc(nodo) {
 function converterParaArvoreD3(data) {
     console.log(`DEBUG: Iniciando conversão - Backend enviou ${data.documentos.length} documentos únicos`);
     
-    // Mapear documentos por número
+    // IDs são a identidade técnica; número permanece apenas como rótulo.
     const docMap = {};
     data.documentos.forEach(doc => {
         doc.children = [];
-        docMap[doc.numero] = doc;
+        docMap[doc.id] = doc;
     });
     
     // Encontrar a matrícula principal (raiz)
@@ -200,18 +200,18 @@ function converterParaArvoreD3(data) {
     
     // Função para construir árvore sem duplicação
     function construirArvoreSimples(node) {
-        if (!node || visitados.has(node.numero)) {
+        if (!node || visitados.has(node.id)) {
             console.log(`DEBUG: Pulando nó ${node?.numero} - já visitado ou nulo`);
             return;
         }
         
         console.log(`DEBUG: Processando nó ${node.numero}`);
-        visitados.add(node.numero);
-        documentosNaArvore.add(node.numero);
+        visitados.add(node.id);
+        documentosNaArvore.add(node.id);
         
         // Buscar filhos deste nó nas conexões (from = filho, to = pai)
         const filhos = data.conexoes
-            .filter(con => con.from === node.numero)
+            .filter(con => con.from === node.id)
             .map(con => docMap[con.to])
             .filter(doc => doc);
         
@@ -219,12 +219,12 @@ function converterParaArvoreD3(data) {
         
         // Adicionar filhos únicos (referências aos mesmos objetos)
         filhos.forEach(filho => {
-            if (!node.children.some(child => child.numero === filho.numero)) {
+            if (!node.children.some(child => child.id === filho.id)) {
                 // CORREÇÃO: Só adicionar se o filho ainda não foi visitado
-                if (!visitados.has(filho.numero)) {
+                if (!visitados.has(filho.id)) {
                     console.log(`DEBUG: Adicionando filho ${filho.numero} ao nó ${node.numero}`);
                     node.children.push(filho);
-                    documentosNaArvore.add(filho.numero);
+                    documentosNaArvore.add(filho.id);
                 } else {
                     console.log(`DEBUG: Filho ${filho.numero} já foi visitado, não adicionando ao nó ${node.numero}`);
                 }
@@ -236,7 +236,7 @@ function converterParaArvoreD3(data) {
         // Processar filhos recursivamente APENAS se não foram visitados
         if (node.children) {
             node.children.forEach(filho => {
-                if (!visitados.has(filho.numero)) {
+                if (!visitados.has(filho.id)) {
                     console.log(`DEBUG: Processando recursivamente filho ${filho.numero} de ${node.numero}`);
                     construirArvoreSimples(filho);
                 } else {
@@ -251,8 +251,8 @@ function converterParaArvoreD3(data) {
         if (!node) return false;
         
         // Verificar se este nó tem a conexão direta
-        if (node.numero === from && node.children) {
-            return node.children.some(child => child.numero === to);
+        if (node.id === from && node.children) {
+            return node.children.some(child => child.id === to);
         }
         
         // Verificar recursivamente nos filhos
@@ -267,7 +267,7 @@ function converterParaArvoreD3(data) {
     construirArvoreSimples(raiz);
     
     // Verificar se há documentos não visitados
-    const documentosNaoVisitados = data.documentos.filter(doc => !visitados.has(doc.numero));
+    const documentosNaoVisitados = data.documentos.filter(doc => !visitados.has(doc.id));
     console.log(`DEBUG: Documentos não visitados: ${documentosNaoVisitados.length}`);
     console.log(`DEBUG: Documentos na árvore: ${documentosNaArvore.size}`);
     
@@ -626,7 +626,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
     // Desenhar links da árvore principal com animações suaves
     const links = svgGroup.selectAll('path.link')
-        .data(root.links(), d => d.target.id)
+        .data(root.links(), d => d.target.data.id)
         .join('path')
         .attr('class', 'link')
         .attr('fill', 'none')
@@ -661,7 +661,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     if (data.conexoesExtras) {
         const nodesMap = new Map();
         root.descendants().forEach(node => {
-            nodesMap.set(node.data.numero, node);
+            nodesMap.set(node.data.id, node);
         });
         
         // Filtrar conexões que não estão na árvore principal
@@ -721,7 +721,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
     // Desenhar nós (cards) com animações suaves
     const node = svgGroup.selectAll('g.node')
-        .data(root.descendants(), d => d.id)
+        .data(root.descendants(), d => d.data.id)
         .join('g')
         .attr('class', 'node')
         .style('cursor', 'pointer')
@@ -1156,4 +1156,4 @@ function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
     const t = d3.zoomIdentity.translate(tx, ty).scale(finalScale);
     svg.transition().duration(400).call(window._d3zoom.transform, t);
     window._zoomTransform = t;
-} 
+}

@@ -30,6 +30,143 @@ Use entradas curtas e cronológicas. Decisões não podem existir apenas em conv
 
 ## Histórico
 
+### 2026-07-13 — checkpoint para troca segura de sessão
+
+- R01–R07 e T22–T24 estão concluídas; T25 é a próxima tarefa desbloqueada.
+- A documentação de retomada foi revisada e o procedimento para interrupções urgentes foi adicionado ao README e ao checkpoint.
+- `last.md` foi removido porque duplicava uma resposta antiga que indicava T22 como próxima tarefa; `CHECKPOINT_ATUAL.md` permanece como fonte única.
+- Artefatos locais alheios (`*.sql`, bancos, caches, `node_modules`, pacotes e imagens) ficam fora do commit; a inclusão deve usar lista explícita de arquivos.
+- Últimos portões: 98 testes integrados PostgreSQL e 17 focados SQLite passaram; checks e diff passaram; suíte global manteve 47 erros e 1 falha legados em 152 testes.
+- Nenhuma migração foi aplicada ao banco compartilhado e nenhum push foi realizado.
+- Próximo passo: criar o commit de checkpoint nesta branch e registrar sua identificação neste diário.
+
+### 2026-07-13 — T24 — leitura estruturada com fallback
+
+- Estado final: CONCLUÍDA.
+- Criados `OrigemLancamentoLeitura` e `LancamentoOrigemLeituraService`: a presença de qualquer estrutura desativa completamente o fallback textual daquele lançamento.
+- O contrato expõe tipo, número informado/canônico, código apresentável, cartório individual, ordem, livro, folha e fonte.
+- Duplicatas/importação, cadeia informativa, tronco, árvore ativa, cadeia completa, tabela e hierarquia de origens deixaram de ler `lancamento.origem` diretamente para criar relações.
+- A regressão contraditória apontou o texto para A e a estrutura para B; todos os consumidores seguiram somente B. Outro teste confirmou o fallback legado quando não há estrutura.
+- Um ciclo de importação no bootstrap foi encontrado na primeira execução e eliminado com import tardio no utilitário; a regressão voltou a passar.
+- Testes: 69 focados e 98 integrados passaram no PostgreSQL; 17 passaram no SQLite; checks, compilação e diff passaram.
+- A suíte global executou 152 testes e manteve 47 erros e 1 falha legados.
+- Nenhuma migração foi aplicada ao banco compartilhado. Próximo passo pequeno: T25, apresentar identidade completa nas opções.
+
+### 2026-07-13 — T23 — migração histórica segura
+
+- Estado final: CONCLUÍDA.
+- Criado `migrar_origens_estruturadas`, com `--dry-run`, `--json` e filtro opcional `--lancamento-id`.
+- O comando só converte uma origem direta (`M`/`T` ou número simples) quando `cartorio_origem` está explicitamente gravado; não usa o cartório do documento como inferência.
+- Múltiplas origens, texto descritivo, fim de cadeia misturado, valores inválidos e ausência de cartório são classificados com contagens e IDs, sem alteração.
+- Lançamentos já estruturados são preservados; a execução real usa bloqueio dos lançamentos e uma transação para o lote inteiro.
+- O teste de `--dry-run` confirmou ausência de `INSERT`, `UPDATE` e `DELETE`; repetição não duplicou e uma falha simulada no segundo registro reverteu o primeiro.
+- Testes: 4 focados e 96 integrados passaram no PostgreSQL; 15 passaram no SQLite; `check`, `makemigrations --check --dry-run`, compilação e `git diff --check` passaram.
+- A suíte global executou 150 testes e manteve exatamente 47 erros e 1 falha legados.
+- O comando não foi executado no banco compartilhado. Próximo passo pequeno: T24, leitura estruturada com fallback textual durante a transição.
+
+### 2026-07-13 — T22 — escrita estruturada
+
+- Estado final: CONCLUÍDA.
+- O signal funcional de `Lancamento` passou a reconciliar `LancamentoOrigem` tanto ao criar/editar quanto ao limpar o texto, sem modificar `Lancamento.origem`.
+- O mapeamento temporário do formulário preserva cartório, livro e folha de cada origem; o fallback geral mantém o comportamento anterior quando não há valor individual.
+- A reconciliação é transacional, detecta duplicidade canônica e preserva o ID da identidade ao reordenar; registros removidos do texto são excluídos do conjunto estruturado.
+- Fins de cadeia continuam nos modelos próprios. Texto compatível só é estruturado quando o parser funcional produz uma identidade única.
+- Testes: 74 focados e 92 integrados passaram no PostgreSQL; 11 de modelo/migração passaram no SQLite; `check`, `makemigrations --check --dry-run` e `git diff --check` passaram.
+- A suíte global executou 146 testes e manteve 47 erros e 1 falha legados, sem aumento em relação ao baseline da R07.
+- Nenhuma migração foi aplicada ao banco compartilhado. Próximo passo pequeno: T23, comando idempotente com `--dry-run` para origens históricas inequívocas.
+
+### 2026-07-13 — R07 — regressão consolidada
+
+- Estado final: CONCLUÍDA; T03, T11, T14, T17, T18 e T21 voltaram a CONCLUÍDA.
+- CR-01 a CR-09 e CT-08/CT-18 permaneceram aprovados na árvore final.
+- PostgreSQL: 90 testes integrados de identidade, origem e migrações passaram. SQLite: 9 testes de modelo/migração passaram.
+- `manage.py check`, `makemigrations --check --dry-run`, `node --check` do consumidor D3 e `git diff --check` passaram.
+- A auditoria estática não encontrou identidade implícita por número nos fluxos ativos reabertos. Restam buscas textuais/diagnósticas, serviços alternativos inativos e ocorrências já destinadas a T22/T28.
+- A suíte global executou 144 testes e terminou com 47 erros e 1 falha: a quantidade de falhas é a mesma do baseline anterior às R01–R07. Causas: fixtures com campos removidos (`descricao`, `sncr`), `pytest` ausente em teste legado, `test_onr_post.py` inválido e uma expectativa incompatível com o próprio helper em teste antigo de níveis.
+- A suíte global não foi declarada aprovada; o débito legado permanece explícito e deve ser saneado em tarefa própria.
+- Nenhuma migração foi aplicada ao banco compartilhado e arquivos não rastreados alheios não foram alterados.
+- T07 continua EM REVISÃO por homologação manual independente. Próximo passo pequeno: T22, integrar a escrita de origens estruturadas.
+
+### 2026-07-13 — R06 — início do endurecimento do resolvedor e origem estruturada
+
+- Estado final: CONCLUÍDA; T21 permanece EM REVISÃO até o fechamento consolidado da R07.
+- O resolvedor revalida cada candidato retornado pela coluna gerada; incompatíveis ficam em `candidatos_invalidos` e não ocultam nem substituem um candidato válido.
+- CR-08 cobriu candidato inválido realmente persistido e o estado legado inválido+válido, sem exceção não tratada.
+- `LancamentoOrigem.numero` passou a preservar o valor informado; `numero_normalizado` é gerado pelo banco e usado pela constraint/índice.
+- A migração `0049` audita e bloqueia conflitos/valores inválidos sem reescrever dados; avanço, reversão e gravação direta equivalente foram testados.
+- Resultado: CR-08/CR-09 e 90 testes integrados passaram no PostgreSQL; 9 testes de modelo/migração passaram no SQLite; `makemigrations --check --dry-run` não detectou mudanças.
+- A migração não foi aplicada ao banco compartilhado. T22 continua responsável por integrar a escrita estruturada aos fluxos funcionais.
+- Próximo passo pequeno: R07, executar todos os portões e fechar as tarefas reabertas.
+
+### 2026-07-13 — R05 — início da preservação de livro e folha
+
+- Estado final: CONCLUÍDA; T11 permanece EM REVISÃO até o fechamento consolidado da R07.
+- A falha foi reproduzida: o cache continha livro/folha individuais, mas o caminho múltiplo recuperava somente o cartório e gravava `0` nos dois campos.
+- A leitura do mapeamento passou a devolver cartório, livro e folha; uma única função aplica a ordem de herança nos caminhos único e múltiplo.
+- Prioridade: primeiro lançamento do documento de origem, valor individual, valor geral do lançamento e `0` apenas quando tudo estiver ausente.
+- CR-07 preservou `11/111` e `22/222` para origens de cartórios distintos; o fallback geral `77/88` também foi aprovado.
+- Resultado: 83 testes integrados e compilação dos módulos alterados passaram; `git diff --check` permaneceu limpo.
+- Próximo passo pequeno: R06, criar primeiro CR-08 para o candidato legado inválido e CR-09 para a constraint canônica de `LancamentoOrigem`.
+
+### 2026-07-13 — R04 — início das arestas e níveis por ID
+
+- Estado final: CONCLUÍDA; T14 permanece EM REVISÃO até o fechamento consolidado da R07.
+- A falha foi reproduzida: duas origens homônimas produziam a mesma chave textual `M999 -> M123`, eliminando uma aresta; o JavaScript também sobrescrevia o nó no mapa por número.
+- O serviço ativo passou a usar IDs em `from`/`to`, deduplicação e cálculo de níveis, mantendo campos numéricos apenas para apresentação e diagnóstico.
+- O D3 passou a usar ID em mapas, visitados, filhos, conexões extras e chaves de renderização; o organizador da view e os comandos diagnósticos foram alinhados ao contrato.
+- CR-06 preservou os dois nós `M123`, as duas arestas e o nível correto independentemente do rótulo repetido.
+- Resultado: 81 testes integrados passaram; `node --check` e compilação dos módulos Python alterados passaram.
+- Próximo passo pequeno: R05/CR-07, comparar os caminhos de criação única e múltipla para restaurar livro/folha.
+
+### 2026-07-13 — R03 — início da resolução contextual do tronco
+
+- Estado final: CONCLUÍDA; corresponde à parte do tronco da T14, que permanece EM REVISÃO até R04/R07.
+- A falha foi reproduzida: `identificar_tronco_principal()` escolhia o homônimo local A porque comparava apenas `doc.numero` antes de considerar o importado B.
+- O documento inicial agora é localizado por imóvel, tipo estruturado, número canônico e cartório; as origens são resolvidas com o cartório do respectivo lançamento.
+- A escolha textual legada da sessão só pode selecionar uma origem que já tenha sido resolvida contextualmente; sem lançamento com origem, ela não busca um documento pelo número.
+- CR-05 passou nas duas ordens de criação e também com escolha de sessão; 80 testes integrados passaram.
+- O contrato de conexões e os mapas de níveis não foram alterados e continuam reservados à R04/CR-06.
+- Próximo passo pequeno: R04, mapear produtores/consumidores das arestas antes de trocar suas chaves por IDs.
+
+### 2026-07-13 — R02 — unicidade canônica de Documento e Imóvel
+
+- Estado final: CONCLUÍDA; T03, T17 e T18 permanecem EM REVISÃO até o fechamento consolidado da R07.
+- Foram adicionados campos canônicos gerados/persistidos a `Documento` e `Imovel`; as constraints, o formulário, o resolvedor e o verificador estrutural passaram a usá-los.
+- A migração `0048_identidade_canonica_gerada` audita conflitos e valores inválidos antes de alterar o schema, não reescreve os campos legados e possui reversão testada.
+- CR-01 a CR-04 passaram; a equivalência entre expressão gerada e normalizador Python cobre prefixo minúsculo, espaços, zeros, pontuação e espaços internos.
+- PostgreSQL: 77 testes integrados de identidade, origem e migrações passaram. SQLite 3.40.1: criação limpa do schema e 13 testes de modelo/formulário passaram.
+- `manage.py check`, `makemigrations --check --dry-run` e `git diff --check` passaram.
+- A migração não foi aplicada ao banco dev compartilhado. `LancamentoOrigem.numero_normalizado` continua reservado à R06/CR-09, que inclui o caminho real de gravação.
+- Próximo passo pequeno: R03/CR-05, corrigir a resolução contextual do tronco principal.
+
+### 2026-07-13 — R01 — persistência canônica
+
+- Estado final: CONCLUÍDA; nenhuma alteração funcional ou de dados.
+- Foram mapeadas gravações por formulário, serviços, views, importação, comandos e operações em massa.
+- Decisão: preservar `numero`/`matricula` legados e adicionar campos canônicos gerados e persistidos pelo banco.
+- Constraints futuras usarão os campos gerados, protegendo também `bulk_create`, `update` e SQL direto.
+- A expressão remove espaços externos e prefixo M/T de apresentação, preservando zeros à esquerda, pontuação e espaços internos.
+- Estratégias rejeitadas: proteção apenas em `save()`/formulário, constraint sobre texto bruto, reescrita automática dos campos legados e consolidação em migração.
+- Documento completo: `DECISAO_PERSISTENCIA_CANONICA.md`.
+- Premissa verificada: Django 5.2.3 possui `GeneratedField`; SQLite 3.40.1 e PostgreSQL 15 são os backends a validar na R02.
+- Testes não executados: R01 foi exclusivamente arquitetural; CR-01 a CR-04 permanecem `NÃO EXECUTADO` e pertencem à R02.
+- Próximo passo pequeno: R02, implementar campos gerados e constraints canônicas em uma migração posterior à 0047.
+
+### 2026-07-13 — revisão geral do commit reconstruído
+
+- Estado inicial: T01–T21 documentadas como concluídas, exceto T07; T22 indicada como próxima tarefa.
+- Escopo revisado: commit `0ff36d3` contra `origin/main`, modelos, formulários, migrações, resolvedor, tabela, árvore, tronco, criação automática e testes.
+- Resultado automatizado: 59 testes focados e 9 testes de migração aprovados; `manage.py check` e `makemigrations --check --dry-run` aprovados.
+- Suíte completa: 122 testes; 47 erros e 1 falha legados já conhecidos, sem evidência de nova quebra proveniente apenas da reconstrução.
+- Achado 1: constraints e formulário comparam o texto bruto, permitindo recriar depois da migração conflitos canônicos como `M123`/`123`.
+- Achado 2: conexões, deduplicação e níveis da árvore ainda usam número como chave.
+- Achado 3: o tronco principal ainda escolhe a origem por igualdade de número dentro da lista carregada.
+- Achado 4: criação com múltiplas origens grava livro/folha como `0` em vez de herdar os metadados.
+- Achado 5: `LancamentoOrigem` depende de `full_clean()` voluntário e o resolvedor pode propagar erro de candidato legado inválido.
+- Decisão documental: reabrir T03, T11, T14, T17, T18 e T21; criar R01–R07; bloquear T22 até R07.
+- Documentação detalhada: `REVISAO_GERAL_2026-07-13.md`.
+- Próximo passo pequeno: R01, registrar a estratégia de persistência canônica e os testes CR-01 a CR-04 antes de alterar modelos/migrações.
+
 ### 2026-07-12 16:41 — T21 — modelo estruturado `LancamentoOrigem`
 
 - Estado final: CONCLUÍDA.

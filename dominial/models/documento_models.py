@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
+from .identidade_expressions import numero_documento_normalizado_expression
+
 
 class DocumentoTipo(models.Model):
     id = models.AutoField(primary_key=True)
@@ -23,6 +25,12 @@ class Documento(models.Model):
     imovel = models.ForeignKey('Imovel', on_delete=models.CASCADE, related_name='documentos')
     tipo = models.ForeignKey(DocumentoTipo, on_delete=models.PROTECT)
     numero = models.CharField(max_length=50)
+    numero_normalizado = models.GeneratedField(
+        expression=numero_documento_normalizado_expression('numero'),
+        output_field=models.CharField(max_length=50),
+        db_persist=True,
+        editable=False,
+    )
     data = models.DateField()
     cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT)
     livro = models.CharField(max_length=50)
@@ -78,7 +86,12 @@ class Documento(models.Model):
     class Meta:
         verbose_name = "Documento"
         verbose_name_plural = "Documentos"
-        unique_together = ('tipo', 'numero', 'cartorio')
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tipo', 'numero_normalizado', 'cartorio'],
+                name='unique_documento_identidade_canonica',
+            ),
+        ]
         ordering = ['-data']
 
     def __str__(self):
@@ -86,4 +99,4 @@ class Documento(models.Model):
 
     def clean(self):
         # Verificar se o imóvel está sobreposto a uma terra indígena
-        pass 
+        pass

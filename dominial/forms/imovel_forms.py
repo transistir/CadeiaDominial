@@ -1,5 +1,6 @@
 from django import forms
 from ..models import Imovel, Cartorios
+from ..utils.documento_identidade_utils import normalizar_numero_documento
 
 
 class ImovelForm(forms.ModelForm):
@@ -75,8 +76,17 @@ class ImovelForm(forms.ModelForm):
         tipo_documento_principal = cleaned_data.get('tipo_documento_principal')
 
         if matricula and cartorio and tipo_documento_principal:
+            try:
+                matricula_normalizada = normalizar_numero_documento(
+                    matricula,
+                    tipo_documento_principal,
+                )
+            except (TypeError, ValueError) as erro:
+                self.add_error('matricula', str(erro))
+                return cleaned_data
+
             queryset = Imovel.objects.filter(
-                matricula=matricula,
+                matricula_normalizada=matricula_normalizada,
                 cartorio=cartorio,
                 tipo_documento_principal=tipo_documento_principal,
             )
@@ -137,4 +147,4 @@ class ImovelForm(forms.ModelForm):
                         estado=estado_post,
                         cidade=cidade_post
                     ).order_by('nome')
-                    self.fields['cartorio'].queryset = cartorios_cidade 
+                    self.fields['cartorio'].queryset = cartorios_cidade

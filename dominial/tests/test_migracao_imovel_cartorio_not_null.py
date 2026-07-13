@@ -18,8 +18,7 @@ class ImovelCartorioNotNullMigrationTest(TransactionTestCase):
 
     def tearDown(self):
         executor = MigrationExecutor(connection)
-        estado = executor.loader.project_state().apps
-        estado.get_model('dominial', 'Imovel').objects.all().delete()
+        self.apps_antes.get_model('dominial', 'Imovel').objects.all().delete()
         executor.migrate(self.migrate_to)
         super().tearDown()
 

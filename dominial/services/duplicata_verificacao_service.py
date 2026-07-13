@@ -8,6 +8,7 @@ from django.db.models import Q
 from typing import Dict, List, Optional, Any
 from ..models import Documento, DocumentoImportado, Lancamento
 from .documento_identidade_service import DocumentoIdentidadeService
+from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
@@ -113,26 +114,22 @@ class DuplicataVerificacaoService:
             )
 
             for lancamento in lancamentos_do_documento:
-                if lancamento.origem:
-                    # Separar múltiplas origens (separadas por ;)
-                    origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    # Resolver documento de origem pela identidade completa
+                    # (tipo, número normalizado e cartório de cada origem)
+                    documento_anterior = DuplicataVerificacaoService._resolver_documento(
+                        origem.codigo, origem.cartorio_id
+                    )
 
-                    for origem_numero in origens:
-                        # Resolver documento de origem pela identidade completa
-                        # (tipo, número normalizado e cartório do lançamento)
-                        documento_anterior = DuplicataVerificacaoService._resolver_documento(
-                            origem_numero, lancamento.cartorio_origem_id
-                        )
-
-                        if documento_anterior:
-                            # Verificar se já não foi importado
-                            if not DocumentoImportado.objects.filter(
-                                documento=documento_anterior,
-                                imovel_origem=documento_origem.imovel
-                            ).exists():
-                                documentos_importaveis.append(documento_anterior)
-                                # Buscar recursivamente as origens deste documento
-                                buscar_cadeia_recursiva(documento_anterior)
+                    if documento_anterior:
+                        # Verificar se já não foi importado
+                        if not DocumentoImportado.objects.filter(
+                            documento=documento_anterior,
+                            imovel_origem=documento_origem.imovel
+                        ).exists():
+                            documentos_importaveis.append(documento_anterior)
+                            # Buscar recursivamente as origens deste documento
+                            buscar_cadeia_recursiva(documento_anterior)
         
         # Iniciar busca recursiva a partir do documento origem
         buscar_cadeia_recursiva(documento_origem)
@@ -172,19 +169,15 @@ class DuplicataVerificacaoService:
             )
             
             for lancamento in lancamentos_do_documento:
-                if lancamento.origem:
-                    # Separar múltiplas origens
-                    origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    # Resolver documento de origem pela identidade completa
+                    documento_anterior = DuplicataVerificacaoService._resolver_documento(
+                        origem.codigo, origem.cartorio_id
+                    )
 
-                    for origem_numero in origens:
-                        # Resolver documento de origem pela identidade completa
-                        documento_anterior = DuplicataVerificacaoService._resolver_documento(
-                            origem_numero, lancamento.cartorio_origem_id
-                        )
-
-                        if documento_anterior and documento_anterior.id not in documentos_processados:
-                            # Recursivamente adicionar o documento anterior
-                            adicionar_documento_e_origens(documento_anterior)
+                    if documento_anterior and documento_anterior.id not in documentos_processados:
+                        # Recursivamente adicionar o documento anterior
+                        adicionar_documento_e_origens(documento_anterior)
         
         # Iniciar a busca recursiva
         adicionar_documento_e_origens(documento_origem)
@@ -219,4 +212,4 @@ class DuplicataVerificacaoService:
             'tempo_execucao': tempo_execucao,
             'tempo_aceitavel': tempo_execucao < 0.1,  # Menos de 100ms
             'resultado': resultado
-        } 
+        }

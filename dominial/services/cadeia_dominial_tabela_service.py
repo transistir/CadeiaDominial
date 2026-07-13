@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento, DocumentoImportado
 from ..services.hierarquia_service import HierarquiaService
 from ..services.documento_identidade_service import DocumentoIdentidadeService
+from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
@@ -165,10 +166,11 @@ class CadeiaDominialTabelaService:
         origens = set()
         
         for lancamento in lancamentos:
-            if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem:
-                # Extrair apenas origens válidas (documentos reais) do campo origem
-                origens_lancamento = self._extrair_origens_validas(lancamento.origem)
-                origens.update(origens_lancamento)
+            if lancamento.tipo.tipo == 'inicio_matricula':
+                origens.update(
+                    origem.codigo
+                    for origem in LancamentoOrigemLeituraService.obter_origens(lancamento)
+                )
         
         # Ordenar do maior para o menor número
         origens_list = list(origens)
@@ -270,14 +272,14 @@ class CadeiaDominialTabelaService:
             origens_disponiveis = []
             
             for lancamento in lancamentos:
-                if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem:
-                    # Para determinar múltiplas origens, contar todas as partes (incluindo fim de cadeia)
-                    partes_origem = [p.strip() for p in lancamento.origem.split(';') if p.strip()]
-                    if len(partes_origem) > 1:
+                if lancamento.tipo.tipo == 'inicio_matricula':
+                    origens_lancamento = LancamentoOrigemLeituraService.obter_origens(
+                        lancamento
+                    )
+                    if len(origens_lancamento) > 1:
                         tem_multiplas_origens = True
-                        # Para os botões, usar apenas origens válidas (documentos reais)
-                        origens_disponiveis = CadeiaDominialTabelaService.extrair_origens_disponiveis(
-                            lancamento.origem, imovel, cartorio_origem=lancamento.cartorio_origem
+                        origens_disponiveis = self._origens_disponiveis_lancamento(
+                            lancamento
                         )
                         break
             
@@ -310,6 +312,25 @@ class CadeiaDominialTabelaService:
             })
         
         return cadeia_completa
+
+    @staticmethod
+    def _origens_disponiveis_lancamento(lancamento):
+        origens = []
+        for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+            documento = CadeiaDominialTabelaService._resolver_documento_por_codigo(
+                origem.codigo, origem.cartorio
+            )
+            if documento:
+                origens.append({
+                    'numero': origem.codigo,
+                    'documento': documento,
+                    'escolhida': False,
+                })
+        return sorted(
+            origens,
+            key=lambda item: item['numero'],
+            reverse=True,
+        )
     
     @staticmethod
     def extrair_origens_disponiveis(origem_texto, imovel, cartorio_origem=None):
@@ -372,21 +393,17 @@ class CadeiaDominialTabelaService:
                 documentos_processados.add(documento.id)
 
             # Verificar se este documento tem lançamentos com origens importadas
-            lancamentos = documento.lancamentos.filter(
-                origem__isnull=False
-            ).exclude(origem='')
+            lancamentos = documento.lancamentos.all()
 
             # Lista temporária para documentos importados deste documento
             docs_importados_temp = []
 
             for lancamento in lancamentos:
-                origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-
-                for origem_numero in origens:
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
                     # Resolver o documento importado pela identidade completa
                     # (tipo, número normalizado e cartório do lançamento)
                     doc_importado = self._resolver_documento_por_codigo(
-                        origem_numero, lancamento.cartorio_origem
+                        origem.codigo, origem.cartorio
                     )
 
                     if doc_importado and doc_importado.id not in documentos_processados:
@@ -435,15 +452,14 @@ class CadeiaDominialTabelaService:
         Resolve a origem escolhida explicitamente (sessão do usuário), usando o
         cartório do lançamento de `documento` que efetivamente referencia esse código.
         """
-        lancamentos = documento.lancamentos.filter(
-            origem__isnull=False
-        ).exclude(origem='')
+        lancamentos = documento.lancamentos.all()
 
         for lancamento in lancamentos:
-            origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-            if codigo_escolhido in origens:
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                if codigo_escolhido != origem.codigo:
+                    continue
                 doc_origem = self._resolver_documento_por_codigo(
-                    codigo_escolhido, lancamento.cartorio_origem
+                    origem.codigo, origem.cartorio
                 )
                 if doc_origem:
                     return doc_origem
@@ -454,19 +470,15 @@ class CadeiaDominialTabelaService:
         Obtém o documento de origem de nível mais alto (maior número) de um documento
         """
         # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.filter(
-            origem__isnull=False
-        ).exclude(origem='')
+        lancamentos = documento.lancamentos.all()
 
         origens_encontradas = []
 
         for lancamento in lancamentos:
-            origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-
-            for origem_numero in origens:
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
                 # Resolver documento de origem pela identidade completa
                 doc_origem = self._resolver_documento_por_codigo(
-                    origem_numero, lancamento.cartorio_origem
+                    origem.codigo, origem.cartorio
                 )
 
                 if doc_origem:
@@ -496,18 +508,15 @@ class CadeiaDominialTabelaService:
         cadeia_expandida = []
 
         # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.filter(
-            origem__isnull=False
-        ).exclude(origem='')
+        lancamentos = documento.lancamentos.all()
 
         # Coletar todas as origens possíveis, associadas ao lançamento que as
         # informou (cada uma tem seu próprio cartório de origem)
-        origem_para_lancamento = {}
+        origem_para_contexto = {}
         for lancamento in lancamentos:
-            origens_lanc = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-            for origem in origens_lanc:
-                origem_para_lancamento.setdefault(origem, lancamento)
-        origens = list(origem_para_lancamento.keys())
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                origem_para_contexto.setdefault(origem.codigo, origem)
+        origens = list(origem_para_contexto.keys())
 
         # Função de ordenação: matrículas maiores primeiro, depois transcrições maiores
         def origem_sort_key(origem):
@@ -560,8 +569,8 @@ class CadeiaDominialTabelaService:
 
         # Só expandir a subcadeia da origem escolhida
         if origem_escolhida:
-            lancamento_origem = origem_para_lancamento.get(origem_escolhida)
-            cartorio_origem = lancamento_origem.cartorio_origem if lancamento_origem else None
+            contexto_origem = origem_para_contexto.get(origem_escolhida)
+            cartorio_origem = contexto_origem.cartorio if contexto_origem else None
             doc_origem = self._resolver_documento_por_codigo(origem_escolhida, cartorio_origem)
             if doc_origem and doc_origem.id not in documentos_processados:
                 cadeia_expandida.append(doc_origem)
@@ -580,24 +589,18 @@ class CadeiaDominialTabelaService:
         
         # Para cada documento atual, verificar suas origens
         for documento in documentos_atuais:
-            lancamentos = documento.lancamentos.filter(
-                origem__isnull=False
-            ).exclude(origem='')
+            lancamentos = documento.lancamentos.all()
             
             for lancamento in lancamentos:
-                if lancamento.origem:
-                    # Extrair todas as origens (separadas por ';')
-                    origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                    
-                    for origem_numero in origens:
-                        # Resolver documento de origem pela identidade completa
-                        doc_origem = self._resolver_documento_por_codigo(
-                            origem_numero, lancamento.cartorio_origem
-                        )
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    # Resolver documento de origem pela identidade completa
+                    doc_origem = self._resolver_documento_por_codigo(
+                        origem.codigo, origem.cartorio
+                    )
 
-                        if doc_origem and doc_origem.id not in documentos_incluidos:
-                            documentos_para_adicionar.append(doc_origem)
-                            documentos_incluidos.add(doc_origem.id)
+                    if doc_origem and doc_origem.id not in documentos_incluidos:
+                        documentos_para_adicionar.append(doc_origem)
+                        documentos_incluidos.add(doc_origem.id)
         
         # Adicionar documentos encontrados
         if documentos_para_adicionar:

@@ -19,6 +19,7 @@ class ResultadoResolucaoDocumento:
     identidade: DocumentoIdentidade
     documento: Documento | None = None
     candidatos: tuple[Documento, ...] = ()
+    candidatos_invalidos: tuple[Documento, ...] = ()
 
     def __post_init__(self):
         if self.status == 'encontrado' and self.documento is None:
@@ -37,37 +38,50 @@ class DocumentoIdentidadeService:
         if not isinstance(identidade, DocumentoIdentidade):
             raise TypeError('A resolução exige um DocumentoIdentidade completo.')
 
-        # O filtro estrutural sempre restringe tipo e cartório. A comparação do
-        # número acontece em Python temporariamente para aceitar dados legados
-        # armazenados como "M123" e dados canônicos armazenados como "123".
-        documentos_estruturalmente_compativeis = Documento.objects.filter(
+        candidatos_banco = tuple(Documento.objects.filter(
             tipo__tipo=identidade.tipo,
             cartorio_id=identidade.cartorio_id,
-        ).select_related('tipo', 'cartorio', 'imovel').order_by('pk')
+            numero_normalizado=identidade.numero_normalizado,
+        ).select_related('tipo', 'cartorio', 'imovel').order_by('pk'))
 
-        candidatos = tuple(
-            documento
-            for documento in documentos_estruturalmente_compativeis
-            if normalizar_numero_documento(documento.numero, identidade.tipo)
-            == identidade.numero_normalizado
-        )
+        candidatos = []
+        candidatos_invalidos = []
+        for candidato in candidatos_banco:
+            try:
+                numero_validado = normalizar_numero_documento(
+                    candidato.numero,
+                    candidato.tipo.tipo,
+                )
+            except (TypeError, ValueError):
+                candidatos_invalidos.append(candidato)
+                continue
+            if numero_validado != identidade.numero_normalizado:
+                candidatos_invalidos.append(candidato)
+                continue
+            candidatos.append(candidato)
+
+        candidatos = tuple(candidatos)
+        candidatos_invalidos = tuple(candidatos_invalidos)
 
         if not candidatos:
             return ResultadoResolucaoDocumento(
                 status='nao_encontrado',
                 identidade=identidade,
+                candidatos_invalidos=candidatos_invalidos,
             )
         if len(candidatos) > 1:
             return ResultadoResolucaoDocumento(
                 status='ambiguo',
                 identidade=identidade,
                 candidatos=candidatos,
+                candidatos_invalidos=candidatos_invalidos,
             )
         return ResultadoResolucaoDocumento(
             status='encontrado',
             identidade=identidade,
             documento=candidatos[0],
             candidatos=candidatos,
+            candidatos_invalidos=candidatos_invalidos,
         )
 
     @staticmethod

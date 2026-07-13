@@ -20,6 +20,8 @@ O número sozinho nunca pode criar vínculos, escolher documentos, importar cade
 - [PLANO_TESTES.md](PLANO_TESTES.md): estratégia, comandos, níveis e portões de qualidade.
 - [MATRIZ_TESTES.md](MATRIZ_TESTES.md): casos obrigatórios e registro da execução.
 - [DIARIO.md](DIARIO.md): decisões, bloqueios e histórico cronológico.
+- [REVISAO_GERAL_2026-07-13.md](REVISAO_GERAL_2026-07-13.md): revisão do commit reconstruído, achados e critérios para retomada.
+- [DECISAO_PERSISTENCIA_CANONICA.md](DECISAO_PERSISTENCIA_CANONICA.md): decisão arquitetural da R01 para a proteção canônica no banco.
 
 ## Fluxo de trabalho
 
@@ -31,6 +33,11 @@ O número sozinho nunca pode criar vínculos, escolher documentos, importar cade
 6. Registre comandos e resultados reais; não marque teste não executado como aprovado.
 7. Marque a tarefa `EM REVISÃO` e preencha suas evidências.
 8. Só use `CONCLUÍDA` após todos os critérios de aceite e testes obrigatórios passarem.
+
+Enquanto houver item `RXX` pendente, ele tem prioridade sobre a próxima tarefa
+funcional. As tarefas corretivas existem para reabrir critérios que uma revisão
+posterior demonstrou ainda não estarem atendidos, sem apagar o histórico da
+implementação original.
 
 ## Estados permitidos
 
@@ -50,6 +57,22 @@ O número sozinho nunca pode criar vínculos, escolher documentos, importar cade
 - Pesquisa textual pode usar apenas o número; relacionamento de negócio não pode.
 - Alteração de cartório deve ser operação administrativa explícita, nunca efeito colateral de “Início de Matrícula”.
 - Cada tarefa deve ser pequena e resultar em uma alteração revisável separadamente.
+
+## Interrupção segura para tarefa urgente
+
+Antes de trocar de assunto, branch ou ferramenta de IA:
+
+1. Atualize `CHECKPOINT_ATUAL.md`, `TAREFAS.md` e `DIARIO.md`.
+2. Execute ao menos os testes focados e `git diff --check`.
+3. Adicione somente arquivos conhecidos; nunca use `git add -A` neste repositório.
+4. Crie um commit de checkpoint na branch da funcionalidade.
+5. Confirme o commit com `git log -1 --oneline` e o escopo restante com `git status --short`.
+6. Só então crie outra branch para a urgência, a partir do commit salvo.
+
+Para retomar, volte à branch registrada no checkpoint e leia primeiro
+`CHECKPOINT_ATUAL.md`. Dumps SQL, bancos locais, caches, dependências e outros
+arquivos não rastreados não fazem parte deste desenvolvimento e não devem ser
+incluídos por engano.
 
 ## Definição global de pronto
 

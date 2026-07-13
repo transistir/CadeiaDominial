@@ -46,6 +46,18 @@ Uma tarefa só pode ir para `EM REVISÃO` quando:
 - **Origens:** o modelo estruturado, a escrita dupla e o fallback são testados.
 - **Entrega:** suíte completa, auditoria estática e teste manual de fumaça passam.
 
+### Após a revisão de 2026-07-13
+
+Antes de T22 foram executados CR-01 a CR-09. Um teste antigo verde não fecha uma
+correção se ele não reproduzir o cenário exato da revisão. Em especial:
+
+- testar formatos equivalentes do mesmo número em gravações feitas depois das migrações;
+- testar dois homônimos presentes simultaneamente na mesma árvore;
+- testar homônimo local e homônimo importado no mesmo cálculo de tronco;
+- verificar IDs das arestas e níveis, não apenas presença/ausência de documentos;
+- verificar livro e folha no caminho de múltiplas origens;
+- testar o caminho real de escrita de `LancamentoOrigem`, não apenas `full_clean()` chamado manualmente.
+
 ## Comandos
 
 O projeto usa Django. Em um ambiente com dependências instaladas, prefira testes focados antes da suíte completa:
@@ -53,6 +65,11 @@ O projeto usa Django. Em um ambiente com dependências instaladas, prefira teste
 ```bash
 python manage.py test dominial.tests.test_identidade_documento
 python manage.py test dominial.tests.test_duplicata_verificacao
+python manage.py test dominial.tests.test_migracao_identidade_documento
+python manage.py test dominial.tests.test_migracao_identidade_imovel
+python manage.py test dominial.tests.test_migracao_imovel_cartorio_not_null
+python manage.py test dominial.tests.test_migrar_origens_estruturadas_command
+python manage.py test dominial.tests.test_lancamento_origem_leitura_service
 python manage.py test dominial.tests
 python manage.py check
 python manage.py makemigrations --check --dry-run
@@ -88,6 +105,15 @@ Cada ocorrência deve ser classificada como:
 - `RELACIONAMENTO`: deve usar identidade completa;
 - `PESQUISA TEXTUAL`: pode usar número, mas não pode criar vínculo;
 - `FALSO POSITIVO`: justificar no relatório.
+
+Também auditar estruturas internas que não consultam o ORM, mas ainda usam o
+número como identidade:
+
+```bash
+rg -n "'from'.*numero|'to'.*numero|niveis.*numero|visitados.*numero|doc\.numero ==" dominial --glob '*.py'
+```
+
+O portão R07 exige `git diff --check` sem saída.
 
 ## Teste manual de fumaça em homologação
 

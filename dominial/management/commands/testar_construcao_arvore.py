@@ -76,7 +76,10 @@ class Command(BaseCommand):
         for tipo, conexoes in conexoes_por_tipo.items():
             self.stdout.write(f"\n   Tipo: {tipo} ({len(conexoes)} conexões)")
             for con in conexoes:
-                self.stdout.write(f"      {con['from']} → {con['to']}")
+                self.stdout.write(
+                    f"      {con['from_numero']} (ID {con['from']}) → "
+                    f"{con['to_numero']} (ID {con['to']})"
+                )
         
         # Verificar conexões problemáticas específicas
         self.stdout.write(f"\n⚠️ VERIFICANDO CONEXÕES PROBLEMÁTICAS")
@@ -86,20 +89,23 @@ class Command(BaseCommand):
         matriculas_problematicas = ['M9712', 'M9716', 'M19905']
         
         for matricula in matriculas_problematicas:
-            conexoes_from = [c for c in arvore['conexoes'] if c['from'] == matricula]
-            conexoes_to = [c for c in arvore['conexoes'] if c['to'] == matricula]
+            conexoes_from = [c for c in arvore['conexoes'] if c['from_numero'] == matricula]
+            conexoes_to = [c for c in arvore['conexoes'] if c['to_numero'] == matricula]
             
             self.stdout.write(f"\n   Matrícula {matricula}:")
             self.stdout.write(f"      Conexões de saída (origem): {len(conexoes_from)}")
             for con in conexoes_from:
-                self.stdout.write(f"         {con['from']} → {con['to']} ({con['tipo']})")
+                self.stdout.write(f"         {con['from_numero']} → {con['to_numero']} ({con['tipo']})")
             
             self.stdout.write(f"      Conexões de entrada (destino): {len(conexoes_to)}")
             for con in conexoes_to:
-                self.stdout.write(f"         {con['from']} → {con['to']} ({con['tipo']})")
+                self.stdout.write(f"         {con['from_numero']} → {con['to_numero']} ({con['tipo']})")
         
         # Verificar se há conexão incorreta M9712 → M19905
-        conexao_incorreta = [c for c in arvore['conexoes'] if c['from'] == 'M9712' and c['to'] == 'M19905']
+        conexao_incorreta = [
+            c for c in arvore['conexoes']
+            if c['from_numero'] == 'M9712' and c['to_numero'] == 'M19905'
+        ]
         if conexao_incorreta:
             self.stdout.write(f"\n❌ PROBLEMA ENCONTRADO!")
             self.stdout.write(f"   Conexão incorreta: M9712 → M19905")
@@ -119,8 +125,8 @@ class Command(BaseCommand):
         # Estrutura encontrada
         self.stdout.write(f"   Estrutura encontrada:")
         for con in arvore['conexoes']:
-            if con['from'] in matriculas_problematicas or con['to'] in matriculas_problematicas:
-                self.stdout.write(f"      {con['from']} → {con['to']} ({con['tipo']})")
+            if con['from_numero'] in matriculas_problematicas or con['to_numero'] in matriculas_problematicas:
+                self.stdout.write(f"      {con['from_numero']} → {con['to_numero']} ({con['tipo']})")
         
         if debug:
             self.stdout.write(f"\n🔍 DADOS COMPLETOS DA ÁRVORE (DEBUG)")

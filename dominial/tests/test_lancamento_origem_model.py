@@ -1,4 +1,6 @@
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -13,8 +15,6 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
-
-
 class LancamentoOrigemModelTest(TestCase):
     def setUp(self):
         self.tis = TIs.objects.create(
@@ -61,7 +61,7 @@ class LancamentoOrigemModelTest(TestCase):
             tipo=self.tipo_lancamento,
             data=timezone.now().date(),
             cartorio_origem=self.cartorio_a,
-            origem='M123; T456',
+            origem=None,
         )
 
     def test_cria_origens_estruturadas_com_cartorios_distintos(self):
@@ -76,6 +76,7 @@ class LancamentoOrigemModelTest(TestCase):
         )
         origem_a.full_clean()
         origem_a.save()
+        origem_a.refresh_from_db()
 
         origem_b = LancamentoOrigem(
             lancamento=self.lancamento,
@@ -86,15 +87,18 @@ class LancamentoOrigemModelTest(TestCase):
         )
         origem_b.full_clean()
         origem_b.save()
+        origem_b.refresh_from_db()
 
         self.assertEqual(self.lancamento.origens_estruturadas.count(), 2)
-        self.assertEqual(origem_a.numero, '123')
+        self.assertEqual(origem_a.numero, 'M123')
+        self.assertEqual(origem_a.numero_normalizado, '123')
         self.assertEqual(origem_a.livro, '10')
         self.assertEqual(origem_a.folha, '20')
-        self.assertEqual(origem_b.numero, '456')
+        self.assertEqual(origem_b.numero, 'T456')
+        self.assertEqual(origem_b.numero_normalizado, '456')
         self.assertEqual(origem_b.cartorio, self.cartorio_b)
-        self.assertIn('Matrícula 123', str(origem_a))
-        self.assertIn('Transcrição 456', str(origem_b))
+        self.assertIn('Matrícula M123', str(origem_a))
+        self.assertIn('Transcrição T456', str(origem_b))
 
     def test_normaliza_numero_da_origem_ao_validar(self):
         origem = LancamentoOrigem(
@@ -106,8 +110,11 @@ class LancamentoOrigemModelTest(TestCase):
         )
 
         origem.full_clean()
+        origem.save()
+        origem.refresh_from_db()
 
-        self.assertEqual(origem.numero, '00123')
+        self.assertEqual(origem.numero, 'M 00123 ')
+        self.assertEqual(origem.numero_normalizado, '00123')
         self.assertEqual(origem.tipo_documento, 'matricula')
 
     def test_rejeita_prefixo_incompativel_com_tipo(self):
@@ -141,3 +148,133 @@ class LancamentoOrigemModelTest(TestCase):
 
         with self.assertRaises(ValidationError):
             duplicada.full_clean()
+
+    def test_cr09_gravacao_direta_preserva_legado_e_recusa_equivalente(self):
+        origem = LancamentoOrigem.objects.create(
+            lancamento=self.lancamento,
+            indice_origem=0,
+            tipo_documento='matricula',
+            numero=' M 00123 ',
+            cartorio=self.cartorio_a,
+        )
+        origem.refresh_from_db()
+
+        self.assertEqual(origem.numero, ' M 00123 ')
+        self.assertEqual(origem.numero_normalizado, '00123')
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LancamentoOrigem.objects.create(
+                lancamento=self.lancamento,
+                indice_origem=1,
+                tipo_documento='matricula',
+                numero='00123',
+                cartorio=self.cartorio_a,
+            )
+
+    def test_t22_fluxo_funcional_grava_origens_sem_alterar_texto_legado(self):
+        cache_key = f'mapeamento_origens_lancamento_{self.lancamento.pk}'
+        cache.set(
+            cache_key,
+            [
+                {
+                    'origem': 'M123',
+                    'cartorio_id': self.cartorio_a.pk,
+                    'cartorio_nome': self.cartorio_a.nome,
+                    'livro': ' 10 ',
+                    'folha': ' 20 ',
+                },
+                {
+                    'origem': 'T456',
+                    'cartorio_id': self.cartorio_b.pk,
+                    'cartorio_nome': self.cartorio_b.nome,
+                    'livro': '30',
+                    'folha': '40',
+                },
+            ],
+            timeout=3600,
+        )
+        self.addCleanup(cache.delete, cache_key)
+
+        self.lancamento.origem = 'M123; T456'
+        self.lancamento.save(update_fields=['origem'])
+
+        self.lancamento.refresh_from_db()
+        self.assertEqual(self.lancamento.origem, 'M123; T456')
+        self.assertEqual(
+            list(
+                self.lancamento.origens_estruturadas.values_list(
+                    'indice_origem',
+                    'tipo_documento',
+                    'numero',
+                    'numero_normalizado',
+                    'cartorio_id',
+                    'livro',
+                    'folha',
+                )
+            ),
+            [
+                (0, 'matricula', 'M123', '123', self.cartorio_a.pk, '10', '20'),
+                (1, 'transcricao', 'T456', '456', self.cartorio_b.pk, '30', '40'),
+            ],
+        )
+
+    def test_t22_reprocessamento_reconcilia_sem_duplicar(self):
+        cache_key = f'mapeamento_origens_lancamento_{self.lancamento.pk}'
+        self.addCleanup(cache.delete, cache_key)
+
+        def definir_mapeamento(origens):
+            cache.set(
+                cache_key,
+                [
+                    {
+                        'origem': numero,
+                        'cartorio_id': cartorio.pk,
+                        'cartorio_nome': cartorio.nome,
+                        'livro': livro,
+                        'folha': folha,
+                    }
+                    for numero, cartorio, livro, folha in origens
+                ],
+                timeout=3600,
+            )
+
+        definir_mapeamento([
+            ('M123', self.cartorio_a, '10', '20'),
+            ('T456', self.cartorio_b, '30', '40'),
+        ])
+        self.lancamento.origem = 'M123; T456'
+        self.lancamento.save(update_fields=['origem'])
+        ids_por_numero = dict(
+            self.lancamento.origens_estruturadas.values_list('numero', 'id')
+        )
+
+        definir_mapeamento([
+            ('T456', self.cartorio_b, '31', '41'),
+            ('M123', self.cartorio_a, '11', '21'),
+        ])
+        self.lancamento.origem = 'T456; M123'
+        self.lancamento.save(update_fields=['origem'])
+
+        origens = list(self.lancamento.origens_estruturadas.all())
+        self.assertEqual(len(origens), 2)
+        self.assertEqual([origem.numero for origem in origens], ['T456', 'M123'])
+        self.assertEqual(
+            {origem.numero: origem.id for origem in origens},
+            ids_por_numero,
+        )
+        self.assertEqual(
+            {(origem.numero, origem.livro, origem.folha) for origem in origens},
+            {('T456', '31', '41'), ('M123', '11', '21')},
+        )
+
+        definir_mapeamento([('M123', self.cartorio_a, '12', '22')])
+        self.lancamento.origem = 'M123'
+        self.lancamento.save(update_fields=['origem'])
+        self.assertEqual(self.lancamento.origens_estruturadas.count(), 1)
+        origem_restante = self.lancamento.origens_estruturadas.get()
+        self.assertEqual(origem_restante.id, ids_por_numero['M123'])
+        self.assertEqual((origem_restante.livro, origem_restante.folha), ('12', '22'))
+
+        self.lancamento.origem = ''
+        self.lancamento.save(update_fields=['origem'])
+        self.assertFalse(self.lancamento.origens_estruturadas.exists())

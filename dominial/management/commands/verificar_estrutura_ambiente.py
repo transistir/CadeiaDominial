@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 
-from dominial.models import Documento, Imovel
+from dominial.models import Documento, Imovel, LancamentoOrigem
 
 
 class Command(BaseCommand):
@@ -15,11 +15,24 @@ class Command(BaseCommand):
     EXPECTATIVAS_FINAIS = {
         'documento_identidade': {
             'tabela': Documento._meta.db_table,
-            'colunas': {'tipo_id', 'numero', 'cartorio_id'},
+            'colunas': {'tipo_id', 'numero_normalizado', 'cartorio_id'},
         },
         'imovel_identidade': {
             'tabela': Imovel._meta.db_table,
-            'colunas': {'tipo_documento_principal', 'matricula', 'cartorio_id'},
+            'colunas': {
+                'tipo_documento_principal',
+                'matricula_normalizada',
+                'cartorio_id',
+            },
+        },
+        'lancamento_origem_identidade': {
+            'tabela': LancamentoOrigem._meta.db_table,
+            'colunas': {
+                'lancamento_id',
+                'tipo_documento',
+                'numero_normalizado',
+                'cartorio_id',
+            },
         },
     }
 
@@ -29,7 +42,10 @@ class Command(BaseCommand):
         parser.add_argument(
             '--expect-final',
             action='store_true',
-            help='Exige as constraints finais planejadas para Documento e Imovel.',
+            help=(
+                'Exige as constraints finais planejadas para Documento, '
+                'Imovel e LancamentoOrigem.'
+            ),
         )
         parser.add_argument(
             '--fail-on-problem',
@@ -59,7 +75,7 @@ class Command(BaseCommand):
         )
 
         constraints = {}
-        for model in (Documento, Imovel):
+        for model in (Documento, Imovel, LancamentoOrigem):
             tabela = model._meta.db_table
             with conexao.cursor() as cursor:
                 constraints[tabela] = conexao.introspection.get_constraints(

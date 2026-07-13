@@ -10,6 +10,7 @@ from django.test.utils import CaptureQueriesContext
 
 from io import StringIO
 import json
+from unittest.mock import patch
 
 from dominial.forms import ImovelForm
 from dominial.models import (
@@ -200,6 +201,77 @@ class IdentidadeDocumentoModelTest(IdentidadeDocumentoFixture):
 
         self.criar_documento(imovel_t, self.tipo_transcricao, "123", self.cartorio_a)
 
+    def test_cr01_constraint_recusa_variantes_canonicas_do_documento(self):
+        imovel_a = self.criar_imovel("9001", self.cartorio_a, nome="Imóvel A")
+        imovel_b = self.criar_imovel("9002", self.cartorio_a, nome="Imóvel B")
+        documento = self.criar_documento(
+            imovel_a,
+            self.tipo_matricula,
+            " M 123 ",
+            self.cartorio_a,
+        )
+
+        documento.refresh_from_db()
+        self.assertEqual(documento.numero, " M 123 ")
+        self.assertEqual(documento.numero_normalizado, "123")
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.criar_documento(
+                imovel_b,
+                self.tipo_matricula,
+                "123",
+                self.cartorio_a,
+            )
+
+    def test_cr03_zeros_a_esquerda_permanecem_identidade_distinta(self):
+        imovel_a = self.criar_imovel("9001", self.cartorio_a, nome="Imóvel A")
+        imovel_b = self.criar_imovel("9002", self.cartorio_a, nome="Imóvel B")
+
+        documento_zeros = self.criar_documento(
+            imovel_a,
+            self.tipo_matricula,
+            "M00123",
+            self.cartorio_a,
+        )
+        documento_sem_zeros = self.criar_documento(
+            imovel_b,
+            self.tipo_matricula,
+            "123",
+            self.cartorio_a,
+        )
+
+        documento_zeros.refresh_from_db()
+        documento_sem_zeros.refresh_from_db()
+        self.assertEqual(documento_zeros.numero_normalizado, "00123")
+        self.assertEqual(documento_sem_zeros.numero_normalizado, "123")
+
+    def test_campo_gerado_equivale_ao_normalizador_python(self):
+        casos = (
+            (self.tipo_matricula, "m123"),
+            (self.tipo_transcricao, " T 00123 "),
+            (self.tipo_matricula, " 12.345 A "),
+        )
+
+        for indice, (tipo, numero) in enumerate(casos, start=1):
+            with self.subTest(tipo=tipo.tipo, numero=numero):
+                imovel = self.criar_imovel(
+                    f"EQ-{indice}",
+                    self.cartorio_a,
+                    nome=f"Imóvel equivalência {indice}",
+                )
+                documento = self.criar_documento(
+                    imovel,
+                    tipo,
+                    numero,
+                    self.cartorio_a,
+                )
+                documento.refresh_from_db()
+
+                self.assertEqual(
+                    documento.numero_normalizado,
+                    normalizar_numero_documento(numero, tipo.tipo),
+                )
+
 
 class IdentidadeImovelFormTest(IdentidadeDocumentoFixture):
     def dados_formulario(self, cartorio, tipo="matricula"):
@@ -264,6 +336,29 @@ class IdentidadeImovelFormTest(IdentidadeDocumentoFixture):
 
         self.assertEqual(Imovel.objects.count(), total_antes)
 
+    def test_cr02_formulario_e_banco_recusam_matricula_equivalente(self):
+        existente = self.criar_imovel(
+            "123",
+            self.cartorio_a,
+            nome="Imóvel existente",
+        )
+        existente.refresh_from_db()
+        self.assertEqual(existente.matricula_normalizada, "123")
+
+        dados = self.dados_formulario(self.cartorio_a)
+        dados["matricula"] = " M 123 "
+        form = ImovelForm(data=dados)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("matricula", form.errors)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.criar_imovel(
+                "M123",
+                self.cartorio_a,
+                nome="Duplicado canônico",
+            )
+
     def test_constraint_atual_recusa_documento_duplicado_no_mesmo_cartorio(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
         imovel_b = self.criar_imovel("456", self.cartorio_a, nome="Imóvel B")
@@ -274,19 +369,12 @@ class IdentidadeImovelFormTest(IdentidadeDocumentoFixture):
 
 
 class AuditoriaIdentidadeDocumentosCommandTest(IdentidadeDocumentoFixture):
-    def test_comando_detecta_conflito_canonico_sem_escrever(self):
-        imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
-        imovel_b = self.criar_imovel("456", self.cartorio_a, nome="Imóvel B")
-        documento_a = self.criar_documento(
-            imovel_a,
+    def test_comando_confirma_ausencia_de_conflito_sem_escrever(self):
+        imovel = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
+        self.criar_documento(
+            imovel,
             self.tipo_matricula,
             "M123",
-            self.cartorio_a,
-        )
-        documento_b = self.criar_documento(
-            imovel_b,
-            self.tipo_matricula,
-            "123",
             self.cartorio_a,
         )
         saida = StringIO()
@@ -300,12 +388,8 @@ class AuditoriaIdentidadeDocumentosCommandTest(IdentidadeDocumentoFixture):
 
         relatorio = json.loads(saida.getvalue())
         self.assertTrue(relatorio["somente_leitura"])
-        self.assertEqual(relatorio["total_grupos_conflitantes"], 1)
-        self.assertEqual(relatorio["total_documentos_conflitantes"], 2)
-        self.assertEqual(
-            {item["id"] for item in relatorio["conflitos"][0]["documentos"]},
-            {documento_a.pk, documento_b.pk},
-        )
+        self.assertEqual(relatorio["total_grupos_conflitantes"], 0)
+        self.assertEqual(relatorio["total_documentos_conflitantes"], 0)
         comandos_escrita = ("INSERT", "UPDATE", "DELETE", "ALTER", "DROP")
         self.assertFalse(any(
             consulta["sql"].lstrip().upper().startswith(comandos_escrita)
@@ -328,19 +412,12 @@ class AuditoriaIdentidadeDocumentosCommandTest(IdentidadeDocumentoFixture):
         self.assertEqual(relatorio["total_invalidos"], 1)
         self.assertIn("incompatível", relatorio["invalidos"][0]["erro"])
 
-    def test_fail_on_conflict_interrompe_sem_corrigir(self):
-        imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
-        imovel_b = self.criar_imovel("456", self.cartorio_a, nome="Imóvel B")
-        documento_a = self.criar_documento(
-            imovel_a,
+    def test_fail_on_conflict_interrompe_diante_de_invalido_sem_corrigir(self):
+        imovel = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
+        documento = self.criar_documento(
+            imovel,
             self.tipo_matricula,
-            "M123",
-            self.cartorio_a,
-        )
-        documento_b = self.criar_documento(
-            imovel_b,
-            self.tipo_matricula,
-            "123",
+            "T123",
             self.cartorio_a,
         )
 
@@ -351,10 +428,8 @@ class AuditoriaIdentidadeDocumentosCommandTest(IdentidadeDocumentoFixture):
                 stdout=StringIO(),
             )
 
-        documento_a.refresh_from_db()
-        documento_b.refresh_from_db()
-        self.assertEqual(documento_a.numero, "M123")
-        self.assertEqual(documento_b.numero, "123")
+        documento.refresh_from_db()
+        self.assertEqual(documento.numero, "T123")
 
 
 class VerificarEstruturaAmbienteCommandTest(TestCase):
@@ -374,6 +449,7 @@ class VerificarEstruturaAmbienteCommandTest(TestCase):
         self.assertEqual(relatorio["migracoes_pendentes"], [])
         self.assertIn("dominial_documento", relatorio["constraints_unicas"])
         self.assertIn("dominial_imovel", relatorio["constraints_unicas"])
+        self.assertIn("dominial_lancamentoorigem", relatorio["constraints_unicas"])
         comandos_escrita = ("INSERT", "UPDATE", "DELETE", "ALTER", "DROP")
         self.assertFalse(any(
             consulta["sql"].lstrip().upper().startswith(comandos_escrita)
@@ -430,7 +506,7 @@ class DocumentoIdentidadeServiceTest(IdentidadeDocumentoFixture):
         self.assertIsNone(resultado.documento)
         self.assertEqual(resultado.candidatos, ())
 
-    def test_ct15_retorna_ambiguo_sem_escolher_primeiro_documento(self):
+    def test_ct15_constraint_impede_estado_ambiguo_pos_migracao(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
         imovel_b = self.criar_imovel("456", self.cartorio_a, nome="Imóvel B")
         documento_prefixado = self.criar_documento(
@@ -439,12 +515,13 @@ class DocumentoIdentidadeServiceTest(IdentidadeDocumentoFixture):
             "M123",
             self.cartorio_a,
         )
-        documento_canonico = self.criar_documento(
-            imovel_b,
-            self.tipo_matricula,
-            "123",
-            self.cartorio_a,
-        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.criar_documento(
+                imovel_b,
+                self.tipo_matricula,
+                "123",
+                self.cartorio_a,
+            )
 
         resultado = DocumentoIdentidadeService.resolver_por_dados(
             tipo="matricula",
@@ -452,12 +529,9 @@ class DocumentoIdentidadeServiceTest(IdentidadeDocumentoFixture):
             cartorio_id=self.cartorio_a.pk,
         )
 
-        self.assertEqual(resultado.status, "ambiguo")
-        self.assertIsNone(resultado.documento)
-        self.assertEqual(
-            {documento.pk for documento in resultado.candidatos},
-            {documento_prefixado.pk, documento_canonico.pk},
-        )
+        self.assertEqual(resultado.status, "encontrado")
+        self.assertEqual(resultado.documento, documento_prefixado)
+        self.assertEqual(resultado.candidatos, (documento_prefixado,))
 
     def test_resolucao_distingue_tipo_do_documento(self):
         imovel = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
@@ -476,6 +550,61 @@ class DocumentoIdentidadeServiceTest(IdentidadeDocumentoFixture):
 
         self.assertEqual(resultado.status, "nao_encontrado")
         self.assertNotEqual(resultado.documento, documento)
+
+    def test_cr08_candidato_invalido_nao_oculta_candidato_valido(self):
+        imovel = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
+        documento_valido = self.criar_documento(
+            imovel,
+            self.tipo_matricula,
+            "M123",
+            self.cartorio_a,
+        )
+        documento_invalido = Documento(
+            pk=999999,
+            imovel=imovel,
+            tipo=self.tipo_matricula,
+            numero="T123",
+            data=date(2026, 1, 1),
+            cartorio=self.cartorio_a,
+            livro="1",
+            folha="1",
+        )
+
+        with patch.object(Documento.objects, "filter") as filtrar:
+            filtrar.return_value.select_related.return_value.order_by.return_value = (
+                documento_invalido,
+                documento_valido,
+            )
+            resultado = DocumentoIdentidadeService.resolver_por_dados(
+                tipo="matricula",
+                numero="123",
+                cartorio_id=self.cartorio_a.pk,
+            )
+
+        self.assertEqual(resultado.status, "encontrado")
+        self.assertEqual(resultado.documento, documento_valido)
+        self.assertEqual(resultado.candidatos, (documento_valido,))
+        self.assertEqual(resultado.candidatos_invalidos, (documento_invalido,))
+
+    def test_cr08_candidato_invalido_persistido_retorna_resultado_controlado(self):
+        imovel = self.criar_imovel("123", self.cartorio_a, nome="Imóvel inválido")
+        documento_invalido = self.criar_documento(
+            imovel,
+            self.tipo_matricula,
+            "T123",
+            self.cartorio_a,
+        )
+
+        resultado = DocumentoIdentidadeService.resolver_por_dados(
+            tipo="matricula",
+            numero="123",
+            cartorio_id=self.cartorio_a.pk,
+        )
+
+        self.assertEqual(resultado.status, "nao_encontrado")
+        self.assertIsNone(resultado.documento)
+        self.assertEqual(resultado.candidatos, ())
+        self.assertEqual(resultado.candidatos_invalidos, (documento_invalido,))
 
     def test_resolucao_recusa_dados_incompletos(self):
         with self.assertRaises(TypeError):
@@ -520,11 +649,22 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
 
         self.assertEqual(origens, [])
 
-    def test_origem_ambigua_nao_seleciona_primeiro_documento(self):
+    def test_constraint_impede_origem_ambigua_na_tabela(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
         imovel_b = self.criar_imovel("456", self.cartorio_a, nome="Imóvel B")
-        self.criar_documento(imovel_a, self.tipo_matricula, "M123", self.cartorio_a)
-        self.criar_documento(imovel_b, self.tipo_matricula, "123", self.cartorio_a)
+        documento = self.criar_documento(
+            imovel_a,
+            self.tipo_matricula,
+            "M123",
+            self.cartorio_a,
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.criar_documento(
+                imovel_b,
+                self.tipo_matricula,
+                "123",
+                self.cartorio_a,
+            )
 
         origens = CadeiaDominialTabelaService.extrair_origens_disponiveis(
             "M123",
@@ -532,7 +672,8 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
             cartorio_origem=self.cartorio_a,
         )
 
-        self.assertEqual(origens, [])
+        self.assertEqual(len(origens), 1)
+        self.assertEqual(origens[0]["documento"], documento)
 
     def test_origem_respeita_tipo_extraido_do_prefixo(self):
         imovel = self.criar_imovel("123", self.cartorio_a)
@@ -678,6 +819,114 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
 
 
 class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
+    def criar_lancamento_multiplas_origens(self, origem, livro="GERAL", folha="GERAL"):
+        imovel = self.criar_imovel("999", self.cartorio_a, nome="Atual múltiplas")
+        documento_atual = self.criar_documento(
+            imovel,
+            self.tipo_matricula,
+            "M999",
+            self.cartorio_a,
+        )
+        tipo_inicio = LancamentoTipo.objects.create(tipo="inicio_matricula")
+        lancamento = Lancamento(
+            documento=documento_atual,
+            tipo=tipo_inicio,
+            data=date(2026, 1, 2),
+            origem=origem,
+            cartorio_origem=self.cartorio_a,
+            livro_origem=livro,
+            folha_origem=folha,
+        )
+        Lancamento.objects.bulk_create([lancamento])
+        return imovel, lancamento
+
+    def test_cr07_multiplas_origens_preservam_livro_e_folha_individuais(self):
+        from django.core.cache import cache
+
+        imovel, lancamento = self.criar_lancamento_multiplas_origens(
+            "M101; T202",
+        )
+        cache.set(
+            f"mapeamento_origens_lancamento_{lancamento.pk}",
+            [
+                {
+                    "origem": "M101",
+                    "cartorio_id": self.cartorio_a.pk,
+                    "cartorio_nome": self.cartorio_a.nome,
+                    "livro": " 11 ",
+                    "folha": " 111 ",
+                },
+                {
+                    "origem": "T202",
+                    "cartorio_id": self.cartorio_b.pk,
+                    "cartorio_nome": self.cartorio_b.nome,
+                    "livro": "22",
+                    "folha": "222",
+                },
+            ],
+            timeout=3600,
+        )
+
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento,
+            lancamento.origem,
+            imovel,
+        )
+
+        documento_m = Documento.objects.get(
+            tipo=self.tipo_matricula,
+            numero_normalizado="101",
+            cartorio=self.cartorio_a,
+        )
+        documento_t = Documento.objects.get(
+            tipo=self.tipo_transcricao,
+            numero_normalizado="202",
+            cartorio=self.cartorio_b,
+        )
+        self.assertEqual((documento_m.livro, documento_m.folha), ("11", "111"))
+        self.assertEqual((documento_t.livro, documento_t.folha), ("22", "222"))
+
+    def test_multiplas_origens_usam_metadados_gerais_como_fallback(self):
+        from django.core.cache import cache
+
+        imovel, lancamento = self.criar_lancamento_multiplas_origens(
+            "M303; T404",
+            livro=" 77 ",
+            folha=" 88 ",
+        )
+        cache.set(
+            f"mapeamento_origens_lancamento_{lancamento.pk}",
+            [
+                {
+                    "origem": origem,
+                    "cartorio_id": cartorio.pk,
+                    "cartorio_nome": cartorio.nome,
+                    "livro": "",
+                    "folha": None,
+                }
+                for origem, cartorio in (
+                    ("M303", self.cartorio_a),
+                    ("T404", self.cartorio_b),
+                )
+            ],
+            timeout=3600,
+        )
+
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento,
+            lancamento.origem,
+            imovel,
+        )
+
+        documentos = Documento.objects.filter(
+            numero_normalizado__in=("303", "404"),
+        )
+        self.assertEqual(documentos.count(), 2)
+        self.assertEqual(
+            {(documento.livro, documento.folha) for documento in documentos},
+            {("77", "88")},
+        )
+
     def test_ct19_homonimo_em_a_nao_impede_criacao_em_b_nem_muda_cartorio(self):
         imovel = self.criar_imovel("999", self.cartorio_b, nome="Atual")
         documento_atual = self.criar_documento(
@@ -912,6 +1161,49 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
         ])
         return imovel_atual, documento_atual, documento_a, documento_b
 
+    def criar_cenario_cr05(self, criar_origem_b_primeiro):
+        imovel_atual = self.criar_imovel("999", self.cartorio_a, nome="Atual CR05")
+        imovel_b = self.criar_imovel("123", self.cartorio_b, nome="Origem B CR05")
+        documento_atual = self.criar_documento(
+            imovel_atual,
+            self.tipo_matricula,
+            "M999",
+            self.cartorio_a,
+        )
+
+        def criar_documento_a():
+            return self.criar_documento(
+                imovel_atual,
+                self.tipo_matricula,
+                "M123",
+                self.cartorio_a,
+            )
+
+        def criar_documento_b():
+            return self.criar_documento(
+                imovel_b,
+                self.tipo_matricula,
+                "M123",
+                self.cartorio_b,
+            )
+
+        if criar_origem_b_primeiro:
+            documento_b = criar_documento_b()
+            documento_a = criar_documento_a()
+        else:
+            documento_a = criar_documento_a()
+            documento_b = criar_documento_b()
+
+        tipo_inicio = LancamentoTipo.objects.create(tipo="inicio_matricula")
+        Lancamento.objects.create(
+            documento=documento_atual,
+            tipo=tipo_inicio,
+            data=date(2026, 1, 2),
+            origem="M123",
+            cartorio_origem=self.cartorio_b,
+        )
+        return imovel_atual, documento_atual, documento_a, documento_b
+
     def test_ct18_arvore_resolve_pai_no_cartorio_do_lancamento(self):
         imovel, documento_atual, documento_a, documento_b = (
             self.criar_cenario_homonimos()
@@ -925,6 +1217,72 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
 
         self.assertIn(documento_b, pais)
         self.assertNotIn(documento_a, pais)
+
+    def test_cr06_arestas_e_niveis_distinguem_homonimos_por_id(self):
+        imovel_atual = self.criar_imovel("999", self.cartorio_a, nome="Atual CR06")
+        imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Origem A CR06")
+        imovel_b = self.criar_imovel("123", self.cartorio_b, nome="Origem B CR06")
+        documento_atual = self.criar_documento(
+            imovel_atual,
+            self.tipo_matricula,
+            "M999",
+            self.cartorio_a,
+        )
+        documento_a = self.criar_documento(
+            imovel_a,
+            self.tipo_matricula,
+            "M123",
+            self.cartorio_a,
+        )
+        documento_b = self.criar_documento(
+            imovel_b,
+            self.tipo_matricula,
+            "M123",
+            self.cartorio_b,
+        )
+        tipo_inicio = LancamentoTipo.objects.create(tipo="inicio_matricula")
+        Lancamento.objects.bulk_create(
+            [
+                Lancamento(
+                    documento=documento_atual,
+                    tipo=tipo_inicio,
+                    data=date(2026, 1, 2),
+                    origem="M123",
+                    cartorio_origem=self.cartorio_a,
+                ),
+                Lancamento(
+                    documento=documento_atual,
+                    tipo=tipo_inicio,
+                    data=date(2026, 1, 3),
+                    origem="M123",
+                    cartorio_origem=self.cartorio_b,
+                ),
+            ]
+        )
+
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel_atual,
+        )
+
+        self.assertEqual(
+            {(conexao["from"], conexao["to"]) for conexao in arvore["conexoes"]},
+            {
+                (documento_atual.pk, documento_a.pk),
+                (documento_atual.pk, documento_b.pk),
+            },
+        )
+        self.assertTrue(
+            all(
+                isinstance(conexao["from"], int)
+                and isinstance(conexao["to"], int)
+                for conexao in arvore["conexoes"]
+            )
+        )
+        nos = {no["id"]: no for no in arvore["documentos"]}
+        self.assertEqual(nos[documento_a.pk]["nivel"], 1)
+        self.assertEqual(nos[documento_b.pk]["nivel"], 1)
+        self.assertEqual(nos[documento_a.pk]["numero"], "M123")
+        self.assertEqual(nos[documento_b.pk]["numero"], "M123")
 
     def test_ct18_cadeia_completa_resolve_origem_no_cartorio_correto(self):
         _, documento_atual, documento_a, documento_b = (
@@ -956,6 +1314,51 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
         self.assertEqual(tronco[0], documento_atual)
         self.assertIn(documento_b, tronco)
         self.assertNotIn(documento_a, tronco)
+
+    def test_cr05_tronco_segue_cartorio_do_lancamento_com_a_criado_primeiro(self):
+        imovel, documento_atual, documento_a, documento_b = (
+            self.criar_cenario_cr05(criar_origem_b_primeiro=False)
+        )
+
+        tronco = identificar_tronco_principal(imovel)
+
+        self.assertEqual(tronco, [documento_atual, documento_b])
+        self.assertNotIn(documento_a, tronco)
+
+    def test_cr05_escolha_textual_so_considera_origem_contextual(self):
+        imovel, documento_atual, documento_a, documento_b = (
+            self.criar_cenario_cr05(criar_origem_b_primeiro=True)
+        )
+
+        tronco = identificar_tronco_principal(
+            imovel,
+            {str(documento_atual.pk): "M123"},
+        )
+
+        self.assertEqual(tronco, [documento_atual, documento_b])
+        self.assertNotIn(documento_a, tronco)
+
+    def test_escolha_sem_lancamento_nao_busca_documento_por_numero(self):
+        imovel = self.criar_imovel("999", self.cartorio_a, nome="Sem origem")
+        documento_atual = self.criar_documento(
+            imovel,
+            self.tipo_matricula,
+            "M999",
+            self.cartorio_a,
+        )
+        self.criar_documento(
+            imovel,
+            self.tipo_matricula,
+            "M123",
+            self.cartorio_a,
+        )
+
+        tronco = identificar_tronco_principal(
+            imovel,
+            {str(documento_atual.pk): "M123"},
+        )
+
+        self.assertEqual(tronco, [documento_atual])
 
     def test_ct18_cadeia_da_origem_nao_cruza_cartorios(self):
         imovel_atual = self.criar_imovel("999", self.cartorio_a, nome="Atual")

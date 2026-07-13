@@ -78,7 +78,11 @@ class Command(BaseCommand):
                 # Mostrar conexões
                 self.stdout.write(f"\n🔗 CONEXÕES:")
                 for conexao in arvore['conexoes']:
-                    self.stdout.write(f"   - {conexao['from']} -> {conexao['to']} ({conexao['tipo']})")
+                    self.stdout.write(
+                        f"   - {conexao['from_numero']} (ID {conexao['from']}) -> "
+                        f"{conexao['to_numero']} (ID {conexao['to']}) "
+                        f"({conexao['tipo']})"
+                    )
                 
                 # Verificar se há lançamentos com origens
                 self.stdout.write(f"\n📝 LANÇAMENTOS COM ORIGENS:")

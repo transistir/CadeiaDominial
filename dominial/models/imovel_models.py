@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
+from .identidade_expressions import numero_documento_normalizado_expression
+
 
 class Imovel(models.Model):
     """
@@ -21,6 +23,12 @@ class Imovel(models.Model):
     proprietario = models.ForeignKey('Pessoas', on_delete=models.PROTECT) # Verificar 'on_delete'
     # Removido unique=True - a unicidade é garantida pela constraint (matricula, cartorio)
     matricula = models.CharField(max_length=50, help_text="Número da matrícula. Deve ser único por cartório.")
+    matricula_normalizada = models.GeneratedField(
+        expression=numero_documento_normalizado_expression('matricula'),
+        output_field=models.CharField(max_length=50),
+        db_persist=True,
+        editable=False,
+    )
     tipo_documento_principal = models.CharField(
         max_length=20,
         choices=TIPO_DOCUMENTO_CHOICES,
@@ -42,7 +50,7 @@ class Imovel(models.Model):
         # Constraint única: identidade registral completa (tipo + matrícula + cartório)
         constraints = [
             models.UniqueConstraint(
-                fields=['tipo_documento_principal', 'matricula', 'cartorio'],
+                fields=['tipo_documento_principal', 'matricula_normalizada', 'cartorio'],
                 name='unique_imovel_identidade_registral',
             ),
         ]
@@ -127,4 +135,4 @@ class ImportacaoCartorios(models.Model):
         ordering = ['-data_inicio']
 
     def __str__(self):
-        return f"Importação {self.estado} - {self.status}" 
+        return f"Importação {self.estado} - {self.status}"

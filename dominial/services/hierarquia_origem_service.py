@@ -3,11 +3,11 @@ Service especializado para processamento de origens na hierarquia
 """
 
 from ..models import Documento, Lancamento, Cartorios, DocumentoTipo
-from ..utils.hierarquia_utils import processar_origens_para_documentos
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 from .documento_identidade_service import DocumentoIdentidadeService
 from .cache_service import CacheService
 from .cri_service import CRIService
+from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from datetime import date
 
 
@@ -31,29 +31,32 @@ class HierarquiaOrigemService:
         # Otimização: usar select_related para reduzir queries
         lancamentos_com_origem = Lancamento.objects.filter(
             documento__imovel=imovel,
-            origem__isnull=False
-        ).exclude(origem='')\
-         .select_related('documento', 'documento__cartorio', 'documento__tipo')
+        ).select_related('documento', 'documento__cartorio', 'documento__tipo')
         
         for lancamento in lancamentos_com_origem:
-            if lancamento.origem:
-                origens_processadas_info = processar_origens_para_documentos(lancamento.origem, imovel, lancamento)
-                
-                for origem_info in origens_processadas_info:
-                    # Verificar se esta origem já foi processada (a chave inclui
-                    # o cartório, já que a identidade nunca é só tipo+número)
-                    cartorio_da_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
-                    chave_origem = (
-                        f"{origem_info['numero']}_{origem_info['tipo']}_"
-                        f"{cartorio_da_origem.id if cartorio_da_origem else ''}"
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                origem_info = {
+                    'numero': origem.codigo,
+                    'tipo': origem.tipo_documento,
+                }
+                # Verificar se esta origem já foi processada (a chave inclui
+                # o cartório, já que a identidade nunca é só tipo+número)
+                cartorio_da_origem = origem.cartorio
+                chave_origem = (
+                    f"{origem_info['numero']}_{origem_info['tipo']}_"
+                    f"{cartorio_da_origem.id if cartorio_da_origem else ''}"
+                )
+                if chave_origem not in origens_processadas:
+                    origem_identificada = HierarquiaOrigemService._processar_origem_individual(
+                        imovel,
+                        lancamento,
+                        origem_info,
+                        criar_documentos_automaticos,
+                        cartorio_origem=cartorio_da_origem,
                     )
-                    if chave_origem not in origens_processadas:
-                        origem_identificada = HierarquiaOrigemService._processar_origem_individual(
-                            imovel, lancamento, origem_info, criar_documentos_automaticos
-                        )
-                        if origem_identificada:
-                            origens_identificadas.append(origem_identificada)
-                            origens_processadas.add(chave_origem)
+                    if origem_identificada:
+                        origens_identificadas.append(origem_identificada)
+                        origens_processadas.add(chave_origem)
         
         return origens_identificadas
     
@@ -74,14 +77,24 @@ class HierarquiaOrigemService:
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
-    def _processar_origem_individual(imovel, lancamento, origem_info, criar_documentos_automaticos=False):
+    def _processar_origem_individual(
+        imovel,
+        lancamento,
+        origem_info,
+        criar_documentos_automaticos=False,
+        cartorio_origem=None,
+    ):
         """
         Processa uma origem individual
         Implementa a regra dos CRI: verifica se existe documento com CRI da origem
         """
+        cartorio_origem = (
+            cartorio_origem
+            or lancamento.cartorio_origem
+            or lancamento.documento.cartorio
+        )
         # O cartório da origem vem de lancamento.cartorio_origem quando
         # informado; só cai para o cartório do documento atual na ausência dele.
-        cartorio_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
         documento_existente = HierarquiaOrigemService._resolver_documento(
             origem_info['tipo'], origem_info['numero'], cartorio_origem
         )
@@ -90,7 +103,7 @@ class HierarquiaOrigemService:
             if criar_documentos_automaticos:
                 # Criar o documento automaticamente com CRI da origem
                 return HierarquiaOrigemService._criar_documento_automatico(
-                    imovel, lancamento, origem_info
+                    imovel, lancamento, origem_info, cartorio_origem
                 )
             else:
                 # Apenas listar como origem identificada sem criar documento
@@ -104,18 +117,15 @@ class HierarquiaOrigemService:
             )
     
     @staticmethod
-    def _criar_documento_automatico(imovel, lancamento, origem_info):
+    def _criar_documento_automatico(
+        imovel, lancamento, origem_info, cartorio_origem
+    ):
         """
         Cria um documento automaticamente a partir de uma origem
         Implementa a regra dos CRI: documento criado automaticamente herda o CRI da origem
         """
         try:
             tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
-
-            # REGRA DOS CRI: o cartório vem de lancamento.cartorio_origem
-            # quando informado; só cai para o cartório do documento atual na
-            # ausência dele.
-            cartorio_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
 
             # Verificar se já existe um documento com esta identidade completa
             documento_existente = HierarquiaOrigemService._resolver_documento(
@@ -184,4 +194,4 @@ class HierarquiaOrigemService:
             'cor': '#28a745' if origem_info['tipo'] == 'matricula' else '#6f42c1',
             'documento_id': documento_id,
             'ja_criado': ja_criado
-        } 
+        }

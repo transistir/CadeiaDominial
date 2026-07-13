@@ -2,6 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 
 from ..utils.documento_identidade_utils import normalizar_numero_documento
+from .identidade_expressions import numero_documento_normalizado_expression
 
 
 class LancamentoTipo(models.Model):
@@ -153,7 +154,13 @@ class LancamentoOrigem(models.Model):
     )
     numero = models.CharField(
         max_length=50,
-        help_text='Número canônico da origem, sem prefixo de apresentação.',
+        help_text='Número informado para a origem; prefixo de apresentação é preservado.',
+    )
+    numero_normalizado = models.GeneratedField(
+        expression=numero_documento_normalizado_expression('numero'),
+        output_field=models.CharField(max_length=50),
+        db_persist=True,
+        editable=False,
     )
     cartorio = models.ForeignKey(
         'Cartorios',
@@ -177,13 +184,21 @@ class LancamentoOrigem(models.Model):
         unique_together = (('lancamento', 'indice_origem'),)
         constraints = [
             models.UniqueConstraint(
-                fields=['lancamento', 'tipo_documento', 'numero', 'cartorio'],
+                fields=[
+                    'lancamento',
+                    'tipo_documento',
+                    'numero_normalizado',
+                    'cartorio',
+                ],
                 name='unique_lancamento_origem_identidade',
             ),
         ]
         indexes = [
             models.Index(fields=['lancamento', 'indice_origem'], name='dom_lan_origem_idx'),
-            models.Index(fields=['tipo_documento', 'numero', 'cartorio'], name='dom_lan_origem_id_idx'),
+            models.Index(
+                fields=['tipo_documento', 'numero_normalizado', 'cartorio'],
+                name='dom_lan_origem_id_idx',
+            ),
         ]
 
     def __str__(self):
@@ -197,7 +212,7 @@ class LancamentoOrigem(models.Model):
             self.folha = self.folha.strip() or None
         if self.tipo_documento and self.numero:
             try:
-                self.numero = normalizar_numero_documento(self.numero, self.tipo_documento)
+                normalizar_numero_documento(self.numero, self.tipo_documento)
             except (ValueError, TypeError) as erro:
                 raise ValidationError({'numero': str(erro)}) from erro
 
@@ -327,4 +342,4 @@ class FimCadeia(models.Model):
             'sem_origem': '#b02a37',     # Vermelho escuro
             'inconclusa': '#e0a800',     # Amarelo escuro
         }
-        return cores.get(self.classificacao, '#495057') 
+        return cores.get(self.classificacao, '#495057')
