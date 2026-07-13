@@ -178,16 +178,20 @@ class HierarquiaArvoreService:
                         continue
                     
                     documentos_processados.add(origem_numero)
-                    
+
                     # Qualificar a busca por tipo (prefixo M/T) e cartório para
                     # evitar homônimos de outros cartórios (ramos repetidos).
+                    # Priorizar o cartório de origem informado no lançamento
+                    # (início de matrícula em outro cartório); só cair para o
+                    # cartório do documento atual quando não houver um definido.
                     prefixo_tipo = 'matricula' if origem_numero.startswith('M') else 'transcricao'
+                    cartorio_busca = lancamento.cartorio_origem or documento.cartorio
                     doc_pai = Documento.objects.filter(
                         numero=origem_numero,
                         tipo__tipo=prefixo_tipo,
-                        cartorio=documento.cartorio,
+                        cartorio=cartorio_busca,
                     ).first()
-                    
+
                     if doc_pai:
                         # Adicionar como origem direta do documento principal
                         documentos_pais.append(doc_pai)
@@ -198,16 +202,20 @@ class HierarquiaArvoreService:
                         continue
                     
                     documentos_processados.add(origem_numero)
-                    
+
                     # Qualificar a busca por tipo (prefixo M/T) e cartório para
                     # evitar homônimos de outros cartórios (ramos repetidos).
+                    # Priorizar o cartório de origem informado no lançamento
+                    # (início de matrícula em outro cartório); só cair para o
+                    # cartório do documento atual quando não houver um definido.
                     prefixo_tipo = 'matricula' if origem_numero.startswith('M') else 'transcricao'
+                    cartorio_busca = lancamento.cartorio_origem or documento.cartorio
                     doc_pai = Documento.objects.filter(
                         numero=origem_numero,
                         tipo__tipo=prefixo_tipo,
-                        cartorio=documento.cartorio,
+                        cartorio=cartorio_busca,
                     ).first()
-                    
+
                     if doc_pai:
                         documentos_pais.append(doc_pai)
                     elif criar_documentos_automaticos:
