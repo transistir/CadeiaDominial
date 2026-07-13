@@ -8,6 +8,7 @@ from django.test import RequestFactory, SimpleTestCase
 from django.urls import reverse
 from openpyxl import load_workbook
 
+from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.views import cadeia_dominial_views
 
 
@@ -68,6 +69,7 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
                 "total_documentos": 2,
                 "total_lancamentos": 0,
                 "documentos_importados": 1,
+                "total_troncos": 1,
             },
         }
 
@@ -112,6 +114,27 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
         self.assertGreater(len(pdf), 1000)
         self.assertEqual(pdf[:4], b"%PDF")
+
+    def test_estatisticas_informam_total_de_troncos(self):
+        cadeia_completa = [
+            {
+                "tipo": "tronco_principal",
+                "documentos": self.contexto_completo["cadeia_completa"][0][
+                    "documentos"
+                ],
+            },
+            {
+                "tipo": "tronco_secundario",
+                "documentos": [],
+            },
+        ]
+
+        estatisticas = CadeiaCompletaService()._calcular_estatisticas_completas(
+            cadeia_completa
+        )
+
+        self.assertEqual(estatisticas["total_troncos"], 2)
+        self.assertEqual(estatisticas["total_documentos"], 2)
 
     @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
     @patch.object(cadeia_dominial_views, "get_object_or_404")
