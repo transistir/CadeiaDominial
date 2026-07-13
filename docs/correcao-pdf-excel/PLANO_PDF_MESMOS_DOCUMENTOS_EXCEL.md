@@ -178,3 +178,22 @@ Os testes devem cobrir:
 - Migrações 0043–0049 da feature de identidade canônica.
 - Refatoração geral das duas views de PDF.
 - Atualização de WeasyPrint/pydyf, já estabilizados em `main`.
+
+## Resultado da execução local
+
+Executado em 2026-07-13 na branch `fix/pdf-documentos-igual-excel`:
+
+- alteração do botão padrão para `exportar_cadeia_completa_pdf`;
+- 5 testes focados de rota, fonte de dados, ordem, XLSX e sequência
+  personalizada: passaram;
+- `manage.py check`: passou;
+- `makemigrations --check --dry-run`: nenhuma mudança detectada;
+- auditoria somente leitura no banco local: 296 imóveis analisados, 104
+  divergências entre a lista do PDF antigo e a cadeia completa usada pelo
+  Excel, sem erro de processamento;
+- caso de homologação local: imóvel `5`, matrícula `6700`, TI `614`; o caminho
+  antigo retornou 7 IDs e a cadeia completa retornou 39 IDs.
+
+O resultado confirma que o defeito ocorre antes da renderização: o PDF antigo
+recebe uma lista diferente. A nova rota recebe a mesma estrutura completa que
+o Excel, eliminando essa divergência de fonte de dados.
