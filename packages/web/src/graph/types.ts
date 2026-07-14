@@ -12,7 +12,7 @@ export interface DocumentoData {
   numero: string;
   tipo: DocumentoTipo;
   cartorioId: string;
-  data: string;
+  data: string | null;
 }
 
 export interface FimCadeiaData {

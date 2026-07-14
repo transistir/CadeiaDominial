@@ -115,8 +115,7 @@ function validateDocumentoData(raw: unknown, path: string): DocumentoData {
   const numero = requireString(raw.numero, `${path}.numero`);
   const tipo = requireDocumentoTipo(raw.tipo, `${path}.tipo`);
   const cartorioId = requireString(raw.cartorioId, `${path}.cartorioId`);
-  const data = requireIsoDateString(raw.data, `${path}.data`);
-
+  const data: string | null = raw.data === null ? null : requireIsoDateString(raw.data, `${path}.data`);
   return { numero, tipo, cartorioId, data };
 }
 

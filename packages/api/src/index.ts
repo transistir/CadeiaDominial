@@ -270,7 +270,7 @@ type GraphChainData = {
     numero: string;
     tipo: string;
     cartorioId: string;
-    data: string;
+    data: string | null;
   }>;
   lancamentos: Array<{ id: string; documentoId: string; tipo: string }>;
   origens: Array<{
@@ -394,7 +394,7 @@ const handleGraph = async (c: Context<Env>) => {
         numero: d.numero,
         tipo: d.tipo,
         cartorioId: String(d.criId),
-        data: d.data ?? ""
+        data: d.data ?? null
       });
     }
   }

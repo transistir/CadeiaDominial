@@ -569,7 +569,7 @@ describe("buildGraph", () => {
     expect(result.edges).toContainEqual({
       id: "orig-fim",
       source: "doc-1",
-      target: "fim-orig-fim",
+      target: "fim-o-orig-fim",
       data: { tipoOrigem: "fim_cadeia" },
     });
   });

@@ -20,7 +20,7 @@ export interface ChainData {
     numero: string;
     tipo: DocumentoTipo;
     cartorioId: string;
-    data: string;
+    data: string | null;
   }>;
   lancamentos: Array<{
     id: string;
@@ -90,7 +90,7 @@ export function buildGraph(chainData: ChainData): GraphJson {
 
     if (origem.documentoId === null) {
       if (origem.tipoOrigem === "fim_cadeia") {
-        const fimId = `fim-${origem.id}`;
+        const fimId = `fim-o-${origem.id}`;
         nodes.push({
           id: fimId,
           label: "Fim de cadeia",
