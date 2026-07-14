@@ -355,7 +355,11 @@ export function parseDumpTable(sql: string, table: string): SqlValue[][] {
     isProductionFormat = true;
     return copyBlocks.flatMap((block) => block.rows);
   }
-  isProductionFormat = false;
+  // Do NOT reset isProductionFormat here — a prior table may have already
+  // set it to true. Only set→false when the caller explicitly resets
+  // (see resetFormatDetection). Resetting pre-table loses the global
+  // format detection and causes mappers to read wrong column indices
+  // (e.g. "Pedro Gezualdo" → "Pessoa 9"). Tested via vitest.
   return parseInserts(sql, table);
 }
 
