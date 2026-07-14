@@ -167,9 +167,13 @@ document.addEventListener('DOMContentLoaded', function() {
 function ordenarFilhosPorNumeroDesc(nodo) {
     if (nodo.children && nodo.children.length > 0) {
         nodo.children.sort((a, b) => {
-            // Extrair número ignorando prefixos não numéricos
-            const numA = parseInt((a.numero || '').replace(/\D/g, ''));
-            const numB = parseInt((b.numero || '').replace(/\D/g, ''));
+            // Matrículas sempre antes de transcrições; dentro do mesmo tipo, maior número primeiro
+            const tipoA = a.tipo_documento === 'matricula' ? 0 : 1;
+            const tipoB = b.tipo_documento === 'matricula' ? 0 : 1;
+            if (tipoA !== tipoB) return tipoA - tipoB;
+
+            const numA = parseInt((a.numero || '').replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt((b.numero || '').replace(/\D/g, ''), 10) || 0;
             return numB - numA;
         });
         nodo.children.forEach(ordenarFilhosPorNumeroDesc);
@@ -178,144 +182,102 @@ function ordenarFilhosPorNumeroDesc(nodo) {
 
 function converterParaArvoreD3(data) {
     console.log(`DEBUG: Iniciando conversão - Backend enviou ${data.documentos.length} documentos únicos`);
-    
+
     // Mapear documentos por número
     const docMap = {};
     data.documentos.forEach(doc => {
         doc.children = [];
         docMap[doc.numero] = doc;
     });
-    
+
     // Encontrar a matrícula principal (raiz)
     let raiz = data.documentos.find(doc => doc.nivel === 0 || doc.origem === '' || doc.origem == null);
     if (!raiz) raiz = data.documentos[0];
-    
+
     console.log(`DEBUG: Raiz identificada: ${raiz.numero}`);
-    
-    // CORREÇÃO: Abordagem simples - usar apenas as conexões do backend
-    // Construir árvore diretamente das conexões, garantindo que cada documento apareça apenas uma vez
-    
-    const visitados = new Set();
-    const documentosNaArvore = new Set();
-    
-    // Função para construir árvore sem duplicação
-    function construirArvoreSimples(node) {
-        if (!node || visitados.has(node.numero)) {
-            console.log(`DEBUG: Pulando nó ${node?.numero} - já visitado ou nulo`);
-            return;
+
+    // CORREÇÃO: um documento pode ser citado como origem por mais de um
+    // documento (grafo, não árvore). Quando isso acontece, o documento deve
+    // pertencer ao citante MAIS PROFUNDO (mais distante da raiz) -- senão a
+    // citação do citante mais raso vira uma linha secundária cruzando
+    // verticalmente irmãos da mesma coluna. Calculamos o caminho mais longo
+    // a partir da raiz (relaxamento iterativo, não BFS de caminho mais
+    // curto) e usamos o citante que produz esse caminho como pai primário;
+    // qualquer outra citação vira conexão secundária (linha tracejada), que
+    // assim sempre "avança" para uma coluna mais profunda, nunca cruza a
+    // mesma coluna.
+    const conexoesPorFrom = new Map();
+    data.conexoes.forEach(con => {
+        if (!conexoesPorFrom.has(con.from)) conexoesPorFrom.set(con.from, []);
+        conexoesPorFrom.get(con.from).push(con);
+    });
+
+    const profundidade = new Map([[raiz.numero, 0]]);
+    const paiPrimario = new Map();
+    const fila = [raiz.numero];
+    let iteracoes = 0;
+    const limiteIteracoes = data.documentos.length * data.conexoes.length + data.documentos.length;
+
+    // Impede que uma citação cíclica (ex.: A cita B e B cita A, direta ou
+    // indiretamente) vire uma aresta primária -- senão docMap[X].children
+    // pode acabar contendo, direta ou indiretamente, o próprio X, e a
+    // recursão em ordenarFilhosPorNumeroDesc/d3.hierarchy nunca termina.
+    function criariCiclo(candidatoPai, alvo) {
+        let atual = candidatoPai;
+        let passos = 0;
+        while (atual !== undefined) {
+            if (atual === alvo) return true;
+            if (++passos > data.documentos.length) return true;
+            atual = paiPrimario.get(atual);
         }
-        
-        console.log(`DEBUG: Processando nó ${node.numero}`);
-        visitados.add(node.numero);
-        documentosNaArvore.add(node.numero);
-        
-        // Buscar filhos deste nó nas conexões (from = filho, to = pai)
-        const filhos = data.conexoes
-            .filter(con => con.from === node.numero)
-            .map(con => docMap[con.to])
-            .filter(doc => doc);
-        
-        console.log(`DEBUG: Nó ${node.numero} tem ${filhos.length} filhos: ${filhos.map(f => f.numero).join(', ')}`);
-        
-        // Adicionar filhos únicos (referências aos mesmos objetos)
-        filhos.forEach(filho => {
-            if (!node.children.some(child => child.numero === filho.numero)) {
-                // CORREÇÃO: Só adicionar se o filho ainda não foi visitado
-                if (!visitados.has(filho.numero)) {
-                    console.log(`DEBUG: Adicionando filho ${filho.numero} ao nó ${node.numero}`);
-                    node.children.push(filho);
-                    documentosNaArvore.add(filho.numero);
-                } else {
-                    console.log(`DEBUG: Filho ${filho.numero} já foi visitado, não adicionando ao nó ${node.numero}`);
-                }
-            } else {
-                console.log(`DEBUG: Filho ${filho.numero} já existe no nó ${node.numero}`);
-            }
-        });
-        
-        // Processar filhos recursivamente APENAS se não foram visitados
-        if (node.children) {
-            node.children.forEach(filho => {
-                if (!visitados.has(filho.numero)) {
-                    console.log(`DEBUG: Processando recursivamente filho ${filho.numero} de ${node.numero}`);
-                    construirArvoreSimples(filho);
-                } else {
-                    console.log(`DEBUG: Filho ${filho.numero} já foi visitado, pulando recursão`);
-                }
-            });
-        }
-    }
-    
-    // Função para verificar se uma conexão já existe na árvore
-    function verificarConexaoExiste(node, from, to) {
-        if (!node) return false;
-        
-        // Verificar se este nó tem a conexão direta
-        if (node.numero === from && node.children) {
-            return node.children.some(child => child.numero === to);
-        }
-        
-        // Verificar recursivamente nos filhos
-        if (node.children) {
-            return node.children.some(child => verificarConexaoExiste(child, from, to));
-        }
-        
         return false;
     }
-    
-    // Construir árvore simples
-    construirArvoreSimples(raiz);
-    
-    // Verificar se há documentos não visitados
-    const documentosNaoVisitados = data.documentos.filter(doc => !visitados.has(doc.numero));
-    console.log(`DEBUG: Documentos não visitados: ${documentosNaoVisitados.length}`);
-    console.log(`DEBUG: Documentos na árvore: ${documentosNaArvore.size}`);
-    
-    // ETAPA 3: Criar conexões secundárias (traços sem duplicar cards)
-    const conexoesSecundarias = [];
-    
-    // Identificar conexões que foram perdidas devido à lógica de visitados
-    data.conexoes.forEach(conexao => {
-        const pai = docMap[conexao.to];
-        const filho = docMap[conexao.from];
-        
-        if (pai && filho) {
-            // Verificar se esta conexão não está representada na árvore principal
-            const conexaoExiste = verificarConexaoExiste(raiz, conexao.from, conexao.to);
-            
-            if (!conexaoExiste) {
-                console.log(`DEBUG: Criando conexão secundária: ${conexao.from} -> ${conexao.to}`);
-                conexoesSecundarias.push({
-                    from: conexao.from,
-                    to: conexao.to,
-                    tipo: 'conexao_secundaria'
-                });
-            }
+
+    while (fila.length > 0) {
+        if (++iteracoes > limiteIteracoes) {
+            console.warn('DEBUG: possível ciclo nas conexões, interrompendo cálculo de profundidade');
+            break;
         }
-    });
-    
-    console.log(`DEBUG: Total de conexões secundárias criadas: ${conexoesSecundarias.length}`);
-    
-    // Adicionar conexões secundárias à raiz
-    raiz.conexoesExtras = conexoesSecundarias;
-    
-    // Ordenar filhos recursivamente
-    ordenarFilhosPorNumeroDesc(raiz);
-    
-    // DEBUG: Contar total de nós na árvore final
-    function contarNos(node) {
-        let total = 1;
-        if (node.children) {
-            node.children.forEach(child => {
-                total += contarNos(child);
+        const atual = fila.shift();
+        (conexoesPorFrom.get(atual) || []).forEach(con => {
+            if (!docMap[con.to]) return;
+            if (con.to === raiz.numero) return; // a raiz nunca recebe pai primário
+            if (criariCiclo(atual, con.to)) return;
+            const novaProfundidade = profundidade.get(atual) + 1;
+            if (!profundidade.has(con.to) || novaProfundidade > profundidade.get(con.to)) {
+                profundidade.set(con.to, novaProfundidade);
+                paiPrimario.set(con.to, atual);
+                fila.push(con.to);
+            }
+        });
+    }
+
+    const conexoesSecundarias = [];
+    data.conexoes.forEach(con => {
+        if (!docMap[con.to] || !docMap[con.from]) return;
+        if (!profundidade.has(con.to)) return;
+
+        if (paiPrimario.get(con.to) === con.from) {
+            docMap[con.from].children.push(docMap[con.to]);
+        } else {
+            // Documento já pertence a outro nó da árvore: conecta sem duplicar o card
+            console.log(`DEBUG: Conexão secundária: ${con.from} -> ${con.to}`);
+            conexoesSecundarias.push({
+                from: con.from,
+                to: con.to,
+                tipo: 'conexao_secundaria'
             });
         }
-        return total;
-    }
-    
-    const totalNos = contarNos(raiz);
-    console.log(`DEBUG: Total de nós na árvore final: ${totalNos}`);
-    
+    });
+
+    console.log(`DEBUG: Documentos na árvore: ${profundidade.size}, conexões secundárias: ${conexoesSecundarias.length}`);
+
+    // Adicionar conexões secundárias à raiz
+    raiz.conexoesExtras = conexoesSecundarias;
+
+    // Ordenar filhos recursivamente
+    ordenarFilhosPorNumeroDesc(raiz);
+
     return raiz;
 }
 
@@ -476,20 +438,28 @@ function corrigirSobreposicoes(root) {
 
 // Função otimizada: Aplicar espaçamento adicional para evitar sobreposições
 function ajustarPosicoesPorNivel(root) {
-    // Ajustar posições horizontais baseado no campo 'nivel' dos dados
+    // Cards de fim de cadeia continuam usando o nível calculado pelo backend.
+    // Um documento com nível ajustado manualmente (nivel_manual, endpoint
+    // ajustar-nivel) também respeita a escolha do usuário. Os demais nós
+    // usam node.depth (profundidade calculada pelo d3.hierarchy a partir da
+    // estrutura de árvore que converterParaArvoreD3 já monta corretamente)
+    // -- usar node.data.nivel para todo mundo prenderia a posição X ao nível
+    // antigo do backend, ignorando o pai primário escolhido acima.
     root.descendants().forEach(node => {
-        const nivel = node.data.nivel || 0;
-        
-        // Cards de fim de cadeia usam o nível do backend para posicionamento
         if (node.data.is_fim_cadeia) {
-            // Usar o nível do backend para posicionar corretamente
+            const nivel = node.data.nivel || 0;
             node.y = nivel * 200 + 120;
             console.log(`DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivel}, posição Y: ${node.y}`);
             return;
         }
-        
-        // Posicionar horizontalmente baseado no nível (200px por nível)
-        node.y = nivel * 200 + 120;
+
+        if (node.data.nivel_manual != null) {
+            const nivel = node.data.nivel ?? node.depth;
+            node.y = nivel * 200 + 120;
+            return;
+        }
+
+        node.y = node.depth * 200 + 120;
     });
 }
 
