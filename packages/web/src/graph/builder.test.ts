@@ -75,16 +75,17 @@ describe("buildGraph", () => {
 
     const result = buildGraph(chainData);
 
+    // Edge direction flows current→origin→fim: doc-3→doc-2→doc-1→fim-1
     expect(result.nodes).toHaveLength(4);
-    expect(result.nodes.map((n) => n.id)).toEqual(["doc-1", "doc-2", "doc-3", "fim-3"]);
+    expect(result.nodes.map((n) => n.id)).toEqual(["doc-1", "doc-2", "doc-3", "fim-1"]);
 
     expect(result.edges).toHaveLength(3);
-    expect(result.edges[0].source).toBe("doc-1");
-    expect(result.edges[0].target).toBe("doc-2");
-    expect(result.edges[1].source).toBe("doc-2");
-    expect(result.edges[1].target).toBe("doc-3");
-    expect(result.edges[2].source).toBe("doc-3");
-    expect(result.edges[2].target).toBe("fim-3");
+    expect(result.edges[0].source).toBe("doc-2");
+    expect(result.edges[0].target).toBe("doc-1");
+    expect(result.edges[1].source).toBe("doc-3");
+    expect(result.edges[1].target).toBe("doc-2");
+    expect(result.edges[2].source).toBe("doc-1");
+    expect(result.edges[2].target).toBe("fim-1");
   });
 
   it("branching (1→2) → both branches get synthetic leaves", () => {
@@ -124,24 +125,23 @@ describe("buildGraph", () => {
 
     const result = buildGraph(chainData);
 
-    expect(result.nodes).toHaveLength(5);
+    // Edge direction flows current→origin→fim. Both doc-2 and doc-3
+    // reference doc-1 as origin; only doc-1 (rightmost) gets synthetic fim.
+    expect(result.nodes).toHaveLength(4);
     expect(result.nodes.map((n) => n.id)).toEqual([
       "doc-1",
       "doc-2",
       "doc-3",
-      "fim-2",
-      "fim-3",
+      "fim-1",
     ]);
 
-    expect(result.edges).toHaveLength(4);
-    expect(result.edges[0].source).toBe("doc-1");
-    expect(result.edges[0].target).toBe("doc-2");
-    expect(result.edges[1].source).toBe("doc-1");
-    expect(result.edges[1].target).toBe("doc-3");
-    expect(result.edges[2].source).toBe("doc-2");
-    expect(result.edges[2].target).toBe("fim-2");
-    expect(result.edges[3].source).toBe("doc-3");
-    expect(result.edges[3].target).toBe("fim-3");
+    expect(result.edges).toHaveLength(3);
+    expect(result.edges[0].source).toBe("doc-2");
+    expect(result.edges[0].target).toBe("doc-1");
+    expect(result.edges[1].source).toBe("doc-3");
+    expect(result.edges[1].target).toBe("doc-1");
+    expect(result.edges[2].source).toBe("doc-1");
+    expect(result.edges[2].target).toBe("fim-1");
   });
 
   it("diamond DAG (1→2, 1→3, 2→4, 3→4) → does not report a cycle", () => {
@@ -192,12 +192,14 @@ describe("buildGraph", () => {
 
     const result = buildGraph(chainData);
 
+    // After edge-direction fix: chain flows doc-4→doc-2→doc-1 and doc-4→doc-3→doc-1.
+    // doc-1 (rightmost origin) gets synthetic fim-1.
     expect(result.nodes.map((n) => n.id)).toEqual([
       "doc-1",
       "doc-2",
       "doc-3",
       "doc-4",
-      "fim-4",
+      "fim-1",
     ]);
   });
 
@@ -364,11 +366,12 @@ describe("buildGraph", () => {
 
     const result = buildGraph(chainData);
 
-    expect(result.edges).toHaveLength(4);
-    expect(result.edges[0].source).toBe("doc-1");
-    expect(result.edges[0].target).toBe("doc-2");
-    expect(result.edges[1].source).toBe("doc-1");
-    expect(result.edges[1].target).toBe("doc-3");
+    // After edge-direction fix: doc-2→doc-1, doc-3→doc-1, doc-1→fim-1
+    expect(result.edges).toHaveLength(3);
+    expect(result.edges[0].source).toBe("doc-2");
+    expect(result.edges[0].target).toBe("doc-1");
+    expect(result.edges[1].source).toBe("doc-3");
+    expect(result.edges[1].target).toBe("doc-1");
   });
 
   // --- ID prefix enforcement (2 cases) ---
