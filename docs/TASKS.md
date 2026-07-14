@@ -81,8 +81,8 @@ Phase 0: Decisions ──┐
 > **Status symbols:** ✅ done · 🔧 in-progress (partially shipped) · 📋 ready/planned · 🚫 blocked (see Depends on)
 
 ### T-500 — Custom node + edge types
-- **Status:** 📋 **ready to start**
-- **Worktree branch:** `feat/xyflow-custom-nodes`
+- **Status:** ✅ done (PR #34)
+- **Worktree branch:** `feat/xyflow-custom-nodes` (merged + cleaned)
 - **Files:** `packages/web/src/components/graph/`
 - **Description:** Design and implement custom React Flow node types for the cadeia dominial graph:
   - `DocumentoNode` — matrícula, transcrição, averbação (card with numero, tipo, cartório, data)
@@ -99,8 +99,8 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-501
 
 ### T-501 — Graph data layer (types + mock builder)
-- **Status:** 🔧 ready for review (builder + generateMockGraph + 100% coverage on new files; awaiting PR)
-- **Worktree branch:** `feat/xyflow-graph-data`
+- **Status:** ✅ done (PR #36, #37)
+- **Worktree branch:** `feat/xyflow-graph-data` (merged + cleaned)
 - **Files:** `packages/web/src/lib/graph/`
 - **Description:** Pure TypeScript library that builds `{ nodes, edges }` from domain data:
   - `types.ts` — `CadeiaNode`, `CadeiaEdge`, `GraphData`, `ChainShape` types
@@ -117,8 +117,8 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-502
 
 ### T-502 — Graph page integration
-- **Status:** 🔧 in-progress (partial: PR #28+#29 wired `/graph` → `GraphPreview` → pipeline → React Flow with the canonical 3-node demo; full graph view with detail panel, multi-chain mock, and Lighthouse ≥ 90 still pending)
-- **Worktree branch:** `feat/xyflow-graph-page`
+- **Status:** ✅ done (PR #38)
+- **Worktree branch:** `feat/xyflow-graph-page` (merged + cleaned)
 - **Files:** `packages/web/src/routes/graph.tsx` (rewrite), `packages/web/src/components/graph/GraphView.tsx`
 - **Description:** Replace the hardcoded skeleton with a full-featured graph page:
   - `<GraphView>` component: `<ReactFlow>` with custom node/edge types, fitView, minimap, controls
@@ -138,8 +138,8 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-503
 
 ### T-503 — Graph API endpoint + data wiring
-- **Status:** blocked on T-502, T-202
-- **Worktree branch:** `feat/api-graph-endpoint`
+- **Status:** ✅ done (part of PR #43, shipped together with T-300)
+- **Worktree branch:** `feat/api-graph-endpoint` (merged + cleaned)
 - **Files:** `packages/api/src/routes/graph.ts`, `packages/web/src/lib/graph/api.ts`
 - **Description:** Add `GET /api/cadeia/:imovelId` API endpoint that queries Drizzle for documento + lancamento + origem data, returns `{ nodes, edges }` JSON. Wire web to fetch from API instead of mock.
 - **Acceptance:**
@@ -155,8 +155,8 @@ Phase 0: Decisions ──┐
 ## Phase 2 — Data generation
 
 ### T-200 — Chain topology generator
-- **Status:** 📋 **ready to start** (T-101 merged, dependency met)
-- **Worktree branch:** `feat/chain-topology-generator`
+- **Status:** ✅ done (PR #32)
+- **Worktree branch:** `feat/chain-topology-generator` (merged + cleaned)
 - **Files:** `scripts/seed/chain-topology.ts`, `scripts/seed/__tests__/chain-topology.test.ts`
 - **Description:** Deterministic generator that produces a **valid** chain graph shape: exactly one `inicio_matricula` per chain, every Registro with ≥ 1 origin, every Averbação with no origin, every chain ending in a `FimCadeia` (when Q3 = "many-per-chain"). Pure function: `(seed: number, n: number) => TopologyGraph`.
 - **Acceptance:**
@@ -166,8 +166,8 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-202.
 
 ### T-201 — Field filler
-- **Status:** 📋 **ready to start** (T-101 merged, can run in parallel with T-200)
-- **Worktree branch:** `feat/field-filler`
+- **Status:** ✅ done (PR #35)
+- **Worktree branch:** `feat/field-filler` (merged + cleaned)
 - **Files:** `scripts/seed/field-filler.ts`
 - **Description:** Uses `@faker-js/faker` to fill non-deterministic fields (names, dates, document numbers, cartórios, etc.) per the constraints from Q1–Q15 + Q11b (e.g. ISO8601 dates, normalized numeric document numbers, INTEGER 0/1 booleans, area in centiares). **Nota:** Q5 removeu CPF/RG/email/telefone de `Pessoa`; Q4 escolheu texto puro, então não gere colunas de PII nem ciphertext.
 - **Acceptance:**
@@ -176,7 +176,7 @@ Phase 0: Decisions ──┐
 - **Blocks:** T-202.
 
 ### T-202 — Seed orchestrator
-- **Status:** blocked on T-200, T-201
+- **Status:** 📋 **ready to start** (T-200, T-201 done)
 - **Worktree branch:** `feat/seed-orchestrator`
 - **Files:** `scripts/seed/seed.ts`, `scripts/seed/__tests__/seed.test.ts`
 - **Description:** Combines topology + filler, inserts via Drizzle, asserts invariants post-insert.
@@ -190,8 +190,8 @@ Phase 0: Decisions ──┐
 ## Phase 3 — Legacy-fit proof (the gate before merge)
 
 ### T-300 — Legacy-fit script
-- **Status:** blocked on T-101, T-202
-- **Worktree branch:** `feat/legacy-fit-script`
+- **Status:** ✅ done (PR #43, shipped together with T-503. Production dump support in PR #44)
+- **Worktree branch:** `feat/legacy-fit-script` (merged + cleaned)
 - **Files:** `scripts/migration/legacy-fit.ts`, `scripts/migration/__tests__/legacy-fit.test.ts`
 - **Description:** Loads `old/data.cleaned.core.no-auth.no-unistr.sql` (3.3MB Postgres dump) into the new Drizzle schema, then asserts: row counts match expected per table, no FK violations, no `NOT NULL` failures, no `CHECK` failures. Emits a human-readable report.
 - **Acceptance:**
@@ -226,20 +226,20 @@ Phase 0: Decisions ──┐
 | T-001 | ✅ done | #24 |
 | T-100 | ✅ done | #26 |
 | T-101 | ✅ done | #25 |
-| **T-500** | 📋 **ready** | — |
-| T-501 | 🔧 ready for review (builder + generateMockGraph + 100% coverage) | — |
-| T-502 | 🔧 in-progress (partial: PR #28+#29) | — |
-| T-503 | blocked (T-502, T-202) | — |
-| T-200 | 📋 ready | — |
-| T-201 | 📋 ready | — |
-| T-202 | blocked (T-200, T-201) | — |
-| T-300 | blocked (T-202, T-503) | — |
+| T-200 | ✅ done | #32 |
+| T-201 | ✅ done | #35 |
+| **T-202** | 📋 **ready** | — |
+| T-300 | ✅ done | #43 |
 | T-400 | ✅ done | #22 |
 | T-401 | ✅ done | — |
 | T-402 | ✅ done | — |
 | T-403 | ✅ done | #17 |
+| T-500 | ✅ done | #34 |
+| T-501 | ✅ done | #36, #37 |
+| T-502 | ✅ done | #38 |
+| T-503 | ✅ done | #43 |
 
-**Current gate: Phase 1.5 — T-500 ready to start** (custom node/edge components). T-501 and T-502 partially shipped via PR #28+#29 (pipeline + 3-node demo). Phase 2 (T-200, T-201) can run in parallel if desired.
+**Current gate: Phase 2 — T-202 ready to start** (seed orchestrator). All Phases 1/1.5/3 done. T-300 shipped ahead of schedule using real production data from the legacy PostgreSQL dump; T-202 synthetic seed generator is the last remaining task.
 
 ---
 
