@@ -32,3 +32,7 @@
 .graph-page__toolbar select:hover {
   border-color: #666;
 }
+
+.graph-page__error {
+  color: #ff6b6b;
+}

@@ -95,7 +95,7 @@ function validateNode(raw: Record<string, unknown>, index: number): GraphNode {
     };
   }
 
-  requirePrefix(id, "fim-", `${path}.id`);
+  requireFimCadeiaPrefix(id, `${path}.id`);
   if (raw.data === undefined) {
     throw new Error(`${path}.data: fimCadeia nodes must have a data object with classificacao`);
   }
@@ -115,8 +115,7 @@ function validateDocumentoData(raw: unknown, path: string): DocumentoData {
   const numero = requireString(raw.numero, `${path}.numero`);
   const tipo = requireDocumentoTipo(raw.tipo, `${path}.tipo`);
   const cartorioId = requireString(raw.cartorioId, `${path}.cartorioId`);
-  const data = requireIsoDateString(raw.data, `${path}.data`);
-
+  const data: string | null = raw.data === null ? null : requireIsoDateString(raw.data, `${path}.data`);
   return { numero, tipo, cartorioId, data };
 }
 
@@ -126,7 +125,11 @@ function validateFimCadeiaData(raw: unknown, path: string): FimCadeiaData {
   }
 
   return {
-    classificacao: requireFimCadeiaClassificacao(raw.classificacao, `${path}.classificacao`)
+    classificacao: requireFimCadeiaClassificacao(raw.classificacao, `${path}.classificacao`),
+    ...(raw.label === undefined ? {} : { label: requireString(raw.label, `${path}.label`) }),
+    ...(raw.especificacao === undefined
+      ? {}
+      : { especificacao: requireString(raw.especificacao, `${path}.especificacao`) })
   };
 }
 
@@ -176,6 +179,12 @@ function requirePrefix(value: string, prefix: "doc-" | "fim-", path: string): vo
   }
 }
 
+function requireFimCadeiaPrefix(value: string, path: string): void {
+  if (!value.startsWith("fim-") && !value.startsWith("unresolved-")) {
+    throw new Error(`${path}: expected prefix 'fim-' or 'unresolved-', got '${value}'`);
+  }
+}
+
 function requireDocumentoTipo(value: unknown, path: string): DocumentoTipo {
   if (value === "matricula" || value === "transcricao" || value === "averbacao") {
     return value;
@@ -184,7 +193,14 @@ function requireDocumentoTipo(value: unknown, path: string): DocumentoTipo {
 }
 
 function requireFimCadeiaClassificacao(value: unknown, path: string): FimCadeiaClassificacao {
-  if (value === "origem_lidima" || value === "sem_origem" || value === "inconclusa") {
+  if (
+    value === "origem_lidima" ||
+    value === "sem_origem" ||
+    value === "inconclusa" ||
+    value === "destacamento_publico" ||
+    value === "nao_resolvida" ||
+    value === "outra"
+  ) {
     return value;
   }
   throw new Error(`${path}: invalid value ${formatValue(value)}`);

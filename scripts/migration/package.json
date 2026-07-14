@@ -1,0 +1,22 @@
+{
+  "name": "@cadeia/legacy-fit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./legacy-fit.ts",
+  "types": "./legacy-fit.ts",
+  "scripts": {
+    "legacy-fit": "npx tsx legacy-fit.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

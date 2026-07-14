@@ -16,6 +16,7 @@ type D1Database = {
   prepare: (query: string) => {
     bind: (...values: unknown[]) => {
       first: <T = Record<string, unknown>>() => Promise<T | null>;
+      all: <T = Record<string, unknown>>() => Promise<{ results: T[] }>;
       run: () => Promise<unknown>;
     };
   };
@@ -258,6 +259,170 @@ app.get("/auth/session", authMiddleware, (c) => {
 app.get("/protected", authMiddleware, (c) => {
   return c.json({ ok: true });
 });
+
+/**
+ * Domain chain data for the graph view (consumed by the web `buildGraph`).
+ * Strings throughout: the frontend casts `tipo`/`tipoOrigem` to its enums.
+ */
+type GraphChainData = {
+  documentos: Array<{
+    id: string;
+    numero: string;
+    tipo: string;
+    cartorioId: string;
+    data: string | null;
+  }>;
+  lancamentos: Array<{ id: string; documentoId: string; tipo: string }>;
+  origens: Array<{
+    id: string;
+    lancamentoId: string;
+    documentoId: string | null;
+    tipoOrigem: string;
+    numero?: string;
+    numeroRaw?: string;
+    tipoFimCadeia?: string;
+    especificacao?: string;
+  }>;
+};
+
+const isPositiveInteger = (value: string) => /^[1-9][0-9]*$/.test(value);
+
+/**
+ * GET /api/graph/:imovelId — serves a dominial chain as `ChainData` for the
+ * web `buildGraph`. Registered under `/graph` too: the web dev proxy strips
+ * the `/api` prefix (see packages/web/vite.config.ts), so browser requests to
+ * `/api/graph/:id` reach this app as `/graph/:id` — the same convention as the
+ * bare `/health` route. Cycle detection + validation stay on the client where
+ * `buildGraph` already lives; this endpoint is a thin DB → ChainData mapper.
+ */
+const handleGraph = async (c: Context<Env>) => {
+  const imovelIdParam = c.req.param("imovelId");
+  if (!imovelIdParam || !isPositiveInteger(imovelIdParam)) {
+    return c.json({ error: "imovelId must be a positive integer." }, 400);
+  }
+  const imovelId = Number(imovelIdParam);
+
+  // 1. Documentos in this imóvel's chain (active membership + active doc).
+  const documentoRows = (
+    await c.env.DB.prepare(
+      `SELECT d.id AS id, d.tipo AS tipo, d.numero AS numero, d.data AS data, d.cri_id AS criId
+       FROM documento d
+       JOIN imovel_documento idoc ON idoc.documento_id = d.id
+       WHERE idoc.imovel_id = ? AND idoc.deleted_at IS NULL AND d.deleted_at IS NULL`
+    )
+      .bind(imovelId)
+      .all<{ id: number; tipo: string; numero: string; data: string | null; criId: number }>()
+  ).results;
+
+  if (documentoRows.length === 0) {
+    return c.json({ error: `No documentos found for imovel ${imovelId}.` }, 404);
+  }
+
+  // 2. Lançamentos for those documentos, joined to their tipo lookup.
+  const lancamentoRows = (
+    await c.env.DB.prepare(
+      `SELECT l.id AS id, l.documento_id AS documentoId, lt.tipo AS tipo
+       FROM lancamento l
+       JOIN lancamento_tipo lt ON lt.id = l.tipo_id
+       JOIN imovel_documento idoc ON idoc.documento_id = l.documento_id
+       WHERE idoc.imovel_id = ? AND idoc.deleted_at IS NULL AND l.deleted_at IS NULL`
+    )
+      .bind(imovelId)
+      .all<{ id: number; documentoId: number; tipo: string }>()
+  ).results;
+
+  // 3. Origens for those lançamentos. NULL-documento fim_cadeia origins carry
+  //    explicit end-of-chain classification from origem_fim_cadeia.
+  const origemRows = (
+    await c.env.DB.prepare(
+      `SELECT o.id AS id,
+              o.lancamento_id AS lancamentoId,
+              o.documento_id AS documentoId,
+              o.tipo AS tipo,
+              o.numero AS numero,
+              o.numero_raw AS numeroRaw,
+              ofc.tipo_fim_cadeia AS tipoFimCadeia,
+              ofc.especificacao_fim_cadeia AS especificacao
+       FROM origem o
+       JOIN lancamento l ON l.id = o.lancamento_id
+       JOIN imovel_documento idoc ON idoc.documento_id = l.documento_id
+       LEFT JOIN origem_fim_cadeia ofc ON ofc.origem_id = o.id
+       WHERE idoc.imovel_id = ? AND idoc.deleted_at IS NULL
+         AND l.deleted_at IS NULL AND o.deleted_at IS NULL`
+    )
+      .bind(imovelId)
+      .all<{
+        id: number;
+        lancamentoId: number;
+        documentoId: number | null;
+        tipo: string;
+        numero: string | null;
+        numeroRaw: string | null;
+        tipoFimCadeia: string | null;
+        especificacao: string | null;
+      }>()
+  ).results;
+
+  // 4. Source (origin) documentos referenced by those origens may live in
+  //    OTHER chains. Fetch them so buildGraph never throws on a missing source
+  //    reference. No deleted_at filter — a referenced source must always exist.
+  const sourceDocRows = (
+    await c.env.DB.prepare(
+      `SELECT d.id AS id, d.tipo AS tipo, d.numero AS numero, d.data AS data, d.cri_id AS criId
+       FROM documento d
+       WHERE d.id IN (
+         SELECT DISTINCT o.documento_id
+         FROM origem o
+         JOIN lancamento l ON l.id = o.lancamento_id
+         JOIN imovel_documento idoc ON idoc.documento_id = l.documento_id
+         WHERE idoc.imovel_id = ? AND idoc.deleted_at IS NULL
+           AND l.deleted_at IS NULL AND o.deleted_at IS NULL
+           AND o.documento_id IS NOT NULL
+       )`
+    )
+      .bind(imovelId)
+      .all<{ id: number; tipo: string; numero: string; data: string | null; criId: number }>()
+  ).results;
+
+  // Merge imóvel docs + referenced source docs, dedup by id.
+  const documentosById = new Map<string, GraphChainData["documentos"][number]>();
+  for (const d of [...documentoRows, ...sourceDocRows]) {
+    const id = String(d.id);
+    if (!documentosById.has(id)) {
+      documentosById.set(id, {
+        id,
+        numero: d.numero,
+        tipo: d.tipo,
+        cartorioId: String(d.criId),
+        data: d.data ?? null
+      });
+    }
+  }
+
+  const chainData: GraphChainData = {
+    documentos: [...documentosById.values()],
+    lancamentos: lancamentoRows.map((l) => ({
+      id: String(l.id),
+      documentoId: String(l.documentoId),
+      tipo: l.tipo
+    })),
+    origens: origemRows.map((o) => ({
+      id: String(o.id),
+      lancamentoId: String(o.lancamentoId),
+      documentoId: o.documentoId === null ? null : String(o.documentoId),
+      tipoOrigem: o.tipo,
+      ...(o.numero ? { numero: o.numero } : {}),
+      ...(o.numeroRaw ? { numeroRaw: o.numeroRaw } : {}),
+      ...(o.tipoFimCadeia ? { tipoFimCadeia: o.tipoFimCadeia } : {}),
+      ...(o.especificacao ? { especificacao: o.especificacao } : {})
+    }))
+  };
+
+  return c.json(chainData);
+};
+
+app.get("/api/graph/:imovelId", authMiddleware, handleGraph);
+app.get("/graph/:imovelId", authMiddleware, handleGraph);
 
 app.post("/api/pdf", authMiddleware, async (c) => {
   if (!c.env.BROWSER_RENDERING_ACCOUNT_ID || !c.env.BROWSER_RENDERING_API_TOKEN) {

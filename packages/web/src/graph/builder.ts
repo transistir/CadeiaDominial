@@ -1,5 +1,12 @@
 import type { LancamentoTipo } from "@cadeia/chain-topology";
-import type { DocumentoTipo, GraphEdge, GraphJson, GraphNode, OrigemTipo } from "./types";
+import type {
+  DocumentoTipo,
+  FimCadeiaClassificacao,
+  GraphEdge,
+  GraphJson,
+  GraphNode,
+  OrigemTipo,
+} from "./types";
 import { validateGraph } from "./validateGraph";
 
 /**
@@ -13,7 +20,7 @@ export interface ChainData {
     numero: string;
     tipo: DocumentoTipo;
     cartorioId: string;
-    data: string;
+    data: string | null;
   }>;
   lancamentos: Array<{
     id: string;
@@ -23,8 +30,12 @@ export interface ChainData {
   origens: Array<{
     id: string;
     lancamentoId: string;
-    documentoId: string;
+    documentoId: string | null;
     tipoOrigem?: OrigemTipo;
+    numero?: string | null;
+    numeroRaw?: string | null;
+    tipoFimCadeia?: FimCadeiaClassificacao;
+    especificacao?: string;
   }>;
 }
 
@@ -75,14 +86,66 @@ export function buildGraph(chainData: ChainData): GraphJson {
       );
     }
 
+    const targetId = ensureDocPrefix(lancamento.documentoId);
+
+    if (origem.documentoId === null) {
+      if (origem.tipoOrigem === "fim_cadeia") {
+        const fimId = `fim-o-${origem.id}`;
+        nodes.push({
+          id: fimId,
+          label: "Fim de cadeia",
+          type: "fimCadeia",
+          data: {
+            classificacao: origem.tipoFimCadeia ?? "inconclusa",
+            ...(origem.especificacao ? { especificacao: origem.especificacao } : {}),
+          },
+        });
+        documentosAsSource.add(targetId);
+        edges.push({
+          id: origem.id,
+          source: targetId,
+          target: fimId,
+          data: { tipoOrigem: "fim_cadeia" },
+        });
+        continue;
+      }
+
+      if (origem.tipoOrigem !== "matricula" && origem.tipoOrigem !== "transcricao") {
+        throw new Error(`Origem ${origem.id} has no documento but has unsupported tipoOrigem`);
+      }
+
+      const tipoOrigem = origem.tipoOrigem;
+      const unresolvedId = `unresolved-${origem.id}`;
+      const label = formatUnresolvedCitationLabel({
+        tipoOrigem,
+        numero: origem.numero,
+        numeroRaw: origem.numeroRaw,
+      });
+      nodes.push({
+        id: unresolvedId,
+        label,
+        type: "fimCadeia",
+        data: {
+          label,
+          classificacao: "nao_resolvida",
+        },
+      });
+      documentosAsSource.add(targetId);
+      edges.push({
+        id: origem.id,
+        source: targetId,
+        target: unresolvedId,
+        data: { tipoOrigem },
+      });
+      continue;
+    }
+
     const sourceDoc = documentosById.get(origem.documentoId);
     if (!sourceDoc) {
       throw new Error(`Origem ${origem.id} references non-existent documento: ${origem.documentoId}`);
     }
 
     const sourceId = ensureDocPrefix(origem.documentoId);
-    const targetId = ensureDocPrefix(lancamento.documentoId);
-
     documentosAsSource.add(sourceId);
 
     edges.push({
@@ -144,12 +207,23 @@ function inferOrigemTipo(sourceDocTipo: DocumentoTipo): OrigemTipo {
   return sourceDocTipo === "transcricao" ? "transcricao" : "matricula";
 }
 
+function formatUnresolvedCitationLabel(origem: {
+  tipoOrigem: "matricula" | "transcricao";
+  numero?: string | null;
+  numeroRaw?: string | null;
+}): string {
+  const tipoLabel = origem.tipoOrigem === "matricula" ? "Matrícula" : "Transcrição";
+  const numero = origem.numero || origem.numeroRaw;
+
+  return numero ? `${tipoLabel} ${numero}` : tipoLabel;
+}
+
 /**
  * Detects cycles in the documento graph using iterative DFS.
- * Throws if a cycle is found, listing the involved documento IDs.
- *
- * Only considers documento→documento edges (not synthetic fim edges).
+ * Logs warnings for cycles found (non-fatal — real chains contain
+ * reciprocal references and self-links from legacy data).
  */
+
 function detectCycles(edges: GraphEdge[], docIds: string[]): void {
   const adjacency = new Map<string, string[]>();
   for (const docId of docIds) {
@@ -195,7 +269,12 @@ function detectCycles(edges: GraphEdge[], docIds: string[]): void {
       if (neighborState === "visiting") {
         const cycleStartIndex = path.indexOf(neighbor);
         const cycle = path.slice(cycleStartIndex).concat(neighbor);
-        throw new Error(`Cycle detected in chain data: ${cycle.join(" -> ")}`);
+        // Non-fatal: cycles are logged instead of throwing.
+        // Real dominial chains contain reciprocal references (A↔B) and
+        // self-links from legacy data.  The graph still renders — the
+        // back-edge creates a visible cycle that users can inspect.
+        console.warn(`Cycle detected in chain data: ${cycle.join(" -> ")}`);
+        continue;
       }
 
       if (neighborState === undefined) {

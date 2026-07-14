@@ -530,7 +530,93 @@ describe("buildGraph", () => {
     );
   });
 
-  // --- Synthetic leaf classification (1 case) ---
+  // --- Fim-cadeia classification (2 cases) ---
+
+  it("explicit fim-cadeia origens render their tipo_fim_cadeia classification", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "1", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        {
+          id: "orig-fim",
+          lancamentoId: "lanc-1",
+          documentoId: null,
+          tipoOrigem: "fim_cadeia",
+          tipoFimCadeia: "destacamento_publico",
+          especificacao: "Terra pública",
+        },
+      ],
+    };
+
+    const result = buildGraph(chainData);
+    const fimNodes = result.nodes.filter((n) => n.type === "fimCadeia");
+
+    expect(fimNodes).toHaveLength(1);
+    expect(fimNodes[0]?.data).toEqual({
+      classificacao: "destacamento_publico",
+      especificacao: "Terra pública",
+    });
+    expect(result.edges).toContainEqual({
+      id: "orig-fim",
+      source: "doc-1",
+      target: "fim-o-orig-fim",
+      data: { tipoOrigem: "fim_cadeia" },
+    });
+  });
+
+  it("null-documento matricula origem renders as unresolved citation leaf", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "1", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        {
+          id: "2854",
+          lancamentoId: "lanc-1",
+          documentoId: null,
+          tipoOrigem: "matricula",
+          numero: "46984",
+        },
+      ],
+    };
+
+    const result = buildGraph(chainData);
+
+    expect(result.nodes).toContainEqual({
+      id: "unresolved-2854",
+      label: "Matrícula 46984",
+      type: "fimCadeia",
+      data: {
+        label: "Matrícula 46984",
+        classificacao: "nao_resolvida",
+      },
+    });
+    expect(result.edges).toContainEqual({
+      id: "2854",
+      source: "doc-1",
+      target: "unresolved-2854",
+      data: { tipoOrigem: "matricula" },
+    });
+  });
 
   it("synthetic fim-cadeia nodes have classificacao: inconclusa", () => {
     const chainData: ChainData = {
@@ -556,7 +642,7 @@ describe("buildGraph", () => {
 
   // --- Cycle detection (2 cases) ---
 
-  it("self-loop (documento with origem pointing to itself) → throws cycle error", () => {
+  it("self-loop (documento with origem pointing to itself) → renders with self-edge (non-fatal)", () => {
     const chainData: ChainData = {
       documentos: [
         {
@@ -575,12 +661,13 @@ describe("buildGraph", () => {
       ],
     };
 
-    expect(() => buildGraph(chainData)).toThrow(
-      /Cycle detected in chain data: doc-1 -> doc-1/
-    );
+    // Self-loops are logged but no longer throw — the graph renders.
+    const result = buildGraph(chainData);
+    expect(result.nodes).toHaveLength(1); // doc-1 only (is a source, no synthetic leaf)
+    expect(result.edges).toHaveLength(1); // self-loop edge
   });
 
-  it("2-node cycle (doc-1 → doc-2 → doc-1) → throws cycle error", () => {
+  it("2-node cycle (doc-1 → doc-2 → doc-1) → renders with cycle (non-fatal)", () => {
     const chainData: ChainData = {
       documentos: [
         {
@@ -608,8 +695,9 @@ describe("buildGraph", () => {
       ],
     };
 
-    expect(() => buildGraph(chainData)).toThrow(
-      /Cycle detected in chain data: (doc-1 -> doc-2 -> doc-1|doc-2 -> doc-1 -> doc-2)/
-    );
+    // Cycles are logged but no longer throw — the graph renders.
+    const result = buildGraph(chainData);
+    expect(result.nodes.length).toBeGreaterThanOrEqual(2); // 2 docs
+    expect(result.edges).toHaveLength(2); // both edges present including cycle
   });
 });

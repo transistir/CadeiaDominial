@@ -774,7 +774,8 @@ Use **React Flow** for the cadeia dominial tree visualization in the React front
 - `packages/web/src/main.tsx` (React Flow styles)
 
 **Gaps**
-- Graph data is static; no API-driven nodes/edges or layout helper integration yet.
+- ✅ Graph data is now API-driven via `GET /api/graph/:imovelId` (auth-gated, D1-backed), wired to `buildGraph()` in the frontend. The static gap is resolved.
+- ~~Graph data is static; no API-driven nodes/edges or layout helper integration yet.~~ (resolved by PR #43 — T-300 + T-503)
 
 ### References
 

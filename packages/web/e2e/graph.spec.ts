@@ -9,7 +9,7 @@ test("graph page loads with complex mock by default", async ({ page }) => {
     });
   });
 
-  await page.goto("/graph");
+  await page.goto("/graph?mock=1");
 
   await expect(page.getByTestId("graph-view")).toBeVisible();
 
@@ -29,7 +29,7 @@ test("mock shape selector switches between shapes", async ({ page }) => {
     });
   });
 
-  await page.goto("/graph");
+  await page.goto("/graph?mock=1");
 
   const select = page.getByTestId("mock-shape-select");
   await expect(select).toBeVisible();
@@ -60,7 +60,7 @@ test("node click opens detail panel", async ({ page }) => {
     });
   });
 
-  await page.goto("/graph");
+  await page.goto("/graph?mock=1");
 
   const panel = page.getByTestId("detail-panel");
   await expect(panel).toHaveClass(/graph-view__panel--closed/);
@@ -93,7 +93,7 @@ test("minimap and controls are rendered", async ({ page }) => {
     });
   });
 
-  await page.goto("/graph");
+  await page.goto("/graph?mock=1");
 
   await expect(page.locator(".react-flow__minimap")).toBeVisible();
   await expect(page.locator(".react-flow__controls")).toBeVisible();
