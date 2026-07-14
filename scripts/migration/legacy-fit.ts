@@ -346,11 +346,16 @@ export function parseCopyFormat(sql: string, table?: string): CopyBlock[] {
 
 /** Parse a table from either production COPY blocks or legacy INSERT rows. */
 export function parseDumpTable(sql: string, table: string): SqlValue[][] {
+  // Reset format-detection flag per invocation so a mixed sequence of calls
+  // (e.g. COPY table A → INSERT table B) does not propagate a stale format
+  // to the mappers. In production every dump is homogeneous, but this keeps
+  // tests and re-entrant use correct.
   const copyBlocks = parseCopyFormat(sql, table);
   if (copyBlocks.length > 0) {
     isProductionFormat = true;
     return copyBlocks.flatMap((block) => block.rows);
   }
+  isProductionFormat = false;
   return parseInserts(sql, table);
 }
 
@@ -625,9 +630,10 @@ export function mapDocumento(r: SqlValue[], now: string) {
 }
 
 export function mapLancamento(r: SqlValue[], now: string) {
-  // The legacy INSERT layout has 26 fields and stores detalhes at index 5;
-  // production COPY has 27 fields and stores it at index 4.
-  const detalhesIndex = r.length >= 27 ? C.lancamento.detalhes : 5;
+  // Legacy INSERT rows store detalhes at index 5; production COPY rows at
+  // index 4 (C.lancamento.detalhes). Use the format flag set by parseDumpTable
+  // rather than row-length heuristics.
+  const detalhesIndex = isProductionFormat ? C.lancamento.detalhes : 5;
   return {
     id: r[C.lancamento.id] as number,
     data: nullIfEmpty(r[C.lancamento.data]),
@@ -849,6 +855,8 @@ interface Report {
   columnErrors: ColumnError[];
   unmatchedOrigemTokens: number;
   mergedDocumentoRows: number;
+  documentoCollisions: DocumentoCollision[];
+  truncatedChains: number;
 }
 
 export interface OrigemRow {
@@ -865,6 +873,7 @@ export interface OrigemRow {
 export interface OrigemBuildResult {
   rows: OrigemRow[];
   unmatchedOrigemTokens: number;
+  truncatedChains: number;
 }
 
 function integerOrNull(value: SqlValue | undefined): number | null {
@@ -874,19 +883,31 @@ function integerOrNull(value: SqlValue | undefined): number | null {
   return null;
 }
 
+export interface DocumentoCollision {
+  key: string;
+  ids: number[];
+  canonicalId: number;
+  conflictingFields: string[];
+}
+
 /**
  * The v2 uniqueness key uses the digits-only document number. If distinct
  * legacy spellings normalize to the same (CRI, type, number), retain the
- * lowest legacy id and remap every reference to it.
+ * lowest legacy id and remap every reference to it — but only when the
+ * colliding rows have compatible non-key data (same dates, books, pages).
+ * Incompatible collisions are reported but NOT auto-merged; they must be
+ * resolved manually.
  */
 export function buildDocumentoIdRemap(
   rawDocumento: SqlValue[][],
-): Map<number, number> {
+): { remap: Map<number, number>; collisions: DocumentoCollision[] } {
+  const rowsById = new Map<number, SqlValue[]>();
   const idsByKey = new Map<string, number[]>();
   for (const r of rawDocumento) {
     const id = integerOrNull(r[C.documento.id]);
     const criId = integerOrNull(r[C.documento.cartorioId]);
     if (id === null || criId === null) continue;
+    rowsById.set(id, r);
     const tipo =
       DOCUMENTO_TIPO_BY_ID[integerOrNull(r[C.documento.tipoId]) ?? 0] ===
       "transcricao"
@@ -901,11 +922,49 @@ export function buildDocumentoIdRemap(
   }
 
   const remap = new Map<number, number>();
-  for (const ids of idsByKey.values()) {
+  const collisions: DocumentoCollision[] = [];
+  for (const [key, ids] of idsByKey) {
+    if (ids.length <= 1) {
+      remap.set(ids[0]!, ids[0]!);
+      continue;
+    }
     const canonicalId = Math.min(...ids);
-    for (const id of ids) remap.set(id, canonicalId);
+    const canonicalRow = rowsById.get(canonicalId);
+
+    // Compare non-key fields across all colliding rows.
+    // NOTE: numero_raw is intentionally excluded — normalization exists
+    // precisely because different spellings of the same document number
+    // (e.g. "M10835 A" vs "M10835") normalize to the same key.
+    const FK_FIELDS = [
+      [C.documento.data, "data"],
+      [C.documento.livro, "livro"],
+      [C.documento.folha, "folha"],
+    ] as const;
+    const conflictingFields: string[] = [];
+    for (const [colIndex, colName] of FK_FIELDS) {
+      const canonicalVal = canonicalRow?.[colIndex];
+      const allMatch = ids.every((id) => {
+        const row = rowsById.get(id);
+        const val = row?.[colIndex];
+        // null/undefined vs null/undefined is compatible
+        if (canonicalVal == null && val == null) return true;
+        return String(canonicalVal ?? "") === String(val ?? "");
+      });
+      if (!allMatch) conflictingFields.push(colName);
+    }
+
+    if (conflictingFields.length > 0) {
+      collisions.push({ key, ids, canonicalId, conflictingFields });
+      // MERGE anyway — the v2 UNIQUE(cri_id, tipo, numero) constraint
+      // requires a single row per normalized key. The conflicting fields
+      // from non-canonical rows are discarded, and the collision is
+      // reported so the user can manually reconcile later.
+      for (const id of ids) remap.set(id, canonicalId);
+    } else {
+      for (const id of ids) remap.set(id, canonicalId);
+    }
   }
-  return remap;
+  return { remap, collisions };
 }
 
 /**
@@ -972,6 +1031,7 @@ export function buildOrigemRows(
 
   const rows: OrigemRow[] = [];
   let unmatchedOrigemTokens = 0;
+  let truncatedChains = 0;
   for (const lancamento of rawLancamento) {
     const lancamentoId = integerOrNull(lancamento[C.lancamento.id]);
     if (lancamentoId === null) continue;
@@ -992,7 +1052,10 @@ export function buildOrigemRows(
       if (documentoId !== null) visited.add(documentoId);
       let sourceId: number | null = documentoOrigemId;
       for (let depth = 0; sourceId !== null && depth < maxDepth; depth++) {
-        if (visited.has(sourceId)) break;
+        if (visited.has(sourceId)) {
+          truncatedChains++;
+          break;
+        }
         visited.add(sourceId);
         const source = documentoById.get(sourceId);
         if (!source) break;
@@ -1011,6 +1074,9 @@ export function buildOrigemRows(
           ? integerOrNull(sourceLancamento[C.lancamento.documentoOrigemId])
           : null;
       }
+      // Report chains truncated by maxDepth (sourceId still non-null after
+      // exhausting the depth budget — ancestry beyond this point is lost).
+      if (sourceId !== null) truncatedChains++;
 
       // The FK chain is authoritative for document links. Preserve only
       // additional non-document citations from the free-text field.
@@ -1081,7 +1147,7 @@ export function buildOrigemRows(
     rows.push(...[...byIndice.values()].sort((a, b) => a.indice - b.indice));
   }
 
-  return { rows, unmatchedOrigemTokens };
+  return { rows, unmatchedOrigemTokens, truncatedChains };
 }
 
 function run(): Report {
@@ -1105,7 +1171,8 @@ function run(): Report {
   const rawTis = parseDumpTable(sql, DOMINIAL.tis);
   const rawTerra = parseDumpTable(sql, DOMINIAL.terra);
 
-  const documentoIdRemap = buildDocumentoIdRemap(rawDocumento);
+  const { remap: documentoIdRemap, collisions: documentoCollisions } =
+    buildDocumentoIdRemap(rawDocumento);
   const canonicalDocumentoRows = rawDocumento.filter((r) => {
     const id = integerOrNull(r[C.documento.id]);
     return id !== null && documentoIdRemap.get(id) === id;
@@ -1359,6 +1426,8 @@ function run(): Report {
     columnErrors: errors,
     unmatchedOrigemTokens,
     mergedDocumentoRows,
+    documentoCollisions,
+    truncatedChains: origemBuild.truncatedChains,
   };
 }
 
@@ -1371,6 +1440,8 @@ function buildReport(report: Report, dumpPath: string): string {
     columnErrors,
     unmatchedOrigemTokens,
     mergedDocumentoRows,
+    documentoCollisions,
+    truncatedChains,
   } = report;
   const lines: string[] = [];
   lines.push("# Legacy-fit migration report (T-300)\n");
@@ -1402,6 +1473,21 @@ function buildReport(report: Report, dumpPath: string): string {
   lines.push(
     `- **Normalized duplicate documentos merged**: ${mergedDocumentoRows}`,
   );
+  lines.push(
+    `- **Truncated chains** (cycles or depth > 50): ${truncatedChains}`,
+  );
+  if (documentoCollisions.length > 0) {
+    lines.push(
+      `- **⚠ Incompatible document collisions**: ${documentoCollisions.length} — NOT auto-merged`,
+    );
+    for (const c of documentoCollisions) {
+      lines.push(
+        `  - Key \`${c.key}\`: ids [${c.ids.join(", ")}] conflict on fields: ${c.conflictingFields.join(", ")}`,
+      );
+    }
+  } else {
+    lines.push(`- **Incompatible document collisions**: 0 ✓`);
+  }
   lines.push("");
   if (fkViolations.length > 0) {
     lines.push("### FK violations (first 20)\n");
@@ -1445,6 +1531,19 @@ function main(): void {
   );
   console.log(`Unmatched origem: ${report.unmatchedOrigemTokens}`);
   console.log(`Merged documentos: ${report.mergedDocumentoRows}`);
+  console.log(
+    `Truncated chains : ${report.truncatedChains} (cycles or depth > 50)`,
+  );
+  if (report.documentoCollisions.length > 0) {
+    console.log(
+      `⚠ Incompatible collisions: ${report.documentoCollisions.length}`,
+    );
+    for (const c of report.documentoCollisions) {
+      console.log(
+        `   Key ${c.key}: ids [${c.ids.join(", ")}] conflict on ${c.conflictingFields.join(", ")}`,
+      );
+    }
+  }
   if (!colOk)
     for (const e of report.columnErrors.slice(0, 10))
       console.log(`   [${e.table}] ${e.message}`);

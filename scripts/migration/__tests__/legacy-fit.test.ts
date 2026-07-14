@@ -354,7 +354,7 @@ describe("documento_origem_id chains", () => {
       documento(2939, "M10835 A", 1315),
       documento(698, "M10835", 1315),
     ];
-    const remap = buildDocumentoIdRemap(documentos);
+    const { remap } = buildDocumentoIdRemap(documentos);
     expect(remap.get(2939)).toBe(698);
     expect(remap.get(698)).toBe(698);
   });
