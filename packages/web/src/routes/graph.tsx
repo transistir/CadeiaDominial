@@ -62,7 +62,8 @@ function RealGraph({ imovelId }: { imovelId: string }) {
     const token =
       typeof window !== "undefined" ? window.localStorage.getItem("token") : null;
 
-    fetch(`/api/graph/${imovelId}`, {
+    const apiBase = import.meta.env.VITE_API_BASE_URL ?? "/api";
+    fetch(`${apiBase}/graph/${imovelId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
       .then(async (res) => {
