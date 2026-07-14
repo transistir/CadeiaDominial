@@ -220,10 +220,10 @@ function formatUnresolvedCitationLabel(origem: {
 
 /**
  * Detects cycles in the documento graph using iterative DFS.
- * Throws if a cycle is found, listing the involved documento IDs.
- *
- * Only considers documento→documento edges (not synthetic fim edges).
+ * Logs warnings for cycles found (non-fatal — real chains contain
+ * reciprocal references and self-links from legacy data).
  */
+
 function detectCycles(edges: GraphEdge[], docIds: string[]): void {
   const adjacency = new Map<string, string[]>();
   for (const docId of docIds) {
@@ -269,7 +269,12 @@ function detectCycles(edges: GraphEdge[], docIds: string[]): void {
       if (neighborState === "visiting") {
         const cycleStartIndex = path.indexOf(neighbor);
         const cycle = path.slice(cycleStartIndex).concat(neighbor);
-        throw new Error(`Cycle detected in chain data: ${cycle.join(" -> ")}`);
+        // Non-fatal: cycles are logged instead of throwing.
+        // Real dominial chains contain reciprocal references (A↔B) and
+        // self-links from legacy data.  The graph still renders — the
+        // back-edge creates a visible cycle that users can inspect.
+        console.warn(`Cycle detected in chain data: ${cycle.join(" -> ")}`);
+        continue;
       }
 
       if (neighborState === undefined) {

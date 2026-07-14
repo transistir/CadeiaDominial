@@ -814,6 +814,15 @@ function run(): Report {
         }
       }
 
+    // Skip self-referencing origens (documento pointing to itself).
+    // These are legacy data artifacts — an origem cannot reference its own
+    // lancamento's document as both source and target.
+    for (const [indice, o] of byIndice) {
+      if (o.documentoId !== null && o.documentoId === docId) {
+        byIndice.delete(indice);
+      }
+    }
+
     for (const o of [...byIndice.values()].sort((a, b) => a.indice - b.indice))
       origemRows.push(o);
   }

@@ -642,7 +642,7 @@ describe("buildGraph", () => {
 
   // --- Cycle detection (2 cases) ---
 
-  it("self-loop (documento with origem pointing to itself) → throws cycle error", () => {
+  it("self-loop (documento with origem pointing to itself) → renders with self-edge (non-fatal)", () => {
     const chainData: ChainData = {
       documentos: [
         {
@@ -661,12 +661,13 @@ describe("buildGraph", () => {
       ],
     };
 
-    expect(() => buildGraph(chainData)).toThrow(
-      /Cycle detected in chain data: doc-1 -> doc-1/
-    );
+    // Self-loops are logged but no longer throw — the graph renders.
+    const result = buildGraph(chainData);
+    expect(result.nodes).toHaveLength(1); // doc-1 only (is a source, no synthetic leaf)
+    expect(result.edges).toHaveLength(1); // self-loop edge
   });
 
-  it("2-node cycle (doc-1 → doc-2 → doc-1) → throws cycle error", () => {
+  it("2-node cycle (doc-1 → doc-2 → doc-1) → renders with cycle (non-fatal)", () => {
     const chainData: ChainData = {
       documentos: [
         {
@@ -694,8 +695,9 @@ describe("buildGraph", () => {
       ],
     };
 
-    expect(() => buildGraph(chainData)).toThrow(
-      /Cycle detected in chain data: (doc-1 -> doc-2 -> doc-1|doc-2 -> doc-1 -> doc-2)/
-    );
+    // Cycles are logged but no longer throw — the graph renders.
+    const result = buildGraph(chainData);
+    expect(result.nodes.length).toBeGreaterThanOrEqual(2); // 2 docs
+    expect(result.edges).toHaveLength(2); // both edges present including cycle
   });
 });
