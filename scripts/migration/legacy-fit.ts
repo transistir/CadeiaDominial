@@ -1008,6 +1008,82 @@ export function buildOrigemRows(
     documentoByKey.set(`${criId}|${tipo}|${numero}`, id);
   }
 
+  // Build cross-CRI index (only for unique matches).
+  // tipoNumeroCris stores the Set of criIds per tipo|numero for [AMBIGUOUS] logging.
+  const crossCRIIndex = new Map<string, { criId: number; docId: number }>();
+  const tipoNumeroCris = new Map<string, Set<number>>();
+
+  for (const r of rawDocumento) {
+    const id = integerOrNull(r[C.documento.id]);
+    const criId = integerOrNull(r[C.documento.cartorioId]);
+    if (id === null || criId === null) continue;
+    const tipo =
+      DOCUMENTO_TIPO_BY_ID[integerOrNull(r[C.documento.tipoId]) ?? 0] ===
+      "transcricao"
+        ? "transcricao"
+        : "matricula";
+    const numero = normalizeNumero(r[C.documento.numero]) || (nullIfEmpty(r[C.documento.numero]) ?? String(id));
+    const key = `${tipo}|${numero}`;
+    if (!tipoNumeroCris.has(key)) tipoNumeroCris.set(key, new Set());
+    tipoNumeroCris.get(key)!.add(criId);
+    if (!crossCRIIndex.has(key)) crossCRIIndex.set(key, { criId, docId: id });
+  }
+
+  // Remove keys with multiple CRIs from crossCRIIndex (keep only unique matches)
+  for (const [key, cris] of tipoNumeroCris) {
+    if (cris.size > 1) crossCRIIndex.delete(key);
+  }
+
+  interface FindDocumentoResult {
+    docId: number;
+    criId: number;
+    tier: 1 | 2 | 3;
+  }
+
+  function findDocumento(
+    token: OrigemToken,
+    cartorioOrigemId: number | null,
+    documentoCriId: number | null,
+  ): FindDocumentoResult | null {
+    if (token.numero === null) return null;
+
+    // Tier 1: cartorio_origem_id
+    if (cartorioOrigemId !== null) {
+      const key = `${cartorioOrigemId}|${token.tipo}|${token.numero}`;
+      const match = documentoByKey.get(key);
+      if (match !== undefined) {
+        const doc = documentoById.get(match)!;
+        return { docId: match, criId: doc.criId, tier: 1 };
+      }
+    }
+
+    // Tier 2: documento.cri_id
+    if (documentoCriId !== null) {
+      const key = `${documentoCriId}|${token.tipo}|${token.numero}`;
+      const match = documentoByKey.get(key);
+      if (match !== undefined) {
+        const doc = documentoById.get(match)!;
+        return { docId: match, criId: doc.criId, tier: 2 };
+      }
+    }
+
+    // Tier 3: cross-CRI unique match
+    const tier3Key = `${token.tipo}|${token.numero}`;
+    const tier3Match = crossCRIIndex.get(tier3Key);
+    if (tier3Match !== undefined) {
+      console.log(`[CROSS-CRI] Tier 3 match: ${token.raw} → cri ${tier3Match.criId}, doc ${tier3Match.docId}`);
+      return { docId: tier3Match.docId, criId: tier3Match.criId, tier: 3 };
+    }
+
+    // Ambiguous: log for audit
+    const cris = tipoNumeroCris.get(tier3Key);
+    if (cris && cris.size > 1) {
+      console.log(`[AMBIGUOUS] ${token.tipo} ${token.numero} exists in multiple CRIs: ${[...cris].join(", ")}`);
+    }
+
+    return null;
+  }
+
   // A document may have many transactions. Prefer its explicit
   // inicio-matricula/origin-bearing transaction when choosing the edge that
   // continues the ancestry chain.
@@ -1103,15 +1179,23 @@ export function buildOrigemRows(
       const tokens = parseOrigemText(lancamento[C.lancamento.origemText]);
       tokens.forEach((token, indice) => {
         let matchedDocumentoId: number | null = null;
+        let resolvedCriId = rootCriId; // default; may be overridden by Tier 3
         if (token.numero !== null) {
-          matchedDocumentoId =
-            documentoByKey.get(`${rootCriId}|${token.tipo}|${token.numero}`) ??
-            null;
-          if (matchedDocumentoId === null) unmatchedOrigemTokens++;
+          const result = findDocumento(
+            token,
+            integerOrNull(lancamento[C.lancamento.cartorioOrigemId]),
+            documentoId !== null ? (documentoById.get(documentoId)?.criId ?? null) : null,
+          );
+          if (result !== null) {
+            matchedDocumentoId = result.docId;
+            resolvedCriId = result.criId;
+          } else {
+            unmatchedOrigemTokens++;
+          }
         }
         byIndice.set(indice, {
           lancamentoId,
-          criId: rootCriId,
+          criId: resolvedCriId,
           documentoId: matchedDocumentoId,
           indice,
           tipo: token.tipo,
