@@ -777,6 +777,32 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
         )
         self.assertFalse(resultado_transcricao["tem_duplicata"])
 
+    def test_origem_numerica_sem_prefixo_e_tratada_como_matricula_implicita(self):
+        """Achado da revisão automatizada do PR (Codex, 2026-07-14): uma
+        origem digitada só com números (sem "M"/"T") já é tratada como
+        matrícula implícita em outros pontos do sistema
+        (`LancamentoOrigemLeituraService._extrair_identidade_legada`); a
+        detecção de duplicata precisa fazer o mesmo, senão um documento
+        existente com o mesmo número normalizado/cartório não é detectado
+        como duplicata quando o usuário digita "123" em vez de "M123"."""
+        imovel_atual = self.criar_imovel("999", self.cartorio_a, nome="Atual")
+        imovel_origem = self.criar_imovel("123", self.cartorio_a, nome="Origem")
+        documento = self.criar_documento(
+            imovel_origem,
+            self.tipo_matricula,
+            "M123",
+            self.cartorio_a,
+        )
+
+        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(
+            origem="123",
+            cartorio_id=self.cartorio_a.pk,
+            imovel_atual_id=imovel_atual.pk,
+        )
+
+        self.assertTrue(resultado["tem_duplicata"])
+        self.assertEqual(resultado["documento_origem"].pk, documento.pk)
+
     def test_ct18_documentos_importaveis_nao_cruzam_cartorios(self):
         imovel_atual = self.criar_imovel("999", self.cartorio_a, nome="Atual")
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Origem A")

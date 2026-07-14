@@ -44,10 +44,22 @@ class CriarDocumentoAutomaticoViewTest(IdentidadeDocumentoFixture):
 
     def test_existencia_verifica_identidade_normalizada_nao_texto_bruto(self):
         """Um documento "123" (sem prefixo, tipo matrícula) já existente deve
-        bloquear a criação de "M123" no mesmo imóvel, mesmo com formatação de
-        número diferente."""
+        bloquear a criação de "M123" no mesmo imóvel/cartório, mesmo com
+        formatação de número diferente. Precisa de um lançamento com
+        cartorio_origem definido para a view conseguir resolver o cartório
+        (mesmo critério de identidade completa usado na checagem)."""
         imovel = self.criar_imovel("999", self.cartorio_a, nome="Atual")
         self.criar_documento(imovel, self.tipo_matricula, "123", self.cartorio_a)
+        documento_atual = self.criar_documento(imovel, self.tipo_matricula, "M999", self.cartorio_a)
+        Lancamento.objects.bulk_create([
+            Lancamento(
+                documento=documento_atual,
+                tipo=self.tipo_inicio,
+                data="2026-01-02",
+                origem="M123",
+                cartorio_origem=self.cartorio_a,
+            ),
+        ])
 
         response = self.client.get(self._url(imovel, "M123"), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
@@ -69,6 +81,35 @@ class CriarDocumentoAutomaticoViewTest(IdentidadeDocumentoFixture):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Não foi possível determinar o cartório", response.json()['error'])
         self.assertFalse(Documento.objects.filter(numero_normalizado="321").exists())
+
+    def test_homonimo_em_outro_cartorio_nao_bloqueia_criacao(self):
+        """Um documento "123"/cartorio_a existente no mesmo imóvel não pode
+        bloquear a criação de "M123" quando o cartório resolvido pelo
+        contexto é cartorio_b: são identidades diferentes (achado da revisão
+        automatizada do PR — Greptile/Qodo, 2026-07-14: a checagem de
+        existência precisa incluir o cartório resolvido, não só tipo+número)."""
+        imovel = self.criar_imovel("999", self.cartorio_a, nome="Atual")
+        self.criar_documento(imovel, self.tipo_matricula, "123", self.cartorio_a)
+        documento_atual = self.criar_documento(imovel, self.tipo_matricula, "M999", self.cartorio_a)
+        Lancamento.objects.bulk_create([
+            Lancamento(
+                documento=documento_atual,
+                tipo=self.tipo_inicio,
+                data="2026-01-02",
+                origem="M123",
+                cartorio_origem=self.cartorio_b,
+            ),
+        ])
+
+        response = self.client.get(self._url(imovel, "M123"), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            Documento.objects.filter(imovel=imovel, numero_normalizado="123").count(), 2,
+            "deve existir um documento por cartório para a mesma identidade de número",
+        )
+        criado = Documento.objects.get(imovel=imovel, numero_normalizado="123", cartorio=self.cartorio_b)
+        self.assertIsNotNone(criado)
 
     def test_com_cartorio_de_origem_no_lancamento_usa_esse_cartorio(self):
         """Quando existe um lançamento com cartorio_origem definido para a

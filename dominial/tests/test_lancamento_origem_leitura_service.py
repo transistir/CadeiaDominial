@@ -101,6 +101,26 @@ class LancamentoOrigemLeituraServiceTest(TestCase):
         self.assertEqual(origens[0].cartorio_id, self.cartorio_a.pk)
         self.assertEqual((origens[0].livro, origens[0].folha), ('10', '20'))
 
+    def test_fallback_textual_sem_cartorio_origem_usa_cartorio_do_documento(self):
+        """Achado da revisão automatizada do PR (Qodo, 2026-07-14): lançamento
+        legado com origem textual mas sem `cartorio_origem` explícito não
+        pode ficar sem cartório na leitura - mesmo fallback já usado na
+        escrita (LancamentoOrigemService._buscar_dados_origem): assume o
+        cartório do próprio documento do lançamento."""
+        lancamento = Lancamento(
+            documento=self.documento_atual,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+            origem='M111',
+            cartorio_origem=None,
+        )
+        Lancamento.objects.bulk_create([lancamento])
+
+        origens = LancamentoOrigemLeituraService.obter_origens(lancamento)
+
+        self.assertEqual(len(origens), 1)
+        self.assertEqual(origens[0].cartorio_id, self.documento_atual.cartorio_id)
+
     def test_estrutura_substitui_texto_contraditorio_em_todos_consumidores(self):
         lancamento = self._criar_lancamento_historico()
         LancamentoOrigem.objects.create(

@@ -20,14 +20,23 @@ class DuplicataVerificacaoService:
 
     @staticmethod
     def _tipo_do_codigo(codigo):
-        """Deduz o tipo documental (matricula/transcricao) do prefixo M/T de um código."""
+        """Deduz o tipo documental (matricula/transcricao) do prefixo M/T de
+        um código. Um código só com dígitos (sem prefixo) é tratado como
+        matrícula implícita — mesma regra já usada por
+        `LancamentoOrigemLeituraService._extrair_identidade_legada` para o
+        texto legado de origem, para não haver dois entendimentos diferentes
+        do mesmo formato de número dentro do sistema (achado da revisão
+        automatizada do PR, 2026-07-14)."""
         if not codigo:
             return None
-        primeiro = codigo.strip()[:1].upper()
+        codigo = codigo.strip()
+        primeiro = codigo[:1].upper()
         if primeiro == 'M':
             return 'matricula'
         if primeiro == 'T':
             return 'transcricao'
+        if codigo.isdigit():
+            return 'matricula'
         return None
 
     @staticmethod

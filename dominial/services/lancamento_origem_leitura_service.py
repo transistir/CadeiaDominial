@@ -64,6 +64,18 @@ class LancamentoOrigemLeituraService:
         if not lancamento.origem:
             return ()
 
+        # Mesmo fallback já usado no caminho de escrita
+        # (LancamentoOrigemService._buscar_dados_origem): sem
+        # `cartorio_origem` explícito, assume o cartório do próprio
+        # documento do lançamento, em vez de ficar sem cartório (o que faria
+        # consumidores que exigem identidade completa ignorarem a origem
+        # silenciosamente). Achado da revisão automatizada do PR (Qodo,
+        # 2026-07-14).
+        cartorio_fallback = (
+            lancamento.cartorio_origem
+            or (lancamento.documento.cartorio if lancamento.documento_id else None)
+        )
+
         resultados = []
         partes = [parte.strip() for parte in lancamento.origem.split(';') if parte.strip()]
         for indice, parte in enumerate(partes):
@@ -79,7 +91,7 @@ class LancamentoOrigemLeituraService:
                     tipo_documento=tipo_documento,
                     numero=numero,
                     numero_normalizado=numero_normalizado,
-                    cartorio=lancamento.cartorio_origem,
+                    cartorio=cartorio_fallback,
                     livro=cls._normalizar_metadado(lancamento.livro_origem),
                     folha=cls._normalizar_metadado(lancamento.folha_origem),
                     fonte='legada',

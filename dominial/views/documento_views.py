@@ -219,24 +219,12 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         # Obter o tipo de documento
         tipo_doc = DocumentoTipo.objects.get(tipo=tipo_documento)
 
-        # Verificar se já existe um documento com essa identidade (tipo +
-        # número normalizado), não apenas o texto bruto do número: "M123",
-        # "123" e "M 123" não podem ser tratados como identidades distintas
-        # no mesmo imóvel/tipo.
         from ..utils.documento_identidade_utils import normalizar_numero_documento
         try:
             numero_normalizado = normalizar_numero_documento(codigo_origem, tipo_documento)
         except (TypeError, ValueError):
             numero_normalizado = None
 
-        if numero_normalizado and Documento.objects.filter(
-            imovel=imovel, tipo=tipo_doc, numero_normalizado=numero_normalizado
-        ).exists():
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': f'Documento "{codigo_origem}" já existe.'}, status=400)
-            messages.warning(request, f'Documento "{codigo_origem}" já existe.')
-            return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
-        
         # CORREÇÃO: Determinar cartório baseado na origem do documento
         # Se é o primeiro documento (matrícula atual) → usar cartório do imóvel
         # Se não é o primeiro → buscar cartório de origem do lançamento que referenciou esta origem
@@ -289,6 +277,22 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({'error': erro}, status=400)
             messages.error(request, erro)
+            return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+
+        # Verificar se já existe um documento com essa identidade completa
+        # (tipo + número normalizado + cartório) — precisa incluir o
+        # cartório resolvido acima: um homônimo em outro cartório do mesmo
+        # imóvel é um documento diferente, não um "já existe" (mesma regra
+        # de identidade canônica usada em todo o restante desta correção).
+        if numero_normalizado and Documento.objects.filter(
+            imovel=imovel,
+            tipo=tipo_doc,
+            numero_normalizado=numero_normalizado,
+            cartorio=cartorio_documento,
+        ).exists():
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': f'Documento "{codigo_origem}" já existe.'}, status=400)
+            messages.warning(request, f'Documento "{codigo_origem}" já existe.')
             return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
 
         # Criar o documento
