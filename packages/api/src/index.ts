@@ -278,6 +278,8 @@ type GraphChainData = {
     lancamentoId: string;
     documentoId: string | null;
     tipoOrigem: string;
+    numero?: string;
+    numeroRaw?: string;
     tipoFimCadeia?: string;
     especificacao?: string;
   }>;
@@ -337,6 +339,8 @@ const handleGraph = async (c: Context<Env>) => {
               o.lancamento_id AS lancamentoId,
               o.documento_id AS documentoId,
               o.tipo AS tipo,
+              o.numero AS numero,
+              o.numero_raw AS numeroRaw,
               ofc.tipo_fim_cadeia AS tipoFimCadeia,
               ofc.especificacao_fim_cadeia AS especificacao
        FROM origem o
@@ -352,6 +356,8 @@ const handleGraph = async (c: Context<Env>) => {
         lancamentoId: number;
         documentoId: number | null;
         tipo: string;
+        numero: string | null;
+        numeroRaw: string | null;
         tipoFimCadeia: string | null;
         especificacao: string | null;
       }>()
@@ -405,6 +411,8 @@ const handleGraph = async (c: Context<Env>) => {
       lancamentoId: String(o.lancamentoId),
       documentoId: o.documentoId === null ? null : String(o.documentoId),
       tipoOrigem: o.tipo,
+      ...(o.numero ? { numero: o.numero } : {}),
+      ...(o.numeroRaw ? { numeroRaw: o.numeroRaw } : {}),
       ...(o.tipoFimCadeia ? { tipoFimCadeia: o.tipoFimCadeia } : {}),
       ...(o.especificacao ? { especificacao: o.especificacao } : {})
     }))

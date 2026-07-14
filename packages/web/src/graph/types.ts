@@ -4,6 +4,7 @@ export type FimCadeiaClassificacao =
   | "sem_origem"
   | "inconclusa"
   | "destacamento_publico"
+  | "nao_resolvida"
   | "outra";
 export type OrigemTipo = "matricula" | "transcricao" | "fim_cadeia";
 
@@ -16,6 +17,7 @@ export interface DocumentoData {
 
 export interface FimCadeiaData {
   classificacao: FimCadeiaClassificacao;
+  label?: string;
   especificacao?: string;
 }
 

@@ -15,6 +15,8 @@ type OrigRow = {
   lancamentoId: number;
   documentoId: number | null;
   tipo: string;
+  numero: string | null;
+  numeroRaw: string | null;
   tipoFimCadeia: string | null;
   especificacao: string | null;
 };
@@ -43,6 +45,8 @@ const GRAPH_FIXTURE: Record<number, { documentos: DocRow[]; lancamentos: LancRow
         lancamentoId: 7,
         documentoId: 5,
         tipo: "matricula",
+        numero: "517",
+        numeroRaw: "M517",
         tipoFimCadeia: null,
         especificacao: null
       },
@@ -51,6 +55,8 @@ const GRAPH_FIXTURE: Record<number, { documentos: DocRow[]; lancamentos: LancRow
         lancamentoId: 8,
         documentoId: null,
         tipo: "fim_cadeia",
+        numero: null,
+        numeroRaw: null,
         tipoFimCadeia: "destacamento_publico",
         especificacao: "Patrimônio público estadual"
       }
@@ -153,6 +159,8 @@ type ChainDataResponse = {
     lancamentoId: string;
     documentoId: string | null;
     tipoOrigem: string;
+    numero?: string;
+    numeroRaw?: string;
     tipoFimCadeia?: string;
     especificacao?: string;
   }>;

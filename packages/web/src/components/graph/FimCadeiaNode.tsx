@@ -13,6 +13,7 @@ const CLASSIFICATION_LABEL: Record<FimCadeiaData["classificacao"], string> = {
   sem_origem: "Sem Origem",
   inconclusa: "Inconclusa",
   destacamento_publico: "Destacamento Público",
+  nao_resolvida: "Não Resolvida",
   outra: "Outra"
 };
 
@@ -29,7 +30,7 @@ export function FimCadeiaNode({ data }: NodeProps<FimCadeiaReactFlowNode>) {
       <div className="fim-cadeia-node__icon" aria-hidden="true">
         ⏹
       </div>
-      <div className="fim-cadeia-node__label">Fim de Cadeia</div>
+      <div className="fim-cadeia-node__label">{data.label ?? "Fim de Cadeia"}</div>
       <div className="fim-cadeia-node__classification">
         {CLASSIFICATION_LABEL[data.classificacao]}
       </div>

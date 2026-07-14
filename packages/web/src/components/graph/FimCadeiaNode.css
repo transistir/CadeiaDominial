@@ -42,6 +42,15 @@
   color: #d97706;
 }
 
+.fim-cadeia-node--nao_resolvida {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+.fim-cadeia-node--nao_resolvida .fim-cadeia-node__icon {
+  color: #4f46e5;
+}
+
 .fim-cadeia-node__icon {
   font-size: 20px;
   margin-bottom: 4px;

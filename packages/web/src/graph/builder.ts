@@ -32,6 +32,8 @@ export interface ChainData {
     lancamentoId: string;
     documentoId: string | null;
     tipoOrigem?: OrigemTipo;
+    numero?: string | null;
+    numeroRaw?: string | null;
     tipoFimCadeia?: FimCadeiaClassificacao;
     especificacao?: string;
   }>;
@@ -87,26 +89,53 @@ export function buildGraph(chainData: ChainData): GraphJson {
     const targetId = ensureDocPrefix(lancamento.documentoId);
 
     if (origem.documentoId === null) {
-      if (origem.tipoOrigem !== "fim_cadeia") {
-        throw new Error(`Origem ${origem.id} has no documento but is not fim_cadeia`);
+      if (origem.tipoOrigem === "fim_cadeia") {
+        const fimId = `fim-${origem.id}`;
+        nodes.push({
+          id: fimId,
+          label: "Fim de cadeia",
+          type: "fimCadeia",
+          data: {
+            classificacao: origem.tipoFimCadeia ?? "inconclusa",
+            ...(origem.especificacao ? { especificacao: origem.especificacao } : {}),
+          },
+        });
+        documentosAsSource.add(targetId);
+        edges.push({
+          id: origem.id,
+          source: targetId,
+          target: fimId,
+          data: { tipoOrigem: "fim_cadeia" },
+        });
+        continue;
       }
 
-      const fimId = `fim-${origem.id}`;
+      if (origem.tipoOrigem !== "matricula" && origem.tipoOrigem !== "transcricao") {
+        throw new Error(`Origem ${origem.id} has no documento but has unsupported tipoOrigem`);
+      }
+
+      const tipoOrigem = origem.tipoOrigem;
+      const unresolvedId = `unresolved-${origem.id}`;
+      const label = formatUnresolvedCitationLabel({
+        tipoOrigem,
+        numero: origem.numero,
+        numeroRaw: origem.numeroRaw,
+      });
       nodes.push({
-        id: fimId,
-        label: "Fim de cadeia",
+        id: unresolvedId,
+        label,
         type: "fimCadeia",
         data: {
-          classificacao: origem.tipoFimCadeia ?? "inconclusa",
-          ...(origem.especificacao ? { especificacao: origem.especificacao } : {}),
+          label,
+          classificacao: "nao_resolvida",
         },
       });
       documentosAsSource.add(targetId);
       edges.push({
         id: origem.id,
         source: targetId,
-        target: fimId,
-        data: { tipoOrigem: "fim_cadeia" },
+        target: unresolvedId,
+        data: { tipoOrigem },
       });
       continue;
     }
@@ -176,6 +205,17 @@ function ensureDocPrefix(id: string): string {
  */
 function inferOrigemTipo(sourceDocTipo: DocumentoTipo): OrigemTipo {
   return sourceDocTipo === "transcricao" ? "transcricao" : "matricula";
+}
+
+function formatUnresolvedCitationLabel(origem: {
+  tipoOrigem: "matricula" | "transcricao";
+  numero?: string | null;
+  numeroRaw?: string | null;
+}): string {
+  const tipoLabel = origem.tipoOrigem === "matricula" ? "Matrícula" : "Transcrição";
+  const numero = origem.numero || origem.numeroRaw;
+
+  return numero ? `${tipoLabel} ${numero}` : tipoLabel;
 }
 
 /**

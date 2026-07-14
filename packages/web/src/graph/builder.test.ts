@@ -574,6 +574,50 @@ describe("buildGraph", () => {
     });
   });
 
+  it("null-documento matricula origem renders as unresolved citation leaf", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "1", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        {
+          id: "2854",
+          lancamentoId: "lanc-1",
+          documentoId: null,
+          tipoOrigem: "matricula",
+          numero: "46984",
+        },
+      ],
+    };
+
+    const result = buildGraph(chainData);
+
+    expect(result.nodes).toContainEqual({
+      id: "unresolved-2854",
+      label: "Matrícula 46984",
+      type: "fimCadeia",
+      data: {
+        label: "Matrícula 46984",
+        classificacao: "nao_resolvida",
+      },
+    });
+    expect(result.edges).toContainEqual({
+      id: "2854",
+      source: "doc-1",
+      target: "unresolved-2854",
+      data: { tipoOrigem: "matricula" },
+    });
+  });
+
   it("synthetic fim-cadeia nodes have classificacao: inconclusa", () => {
     const chainData: ChainData = {
       documentos: [
