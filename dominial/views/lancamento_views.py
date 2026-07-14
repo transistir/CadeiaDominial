@@ -304,12 +304,26 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # Verificar se o documento do lançamento é compartilhado (referenciado como origem)
             from ..models import Lancamento as LancamentoModel
             from ..services.hierarquia_arvore_service import HierarquiaArvoreService
-            
-            # Verificar referência direta
-            lancamentos_referenciando_direta = LancamentoModel.objects.filter(
-                documento__imovel=imovel,
-                origem__icontains=lancamento.documento.numero
-            ).exists()
+            from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+
+            # Verificar referência direta pela identidade completa (tipo +
+            # número normalizado + cartório), nunca por número isolado: um
+            # texto de origem que apenas contenha o mesmo número não prova
+            # que é o mesmo documento - pode ser um homônimo em outro
+            # cartório que não pertence à cadeia deste imóvel.
+            documento_referenciado = lancamento.documento
+            lancamentos_referenciando_direta = False
+            for lanc_do_imovel in LancamentoModel.objects.filter(documento__imovel=imovel):
+                for origem_info in LancamentoOrigemLeituraService.obter_origens(lanc_do_imovel):
+                    if (
+                        origem_info.tipo_documento == documento_referenciado.tipo.tipo
+                        and origem_info.numero_normalizado == documento_referenciado.numero_normalizado
+                        and origem_info.cartorio_id == documento_referenciado.cartorio_id
+                    ):
+                        lancamentos_referenciando_direta = True
+                        break
+                if lancamentos_referenciando_direta:
+                    break
             
             # Verificar referência indireta (através da cadeia dominial)
             lancamentos_referenciando_indireta = False

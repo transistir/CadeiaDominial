@@ -224,9 +224,11 @@ class HierarquiaArvoreService:
                     if doc_pai:
                         documentos_pais.append(doc_pai)
                     elif criar_documentos_automaticos:
-                        # Criar documento automaticamente se solicitado
+                        # Criar documento automaticamente se solicitado, sempre
+                        # com o cartório da própria origem (nunca um cartório
+                        # arbitrário).
                         doc_pai = HierarquiaArvoreService._criar_documento_automatico(
-                            origem.codigo, imovel
+                            origem.codigo, origem.cartorio, imovel
                         )
                         if doc_pai:
                             documentos_pais.append(doc_pai)
@@ -234,9 +236,14 @@ class HierarquiaArvoreService:
         return documentos_pais
     
     @staticmethod
-    def _criar_documento_automatico(numero_documento, imovel):
+    def _criar_documento_automatico(numero_documento, cartorio, imovel):
         """
-        Cria um documento automaticamente para uma origem identificada
+        Cria um documento automaticamente para uma origem identificada.
+
+        O cartório é sempre o da própria origem (`origem.cartorio`), nunca um
+        cartório arbitrário: sem cartório, não cria o documento (mesma regra
+        aplicada em T11/T12/R06 — nunca resolver ou criar identidade sem
+        contexto completo de cartório).
         """
         try:
             # Determinar tipo do documento
@@ -247,14 +254,10 @@ class HierarquiaArvoreService:
                 tipo_documento = DocumentoTipo.objects.get(tipo='transcricao')
             else:
                 return None
-            
-            # Buscar cartório padrão (pode ser melhorado)
-            from ..models import Cartorios
-            cartorio = Cartorios.objects.first()  # Simplificado
-            
+
             if not cartorio:
                 return None
-            
+
             # Criar documento
             from datetime import date
             documento = Documento.objects.create(

@@ -4,45 +4,45 @@ Atualize a coluna **Estado** e a seção **Evidências** ao terminar cada tarefa
 
 ## Resumo
 
-| ID  | Entrega pequena                                        | Depende de         | Testes                     | Estado     |
-| --- | ------------------------------------------------------ | ------------------ | -------------------------- | ---------- |
-| T01 | Auditar consultas de `Documento` por número            | —                  | revisão estática           | CONCLUÍDA  |
-| T02 | Testes-base da identidade completa                     | —                  | CT-01 a CT-05              | CONCLUÍDA  |
-| T03 | Testes do cadastro de imóvel                           | —                  | CT-06 a CT-08              | CONCLUÍDA  |
-| T04 | Função isolada de normalização                         | T02                | CT-09 a CT-12              | CONCLUÍDA  |
-| T05 | Objeto imutável `DocumentoIdentidade`                  | T04                | CT-01 a CT-05              | CONCLUÍDA  |
-| T06 | `DocumentoIdentidadeService`                           | T05                | CT-13 a CT-15              | CONCLUÍDA  |
-| T07 | Corrigir origens disponíveis na tabela                 | T06                | CT-16                      | EM REVISÃO |
-| T08 | Corrigir verificação inicial de duplicata              | T06                | CT-17                      | CONCLUÍDA  |
-| T09 | Corrigir recursão de documentos importáveis            | T08                | CT-18                      | CONCLUÍDA  |
-| T10 | Corrigir obtenção da cadeia de origem                  | T09                | CT-18                      | CONCLUÍDA  |
-| T11 | Corrigir criação automática de origem                  | T06                | CT-19                      | CONCLUÍDA  |
-| T12 | Proibir alteração automática de cartório               | T11                | CT-20                      | CONCLUÍDA  |
-| T13 | Corrigir `HierarquiaOrigemService`                     | T06                | CT-16, CT-19               | CONCLUÍDA  |
-| T14 | Corrigir identidade nos serviços ativos de árvore      | T13                | CT-18                      | CONCLUÍDA  |
-| T15 | Comando somente leitura de auditoria de dados          | T04                | testes do comando          | CONCLUÍDA  |
-| T16 | Verificador de migrações e constraints por ambiente    | T15                | testes do comando          | CONCLUÍDA  |
-| T17 | Constraint de Documento: tipo+número+cartório          | T02, T04, T15      | testes de migração         | CONCLUÍDA  |
-| T18 | Constraint do documento principal do Imóvel            | T03, T15           | testes de migração         | CONCLUÍDA  |
-| T19 | Impedir novos registros sem cartório                   | T15                | CT-07                      | CONCLUÍDA  |
-| T20 | Tornar cartório `NOT NULL`                             | T19                | teste de migração          | CONCLUÍDA  |
-| T21 | Adicionar modelo `LancamentoOrigem`                    | T17                | testes do modelo           | CONCLUÍDA  |
-| R01 | Definir persistência do número canônico                | T04, T15           | decisão arquitetural       | CONCLUÍDA  |
-| R02 | Garantir unicidade canônica de Documento e Imóvel      | R01, T04, T15, T16 | CR-01 a CR-04 + migrações  | CONCLUÍDA  |
-| R03 | Resolver o tronco principal pela identidade contextual | T06, T13           | CR-05                      | CONCLUÍDA  |
-| R04 | Usar IDs nas conexões e níveis da árvore               | T06, T13           | CR-06                      | CONCLUÍDA  |
-| R05 | Restaurar livro/folha na criação com múltiplas origens | T06, T12           | CR-07                      | CONCLUÍDA  |
-| R06 | Endurecer resolvedor e modelo de origem estruturada    | R01, T06           | CR-08 e CR-09              | CONCLUÍDA  |
-| R07 | Regressão e fechamento das tarefas reabertas           | R02–R06            | suítes focadas + auditoria | CONCLUÍDA  |
-| T22 | Gravar origens estruturadas                            | R07                | testes de integração       | CONCLUÍDA  |
-| T23 | Comando `--dry-run` para migrar origens antigas        | R07                | testes do comando          | CONCLUÍDA  |
-| T24 | Consultar origens estruturadas com fallback            | T22, T23           | CT-17, CT-18               | CONCLUÍDA  |
-| T25 | Exibir identidade completa nas opções                  | T08                | teste de template/view     | EM REVISÃO |
-| T26 | Exigir seleção inequívoca por ID e validar backend     | T25                | CT-15                      | EM REVISÃO |
-| T27 | Prévia: criar, reutilizar ou importar                  | T26                | teste de fluxo             | PENDENTE   |
-| T28 | Auditoria final de buscas por número isolado           | T07–T27            | revisão estática           | PENDENTE   |
-| T29 | Teste integrado de regressão                           | T07–T27            | suíte CT completa          | PENDENTE   |
-| T30 | Roteiro de implantação e rollback                      | T15–T29            | validação documental       | PENDENTE   |
+| ID  | Entrega pequena                                                | Depende de         | Testes                     | Estado     |
+| --- | -------------------------------------------------------------- | ------------------ | -------------------------- | ---------- |
+| T01 | Auditar consultas de `Documento` por número                    | —                  | revisão estática           | CONCLUÍDA  |
+| T02 | Testes-base da identidade completa                             | —                  | CT-01 a CT-05              | CONCLUÍDA  |
+| T03 | Testes do cadastro de imóvel                                   | —                  | CT-06 a CT-08              | CONCLUÍDA  |
+| T04 | Função isolada de normalização                                 | T02                | CT-09 a CT-12              | CONCLUÍDA  |
+| T05 | Objeto imutável `DocumentoIdentidade`                          | T04                | CT-01 a CT-05              | CONCLUÍDA  |
+| T06 | `DocumentoIdentidadeService`                                   | T05                | CT-13 a CT-15              | CONCLUÍDA  |
+| T07 | Corrigir origens disponíveis na tabela                         | T06                | CT-16                      | EM REVISÃO |
+| T08 | Corrigir verificação inicial de duplicata                      | T06                | CT-17                      | CONCLUÍDA  |
+| T09 | Corrigir recursão de documentos importáveis                    | T08                | CT-18                      | CONCLUÍDA  |
+| T10 | Corrigir obtenção da cadeia de origem                          | T09                | CT-18                      | CONCLUÍDA  |
+| T11 | Corrigir criação automática de origem                          | T06                | CT-19                      | CONCLUÍDA  |
+| T12 | Proibir alteração automática de cartório                       | T11                | CT-20                      | CONCLUÍDA  |
+| T13 | Corrigir `HierarquiaOrigemService`                             | T06                | CT-16, CT-19               | CONCLUÍDA  |
+| T14 | Corrigir identidade nos serviços ativos de árvore              | T13                | CT-18                      | CONCLUÍDA  |
+| T15 | Comando somente leitura de auditoria de dados                  | T04                | testes do comando          | CONCLUÍDA  |
+| T16 | Verificador de migrações e constraints por ambiente            | T15                | testes do comando          | CONCLUÍDA  |
+| T17 | Constraint de Documento: tipo+número+cartório                  | T02, T04, T15      | testes de migração         | CONCLUÍDA  |
+| T18 | Constraint do documento principal do Imóvel                    | T03, T15           | testes de migração         | CONCLUÍDA  |
+| T19 | Impedir novos registros sem cartório                           | T15                | CT-07                      | CONCLUÍDA  |
+| T20 | Tornar cartório `NOT NULL`                                     | T19                | teste de migração          | CONCLUÍDA  |
+| T21 | Adicionar modelo `LancamentoOrigem`                            | T17                | testes do modelo           | CONCLUÍDA  |
+| R01 | Definir persistência do número canônico                        | T04, T15           | decisão arquitetural       | CONCLUÍDA  |
+| R02 | Garantir unicidade canônica de Documento e Imóvel              | R01, T04, T15, T16 | CR-01 a CR-04 + migrações  | CONCLUÍDA  |
+| R03 | Resolver o tronco principal pela identidade contextual         | T06, T13           | CR-05                      | CONCLUÍDA  |
+| R04 | Usar IDs nas conexões e níveis da árvore                       | T06, T13           | CR-06                      | CONCLUÍDA  |
+| R05 | Restaurar livro/folha na criação com múltiplas origens         | T06, T12           | CR-07                      | CONCLUÍDA  |
+| R06 | Endurecer resolvedor e modelo de origem estruturada            | R01, T06           | CR-08 e CR-09              | CONCLUÍDA  |
+| R07 | Regressão e fechamento das tarefas reabertas                   | R02–R06            | suítes focadas + auditoria | CONCLUÍDA  |
+| T22 | Gravar origens estruturadas                                    | R07                | testes de integração       | CONCLUÍDA  |
+| T23 | Comando `--dry-run` para migrar origens antigas                | R07                | testes do comando          | CONCLUÍDA  |
+| T24 | Consultar origens estruturadas com fallback                    | T22, T23           | CT-17, CT-18               | CONCLUÍDA  |
+| T25 | Exibir identidade completa nas opções                          | T08                | teste de template/view     | CONCLUÍDA  |
+| T26 | Exigir seleção inequívoca por ID e validar backend             | T25                | CT-15                      | CONCLUÍDA  |
+| T27 | Regressão: confirmação de duplicata usa cartório ponta a ponta | T26                | teste de regressão         | CONCLUÍDA  |
+| T28 | Auditoria final de buscas por número isolado                   | T07–T27            | revisão estática           | CONCLUÍDA  |
+| T29 | Teste integrado de regressão                                   | T07–T27            | suíte CT completa          | CONCLUÍDA  |
+| T30 | Roteiro de implantação e rollback                              | T15–T29            | validação documental       | CONCLUÍDA  |
 
 ## Ordem de retomada após a revisão de 2026-07-13
 
@@ -56,10 +56,12 @@ Atualize a coluna **Estado** e a seção **Evidências** ao terminar cada tarefa
 8. T22 — concluída; o fluxo funcional mantém escrita textual e estruturada sincronizadas.
 9. T23 — concluída; migração histórica conservadora, idempotente e auditável.
 10. T24 — concluída; consumidores relacionais usam estrutura com fallback exclusivo para o legado.
-11. Próxima tarefa: T25; T07 continua dependendo também da homologação manual já registrada.
+11. T25 — concluída; identidade completa exibida e homologada manualmente pelo usuário.
+12. T26 — concluída; seleção inequívoca por ID e validação backend homologadas manualmente pelo usuário.
+13. T27 — concluída (redefinida como teste de regressão após tentativa de UI descartada; passou sem alteração de código de produção). Próxima tarefa: tratar as duas dívidas técnicas pré-T28, depois T28/T29/T30. T07 continua dependendo também da homologação manual já registrada, separadamente de T25/T26.
 
 As tarefas R01–R07 corrigiram o checkpoint reconstruído e não substituem
-T22–T30. Com T22–T24 concluídas, a T25 está desbloqueada.
+T22–T30. Com T22–T27 concluídas, T28 está desbloqueada (após as dívidas técnicas).
 
 ## Detalhamento das correções R01–R07
 
@@ -483,7 +485,7 @@ o fechamento atual em R01–R07 e no diário.
 
 ### T25 — Exibir identidade completa nas opções
 
-- Estado: EM REVISÃO
+- Estado: CONCLUÍDA
 - Data: 2026-07-14
 - Responsável/IA: Claude Code (plano revisado por Codex)
 - Arquivos alterados: `dominial/services/lancamento_duplicata_service.py`, `templates/dominial/duplicata_importacao.html`, `templates/dominial/selecionar_documento_lancamento.html`, `dominial/tests/test_t25_identidade_opcoes.py`
@@ -491,12 +493,13 @@ o fechamento atual em R01–R07 e no diário.
 - Decisões: T25 cobre as duas telas de opções (duplicata/importação e seleção de documento); o DTO é aditivo e preserva IDs/URLs/campos existentes; o contrato de seleção permanece intocado (T26); nenhuma migração; corrigido `documento.get_tipo_display` → `documento.tipo.get_tipo_display`
 - Comandos executados: `test_t25_identidade_opcoes` (7/7); `test_identidade_documento` (67/67); `test_fase2_duplicata_integracao` (12 erros preexistentes em `setUp` por `descricao` removido); `manage.py check` (OK); `makemigrations --check --dry-run` (sem mudanças); `git diff --check` (limpo); `dominial.tests` global (159 testes, 47 erros + 1 falha legados, baseline inalterado)
 - Resultado: 7/7 novos passaram; canônica 67/67; baseline global mantido; nenhum teste removido ou afrouxado
-- Riscos ou pendências: dois caminhos ativos de criação automática por contexto incompleto foram registrados como dívida (ver seção abaixo) e devem ser tratados antes de T28/T29; nenhuma migração aplicada ao banco compartilhado
+- Revisão do usuário: roteiro manual de homologação (seleção de documento e tela de duplicata com homônimos M123 em cartórios A/B) executado localmente em 2026-07-14; usuário confirmou funcionamento correto. Fechamento formal desta entrada.
+- Riscos ou pendências: dois caminhos ativos de criação automática por contexto incompleto foram registrados como dívida (ver seção abaixo) e devem ser tratados antes de T28/T29; nenhuma migração aplicada ao banco compartilhado; homologação manual da T07 (cross-cartorio no servidor de teste, com dados reais) continua pendente separadamente
 - Commit/PR: não criado
 
 ### T26 — Exigir seleção inequívoca por ID e validar backend
 
-- Estado: EM REVISÃO
+- Estado: CONCLUÍDA
 - Data: 2026-07-14
 - Responsável/IA: Claude Code
 - Arquivos alterados: `dominial/views/lancamento_views.py`, `templates/dominial/selecionar_documento_lancamento.html`, `dominial/services/lancamento_duplicata_service.py`, `dominial/tests/test_t26_selecao_inequivoca.py`
@@ -504,17 +507,86 @@ o fechamento atual em R01–R07 e no diário.
 - Decisões: `novo_lancamento_documento` passou a usar `get_object_or_404(Documento, id=documento_id, imovel=imovel)`; o botão de "Novo Lançamento" na seleção de documento usa essa URL com `documento_id` explícito em vez de depender do primeiro documento do imóvel; a importação de duplicata reprocessa `origem_completa[]`/`cartorio_origem[]` (campos ocultos já preservados no template) pelo mesmo `DuplicataVerificacaoService.verificar_duplicata_origem` usado na detecção original e só aceita `documento_origem_id`/`documentos_importaveis[]` que batam exatamente com o resultado recalculado; nenhuma migração
 - Comandos executados: `test_t26_selecao_inequivoca` (6/6); `test_t25_identidade_opcoes` (7/7); `test_identidade_documento` (67/67); `manage.py check` (OK); `makemigrations --check --dry-run` (sem mudanças); `git diff --check` (limpo); `dominial.tests` global (165 testes, 47 erros + 1 falha legados, baseline inalterado)
 - Resultado: 6/6 novos testes passaram; baseline global mantido; nenhum teste removido ou afrouxado
+- Revisão do usuário: mesma sessão de homologação manual local de T25 (botão de novo lançamento por `documento_id`, importação de duplicata) confirmada pelo usuário em 2026-07-14. Fechamento formal desta entrada.
 - Riscos ou pendências: `test_fase2_duplicata_integracao` continua com 12 erros pré-existentes no `setUp` (campo `descricao` removido de `DocumentoTipo`), já registrados no baseline; não foi possível reutilizar esse arquivo para exercitar T26, coberto pelo novo módulo de teste; nenhuma migração aplicada ao banco compartilhado
 - Commit/PR: não criado
 
-## Dívidas identificadas (pré-T28)
+### T27 — histórico: tentativa descartada, depois redefinida
 
-Encontradas na revisão de 2026-07-14 (Codex, verificadas no código). Contradizem o objetivo “homônimos nunca confundidos” e não bloqueiam T25–T27 (apresentação/seleção), mas exigem reclassificação ou correção antes da auditoria final (T28) e da regressão (T29).
+**Tentativa descartada (2026-07-14, tarde).** Implementação original interpretou o título do backlog ("Prévia: criar, reutilizar ou importar") como uma funcionalidade nova de UI — bloco CRIAR/IMPORTAR/REUTILIZAR em `duplicata_importacao.html`, com classificação de "já importado" via `DocumentoImportado`. O usuário apontou, antes mesmo de testar, que isso partia de uma compreensão errada do escopo: o fluxo de detectar duplicata → avisar → confirmar → importar cadeia + gerar aresta + recalcular hierarquia **já existe no baseline** (`ImportacaoCadeiaService`, migração 0031, `duplicata_importacao.html`), é anterior a esta branch, e esta branch (`feature/identidade-documento-cartorio`) deve se limitar a corrigir a identidade por cartório nesse fluxo — não inventar uma prévia nova. Consulta ao Codex confirmou: (1) a entrada T27 do backlog não tinha critério funcional correspondente, foi especificada sem base verificável; (2) o comportamento que o usuário descreve já está coberto, inclusive quanto ao cartório, por `duplicata_verificacao_service.py` (T08), `lancamento_duplicata_service.py` (T26), `lancamento_origem_service.py` (T22) e `hierarquia_arvore_service.py` (R04/T14); (3) recomendação: descartar integralmente a implementação. Os arquivos alterados (`dominial/services/lancamento_duplicata_service.py`, `dominial/views/lancamento_views.py`, `templates/dominial/duplicata_importacao.html`) foram revertidos via `git checkout --` para o estado de T26, e `dominial/tests/test_t27_previa_duplicata.py` foi removido. Nenhum código dessa tentativa permanece.
 
-1. **Criação automática com cartório arbitrário na árvore**
-   - `dominial/services/hierarquia_arvore_service.py:237` — `_criar_documento_automatico()` cria documento com `Cartorios.objects.first()` quando uma origem não resolve.
+**Redefinição (2026-07-14, tarde), seguindo a recomendação do Codex:** T27 passa a ser um teste de regressão do fluxo pós-confirmação já existente, não uma nova interface. Critério de aceite: criar dois documentos homônimos em cartórios diferentes; confirmar a duplicata do cartório escolhido; verificar que o lançamento e seu `LancamentoOrigem` guardam o cartório correto; reconstruir a árvore; afirmar que a aresta aponta, por ID, para o documento do cartório correto; afirmar os níveis recalculados; afirmar que o homônimo do outro cartório não aparece. Se esse teste passar sem exigir mudança de código (que é o esperado, já que R03/R04/T14/T26 já cobrem esse caminho), T27 é encerrada sem alteração funcional — apenas com o teste de regressão registrado.
+
+**Fechamento (2026-07-14, tarde).** Teste `test_t27_regressao_cartorio_duplicata.py` implementado seguindo exatamente o critério acima: dois documentos M123 homônimos (cartório A e B); confirmação da duplicata do cartório A via `LancamentoDuplicataService.processar_importacao_duplicata`; criação do lançamento original via `LancamentoCriacaoService.criar_lancamento_completo` (`apos_importacao=true`, mesmo caminho de `duplicata_views.importar_duplicata`); reconstrução da árvore via `HierarquiaArvoreService.construir_arvore_cadeia_dominial`. **Passou na primeira execução, sem qualquer mudança em código de produção**, confirmando a previsão do Codex: `LancamentoOrigem` estruturado grava `cartorio_id` e `numero_normalizado` corretos; a aresta reconstruída liga o documento ativo ao documento do cartório A por ID; o homônimo do cartório B não aparece nem como aresta nem como nó; o nível do nó importado é 1.
+
+- Estado: CONCLUÍDA
+- Data: 2026-07-14
+- Responsável/IA: Claude Code (redefinição por recomendação do Codex; execução confirma diagnóstico)
+- Arquivos alterados: `dominial/tests/test_t27_regressao_cartorio_duplicata.py` (novo); nenhum arquivo de produção.
+- Testes adicionados: 1 teste de regressão ponta a ponta (confirmação de duplicata → `LancamentoOrigem` → aresta/nível da árvore), cobrindo a distinção de homônimos por cartório em todo o caminho pós-confirmação.
+- Comandos executados: `test_t27_regressao_cartorio_duplicata` isolado (1/1); combinado com `test_t26_selecao_inequivoca` + `test_t25_identidade_opcoes` + `test_identidade_documento` (81/81); `manage.py check` (OK); `makemigrations --check --dry-run` (sem mudanças); `git diff --check` (limpo); `dominial.tests` global (166 testes, 47 erros + 1 falha legados, baseline inalterado, +1 novo de T27)
+- Resultado: teste passou de primeira, sem alteração de código de produção — confirma que R03/R04/T14/T22/T26 já cobrem a identidade de cartório ponta a ponta no fluxo de confirmação de duplicata legado
+- Riscos ou pendências: nenhuma nova; as duas dívidas técnicas pré-T28 continuam pendentes
+- Commit/PR: não criado
+
+## Dívidas identificadas (pré-T28) — CORRIGIDAS em 2026-07-14
+
+Encontradas na revisão de 2026-07-14 (Codex, verificadas no código). Contradiziam o objetivo “homônimos nunca confundidos”.
+
+1. **Criação automática com cartório arbitrário na árvore — CORRIGIDO**
+   - `dominial/services/hierarquia_arvore_service.py:237` — `_criar_documento_automatico()` criava documento com `Cartorios.objects.first()` quando uma origem não resolve.
    - `dominial/views/cadeia_dominial_views.py:64` — a view `cadeia_dominial_arvore` chama `construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=True)`, acionando o caminho acima ao renderizar a árvore D3 (write-on-read).
-2. **Criação automática via view com busca por número isolado**
-   - `dominial/views/documento_views.py:199` — `criar_documento_automatico` verifica existência por `imovel + numero`, sem tipo/cartório canônicos.
+   - Fix: `_criar_documento_automatico` passou a receber `cartorio` como parâmetro explícito (o `origem.cartorio` do chamador, o mesmo já usado por `_resolver_documento_por_codigo`); sem cartório, retorna `None` em vez de `Cartorios.objects.first()`. Achado curioso durante a correção: existe um arquivo `hierarquia_arvore_service_backup.py`, não importado por nada no projeto (código morto), que já tinha essa mesma correção aplicada uma vez — reforça que esse é o padrão correto já estabelecido em outras partes do código (`lancamento_origem_service.py`, `hierarquia_origem_service.py`).
+   - Teste: `dominial/tests/test_divida_cartorio_arbitrario_arvore.py` (2/2) — usa `bulk_create` para contornar o sinal de criação automática já correto (T11/T12) e isolar o caminho de fallback sob teste; usa dois cartórios em ordem de criação tal que `Cartorios.objects.first()` devolveria o cartório errado se o bug persistisse.
+2. **Criação automática via view com busca por número isolado — CORRIGIDO**
+   - `dominial/views/documento_views.py:199` — `criar_documento_automatico` verificava existência por `imovel + numero` bruto, sem tipo/cartório canônicos, e tinha os mesmos dois fallbacks para `Cartorios.objects.first()`.
+   - Fix: existência agora verificada por tipo + número normalizado (`normalizar_numero_documento`); os dois fallbacks para `Cartorios.objects.first()` foram removidos — sem cartório resolvível pelo contexto (matrícula do imóvel ou lançamento com `cartorio_origem`), a criação é recusada com mensagem de erro, nunca adivinha um cartório.
+   - Achado: esta view não está referenciada em nenhum template/JS ativo (nem a URL nomeada `criar_documento_automatico`, nem o path `criar-documento/` aparecem em `templates/` ou `static/`) — é um endpoint morto do ponto de vista de uso real, só alcançável por URL direta. Corrigido mesmo assim porque a rota nomeada permanece registrada e pode ser usada manualmente ou por integrações futuras; não foi removida (decisão: corrigir a resolução, não remover o caminho automático).
+   - Teste: `dominial/tests/test_divida_criar_documento_automatico_view.py` (3/3).
+3. **Autorização de edição de lançamento por número isolado — encontrado na auditoria T28, CORRIGIDO**
+   - `dominial/views/lancamento_views.py` (`editar_lancamento`) — a checagem "direta" de que um documento de outro imóvel é legitimamente referenciado como origem desta cadeia usava `origem__icontains=lancamento.documento.numero`: um match textual de número, sem checar cartório. Um homônimo (mesmo número, cartório diferente, não referenciado de fato) passava só por coincidência de texto, autorizando edição indevida de um lançamento que não pertence à cadeia do imóvel — achado durante a auditoria estática de T28, não estava no checkpoint original de dívidas.
+   - Fix: a checagem agora usa `LancamentoOrigemLeituraService.obter_origens` (já usado em `hierarquia_arvore_service.py` e outros serviços) e compara tipo + número normalizado + cartório de cada origem do imóvel contra a identidade completa do documento do lançamento a editar.
+   - Teste: `dominial/tests/test_divida_edicao_lancamento_homonimo.py` (2/2) — homônimo em cartório diferente não referenciado é recusado (antes seria aceito); documento realmente referenciado continua aceito.
 
-Decisão: registrar como dívida; T28 deve classificar cada ocorrência e T26/T28 devem decidir entre corrigir a resolução ou remover o caminho automático. Não há migração envolvida.
+Suíte combinada (T25+T26+T27+identidade canônica+as três correções): 88/88. Suíte global: 173 testes, 47 erros + 1 falha legados (baseline inalterado). `manage.py check`, `makemigrations --check --dry-run` e `git diff --check` limpos. Nenhuma migração envolvida em nenhuma das três correções.
+
+## T28 — Auditoria final de buscas por número isolado
+
+- Estado: CONCLUÍDA
+- Data: 2026-07-14
+- Responsável/IA: Claude Code
+- Método: repetição do tipo de busca estática já feita em T01/R07 (`grep` por `.filter(numero=`, `.get(numero=`, `origem__icontains`, `Q(numero=`, `.filter(matricula=`) sobre `dominial/services/`, `dominial/views/`, `dominial/utils/`, `dominial/admin.py` e `dominial/management/commands/`, excluindo testes e migrações, classificando cada ocorrência.
+- Achados classificados:
+  1. **Corrigidos nesta sessão** (itens 1–3 acima): `hierarquia_arvore_service.py`, `documento_views.py`, `lancamento_views.py` (`editar_lancamento`).
+  2. **Implementações alternativas inativas (código morto, não importado por nada):** `dominial/services/hierarquia_arvore_service_backup.py`, `hierarquia_arvore_service_corrigido.py`, `documento_service_consolidado.py`. Confirmado por busca: nenhum arquivo do projeto importa desses três.
+  3. **Diagnóstico usado apenas por script isolado:** `dominial/services/hierarquia_arvore_service_melhorado.py`, importado só por `dominial/management/commands/testar_conexao_t1004_t2822.py` — comando de investigação hardcoded para documentos específicos (T1004/T2822), não faz parte do fluxo do usuário.
+  4. **Comandos de management somente-diagnóstico** (nomes começam com `investigar_`/`verificar_`/`testar_`): `investigar_documentos_duplicados.py`, `verificar_documentos.py`, `investigar_conexoes_incorretas.py`, `verificar_matricula_constraint.py`, `verificar_cartorios_documentos.py` — leem e reportam, não alimentam resolução de relacionamento de negócio (árvore, duplicata, importação).
+  5. **Pesquisa textual administrativa, não relacionamento de negócio:** `dominial/admin.py` — `NumeroDocumentoFilter` (filtro de lista) e a ação `investigar_duplicatas` reportam documentos com o mesmo número (inclusive entre cartórios diferentes, o que é esperado/legítimo neste domínio) para o staff investigar manualmente; não resolvem nem confundem identidades automaticamente.
+  6. **Campo não relacionado à identidade documental:** `numero_lancamento` em `lancamento_service.py`/`lancamento_validacao_service.py` é a numeração interna do lançamento dentro do seu próprio documento (conceito diferente de tipo+número+cartório do `Documento`), fora do escopo desta auditoria.
+  7. **Fallback já seguro, dentro do mesmo imóvel:** `hierarquia_arvore_service.py:75` (`_identificar_documento_principal`) usa `Documento.objects.filter(imovel=imovel).first()` só como último recurso, depois de tentar a identidade canônica completa, e já escopado a um único imóvel (não atravessa cartórios/imóveis) — comportamento testado desde antes desta branch (`test_identificar_documento_principal_fallback_to_oldest`), não é uma confusão de homônimos.
+- Resultado: nenhum fluxo ativo de negócio (árvore, duplicata/importação, autorização de edição) resolve ou autoriza mais por número isolado. As ocorrências restantes são código morto, diagnóstico manual, pesquisa administrativa ou já devidamente escopadas.
+- Riscos ou pendências: os arquivos de código morto (`_backup`, `_corrigido`, `_melhorado`, `documento_service_consolidado.py`) não foram removidos nesta tarefa — é uma decisão de limpeza separada, fora do escopo de correção de identidade; considerar removê-los em uma tarefa de housekeeping futura.
+- Commit/PR: não criado
+
+## T29 — Teste integrado de regressão
+
+- Estado: CONCLUÍDA
+- Data: 2026-07-14
+- Responsável/IA: Claude Code
+- Comandos executados:
+  - Suíte global `dominial.tests` (todo o app, sem filtro): **173 testes, 47 erros + 1 falha** — exatamente o baseline legado já documentado desde antes de T22, sem nenhuma quebra nova introduzida por T25–T28.
+  - Suíte focada combinada (identidade canônica + migrações de identidade + `LancamentoOrigem` + leitura de origem + comando de migração histórica + T25/T26/T27/dívidas pré-T28): **116/116 testes, todos passando** — `test_identidade_documento`, `test_t25_identidade_opcoes`, `test_t26_selecao_inequivoca`, `test_t27_regressao_cartorio_duplicata`, `test_divida_cartorio_arbitrario_arvore`, `test_divida_criar_documento_automatico_view`, `test_divida_edicao_lancamento_homonimo`, `test_migracao_identidade_documento`, `test_migracao_identidade_imovel`, `test_migracao_identidade_canonica`, `test_migracao_lancamento_origem_canonica`, `test_lancamento_origem_model`, `test_lancamento_origem_leitura_service`, `test_migrar_origens_estruturadas_command`.
+  - `manage.py check`: OK. `makemigrations --check --dry-run`: sem mudanças. `git diff --check`: limpo.
+- Resultado: o baseline legado de 47 erros + 1 falha é o mesmo desde antes de T22 (pré-existente, não causado por este trabalho); todo o código novo/alterado por T25–T28 está coberto e verde. Nenhuma migração pendente ou desconhecida.
+- Riscos ou pendências: o baseline legado (47 erros + 1 falha) não foi saneado nesta tarefa — são fixtures/API antigas e um teste autocontido que precisam de manutenção própria, fora do escopo desta correção de identidade (já registrado em sessões anteriores, ex.: `test_fase2_duplicata_integracao` com 12 erros por `DocumentoTipo.descricao` removido).
+- Commit/PR: não criado
+
+## T30 — Roteiro de implantação e rollback
+
+- Estado: CONCLUÍDA
+- Data: 2026-07-14
+- Responsável/IA: Claude Code
+- Entregável: `docs/correcao-identidade-documentos/ROTEIRO_IMPLANTACAO.md` — cobre escopo do deploy (migrações 0043–0049 + T25–T29), estado conhecido do servidor de teste (branch atual, config local não commitada, containers), backup do banco, preservação de config local (`git stash`), troca de branch, subida controlada com acompanhamento de migração, verificação pós-deploy (estrutural via `verificar_estrutura_ambiente`/`auditar_identidade_documentos` + funcional + homologação de T25/T26/T07 com dados reais), e rollback de código/migração/dado.
+- Decisões: roteiro cobre só o servidor de teste, não produção/merge para `main` — decisão explicitamente fora de escopo, registrada no próprio documento. A execução real do roteiro (deploy efetivo) permanece separada, pendente de autorização explícita do usuário a cada etapa arriscada (push da branch, backup/restore, restart do container).
+- Riscos ou pendências: a auditoria automatizada só cobre `Documento` (comando `auditar_identidade_documentos`); `Imovel`/`LancamentoOrigem` contam apenas com a auditoria embutida nas próprias migrações 0048/0049 (que abortam sem reescrever dados em caso de conflito, mas não têm um relatório prévio dedicado como o de `Documento`).
+- Commit/PR: não criado
