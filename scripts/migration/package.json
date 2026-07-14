@@ -6,7 +6,7 @@
   "main": "./legacy-fit.ts",
   "types": "./legacy-fit.ts",
   "scripts": {
-    "legacy-fit": "npx tsx legacy-fit.ts",
+    "legacy-fit": "node legacy-fit.ts",
     "test": "vitest run",
     "test:unit": "vitest run",
     "typecheck": "tsc --noEmit"

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   tokenizeValues,
   parseInserts,
+  parseCopyFormat,
+  parseDumpTable,
   normalizeNumero,
   haToCentiares,
   toIso,
@@ -15,6 +17,8 @@ import {
   mapLancamento,
   mapLancamentoTipo,
   mapTis,
+  buildOrigemRows,
+  buildDocumentoIdRemap,
 } from "../legacy-fit";
 
 const NOW = "2026-06-29T00:00:00.000Z";
@@ -82,6 +86,53 @@ describe("parseInserts", () => {
   });
 });
 
+describe("parseCopyFormat", () => {
+  it("captures headers and parses tabs, NULLs, booleans, and COPY escapes", () => {
+    const sql = [
+      "COPY public.dominial_pessoas (id, nome, cpf, ativo) FROM stdin;",
+      '1\t"Nome com\\ttab e\\nnewline"\t\\N\tt',
+      "2\tAna\t\tfalse",
+      "\\.",
+    ].join("\n");
+
+    expect(parseCopyFormat(sql)).toEqual([
+      {
+        table: "dominial_pessoas",
+        headers: ["id", "nome", "cpf", "ativo"],
+        rows: [
+          [1, '"Nome com\ttab e\nnewline"', null, 1],
+          [2, "Ana", "", 0],
+        ],
+      },
+    ]);
+  });
+
+  it("combines repeated COPY blocks for a table", () => {
+    const sql = [
+      "COPY public.dominial_pessoas (id, nome) FROM stdin;",
+      "1\tAna",
+      "\\.",
+      "COPY public.outra (id) FROM stdin;",
+      "9",
+      "\\.",
+      "COPY public.dominial_pessoas (id, nome) FROM stdin;",
+      "2\tBia",
+      "\\.",
+    ].join("\n");
+    expect(parseDumpTable(sql, "dominial_pessoas")).toEqual([
+      [1, "Ana"],
+      [2, "Bia"],
+    ]);
+  });
+
+  it("falls back to legacy INSERT parsing when COPY is absent", () => {
+    const sql = "INSERT INTO dominial_pessoas VALUES(1,NULL,'','','','','Ze');";
+    expect(parseDumpTable(sql, "dominial_pessoas")).toEqual([
+      [1, null, "", "", "", "", "Ze"],
+    ]);
+  });
+});
+
 describe("scalar helpers", () => {
   it("normalizeNumero keeps digits only", () => {
     expect(normalizeNumero("M6726")).toBe("6726");
@@ -99,7 +150,7 @@ describe("scalar helpers", () => {
     expect(toIso("2025-07-07", NOW)).toBe("2025-07-07T00:00:00.000Z");
     expect(toIso("1992", NOW)).toBe("1992-01-01T00:00:00.000Z");
     expect(toIso("2025-08-13T22:05:17.770637Z", NOW)).toBe(
-      "2025-08-13T22:05:17.770637Z"
+      "2025-08-13T22:05:17.770637Z",
     );
     expect(toIso(null, NOW)).toBe(NOW);
   });
@@ -112,7 +163,7 @@ describe("scalar helpers", () => {
 
   it("normalizeTipoFimCadeia maps to the v2 CHECK set", () => {
     expect(normalizeTipoFimCadeia("destacamento_publico")).toBe(
-      "destacamento_publico"
+      "destacamento_publico",
     );
     expect(normalizeTipoFimCadeia("")).toBeNull();
     expect(normalizeTipoFimCadeia("algo_estranho")).toBe("outra");
@@ -146,7 +197,7 @@ describe("column-order assumptions (validated against the dump)", () => {
     // id, nome, cns, endereco, telefone, email, CIDADE, ESTADO, tipo
     const row = parseInserts(
       "INSERT INTO dominial_cartorios VALUES(1,'1º Registro de Imóveis de Alta Floresta','063453','Ariosto da Riva','(66) 3521-2303','adm@x.com','ALTA FLORESTA','MT','CRI');",
-      "dominial_cartorios"
+      "dominial_cartorios",
     )[0]!;
     const cri = mapCri(row, NOW);
     expect(cri).toMatchObject({
@@ -164,7 +215,7 @@ describe("column-order assumptions (validated against the dump)", () => {
     // id, nome, matricula, observacoes, data_cadastro, cartorio, proprietario, tis, tipo_doc, arquivado
     const row = parseInserts(
       "INSERT INTO dominial_imovel VALUES(4,'Fazenda Espigão','6726','','2025-07-07',1355,9,614,'matricula',0);",
-      "dominial_imovel"
+      "dominial_imovel",
     )[0]!;
     const imovel = mapImovel(row, NOW);
     expect(imovel).toMatchObject({
@@ -178,13 +229,141 @@ describe("column-order assumptions (validated against the dump)", () => {
       created_at: "2025-07-07T00:00:00.000Z",
     });
   });
+
+  it("maps production dominial_pessoas with nome at index 1", () => {
+    const sql = [
+      "COPY public.dominial_pessoas (id, nome, cpf, rg, data_nascimento, email, telefone) FROM stdin;",
+      "9\tPedro Gezualdo\t\\N\t\\N\t\\N\t\\N\t\\N",
+      "\\.",
+    ].join("\n");
+    const row = parseDumpTable(sql, "dominial_pessoas")[0]!;
+    expect(mapPessoa(row, NOW).nome).toBe("Pedro Gezualdo");
+  });
+
+  it("maps production dominial_lancamento with detalhes at index 4", () => {
+    const sql = [
+      "COPY public.dominial_lancamento (id, data, valor_transacao, area, detalhes, observacoes, data_cadastro, adquirente_id, documento_id, transmitente_id, tipo_id, cartorio_origem_id, data_origem, descricao, documento_origem_id, eh_inicio_matricula, folha_origem, forma, livro_origem, titulo, origem, numero_lancamento, cartorio_transacao_id, data_transacao, folha_transacao, livro_transacao, cartorio_transmissao_id) FROM stdin;",
+      "99\t2022-08-09\t\\N\t2228.56\tdetalhe novo\tobservacao\t2025-07-07\t\\N\t4\t\\N\t2\t1355\t\\N\t\\N\t3\tf\t\\N\tDoação\t\\N\t\\N\tM517\tR6M6726\t\\N\t\\N\t\\N\t\\N\t\\N",
+      "\\.",
+    ].join("\n");
+    const row = parseDumpTable(sql, "dominial_lancamento")[0]!;
+    expect(mapLancamento(row, NOW)).toMatchObject({
+      id: 99,
+      detalhes: "detalhe novo",
+      forma: "Doação",
+      documento_id: 4,
+    });
+  });
+});
+
+describe("documento_origem_id chains", () => {
+  const documento = (
+    id: number,
+    numero: string,
+    criId = 10,
+  ): (string | number | null)[] => {
+    const row = Array<string | number | null>(16).fill(null);
+    row[0] = id;
+    row[1] = numero;
+    row[7] = criId;
+    row[9] = 2;
+    return row;
+  };
+
+  const lancamento = (
+    id: number,
+    documentoId: number,
+    documentoOrigemId: number | null,
+    origemText: string | null = null,
+  ): (string | number | null)[] => {
+    const row = Array<string | number | null>(27).fill(null);
+    row[0] = id;
+    row[8] = documentoId;
+    row[11] = 10;
+    row[14] = documentoOrigemId;
+    row[15] = 1;
+    row[20] = origemText;
+    return row;
+  };
+
+  it("recursively follows source documents and appends free-text chain endings", () => {
+    const documentos = [
+      documento(1, "M100"),
+      documento(2, "M200"),
+      documento(3, "M300"),
+    ];
+    const lancamentos = [
+      lancamento(30, 3, 2, "M200; Sem Origem"),
+      lancamento(20, 2, 1),
+      lancamento(10, 1, null),
+    ];
+
+    const result = buildOrigemRows(lancamentos, documentos, []);
+    expect(result.rows.filter((row) => row.lancamentoId === 30)).toMatchObject([
+      { indice: 0, documentoId: 2, tipo: "matricula", numero: "200" },
+      { indice: 1, documentoId: 1, tipo: "matricula", numero: "100" },
+      {
+        indice: 2,
+        documentoId: null,
+        tipo: "fim_cadeia",
+        numeroRaw: "Sem Origem",
+      },
+    ]);
+  });
+
+  it("stops self-references and multi-document cycles", () => {
+    const documentos = [documento(1, "M100"), documento(2, "M200")];
+    const lancamentos = [lancamento(10, 1, 2), lancamento(20, 2, 1)];
+
+    const result = buildOrigemRows(lancamentos, documentos, []);
+    expect(result.rows.filter((row) => row.lancamentoId === 10)).toMatchObject([
+      { indice: 0, documentoId: 2 },
+    ]);
+    expect(result.rows.filter((row) => row.lancamentoId === 20)).toMatchObject([
+      { indice: 0, documentoId: 1 },
+    ]);
+  });
+
+  it("overlays structured fim-de-cadeia data by indice", () => {
+    const documentos = [documento(1, "M100"), documento(2, "M200")];
+    const lancamentos = [lancamento(20, 2, 1)];
+    const fim = [[1, 0, null, "sem_origem", "Livro perdido", "privado", 20]];
+
+    const result = buildOrigemRows(lancamentos, documentos, fim);
+    expect(result.rows).toMatchObject([
+      { indice: 0, documentoId: null, tipo: "fim_cadeia", fim: fim[0] },
+    ]);
+  });
+
+  it("falls back to origem text when documento_origem_id is NULL", () => {
+    const documentos = [documento(1, "M100"), documento(2, "M200")];
+    const result = buildOrigemRows(
+      [lancamento(20, 2, null, "M100; Estado do Paraná")],
+      documentos,
+      [],
+    );
+    expect(result.rows).toMatchObject([
+      { indice: 0, documentoId: 1, tipo: "matricula", numero: "100" },
+      { indice: 1, documentoId: null, tipo: "fim_cadeia" },
+    ]);
+  });
+
+  it("canonicalizes documento numbers that collide after normalization", () => {
+    const documentos = [
+      documento(2939, "M10835 A", 1315),
+      documento(698, "M10835", 1315),
+    ];
+    const remap = buildDocumentoIdRemap(documentos);
+    expect(remap.get(2939)).toBe(698);
+    expect(remap.get(698)).toBe(698);
+  });
 });
 
 describe("full row → new-schema transforms", () => {
   it("transforms a documento row (numero normalized, tipo_id 2 → matricula)", () => {
     const row = parseInserts(
       "INSERT INTO dominial_documento VALUES(4,'M6726','2024-01-01','1','1','origem text','2025-07-07',1355,4,2,'obs',NULL,NULL,NULL,NULL,NULL);",
-      "dominial_documento"
+      "dominial_documento",
     )[0]!;
     expect(mapDocumento(row, NOW)).toEqual({
       id: 4,
@@ -203,7 +382,7 @@ describe("full row → new-schema transforms", () => {
   it("transforms a transcricao documento (tipo_id 3 → transcricao)", () => {
     const row = parseInserts(
       "INSERT INTO dominial_documento VALUES(113,'T2108','2025-07-11','3A','155','o','2025-07-11',1305,5,3,'obs',NULL,1355,1305,NULL,NULL);",
-      "dominial_documento"
+      "dominial_documento",
     )[0]!;
     const doc = mapDocumento(row, NOW);
     expect(doc.tipo).toBe("transcricao");
@@ -215,7 +394,7 @@ describe("full row → new-schema transforms", () => {
     // id,data,_,area,_,detalhes,data_cadastro,_,documento,_,tipo,...
     const row = parseInserts(
       "INSERT INTO dominial_lancamento VALUES(99,'2022-08-09',NULL,2228.56,NULL,'detalhe aqui','2025-07-07',NULL,4,NULL,2,1355,'1992-10-21',NULL,NULL,0,'0','Doação',NULL,NULL,'M517; M526','R6M6726',NULL,NULL,NULL,NULL);",
-      "dominial_lancamento"
+      "dominial_lancamento",
     )[0]!;
     const l = mapLancamento(row, NOW);
     expect(l.id).toBe(99);
@@ -233,7 +412,7 @@ describe("full row → new-schema transforms", () => {
   it("transforms a pessoa row keeping only nome (Q5 PII removal)", () => {
     const row = parseInserts(
       "INSERT INTO dominial_pessoas VALUES(9,NULL,'',NULL,'','','Pedro Gezualdo');",
-      "dominial_pessoas"
+      "dominial_pessoas",
     )[0]!;
     expect(mapPessoa(row, NOW)).toEqual({
       id: 9,
@@ -246,7 +425,7 @@ describe("full row → new-schema transforms", () => {
   it("transforms a tis row (area ha → centiares, terra_referencia_id kept)", () => {
     const row = parseInserts(
       "INSERT INTO dominial_tis VALUES(1,'101','Kokama','2025-07-05',1,18393.94,'AM','Acapuri de Cima');",
-      "dominial_tis"
+      "dominial_tis",
     )[0]!;
     expect(mapTis(row, NOW)).toMatchObject({
       id: 1,
@@ -262,7 +441,7 @@ describe("full row → new-schema transforms", () => {
   it("generates a human nome and copies requer_* flags for lancamento_tipo", () => {
     const row = parseInserts(
       "INSERT INTO dominial_lancamentotipo VALUES(3,'inicio_matricula',0,0,0,0,1,0,1,0,1,0);",
-      "dominial_lancamentotipo"
+      "dominial_lancamentotipo",
     )[0]!;
     const t = mapLancamentoTipo(row);
     expect(t.id).toBe(3);
@@ -271,6 +450,7 @@ describe("full row → new-schema transforms", () => {
     // all 10 flags present and 0/1
     const flagKeys = Object.keys(t).filter((k) => k.startsWith("requer_"));
     expect(flagKeys).toHaveLength(10);
-    for (const k of flagKeys) expect([0, 1]).toContain((t as Record<string, unknown>)[k]);
+    for (const k of flagKeys)
+      expect([0, 1]).toContain((t as Record<string, unknown>)[k]);
   });
 });

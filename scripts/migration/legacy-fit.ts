@@ -2,12 +2,12 @@
  * legacy-fit.ts — Load the legacy PostgreSQL data dump into the NEW
  * Drizzle/D1 schema (T-300).
  *
- * The dump (`data.cleaned.core.no-auth.no-unistr.sql`) is DATA-ONLY: every
- * line is a positional `INSERT INTO dominial_<table> VALUES(...);` with no
- * column names and no CREATE TABLE. The new schema is a redesign, so this is
- * a TRANSFORMATION, not a 1:1 copy. We parse the positional tuples, map them
- * onto the new tables, and load them into the local miniflare D1 SQLite file
- * via better-sqlite3.
+ * Supports both the old positional INSERT dump
+ * (`data.cleaned.core.no-auth.no-unistr.sql`) and production PostgreSQL dumps
+ * whose table data is emitted as `COPY public.<table> (...) FROM stdin`.
+ * The new schema is a redesign, so this is a TRANSFORMATION, not a 1:1 copy.
+ * We parse the rows, map them onto the new tables, and load them into the
+ * local miniflare D1 SQLite file via better-sqlite3.
  *
  * Run:  pnpm legacy-fit            (from the worktree root)
  *   or  node legacy-fit.ts         (from scripts/migration/)
@@ -31,7 +31,7 @@
  *   ([4]telefone, [5]email dropped — no home in v2)
  *
  * dominial_pessoas → pessoa   (Q5 removed all PII except nome)
- *   [0]id→id  [6]nome→nome   ([1..5] cpf/rg/nascimento/email/telefone dropped)
+ *   [0]id→id  [1]nome→nome   ([2..6] cpf/rg/nascimento/email/telefone dropped)
  *
  * dominial_imovel → imovel (+ tis_imovel + imovel_documento)
  *   [0]id→id  [1]nome→nome  [2]matricula→(used for is_documento_atual match)
@@ -50,9 +50,10 @@
  *    chain origins live on lancamento/origem in v2)
  *
  * dominial_lancamento → lancamento (+ origem + origem_fim_cadeia)
- *   [0]id→id  [1]data→data  [3]area(ha)→area_centiares  [5]detalhes→detalhes
+ *   [0]id→id  [1]data→data  [3]area(ha)→area_centiares  [4]detalhes→detalhes
  *   [6]data_cadastro→data_cadastro  [8]documento_id→documento_id
- *   [10]tipo_id→tipo_id  [13]descricao→descricao  [17]forma→forma
+ *   [10]tipo_id→tipo_id  [13]descricao→descricao
+ *   [14]documento_origem_id→origem.documento_id chain  [17]forma→forma
  *   [19]titulo→titulo  [20]origem text→origem rows  [23]→data_transmissao
  *   [24]→folha_transmissao  [25]→livro_transmissao
  *   ([11]cartorio_origem used as origem.cri_id fallback; [21] numero_lancamento
@@ -71,12 +72,12 @@
  *   [1]indice_origem  [3]tipo_fim_cadeia ('' → NULL)  [4]especificacao
  *   [5]classificacao  [6]lancamento_id
  *
- * dominial_tis → tis            [0]id [1]codigo [2]etnia [3]data_cadastro
- *   [4]terra_referencia_id [5]area(ha)→area_centiares [6]estado [7]nome
+ * dominial_tis → tis            [0]id [1]nome [2]codigo [3]etnia
+ *   [4]data_cadastro [5]terra_referencia_id [6]area(ha)→area_centiares [7]estado
  * dominial_terraindigenareferencia → terra_indigena_referencia
- *   [0]id [1]codigo [2]nome [3]etnia [4]municipio [5]area(ha)→area_ha_centiares
- *   [6]fase [7]modalidade [8]coordenacao_regional [9..13]dates [14]created
- *   [15]updated [16]estado
+ *   [0]id [1]codigo [2]nome [3]etnia [4]estado [5]municipio
+ *   [6]area(ha)→area_ha_centiares [7]fase [8]modalidade
+ *   [9]coordenacao_regional [10..14]dates [15]created [16]updated
  * dominial_documentotipo → (lookup only) {1:transmissao,2:matricula,3:transcricao}
  *
  * NOT LOADED (no clean v2 home — documented decision):
@@ -85,7 +86,14 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 
-import { readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
@@ -189,6 +197,133 @@ export function parseInserts(sql: string, table: string): SqlValue[][] {
   return rows;
 }
 
+export interface CopyBlock {
+  table: string;
+  headers: string[];
+  rows: SqlValue[][];
+}
+
+/** Decode PostgreSQL COPY text-format backslash escapes. */
+function decodeCopyText(raw: string): string {
+  let decoded = "";
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i]!;
+    if (c !== "\\" || i + 1 >= raw.length) {
+      decoded += c;
+      continue;
+    }
+
+    const escape = raw[++i]!;
+    const simpleEscapes: Record<string, string> = {
+      b: "\b",
+      f: "\f",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+      v: "\v",
+      "\\": "\\",
+    };
+    if (escape in simpleEscapes) {
+      decoded += simpleEscapes[escape];
+      continue;
+    }
+
+    if (/[0-7]/.test(escape)) {
+      let octal = escape;
+      while (
+        octal.length < 3 &&
+        i + 1 < raw.length &&
+        /[0-7]/.test(raw[i + 1]!)
+      )
+        octal += raw[++i]!;
+      decoded += String.fromCharCode(Number.parseInt(octal, 8));
+      continue;
+    }
+
+    if (
+      escape === "x" &&
+      i + 1 < raw.length &&
+      /[0-9A-Fa-f]/.test(raw[i + 1]!)
+    ) {
+      let hex = raw[++i]!;
+      if (i + 1 < raw.length && /[0-9A-Fa-f]/.test(raw[i + 1]!))
+        hex += raw[++i]!;
+      decoded += String.fromCharCode(Number.parseInt(hex, 16));
+      continue;
+    }
+
+    // PostgreSQL treats a backslash before an otherwise unrecognized
+    // character as quoting that character.
+    decoded += escape;
+  }
+  return decoded;
+}
+
+/** Convert one PostgreSQL COPY text field to the SqlValue representation. */
+function copyValue(raw: string): SqlValue {
+  if (raw === "\\N") return null;
+  const value = decodeCopyText(raw);
+  if (value === "t" || value === "true") return 1;
+  if (value === "f" || value === "false") return 0;
+  // Preserve leading-zero identifiers such as CNS codes and document numbers.
+  if (/^-?(?:0|[1-9]\d*)$/.test(value)) return Number.parseInt(value, 10);
+  if (/^-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][-+]?\d+)?$/.test(value))
+    return Number.parseFloat(value);
+  return value;
+}
+
+/**
+ * Parse PostgreSQL text-format COPY blocks. COPY text uses tabs as field
+ * separators, `\\N` for NULL, `\\.` as the block terminator, and backslash
+ * escapes (`\\t`, `\\n`, `\\\\`, octal, or hex) for special characters.
+ * Literal quote characters are data in this format and are preserved.
+ */
+export function parseCopyFormat(sql: string, table?: string): CopyBlock[] {
+  const blocks: CopyBlock[] = [];
+  const header =
+    /^COPY\s+public\.([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s+FROM\s+stdin;\r?$/gim;
+  let match: RegExpExecArray | null;
+  while ((match = header.exec(sql)) !== null) {
+    const tableName = match[1]!;
+    const includeBlock = table === undefined || tableName === table;
+    const headers = match[2]!
+      .split(",")
+      .map((column) => column.trim().replace(/^"|"$/g, ""));
+    const rows: SqlValue[][] = [];
+    let cursor = header.lastIndex;
+    if (sql[cursor] === "\r") cursor++;
+    if (sql[cursor] === "\n") cursor++;
+    let terminated = false;
+
+    while (cursor <= sql.length) {
+      let end = sql.indexOf("\n", cursor);
+      if (end === -1) end = sql.length;
+      let line = sql.slice(cursor, end);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      cursor = end + 1;
+      if (line === "\\.") {
+        terminated = true;
+        break;
+      }
+      if (includeBlock) rows.push(line.split("\t").map(copyValue));
+      if (end === sql.length) break;
+    }
+
+    if (!terminated)
+      throw new Error(`Unterminated COPY block for public.${tableName}`);
+    header.lastIndex = cursor;
+    if (includeBlock) blocks.push({ table: tableName, headers, rows });
+  }
+  return blocks;
+}
+
+/** Parse a table from either production COPY blocks or legacy INSERT rows. */
+export function parseDumpTable(sql: string, table: string): SqlValue[][] {
+  const copyBlocks = parseCopyFormat(sql, table);
+  if (copyBlocks.length > 0) return copyBlocks.flatMap((block) => block.rows);
+  return parseInserts(sql, table);
+}
+
 // ──────────────────────────────── Helpers ──────────────────────────────────
 
 /** Normalize a cartório document number to digits only (for indexing). */
@@ -283,8 +418,16 @@ const LANCAMENTO_TIPO_NOME: Record<string, string> = {
 // ─────────────────────────── Column index maps ─────────────────────────────
 
 const C = {
-  cartorio: { id: 0, nome: 1, cns: 2, endereco: 3, cidade: 6, estado: 7, tipo: 8 },
-  pessoa: { id: 0, nome: 6 },
+  cartorio: {
+    id: 0,
+    nome: 1,
+    cns: 2,
+    endereco: 3,
+    cidade: 6,
+    estado: 7,
+    tipo: 8,
+  },
+  pessoa: { id: 0, nome: 1 },
   imovel: {
     id: 0,
     nome: 1,
@@ -312,12 +455,14 @@ const C = {
     id: 0,
     data: 1,
     area: 3,
-    detalhes: 5,
+    detalhes: 4,
     dataCadastro: 6,
     documentoId: 8,
     tipoId: 10,
     cartorioOrigemId: 11,
     descricao: 13,
+    documentoOrigemId: 14,
+    ehInicioMatricula: 15,
     forma: 17,
     titulo: 19,
     origemText: 20,
@@ -325,7 +470,13 @@ const C = {
     folhaTransmissao: 24,
     livroTransmissao: 25,
   },
-  lancPessoa: { id: 0, papel: 1, nomeDigitado: 2, lancamentoId: 3, pessoaId: 4 },
+  lancPessoa: {
+    id: 0,
+    papel: 1,
+    nomeDigitado: 2,
+    lancamentoId: 3,
+    pessoaId: 4,
+  },
   lancTipo: { id: 0, tipo: 1, requerStart: 2 },
   origemFim: {
     indice: 1,
@@ -336,32 +487,32 @@ const C = {
   },
   tis: {
     id: 0,
-    codigo: 1,
-    etnia: 2,
-    dataCadastro: 3,
-    terraRefId: 4,
-    area: 5,
-    estado: 6,
-    nome: 7,
+    nome: 1,
+    codigo: 2,
+    etnia: 3,
+    dataCadastro: 4,
+    terraRefId: 5,
+    area: 6,
+    estado: 7,
   },
   terra: {
     id: 0,
     codigo: 1,
     nome: 2,
     etnia: 3,
-    municipio: 4,
-    area: 5,
-    fase: 6,
-    modalidade: 7,
-    coordRegional: 8,
-    dataRegularizada: 9,
-    dataHomologada: 10,
-    dataDeclarada: 11,
-    dataDelimitada: 12,
-    dataEmEstudo: 13,
-    createdAt: 14,
-    updatedAt: 15,
-    estado: 16,
+    estado: 4,
+    municipio: 5,
+    area: 6,
+    fase: 7,
+    modalidade: 8,
+    coordRegional: 9,
+    dataRegularizada: 10,
+    dataHomologada: 11,
+    dataDeclarada: 12,
+    dataDelimitada: 13,
+    dataEmEstudo: 14,
+    createdAt: 15,
+    updatedAt: 16,
   },
 } as const;
 
@@ -373,7 +524,7 @@ export function mapCri(r: SqlValue[], now: string) {
   const tipo = String(r[C.cartorio.tipo] ?? "CRI");
   return {
     id: r[C.cartorio.id] as number,
-    nome: (nullIfEmpty(r[C.cartorio.nome]) ?? `Cartório ${r[C.cartorio.id]}`),
+    nome: nullIfEmpty(r[C.cartorio.nome]) ?? `Cartório ${r[C.cartorio.id]}`,
     cns_codigo: nullIfEmpty(r[C.cartorio.cns]),
     cidade: nullIfEmpty(r[C.cartorio.cidade]),
     uf: nullIfEmpty(r[C.cartorio.estado]),
@@ -385,9 +536,17 @@ export function mapCri(r: SqlValue[], now: string) {
 }
 
 export function mapPessoa(r: SqlValue[], now: string) {
+  // Legacy INSERT dumps placed nome at index 6; production COPY uses index 1.
+  const productionNome = nullIfEmpty(r[C.pessoa.nome]);
+  const looksLikeLegacyCpf =
+    productionNome !== null && /^[\d./-]+$/.test(productionNome);
+  const nome =
+    productionNome === null || looksLikeLegacyCpf
+      ? (nullIfEmpty(r[6]) ?? productionNome)
+      : productionNome;
   return {
     id: r[C.pessoa.id] as number,
-    nome: nullIfEmpty(r[C.pessoa.nome]) ?? `Pessoa ${r[C.pessoa.id]}`,
+    nome: nome ?? `Pessoa ${r[C.pessoa.id]}`,
     created_at: now,
     updated_at: now,
   };
@@ -409,7 +568,10 @@ export function mapImovel(r: SqlValue[], now: string) {
 
 export function mapDocumento(r: SqlValue[], now: string) {
   const tipoId = r[C.documento.tipoId] as number;
-  const tipo = DOCUMENTO_TIPO_BY_ID[tipoId] === "transcricao" ? "transcricao" : "matricula";
+  const tipo =
+    DOCUMENTO_TIPO_BY_ID[tipoId] === "transcricao"
+      ? "transcricao"
+      : "matricula";
   const numeroRaw = nullIfEmpty(r[C.documento.numero]);
   const numero = normalizeNumero(r[C.documento.numero]) || (numeroRaw ?? "0");
   return {
@@ -427,12 +589,15 @@ export function mapDocumento(r: SqlValue[], now: string) {
 }
 
 export function mapLancamento(r: SqlValue[], now: string) {
+  // The legacy INSERT layout has 26 fields and stores detalhes at index 5;
+  // production COPY has 27 fields and stores it at index 4.
+  const detalhesIndex = r.length >= 27 ? C.lancamento.detalhes : 5;
   return {
     id: r[C.lancamento.id] as number,
     data: nullIfEmpty(r[C.lancamento.data]),
     valor_transacao_centavos: null as number | null,
     area_centiares: haToCentiares(r[C.lancamento.area]),
-    detalhes: nullIfEmpty(r[C.lancamento.detalhes]),
+    detalhes: nullIfEmpty(r[detalhesIndex]),
     observacoes: null as string | null,
     data_cadastro: nullIfEmpty(r[C.lancamento.dataCadastro]),
     documento_id: (r[C.lancamento.documentoId] as number | null) ?? null,
@@ -475,39 +640,81 @@ export function mapLancamentoTipo(r: SqlValue[]) {
 }
 
 export function mapTis(r: SqlValue[], now: string) {
+  const legacyLayout =
+    /^\d{4}-\d{2}-\d{2}/.test(String(r[3] ?? "")) ||
+    (!/^\d{4}-\d{2}-\d{2}/.test(String(r[4] ?? "")) &&
+      /^\d+$/.test(String(r[1] ?? "")) &&
+      !/^\d+$/.test(String(r[2] ?? "")));
+  const c = legacyLayout
+    ? {
+        id: 0,
+        codigo: 1,
+        etnia: 2,
+        dataCadastro: 3,
+        terraRefId: 4,
+        area: 5,
+        estado: 6,
+        nome: 7,
+      }
+    : C.tis;
   return {
-    id: r[C.tis.id] as number,
-    codigo: String(r[C.tis.codigo] ?? r[C.tis.id]),
-    etnia: nullIfEmpty(r[C.tis.etnia]) ?? "—",
-    data_cadastro: nullIfEmpty(r[C.tis.dataCadastro]) ?? now.slice(0, 10),
-    terra_referencia_id: (r[C.tis.terraRefId] as number | null) ?? null,
-    area_centiares: haToCentiares(r[C.tis.area]),
-    estado: nullIfEmpty(r[C.tis.estado]),
-    nome: nullIfEmpty(r[C.tis.nome]),
+    id: r[c.id] as number,
+    codigo: String(r[c.codigo] ?? r[c.id]),
+    etnia: nullIfEmpty(r[c.etnia]) ?? "—",
+    data_cadastro: nullIfEmpty(r[c.dataCadastro]) ?? now.slice(0, 10),
+    terra_referencia_id: (r[c.terraRefId] as number | null) ?? null,
+    area_centiares: haToCentiares(r[c.area]),
+    estado: nullIfEmpty(r[c.estado]),
+    nome: nullIfEmpty(r[c.nome]),
     created_at: now,
     updated_at: now,
   };
 }
 
 export function mapTerra(r: SqlValue[], now: string) {
+  const legacyLayout =
+    /^[A-Z]{2}$/.test(String(r[16] ?? "")) ||
+    (!/^[A-Z]{2}$/.test(String(r[4] ?? "")) &&
+      (typeof r[5] === "number" || r[5] === null));
+  const c = legacyLayout
+    ? {
+        id: 0,
+        codigo: 1,
+        nome: 2,
+        etnia: 3,
+        municipio: 4,
+        area: 5,
+        fase: 6,
+        modalidade: 7,
+        coordRegional: 8,
+        dataRegularizada: 9,
+        dataHomologada: 10,
+        dataDeclarada: 11,
+        dataDelimitada: 12,
+        dataEmEstudo: 13,
+        createdAt: 14,
+        updatedAt: 15,
+        estado: 16,
+      }
+    : C.terra;
   return {
-    id: r[C.terra.id] as number,
-    codigo: String(r[C.terra.codigo] ?? r[C.terra.id]),
-    nome: nullIfEmpty(r[C.terra.nome]) ?? `Terra ${r[C.terra.id]}`,
-    etnia: nullIfEmpty(r[C.terra.etnia]),
-    estado: nullIfEmpty(r[C.terra.estado]),
-    municipio: nullIfEmpty(r[C.terra.municipio]),
-    area_ha_centiares: haToCentiares(r[C.terra.area]),
-    fase: nullIfEmpty(r[C.terra.fase]),
-    modalidade: nullIfEmpty(r[C.terra.modalidade]),
-    coordenacao_regional: nullIfEmpty(r[C.terra.coordRegional]),
-    data_regularizada: nullIfEmpty(r[C.terra.dataRegularizada]),
-    data_homologada: nullIfEmpty(r[C.terra.dataHomologada]),
-    data_declarada: nullIfEmpty(r[C.terra.dataDeclarada]),
-    data_delimitada: nullIfEmpty(r[C.terra.dataDelimitada]),
-    data_em_estudo: nullIfEmpty(r[C.terra.dataEmEstudo]),
-    created_at: toIso(r[C.terra.createdAt], now),
-    updated_at: toIso(r[C.terra.updatedAt], now),
+    id: r[c.id] as number,
+    codigo: String(r[c.codigo] ?? r[c.id]),
+    nome: nullIfEmpty(r[c.nome]) ?? `Terra ${r[c.id]}`,
+    etnia: nullIfEmpty(r[c.etnia]),
+    estado: nullIfEmpty(r[c.estado]),
+    municipio: nullIfEmpty(r[c.municipio]),
+    area_ha_centiares: haToCentiares(r[c.area]),
+    fase: nullIfEmpty(r[c.fase]),
+    modalidade: nullIfEmpty(r[c.modalidade]),
+    coordenacao_regional: nullIfEmpty(r[c.coordRegional]),
+    data_regularizada: nullIfEmpty(r[c.dataRegularizada]),
+    data_homologada: nullIfEmpty(r[c.dataHomologada]),
+    data_declarada: nullIfEmpty(r[c.dataDeclarada]),
+    data_delimitada: nullIfEmpty(r[c.dataDelimitada]),
+    data_em_estudo: nullIfEmpty(r[c.dataEmEstudo]),
+    created_at: toIso(r[c.createdAt], now),
+    updated_at: toIso(r[c.updatedAt], now),
   };
 }
 
@@ -548,23 +755,20 @@ function resolveDumpPath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const root = resolve(here, "../.."); // worktree root (scripts/migration → root)
   const DUMP = "data.cleaned.core.no-auth.no-unistr.sql";
+  const PRODUCTION_DUMP = "cadeia_dominial_prod_20260714_080011.sql";
   // Per AGENTS.md the layout is <project>/{CadeiaDominial, worktrees/<task>},
   // so the dump lives in the sibling main checkout `../../CadeiaDominial`.
   const candidates = [
+    resolve(homedir(), PRODUCTION_DUMP),
     resolve(root, DUMP),
     resolve(root, "../../CadeiaDominial", DUMP),
     resolve(root, "../CadeiaDominial", DUMP),
   ];
   for (const c of candidates) {
-    try {
-      readFileSync(c);
-      return c;
-    } catch {
-      /* try next */
-    }
+    if (existsSync(c)) return c;
   }
   throw new Error(
-    `Dump not found. Set LEGACY_DUMP=<path>. Tried:\n  ${candidates.join("\n  ")}`
+    `Dump not found. Set LEGACY_DUMP=<path>. Tried:\n  ${candidates.join("\n  ")}`,
   );
 }
 
@@ -573,10 +777,10 @@ function resolveSqlitePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const dir = resolve(
     here,
-    "../../packages/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject"
+    "../../packages/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject",
   );
   const files = readdirSync(dir).filter(
-    (f) => f.endsWith(".sqlite") && !f.includes("metadata")
+    (f) => f.endsWith(".sqlite") && !f.includes("metadata"),
   );
   if (files.length === 0)
     throw new Error(`No D1 SQLite file under ${dir}. Run db:migrate:local.`);
@@ -599,14 +803,12 @@ function insertRows(
   db: Database,
   table: string,
   rows: Record<string, unknown>[],
-  errors: ColumnError[]
+  errors: ColumnError[],
 ): number {
   if (rows.length === 0) return 0;
   const cols = Object.keys(rows[0]!);
   const stmt = db.prepare(
-    `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols
-      .map(() => "?")
-      .join(", ")})`
+    `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
   );
   let loaded = 0;
   for (const row of rows) {
@@ -629,6 +831,240 @@ interface Report {
   fkViolations: unknown[];
   columnErrors: ColumnError[];
   unmatchedOrigemTokens: number;
+  mergedDocumentoRows: number;
+}
+
+export interface OrigemRow {
+  lancamentoId: number;
+  criId: number;
+  documentoId: number | null;
+  indice: number;
+  tipo: string;
+  numero: string | null;
+  numeroRaw: string;
+  fim?: SqlValue[];
+}
+
+export interface OrigemBuildResult {
+  rows: OrigemRow[];
+  unmatchedOrigemTokens: number;
+}
+
+function integerOrNull(value: SqlValue | undefined): number | null {
+  if (typeof value === "number" && Number.isInteger(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value))
+    return Number.parseInt(value, 10);
+  return null;
+}
+
+/**
+ * The v2 uniqueness key uses the digits-only document number. If distinct
+ * legacy spellings normalize to the same (CRI, type, number), retain the
+ * lowest legacy id and remap every reference to it.
+ */
+export function buildDocumentoIdRemap(
+  rawDocumento: SqlValue[][],
+): Map<number, number> {
+  const idsByKey = new Map<string, number[]>();
+  for (const r of rawDocumento) {
+    const id = integerOrNull(r[C.documento.id]);
+    const criId = integerOrNull(r[C.documento.cartorioId]);
+    if (id === null || criId === null) continue;
+    const tipo =
+      DOCUMENTO_TIPO_BY_ID[integerOrNull(r[C.documento.tipoId]) ?? 0] ===
+      "transcricao"
+        ? "transcricao"
+        : "matricula";
+    const numero =
+      normalizeNumero(r[C.documento.numero]) ||
+      (nullIfEmpty(r[C.documento.numero]) ?? "0");
+    const key = `${criId}|${tipo}|${numero}`;
+    if (!idsByKey.has(key)) idsByKey.set(key, []);
+    idsByKey.get(key)!.push(id);
+  }
+
+  const remap = new Map<number, number>();
+  for (const ids of idsByKey.values()) {
+    const canonicalId = Math.min(...ids);
+    for (const id of ids) remap.set(id, canonicalId);
+  }
+  return remap;
+}
+
+/**
+ * Build ordered origem rows. Production rows use documento_origem_id as the
+ * authoritative edge and recursively follow the source document's own
+ * lancamento. Legacy rows (or production rows without the FK) retain the
+ * free-text matcher. Structured fim-de-cadeia rows are overlaid last.
+ */
+export function buildOrigemRows(
+  rawLancamento: SqlValue[][],
+  rawDocumento: SqlValue[][],
+  rawOrigemFim: SqlValue[][],
+  maxDepth = 50,
+): OrigemBuildResult {
+  interface DocumentoInfo {
+    id: number;
+    criId: number;
+    tipo: "matricula" | "transcricao";
+    numero: string;
+    numeroRaw: string;
+  }
+
+  const documentoById = new Map<number, DocumentoInfo>();
+  const documentoByKey = new Map<string, number>();
+  for (const r of rawDocumento) {
+    const id = integerOrNull(r[C.documento.id]);
+    const criId = integerOrNull(r[C.documento.cartorioId]);
+    if (id === null || criId === null) continue;
+    const tipo =
+      DOCUMENTO_TIPO_BY_ID[integerOrNull(r[C.documento.tipoId]) ?? 0] ===
+      "transcricao"
+        ? "transcricao"
+        : "matricula";
+    const numeroRaw = nullIfEmpty(r[C.documento.numero]) ?? String(id);
+    const numero = normalizeNumero(r[C.documento.numero]) || numeroRaw;
+    documentoById.set(id, { id, criId, tipo, numero, numeroRaw });
+    documentoByKey.set(`${criId}|${tipo}|${numero}`, id);
+  }
+
+  // A document may have many transactions. Prefer its explicit
+  // inicio-matricula/origin-bearing transaction when choosing the edge that
+  // continues the ancestry chain.
+  const lancamentoByDocumento = new Map<number, SqlValue[]>();
+  const ancestryScore = (r: SqlValue[]): number =>
+    (integerOrNull(r[C.lancamento.documentoOrigemId]) !== null ? 2 : 0) +
+    (r[C.lancamento.ehInicioMatricula] ? 1 : 0);
+  for (const r of rawLancamento) {
+    const documentoId = integerOrNull(r[C.lancamento.documentoId]);
+    if (documentoId === null) continue;
+    const existing = lancamentoByDocumento.get(documentoId);
+    if (!existing || ancestryScore(r) > ancestryScore(existing))
+      lancamentoByDocumento.set(documentoId, r);
+  }
+
+  const fimByLancamento = new Map<number, Map<number, SqlValue[]>>();
+  for (const r of rawOrigemFim) {
+    const lancamentoId = integerOrNull(r[C.origemFim.lancamentoId]);
+    const indice = integerOrNull(r[C.origemFim.indice]);
+    if (lancamentoId === null || indice === null) continue;
+    if (!fimByLancamento.has(lancamentoId))
+      fimByLancamento.set(lancamentoId, new Map());
+    fimByLancamento.get(lancamentoId)!.set(indice, r);
+  }
+
+  const rows: OrigemRow[] = [];
+  let unmatchedOrigemTokens = 0;
+  for (const lancamento of rawLancamento) {
+    const lancamentoId = integerOrNull(lancamento[C.lancamento.id]);
+    if (lancamentoId === null) continue;
+    const documentoId = integerOrNull(lancamento[C.lancamento.documentoId]);
+    const documentoOrigemId = integerOrNull(
+      lancamento[C.lancamento.documentoOrigemId],
+    );
+    const rootCriId =
+      integerOrNull(lancamento[C.lancamento.cartorioOrigemId]) ??
+      (documentoId !== null
+        ? (documentoById.get(documentoId)?.criId ?? null)
+        : null);
+    const byIndice = new Map<number, OrigemRow>();
+    let nextIndice = 0;
+
+    if (documentoOrigemId !== null) {
+      const visited = new Set<number>();
+      if (documentoId !== null) visited.add(documentoId);
+      let sourceId: number | null = documentoOrigemId;
+      for (let depth = 0; sourceId !== null && depth < maxDepth; depth++) {
+        if (visited.has(sourceId)) break;
+        visited.add(sourceId);
+        const source = documentoById.get(sourceId);
+        if (!source) break;
+        byIndice.set(nextIndice, {
+          lancamentoId,
+          criId: source.criId ?? rootCriId,
+          documentoId: source.id,
+          indice: nextIndice,
+          tipo: source.tipo,
+          numero: source.numero,
+          numeroRaw: source.numeroRaw,
+        });
+        nextIndice++;
+        const sourceLancamento = lancamentoByDocumento.get(sourceId);
+        sourceId = sourceLancamento
+          ? integerOrNull(sourceLancamento[C.lancamento.documentoOrigemId])
+          : null;
+      }
+
+      // The FK chain is authoritative for document links. Preserve only
+      // additional non-document citations from the free-text field.
+      for (const token of parseOrigemText(
+        lancamento[C.lancamento.origemText],
+      )) {
+        if (token.tipo !== "fim_cadeia" || rootCriId === null) continue;
+        byIndice.set(nextIndice, {
+          lancamentoId,
+          criId: rootCriId,
+          documentoId: null,
+          indice: nextIndice,
+          tipo: token.tipo,
+          numero: token.numero,
+          numeroRaw: token.raw,
+        });
+        nextIndice++;
+      }
+    } else if (rootCriId !== null) {
+      const tokens = parseOrigemText(lancamento[C.lancamento.origemText]);
+      tokens.forEach((token, indice) => {
+        let matchedDocumentoId: number | null = null;
+        if (token.numero !== null) {
+          matchedDocumentoId =
+            documentoByKey.get(`${rootCriId}|${token.tipo}|${token.numero}`) ??
+            null;
+          if (matchedDocumentoId === null) unmatchedOrigemTokens++;
+        }
+        byIndice.set(indice, {
+          lancamentoId,
+          criId: rootCriId,
+          documentoId: matchedDocumentoId,
+          indice,
+          tipo: token.tipo,
+          numero: token.numero,
+          numeroRaw: token.raw,
+        });
+      });
+    }
+
+    // Structured end-of-chain data remains authoritative at its legacy index.
+    const fimRows = fimByLancamento.get(lancamentoId);
+    if (fimRows)
+      for (const [indice, fimRow] of fimRows) {
+        const existing = byIndice.get(indice);
+        if (existing) {
+          existing.tipo = "fim_cadeia";
+          existing.documentoId = null;
+          existing.fim = fimRow;
+        } else if (rootCriId !== null) {
+          byIndice.set(indice, {
+            lancamentoId,
+            criId: rootCriId,
+            documentoId: null,
+            indice,
+            tipo: "fim_cadeia",
+            numero: null,
+            numeroRaw: nullIfEmpty(fimRow[C.origemFim.tipoFim]) ?? "fim_cadeia",
+            fim: fimRow,
+          });
+        }
+      }
+
+    for (const [indice, origem] of byIndice) {
+      if (origem.documentoId !== null && origem.documentoId === documentoId)
+        byIndice.delete(indice);
+    }
+    rows.push(...[...byIndice.values()].sort((a, b) => a.indice - b.indice));
+  }
+
+  return { rows, unmatchedOrigemTokens };
 }
 
 function run(): Report {
@@ -641,45 +1077,59 @@ function run(): Report {
   console.log(`legacy-fit: target = ${sqlitePath}\n`);
 
   // ── parse ──
-  const rawCartorios = parseInserts(sql, DOMINIAL.cartorios);
-  const rawPessoas = parseInserts(sql, DOMINIAL.pessoas);
-  const rawImovel = parseInserts(sql, DOMINIAL.imovel);
-  const rawDocumento = parseInserts(sql, DOMINIAL.documento);
-  const rawLancamento = parseInserts(sql, DOMINIAL.lancamento);
-  const rawLancPessoa = parseInserts(sql, DOMINIAL.lancamentopessoa);
-  const rawLancTipo = parseInserts(sql, DOMINIAL.lancamentotipo);
-  const rawOrigemFim = parseInserts(sql, DOMINIAL.origemfimcadeia);
-  const rawTis = parseInserts(sql, DOMINIAL.tis);
-  const rawTerra = parseInserts(sql, DOMINIAL.terra);
+  const rawCartorios = parseDumpTable(sql, DOMINIAL.cartorios);
+  const rawPessoas = parseDumpTable(sql, DOMINIAL.pessoas);
+  const rawImovel = parseDumpTable(sql, DOMINIAL.imovel);
+  const rawDocumento = parseDumpTable(sql, DOMINIAL.documento);
+  const rawLancamento = parseDumpTable(sql, DOMINIAL.lancamento);
+  const rawLancPessoa = parseDumpTable(sql, DOMINIAL.lancamentopessoa);
+  const rawLancTipo = parseDumpTable(sql, DOMINIAL.lancamentotipo);
+  const rawOrigemFim = parseDumpTable(sql, DOMINIAL.origemfimcadeia);
+  const rawTis = parseDumpTable(sql, DOMINIAL.tis);
+  const rawTerra = parseDumpTable(sql, DOMINIAL.terra);
+
+  const documentoIdRemap = buildDocumentoIdRemap(rawDocumento);
+  const canonicalDocumentoRows = rawDocumento.filter((r) => {
+    const id = integerOrNull(r[C.documento.id]);
+    return id !== null && documentoIdRemap.get(id) === id;
+  });
+  const mergedDocumentoRows =
+    rawDocumento.length - canonicalDocumentoRows.length;
+  const migratedLancamentoRows = rawLancamento.map((r) => {
+    const migrated = [...r];
+    for (const index of [
+      C.lancamento.documentoId,
+      C.lancamento.documentoOrigemId,
+    ]) {
+      const id = integerOrNull(migrated[index]);
+      if (id !== null) migrated[index] = documentoIdRemap.get(id) ?? id;
+    }
+    return migrated;
+  });
 
   // ── lookups ──
   const pessoaNomeById = new Map<number, string>();
-  for (const r of rawPessoas)
-    pessoaNomeById.set(
-      r[C.pessoa.id] as number,
-      nullIfEmpty(r[C.pessoa.nome]) ?? `Pessoa ${r[C.pessoa.id]}`
-    );
+  for (const r of rawPessoas) {
+    const pessoa = mapPessoa(r, now);
+    pessoaNomeById.set(pessoa.id, pessoa.nome);
+  }
 
-  // documento lookup: (criId|tipo|normNumero) → documentoId, and per-imovel docs
-  const docByKey = new Map<string, number>();
-  const docsByImovel = new Map<number, { id: number; numeroNorm: string; tipo: string }[]>();
+  // documento lookup per imovel
+  const docsByImovel = new Map<
+    number,
+    { id: number; numeroNorm: string; tipo: string }[]
+  >();
   for (const r of rawDocumento) {
-    const id = r[C.documento.id] as number;
+    const legacyId = r[C.documento.id] as number;
+    const id = documentoIdRemap.get(legacyId) ?? legacyId;
     const imovelId = r[C.documento.imovelId] as number;
-    const criId = r[C.documento.cartorioId] as number;
     const tipo =
       DOCUMENTO_TIPO_BY_ID[r[C.documento.tipoId] as number] === "transcricao"
         ? "transcricao"
         : "matricula";
     const numeroNorm = normalizeNumero(r[C.documento.numero]);
-    docByKey.set(`${criId}|${tipo}|${numeroNorm}`, id);
     if (!docsByImovel.has(imovelId)) docsByImovel.set(imovelId, []);
     docsByImovel.get(imovelId)!.push({ id, numeroNorm, tipo });
-  }
-  // documento → cri lookup (for lancamento origem cri fallback)
-  const docCri = new Map<number, number>();
-  for (const r of rawDocumento) {
-    docCri.set(r[C.documento.id] as number, r[C.documento.cartorioId] as number);
   }
 
   // ── build new-schema rows ──
@@ -689,16 +1139,21 @@ function run(): Report {
   const terraRows = rawTerra.map((r) => mapTerra(r, now));
   const lancTipoRows = rawLancTipo.map((r) => mapLancamentoTipo(r));
   const imovelRows = rawImovel.map((r) => mapImovel(r, now));
-  const documentoRows = rawDocumento.map((r) => mapDocumento(r, now));
-  const lancamentoRows = rawLancamento.map((r) => mapLancamento(r, now));
+  const documentoRows = canonicalDocumentoRows.map((r) => mapDocumento(r, now));
+  const lancamentoRows = migratedLancamentoRows.map((r) =>
+    mapLancamento(r, now),
+  );
 
   // imovel_documento: every (imovel, documento) pair; mark the current one.
   const imovelDocRows: Record<string, unknown>[] = [];
+  const imovelDocumentoPairs = new Set<string>();
   for (const r of rawImovel) {
     const imovelId = r[C.imovel.id] as number;
     const matriculaNorm = normalizeNumero(r[C.imovel.matricula]);
     const principal =
-      r[C.imovel.tipoDocPrincipal] === "transcricao" ? "transcricao" : "matricula";
+      r[C.imovel.tipoDocPrincipal] === "transcricao"
+        ? "transcricao"
+        : "matricula";
     const docs = docsByImovel.get(imovelId) ?? [];
     let currentDocId: number | null = null;
     for (const d of docs)
@@ -708,13 +1163,17 @@ function run(): Report {
         d.tipo === principal
       )
         currentDocId = d.id;
-    for (const d of docs)
+    for (const d of docs) {
+      const pairKey = `${imovelId}|${d.id}`;
+      if (imovelDocumentoPairs.has(pairKey)) continue;
+      imovelDocumentoPairs.add(pairKey);
       imovelDocRows.push({
         imovel_id: imovelId,
         documento_id: d.id,
         is_documento_atual: d.id === currentDocId ? 1 : 0,
         created_at: now,
       });
+    }
   }
 
   // tis_imovel: imovel → its terra_indigena (one membership per imovel)
@@ -742,90 +1201,15 @@ function run(): Report {
     };
   });
 
-  // origem (+ origem_fim_cadeia), built per lancamento from origem text and
-  // overlaid with the dominial_origemfimcadeia table by indice.
-  const ofcByLanc = new Map<number, Map<number, SqlValue[]>>();
-  for (const r of rawOrigemFim) {
-    const lancId = r[C.origemFim.lancamentoId] as number;
-    const indice = r[C.origemFim.indice] as number;
-    if (!ofcByLanc.has(lancId)) ofcByLanc.set(lancId, new Map());
-    ofcByLanc.get(lancId)!.set(indice, r);
-  }
-
-  interface OrigemRow {
-    lancamentoId: number;
-    criId: number;
-    documentoId: number | null;
-    indice: number;
-    tipo: string;
-    numero: string | null;
-    numeroRaw: string;
-    fim?: SqlValue[];
-  }
-  const origemRows: OrigemRow[] = [];
-  let unmatchedOrigemTokens = 0;
-  for (const r of rawLancamento) {
-    const lancId = r[C.lancamento.id] as number;
-    const docId = (r[C.lancamento.documentoId] as number | null) ?? null;
-    const criId =
-      (r[C.lancamento.cartorioOrigemId] as number | null) ??
-      (docId !== null ? (docCri.get(docId) ?? null) : null);
-    if (criId === null) continue; // origem.cri_id is NOT NULL; skip if unknown
-
-    const byIndice = new Map<number, OrigemRow>();
-    const tokens = parseOrigemText(r[C.lancamento.origemText]);
-    tokens.forEach((tok, i) => {
-      let matchedDoc: number | null = null;
-      if (tok.numero !== null) {
-        matchedDoc = docByKey.get(`${criId}|${tok.tipo}|${tok.numero}`) ?? null;
-        if (matchedDoc === null) unmatchedOrigemTokens++;
-      }
-      byIndice.set(i, {
-        lancamentoId: lancId,
-        criId,
-        documentoId: matchedDoc,
-        indice: i,
-        tipo: tok.tipo,
-        numero: tok.numero,
-        numeroRaw: tok.raw,
-      });
-    });
-
-    // overlay end-of-chain entries by indice
-    const ofc = ofcByLanc.get(lancId);
-    if (ofc)
-      for (const [indice, fimRow] of ofc) {
-        const existing = byIndice.get(indice);
-        if (existing) {
-          existing.tipo = "fim_cadeia";
-          existing.documentoId = null;
-          existing.fim = fimRow;
-        } else {
-          byIndice.set(indice, {
-            lancamentoId: lancId,
-            criId,
-            documentoId: null,
-            indice,
-            tipo: "fim_cadeia",
-            numero: null,
-            numeroRaw: nullIfEmpty(fimRow[C.origemFim.tipoFim]) ?? "fim_cadeia",
-            fim: fimRow,
-          });
-        }
-      }
-
-    // Skip self-referencing origens (documento pointing to itself).
-    // These are legacy data artifacts — an origem cannot reference its own
-    // lancamento's document as both source and target.
-    for (const [indice, o] of byIndice) {
-      if (o.documentoId !== null && o.documentoId === docId) {
-        byIndice.delete(indice);
-      }
-    }
-
-    for (const o of [...byIndice.values()].sort((a, b) => a.indice - b.indice))
-      origemRows.push(o);
-  }
+  // origem (+ origem_fim_cadeia): recursively follow documento_origem_id,
+  // falling back to legacy origem text when no FK is present.
+  const origemBuild = buildOrigemRows(
+    migratedLancamentoRows,
+    canonicalDocumentoRows,
+    rawOrigemFim,
+  );
+  const origemRows = origemBuild.rows;
+  const unmatchedOrigemTokens = origemBuild.unmatchedOrigemTokens;
 
   // ── open db & load ──
   const db = new Database(sqlitePath);
@@ -871,7 +1255,7 @@ function run(): Report {
     });
     stats.push({
       table: "documento",
-      dumpRows: rawDocumento.length,
+      dumpRows: canonicalDocumentoRows.length,
       loaded: insertRows(db, "documento", documentoRows, errors),
     });
     stats.push({
@@ -897,10 +1281,10 @@ function run(): Report {
 
     // origem must be inserted before origem_fim_cadeia; capture generated ids
     const origemStmt = db.prepare(
-      `INSERT INTO origem (lancamento_id, cri_id, documento_id, indice, tipo, numero, numero_raw, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO origem (lancamento_id, cri_id, documento_id, indice, tipo, numero, numero_raw, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const fimStmt = db.prepare(
-      `INSERT INTO origem_fim_cadeia (origem_id, tipo_fim_cadeia, classificacao_fim_cadeia, especificacao_fim_cadeia) VALUES (?, ?, ?, ?)`
+      `INSERT INTO origem_fim_cadeia (origem_id, tipo_fim_cadeia, classificacao_fim_cadeia, especificacao_fim_cadeia) VALUES (?, ?, ?, ?)`,
     );
     let origemLoaded = 0;
     let fimLoaded = 0;
@@ -914,7 +1298,7 @@ function run(): Report {
           o.tipo,
           o.numero,
           o.numeroRaw,
-          now
+          now,
         );
         origemLoaded++;
         if (o.fim) {
@@ -922,7 +1306,7 @@ function run(): Report {
             Number(res.lastInsertRowid),
             normalizeTipoFimCadeia(o.fim[C.origemFim.tipoFim]),
             nullIfEmpty(o.fim[C.origemFim.classificacao]),
-            nullIfEmpty(o.fim[C.origemFim.especificacao])
+            nullIfEmpty(o.fim[C.origemFim.especificacao]),
           );
           fimLoaded++;
         }
@@ -934,7 +1318,11 @@ function run(): Report {
         });
       }
     }
-    stats.push({ table: "origem", dumpRows: origemRows.length, loaded: origemLoaded });
+    stats.push({
+      table: "origem",
+      dumpRows: origemRows.length,
+      loaded: origemLoaded,
+    });
     stats.push({
       table: "origem_fim_cadeia",
       dumpRows: origemRows.filter((o) => o.fim).length,
@@ -948,13 +1336,25 @@ function run(): Report {
   const fkViolations = db.pragma("foreign_key_check") as unknown[];
 
   db.close();
-  return { stats, fkViolations, columnErrors: errors, unmatchedOrigemTokens };
+  return {
+    stats,
+    fkViolations,
+    columnErrors: errors,
+    unmatchedOrigemTokens,
+    mergedDocumentoRows,
+  };
 }
 
 // ──────────────────────────────── Report ───────────────────────────────────
 
 function buildReport(report: Report, dumpPath: string): string {
-  const { stats, fkViolations, columnErrors, unmatchedOrigemTokens } = report;
+  const {
+    stats,
+    fkViolations,
+    columnErrors,
+    unmatchedOrigemTokens,
+    mergedDocumentoRows,
+  } = report;
   const lines: string[] = [];
   lines.push("# Legacy-fit migration report (T-300)\n");
   lines.push(`Source dump: \`${dumpPath}\`\n`);
@@ -969,15 +1369,22 @@ function buildReport(report: Report, dumpPath: string): string {
   lines.push("## Integrity checks\n");
   lines.push(
     `- **FK check** (PRAGMA foreign_key_check): ${
-      fkViolations.length === 0 ? "✓ no violations" : `✗ ${fkViolations.length} violations`
-    }`
+      fkViolations.length === 0
+        ? "✓ no violations"
+        : `✗ ${fkViolations.length} violations`
+    }`,
   );
   lines.push(
     `- **NOT NULL / CHECK** (enforced at insert): ${
-      columnErrors.length === 0 ? "✓ no violations" : `✗ ${columnErrors.length} rejected rows`
-    }`
+      columnErrors.length === 0
+        ? "✓ no violations"
+        : `✗ ${columnErrors.length} rejected rows`
+    }`,
   );
   lines.push(`- **Unmatched origem tokens**: ${unmatchedOrigemTokens}`);
+  lines.push(
+    `- **Normalized duplicate documentos merged**: ${mergedDocumentoRows}`,
+  );
   lines.push("");
   if (fkViolations.length > 0) {
     lines.push("### FK violations (first 20)\n");
@@ -1007,19 +1414,25 @@ function main(): void {
   for (const s of report.stats) {
     const flag = s.loaded === s.dumpRows ? "✓" : "⚠";
     console.log(
-      `  ${flag} ${s.table.padEnd(26)} ${String(s.loaded).padStart(5)} / ${s.dumpRows}`
+      `  ${flag} ${s.table.padEnd(26)} ${String(s.loaded).padStart(5)} / ${s.dumpRows}`,
     );
   }
   const fkOk = report.fkViolations.length === 0;
   const colOk = report.columnErrors.length === 0;
   console.log("");
-  console.log(`FK check        : ${fkOk ? "✓ no violations" : `✗ ${report.fkViolations.length}`}`);
-  console.log(`NOT NULL/CHECK  : ${colOk ? "✓ no violations" : `✗ ${report.columnErrors.length}`}`);
+  console.log(
+    `FK check        : ${fkOk ? "✓ no violations" : `✗ ${report.fkViolations.length}`}`,
+  );
+  console.log(
+    `NOT NULL/CHECK  : ${colOk ? "✓ no violations" : `✗ ${report.columnErrors.length}`}`,
+  );
   console.log(`Unmatched origem: ${report.unmatchedOrigemTokens}`);
+  console.log(`Merged documentos: ${report.mergedDocumentoRows}`);
   if (!colOk)
     for (const e of report.columnErrors.slice(0, 10))
       console.log(`   [${e.table}] ${e.message}`);
-  if (!fkOk) console.log(JSON.stringify(report.fkViolations.slice(0, 10), null, 2));
+  if (!fkOk)
+    console.log(JSON.stringify(report.fkViolations.slice(0, 10), null, 2));
 
   // write markdown report
   const here = dirname(fileURLToPath(import.meta.url));
