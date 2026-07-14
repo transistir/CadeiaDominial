@@ -259,8 +259,16 @@ function decodeCopyText(raw: string): string {
   return decoded;
 }
 
-/** Convert one PostgreSQL COPY text field to the SqlValue representation. */
-function copyValue(raw: string): SqlValue {
+/**
+ * Convert one PostgreSQL COPY text field to the SqlValue representation.
+ *
+ * Boolean-looking tokens (`t`/`f`/`true`/`false`) are NOT coerced here. In
+ * COPY text format a field's type is determined by its column, not its
+ * spelling, so a `detalhes` value of "t" must stay the string "t" rather than
+ * silently becoming the number 1. Boolean columns are coerced to 0/1 by the
+ * column mappers via {@link toBool}.
+ */
+export function copyValue(raw: string): SqlValue {
   if (raw === "\\N") return null;
   const value = decodeCopyText(raw);
   // Preserve leading-zero identifiers such as CNS codes and document numbers.
@@ -268,6 +276,20 @@ function copyValue(raw: string): SqlValue {
   if (/^-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][-+]?\d+)?$/.test(value))
     return Number.parseFloat(value);
   return value;
+}
+
+/**
+ * Coerce a boolean-ish column value (COPY `t`/`f`/`true`/`false` or an INSERT
+ * 0/1 integer) to 0/1. Used by column mappers that know their column is a
+ * boolean — the generic parsers must not guess. Unknown/empty values default
+ * to 0 so a stray non-empty string never reads as truthy just because it is
+ * non-empty (e.g. `"f"` must not become 1).
+ */
+export function toBool(v: SqlValue): number {
+  if (typeof v === "number") return v !== 0 ? 1 : 0;
+  if (v === null) return 0;
+  const s = String(v).trim().toLowerCase();
+  return s === "t" || s === "true" ? 1 : 0;
 }
 
 /**
@@ -303,7 +325,15 @@ export function parseCopyFormat(sql: string, table?: string): CopyBlock[] {
         terminated = true;
         break;
       }
-      if (includeBlock) rows.push(line.split("\t").map(copyValue));
+      if (includeBlock) {
+        const fields = line.split("\t");
+        if (fields.length !== headers.length) {
+          throw new Error(
+            `COPY public.${tableName}: row has ${fields.length} fields, expected ${headers.length} — malformed dump or unescaped tab/newline in data`,
+          );
+        }
+        rows.push(fields.map(copyValue));
+      }
       if (end === sql.length) break;
     }
 
@@ -546,9 +576,11 @@ export function mapCri(r: SqlValue[], now: string) {
 
 export function mapPessoa(r: SqlValue[], now: string) {
   // Production COPY dumps have nome at index 1; legacy INSERT at index 6.
+  // IMPORTANT: in legacy format index 1 is CPF — never use it as a nome
+  // fallback (PII leak). Fall back to synthetic "Pessoa <id>" instead.
   const nome = isProductionFormat
     ? (nullIfEmpty(r[1]) ?? `Pessoa ${r[C.pessoa.id]}`)
-    : (nullIfEmpty(r[6]) ?? nullIfEmpty(r[C.pessoa.nome]) ?? `Pessoa ${r[C.pessoa.id]}`);
+    : (nullIfEmpty(r[6]) ?? `Pessoa ${r[C.pessoa.id]}`);
   return {
     id: r[C.pessoa.id] as number,
     nome,
@@ -565,7 +597,7 @@ export function mapImovel(r: SqlValue[], now: string) {
     data_cadastro: nullIfEmpty(r[C.imovel.dataCadastro]),
     cri_id: r[C.imovel.cartorioId] as number,
     proprietario_id: (r[C.imovel.proprietarioId] as number | null) ?? null,
-    arquivado: r[C.imovel.arquivado] ? 1 : 0,
+    arquivado: toBool(r[C.imovel.arquivado]),
     created_at: toIso(r[C.imovel.dataCadastro], now),
     updated_at: toIso(r[C.imovel.dataCadastro], now),
   };
@@ -635,7 +667,7 @@ export function mapLancamentoTipo(r: SqlValue[]) {
     "requer_titulo",
   ];
   for (let i = 0; i < keys.length; i++)
-    flags[keys[i]!] = r[C.lancTipo.requerStart + i] ? 1 : 0;
+    flags[keys[i]!] = toBool(r[C.lancTipo.requerStart + i]);
   return {
     id: r[C.lancTipo.id] as number,
     tipo,
@@ -916,7 +948,7 @@ export function buildOrigemRows(
   const lancamentoByDocumento = new Map<number, SqlValue[]>();
   const ancestryScore = (r: SqlValue[]): number =>
     (integerOrNull(r[C.lancamento.documentoOrigemId]) !== null ? 2 : 0) +
-    (r[C.lancamento.ehInicioMatricula] ? 1 : 0);
+    (toBool(r[C.lancamento.ehInicioMatricula]) ? 1 : 0);
   for (const r of rawLancamento) {
     const documentoId = integerOrNull(r[C.lancamento.documentoId]);
     if (documentoId === null) continue;

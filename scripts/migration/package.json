@@ -6,7 +6,7 @@
   "main": "./legacy-fit.ts",
   "types": "./legacy-fit.ts",
   "scripts": {
-    "legacy-fit": "node legacy-fit.ts",
+    "legacy-fit": "tsx legacy-fit.ts",
     "test": "vitest run",
     "test:unit": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }
