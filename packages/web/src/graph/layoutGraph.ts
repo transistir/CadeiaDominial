@@ -22,28 +22,27 @@ export interface LayoutedGraph {
 
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 80;
+const RANK_WIDTH = NODE_WIDTH + 80; // ranksep=80, so ~260px between ranks
 
 /**
  * Extract a sortable priority for vertical ordering within a dagre rank.
  *
- * Priority (lower = higher on screen):
- *   0–999     matrículas, sorted by número descending
- *   1000–1999 transcrições, sorted by número descending
- *   2000+     fim-de-cadeia / other
+ * Lower priority = higher on screen.
+ * Matrículas occupy 0–999, transcrições 1000–1999, fim-cadeia 9999.
+ * Within each type, higher número → lower priority (appears first).
  */
 function verticalPriority(node: GraphJson["nodes"][number]): number {
-  if (node.type === "fimCadeia") return 9999;
-  if (node.type !== "documento") return 9000;
+  if (node.type === "fimCadeia") return Number.MAX_SAFE_INTEGER;
+  if (node.type !== "documento") return Number.MAX_SAFE_INTEGER - 1;
 
   const data = node.data as DocumentoData | undefined;
-  const numero = data?.numero ? Number.parseInt(data.numero.replace(/\D/g, ""), 10) || 0 : 0;
+  const raw = data?.numero?.replace(/\D/g, "") ?? "0";
+  const num = Number.parseInt(raw, 10) || 0;
 
-  if (data?.tipo === "matricula") {
-    // Higher número first → lower priority value
-    return 999 - Math.min(numero, 999);
-  }
-  // transcricao or averbacao: below matrículas
-  return 1999 - Math.min(numero, 999);
+  // Matrículas get negative priority → sort above transcrições.
+  // Larger número → more negative → appears first (top of screen).
+  // Transcrições get positive offset, also sorted by número descending.
+  return data?.tipo === "matricula" ? -num : 1_000_000 - num;
 }
 
 /**
@@ -72,12 +71,13 @@ export function layoutGraph(graph: GraphJson): LayoutedGraph {
   // ── Vertical reorder within each rank ──────────────────────────────────
   // Dagre picks Y positions that minimize edge crossings; that set of Y
   // values is preserved.  We only reassign which node gets which Y inside
-  // each horizontal rank, so the horizontal layout stays identical.
+  // each horizontal rank.  Group by coarse X (rankstep ≈ 260px) so nodes
+  // in the same visual column land in the same sort group.
   const rankNodes = new Map<number, string[]>();
 
   for (const node of graph.nodes) {
-    const dagrePos = dagreGraph.node(node.id);
-    const rank = Math.round(dagrePos.x);
+    const pos = dagreGraph.node(node.id);
+    const rank = Math.round(pos.x / RANK_WIDTH);
     if (!rankNodes.has(rank)) rankNodes.set(rank, []);
     rankNodes.get(rank)!.push(node.id);
   }
