@@ -93,7 +93,6 @@ import {
   mkdirSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
@@ -765,15 +764,19 @@ const LOAD_TABLES = [
 ];
 
 function resolveDumpPath(): string {
-  if (process.env.LEGACY_DUMP) return resolve(process.env.LEGACY_DUMP);
+  if (process.env.LEGACY_DUMP) {
+    const path = resolve(process.env.LEGACY_DUMP);
+    if (!existsSync(path)) {
+      throw new Error(`LEGACY_DUMP set but file not found: ${path}`);
+    }
+    return path;
+  }
   const here = dirname(fileURLToPath(import.meta.url));
   const root = resolve(here, "../.."); // worktree root (scripts/migration → root)
   const DUMP = "data.cleaned.core.no-auth.no-unistr.sql";
-  const PRODUCTION_DUMP = "cadeia_dominial_prod_20260714_080011.sql";
   // Per AGENTS.md the layout is <project>/{CadeiaDominial, worktrees/<task>},
   // so the dump lives in the sibling main checkout `../../CadeiaDominial`.
   const candidates = [
-    resolve(homedir(), PRODUCTION_DUMP),
     resolve(root, DUMP),
     resolve(root, "../../CadeiaDominial", DUMP),
     resolve(root, "../CadeiaDominial", DUMP),
