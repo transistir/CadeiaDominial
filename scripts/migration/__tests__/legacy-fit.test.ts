@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   tokenizeValues,
   parseInserts,
@@ -19,6 +19,7 @@ import {
   mapTis,
   buildOrigemRows,
   buildDocumentoIdRemap,
+  resetFormatDetection,
 } from "../legacy-fit";
 
 const NOW = "2026-06-29T00:00:00.000Z";
@@ -100,8 +101,8 @@ describe("parseCopyFormat", () => {
         table: "dominial_pessoas",
         headers: ["id", "nome", "cpf", "ativo"],
         rows: [
-          [1, '"Nome com\ttab e\nnewline"', null, 1],
-          [2, "Ana", "", 0],
+          [1, '"Nome com\ttab e\nnewline"', null, "t"],
+          [2, "Ana", "", "false"],
         ],
       },
     ]);
@@ -360,6 +361,7 @@ describe("documento_origem_id chains", () => {
 });
 
 describe("full row → new-schema transforms", () => {
+  beforeEach(() => resetFormatDetection());
   it("transforms a documento row (numero normalized, tipo_id 2 → matricula)", () => {
     const row = parseInserts(
       "INSERT INTO dominial_documento VALUES(4,'M6726','2024-01-01','1','1','origem text','2025-07-07',1355,4,2,'obs',NULL,NULL,NULL,NULL,NULL);",

@@ -263,8 +263,6 @@ function decodeCopyText(raw: string): string {
 function copyValue(raw: string): SqlValue {
   if (raw === "\\N") return null;
   const value = decodeCopyText(raw);
-  if (value === "t" || value === "true") return 1;
-  if (value === "f" || value === "false") return 0;
   // Preserve leading-zero identifiers such as CNS codes and document numbers.
   if (/^-?(?:0|[1-9]\d*)$/.test(value)) return Number.parseInt(value, 10);
   if (/^-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][-+]?\d+)?$/.test(value))
@@ -320,7 +318,10 @@ export function parseCopyFormat(sql: string, table?: string): CopyBlock[] {
 /** Parse a table from either production COPY blocks or legacy INSERT rows. */
 export function parseDumpTable(sql: string, table: string): SqlValue[][] {
   const copyBlocks = parseCopyFormat(sql, table);
-  if (copyBlocks.length > 0) return copyBlocks.flatMap((block) => block.rows);
+  if (copyBlocks.length > 0) {
+    isProductionFormat = true;
+    return copyBlocks.flatMap((block) => block.rows);
+  }
   return parseInserts(sql, table);
 }
 
@@ -516,6 +517,14 @@ const C = {
   },
 } as const;
 
+/** Set to true when `parseDumpTable` finds COPY-format blocks (production dump). */
+let isProductionFormat = false;
+
+/** Reset the production-format flag (for tests). */
+export function resetFormatDetection(): void {
+  isProductionFormat = false;
+}
+
 // ──────────────────────────────── Mappers ──────────────────────────────────
 // Each returns a plain object whose keys are the v2 column names. Pure
 // functions of a parsed row (+ small lookups) so they are unit-testable.
@@ -536,17 +545,13 @@ export function mapCri(r: SqlValue[], now: string) {
 }
 
 export function mapPessoa(r: SqlValue[], now: string) {
-  // Legacy INSERT dumps placed nome at index 6; production COPY uses index 1.
-  const productionNome = nullIfEmpty(r[C.pessoa.nome]);
-  const looksLikeLegacyCpf =
-    productionNome !== null && /^[\d./-]+$/.test(productionNome);
-  const nome =
-    productionNome === null || looksLikeLegacyCpf
-      ? (nullIfEmpty(r[6]) ?? productionNome)
-      : productionNome;
+  // Production COPY dumps have nome at index 1; legacy INSERT at index 6.
+  const nome = isProductionFormat
+    ? (nullIfEmpty(r[1]) ?? `Pessoa ${r[C.pessoa.id]}`)
+    : (nullIfEmpty(r[6]) ?? nullIfEmpty(r[C.pessoa.nome]) ?? `Pessoa ${r[C.pessoa.id]}`);
   return {
     id: r[C.pessoa.id] as number,
-    nome: nome ?? `Pessoa ${r[C.pessoa.id]}`,
+    nome,
     created_at: now,
     updated_at: now,
   };
@@ -640,23 +645,14 @@ export function mapLancamentoTipo(r: SqlValue[]) {
 }
 
 export function mapTis(r: SqlValue[], now: string) {
-  const legacyLayout =
-    /^\d{4}-\d{2}-\d{2}/.test(String(r[3] ?? "")) ||
-    (!/^\d{4}-\d{2}-\d{2}/.test(String(r[4] ?? "")) &&
-      /^\d+$/.test(String(r[1] ?? "")) &&
-      !/^\d+$/.test(String(r[2] ?? "")));
-  const c = legacyLayout
-    ? {
-        id: 0,
-        codigo: 1,
-        etnia: 2,
-        dataCadastro: 3,
-        terraRefId: 4,
-        area: 5,
-        estado: 6,
-        nome: 7,
-      }
-    : C.tis;
+  // Legacy INSERT dumps: [0]id [1]codigo [2]etnia [3]dataCadastro [4]terraRefId [5]area [6]estado [7]nome
+  // Production COPY:     [0]id [1]nome   [2]codigo [3]etnia       [4]dataCadastro [5]terraRefId [6]area [7]estado
+  const c = isProductionFormat
+    ? C.tis
+    : {
+        id: 0, codigo: 1, etnia: 2, dataCadastro: 3,
+        terraRefId: 4, area: 5, estado: 6, nome: 7,
+      };
   return {
     id: r[c.id] as number,
     codigo: String(r[c.codigo] ?? r[c.id]),
@@ -672,31 +668,17 @@ export function mapTis(r: SqlValue[], now: string) {
 }
 
 export function mapTerra(r: SqlValue[], now: string) {
-  const legacyLayout =
-    /^[A-Z]{2}$/.test(String(r[16] ?? "")) ||
-    (!/^[A-Z]{2}$/.test(String(r[4] ?? "")) &&
-      (typeof r[5] === "number" || r[5] === null));
-  const c = legacyLayout
-    ? {
-        id: 0,
-        codigo: 1,
-        nome: 2,
-        etnia: 3,
-        municipio: 4,
-        area: 5,
-        fase: 6,
-        modalidade: 7,
-        coordRegional: 8,
-        dataRegularizada: 9,
-        dataHomologada: 10,
-        dataDeclarada: 11,
-        dataDelimitada: 12,
-        dataEmEstudo: 13,
-        createdAt: 14,
-        updatedAt: 15,
-        estado: 16,
-      }
-    : C.terra;
+  // Legacy INSERT: [0]id [1]codigo [2]nome [3]etnia [4]municipio [5]area [6]fase ... [16]estado
+  // Production COPY: [0]id [1]codigo [2]nome [3]etnia [4]estado [5]municipio [6]area ...
+  const c = isProductionFormat
+    ? C.terra
+    : {
+        id: 0, codigo: 1, nome: 2, etnia: 3, municipio: 4,
+        area: 5, fase: 6, modalidade: 7, coordRegional: 8,
+        dataRegularizada: 9, dataHomologada: 10, dataDeclarada: 11,
+        dataDelimitada: 12, dataEmEstudo: 13, createdAt: 14,
+        updatedAt: 15, estado: 16,
+      };
   return {
     id: r[c.id] as number,
     codigo: String(r[c.codigo] ?? r[c.id]),
