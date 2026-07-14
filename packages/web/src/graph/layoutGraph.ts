@@ -22,7 +22,6 @@ export interface LayoutedGraph {
 
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 80;
-const RANK_WIDTH = NODE_WIDTH + 80; // ranksep=80, so ~260px between ranks
 
 /**
  * Extract a sortable priority for vertical ordering within a dagre rank.
@@ -77,7 +76,9 @@ export function layoutGraph(graph: GraphJson): LayoutedGraph {
 
   for (const node of graph.nodes) {
     const pos = dagreGraph.node(node.id);
-    const rank = Math.round(pos.x / RANK_WIDTH);
+    // Dagre places nodes at whole-pixel X within each rank — use exact X
+    // so nodes in different columns never merge into the same sort group.
+    const rank = Math.round(pos.x);
     if (!rankNodes.has(rank)) rankNodes.set(rank, []);
     rankNodes.get(rank)!.push(node.id);
   }
