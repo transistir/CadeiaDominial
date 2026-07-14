@@ -25,15 +25,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     documento_ativo = None
     
     if documento_id:
-        # Usar o novo service para verificar acesso ao documento
-        # Usar service consolidado - método a ser implementado
-        # documento_ativo = DocumentoService.obter_documento_com_acesso(documento_id, imovel)
-        from ..models import Documento
-        documento_ativo = Documento.objects.get(id=documento_id)
-        
-        if not documento_ativo:
-            messages.error(request, '❌ Documento não encontrado ou não importado para este imóvel.')
-            return redirect('imoveis', tis_id=tis.id)
+        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     else:
         # Buscar documento ativo do imóvel (primeiro documento)
         documento_ativo = imovel.documentos.first()

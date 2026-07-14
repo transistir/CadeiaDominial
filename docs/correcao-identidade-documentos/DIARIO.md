@@ -30,6 +30,60 @@ Use entradas curtas e cronológicas. Decisões não podem existir apenas em conv
 
 ## Histórico
 
+### 2026-07-14 (noite) — T26 — seleção inequívoca por ID e validação backend
+
+- Estado final: EM REVISÃO (critérios automatizados atendidos; aguarda revisão do usuário).
+- Responsável/IA: Claude Code (retomada orientada por consulta ao Codex).
+- Hipótese ou objetivo: fechar os dois pontos mapeados no checkpoint — (1) o botão de seleção de documento usava `novo_lancamento` sem `documento_id`, deixando a escolha do "documento ativo" a cargo de `imovel.documentos.first()`; (2) o backend de importação de duplicata aceitava `documento_origem_id`/`documentos_importaveis[]` como PKs arbitrários, sem checar que pertenciam à identidade/cadeia oferecida ao usuário.
+- Arquivos alterados: `dominial/views/lancamento_views.py`, `templates/dominial/selecionar_documento_lancamento.html`, `dominial/services/lancamento_duplicata_service.py`, `dominial/tests/test_t26_selecao_inequivoca.py` (novo).
+- Decisões tomadas:
+  - `novo_lancamento_documento` (view `novo_lancamento` com `documento_id`) passou a usar `get_object_or_404(Documento, id=documento_id, imovel=imovel)` em vez de `Documento.objects.get(id=documento_id)` sem filtro de imóvel — um `documento_id` de outro imóvel agora resulta em 404 em vez de renderizar o formulário com imóvel/documento incompatíveis. O `if not documento_ativo:` morto (`.get()` nunca retorna falsy) foi removido junto.
+  - O botão "Novo Lançamento" em `selecionar_documento_lancamento.html` agora usa `novo_lancamento_documento` com `documento_id=documento.id`, eliminando a dependência do "primeiro documento" implícito.
+  - `LancamentoDuplicataService.processar_importacao_duplicata` não confia mais nos PKs recebidos por si só. Novo método privado `_validar_identidade_duplicata` reprocessa a origem/cartório originalmente submetidos (preservados como campos ocultos `origem_completa[]`/`cartorio_origem[]` no template de duplicata) através do mesmo `DuplicataVerificacaoService.verificar_duplicata_origem` usado na detecção original, e só aceita a importação se o `documento_origem_id` postado bater exatamente com o documento resolvido e se todo `documentos_importaveis[]` postado for subconjunto da cadeia dominial recalculada. Sem origem/cartório preservados, ou com qualquer PK fora da cadeia recalculada, a importação é recusada mesmo que os IDs existam no banco.
+  - Nenhuma migração; nenhuma mudança de contrato visível ao usuário além da URL do botão.
+- Comandos executados: `test_t26_selecao_inequivoca` (6/6, novo); `test_t25_identidade_opcoes` (7/7); `test_identidade_documento` (74/74 combinados); `manage.py check` (OK); `makemigrations --check --dry-run` (sem mudanças); `git diff --check` (limpo); `dominial.tests` global (165 testes, 47 erros + 1 falha legados — baseline inalterado, +6 testes novos).
+- Resultado dos testes: 6/6 novos passaram (documento de outro imóvel recusado com 404; documento de outro imóvel aceito quando é o próprio; importação aceita quando identidade confere; documento fora da cadeia recusado; `documento_origem_id` incompatível com a origem informada recusado; importação sem origem preservada recusada); baseline global mantido.
+- Bloqueios/riscos: `test_fase2_duplicata_integracao` continua com 12 erros pré-existentes no `setUp` (campo `descricao` removido de `DocumentoTipo`) — não relacionados a T26, parte do baseline de 47 erros já documentado; não foi possível exercitar T26 através desse arquivo de teste legado, coberto pelo novo `test_t26_selecao_inequivoca` em seu lugar.
+- Próximo passo pequeno: aguardar revisão do usuário para fechar T26; depois T27 (prévia: criar, reutilizar ou importar).
+
+### 2026-07-14 (tarde) — verificação final pós-T25
+
+- Estado final: sem mudança de código; verificação de continuidade após sessão anterior ter travado.
+- Responsável/IA: Claude Code.
+- Hipótese ou objetivo: confirmar que o estado deixado pela sessão anterior (T25 EM REVISÃO) está íntegro antes de prosseguir para T26.
+- Arquivos pretendidos: nenhum (somente verificação).
+- Decisões tomadas: nenhuma alteração de código; documentação apenas.
+- Comandos executados: `git status` e `git diff --check` (limpo); escopo do diff conferido (`lancamento_duplicata_service.py` + 2 templates + docs + `test_t25_identidade_opcoes.py`, sem arquivos fora do escopo de T25); `test_t25_identidade_opcoes` isolado (7/7 OK); suíte canônica (`test_migracao_identidade_canonica`, `test_migracao_identidade_documento`, `test_migracao_identidade_imovel`, `test_migracao_lancamento_origem_canonica`, `test_identidade_documento`) — 82/84 OK, 2 erros em `VerificarEstruturaAmbienteCommandTest`.
+- Resultado dos testes: os 2 erros (`IndexError` em `_get_column_collations` do introspector SQLite do Django) foram reproduzidos também em `git stash` sobre o commit `3e94ee2` (árvore limpa, sem as mudanças da sessão) — confirmado que é um problema pré-existente do ambiente local (incompatibilidade Django 5.2/SQLite), não uma regressão introduzida por T25.
+- Bloqueios/riscos: nenhum novo; o erro pré-existente do `VerificarEstruturaAmbienteCommandTest` continua sem investigação — não bloqueia T25/T26.
+- Próximo passo pequeno: aguardar revisão do usuário para fechar T25; iniciar T26 (seleção inequívoca por ID + validação backend) em seguida.
+
+### 2026-07-14 — T25 — identidade completa nas opções
+
+- Estado final: EM REVISÃO (critérios automatizados atendidos; aguarda revisão do usuário).
+- Responsável/IA: Claude Code (plano revisado por Codex).
+- Hipótese ou objetivo: exibir tipo, número, cartório (CNS + localização) e imóvel nas opções documentais, distinguindo homônimos antes da seleção, sem mudar o contrato de seleção (T26).
+- Arquivos pretendidos: serviço de duplicata, templates de duplicata/importação e de seleção de documento, novo módulo de testes.
+- Decisões tomadas: T25 cobre as duas telas de opções (duplicata/importação e seleção de documento); o DTO é aditivo e preserva IDs/URLs/campos existentes; o contrato de seleção permanece para T26; nenhuma migração; corrigido `documento.get_tipo_display` → `documento.tipo.get_tipo_display` (tipo é FK, o original renderizava vazio).
+- Comandos executados: `test_t25_identidade_opcoes` (7/7); `test_identidade_documento` (67/67); `test_fase2_duplicata_integracao` (12 erros preexistentes em `setUp` por `descricao` removido do modelo); `manage.py check` (OK); `makemigrations --check --dry-run` (sem mudanças); `git diff --check` (limpo); `dominial.tests` global (159 testes, 47 erros + 1 falha legados).
+- Resultado dos testes: 7/7 novos passaram; canônica 67/67; baseline global mantido (47 erros + 1 falha, sem novas quebras).
+- Bloqueios/riscos: dois caminhos ativos de criação automática por contexto incompleto contradizem o objetivo “homônimos nunca confundidos” e foram registrados como dívida para T28 (ver entrada seguinte).
+- Próximo passo pequeno: fechar T25 após revisão; depois T26, seleção inequívoca por ID (botão da seleção deve usar `novo_lancamento_documento` com `documento_id`; backend de importação deve validar IDs contra a cadeia oferecida).
+
+### 2026-07-14 — dívida identificada — criação automática por contexto incompleto
+
+- Estado inicial: revisão de plano com Codex para retomar o trabalho.
+- Responsável/IA: Codex (achado) + Claude Code (verificação no código).
+- Hipótese ou objetivo: confirmar se o estado documentado “T01–T24 concluídas” corresponde ao código.
+- Achados (verificados em código):
+  1. `dominial/services/hierarquia_arvore_service.py:237` — `_criar_documento_automatico()` cria documento com `Cartorios.objects.first()` quando uma origem não resolve; acionado por `dominial/views/cadeia_dominial_views.py:64` (`criar_documentos_automaticos=True`) ao renderizar a árvore D3 (write-on-read).
+  2. `dominial/views/documento_views.py:199` — `criar_documento_automatico` verifica existência por `imovel + numero`, sem tipo/cartório canônicos.
+- Decisões tomadas: registrar como dívida em `TAREFAS.md` e `CHECKPOINT_ATUAL.md`; T28 deve classificar cada ocorrência e T26/T28 decidir entre corrigir a resolução ou remover o caminho automático.
+- Comandos executados: leitura dos três pontos de código com verificação direta das linhas citadas.
+- Resultado dos testes: não aplicável (achado de revisão estática).
+- Bloqueios/riscos: não bloqueiam T25–T27 (apresentação/seleção), mas inviabilizam declarar “T01–T24 integralmente concluídas” e devem ser tratados antes de T28/T29.
+- Próximo passo pequeno: incluir na auditoria final da T28; avaliar correção isolada se vier a bloquear a homologação da T07.
+
 ### 2026-07-13 — checkpoint para troca segura de sessão
 
 - R01–R07 e T22–T24 estão concluídas; T25 é a próxima tarefa desbloqueada.
