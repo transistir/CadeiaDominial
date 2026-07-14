@@ -126,7 +126,10 @@ function validateFimCadeiaData(raw: unknown, path: string): FimCadeiaData {
   }
 
   return {
-    classificacao: requireFimCadeiaClassificacao(raw.classificacao, `${path}.classificacao`)
+    classificacao: requireFimCadeiaClassificacao(raw.classificacao, `${path}.classificacao`),
+    ...(raw.especificacao === undefined
+      ? {}
+      : { especificacao: requireString(raw.especificacao, `${path}.especificacao`) })
   };
 }
 
@@ -184,7 +187,13 @@ function requireDocumentoTipo(value: unknown, path: string): DocumentoTipo {
 }
 
 function requireFimCadeiaClassificacao(value: unknown, path: string): FimCadeiaClassificacao {
-  if (value === "origem_lidima" || value === "sem_origem" || value === "inconclusa") {
+  if (
+    value === "origem_lidima" ||
+    value === "sem_origem" ||
+    value === "inconclusa" ||
+    value === "destacamento_publico" ||
+    value === "outra"
+  ) {
     return value;
   }
   throw new Error(`${path}: invalid value ${formatValue(value)}`);

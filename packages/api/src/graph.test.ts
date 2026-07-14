@@ -10,7 +10,14 @@ type UserRecord = {
 
 type DocRow = { id: number; tipo: string; numero: string; data: string | null; criId: number };
 type LancRow = { id: number; documentoId: number; tipo: string };
-type OrigRow = { id: number; lancamentoId: number; documentoId: number; tipo: string };
+type OrigRow = {
+  id: number;
+  lancamentoId: number;
+  documentoId: number | null;
+  tipo: string;
+  tipoFimCadeia: string | null;
+  especificacao: string | null;
+};
 
 /**
  * Minimal in-memory fixture mirroring the real schema for imóvel 4:
@@ -25,10 +32,29 @@ const GRAPH_FIXTURE: Record<number, { documentos: DocRow[]; lancamentos: LancRow
     ],
     lancamentos: [
       { id: 1, documentoId: 4, tipo: "averbacao" },
-      { id: 7, documentoId: 4, tipo: "registro" }
+      { id: 7, documentoId: 4, tipo: "registro" },
+      { id: 8, documentoId: 5, tipo: "registro" }
     ],
-    // origem cites doc 5 (source) on a lançamento of doc 4 (target).
-    origens: [{ id: 1, lancamentoId: 7, documentoId: 5, tipo: "matricula" }]
+    // origem cites doc 5 (source) on a lançamento of doc 4 (target), then
+    // doc 5 has an explicit classified fim_cadeia origin.
+    origens: [
+      {
+        id: 1,
+        lancamentoId: 7,
+        documentoId: 5,
+        tipo: "matricula",
+        tipoFimCadeia: null,
+        especificacao: null
+      },
+      {
+        id: 2,
+        lancamentoId: 8,
+        documentoId: null,
+        tipo: "fim_cadeia",
+        tipoFimCadeia: "destacamento_publico",
+        especificacao: "Patrimônio público estadual"
+      }
+    ]
   }
 };
 
@@ -48,10 +74,12 @@ const makeGraphEnv = () => {
     // Source-documento subquery (`WHERE d.id IN (...)`) — must be checked
     // before the generic documento query since it also references `documento`.
     if (query.includes("WHERE d.id IN (")) {
-      const ids = new Set(data.origens.map((o) => o.documentoId));
+      const ids = new Set(
+        data.origens.flatMap((o) => (o.documentoId === null ? [] : [o.documentoId]))
+      );
       return { results: data.documentos.filter((d) => ids.has(d.id)) };
     }
-    if (query.includes("FROM origem o") && query.includes("o.documento_id IS NOT NULL")) {
+    if (query.includes("FROM origem o")) {
       return { results: data.origens };
     }
     if (query.includes("FROM documento d")) {
@@ -120,7 +148,14 @@ const loginAndGetToken = async (env: ReturnType<typeof makeGraphEnv>) => {
 type ChainDataResponse = {
   documentos: Array<{ id: string; numero: string; tipo: string; cartorioId: string; data: string }>;
   lancamentos: Array<{ id: string; documentoId: string; tipo: string }>;
-  origens: Array<{ id: string; lancamentoId: string; documentoId: string; tipoOrigem: string }>;
+  origens: Array<{
+    id: string;
+    lancamentoId: string;
+    documentoId: string | null;
+    tipoOrigem: string;
+    tipoFimCadeia?: string;
+    especificacao?: string;
+  }>;
 };
 
 describe("GET /api/graph/:imovelId", () => {
@@ -193,6 +228,14 @@ describe("GET /api/graph/:imovelId", () => {
     for (const o of body.origens) {
       expect(["matricula", "transcricao", "fim_cadeia"]).toContain(o.tipoOrigem);
     }
+    expect(body.origens).toContainEqual({
+      id: "2",
+      lancamentoId: "8",
+      documentoId: null,
+      tipoOrigem: "fim_cadeia",
+      tipoFimCadeia: "destacamento_publico",
+      especificacao: "Patrimônio público estadual"
+    });
 
     // Referential integrity — exactly what buildGraph needs to not throw:
     const docIds = new Set(body.documentos.map((d) => d.id));
@@ -202,7 +245,11 @@ describe("GET /api/graph/:imovelId", () => {
     }
     for (const o of body.origens) {
       expect(lancIds.has(o.lancamentoId)).toBe(true);
-      expect(docIds.has(o.documentoId)).toBe(true);
+      if (o.documentoId === null) {
+        expect(o.tipoOrigem).toBe("fim_cadeia");
+      } else {
+        expect(docIds.has(o.documentoId)).toBe(true);
+      }
     }
   });
 });

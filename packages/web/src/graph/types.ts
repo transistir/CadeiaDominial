@@ -1,5 +1,10 @@
 export type DocumentoTipo = "matricula" | "transcricao" | "averbacao";
-export type FimCadeiaClassificacao = "origem_lidima" | "sem_origem" | "inconclusa";
+export type FimCadeiaClassificacao =
+  | "origem_lidima"
+  | "sem_origem"
+  | "inconclusa"
+  | "destacamento_publico"
+  | "outra";
 export type OrigemTipo = "matricula" | "transcricao" | "fim_cadeia";
 
 export interface DocumentoData {
@@ -11,6 +16,7 @@ export interface DocumentoData {
 
 export interface FimCadeiaData {
   classificacao: FimCadeiaClassificacao;
+  especificacao?: string;
 }
 
 export type GraphNode =

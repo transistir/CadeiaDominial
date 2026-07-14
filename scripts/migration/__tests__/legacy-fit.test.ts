@@ -30,10 +30,10 @@ describe("tokenizeValues", () => {
     ]);
   });
 
-  it("parses quoted strings and treats empty string as null", () => {
+  it("parses quoted strings and preserves empty strings", () => {
     expect(tokenizeValues("'abc',''," + "'  spaced  '")).toEqual([
       "abc",
-      null,
+      "",
       "  spaced  ",
     ]);
   });
@@ -68,7 +68,7 @@ describe("parseInserts", () => {
     ].join("\n");
     const pessoas = parseInserts(sql, "dominial_pessoas");
     expect(pessoas).toHaveLength(2);
-    expect(pessoas[0]).toEqual([1, null, null, null, null, null, "Ze"]);
+    expect(pessoas[0]).toEqual([1, null, "", null, "", "", "Ze"]);
     expect(pessoas[1]![6]).toBe("Malandrao");
   });
 

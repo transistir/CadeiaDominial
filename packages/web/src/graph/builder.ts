@@ -1,5 +1,12 @@
 import type { LancamentoTipo } from "@cadeia/chain-topology";
-import type { DocumentoTipo, GraphEdge, GraphJson, GraphNode, OrigemTipo } from "./types";
+import type {
+  DocumentoTipo,
+  FimCadeiaClassificacao,
+  GraphEdge,
+  GraphJson,
+  GraphNode,
+  OrigemTipo,
+} from "./types";
 import { validateGraph } from "./validateGraph";
 
 /**
@@ -23,8 +30,10 @@ export interface ChainData {
   origens: Array<{
     id: string;
     lancamentoId: string;
-    documentoId: string;
+    documentoId: string | null;
     tipoOrigem?: OrigemTipo;
+    tipoFimCadeia?: FimCadeiaClassificacao;
+    especificacao?: string;
   }>;
 }
 
@@ -75,14 +84,39 @@ export function buildGraph(chainData: ChainData): GraphJson {
       );
     }
 
+    const targetId = ensureDocPrefix(lancamento.documentoId);
+
+    if (origem.documentoId === null) {
+      if (origem.tipoOrigem !== "fim_cadeia") {
+        throw new Error(`Origem ${origem.id} has no documento but is not fim_cadeia`);
+      }
+
+      const fimId = `fim-${origem.id}`;
+      nodes.push({
+        id: fimId,
+        label: "Fim de cadeia",
+        type: "fimCadeia",
+        data: {
+          classificacao: origem.tipoFimCadeia ?? "inconclusa",
+          ...(origem.especificacao ? { especificacao: origem.especificacao } : {}),
+        },
+      });
+      documentosAsSource.add(targetId);
+      edges.push({
+        id: origem.id,
+        source: targetId,
+        target: fimId,
+        data: { tipoOrigem: "fim_cadeia" },
+      });
+      continue;
+    }
+
     const sourceDoc = documentosById.get(origem.documentoId);
     if (!sourceDoc) {
       throw new Error(`Origem ${origem.id} references non-existent documento: ${origem.documentoId}`);
     }
 
     const sourceId = ensureDocPrefix(origem.documentoId);
-    const targetId = ensureDocPrefix(lancamento.documentoId);
-
     documentosAsSource.add(sourceId);
 
     edges.push({

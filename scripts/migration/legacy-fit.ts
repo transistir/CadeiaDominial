@@ -129,7 +129,7 @@ export function tokenizeValues(inner: string): SqlValue[] {
         while (i < n && /[A-Za-z0-9_ ]/.test(inner[i]!) && inner[i] !== ",")
           i++;
       }
-      out.push(buf === "" ? null : buf);
+      out.push(buf);
     } else {
       let buf = "";
       while (i < n && inner[i] !== ",") buf += inner[i++];
@@ -628,6 +628,7 @@ interface Report {
   stats: LoadStat[];
   fkViolations: unknown[];
   columnErrors: ColumnError[];
+  unmatchedOrigemTokens: number;
 }
 
 function run(): Report {
@@ -659,26 +660,25 @@ function run(): Report {
       nullIfEmpty(r[C.pessoa.nome]) ?? `Pessoa ${r[C.pessoa.id]}`
     );
 
-  // documento lookup: (imovelId|tipo|normNumero) → documentoId, and per-imovel docs
+  // documento lookup: (criId|tipo|normNumero) → documentoId, and per-imovel docs
   const docByKey = new Map<string, number>();
   const docsByImovel = new Map<number, { id: number; numeroNorm: string; tipo: string }[]>();
   for (const r of rawDocumento) {
     const id = r[C.documento.id] as number;
     const imovelId = r[C.documento.imovelId] as number;
+    const criId = r[C.documento.cartorioId] as number;
     const tipo =
       DOCUMENTO_TIPO_BY_ID[r[C.documento.tipoId] as number] === "transcricao"
         ? "transcricao"
         : "matricula";
     const numeroNorm = normalizeNumero(r[C.documento.numero]);
-    docByKey.set(`${imovelId}|${tipo}|${numeroNorm}`, id);
+    docByKey.set(`${criId}|${tipo}|${numeroNorm}`, id);
     if (!docsByImovel.has(imovelId)) docsByImovel.set(imovelId, []);
     docsByImovel.get(imovelId)!.push({ id, numeroNorm, tipo });
   }
-  // documento → imovel + cri lookups (for lancamento origem cri fallback)
-  const docImovel = new Map<number, number>();
+  // documento → cri lookup (for lancamento origem cri fallback)
   const docCri = new Map<number, number>();
   for (const r of rawDocumento) {
-    docImovel.set(r[C.documento.id] as number, r[C.documento.imovelId] as number);
     docCri.set(r[C.documento.id] as number, r[C.documento.cartorioId] as number);
   }
 
@@ -763,10 +763,10 @@ function run(): Report {
     fim?: SqlValue[];
   }
   const origemRows: OrigemRow[] = [];
+  let unmatchedOrigemTokens = 0;
   for (const r of rawLancamento) {
     const lancId = r[C.lancamento.id] as number;
     const docId = (r[C.lancamento.documentoId] as number | null) ?? null;
-    const imovelId = docId !== null ? (docImovel.get(docId) ?? null) : null;
     const criId =
       (r[C.lancamento.cartorioOrigemId] as number | null) ??
       (docId !== null ? (docCri.get(docId) ?? null) : null);
@@ -776,8 +776,10 @@ function run(): Report {
     const tokens = parseOrigemText(r[C.lancamento.origemText]);
     tokens.forEach((tok, i) => {
       let matchedDoc: number | null = null;
-      if (tok.numero !== null && imovelId !== null)
-        matchedDoc = docByKey.get(`${imovelId}|${tok.tipo}|${tok.numero}`) ?? null;
+      if (tok.numero !== null) {
+        matchedDoc = docByKey.get(`${criId}|${tok.tipo}|${tok.numero}`) ?? null;
+        if (matchedDoc === null) unmatchedOrigemTokens++;
+      }
       byIndice.set(i, {
         lancamentoId: lancId,
         criId,
@@ -937,13 +939,13 @@ function run(): Report {
   const fkViolations = db.pragma("foreign_key_check") as unknown[];
 
   db.close();
-  return { stats, fkViolations, columnErrors: errors };
+  return { stats, fkViolations, columnErrors: errors, unmatchedOrigemTokens };
 }
 
 // ──────────────────────────────── Report ───────────────────────────────────
 
 function buildReport(report: Report, dumpPath: string): string {
-  const { stats, fkViolations, columnErrors } = report;
+  const { stats, fkViolations, columnErrors, unmatchedOrigemTokens } = report;
   const lines: string[] = [];
   lines.push("# Legacy-fit migration report (T-300)\n");
   lines.push(`Source dump: \`${dumpPath}\`\n`);
@@ -966,6 +968,7 @@ function buildReport(report: Report, dumpPath: string): string {
       columnErrors.length === 0 ? "✓ no violations" : `✗ ${columnErrors.length} rejected rows`
     }`
   );
+  lines.push(`- **Unmatched origem tokens**: ${unmatchedOrigemTokens}`);
   lines.push("");
   if (fkViolations.length > 0) {
     lines.push("### FK violations (first 20)\n");
@@ -1003,6 +1006,7 @@ function main(): void {
   console.log("");
   console.log(`FK check        : ${fkOk ? "✓ no violations" : `✗ ${report.fkViolations.length}`}`);
   console.log(`NOT NULL/CHECK  : ${colOk ? "✓ no violations" : `✗ ${report.columnErrors.length}`}`);
+  console.log(`Unmatched origem: ${report.unmatchedOrigemTokens}`);
   if (!colOk)
     for (const e of report.columnErrors.slice(0, 10))
       console.log(`   [${e.table}] ${e.message}`);

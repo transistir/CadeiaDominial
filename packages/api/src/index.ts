@@ -276,8 +276,10 @@ type GraphChainData = {
   origens: Array<{
     id: string;
     lancamentoId: string;
-    documentoId: string;
+    documentoId: string | null;
     tipoOrigem: string;
+    tipoFimCadeia?: string;
+    especificacao?: string;
   }>;
 };
 
@@ -327,22 +329,32 @@ const handleGraph = async (c: Context<Env>) => {
       .all<{ id: number; documentoId: number; tipo: string }>()
   ).results;
 
-  // 3. Origens for those lançamentos. Skip NULL-documento origens (fim_cadeia
-  //    leaves and unlinked verbatim citations): buildGraph turns documentos
-  //    with no outgoing origem into synthetic fim-cadeia leaves, which is the
-  //    correct rendering and keeps the response referentially complete.
+  // 3. Origens for those lançamentos. NULL-documento fim_cadeia origins carry
+  //    explicit end-of-chain classification from origem_fim_cadeia.
   const origemRows = (
     await c.env.DB.prepare(
-      `SELECT o.id AS id, o.lancamento_id AS lancamentoId, o.documento_id AS documentoId, o.tipo AS tipo
+      `SELECT o.id AS id,
+              o.lancamento_id AS lancamentoId,
+              o.documento_id AS documentoId,
+              o.tipo AS tipo,
+              ofc.tipo_fim_cadeia AS tipoFimCadeia,
+              ofc.especificacao_fim_cadeia AS especificacao
        FROM origem o
        JOIN lancamento l ON l.id = o.lancamento_id
        JOIN imovel_documento idoc ON idoc.documento_id = l.documento_id
+       LEFT JOIN origem_fim_cadeia ofc ON ofc.origem_id = o.id
        WHERE idoc.imovel_id = ? AND idoc.deleted_at IS NULL
-         AND l.deleted_at IS NULL AND o.deleted_at IS NULL
-         AND o.documento_id IS NOT NULL`
+         AND l.deleted_at IS NULL AND o.deleted_at IS NULL`
     )
       .bind(imovelId)
-      .all<{ id: number; lancamentoId: number; documentoId: number; tipo: string }>()
+      .all<{
+        id: number;
+        lancamentoId: number;
+        documentoId: number | null;
+        tipo: string;
+        tipoFimCadeia: string | null;
+        especificacao: string | null;
+      }>()
   ).results;
 
   // 4. Source (origin) documentos referenced by those origens may live in
@@ -391,8 +403,10 @@ const handleGraph = async (c: Context<Env>) => {
     origens: origemRows.map((o) => ({
       id: String(o.id),
       lancamentoId: String(o.lancamentoId),
-      documentoId: String(o.documentoId),
-      tipoOrigem: o.tipo
+      documentoId: o.documentoId === null ? null : String(o.documentoId),
+      tipoOrigem: o.tipo,
+      ...(o.tipoFimCadeia ? { tipoFimCadeia: o.tipoFimCadeia } : {}),
+      ...(o.especificacao ? { especificacao: o.especificacao } : {})
     }))
   };
 

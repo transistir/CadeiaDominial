@@ -530,7 +530,49 @@ describe("buildGraph", () => {
     );
   });
 
-  // --- Synthetic leaf classification (1 case) ---
+  // --- Fim-cadeia classification (2 cases) ---
+
+  it("explicit fim-cadeia origens render their tipo_fim_cadeia classification", () => {
+    const chainData: ChainData = {
+      documentos: [
+        {
+          id: "1",
+          numero: "M1",
+          tipo: "matricula",
+          cartorioId: "cartorio-1",
+          data: "2024-01-01",
+        },
+      ],
+      lancamentos: [
+        { id: "lanc-1", documentoId: "1", tipo: "registro" as LancamentoTipo },
+      ],
+      origens: [
+        {
+          id: "orig-fim",
+          lancamentoId: "lanc-1",
+          documentoId: null,
+          tipoOrigem: "fim_cadeia",
+          tipoFimCadeia: "destacamento_publico",
+          especificacao: "Terra pública",
+        },
+      ],
+    };
+
+    const result = buildGraph(chainData);
+    const fimNodes = result.nodes.filter((n) => n.type === "fimCadeia");
+
+    expect(fimNodes).toHaveLength(1);
+    expect(fimNodes[0]?.data).toEqual({
+      classificacao: "destacamento_publico",
+      especificacao: "Terra pública",
+    });
+    expect(result.edges).toContainEqual({
+      id: "orig-fim",
+      source: "doc-1",
+      target: "fim-orig-fim",
+      data: { tipoOrigem: "fim_cadeia" },
+    });
+  });
 
   it("synthetic fim-cadeia nodes have classificacao: inconclusa", () => {
     const chainData: ChainData = {

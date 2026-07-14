@@ -11,7 +11,9 @@ export type FimCadeiaReactFlowNode = Node<FimCadeiaNodeData, "fimCadeia">;
 const CLASSIFICATION_LABEL: Record<FimCadeiaData["classificacao"], string> = {
   origem_lidima: "Origem Lídima",
   sem_origem: "Sem Origem",
-  inconclusa: "Inconclusa"
+  inconclusa: "Inconclusa",
+  destacamento_publico: "Destacamento Público",
+  outra: "Outra"
 };
 
 export function FimCadeiaNode({ data }: NodeProps<FimCadeiaReactFlowNode>) {
@@ -31,6 +33,9 @@ export function FimCadeiaNode({ data }: NodeProps<FimCadeiaReactFlowNode>) {
       <div className="fim-cadeia-node__classification">
         {CLASSIFICATION_LABEL[data.classificacao]}
       </div>
+      {data.especificacao && (
+        <div className="fim-cadeia-node__classification">{data.especificacao}</div>
+      )}
     </div>
   );
 }
