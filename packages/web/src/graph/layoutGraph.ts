@@ -22,7 +22,6 @@ export interface LayoutedGraph {
 
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 80;
-const VERTICAL_GAP = 20;
 
 /**
  * Extract a sortable priority for vertical ordering within a dagre rank.
@@ -71,32 +70,35 @@ export function layoutGraph(graph: GraphJson): LayoutedGraph {
   dagre.layout(dagreGraph);
 
   // ── Vertical reorder within each rank ──────────────────────────────────
-  // Dagre determines horizontal ranks but doesn't guarantee vertical order.
-  // Group nodes by X (rounded to 10px), sort each group by vertical priority
-  // (matrículas↑, transcrições↓), and reassign Y positions.
-  const X_TOLERANCE = 10;
-  const rankGroups = new Map<number, { id: string; dagreY: number }[]>();
+  // Dagre picks Y positions that minimize edge crossings; that set of Y
+  // values is preserved.  We only reassign which node gets which Y inside
+  // each horizontal rank, so the horizontal layout stays identical.
+  const rankNodes = new Map<number, string[]>();
 
   for (const node of graph.nodes) {
     const dagrePos = dagreGraph.node(node.id);
-    const rankX = Math.round(dagrePos.x / X_TOLERANCE) * X_TOLERANCE;
-    if (!rankGroups.has(rankX)) rankGroups.set(rankX, []);
-    rankGroups.get(rankX)!.push({ id: node.id, dagreY: dagrePos.y });
+    const rank = Math.round(dagrePos.x);
+    if (!rankNodes.has(rank)) rankNodes.set(rank, []);
+    rankNodes.get(rank)!.push(node.id);
   }
 
-  // Sort each rank by vertical priority, then assign Y from top to bottom
   const nodeY = new Map<string, number>();
-  for (const [, group] of rankGroups) {
-    group.sort((a, b) => {
-      const nodeA = graph.nodes.find((n) => n.id === a.id)!;
-      const nodeB = graph.nodes.find((n) => n.id === b.id)!;
+  for (const [, ids] of rankNodes) {
+    // Collect the Ys dagre assigned to these nodes, sorted ascending.
+    const ys = ids
+      .map((id) => dagreGraph.node(id).y)
+      .sort((a, b) => a - b);
+
+    // Sort node ids by vertical priority (highest priority = smallest Y).
+    const sorted = [...ids].sort((a, b) => {
+      const nodeA = graph.nodes.find((n) => n.id === a)!;
+      const nodeB = graph.nodes.find((n) => n.id === b)!;
       return verticalPriority(nodeA) - verticalPriority(nodeB);
     });
 
-    let y = 0;
-    for (const item of group) {
-      nodeY.set(item.id, y);
-      y += NODE_HEIGHT + VERTICAL_GAP;
+    // Assign the preserved Y values in priority order.
+    for (let i = 0; i < sorted.length; i++) {
+      nodeY.set(sorted[i], ys[i]);
     }
   }
 
