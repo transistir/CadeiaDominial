@@ -159,10 +159,10 @@ mapeada era exatamente esta.
 ## Ponto seguro de versionamento
 
 - Branch de continuidade: `feature/identidade-documento-cartorio`.
-- Último commit no histórico: `3e94ee2` (`docs(dominial): registra checkpoint seguro de continuidade`). As mudanças de T25 e T26 abaixo ainda **não foram commitadas** — seguem como alterações de working tree neste checkpoint.
-- Escopo das alterações não commitadas (confira com `git status` antes de continuar):
-  - T25: `dominial/services/lancamento_duplicata_service.py` (DTO de identidade), `templates/dominial/duplicata_importacao.html`, `templates/dominial/selecionar_documento_lancamento.html`, `dominial/tests/test_t25_identidade_opcoes.py` (novo).
-  - T26: `dominial/views/lancamento_views.py` (`novo_lancamento_documento` escopado por imóvel), `templates/dominial/selecionar_documento_lancamento.html` (botão usa `novo_lancamento_documento`), `dominial/services/lancamento_duplicata_service.py` (`_validar_identidade_duplicata`), `dominial/tests/test_t26_selecao_inequivoca.py` (novo).
+- Commit funcional seguro: `b67d368` (`feat(dominial): exibe identidade completa e valida seleção por ID (T25/T26)`), local, sem push.
+- Escopo do commit:
+  - T25: `dominial/services/lancamento_duplicata_service.py` (DTO de identidade), `templates/dominial/duplicata_importacao.html`, `templates/dominial/selecionar_documento_lancamento.html`, `dominial/tests/test_t25_identidade_opcoes.py`.
+  - T26: `dominial/views/lancamento_views.py` (`novo_lancamento_documento` escopado por imóvel), `templates/dominial/selecionar_documento_lancamento.html` (botão usa `novo_lancamento_documento`), `dominial/services/lancamento_duplicata_service.py` (`_validar_identidade_duplicata`), `dominial/tests/test_t26_selecao_inequivoca.py`.
   - Docs: `CHECKPOINT_ATUAL.md`, `TAREFAS.md`, `DIARIO.md`.
 - Estado funcional salvo: R01–R07 e T22–T24 concluídas; T25 EM REVISÃO; T26 EM REVISÃO; T27 é a próxima tarefa.
 - T07 continua em revisão exclusivamente pela homologação manual documentada.
