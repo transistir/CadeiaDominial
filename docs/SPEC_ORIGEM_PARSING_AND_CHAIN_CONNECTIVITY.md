@@ -113,7 +113,7 @@ Use `cartorio_origem_id` from the lancamento as the lookup cartório. This is th
 
 ### Tier 2: documento.cri_id (Current Document's Cartório)
 
-When `cartorio_origem_id` is NULL, use the current document's own cartório.
+When `cartorio_origem_id` is NULL, use the current document's own cartório. This is a conservative fallback that handles origins within the same CRI as the current document — a common case when the user didn't explicitly record a different cartório because both documents belong to the same registry office.
 
 **Status:** Already implemented as fallback.
 
@@ -341,6 +341,8 @@ Origem Resolution Summary:
 - **Do NOT** extract cartório from free-text description fields
 - **Do NOT** resolve ambiguous matches automatically (require manual audit)
 
+> **Data recovery vs. user error:** Tier 3 cross-CRI recovery addresses **legacy schema limitations** (the single-FK design flaw in Django's `Lancamento` model), not user data entry errors. In v2, origins reference documents by FK, eliminating this class of data loss at the schema level.
+
 ---
 
 ## Expected Outcomes
@@ -426,6 +428,7 @@ Every Tier 3 resolution will be logged with `[CROSS-CRI]` prefix, creating a cle
 4. [ ] **Ambiguous handling:** Multiple matches logged as `[AMBIGUOUS]`
 5. [ ] **Audit logging:** All Tier 3 matches logged with `[CROSS-CRI]` prefix
 6. [ ] **Resolution rate:** ≥94% of previously unmatched origins resolved
+7. [ ] **Tier 1 false positive handling:** Documented as pre-existing limitation — Tier 3 is the recovery path for origins whose cartório was lost by the legacy schema
 
 ### Non-Functional Requirements
 
