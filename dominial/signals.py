@@ -14,10 +14,6 @@ def processar_origens_automaticas_signal(sender, instance, created, **kwargs):
     """
     Signal para processar origens automaticamente sempre que um lançamento for salvo
     """
-    # Só processar se o lançamento tem origem
-    if not instance.origem or not instance.origem.strip():
-        return
-    
     # Só processar se o lançamento tem documento e imóvel
     if not instance.documento or not instance.documento.imovel:
         return
@@ -25,7 +21,7 @@ def processar_origens_automaticas_signal(sender, instance, created, **kwargs):
     try:
         # Processar origens para criar documentos automáticos
         resultado = LancamentoOrigemService.processar_origens_automaticas(
-            instance, instance.origem, instance.documento.imovel
+            instance, instance.origem or '', instance.documento.imovel
         )
         
         if resultado:

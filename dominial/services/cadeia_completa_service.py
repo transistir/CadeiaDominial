@@ -6,6 +6,9 @@ import re
 from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento
 from ..services.hierarquia_service import HierarquiaService
+from ..services.documento_identidade_service import DocumentoIdentidadeService
+from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
 class CadeiaCompletaService:
@@ -114,41 +117,58 @@ class CadeiaCompletaService:
         # TODO: Implementar lógica de troncos secundários
         return []
     
+    @staticmethod
+    def _resolver_documento_por_codigo(codigo, cartorio):
+        """
+        Resolve um documento pela identidade completa (tipo, número
+        normalizado e cartório), nunca por número isolado. Sem cartório, com
+        tipo incompatível ou com identidade ambígua, não seleciona documento.
+        """
+        if not cartorio or not codigo:
+            return None
+        primeiro = codigo.strip()[:1].upper()
+        if primeiro == 'M':
+            tipo = 'matricula'
+        elif primeiro == 'T':
+            tipo = 'transcricao'
+        else:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
+        except (TypeError, ValueError):
+            return None
+        resultado = DocumentoIdentidadeService.resolver(identidade)
+        return resultado.documento if resultado.status == 'encontrado' else None
+
     def _expandir_todas_origens_documento(self, documento, documentos_processados=None):
         """
         Expande TODAS as origens de um documento (não apenas uma)
         """
         if documentos_processados is None:
             documentos_processados = set()
-            
+
         documentos_origem = []
-        
+
         # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.filter(
-            origem__isnull=False
-        ).exclude(origem='')
-        
+        lancamentos = documento.lancamentos.all()
+
         for lancamento in lancamentos:
-            if lancamento.origem:
-                # Extrair todas as origens (separadas por ';')
-                origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                
-                for origem_numero in origens:
-                    # Buscar documento de origem
-                    doc_origem = Documento.objects.filter(
-                        numero=origem_numero
-                    ).select_related('cartorio', 'tipo').first()
-                    
-                    if doc_origem and doc_origem.id not in documentos_processados:
-                        documentos_origem.append(doc_origem)
-                        documentos_processados.add(doc_origem.id)
-                        
-                        # Recursivamente expandir origens deste documento
-                        sub_origens = self._expandir_todas_origens_documento(doc_origem, documentos_processados)
-                        for sub_origem in sub_origens:
-                            if sub_origem.id not in documentos_processados:
-                                documentos_origem.append(sub_origem)
-                                documentos_processados.add(sub_origem.id)
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                # Resolver documento de origem pela identidade completa
+                doc_origem = CadeiaCompletaService._resolver_documento_por_codigo(
+                    origem.codigo, origem.cartorio
+                )
+
+                if doc_origem and doc_origem.id not in documentos_processados:
+                    documentos_origem.append(doc_origem)
+                    documentos_processados.add(doc_origem.id)
+
+                    # Recursivamente expandir origens deste documento
+                    sub_origens = self._expandir_todas_origens_documento(doc_origem, documentos_processados)
+                    for sub_origem in sub_origens:
+                        if sub_origem.id not in documentos_processados:
+                            documentos_origem.append(sub_origem)
+                            documentos_processados.add(sub_origem.id)
         
         return documentos_origem
     
@@ -245,10 +265,11 @@ class CadeiaCompletaService:
         origens = set()
         
         for lancamento in documento.lancamentos.all():
-            if lancamento.tipo.tipo == 'inicio_matricula' and lancamento.origem:
-                # Extrair origens do campo origem
-                origens_lancamento = self._extrair_origens(lancamento.origem)
-                origens.update(origens_lancamento)
+            if lancamento.tipo.tipo == 'inicio_matricula':
+                origens.update(
+                    origem.codigo
+                    for origem in LancamentoOrigemLeituraService.obter_origens(lancamento)
+                )
         
         # Ordenar do maior para o menor número
         origens_list = list(origens)

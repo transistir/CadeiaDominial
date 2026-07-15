@@ -7,6 +7,9 @@ from django.conf import settings
 from django.db.models import Q
 from typing import Dict, List, Optional, Any
 from ..models import Documento, DocumentoImportado, Lancamento
+from .documento_identidade_service import DocumentoIdentidadeService
+from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
 class DuplicataVerificacaoService:
@@ -14,34 +17,69 @@ class DuplicataVerificacaoService:
     Service responsável por verificar duplicatas de origem/cartório
     e calcular documentos importáveis.
     """
-    
+
+    @staticmethod
+    def _tipo_do_codigo(codigo):
+        """Deduz o tipo documental (matricula/transcricao) do prefixo M/T de
+        um código. Um código só com dígitos (sem prefixo) é tratado como
+        matrícula implícita — mesma regra já usada por
+        `LancamentoOrigemLeituraService._extrair_identidade_legada` para o
+        texto legado de origem, para não haver dois entendimentos diferentes
+        do mesmo formato de número dentro do sistema (achado da revisão
+        automatizada do PR, 2026-07-14)."""
+        if not codigo:
+            return None
+        codigo = codigo.strip()
+        primeiro = codigo[:1].upper()
+        if primeiro == 'M':
+            return 'matricula'
+        if primeiro == 'T':
+            return 'transcricao'
+        if codigo.isdigit():
+            return 'matricula'
+        return None
+
+    @staticmethod
+    def _resolver_documento(codigo, cartorio_id):
+        """
+        Resolve um documento pela identidade completa (tipo, número normalizado
+        e cartório), nunca por número isolado. Sem cartório, com tipo
+        incompatível ou com identidade ambígua, não seleciona nenhum documento.
+        """
+        if not codigo or not cartorio_id:
+            return None
+        tipo = DuplicataVerificacaoService._tipo_do_codigo(codigo)
+        if not tipo:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, codigo, cartorio_id)
+        except (TypeError, ValueError):
+            return None
+        resultado = DocumentoIdentidadeService.resolver(identidade)
+        return resultado.documento if resultado.status == 'encontrado' else None
+
     @staticmethod
     def verificar_duplicata_origem(origem: str, cartorio_id: int, imovel_atual_id: int) -> Dict[str, Any]:
         """
         Verifica se uma origem/cartório já existe em outras cadeias dominiais.
-        
+
         Args:
             origem: Número da origem/documento
             cartorio_id: ID do cartório
             imovel_atual_id: ID do imóvel atual (para excluir da busca)
-            
+
         Returns:
             Dict com informações sobre a duplicata encontrada ou None
         """
         if not getattr(settings, 'DUPLICATA_VERIFICACAO_ENABLED', False):
             return {'tem_duplicata': False}
-        
-        # Buscar documento com mesmo número e cartório em outros imóveis
-        documento_existente = Documento.objects.filter(
-            numero=origem,
-            cartorio_id=cartorio_id
-        ).exclude(
-            imovel_id=imovel_atual_id
-        ).select_related('imovel', 'cartorio', 'tipo').first()
-        
-        if not documento_existente:
+
+        # Resolver documento pela identidade completa (tipo, número e cartório)
+        documento_existente = DuplicataVerificacaoService._resolver_documento(origem, cartorio_id)
+
+        if not documento_existente or documento_existente.imovel_id == imovel_atual_id:
             return {'tem_duplicata': False}
-        
+
         # Calcular documentos importáveis
         documentos_importaveis = DuplicataVerificacaoService.calcular_documentos_importaveis(
             documento_existente
@@ -77,51 +115,30 @@ class DuplicataVerificacaoService:
         def buscar_cadeia_recursiva(documento):
             if documento.id in documentos_processados:
                 return
-            
+
             documentos_processados.add(documento.id)
-            
-            # Buscar lançamentos deste documento para encontrar suas origens
-            from ..models import Lancamento
-            
+
             lancamentos_do_documento = Lancamento.objects.filter(
                 documento=documento
             )
-            
+
             for lancamento in lancamentos_do_documento:
-                print(f"DEBUG CADEIA: Lançamento {lancamento.id} - Origem: '{lancamento.origem}' - Cartório Origem: {lancamento.cartorio_origem}")
-                
-                if lancamento.origem:
-                    # Separar múltiplas origens (separadas por ;)
-                    origens = [o.strip() for o in lancamento.origem.split(';')]
-                    print(f"DEBUG CADEIA: Origens separadas: {origens}")
-                    
-                    for origem_numero in origens:
-                        if origem_numero:
-                            print(f"DEBUG CADEIA: Buscando documento {origem_numero} no cartório {lancamento.cartorio_origem}")
-                            
-                            # Buscar documento com este número (independente do cartório)
-                            documento_anterior = Documento.objects.filter(
-                                numero=origem_numero
-                            ).first()
-                            
-                            if documento_anterior:
-                                print(f"DEBUG CADEIA: Documento encontrado: {documento_anterior.numero} - {documento_anterior.imovel.nome}")
-                                
-                                # Verificar se já não foi importado
-                                if not DocumentoImportado.objects.filter(
-                                    documento=documento_anterior,
-                                    imovel_origem=documento_origem.imovel
-                                ).exists():
-                                    
-                                    documentos_importaveis.append(documento_anterior)
-                                    print(f"DEBUG CADEIA: Documento adicionado à lista de importáveis")
-                                    
-                                    # Buscar recursivamente as origens deste documento
-                                    buscar_cadeia_recursiva(documento_anterior)
-                                else:
-                                    print(f"DEBUG CADEIA: Documento já foi importado")
-                            else:
-                                print(f"DEBUG CADEIA: Documento {origem_numero} não encontrado no cartório {lancamento.cartorio_origem}")
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    # Resolver documento de origem pela identidade completa
+                    # (tipo, número normalizado e cartório de cada origem)
+                    documento_anterior = DuplicataVerificacaoService._resolver_documento(
+                        origem.codigo, origem.cartorio_id
+                    )
+
+                    if documento_anterior:
+                        # Verificar se já não foi importado
+                        if not DocumentoImportado.objects.filter(
+                            documento=documento_anterior,
+                            imovel_origem=documento_origem.imovel
+                        ).exists():
+                            documentos_importaveis.append(documento_anterior)
+                            # Buscar recursivamente as origens deste documento
+                            buscar_cadeia_recursiva(documento_anterior)
         
         # Iniciar busca recursiva a partir do documento origem
         buscar_cadeia_recursiva(documento_origem)
@@ -161,20 +178,15 @@ class DuplicataVerificacaoService:
             )
             
             for lancamento in lancamentos_do_documento:
-                if lancamento.origem:
-                    # Separar múltiplas origens
-                    origens = [o.strip() for o in lancamento.origem.split(';')]
-                    
-                    for origem_numero in origens:
-                        if origem_numero:
-                            # Buscar documento com este número
-                            documento_anterior = Documento.objects.filter(
-                                numero=origem_numero
-                            ).first()
-                            
-                            if documento_anterior and documento_anterior.id not in documentos_processados:
-                                # Recursivamente adicionar o documento anterior
-                                adicionar_documento_e_origens(documento_anterior)
+                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                    # Resolver documento de origem pela identidade completa
+                    documento_anterior = DuplicataVerificacaoService._resolver_documento(
+                        origem.codigo, origem.cartorio_id
+                    )
+
+                    if documento_anterior and documento_anterior.id not in documentos_processados:
+                        # Recursivamente adicionar o documento anterior
+                        adicionar_documento_e_origens(documento_anterior)
         
         # Iniciar a busca recursiva
         adicionar_documento_e_origens(documento_origem)
@@ -209,4 +221,4 @@ class DuplicataVerificacaoService:
             'tempo_execucao': tempo_execucao,
             'tempo_aceitavel': tempo_execucao < 0.1,  # Menos de 100ms
             'resultado': resultado
-        } 
+        }

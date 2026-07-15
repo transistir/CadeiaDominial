@@ -41,7 +41,7 @@
                     {% elif documento.tipo.tipo == 'transcricao' %}📄
                     {% elif documento.tipo.tipo == 'certidao' %}📜
                     {% else %}📝{% endif %}
-                    {{ documento.get_tipo_display }}
+                    {{ documento.tipo.get_tipo_display }}
                 </div>
                 <div class="documento-data">
                     {{ documento.data|date:'d/m/Y' }}
@@ -55,6 +55,15 @@
             <div class="documento-details">
                 <div class="detail-item">
                     <strong>Cartório:</strong> {{ documento.cartorio.nome }}
+                </div>
+                <div class="detail-item">
+                    <strong>CNS:</strong> {{ documento.cartorio.cns|default:"Não informado" }}
+                </div>
+                <div class="detail-item">
+                    <strong>Localidade:</strong>
+                    {% if documento.cartorio.cidade or documento.cartorio.estado %}
+                        {{ documento.cartorio.cidade }}{% if documento.cartorio.cidade and documento.cartorio.estado %}/{% endif %}{{ documento.cartorio.estado }}
+                    {% else %}Não informado{% endif %}
                 </div>
                 <div class="detail-item">
                     <strong>Livro:</strong> {{ documento.livro }}
@@ -83,7 +92,7 @@
             </div>
 
             <div class="documento-actions">
-                <a href="{% url 'novo_lancamento' tis_id=tis.id imovel_id=imovel.id %}" 
+                <a href="{% url 'novo_lancamento_documento' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}"
                    class="btn btn-primary">
                     ➕ Novo Lançamento
                 </a>

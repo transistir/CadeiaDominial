@@ -4,6 +4,70 @@ Utilitários para cálculos de hierarquia de documentos e cadeia dominial
 
 import re
 from ..models import Documento, DocumentoTipo
+from .documento_identidade_utils import DocumentoIdentidade
+
+
+def _obter_origens_lancamento(lancamento):
+    # Import tardio evita o ciclo models -> utils -> services -> utils durante
+    # a inicialização do Django.
+    from ..services.lancamento_origem_leitura_service import (
+        LancamentoOrigemLeituraService,
+    )
+
+    return LancamentoOrigemLeituraService.obter_origens(lancamento)
+
+
+def _tipo_do_codigo(codigo):
+    """Deduz o tipo documental (matricula/transcricao) do prefixo M/T de um código."""
+    if not codigo:
+        return None
+    primeiro = codigo.strip()[:1].upper()
+    if primeiro == 'M':
+        return 'matricula'
+    if primeiro == 'T':
+        return 'transcricao'
+    return None
+
+
+def _resolver_documento_por_codigo(codigo, cartorio):
+    """
+    Resolve um documento pela identidade completa (tipo, número normalizado e
+    cartório), nunca por número isolado. Sem cartório, com tipo incompatível
+    ou com identidade ambígua, não seleciona nenhum documento.
+    """
+    from ..services.documento_identidade_service import DocumentoIdentidadeService
+
+    if not cartorio:
+        return None
+    tipo = _tipo_do_codigo(codigo)
+    if not tipo:
+        return None
+    try:
+        identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
+    except (TypeError, ValueError):
+        return None
+    resultado = DocumentoIdentidadeService.resolver(identidade)
+    return resultado.documento if resultado.status == 'encontrado' else None
+
+
+def _selecionar_origem_contextual(origens, codigo_escolhido):
+    """Aceita a escolha textual apenas entre origens já resolvidas no contexto."""
+    tipo = _tipo_do_codigo(codigo_escolhido)
+    if not tipo:
+        return None
+
+    compativeis = []
+    for documento in origens:
+        if documento.tipo.tipo != tipo:
+            continue
+        try:
+            escolha = DocumentoIdentidade(tipo, codigo_escolhido, documento.cartorio_id)
+        except (TypeError, ValueError):
+            return None
+        if documento.numero_normalizado == escolha.numero_normalizado:
+            compativeis.append(documento)
+
+    return compativeis[0] if len(compativeis) == 1 else None
 
 
 def ajustar_nivel_para_nova_conexao(documentos, from_numero, to_numero):
@@ -44,17 +108,20 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         return []
 
     tronco_principal = []
-    # CORREÇÃO: Começar pela matrícula atual (que foi convertida em documento durante o cadastro do imóvel)
-    # Primeiro, tentar encontrar o documento que corresponde à matrícula do imóvel
-    documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula), None)
-    
-    # Se não encontrou, verificar se a matrícula do imóvel tem prefixo "M" e o documento não
-    if not documento_atual and imovel.matricula.startswith('M'):
-        documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == imovel.matricula[1:]), None)
-    
-    # Se não encontrou, verificar se o documento tem prefixo "M" e a matrícula do imóvel não
-    if not documento_atual:
-        documento_atual = next((doc for doc in documentos if doc.tipo.tipo == 'matricula' and doc.numero == f"M{imovel.matricula}"), None)
+    # Começar pelo documento que representa a identidade registral do imóvel.
+    # A busca inclui tipo, número canônico e cartório, sem depender da forma do
+    # prefixo nem da ordem da lista de documentos importados.
+    documento_atual = next(
+        (
+            doc
+            for doc in documentos
+            if doc.imovel_id == imovel.id
+            and doc.tipo.tipo == imovel.tipo_documento_principal
+            and doc.numero_normalizado == imovel.matricula_normalizada
+            and doc.cartorio_id == imovel.cartorio_id
+        ),
+        None,
+    )
     
     # Se não encontrou o documento da matrícula atual, procurar por matrículas
     if not documento_atual:
@@ -77,61 +144,45 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         escolha_atual = escolhas_origem.get(str(documento_atual.id))
         
         # Buscar lançamentos do documento atual que têm origens
-        lancamentos_com_origem = documento_atual.lancamentos.filter(origem__isnull=False).exclude(origem='')
+        lancamentos_com_origem = documento_atual.lancamentos.all()
         
         # Se não há lançamentos com origens, verificar se há uma escolha de origem
-        if not lancamentos_com_origem.exists():
-            if escolha_atual:
-                # Se há escolha mas não há lançamentos com origens, buscar o documento escolhido
-                proximo_documento = next((doc for doc in documentos if doc.numero == escolha_atual), None)
-                if proximo_documento and proximo_documento not in tronco_principal:
-                    documento_atual = proximo_documento
-                    continue
-            break
-        
         # Extrair códigos de origem dos lançamentos (apenas origens normais, não fim de cadeia)
         origens_identificadas = []
         for lancamento in lancamentos_com_origem:
-            if lancamento.origem:
-                # Separar origens normais de fim de cadeia
-                origens_individuals = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                origens_normais = []
-                
-                for origem_individual in origens_individuals:
-                    # Verificar se é fim de cadeia
-                    padroes_fim_cadeia = [
-                        'Destacamento Público:',
-                        'Outra:',
-                        'Sem Origem:',
-                        'FIM_CADEIA'
-                    ]
-                    
-                    is_fim_cadeia = any(padrao in origem_individual for padrao in padroes_fim_cadeia)
-                    
-                    if not is_fim_cadeia:
-                        origens_normais.append(origem_individual)
-                
-                # Processar apenas origens normais
-                for origem_normal in origens_normais:
-                    codigos = re.findall(r'[MT]\d+', origem_normal)
-                    for codigo in codigos:
-                        doc_existente = next((doc for doc in documentos if doc.numero == codigo), None)
-                        if doc_existente:
-                            origens_identificadas.append(doc_existente)
+            for origem in _obter_origens_lancamento(lancamento):
+                doc_existente = _resolver_documento_por_codigo(
+                    origem.codigo,
+                    origem.cartorio,
+                )
+                if (
+                    doc_existente
+                    and doc_existente.pk
+                    not in {doc.pk for doc in origens_identificadas}
+                ):
+                    origens_identificadas.append(doc_existente)
+
+        if not origens_identificadas:
+            break
         
         # Escolher próximo documento baseado na escolha do usuário ou padrão
         proximo_documento = None
         
         if escolha_atual:
-            # Se há escolha específica, usar ela
-            proximo_documento = next((doc for doc in origens_identificadas if doc.numero == escolha_atual), None)
+            # O valor legado da sessão ainda é textual. Ele só é aceito quando
+            # identifica exatamente uma das origens já resolvidas com o
+            # cartório de seu lançamento.
+            proximo_documento = _selecionar_origem_contextual(
+                origens_identificadas,
+                escolha_atual,
+            )
         
         if not proximo_documento:
             # Se não há escolha ou escolha não encontrada, usar a origem com maior número
             if origens_identificadas:
                 # Ordenar por número (maior primeiro) e pegar a primeira
                 origens_ordenadas = sorted(origens_identificadas, 
-                    key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')), 
+                    key=lambda x: int(x.numero_normalizado),
                     reverse=True)
                 proximo_documento = origens_ordenadas[0]
         
@@ -163,59 +214,49 @@ def identificar_documentos_importados(imovel):
     """
     from ..models import Documento, Lancamento
     import re
-    
+
     # Buscar todos os lançamentos do imóvel que têm origens
-    lancamentos_com_origem = Lancamento.objects.filter(
-        documento__imovel=imovel,
-        origem__isnull=False
-    ).exclude(origem='')
-    
-    # Coletar todos os códigos de origem referenciados
-    codigos_origem = set()
+    lancamentos_com_origem = Lancamento.objects.filter(documento__imovel=imovel)
+
+    # Coletar códigos de origem referenciados, cada um com o cartório do
+    # lançamento que o informou (a resolução nunca cruza cartórios)
+    codigos_origem = []
     for lancamento in lancamentos_com_origem:
-        if lancamento.origem:
-            # Extrair códigos M/T dos lançamentos
-            codigos = re.findall(r'[MT]\d+', lancamento.origem)
-            codigos_origem.update(codigos)
-    
-    # Buscar documentos que correspondem aos códigos e pertencem a outros imóveis
+        for origem in _obter_origens_lancamento(lancamento):
+            codigos_origem.append((origem.codigo, origem.cartorio))
+
     documentos_compartilhados = []
     documentos_processados = set()
-    
-    def expandir_documentos_recursivamente(codigos):
+
+    def expandir_documentos_recursivamente(codigos_com_cartorio):
         """Função recursiva para expandir documentos compartilhados"""
-        for codigo in codigos:
-            if codigo in documentos_processados:
+        for codigo, cartorio in codigos_com_cartorio:
+            chave = (codigo, cartorio.pk if cartorio else None)
+            if chave in documentos_processados:
                 continue
-                
-            doc_compartilhado = Documento.objects.filter(
-                numero=codigo
-            ).exclude(
-                imovel=imovel  # Excluir documentos do imóvel atual
-            ).select_related('cartorio', 'tipo', 'imovel').first()
-            
-            if doc_compartilhado:
-                documentos_compartilhados.append(doc_compartilhado)
-                documentos_processados.add(codigo)
-                
+            documentos_processados.add(chave)
+
+            doc_compartilhado = _resolver_documento_por_codigo(codigo, cartorio)
+
+            if doc_compartilhado and doc_compartilhado.imovel_id != imovel.id:
+                if doc_compartilhado.id not in {doc.id for doc in documentos_compartilhados}:
+                    documentos_compartilhados.append(doc_compartilhado)
+
                 # Buscar origens deste documento compartilhado
-                lancamentos_doc = doc_compartilhado.lancamentos.filter(
-                    origem__isnull=False
-                ).exclude(origem='')
-                
-                codigos_origem_doc = set()
+                lancamentos_doc = doc_compartilhado.lancamentos.all()
+
+                codigos_origem_doc = []
                 for lancamento in lancamentos_doc:
-                    if lancamento.origem:
-                        codigos_orig = re.findall(r'[MT]\d+', lancamento.origem)
-                        codigos_origem_doc.update(codigos_orig)
-                
+                    for origem in _obter_origens_lancamento(lancamento):
+                        codigos_origem_doc.append((origem.codigo, origem.cartorio))
+
                 # Expandir recursivamente
                 if codigos_origem_doc:
                     expandir_documentos_recursivamente(codigos_origem_doc)
-    
+
     # Expandir recursivamente todos os documentos compartilhados
     expandir_documentos_recursivamente(codigos_origem)
-    
+
     return documentos_compartilhados
 
 
@@ -330,64 +371,61 @@ def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
         bool: True se a origem deve ser criada, False caso contrário
     """
     from ..models import Documento, Lancamento
-    
-    # CORREÇÃO: Sempre verificar se documento existe em outros imóveis primeiro
-    # Buscar documento em outros imóveis (com e sem prefixo)
-    documento_existente = Documento.objects.filter(
-        numero=numero_documento
-    ).exclude(
-        imovel=imovel_atual
-    ).first()
-    
-    # Se não encontrou com prefixo, tentar sem prefixo
-    if not documento_existente and numero_documento.startswith(('M', 'T')):
-        numero_base = numero_documento[1:]  # Remove M ou T
-        documento_existente = Documento.objects.filter(
-            numero=numero_base
-        ).exclude(
-            imovel=imovel_atual
-        ).first()
-    
+
+    cartorio_origem = lancamento.cartorio_origem if lancamento else None
+
+    # Resolver pela identidade completa (tipo, número normalizado e cartório
+    # do lançamento) - nunca por número isolado.
+    documento_existente = _resolver_documento_por_codigo(numero_documento, cartorio_origem)
+    if documento_existente and documento_existente.imovel_id == imovel_atual.id:
+        # É o próprio documento do imóvel atual, não uma origem em outro imóvel
+        documento_existente = None
+
     if documento_existente:
         # Documento existe em outro imóvel - NÃO criar duplicado
         # Em vez disso, deve importar a cadeia dominial
         print(f"AVISO: Documento {numero_documento} já existe no imóvel {documento_existente.imovel.id} (número: {documento_existente.numero}) - não criando duplicado")
         return False
-    
+
     # REGRA PÉTREA: Se é lançamento de início de matrícula e não existe em outros imóveis
     if lancamento and lancamento.tipo and lancamento.tipo.tipo == 'inicio_matricula':
-        # Verificar se não existe no imóvel atual
-        documento_no_imovel_atual = Documento.objects.filter(
-            numero=numero_documento,
-            imovel=imovel_atual
-        ).exists()
-        
+        # Verificar se não existe no imóvel atual, com a mesma identidade completa
+        documento_no_imovel_atual = (
+            cartorio_origem
+            and Documento.objects.filter(
+                tipo__tipo=_tipo_do_codigo(numero_documento),
+                numero=numero_documento,
+                cartorio=cartorio_origem,
+                imovel=imovel_atual,
+            ).exists()
+        )
+
         if documento_no_imovel_atual:
             return False
-        
+
         # Para início de matrícula, permitir criação apenas se não existe em lugar nenhum
         return True
-    
+
     # Para outros tipos de lançamento, usar validação restritiva
     # (já verificamos se existe em outros imóveis acima)
     if not documento_existente:
         return False
-    
+
     # Verificar se o documento tem lançamentos reais
     lancamentos_count = Lancamento.objects.filter(
         documento=documento_existente
     ).count()
-    
+
     if lancamentos_count == 0:
         return False
-    
+
     # Verificar se não existe no imóvel atual
     documento_no_imovel_atual = Documento.objects.filter(
         numero=numero_documento,
         imovel=imovel_atual
     ).exists()
-    
+
     if documento_no_imovel_atual:
         return False
-    
-    return True 
+
+    return True

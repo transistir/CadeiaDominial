@@ -4,7 +4,7 @@ Service para integração da verificação de duplicatas com o processo de cria�
 
 from .duplicata_verificacao_service import DuplicataVerificacaoService
 from .importacao_cadeia_service import ImportacaoCadeiaService
-from ..models import Documento, Cartorios
+from ..models import Cartorios
 
 
 class LancamentoDuplicataService:
@@ -108,42 +108,31 @@ class LancamentoDuplicataService:
         """
         documento_origem_id = request.POST.get('documento_origem_id')
         documentos_importaveis_ids = request.POST.getlist('documentos_importaveis[]')
-        
+
         if not documento_origem_id:
             return {
                 'sucesso': False,
                 'mensagem': 'Documento de origem não especificado'
             }
-        
+
         try:
-            documento_origem = Documento.objects.get(id=documento_origem_id)
-        except Documento.DoesNotExist:
-            return {
-                'sucesso': False,
-                'mensagem': 'Documento de origem não encontrado'
-            }
-        
-        # Converter IDs para lista de inteiros
-        try:
+            documento_origem_id = int(documento_origem_id)
             documentos_importaveis_ids = [int(id) for id in documentos_importaveis_ids if id.strip()]
         except ValueError:
             return {
                 'sucesso': False,
                 'mensagem': 'IDs de documentos inválidos'
             }
-        
-        # Verificar se os documentos existem
-        documentos_importaveis = []
-        for doc_id in documentos_importaveis_ids:
-            try:
-                doc = Documento.objects.get(id=doc_id)
-                documentos_importaveis.append(doc)
-            except Documento.DoesNotExist:
-                return {
-                    'sucesso': False,
-                    'mensagem': f'Documento {doc_id} não encontrado'
-                }
-        
+
+        validacao = LancamentoDuplicataService._validar_identidade_duplicata(
+            request, documento_origem_id, documentos_importaveis_ids, documento_ativo.imovel_id
+        )
+        if not validacao['sucesso']:
+            return validacao
+
+        documento_origem = validacao['documento_origem']
+        documentos_importaveis = validacao['documentos_importaveis']
+
         # Realizar importação
         try:
             print(f"DEBUG IMPORTACAO: Iniciando importação para imóvel {documento_ativo.imovel.id}")
@@ -182,43 +171,127 @@ class LancamentoDuplicataService:
                 'sucesso': False,
                 'mensagem': f'Erro durante importação: {str(e)}'
             }
-    
+
+    @staticmethod
+    def _validar_identidade_duplicata(request, documento_origem_id, documentos_importaveis_ids, imovel_atual_id):
+        """
+        Confirma o `documento_origem_id` e os `documentos_importaveis[]` recebidos
+        no POST contra uma duplicata recalculada no servidor (T26).
+
+        Nunca confia nos PKs enviados pelo formulário: a origem/cartório
+        originalmente submetidos (preservados como campos ocultos) são
+        reprocessados pelo mesmo fluxo de detecção de duplicata, e o
+        documento de origem e a cadeia dominial resultantes precisam bater
+        exatamente com o que o usuário está tentando importar.
+        """
+        origens = request.POST.getlist('origem_completa[]')
+        cartorios_origem = request.POST.getlist('cartorio_origem[]')
+
+        for i, origem in enumerate(origens):
+            origem = origem.strip() if origem else ''
+            cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
+            if not origem or not cartorio_origem_id:
+                continue
+
+            try:
+                cartorio_origem = Cartorios.objects.get(id=cartorio_origem_id)
+            except (Cartorios.DoesNotExist, ValueError):
+                continue
+
+            duplicata_info = DuplicataVerificacaoService.verificar_duplicata_origem(
+                origem=origem,
+                cartorio_id=cartorio_origem.id,
+                imovel_atual_id=imovel_atual_id
+            )
+            if not duplicata_info.get('tem_duplicata'):
+                continue
+
+            documento_origem = duplicata_info['documento_origem']
+            if documento_origem.id != documento_origem_id:
+                continue
+
+            cadeia_por_id = {
+                item['documento'].id: item['documento']
+                for item in duplicata_info['cadeia_dominial']
+            }
+            if not set(documentos_importaveis_ids).issubset(cadeia_por_id.keys()):
+                return {
+                    'sucesso': False,
+                    'mensagem': 'Os documentos selecionados não pertencem à cadeia dominial identificada.'
+                }
+
+            return {
+                'sucesso': True,
+                'documento_origem': documento_origem,
+                'documentos_importaveis': [
+                    cadeia_por_id[doc_id] for doc_id in documentos_importaveis_ids
+                ]
+            }
+
+        return {
+            'sucesso': False,
+            'mensagem': 'Não foi possível confirmar a duplicata: origem e cartório informados não correspondem ao documento selecionado.'
+        }
+
+    @staticmethod
+    def _identidade_documento(documento):
+        """Bloco de identidade documental completa para apresentação (T25).
+
+        Reúne tipo, número, cartório (com CNS e localização) e imóvel, de forma
+        suficiente para distinguir homônimos em cartórios diferentes. Apenas
+        adiciona dados de apresentação; não altera o contrato de seleção (IDs e
+        campos existentes seguem iguais até a T26).
+        """
+        cartorio = documento.cartorio
+        imovel = documento.imovel
+        return {
+            'cartorio': cartorio.nome if cartorio else 'Não informado',
+            'cartorio_cns': cartorio.cns if cartorio and cartorio.cns else '',
+            'cartorio_cidade': cartorio.cidade if cartorio and cartorio.cidade else '',
+            'cartorio_uf': cartorio.estado if cartorio and cartorio.estado else '',
+            'imovel_id': imovel.id if imovel else None,
+            'imovel_nome': imovel.nome if imovel else 'Não informado',
+            'imovel_matricula': imovel.matricula if imovel else '',
+        }
+
     @staticmethod
     def obter_dados_duplicata_para_template(duplicata_info):
         """
         Prepara dados da duplicata para exibição no template
-        
+
         Args:
             duplicata_info: Informações da duplicata encontrada
-            
+
         Returns:
             dict: Dados formatados para o template
         """
         if not duplicata_info.get('tem_duplicata'):
             return None
-        
+
         documento_origem = duplicata_info['documento_origem']
         documentos_importaveis = duplicata_info['documentos_importaveis']
         cadeia_dominial = duplicata_info['cadeia_dominial']
-        
+
         # Formatar dados para exibição
+        documento_origem_dados = {
+            'id': documento_origem.id,
+            'numero': documento_origem.numero,
+            'tipo': documento_origem.tipo.get_tipo_display(),
+            'livro': documento_origem.livro or 'Não informado',
+            'folha': documento_origem.folha or 'Não informado',
+            'total_lancamentos': documento_origem.lancamentos.count(),
+        }
+        documento_origem_dados.update(
+            LancamentoDuplicataService._identidade_documento(documento_origem)
+        )
         dados_template = {
-            'documento_origem': {
-                'id': documento_origem.id,
-                'numero': documento_origem.numero,
-                'tipo': documento_origem.tipo.get_tipo_display(),
-                'imovel_nome': documento_origem.imovel.nome,
-                'cartorio': documento_origem.cartorio.nome if documento_origem.cartorio else 'Não informado',
-                'livro': documento_origem.livro or 'Não informado',
-                'folha': documento_origem.folha or 'Não informado',
-                'total_lancamentos': documento_origem.lancamentos.count()
-            },
+            'documento_origem': documento_origem_dados,
             'documentos_importaveis': []
         }
-        
+
         # Formatar documentos importáveis
         for doc in documentos_importaveis:
-            dados_template['documentos_importaveis'].append({
+            item = {
                 'id': doc.id,
                 'numero': doc.numero,
                 'tipo': doc.tipo.get_tipo_display(),
@@ -226,19 +299,25 @@ class LancamentoDuplicataService:
                 'folha': doc.folha or 'Não informado',
                 'total_lancamentos': doc.lancamentos.count(),
                 'selecionado': True  # Por padrão, todos selecionados
-            })
-        
+            }
+            item.update(LancamentoDuplicataService._identidade_documento(doc))
+            dados_template['documentos_importaveis'].append(item)
+
         # Formatar cadeia dominial
         dados_template['cadeia_dominial'] = []
         for item in cadeia_dominial:
+            documento_dados = {
+                'id': item['documento'].id,
+                'numero': item['documento'].numero,
+                'tipo': item['documento'].tipo.get_tipo_display(),
+                'livro': item['documento'].livro or 'Não informado',
+                'folha': item['documento'].folha or 'Não informado',
+            }
+            documento_dados.update(
+                LancamentoDuplicataService._identidade_documento(item['documento'])
+            )
             dados_template['cadeia_dominial'].append({
-                'documento': {
-                    'id': item['documento'].id,
-                    'numero': item['documento'].numero,
-                    'tipo': item['documento'].tipo.get_tipo_display(),
-                    'livro': item['documento'].livro or 'Não informado',
-                    'folha': item['documento'].folha or 'Não informado'
-                },
+                'documento': documento_dados,
                 'lancamentos': [
                     {
                         'numero': lanc.numero_lancamento,
@@ -249,5 +328,5 @@ class LancamentoDuplicataService:
                     for lanc in item['lancamentos']
                 ]
             })
-        
-        return dados_template 
+
+        return dados_template

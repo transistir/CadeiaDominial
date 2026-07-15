@@ -216,16 +216,15 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
     
     try:
-        # Verificar se já existe um documento com esse número
-        if Documento.objects.filter(imovel=imovel, numero=codigo_origem).exists():
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': f'Documento "{codigo_origem}" já existe.'}, status=400)
-            messages.warning(request, f'Documento "{codigo_origem}" já existe.')
-            return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
-        
         # Obter o tipo de documento
         tipo_doc = DocumentoTipo.objects.get(tipo=tipo_documento)
-        
+
+        from ..utils.documento_identidade_utils import normalizar_numero_documento
+        try:
+            numero_normalizado = normalizar_numero_documento(codigo_origem, tipo_documento)
+        except (TypeError, ValueError):
+            numero_normalizado = None
+
         # CORREÇÃO: Determinar cartório baseado na origem do documento
         # Se é o primeiro documento (matrícula atual) → usar cartório do imóvel
         # Se não é o primeiro → buscar cartório de origem do lançamento que referenciou esta origem
@@ -234,7 +233,7 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
         # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
         if codigo_origem == imovel.matricula:
             # É o primeiro documento da cadeia dominial - usar cartório do imóvel
-            cartorio_documento = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
+            cartorio_documento = imovel.cartorio
         else:
             # Não é o primeiro documento - buscar cartório de origem do lançamento que referenciou esta origem
             from ..models import Lancamento, LancamentoTipo
@@ -264,10 +263,38 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
                 
                 if lancamento_com_origem and lancamento_com_origem.cartorio_origem:
                     cartorio_documento = lancamento_com_origem.cartorio_origem
-                else:
-                    # Último fallback: usar cartório do imóvel ou primeiro cartório disponível
-                    cartorio_documento = imovel.cartorio if imovel.cartorio else Cartorios.objects.first()
-        
+                # Sem lançamento com cartório de origem: não há como saber o
+                # cartório correto, e nunca se deve adivinhar um (mesma regra
+                # de T11/T12/R06). cartorio_documento permanece None e a
+                # criação é recusada abaixo.
+
+        if not cartorio_documento:
+            erro = (
+                f'Não foi possível determinar o cartório do documento "{codigo_origem}" '
+                'a partir do contexto da cadeia dominial. Informe a origem novamente '
+                'com o cartório correto antes de criar o documento.'
+            )
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': erro}, status=400)
+            messages.error(request, erro)
+            return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+
+        # Verificar se já existe um documento com essa identidade completa
+        # (tipo + número normalizado + cartório) — precisa incluir o
+        # cartório resolvido acima: um homônimo em outro cartório do mesmo
+        # imóvel é um documento diferente, não um "já existe" (mesma regra
+        # de identidade canônica usada em todo o restante desta correção).
+        if numero_normalizado and Documento.objects.filter(
+            imovel=imovel,
+            tipo=tipo_doc,
+            numero_normalizado=numero_normalizado,
+            cartorio=cartorio_documento,
+        ).exists():
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': f'Documento "{codigo_origem}" já existe.'}, status=400)
+            messages.warning(request, f'Documento "{codigo_origem}" já existe.')
+            return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
+
         # Criar o documento
         documento = Documento.objects.create(
             imovel=imovel,

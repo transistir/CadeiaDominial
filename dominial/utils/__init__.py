@@ -14,6 +14,7 @@ from .formatacao_utils import (
     formatar_valor_monetario,
     formatar_area
 )
+from .documento_identidade_utils import DocumentoIdentidade, normalizar_numero_documento
 
 # Exportar todos os utilitários para uso externo
 __all__ = [
@@ -28,4 +29,6 @@ __all__ = [
     'formatar_telefone',
     'formatar_valor_monetario',
     'formatar_area',
-] 
+    'DocumentoIdentidade',
+    'normalizar_numero_documento',
+]
