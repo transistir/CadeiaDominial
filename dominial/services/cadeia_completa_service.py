@@ -299,12 +299,14 @@ class CadeiaCompletaService:
         total_documentos = 0
         total_lancamentos = 0
         documentos_importados = 0
+        total_troncos = 0
         
         # Verificar se é lista (formato antigo) ou dicionário (formato novo)
         if isinstance(cadeia_completa, list):
             # Formato antigo: lista de troncos
             for tronco in cadeia_completa:
                 if isinstance(tronco, dict) and 'documentos' in tronco:
+                    total_troncos += 1
                     total_documentos += len(tronco['documentos'])
                     for doc in tronco['documentos']:
                         if isinstance(doc, dict):
@@ -315,6 +317,7 @@ class CadeiaCompletaService:
             # Formato novo: dicionário com tronco_principal e troncos_secundarios
             # Contar documentos do tronco principal
             if cadeia_completa.get('tronco_principal'):
+                total_troncos += 1
                 total_documentos += len(cadeia_completa['tronco_principal'])
                 for doc in cadeia_completa['tronco_principal']:
                     total_lancamentos += len(doc.get('lancamentos', []))
@@ -324,6 +327,7 @@ class CadeiaCompletaService:
             # Contar documentos dos troncos secundários
             if cadeia_completa.get('troncos_secundarios'):
                 for tronco in cadeia_completa['troncos_secundarios']:
+                    total_troncos += 1
                     total_documentos += len(tronco.get('documentos', []))
                     for doc in tronco.get('documentos', []):
                         total_lancamentos += len(doc.get('lancamentos', []))
@@ -333,7 +337,8 @@ class CadeiaCompletaService:
         return {
             'total_documentos': total_documentos,
             'total_lancamentos': total_lancamentos,
-            'documentos_importados': documentos_importados
+            'documentos_importados': documentos_importados,
+            'total_troncos': total_troncos,
         }
 
     def get_cadeia_completa_com_sequencia_personalizada(self, tis_id, imovel_id, sequencia_ids):

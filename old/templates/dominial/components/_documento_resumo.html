@@ -1,0 +1,28 @@
+<div class="field-group">
+    <h4>📄 Documento</h4>
+    <div class="grid-3">
+        <div>
+            <strong>Tipo:</strong> {{ documento.tipo.get_tipo_display }}
+        </div>
+        <div>
+            <strong>Número:</strong> {{ documento.numero }}
+        </div>
+        <div>
+            <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
+        </div>
+        {% if documento.cartorio %}
+        <div>
+            <strong>Cartório:</strong> {{ documento.cartorio.nome }}
+        </div>
+        {% endif %}
+        {% if documento.origem %}
+        <div>
+            <strong>Origem:</strong> {{ documento.origem }}
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="documento-actions">
+        <a href="{% url 'documento_editar' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-sm btn-outline">✏️ Editar Documento</a>
+    </div>
+</div> 

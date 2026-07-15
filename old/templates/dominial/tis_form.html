@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% load i18n static %}
+
+{% block title %}Cadastro de Terra Indígena{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/tis_form.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="tis-form-container">
+    <div class="tis-form-header">
+        <h2>
+            ➕ Cadastro de Nova Terra Indígena
+        </h2>
+    </div>
+    
+    <div class="tis-form-body">
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible">
+            {{ message }}
+                <button type="button" class="btn-close" onclick="this.parentElement.remove()">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+        <form method="post" class="needs-validation" novalidate>
+        {% csrf_token %}
+        
+        {% if form.errors %}
+            <div class="alert alert-danger">
+                <h6>Por favor, corrija os seguintes erros:</h6>
+            {% for field in form %}
+                {% for error in field.errors %}
+                        <p class="mb-1"><strong>{{ field.label }}:</strong> {{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+            <div class="form-row full-width">
+                <div class="form-group">
+                    <label for="{{ form.nome.id_for_label }}" class="form-label">
+                        {{ form.nome.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.nome }}
+                    {% if form.nome.help_text %}
+                    <div class="form-text">{{ form.nome.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="{{ form.codigo.id_for_label }}" class="form-label">
+                        {{ form.codigo.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.codigo }}
+                    {% if form.codigo.help_text %}
+                    <div class="form-text">{{ form.codigo.help_text }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.etnia.id_for_label }}" class="form-label">
+                        {{ form.etnia.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.etnia }}
+                    {% if form.etnia.help_text %}
+                    <div class="form-text">{{ form.etnia.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row full-width">
+                <div class="form-group">
+                    <label class="form-label">
+                        {{ form.estado.label }} <span class="required">*</span>
+                    </label>
+                    {{ form.estado }}
+                    {% if form.estado.help_text %}
+                    <div class="form-text">{{ form.estado.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row full-width">
+                <div class="form-group">
+                    <label for="{{ form.area.id_for_label }}" class="form-label">
+                        {{ form.area.label }}
+                    </label>
+                    {{ form.area }}
+                    {% if form.area.help_text %}
+                    <div class="form-text">{{ form.area.help_text }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <a href="{% url 'home' %}" class="btn btn-secondary">
+                    ← Voltar
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    💾 Cadastrar Terra Indígena
+                </button>
+        </div>
+    </form>
+    </div>
+</div>
+{% endblock %} 

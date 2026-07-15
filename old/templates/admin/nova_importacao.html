@@ -1,0 +1,209 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .progress-container {
+        display: none;
+        margin-top: 20px;
+        padding: 20px;
+        background: #f8f8f8;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .progress-bar {
+        height: 20px;
+        background-color: #f0f0f0;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        background-color: #79aec8;
+        width: 0%;
+        transition: width 0.3s ease-in-out;
+    }
+    .status-text {
+        margin-top: 10px;
+        font-weight: bold;
+    }
+    .error-text {
+        color: #ba2121;
+        margin-top: 10px;
+    }
+    #progress-container {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        background: white;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        min-width: 300px;
+    }
+    .overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 999;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <form method="post" id="importacao-form">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            {% for field in form %}
+            <div class="form-row">
+                {{ field.errors }}
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}
+                <div class="help">{{ field.help_text|safe }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </fieldset>
+        <div class="submit-row">
+            <input type="submit" value="Criar Importação" class="default" />
+        </div>
+    </form>
+
+    <div class="overlay" id="overlay"></div>
+    <div class="progress-container" id="progress-container">
+        <h3>Progresso da Importação</h3>
+        <div class="progress-bar">
+            <div class="progress-bar-fill" id="progress-bar-fill"></div>
+        </div>
+        <div class="status-text" id="status-text">Aguardando início...</div>
+        <div class="error-text" id="error-text"></div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('importacao-form');
+    const progressContainer = document.getElementById('progress-container');
+    const overlay = document.getElementById('overlay');
+    const progressBarFill = document.getElementById('progress-bar-fill');
+    const statusText = document.getElementById('status-text');
+    const errorText = document.getElementById('error-text');
+    let importacaoId = null;
+
+    function showProgress() {
+        overlay.style.display = 'block';
+        progressContainer.style.display = 'block';
+        progressBarFill.style.width = '0%';
+        statusText.textContent = 'Iniciando importação...';
+        errorText.textContent = '';
+    }
+
+    function hideProgress() {
+        overlay.style.display = 'none';
+        progressContainer.style.display = 'none';
+    }
+
+    function handleSubmit(e) {
+        e.preventDefault();
+        showProgress();
+
+        // Enviar formulário via AJAX
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.importacao_id) {
+                importacaoId = data.importacao_id;
+                iniciarImportacao();
+            } else {
+                errorText.textContent = 'Erro ao criar importação';
+                hideProgress();
+            }
+        })
+        .catch(error => {
+            errorText.textContent = 'Erro ao enviar formulário: ' + error;
+            hideProgress();
+        });
+    }
+
+    // Adicionar listener para o formulário
+    form.addEventListener('submit', handleSubmit);
+
+    // Adicionar listener para o botão GO
+    const goButton = document.querySelector('input[type="submit"][value="GO"]');
+    if (goButton) {
+        goButton.addEventListener('click', handleSubmit);
+    }
+
+    function iniciarImportacao() {
+        if (!importacaoId) return;
+
+        fetch(`/admin/dominial/importacaocartorios/iniciar-importacao/${importacaoId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    checkProgress();
+                } else {
+                    errorText.textContent = data.message;
+                    hideProgress();
+                }
+            })
+            .catch(error => {
+                errorText.textContent = 'Erro ao iniciar importação: ' + error;
+                hideProgress();
+            });
+    }
+
+    function checkProgress() {
+        if (!importacaoId) return;
+
+        fetch(`/admin/dominial/importacaocartorios/verificar-progresso/${importacaoId}/`)
+            .then(response => response.json())
+            .then(data => {
+                switch(data.status) {
+                    case 'pendente':
+                        progressBarFill.style.width = '0%';
+                        statusText.textContent = 'Aguardando início...';
+                        break;
+                    case 'em_andamento':
+                        progressBarFill.style.width = '50%';
+                        statusText.textContent = 'Importando cartórios...';
+                        break;
+                    case 'concluido':
+                        progressBarFill.style.width = '100%';
+                        statusText.textContent = `Importação concluída! Total de cartórios: ${data.total_cartorios}`;
+                        setTimeout(() => {
+                            hideProgress();
+                            window.location.reload();
+                        }, 2000);
+                        return;
+                    case 'erro':
+                        progressBarFill.style.width = '100%';
+                        statusText.textContent = 'Erro na importação';
+                        errorText.textContent = data.erro;
+                        setTimeout(hideProgress, 3000);
+                        return;
+                }
+                setTimeout(checkProgress, 2000);
+            })
+            .catch(error => {
+                errorText.textContent = 'Erro ao verificar progresso: ' + error;
+                hideProgress();
+            });
+    }
+});
+</script>
+{% endblock %} 

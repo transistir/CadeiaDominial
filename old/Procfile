@@ -1,0 +1,1 @@
+web: gunicorn cadeia_dominial.wsgi --log-file - 

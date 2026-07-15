@@ -1,0 +1,97 @@
+<!--
+  Componente para campos de cartório com autocomplete
+  Parâmetros esperados:
+    - prefix: prefixo para os IDs dos campos (ex: 'averbacao', 'registro')
+    - titulo_obrigatorio: se o título é obrigatório (true/false)
+    - data_obrigatorio: se a data é obrigatória (true/false)
+    - cartorio_obrigatorio: se o cartório é obrigatório (true/false)
+    - livro_obrigatorio: se o livro é obrigatório (true/false)
+    - folha_obrigatorio: se a folha é obrigatória (true/false)
+    - modo_edicao: se está em modo de edição
+    - lancamento: objeto do lançamento (se modo_edicao)
+    - form_data: dados do formulário
+-->
+<div class="toggle-group">
+    <label class="toggle-label">
+        <input type="checkbox" id="incluir_cartorio_{{ prefix }}" class="toggle-checkbox">
+        Incluir informações de cartório de origem
+    </label>
+</div>
+
+<div id="campos-cartorio-{{ prefix }}" class="cartorio-fields hidden">
+    <h5>Informações de Cartório de Origem</h5>
+    
+    <div class="grid-3">
+        <div class="form-group">
+            <label for="cartorio_origem_nome_{{ prefix }}">Nome do Cartório</label>
+            <div class="autocomplete-container">
+                <input type="text" name="cartorio_origem_nome_{{ prefix }}" id="cartorio_origem_nome_{{ prefix }}" 
+                       placeholder="Digite o nome do cartório" autocomplete="off"
+                       value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.nome }}{% elif form_data and form_data.cartorio_origem_nome_prefix %}{{ form_data.cartorio_origem_nome_prefix }}{% endif %}">
+                <input type="hidden" name="cartorio_origem_{{ prefix }}" id="cartorio_origem_{{ prefix }}" 
+                       value="{% if modo_edicao and lancamento.cartorio_origem %}{{ lancamento.cartorio_origem.id }}{% elif form_data and form_data.cartorio_origem_prefix %}{{ form_data.cartorio_origem_prefix }}{% endif %}">
+                <div class="autocomplete-suggestions cartorio-suggestions-{{ prefix }}"></div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="cartorio_origem_cidade_{{ prefix }}">Cidade</label>
+            <input type="text" name="cartorio_origem_cidade_{{ prefix }}" id="cartorio_origem_cidade_{{ prefix }}" 
+                   placeholder="Cidade do cartório">
+        </div>
+        <div class="form-group">
+            <label for="cartorio_origem_estado_{{ prefix }}">Estado</label>
+            <select name="cartorio_origem_estado_{{ prefix }}" id="cartorio_origem_estado_{{ prefix }}">
+                <option value="">Selecione...</option>
+                <option value="AC">Acre</option>
+                <option value="AL">Alagoas</option>
+                <option value="AP">Amapá</option>
+                <option value="AM">Amazonas</option>
+                <option value="BA">Bahia</option>
+                <option value="CE">Ceará</option>
+                <option value="DF">Distrito Federal</option>
+                <option value="ES">Espírito Santo</option>
+                <option value="GO">Goiás</option>
+                <option value="MA">Maranhão</option>
+                <option value="MT">Mato Grosso</option>
+                <option value="MS">Mato Grosso do Sul</option>
+                <option value="MG">Minas Gerais</option>
+                <option value="PA">Pará</option>
+                <option value="PB">Paraíba</option>
+                <option value="PR">Paraná</option>
+                <option value="PE">Pernambuco</option>
+                <option value="PI">Piauí</option>
+                <option value="RJ">Rio de Janeiro</option>
+                <option value="RN">Rio Grande do Norte</option>
+                <option value="RS">Rio Grande do Sul</option>
+                <option value="RO">Rondônia</option>
+                <option value="RR">Roraima</option>
+                <option value="SC">Santa Catarina</option>
+                <option value="SP">São Paulo</option>
+                <option value="SE">Sergipe</option>
+                <option value="TO">Tocantins</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="livro_origem_{{ prefix }}">Livro{% if livro_obrigatorio %} *{% endif %}</label>
+        <input type="text" name="livro_origem_{{ prefix }}" id="livro_origem_{{ prefix }}" 
+               value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_prefix }}{% endif %}">
+    </div>
+    <div class="form-group">
+        <label for="folha_origem_{{ prefix }}">Folha{% if folha_obrigatorio %} *{% endif %}</label>
+        <input type="text" name="folha_origem_{{ prefix }}" id="folha_origem_{{ prefix }}" 
+               value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_prefix }}{% endif %}">
+    </div>
+    <div class="form-group">
+        <label for="data_origem_{{ prefix }}">Data{% if data_obrigatorio %} *{% endif %}</label>
+        <input type="date" name="data_origem_{{ prefix }}" id="data_origem_{{ prefix }}" 
+               value="{% if modo_edicao and lancamento.data_origem %}{{ lancamento.data_origem|date:'Y-m-d' }}{% elif form_data and form_data.data_origem_prefix and form_data.data_origem_prefix != 'None' %}{{ form_data.data_origem_prefix }}{% endif %}">
+    </div>
+    {% if titulo_obrigatorio %}
+    <div class="form-group">
+        <label for="titulo_{{ prefix }}">Título *</label>
+        <input type="text" name="titulo_{{ prefix }}" id="titulo_{{ prefix }}" placeholder="Título do registro"
+               value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo_prefix }}{% endif %}">
+    </div>
+    {% endif %}
+</div> 

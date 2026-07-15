@@ -1,0 +1,270 @@
+{# ===================================================== #}
+{# TEMPLATE PARA GERAÇÃO DE PDF - CADEIA COMPLETA      #}
+{# ===================================================== #}
+{# Este template é usado pela view exportar_cadeia_completa_pdf #}
+{# para gerar PDFs da cadeia dominial COMPLETA usando WeasyPrint    #}
+
+{# Carrega os filtros customizados do Django (como 'split', 'strip') #}
+{% load dominial_extras %}
+{# Carrega os arquivos estáticos (CSS, JS, imagens) #}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# Título dinâmico baseado no nome do imóvel #}
+    <title>Cadeia Dominial Completa - {{ imovel.nome }}</title>
+    {# Link para o CSS específico do PDF (formato paisagem, fontes pequenas) #}
+    <link rel="stylesheet" href="{% static 'dominial/css/cadeia_completa_pdf.css' %}">
+</head>
+<body>
+    {# ===================================================== #}
+    {# CABEÇALHO DO PDF - INFORMAÇÕES PRINCIPAIS           #}
+    {# ===================================================== #}
+    <div class="header">
+        <h1>CADEIA DOMINIAL COMPLETA</h1>
+        {# Informações do imóvel e matrícula #}
+        <p><strong>Imóvel:</strong> {{ imovel.nome }} | <strong>Matrícula:</strong> {{ imovel.matricula }}</p>
+        {# Data/hora de geração do PDF #}
+        <p>Relatório completo gerado em {{ "now"|date:"d/m/Y H:i" }} | Sistema Cadeia Dominial</p>
+    </div>
+
+    {# ===================================================== #}
+    {# TABELA DE INFORMAÇÕES DO IMÓVEL                     #}
+    {# ===================================================== #}
+    <div class="imovel-info">
+        {# Cada linha mostra um campo do imóvel #}
+        <div class="imovel-info-row">
+            <div class="imovel-info-cell">Imóvel:</div>
+            <div class="imovel-info-cell">{{ imovel.nome }}</div>
+        </div>
+        <div class="imovel-info-row">
+            <div class="imovel-info-cell">Matrícula:</div>
+            <div class="imovel-info-cell">{{ imovel.matricula }}</div>
+        </div>
+        <div class="imovel-info-row">
+            <div class="imovel-info-cell">Proprietário:</div>
+            <div class="imovel-info-cell">{{ imovel.proprietario.nome }}</div>
+        </div>
+        {# Campos opcionais - só aparecem se existirem #}
+        {% if imovel.sncr %}
+        <div class="imovel-info-row">
+            <div class="imovel-info-cell">SNCR:</div>
+            <div class="imovel-info-cell">{{ imovel.sncr }}</div>
+        </div>
+        {% endif %}
+        {% if imovel.cartorio %}
+        <div class="imovel-info-row">
+            <div class="imovel-info-cell">Cartório:</div>
+            <div class="imovel-info-cell">{{ imovel.cartorio.nome }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ===================================================== #}
+    {# VERIFICAÇÕES DE DADOS - ESTADOS VAZIOS              #}
+    {# ===================================================== #}
+    {# Se não há cadeia completa #}
+    {% if not cadeia_completa %}
+        <div class="empty-state">
+            <h3>Nenhum documento encontrado</h3>
+            <p>Esta cadeia dominial ainda não possui documentos registrados.</p>
+        </div>
+    {% else %}
+        {# ===================================================== #}
+        {# CONTEÚDO PRINCIPAL - CADAIA COMPLETA               #}
+        {# ===================================================== #}
+        {% for tronco in cadeia_completa %}
+            {# ===================================================== #}
+            {# SEÇÃO DE TRONCO (PRINCIPAL OU SECUNDÁRIO)          #}
+            {# ===================================================== #}
+            <div class="tronco-section">
+                <h2>{{ tronco.titulo }}</h2>
+                
+                {# ===================================================== #}
+                {# LOOP DOS DOCUMENTOS DO TRONCO                      #}
+                {# ===================================================== #}
+                {% for item in tronco.documentos %}
+                    {# ===================================================== #}
+                    {# SEÇÃO DE DOCUMENTO INDIVIDUAL                       #}
+                    {# ===================================================== #}
+                    {# Classe CSS especial se for documento importado #}
+                    <div class="documento-section {% if item.is_importado %}documento-importado{% endif %}">
+                        {# Cabeçalho do documento com informações básicas #}
+                        <div class="documento-header">
+                            📄 {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
+<!--                             {# Badge especial para documentos importados #}
+                            {% if item.is_importado %}
+                                <span class="badge-importado">📥 Importado</span>
+                            {% endif %} -->
+                            <br>
+                            <small>
+                                Data: {{ item.documento.data|date:"d/m/Y" }} | 
+                                Cartório: {{ item.documento.cartorio.nome }} | 
+                                Lançamentos: {{ item.lancamentos.count }}
+                            </small>
+                        </div>
+                        
+                        {# ===================================================== #}
+                        {# TABELA DE LANÇAMENTOS DO DOCUMENTO               #}
+                        {# ===================================================== #}
+                        {% if item.lancamentos %}
+                        <table class="lancamentos-table">
+                            <thead>
+                                {# Primeira linha do cabeçalho - agrupamentos #}
+                                <tr>
+                                    <th colspan="5" class="agrupamento">MATRÍCULA</th>
+                                    <th colspan="2" class="agrupamento">&nbsp;</th>
+                                    <th colspan="6" class="agrupamento">TRANSMISSÃO</th>
+                                    <th rowspan="2">Área (ha)</th>
+                                    <th rowspan="2">Origem</th>
+                                    <th rowspan="2">Observações</th>
+                                </tr>
+                                {# Segunda linha do cabeçalho - colunas específicas #}
+                                <tr>
+                                    <!-- Colunas da Matrícula -->
+                                    <th>Nº</th>
+                                    <th>L</th>
+                                    <th>Fls.</th>
+                                    <th>Cartório</th>
+                                    <th>Data</th>
+                                    <!-- Colunas de Transmitente/Adquirente -->
+                                    <th>Transmitente</th>
+                                    <th>Adquirente</th>
+                                    <!-- Colunas da Transmissão -->
+                                    <th>Forma</th>
+                                    <th>Título</th>
+                                    <th>Cartório</th>
+                                    <th>L</th>
+                                    <th>Fls.</th>
+                                    <th>Data</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {# ===================================================== #}
+                                {# LOOP DOS LANÇAMENTOS INDIVIDUAIS                   #}
+                                {# ===================================================== #}
+                                {% for lancamento in item.lancamentos %}
+                                {# Alterna cores das linhas (par/ímpar) #}
+                                <tr class="{% cycle 'linha-par' 'linha-impar' %}">
+                                    {# ===================================================== #}
+                                    {# COLUNAS DA MATRÍCULA                               #}
+                                    {# ===================================================== #}
+                                    <td>{{ lancamento|numero_documento_criado }}</td>
+                                    <td>{{ item.documento.livro|default_if_none:"-" }}</td>
+                                    <td>{{ item.documento.folha|default_if_none:"-" }}</td>
+                                    <td>{{ item.documento.cartorio.nome }}</td>
+                                    <td>{{ lancamento.data|date:'d/m/Y' }}</td>
+                                    
+                                    {# ===================================================== #}
+                                    {# COLUNAS DE PESSOAS (TRANSMITENTE/ADQUIRENTE)        #}
+                                    {# ===================================================== #}
+                                    <!-- Transmitente - lista todas as pessoas -->
+                                    <td>
+                                        {% for pessoa in lancamento.transmitentes.all %}
+                                            {{ pessoa.pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                        {% empty %}-{% endfor %}
+                                    </td>
+                                    <!-- Adquirente - lista todas as pessoas -->
+                                    <td>
+                                        {% for pessoa in lancamento.adquirentes.all %}
+                                            {{ pessoa.pessoa.nome }}{% if not forloop.last %}, {% endif %}
+                                        {% empty %}-{% endfor %}
+                                    </td>
+                                    
+                                    {# ===================================================== #}
+                                    {# COLUNAS DA TRANSMISSÃO                              #}
+                                    {# ===================================================== #}
+                                    {# Lógica especial para averbações vs transcrições #}
+                                    {% if lancamento.tipo.tipo == 'averbacao' and item.documento.tipo.tipo != 'transcricao' %}
+                                        {# Para averbações, mostra descrição em todas as colunas #}
+                                        <td colspan="6">{{ lancamento.descricao|default_if_none:"-" }}</td>
+                                    {% else %}
+                                        {# Para transcrições, mostra dados detalhados #}
+                                        <td>{{ lancamento.forma|default_if_none:"-" }}</td>
+                                        <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
+                                        <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
+                                        <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
+                                        <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
+                                        <td>
+                                            {% if lancamento.data_transacao %}
+                                                {{ lancamento.data_transacao|date:'d/m/Y' }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+                                    
+                                    {# ===================================================== #}
+                                    {# COLUNAS ADICIONAIS                                  #}
+                                    {# ===================================================== #}
+                                    <!-- Área do imóvel -->
+                                    <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                                    <!-- Origem - pode ter múltiplas origens separadas por ';' -->
+                                    <!-- <td>
+                                      {% if lancamento.origem %}
+                                        {% if ';' in lancamento.origem %}
+                                          {# Se tem múltiplas origens, quebra por ';' e mostra cada uma #}
+                                          {% for origem in lancamento.origem|split:';' %}
+                                            <div>{{ lancamento|origem_formatada_completa|safe }}</div>
+                                          {% endfor %}
+                                        {% else %}
+                                          {# Se tem apenas uma origem #}
+                                          {{ lancamento|origem_formatada_completa|safe }}
+                                        {% endif %}
+                                      {% else %}
+                                        -
+                                      {% endif %}
+                                    </td> -->
+                                    <td>
+                                        {% if lancamento.origem %}
+                                          {{ lancamento|origem_formatada_completa|safe }}
+                                        {% else %}
+                                          -
+                                        {% endif %}
+                                      </td>
+                                    <!-- Observações do lançamento -->
+                                    <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+        
+        {# ===================================================== #}
+        {# SEÇÃO DE ESTATÍSTICAS                               #}
+        {# ===================================================== #}
+        {% if estatisticas %}
+        <div class="estatisticas">
+            <h3>📈 Estatísticas da Cadeia Completa</h3>
+            <div class="estatisticas-grid">
+                <div class="estatisticas-item">
+                    <div class="estatisticas-valor">{{ estatisticas.total_documentos }}</div>
+                    <div class="estatisticas-label">Documentos</div>
+                </div>
+                <div class="estatisticas-item">
+                    <div class="estatisticas-valor">{{ estatisticas.total_lancamentos }}</div>
+                    <div class="estatisticas-label">Lançamentos</div>
+                </div>
+                <div class="estatisticas-item">
+                    <div class="estatisticas-valor">{{ estatisticas.total_troncos }}</div>
+                    <div class="estatisticas-label">Troncos</div>
+                </div>
+                <div class="estatisticas-item">
+                    <div class="estatisticas-valor">{{ estatisticas.documentos_importados }}</div>
+                    <div class="estatisticas-label">Importados</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+    
+
+</body>
+</html>

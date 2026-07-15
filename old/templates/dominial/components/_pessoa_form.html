@@ -1,0 +1,64 @@
+<!--
+  Componente para campos de pessoas (transmitente/adquirente)
+  Parâmetros esperados:
+    - tipo: 'transmitente' ou 'adquirente'
+    - label: rótulo do campo
+    - container_id: id do container (ex: 'transmitentes-container')
+    - sugestao_class: classe para autocomplete (ex: 'transmitente-suggestions')
+    - form_data: dados do formulário (opcional)
+    - pessoas: lista de pessoas já adicionadas (opcional)
+-->
+<div class="field-group">
+    <h4>{{ label }}</h4>
+    
+    <div id="{{ container_id }}">
+        {% if pessoas and pessoas|length > 0 %}
+            {% for pessoa in pessoas %}
+            <div class="pessoa-item">
+                <div class="pessoa-input-group">
+                    <div class="autocomplete-container">
+                        <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off" tabindex="0"
+                               value="{% if pessoa.pessoa %}{{ pessoa.pessoa.nome }}{% else %}{{ pessoa.nome }}{% endif %}">
+                        <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id" 
+                               value="{% if pessoa.pessoa %}{{ pessoa.pessoa.id }}{% else %}{{ pessoa.id }}{% endif %}">
+                        <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
+                </div>
+            </div>
+            {% endfor %}
+        {% elif form_data and form_data.tipo == tipo and form_data.nomes %}
+            {% for nome in form_data.nomes %}
+            <div class="pessoa-item">
+                <div class="pessoa-input-group">
+                    <div class="autocomplete-container">
+                        <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off" tabindex="0"
+                               value="{{ nome }}">
+                        <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
+                        <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="pessoa-item">
+                <div class="pessoa-input-group">
+                    <div class="autocomplete-container">
+                        <input type="text" name="{{ tipo }}_nome[]" class="{{ tipo }}-nome" 
+                               placeholder="Digite o nome do {{ tipo }}" autocomplete="off" tabindex="0">
+                        <input type="hidden" name="{{ tipo }}[]" class="{{ tipo }}-id">
+                        <div class="autocomplete-suggestions {{ sugestao_class }}"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger remove-pessoa" onclick="removePessoa(this)" tabindex="0">×</button>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    <button type="button" class="btn btn-sm btn-outline" onclick="adicionar{{ tipo|title }}()" tabindex="0">
+        ➕ Adicionar {{ tipo|title }}
+    </button>
+</div> 
