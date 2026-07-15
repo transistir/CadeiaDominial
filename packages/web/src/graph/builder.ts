@@ -146,12 +146,15 @@ export function buildGraph(chainData: ChainData): GraphJson {
     }
 
     const sourceId = ensureDocPrefix(origem.documentoId);
-    documentosAsSource.add(sourceId);
+    documentosAsSource.add(targetId);
 
     edges.push({
       id: origem.id,
-      source: sourceId,
-      target: targetId,
+      // Edge direction follows the chain from the current matrícula
+      // (left) toward its historical origins (right):
+      //   current documento → origem documento → ... → fim de cadeia
+      source: targetId,
+      target: sourceId,
       data: {
         tipoOrigem:
           origem.tipoOrigem ?? inferOrigemTipo(sourceDoc.tipo),
