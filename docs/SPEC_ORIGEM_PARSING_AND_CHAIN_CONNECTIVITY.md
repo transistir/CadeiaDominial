@@ -1,8 +1,9 @@
 # SPEC: Origem Text Parsing & Chain Connectivity (3-Tier Fallback)
 
-**Status:** IMPLEMENTATION PENDING  
-**Last Updated:** 2026-07-14  
-**Issue:** Unmatched document origins in chain connectivity due to legacy cartório data loss
+**Status:** IMPLEMENTED ✓  
+**Last Updated:** 2026-07-15  
+**Issue:** Unmatched document origins in chain connectivity due to legacy cartório data loss  
+**Domain Ruling (Hiure):** Tier 3 produces **suggestions for manual audit**, not automatic connections. Without confirmed cartório, there is no complete document identity.
 
 ---
 
@@ -117,17 +118,18 @@ When `cartorio_origem_id` is NULL, use the current document's own cartório. Thi
 
 **Status:** Already implemented as fallback.
 
-### Tier 3 (NEW): Cross-CRI Exact Match (Data Recovery)
+### Tier 3 (NEW): Cross-CRI Suggestion (Audit Trail)
 
-When Tier 1 AND Tier 2 both fail, search for `tipo+numero` across ALL cartórios.
+When Tier 1 AND Tier 2 both fail, search for `tipo+numero` across ALL cartórios. Instead of auto-connecting, Tier 3 produces **auditable suggestions** for manual review.
 
-**Conservative rules:**
-- **Only** activates when exactly ONE document matches that tipo+numero globally
-- If multiple documents match → do NOT resolve (log for manual audit)
-- ALL tier 3 matches are logged with `[CROSS-CRI]` prefix in migration report
-- This is **data recovery** for the legacy system's design flaw — NOT guessing
+**Rules (per Hiure's domain ruling):**
+- Tier 3 **never auto-connects** — without confirmed cartório, document identity is incomplete
+- Unique global matches are logged as `[SUGESTAO-CARTORIO]` for manual audit
+- Ambiguous matches are logged as `[AMBIGUOUS]` — multiple documents share the same tipo+numero
+- Origens without confirmed cartório remain **visible in the chain** as pending nodes (`documento_id: NULL`)
+- The system should present these suggestions to the user for confirmation before persisting connections
 
-**Impact:** 148 of 157 unmatched → resolved (94%). Only 1 ambiguous case + 8 truly missing remain.
+**Impact:** 108 suggestions generated for manual audit. 157 origins remain unmatched (same as before Tier 3) — the difference is they now carry audit suggestions.
 
 ---
 
@@ -215,14 +217,15 @@ function findDocumento(
     }
   }
 
-  // Tier 3: cross-CRI unique match (data recovery for legacy flaw).
-  // Only activates when exactly ONE document has this tipo+numero globally.
+  // Tier 3: cross-CRI unique match — log as SUGGESTION, do NOT auto-connect.
+  // Per Hiure's domain rule: without confirmed cartório, there is no complete
+  // document identity (tipo + número + cartório). A unique global match is a
+  // suggestion for manual audit, not a persisted connection.
   const tier3Key = `${token.tipo}|${token.numero}`;
   const tier3Match = crossCRIIndex.get(tier3Key);
   if (tier3Match !== undefined) {
-    // Log for audit
-    console.log(`[CROSS-CRI] Tier 3 match: ${token.raw} → cri ${tier3Match.criId}, doc ${tier3Match.docId}`);
-    return { docId: tier3Match.docId, criId: tier3Match.criId, tier: 3 };
+    console.log(`[SUGESTAO-CARTORIO] ${token.raw}: encontrada como ${token.tipo} ${token.numero} no CRI ${tier3Match.criId} (doc ${tier3Match.docId}). Confirme o cartório para conectar.`);
+    // DO NOT return — keep as null (pending cartório confirmation)
   }
 
   // Ambiguous: multiple documents share this tipo+numero
@@ -277,10 +280,10 @@ byIndice.set(indice, {
 
 ## Audit Logging Format
 
-All Tier 3 (cross-CRI) matches must be logged for audit:
+All Tier 3 (cross-CRI) suggestions must be logged for audit:
 
 ```typescript
-console.log(`[CROSS-CRI] Resolved ${token.tipo} ${token.numero} → CRI ${criId} (doc ${docId})`);
+console.log(`[SUGESTAO-CARTORIO] ${token.raw}: encontrada como ${token.tipo} ${token.numero} no CRI ${criId} (doc ${docId}). Confirme o cartório para conectar.`);
 ```
 
 **Migration report summary:**
@@ -288,8 +291,8 @@ console.log(`[CROSS-CRI] Resolved ${token.tipo} ${token.numero} → CRI ${criId}
 Origem Resolution Summary:
 - Tier 1 (cartorio_origem_id): X matches
 - Tier 2 (documento.cri_id): Y matches  
-- Tier 3 (cross-CRI unique): Z matches [CROSS-CRI]
-- Unmatched: N tokens
+- Tier 3 (cross-CRI suggestions): Z suggestions [SUGESTAO-CARTORIO]
+- Unmatched: N tokens (pending cartório confirmation)
 ```
 
 **Ambiguous cases (multiple matches) logged separately:**
@@ -422,13 +425,14 @@ Every Tier 3 resolution will be logged with `[CROSS-CRI]` prefix, creating a cle
 
 ### Functional Requirements
 
-1. [ ] **Tier 1 matches:** cartorio_origem_id lookup works as before
-2. [ ] **Tier 2 matches:** documento.cri_id fallback works as before
-3. [ ] **Tier 3 matches:** Cross-CRI unique matches resolve correctly
-4. [ ] **Ambiguous handling:** Multiple matches logged as `[AMBIGUOUS]`
-5. [ ] **Audit logging:** All Tier 3 matches logged with `[CROSS-CRI]` prefix
-6. [ ] **Resolution rate:** ≥94% of previously unmatched origins resolved
-7. [ ] **Tier 1 false positive handling:** Documented as pre-existing limitation — Tier 3 is the recovery path for origins whose cartório was lost by the legacy schema
+1. [x] **Tier 1 matches:** cartorio_origem_id lookup works as before
+2. [x] **Tier 2 matches:** documento.cri_id fallback works as before
+3. [x] **Tier 3 suggestions:** Cross-CRI unique matches logged as `[SUGESTAO-CARTORIO]`, never auto-connected
+4. [x] **Ambiguous handling:** Multiple matches logged as `[AMBIGUOUS]`
+5. [x] **Audit logging:** All Tier 3 suggestions logged with `[SUGESTAO-CARTORIO]` prefix
+6. [x] **Pending origins visible:** Origins without confirmed cartório remain in chain as pending nodes (`documento_id: NULL`)
+7. [x] **No auto-connection:** Zero false chain connections introduced by Tier 3
+8. [x] **Tier 1 false positive handling:** Documented as pre-existing limitation — Tier 3 suggestions are the recovery path for origins whose cartório was lost by the legacy schema
 
 ### Non-Functional Requirements
 

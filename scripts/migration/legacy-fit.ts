@@ -1067,12 +1067,15 @@ export function buildOrigemRows(
       }
     }
 
-    // Tier 3: cross-CRI unique match
+    // Tier 3: cross-CRI unique match — log as SUGGESTION, do NOT auto-connect.
+    // Per Hiure's domain rule: without confirmed cartório, there is no complete
+    // document identity (tipo + número + cartório). A unique global match is a
+    // suggestion for manual audit, not a persisted connection.
     const tier3Key = `${token.tipo}|${token.numero}`;
     const tier3Match = crossCRIIndex.get(tier3Key);
     if (tier3Match !== undefined) {
-      console.log(`[CROSS-CRI] Tier 3 match: ${token.raw} → cri ${tier3Match.criId}, doc ${tier3Match.docId}`);
-      return { docId: tier3Match.docId, criId: tier3Match.criId, tier: 3 };
+      console.log(`[SUGESTAO-CARTORIO] ${token.raw}: encontrada como ${token.tipo} ${token.numero} no CRI ${tier3Match.criId} (doc ${tier3Match.docId}). Confirme o cartório para conectar.`);
+      // DO NOT return — keep as null (pending cartório confirmation)
     }
 
     // Ambiguous: log for audit
