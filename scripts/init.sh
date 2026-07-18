@@ -120,16 +120,14 @@ run_migrations() {
 
 # Função para coletar arquivos estáticos
 collect_static() {
-    echo "📦 Verificando arquivos estáticos..."
-    # Os arquivos estáticos já foram coletados durante o build
-    # Apenas verifica se o diretório existe
-    if [ -d "/app/staticfiles" ]; then
-        echo "✅ Arquivos estáticos já coletados durante o build."
-    else
-        echo "⚠️ Diretório staticfiles não encontrado, coletando..."
-        python manage.py collectstatic --noinput
-        echo "✅ Arquivos estáticos coletados!"
-    fi
+    # Sempre roda: collectstatic é idempotente (só copia o que mudou) e
+    # rápido. Rodar condicionalmente à existência do diretório fazia com que
+    # JS/CSS alterados em commits posteriores ao primeiro build nunca fossem
+    # recopiados para /app/staticfiles em restarts subsequentes, deixando o
+    # nginx servir versões desatualizadas indefinidamente.
+    echo "📦 Coletando arquivos estáticos..."
+    python manage.py collectstatic --noinput
+    echo "✅ Arquivos estáticos coletados!"
 }
 
 # Função principal
