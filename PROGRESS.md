@@ -17,7 +17,7 @@
 - **PR #26** — T-100 ERD v2 rev1 (schema drift fixes). Codex 5/5 R1 ✅ MERGED
 - **PR #27** — CI fix: pnpm v9→v10, frozen-lockfile, composite action, shared Vitest suite ✅ MERGED
 - **PR #28** — feat(web): minimal React Flow screenshot harness (3-node demo, `pnpm graph:screenshot`, e2e baseline PNG). Codex 5/5 R2 ✅ MERGED
-- **PR #29** — chore(graph): post-merge polish (end-to-end verified, golden positions, fixture happy-path, docu...[truncated]
+- **PR #29** — chore(graph): post-merge polish (end-to-end verified, golden positions, fixture happy-path, docs)
 
 ## Task Status
 
@@ -34,9 +34,9 @@
 ### Phase 1.5 — Visualization (in progress)
 
 - **T-500** 📋 ready — Custom node + edge types for `@xyflow/react` graph. **Ready to start** (no custom components shipped yet — current demo uses the default node type)
-- **T-501** 🔧 in-progress — Graph data layer partially shipped (PR #28+#29). `types.ts`, `validateGraph` (shape + integrity), `layoutGraph` (dagre LR), `basic-graph.json` fixture, golden positions test, fixture happy-path test. **Still to do:** `generateMockGraph('linear'|'branching'|'merge')`, 100% unit test coverage
-- **T-502** 🔧 in-progress — Graph page partially wired (PR #28+#29). `/graph` route → `GraphPreview` → `validateGraph` → `layoutGraph` → React Flow. **Still to do:** multi-chain mock, node selection, pan/zoom polish, detail panel, Lighthouse ≥ 90
-- **T-503** 📋 planned — API endpoint + real data wiring (blocked on T-202)
+- **T-501** 🔧 in-progress — Graph data layer partially shipped (PR #28+#29). `types.ts`, `validateGraph` (shape + integrity), `layoutGraph` (dagre LR), `basic-graph.json` fixture, golden positions test, fixture happy-path test, vertical ordering (matrículas above transcrições, fim-cadeia at bottom). **Still to do:** `generateMockGraph('linear'|'branching'|'merge')`, 100% unit test coverage
+- **T-502** 🔧 in-progress — Graph page partially wired (PR #28+#29, PR #44). `/graph` route → `GraphPreview` → `validateGraph` → `layoutGraph` → React Flow. Edge direction: current → origem (left to right). Vertical ordering enforced. **Still to do:** multi-chain mock, node selection, pan/zoom polish, detail panel, Lighthouse ≥ 90
+- **T-503** 📋 planned — API endpoint + real data wiring (blocked on T-202 for seed data; PR #44 provides production data path)
 
 ### Phase 2 — Data
 
@@ -44,9 +44,9 @@
 - **T-201** 📋 planned — Field filler (faker). **Ready to start** (T-101 merged, parallel com T-200)
 - **T-202** 📋 planned — Seed orchestrator
 
-### Phase 3 — Legacy-fit
+### Phase 3 — Legacy-fit (ahead of schedule via PR #44)
 
-- **T-300** 📋 planned — Load legacy Postgres dump into v2 schema, validate integrity. Blocked on T-202 + T-503 (graph must render legacy data). **Sub-task:** drop PII columns (cpf, rg, data\_nascimento, email, telefone) — Q5 decision
+- **T-300** 🔧 in-progress — PR #44 loads production PostgreSQL dumps (COPY format) into v2 schema. **Achieved:** 4,267 CRIs, 2,523 documentos, 7,776 lançamentos loaded. 3-tier origem lookup (Tier 1: cartorio_origem_id, Tier 2: documento.cri_id, Tier 3: `[SUGESTAO-CARTORIO]` audit suggestions). Chain graph renders at `/graph?imovelId=274`. **Still to do:** merge PR #44, resolve 157 pending cartório origins (108 have cross-CRI suggestions), wire graph to real API endpoint (T-503).
 
 ### Phase 4 — Cleanup ✅ DONE
 
@@ -61,9 +61,8 @@
 |---|---|---|
 | `CadeiaDominial/` | `v2` | Main checkout (clean) |
 | `worktrees/decisions/` | `docs/roadmap-and-pending-decisions` | Long-lived decisions branch (1f69d94) |
+| `worktrees/prod-chain/` | `feat/prod-dump-chain` | **PR #44** — production dump migration (15 commits, CI green, CLEAN merge, pending review) |
 | `worktrees/t-001-v2/` | `feat/t-001-schema-decisions-v2` | T-001 follow-up: 3 unpushed commits (rounds 4-6 review fixes) — out of scope here, owned by Hiure |
-
-Graph-harness worktree (PR #28+#29) merged and cleaned up.
 
 ## Key Decisions Summary (Q1-Q15)
 

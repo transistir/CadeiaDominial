@@ -190,15 +190,15 @@ Phase 0: Decisions ──┐
 ## Phase 3 — Legacy-fit proof (the gate before merge)
 
 ### T-300 — Legacy-fit script
-- **Status:** blocked on T-101, T-202
-- **Worktree branch:** `feat/legacy-fit-script`
+- **Status:** 🔧 in-progress (PR #44 — `feat/prod-dump-chain`)
+- **Worktree branch:** `feat/prod-dump-chain`
 - **Files:** `scripts/migration/legacy-fit.ts`, `scripts/migration/__tests__/legacy-fit.test.ts`
-- **Description:** Loads `old/data.cleaned.core.no-auth.no-unistr.sql` (3.3MB Postgres dump) into the new Drizzle schema, then asserts: row counts match expected per table, no FK violations, no `NOT NULL` failures, no `CHECK` failures. Emits a human-readable report.
+- **Description:** Loads legacy PostgreSQL dumps (both old INSERT-format and production COPY-format) into the new Drizzle schema. Supports recursive `documento_origem_id` FK chain following, 3-tier origem lookup (cartorio_origem_id → documento.cri_id → `[SUGESTAO-CARTORIO]` audit suggestions), and duplicate document normalization. Emits a human-readable report. **Achieved:** 4,267 CRIs, 2,523 documentos, 7,776 lançamentos loaded from production dump. Chain graph renders at `/graph?imovelId=274`. **Still to do:** merge PR #44, resolve 157 pending cartório origins (108 have cross-CRI suggestions), wire graph to real API endpoint (T-503).
 - **Acceptance:**
-  - `pnpm legacy-fit` exits 0 on a clean run
-  - Report shows: ✓ row count per table, ✓ FK check, ✓ NOT NULL check, ✓ (optional) CHECK check
-  - The legacy data renders in `packages/web` without manual fixing
-- **Blocks:** T-101 PR merge, T-200 PR merge, T-201 PR merge, T-202 PR merge.
+  - `pnpm legacy-fit` exits 0 on a clean run ✅
+  - Report shows: ✓ row count per table, ✓ FK check, ✓ NOT NULL check ✅
+  - The legacy data renders in `packages/web` without manual fixing ✅ (renders, 157 origins pending cartório)
+- **PR:** #44 (15 commits, CI 4/4 green, CLEAN merge, pending review)
 
 ---
 
@@ -227,19 +227,19 @@ Phase 0: Decisions ──┐
 | T-100 | ✅ done | #26 |
 | T-101 | ✅ done | #25 |
 | **T-500** | 📋 **ready** | — |
-| T-501 | 🔧 ready for review (builder + generateMockGraph + 100% coverage) | — |
-| T-502 | 🔧 in-progress (partial: PR #28+#29) | — |
-| T-503 | blocked (T-502, T-202) | — |
+| T-501 | 🔧 in-progress (partial: PR #28+#29) | — |
+| T-502 | 🔧 in-progress (partial: PR #28+#29, #44) | — |
+| T-503 | 📋 planned (blocked on T-202; PR #44 provides production path) | — |
 | T-200 | 📋 ready | — |
 | T-201 | 📋 ready | — |
-| T-202 | blocked (T-200, T-201) | — |
-| T-300 | blocked (T-202, T-503) | — |
+| T-202 | 📋 planned (blocked on T-200, T-201) | — |
+| **T-300** | 🔧 in-progress (ahead of schedule via PR #44) | #44 |
 | T-400 | ✅ done | #22 |
 | T-401 | ✅ done | — |
 | T-402 | ✅ done | — |
 | T-403 | ✅ done | #17 |
 
-**Current gate: Phase 1.5 — T-500 ready to start** (custom node/edge components). T-501 and T-502 partially shipped via PR #28+#29 (pipeline + 3-node demo). Phase 2 (T-200, T-201) can run in parallel if desired.
+**Current gate:** Phase 1.5 — T-500 ready (custom nodes). T-501/T-502 partially shipped via PR #28+#29 (pipeline + 3-node demo + vertical ordering). **T-300 ahead of schedule via PR #44** — production dump loaded, chain renders, 157 pending cartório origins. Phase 2 (T-200, T-201) can run in parallel.
 
 ---
 
