@@ -55,6 +55,14 @@ export const origem = sqliteTable(
     documentoId: integer("documento_id").references(() => documento.id, {
       onDelete: "set null",
     }),
+    /**
+     * Optional FK to a suggested CRI when `documento_id` is NULL.
+     * Populated by the migration's Tier 3 cross-CRI suggestion logic.
+     * NULL until the user confirms the cartório and resolves the origem.
+     */
+    criSugeridoId: integer("cri_sugerido_id").references(() => cri.id, {
+      onDelete: "set null",
+    }),
     /** 0-based, contiguous per Lancamento. CHECK (indice >= 0). */
     indice: integer("indice").notNull(),
     /**

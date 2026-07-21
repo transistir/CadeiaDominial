@@ -867,6 +867,7 @@ export interface OrigemRow {
   lancamentoId: number;
   criId: number;
   documentoId: number | null;
+  criSugeridoId?: number | null;
   indice: number;
   tipo: string;
   numero: string | null;
@@ -1035,9 +1036,11 @@ export function buildOrigemRows(
   }
 
   interface FindDocumentoResult {
-    docId: number;
+    docId: number | null;
     criId: number;
     tier: 1 | 2 | 3;
+    /** Tier 3 suggestion criId — set when a unique cross-CRI match exists. */
+    sugestaoCriId?: number;
   }
 
   function findDocumento(
@@ -1075,7 +1078,9 @@ export function buildOrigemRows(
     const tier3Match = crossCRIIndex.get(tier3Key);
     if (tier3Match !== undefined) {
       console.log(`[SUGESTAO-CARTORIO] ${token.raw}: encontrada como ${token.tipo} ${token.numero} no CRI ${tier3Match.criId} (doc ${tier3Match.docId}). Confirme o cartório para conectar.`);
-      // DO NOT return — keep as null (pending cartório confirmation)
+      // Return null docId — suggestion only, no auto-connection.
+      // criId is unused when docId is null (caller preserves rootCriId).
+      return { docId: null, criId: 0, tier: 3, sugestaoCriId: tier3Match.criId };
     }
 
     // Ambiguous: log for audit
@@ -1183,6 +1188,7 @@ export function buildOrigemRows(
       tokens.forEach((token, indice) => {
         let matchedDocumentoId: number | null = null;
         let resolvedCriId = rootCriId; // default; may be overridden by Tier 3
+        let sugestaoCriId: number | null = null;
         if (token.numero !== null) {
           const result = findDocumento(
             token,
@@ -1190,8 +1196,11 @@ export function buildOrigemRows(
             documentoId !== null ? (documentoById.get(documentoId)?.criId ?? null) : null,
           );
           if (result !== null) {
-            matchedDocumentoId = result.docId;
-            resolvedCriId = result.criId;
+            if (result.docId !== null) {
+              matchedDocumentoId = result.docId;
+              resolvedCriId = result.criId;
+            }
+            sugestaoCriId = result.sugestaoCriId ?? null;
           } else {
             unmatchedOrigemTokens++;
           }
@@ -1200,6 +1209,7 @@ export function buildOrigemRows(
           lancamentoId,
           criId: resolvedCriId,
           documentoId: matchedDocumentoId,
+          criSugeridoId: sugestaoCriId,
           indice,
           tipo: token.tipo,
           numero: token.numero,
@@ -1456,7 +1466,7 @@ function run(): Report {
 
     // origem must be inserted before origem_fim_cadeia; capture generated ids
     const origemStmt = db.prepare(
-      `INSERT INTO origem (lancamento_id, cri_id, documento_id, indice, tipo, numero, numero_raw, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO origem (lancamento_id, cri_id, documento_id, cri_sugerido_id, indice, tipo, numero, numero_raw, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const fimStmt = db.prepare(
       `INSERT INTO origem_fim_cadeia (origem_id, tipo_fim_cadeia, classificacao_fim_cadeia, especificacao_fim_cadeia) VALUES (?, ?, ?, ?)`,
@@ -1469,6 +1479,7 @@ function run(): Report {
           o.lancamentoId,
           o.criId,
           o.documentoId,
+          o.criSugeridoId ?? null,
           o.indice,
           o.tipo,
           o.numero,
