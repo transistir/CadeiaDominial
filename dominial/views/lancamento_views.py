@@ -700,6 +700,7 @@ def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
     adquirentes = lancamento.pessoas.filter(tipo='adquirente')
     return render(request, 'dominial/components/_lancamento_resumo_card.html', {
         'lancamento': lancamento,
+        'documento': lancamento.documento,
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
         'tis': tis,
@@ -728,4 +729,4 @@ def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
         'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
     }
     
-    return render(request, 'dominial/lancamento_detail.html', context) 
+    return render(request, 'dominial/lancamento_detail.html', context)

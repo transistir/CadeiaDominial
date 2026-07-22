@@ -1,118 +1,80 @@
-<!--
-  Resumo compacto de lançamento, carregado via AJAX.
-  Mostra campos diferentes conforme o tipo:
-    - Averbação: descrição, forma, transmitentes/adquirentes
-    - Registro: título, cartório origem, transmitentes/adquirentes
-    - Início de Matrícula: cartório origem, livro/folha/data origem, transmitentes/adquirentes
+{% load dominial_extras %}
 
-  Nota: pessoas são LancamentoPessoa — usar .pessoa.nome (com fallback .nome_digitado)
--->
 <div class="resumo-card">
   <div class="resumo-topo">
     <span class="resumo-tipo resumo-tipo-{{ lancamento.tipo.tipo }}">{{ lancamento.tipo.get_tipo_display }}</span>
-    <span class="resumo-codigo">#{{ lancamento.numero_lancamento|default:"—" }}</span>
-    <span class="resumo-data">{{ lancamento.data|date:"d/m/Y"|default:"—" }}</span>
+    <span class="resumo-codigo">{% if lancamento.numero_lancamento %}#{{ lancamento.numero_lancamento }}{% else %}-{% endif %}</span>
+    <span class="resumo-separador" aria-hidden="true">·</span>
+    <span class="resumo-data">{{ lancamento.data|date:"d/m/Y"|default:"-" }}</span>
+    <button type="button" class="resumo-fechar resumo-fechar-topo" aria-label="Fechar resumo" title="Fechar resumo">✕</button>
   </div>
 
   <div class="resumo-corpo">
-    {% if lancamento.tipo.tipo == 'averbacao' %}
-      {# --- Averbação: descrição, forma, detalhes --- #}
-      {% if lancamento.descricao %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Descrição</span>
-        <span class="resumo-r-valor">{{ lancamento.descricao|truncatechars:120 }}</span>
-      </div>
-      {% endif %}
-      {% if lancamento.forma %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Forma</span>
-        <span class="resumo-r-valor">{{ lancamento.forma }}</span>
-      </div>
-      {% endif %}
-      {% if lancamento.detalhes %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Detalhes</span>
-        <span class="resumo-r-valor">{{ lancamento.detalhes|truncatechars:150 }}</span>
-      </div>
-      {% endif %}
+    <div class="resumo-planilha-scroll">
+      <div class="resumo-planilha-row{% if lancamento.tipo.tipo == 'averbacao' %} resumo-planilha-row--averbacao{% endif %}" role="row">
+        <div class="resumo-planilha-cell" role="cell" title="Nº: {{ lancamento|numero_documento_criado|default:'-' }}">
+          {{ lancamento|numero_documento_criado|default:"-" }}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="Livro: {{ documento.livro|default:'-' }}">
+          {{ documento.livro|default:"-" }}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="Folhas: {{ documento.folha|default:'-' }}">
+          {{ documento.folha|default:"-" }}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="CRI: {{ documento.cartorio.nome|default:'-' }}">
+          {{ documento.cartorio.nome|default:"-" }}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="Data: {{ lancamento.data|date:'d/m/Y'|default:'-' }}">
+          {{ lancamento.data|date:"d/m/Y"|default:"-" }}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="Transmitente: {% for pessoa in transmitentes %}{{ pessoa.pessoa.nome|default:'-' }}{% if not forloop.last %}, {% endif %}{% empty %}-{% endfor %}">
+          {% for pessoa in transmitentes %}{{ pessoa.pessoa.nome|default:"-" }}{% if not forloop.last %}, {% endif %}{% empty %}-{% endfor %}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="Adquirente: {% for pessoa in adquirentes %}{{ pessoa.pessoa.nome|default:'-' }}{% if not forloop.last %}, {% endif %}{% empty %}-{% endfor %}">
+          {% for pessoa in adquirentes %}{{ pessoa.pessoa.nome|default:"-" }}{% if not forloop.last %}, {% endif %}{% empty %}-{% endfor %}
+        </div>
 
-    {% elif lancamento.tipo.tipo == 'registro' %}
-      {# --- Registro: título, cartório, transmitentes/adquirentes, forma --- #}
-      {% if lancamento.titulo %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Título</span>
-        <span class="resumo-r-valor">{{ lancamento.titulo }}</span>
-      </div>
-      {% endif %}
-      {% if lancamento.cartorio_origem %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Cartório</span>
-        <span class="resumo-r-valor">{{ lancamento.cartorio_origem.nome }}</span>
-      </div>
-      {% endif %}
-      {% if lancamento.forma %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Forma</span>
-        <span class="resumo-r-valor">{{ lancamento.forma }}</span>
-      </div>
-      {% endif %}
+        {% if lancamento.tipo.tipo == 'averbacao' %}
+          <div class="resumo-planilha-cell resumo-planilha-cell--descricao" role="cell" title="Descrição: {{ lancamento.descricao|default:'-' }}">
+            {% if lancamento.descricao|length > 100 %}
+              <span class="resumo-descricao-curta">{{ lancamento.descricao|slice:":100" }}...</span>
+              <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" class="resumo-ler-mais">Ler mais</a>
+            {% else %}
+              {{ lancamento.descricao|default:"-" }}
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="resumo-planilha-cell" role="cell" title="Forma: {{ lancamento.forma|default:'-' }}">
+            {{ lancamento.forma|default:"-" }}
+          </div>
+          <div class="resumo-planilha-cell" role="cell" title="Título: {{ lancamento.titulo|default:'-' }}">
+            {{ lancamento.titulo|default:"-" }}
+          </div>
+          <div class="resumo-planilha-cell" role="cell" title="Cartório: {{ lancamento.cartorio_transmissao_compat.nome|default:'-' }}">
+            {{ lancamento.cartorio_transmissao_compat.nome|default:"-" }}
+          </div>
+          <div class="resumo-planilha-cell" role="cell" title="Livro: {{ lancamento.livro_transacao|default:'-' }}">
+            {{ lancamento.livro_transacao|default:"-" }}
+          </div>
+          <div class="resumo-planilha-cell" role="cell" title="Folhas: {{ lancamento.folha_transacao|default:'-' }}">
+            {{ lancamento.folha_transacao|default:"-" }}
+          </div>
+          <div class="resumo-planilha-cell" role="cell" title="Data: {{ lancamento.data_transacao|date:'d/m/Y'|default:'-' }}">
+            {{ lancamento.data_transacao|date:"d/m/Y"|default:"-" }}
+          </div>
+        {% endif %}
 
-    {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
-      {# --- Início de Matrícula: cartório origem, livro/folha/data origem --- #}
-      {% if lancamento.cartorio_origem %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Cartório</span>
-        <span class="resumo-r-valor">{{ lancamento.cartorio_origem.nome }}</span>
+        <div class="resumo-planilha-cell" role="cell" title="Área: {% if lancamento.area != None %}{{ lancamento.area|floatformat:'-2' }} ha{% else %}-{% endif %}">
+          {% if lancamento.area != None %}{{ lancamento.area|floatformat:"-2" }} ha{% else %}-{% endif %}
+        </div>
+        <div class="resumo-planilha-cell resumo-planilha-cell--origem" role="cell" title="Origem: {{ lancamento.origem|default:'-' }}">
+          {% if lancamento.origem %}{{ lancamento|origem_formatada_completa|safe }}{% else %}-{% endif %}
+        </div>
+        <div class="resumo-planilha-cell" role="cell" title="Observações: {{ lancamento.observacoes|default:'-' }}">
+          {{ lancamento.observacoes|default:"-" }}
+        </div>
       </div>
-      {% endif %}
-      {% if lancamento.livro_origem or lancamento.folha_origem %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Origem</span>
-        <span class="resumo-r-valor">{% if lancamento.livro_origem %}Livro {{ lancamento.livro_origem }}{% endif %}{% if lancamento.livro_origem and lancamento.folha_origem %} · {% endif %}{% if lancamento.folha_origem %}Folha {{ lancamento.folha_origem }}{% endif %}</span>
-      </div>
-      {% endif %}
-      {% if lancamento.data_origem %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Data Origem</span>
-        <span class="resumo-r-valor">{{ lancamento.data_origem|date:"d/m/Y" }}</span>
-      </div>
-      {% endif %}
-
-    {% endif %}
-
-    {# --- Transmitentes / Adquirentes (comum a todos os tipos) --- #}
-    {% if transmitentes %}
-    <div class="resumo-linha">
-      <span class="resumo-r-label">Transmitente(s)</span>
-      <span class="resumo-r-valor">
-        {% for t in transmitentes %}{{ t.pessoa.nome }}{% if t.nome_digitado and t.nome_digitado != t.pessoa.nome %} ({{ t.nome_digitado }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
-      </span>
     </div>
-    {% endif %}
-    {% if adquirentes %}
-    <div class="resumo-linha">
-      <span class="resumo-r-label">Adquirente(s)</span>
-      <span class="resumo-r-valor">
-        {% for a in adquirentes %}{{ a.pessoa.nome }}{% if a.nome_digitado and a.nome_digitado != a.pessoa.nome %} ({{ a.nome_digitado }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
-      </span>
-    </div>
-    {% endif %}
-
-    {# --- Comum a todos: área --- #}
-    {% if lancamento.area %}
-    <div class="resumo-linha">
-      <span class="resumo-r-label">Área</span>
-      <span class="resumo-r-valor">{{ lancamento.area|floatformat:2 }} ha</span>
-    </div>
-    {% endif %}
-
-    {# --- Comum a todos: observações --- #}
-    {% if lancamento.observacoes %}
-    <div class="resumo-linha">
-      <span class="resumo-r-label">Observações</span>
-      <span class="resumo-r-valor">{{ lancamento.observacoes|truncatechars:100 }}</span>
-    </div>
-    {% endif %}
   </div>
 
   <div class="resumo-rodape">

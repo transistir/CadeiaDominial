@@ -1178,40 +1178,94 @@
 }
 
 .resumo-data {
-    margin-left: auto;
     color: #6c757d;
     font-size: 0.78rem;
 }
 
+.resumo-separador {
+    color: #889099;
+}
+
+.resumo-fechar.resumo-fechar-topo {
+    margin-left: auto;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
 /* Corpo */
 .resumo-corpo {
-    padding: 8px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    padding: 0;
 }
 
-.resumo-linha {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    line-height: 1.4;
+.resumo-planilha-scroll {
+    overflow-x: auto;
+    scrollbar-width: thin;
 }
 
-.resumo-r-label {
-    flex: 0 0 90px;
-    font-size: 0.68rem;
-    color: #6c757d;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    font-weight: 600;
+.resumo-planilha-row {
+    display: grid;
+    grid-template-columns:
+        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
+        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
+        minmax(110px, 11fr) minmax(80px, 8fr) minmax(80px, 8fr)
+        minmax(100px, 10fr) minmax(42px, 3fr) minmax(42px, 3fr)
+        minmax(76px, 8fr) minmax(70px, 6fr) minmax(100px, 10fr)
+        minmax(90px, 8fr);
+    min-width: 1450px;
+    background: #f9f9f9;
 }
 
-.resumo-r-valor {
-    flex: 1;
+.resumo-planilha-row--averbacao {
+    grid-template-columns:
+        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
+        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
+        minmax(110px, 11fr) minmax(260px, 26fr) minmax(70px, 6fr)
+        minmax(100px, 10fr) minmax(90px, 8fr);
+    min-width: 1250px;
+}
+
+.resumo-planilha-cell {
+    min-width: 0;
+    padding: 6px 8px;
+    border-right: 1px solid #333;
     color: #212529;
-    font-size: 0.82rem;
-    word-break: break-word;
+    line-height: 1.35;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+.resumo-planilha-cell:last-child {
+    border-right: 0;
+}
+
+.resumo-planilha-cell--descricao {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #fffbe6;
+    font-style: italic;
+    text-align: left;
+}
+
+.resumo-descricao-curta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.resumo-ler-mais {
+    flex: 0 0 auto;
+    color: #1a56db;
+    font-size: 0.72rem;
+    font-style: normal;
+    text-decoration: none;
+}
+
+.resumo-ler-mais:hover {
+    text-decoration: underline;
 }
 
 /* Rodapé */
@@ -1290,4 +1344,4 @@
         padding-left: 12px !important;
         padding-right: 12px !important;
     }
-} 
+}
