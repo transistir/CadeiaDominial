@@ -147,4 +147,17 @@
     border-radius: 4px;
     border-left: 3px solid #28a745;
     font-size: 0.9em;
-} 
+}
+
+/* ===== OVERRIDE FULL-WIDTH (INTEGRAÇÃO HERMES) ===== */
+
+/* Remove o max-width:1200px do main-content quando esta página está ativa */
+.main-content:has(.documento-detalhado-page) {
+    max-width: none !important;
+    padding: 12px 16px !important;
+}
+
+/* Remove o max-width do Bootstrap .container (1200px/1320px) */
+.container.documento-detalhado-page {
+    max-width: none !important;
+}
