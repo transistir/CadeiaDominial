@@ -397,8 +397,22 @@
     background: #007bff;
     color: #fff;
     border-color: #007bff;
-} 
+}
 
+/* Full-width na página da tabela — header/nav já compactos globalmente */
+.main-content:has(.cadeia-tabela-page) {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.container.cadeia-tabela-page {
+    max-width: none !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+}
+
+/* ===== MODAL ===== */
 /* Modal de Seleção de Sequência */
 .modal {
     display: none;
