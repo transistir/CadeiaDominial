@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
 from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa
 from ..services.lancamento_service import LancamentoService
@@ -52,7 +52,23 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     documento_ativo = None
     
     if documento_id:
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        # Primeiro, tentar encontrar no imóvel atual
+        try:
+            documento_ativo = Documento.objects.get(id=documento_id, imovel=imovel)
+        except Documento.DoesNotExist:
+            # Se não encontrou no imóvel atual, pode ser um documento importado
+            try:
+                documento_ativo = Documento.objects.get(id=documento_id)
+                # Redirecionar para o imóvel correto
+                messages.info(request, '📄 Documento importado — redirecionado para o imóvel de origem.')
+                return redirect(
+                    'novo_lancamento_documento',
+                    tis_id=tis.id,
+                    imovel_id=documento_ativo.imovel.id,
+                    documento_id=documento_id,
+                )
+            except Documento.DoesNotExist:
+                raise Http404("Documento não encontrado")
     else:
         # Buscar documento ativo do imóvel (primeiro documento)
         documento_ativo = imovel.documentos.first()
