@@ -435,20 +435,65 @@
     pointer-events: none;
 }
 
-/* Tela cheia na página da árvore D3 —
-   header e nav do base.html são escondidos para maximizar espaço do organograma */
+/* Tela cheia na página da árvore D3 */
 @media screen {
+    /* Header e nav ficam fixos no topo (compactos) */
     body:has(.d3-tree-page) .header,
+    .d3-active .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        padding: 4px 20px !important;
+        /* Mantém o gradiente original do base.css */
+    }
+
+    body:has(.d3-tree-page) .header-title,
+    .d3-active .header-title {
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    body:has(.d3-tree-page) .header-subtitle,
+    .d3-active .header-subtitle {
+        display: none;
+    }
+
+    body:has(.d3-tree-page) .user-info,
+    .d3-active .user-info {
+        font-size: 0.8rem;
+    }
+
+    body:has(.d3-tree-page) .user-info > span,
+    .d3-active .user-info > span {
+        display: none;
+    }
+
     body:has(.d3-tree-page) .nav,
-    .d3-active .header,
     .d3-active .nav {
-        display: none !important;
+        position: fixed;
+        top: 36px;
+        left: 0;
+        right: 0;
+        z-index: 999;
+        padding: 0 20px;
+        line-height: 26px;
+        min-height: 26px;
+    }
+
+    body:has(.d3-tree-page) .nav-link,
+    .d3-active .nav-link {
+        font-size: 0.8rem;
+        padding: 2px 0;
     }
 
     body:has(.d3-tree-page) .main-content,
     .d3-active .main-content {
         max-width: none !important;
-        padding: 0 !important;
+        padding-top: 62px !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
 
     body:has(.d3-tree-page) .container.d3-tree-page,
@@ -461,7 +506,7 @@
     body:has(.d3-tree-page) .arvore-header,
     .d3-active .arvore-header {
         padding: 8px 16px;
-        margin-bottom: 0;
+        margin: 0;
         border-radius: 0;
         border-bottom: 1px solid #eee;
     }
@@ -494,7 +539,7 @@
 
     body:has(.d3-tree-page) #arvore-d3-svg,
     .d3-active #arvore-d3-svg {
-        height: calc(100vh - 112px) !important;
+        height: calc(100vh - 130px) !important;
         border-radius: 0;
     }
 }
