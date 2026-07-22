@@ -541,11 +541,11 @@
     font-weight: 500;
 }
 
-/* cartorio-origem-info — linha inline compacta */
+/* cartorio-origem-info — linha inline */
 .cartorio-origem-info {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     margin-bottom: 10px;
     background: none;
     border: none;
@@ -553,17 +553,17 @@
 }
 
 .cartorio-origem-info .cri-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #495057;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
 }
 
 .cartorio-origem-info .cri-valor {
-    font-size: 0.82rem;
-    color: #495057;
-    font-weight: 500;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1a56db;
 }
 
 /* Estilos comuns para exibição do cartório */

@@ -690,7 +690,12 @@ def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
     """Retorna HTML parcial com o resumo de um lançamento (para sidebar AJAX)."""
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
+    lancamento = get_object_or_404(
+        Lancamento.objects.select_related('documento', 'tipo').prefetch_related(
+            Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+        ),
+        id=lancamento_id, documento__imovel=imovel
+    )
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
     adquirentes = lancamento.pessoas.filter(tipo='adquirente')
     return render(request, 'dominial/components/_lancamento_resumo_card.html', {

@@ -1,9 +1,11 @@
 <!--
   Resumo compacto de lançamento, carregado via AJAX.
   Mostra campos diferentes conforme o tipo:
-    - Averbação: descrição, forma
+    - Averbação: descrição, forma, transmitentes/adquirentes
     - Registro: título, cartório origem, transmitentes/adquirentes
     - Início de Matrícula: cartório origem, livro/folha/data origem, transmitentes/adquirentes
+
+  Nota: pessoas são LancamentoPessoa — usar .pessoa.nome (com fallback .nome_digitado)
 -->
 <div class="resumo-card">
   <div class="resumo-topo">
@@ -54,18 +56,6 @@
         <span class="resumo-r-valor">{{ lancamento.forma }}</span>
       </div>
       {% endif %}
-      {% if transmitentes %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Transmitente(s)</span>
-        <span class="resumo-r-valor">{% for t in transmitentes %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
-      </div>
-      {% endif %}
-      {% if adquirentes %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Adquirente(s)</span>
-        <span class="resumo-r-valor">{% for a in adquirentes %}{{ a.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
-      </div>
-      {% endif %}
 
     {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
       {# --- Início de Matrícula: cartório origem, livro/folha/data origem --- #}
@@ -87,19 +77,25 @@
         <span class="resumo-r-valor">{{ lancamento.data_origem|date:"d/m/Y" }}</span>
       </div>
       {% endif %}
-      {% if transmitentes %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Transmitente(s)</span>
-        <span class="resumo-r-valor">{% for t in transmitentes %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
-      </div>
-      {% endif %}
-      {% if adquirentes %}
-      <div class="resumo-linha">
-        <span class="resumo-r-label">Adquirente(s)</span>
-        <span class="resumo-r-valor">{% for a in adquirentes %}{{ a.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
-      </div>
-      {% endif %}
 
+    {% endif %}
+
+    {# --- Transmitentes / Adquirentes (comum a todos os tipos) --- #}
+    {% if transmitentes %}
+    <div class="resumo-linha">
+      <span class="resumo-r-label">Transmitente(s)</span>
+      <span class="resumo-r-valor">
+        {% for t in transmitentes %}{{ t.pessoa.nome }}{% if t.nome_digitado and t.nome_digitado != t.pessoa.nome %} ({{ t.nome_digitado }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </span>
+    </div>
+    {% endif %}
+    {% if adquirentes %}
+    <div class="resumo-linha">
+      <span class="resumo-r-label">Adquirente(s)</span>
+      <span class="resumo-r-valor">
+        {% for a in adquirentes %}{{ a.pessoa.nome }}{% if a.nome_digitado and a.nome_digitado != a.pessoa.nome %} ({{ a.nome_digitado }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </span>
+    </div>
     {% endif %}
 
     {# --- Comum a todos: área --- #}
