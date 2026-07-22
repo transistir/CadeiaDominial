@@ -1350,8 +1350,8 @@
 
 /* Full width na página de formulário de lançamento */
 .lancamento-form-page,
-.documento-detalhado-page {
-    max-width: 100% !important;
+.container.documento-detalhado-page {
+    max-width: none !important;
     padding-left: 24px !important;
     padding-right: 24px !important;
 }
