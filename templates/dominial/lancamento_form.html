@@ -63,52 +63,7 @@
         </div>
     </div>
 
-    {% if lancamentos_com_pessoas %}
-    <!-- Painel de Lançamentos Anteriores -->
-    <details class="lancamentos-anteriores-panel">
-        <summary>📋 Lançamentos anteriores neste documento ({{ lancamentos_com_pessoas|length }}{% if lancamentos_com_pessoas|length >= 20 %} — últimos 20{% endif %})</summary>
-        <div class="lancamentos-anteriores-content">
-            <h5>Lançamentos já feitos neste documento</h5>
-            <div class="lancamentos-anteriores-list">
-                {% for item in lancamentos_com_pessoas %}
-                <div class="lancamento-anterior-card">
-                    <div class="lancamento-anterior-header">
-                        <span class="lancamento-anterior-numero">{{ item.lancamento.numero_lancamento|default:"-" }}</span>
-                        <span class="lancamento-anterior-tipo">{{ item.lancamento.tipo.get_tipo_display }}</span>
-                        <span class="lancamento-anterior-data">{{ item.lancamento.data|date:"d/m/Y" }}</span>
-                    </div>
-                    <div class="lancamento-anterior-body">
-                        {% if item.transmitentes %}
-                        <div class="lancamento-anterior-field">
-                            <span class="field-label">Transmitente(s):</span>
-                            <span>{% for t in item.transmitentes %}{{ t.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}</span>
-                        </div>
-                        {% endif %}
-                        {% if item.adquirentes %}
-                        <div class="lancamento-anterior-field">
-                            <span class="field-label">Adquirente(s):</span>
-                            <span>{% for a in item.adquirentes %}{{ a.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}</span>
-                        </div>
-                        {% endif %}
-                        {% if item.lancamento.area %}
-                        <div class="lancamento-anterior-field">
-                            <span class="field-label">Área:</span>
-                            <span>{{ item.lancamento.area }} ha</span>
-                        </div>
-                        {% endif %}
-                        {% if item.lancamento.detalhes %}
-                        <div class="lancamento-anterior-field lancamento-anterior-detalhes">
-                            <span class="field-label">Detalhes:</span>
-                            <span>{{ item.lancamento.detalhes|truncatechars:80 }}</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </details>
-    {% endif %}
+    {% include "dominial/components/_lancamento_sidebar.html" with is_novo_lancamento=not modo_edicao|default:True %}
 
     <form method="post" id="lancamento-form" {% if numero_lancamento_error %}data-numero-lancamento-error="true"{% endif %}>
         {% csrf_token %}

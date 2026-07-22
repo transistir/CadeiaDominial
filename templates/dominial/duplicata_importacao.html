@@ -125,7 +125,7 @@
         </div>
         
         <div class="warning-message">
-            <strong>⚠️ Atenção:</strong> Verifique se digitou corretamente origem e Registro Imobiliário. Caso digitou errado clique em cancelar e altere os dados.
+            <strong>⚠️ Atenção:</strong> Verifique se digitou corretamente origem e CRI. Caso digitou errado clique em cancelar e altere os dados.
         </div>
         
         <!-- Documento de Origem -->
@@ -138,7 +138,7 @@
                     <p><strong>Imóvel:</strong> {{ duplicata_info.documento_origem.imovel_nome }} (matrícula {{ duplicata_info.documento_origem.imovel_matricula|default:"—" }})</p>
                 </div>
                 <div class="col-md-6">
-                    <p><strong>Registro Imobiliário:</strong> {{ duplicata_info.documento_origem.cartorio }}</p>
+                    <p><strong>CRI:</strong> {{ duplicata_info.documento_origem.cartorio }}</p>
                     <p><strong>CNS:</strong> {{ duplicata_info.documento_origem.cartorio_cns|default:"Não informado" }}</p>
                     <p><strong>Localização:</strong>
                         {% if duplicata_info.documento_origem.cartorio_cidade or duplicata_info.documento_origem.cartorio_uf %}
@@ -261,7 +261,7 @@
             <div class="lancamento-item">
                 <h6><strong>{{ item.documento.numero }}</strong> - {{ item.documento.tipo }}</h6>
                 <p><small>
-                    Registro Imobiliário: {{ item.documento.cartorio }}
+                    CRI: {{ item.documento.cartorio }}
                     {% if item.documento.cartorio_cns %} (CNS {{ item.documento.cartorio_cns }}){% endif %}
                     {% if item.documento.cartorio_cidade or item.documento.cartorio_uf %} — {{ item.documento.cartorio_cidade }}{% if item.documento.cartorio_cidade and item.documento.cartorio_uf %}/{% endif %}{{ item.documento.cartorio_uf }}{% endif %}
                     | Imóvel: {{ item.documento.imovel_nome }} (matrícula {{ item.documento.imovel_matricula|default:"—" }})
@@ -294,7 +294,7 @@
                 </div>
                 <div class="col-md-6">
                     <p><strong>Documento Ativo:</strong> {{ documento.numero }} - {{ documento.tipo.get_tipo_display }}</p>
-                    <p><strong>Registro Imobiliário:</strong> {% if documento.cartorio %}{{ documento.cartorio.nome }}{% else %}Não informado{% endif %}</p>
+                    <p><strong>CRI:</strong> {% if documento.cartorio %}{{ documento.cartorio.nome }}{% else %}Não informado{% endif %}</p>
                     <p><strong>Total de Lançamentos Atuais:</strong> {{ documento.lancamentos.count }}</p>
                 </div>
             </div>

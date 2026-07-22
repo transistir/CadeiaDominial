@@ -1030,4 +1030,81 @@
     .matricula-destaque-card .grid-3 {
         grid-template-columns: 1fr;
     }
+}
+
+/* ========================================
+   SIDEBAR DE LANÇAMENTOS DO DOCUMENTO
+   ======================================== */
+.lancamento-sidebar {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.lancamento-sidebar-header {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.lancamento-sidebar-header h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #495057;
+    font-weight: 600;
+}
+
+.lancamento-sidebar-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.lancamento-tab {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    text-decoration: none;
+    background: #e9ecef;
+    color: #495057;
+    border: 1px solid #ced4da;
+    transition: all 0.15s ease;
+}
+
+.lancamento-tab:hover {
+    background: #dde2e6;
+    border-color: #adb5bd;
+    color: #212529;
+}
+
+.lancamento-tab.active {
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+    pointer-events: none;
+    cursor: default;
+}
+
+.lancamento-tab.novo {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffc107;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .lancamento-sidebar-tabs {
+        flex-direction: column;
+    }
+
+    .lancamento-tab {
+        text-align: center;
+    }
 } 

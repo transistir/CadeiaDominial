@@ -91,7 +91,7 @@
                     <path d="M21 10C21 17 12 23 12 23S3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                Localização e Registro Imobiliário
+                Localização e CRI
             </h3>
             
             <div class="grid-2">
@@ -112,7 +112,7 @@
             </div>
 
             <div class="form-group">
-                <label for="cartorio">Registro Imobiliário:</label>
+                <label for="cartorio">CRI:</label>
                 {{ form.cartorio }}
                 {% if form.cartorio.errors %}
                     <div class="error-message">{{ form.cartorio.errors }}</div>
@@ -120,7 +120,7 @@
             </div>
 
             <div id="cartorio-info" class="form-info" style="display: none;">
-                <h5>Informações do Registro Imobiliário</h5>
+                <h5>Informações do CRI</h5>
                 <div id="cartorio-detalhes"></div>
             </div>
         </div>
@@ -136,13 +136,13 @@
 <div id="modal-novo-cartorio" class="modal" style="display:none;">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Adicionar Novo Registro Imobiliário</h3>
+            <h3>Adicionar Novo CRI</h3>
             <span class="close" id="fechar-modal-cartorio">&times;</span>
         </div>
         <div class="modal-body">
             <form id="form-novo-cartorio">
                 <div class="form-group">
-                    <label for="novo-cartorio-nome">Nome do Registro Imobiliário:</label>
+                    <label for="novo-cartorio-nome">Nome do CRI:</label>
                     <input type="text" id="novo-cartorio-nome" name="nome" class="form-control" required>
                 </div>
                 <div class="form-group">
@@ -159,7 +159,7 @@
                 </div>
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" id="cancelar-novo-cartorio">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar Registro Imobiliário</button>
+                    <button type="submit" class="btn btn-primary">Salvar CRI</button>
                 </div>
             </form>
         </div>

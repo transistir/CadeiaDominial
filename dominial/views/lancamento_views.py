@@ -13,6 +13,25 @@ from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 from ..services.documento_service import DocumentoService
 
+
+def _build_documento_lancamentos(documento, current_lancamento_id=None):
+    """Constrói lista de lançamentos do documento para o sidebar de navegação."""
+    lancamentos = (
+        Lancamento.objects
+        .filter(documento=documento)
+        .select_related('tipo')
+        .order_by('data', 'id')
+    )
+    return [
+        {
+            'id': lanc.id,
+            'display': lanc.numero_lancamento or f'#{lanc.id}',
+            'is_current': current_lancamento_id is not None and lanc.id == current_lancamento_id,
+        }
+        for lanc in lancamentos
+    ]
+
+
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     """
@@ -216,6 +235,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 },
                 'numero_lancamento_error': numero_lancamento_error,
                 'lancamentos_com_pessoas': lancamentos_com_pessoas,
+                'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
             }
             
             context['transmitentes'] = transmitentes_data
@@ -269,6 +289,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
         'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
         'lancamentos_com_pessoas': lancamentos_com_pessoas,
+        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
     }
     
     # Verificar se é o primeiro lançamento do documento
@@ -439,7 +460,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'modo_edicao': True,
         'cartorio_origem_correto': cartorio_origem_correto,
         'is_lancamento_do_imovel': is_lancamento_do_imovel,
-        'is_lancamento_compartilhado': not is_lancamento_do_imovel
+        'is_lancamento_compartilhado': not is_lancamento_do_imovel,
+        'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
     }
     
     # Preparar dados para o template
@@ -671,7 +693,8 @@ def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
         'lancamento': lancamento,
         'documento': lancamento.documento,
         'transmitentes': transmitentes,
-        'adquirentes': adquirentes
+        'adquirentes': adquirentes,
+        'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
     }
     
     return render(request, 'dominial/lancamento_detail.html', context) 

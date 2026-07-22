@@ -3,9 +3,9 @@
     <h4>Informações do Documento</h4>
     
     {% if is_primeiro_lancamento %}
-    <!-- Registro Imobiliário da Matrícula para Primeiro Lançamento -->
+    <!-- CRI da Matrícula para Primeiro Lançamento -->
     <div class="form-group cartorio-matricula-info">
-        <label>Registro Imobiliário da Matrícula</label>
+        <label>CRI da Matrícula</label>
         <div class="cartorio-display">
             <span class="cartorio-nome">{{ cartorio_matricula_nome }}</span>
         </div>
@@ -13,19 +13,19 @@
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ cartorio_matricula_nome }}">
     </div>
     {% else %}
-    <!-- Registro Imobiliário da Origem para Lançamentos Subsequentes -->
+    <!-- CRI da Origem para Lançamentos Subsequentes -->
     <div class="form-group cartorio-origem-info">
-        <label>Registro Imobiliário da Origem</label>
+        <label>CRI da Origem</label>
         <div class="cartorio-display">
             <span class="cartorio-nome">
                 {% if modo_edicao %}
                     {% if cartorio_origem_correto %}
                         {{ cartorio_origem_correto.nome }}
                     {% else %}
-                        Registro Imobiliário não definido
+                        CRI não definido
                     {% endif %}
                 {% else %}
-                    Registro Imobiliário não definido
+                    CRI não definido
                 {% endif %}
             </span>
             <small class="form-text text-muted">
