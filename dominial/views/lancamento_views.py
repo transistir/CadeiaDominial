@@ -236,6 +236,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 'numero_lancamento_error': numero_lancamento_error,
                 'lancamentos_com_pessoas': lancamentos_com_pessoas,
                 'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
+                'is_novo_lancamento': True,
             }
             
             context['transmitentes'] = transmitentes_data
@@ -290,6 +291,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
         'lancamentos_com_pessoas': lancamentos_com_pessoas,
         'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
+        'is_novo_lancamento': True,
     }
     
     # Verificar se é o primeiro lançamento do documento
