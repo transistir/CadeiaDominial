@@ -44,7 +44,7 @@
             {% endif %}
             {% if imovel.cartorio %}
             <div>
-                <strong>Cartório:</strong>
+                <strong>Registro Imobiliário:</strong>
                 {{ imovel.cartorio.nome }}
             </div>
             {% endif %}
@@ -100,7 +100,7 @@
                     <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
                 </div>
                 <div class="info-item">
-                    <strong>Cartório:</strong> {{ documento.cartorio.nome }}
+                    <strong>Registro Imobiliário:</strong> {{ documento.cartorio.nome }}
                 </div>
                 <div class="info-item">
                     <strong>Livro:</strong> {{ documento.livro }}
@@ -146,7 +146,7 @@
                         <th>Nº</th>
                         <th>L</th>
                         <th>Fls.</th>
-                        <th>Cartório</th>
+                        <th>Registro Imobiliário</th>
                         <th>Data</th>
                         <!-- Transmitente/Adquirente -->
                         <th>Transmitente</th>

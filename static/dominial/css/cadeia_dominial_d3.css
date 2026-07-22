@@ -311,4 +311,92 @@
         max-width: 300px;
         justify-content: center;
     }
+}
+
+/* ========================================
+   IMPRESSÃO
+   ======================================== */
+@media print {
+    @page {
+        size: landscape;
+        margin: 1cm;
+    }
+
+    /* Esconder elementos de navegação e chrome do base.html */
+    .navbar,
+    .nav,
+    header,
+    .main-nav,
+    .navigation-actions,
+    .zoom-controls,
+    .arvore-container::before,
+    .arvore-header .header-icon,
+    .nav-btn {
+        display: none !important;
+    }
+
+    /* Ajustar header para impressão */
+    .arvore-header {
+        box-shadow: none;
+        border-bottom: 2px solid #000;
+        padding: 10px 0;
+        margin-bottom: 10px;
+    }
+
+    .arvore-header h1 {
+        font-size: 1.4em;
+        color: #000;
+        margin-bottom: 5px;
+    }
+
+    .imovel-info {
+        font-size: 0.9em;
+    }
+
+    /* Container da árvore ocupa página toda */
+    .arvore-container {
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        page-break-inside: avoid;
+        overflow: visible !important;
+    }
+
+    /* SVG da árvore — ocupa largura total da página */
+    #arvore-d3-svg {
+        width: 100% !important;
+        height: auto !important;
+        max-height: none;
+        background: #fff;
+        border-radius: 0;
+        overflow: visible !important;
+    }
+
+    /* Ajustar links para impressão */
+    .link {
+        stroke: #000 !important;
+        stroke-width: 1.5 !important;
+    }
+
+    .link-extra {
+        stroke: #666 !important;
+        stroke-width: 1 !important;
+    }
+
+    /* Manter cores dos cards mas mais sóbrias */
+    .node rect {
+        filter: none !important;
+    }
+
+    /* Garantir que texto fique preto */
+    .node text {
+        fill: #fff !important;
+    }
+}
+
+/* Print button disabled state */
+.zoom-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
 } 

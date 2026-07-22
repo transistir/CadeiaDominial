@@ -57,7 +57,7 @@
         {% endif %}
         {% if imovel.cartorio %}
         <div class="imovel-info-row">
-            <div class="imovel-info-cell">Cartório:</div>
+            <div class="imovel-info-cell">Registro Imobiliário:</div>
             <div class="imovel-info-cell">{{ imovel.cartorio.nome }}</div>
         </div>
         {% endif %}
@@ -90,9 +90,7 @@
                     {# ===================================================== #}
                     {# SEÇÃO DE DOCUMENTO INDIVIDUAL                       #}
                     {# ===================================================== #}
-                    {# Classe CSS especial se for documento importado #}
                     <div class="documento-section {% if item.is_importado %}documento-importado{% endif %}">
-                        {# Cabeçalho do documento com informações básicas #}
                         <div class="documento-header">
                             📄 {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
 <!--                             {# Badge especial para documentos importados #}
@@ -102,7 +100,7 @@
                             <br>
                             <small>
                                 Data: {{ item.documento.data|date:"d/m/Y" }} | 
-                                Cartório: {{ item.documento.cartorio.nome }} | 
+                                Registro Imobiliário: {{ item.documento.cartorio.nome }} | 
                                 Lançamentos: {{ item.lancamentos.count }}
                             </small>
                         </div>
@@ -128,7 +126,7 @@
                                     <th>Nº</th>
                                     <th>L</th>
                                     <th>Fls.</th>
-                                    <th>Cartório</th>
+                                    <th>Registro Imobiliário</th>
                                     <th>Data</th>
                                     <!-- Colunas de Transmitente/Adquirente -->
                                     <th>Transmitente</th>

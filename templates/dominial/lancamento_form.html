@@ -44,12 +44,16 @@
     </div>
     {% endif %}
     
-    <div class="field-group">
-        <h4>{{ imovel.nome }}</h4>
+    <div class="matricula-destaque-card">
+        <div class="imovel-nome">{{ imovel.nome }}</div>
+        <div>
+            <span class="matricula-label">{{ imovel.get_tipo_documento_principal_display|default:"Matrícula" }}</span><br>
+            <span class="matricula-numero">{{ imovel.matricula }}</span>
+        </div>
+        <div class="documento-target-info">
+            <strong>Lançamento em:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}
+        </div>
         <div class="grid-3">
-            <div>
-                <strong>Matrícula:</strong> {{ imovel.matricula }}
-            </div>
             <div>
                 <strong>SNCR:</strong> {{ imovel.sncr }}
             </div>
@@ -58,6 +62,53 @@
             </div>
         </div>
     </div>
+
+    {% if lancamentos_com_pessoas %}
+    <!-- Painel de Lançamentos Anteriores -->
+    <details class="lancamentos-anteriores-panel">
+        <summary>📋 Lançamentos anteriores neste documento ({{ lancamentos_com_pessoas|length }}{% if lancamentos_com_pessoas|length >= 20 %} — últimos 20{% endif %})</summary>
+        <div class="lancamentos-anteriores-content">
+            <h5>Lançamentos já feitos neste documento</h5>
+            <div class="lancamentos-anteriores-list">
+                {% for item in lancamentos_com_pessoas %}
+                <div class="lancamento-anterior-card">
+                    <div class="lancamento-anterior-header">
+                        <span class="lancamento-anterior-numero">{{ item.lancamento.numero_lancamento|default:"-" }}</span>
+                        <span class="lancamento-anterior-tipo">{{ item.lancamento.tipo.get_tipo_display }}</span>
+                        <span class="lancamento-anterior-data">{{ item.lancamento.data|date:"d/m/Y" }}</span>
+                    </div>
+                    <div class="lancamento-anterior-body">
+                        {% if item.transmitente %}
+                        <div class="lancamento-anterior-field">
+                            <span class="field-label">Transmitente:</span>
+                            <span>{{ item.transmitente.nome }}</span>
+                        </div>
+                        {% endif %}
+                        {% if item.adquirente %}
+                        <div class="lancamento-anterior-field">
+                            <span class="field-label">Adquirente:</span>
+                            <span>{{ item.adquirente.nome }}</span>
+                        </div>
+                        {% endif %}
+                        {% if item.lancamento.area %}
+                        <div class="lancamento-anterior-field">
+                            <span class="field-label">Área:</span>
+                            <span>{{ item.lancamento.area }} ha</span>
+                        </div>
+                        {% endif %}
+                        {% if item.lancamento.detalhes %}
+                        <div class="lancamento-anterior-field lancamento-anterior-detalhes">
+                            <span class="field-label">Detalhes:</span>
+                            <span>{{ item.lancamento.detalhes|truncatechars:80 }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </details>
+    {% endif %}
 
     <form method="post" id="lancamento-form" {% if numero_lancamento_error %}data-numero-lancamento-error="true"{% endif %}>
         {% csrf_token %}

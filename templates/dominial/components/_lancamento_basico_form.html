@@ -3,9 +3,9 @@
     <h4>Informações do Documento</h4>
     
     {% if is_primeiro_lancamento %}
-    <!-- Cartório da Matrícula para Primeiro Lançamento -->
+    <!-- Registro Imobiliário da Matrícula para Primeiro Lançamento -->
     <div class="form-group cartorio-matricula-info">
-        <label>Cartório da Matrícula</label>
+        <label>Registro Imobiliário da Matrícula</label>
         <div class="cartorio-display">
             <span class="cartorio-nome">{{ cartorio_matricula_nome }}</span>
         </div>
@@ -13,24 +13,24 @@
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ cartorio_matricula_nome }}">
     </div>
     {% else %}
-    <!-- Cartório da Origem para Lançamentos Subsequentes -->
+    <!-- Registro Imobiliário da Origem para Lançamentos Subsequentes -->
     <div class="form-group cartorio-origem-info">
-        <label>Cartório da Origem</label>
+        <label>Registro Imobiliário da Origem</label>
         <div class="cartorio-display">
             <span class="cartorio-nome">
                 {% if modo_edicao %}
                     {% if cartorio_origem_correto %}
                         {{ cartorio_origem_correto.nome }}
                     {% else %}
-                        Cartório não definido
+                        Registro Imobiliário não definido
                     {% endif %}
                 {% else %}
-                    Cartório não definido
+                    Registro Imobiliário não definido
                 {% endif %}
             </span>
             <small class="form-text text-muted">
-                <strong>💡 Dica:</strong> Este é o cartório da origem do documento. 
-                Para lançamentos subsequentes, o cartório é definido pela origem do documento.
+                <strong>💡 Dica:</strong> Este é o registro imobiliário da origem do documento. 
+                Para lançamentos subsequentes, o registro imobiliário é definido pela origem do documento.
             </small>
         </div>
         <input type="hidden" name="cartorio" id="cartorio" 

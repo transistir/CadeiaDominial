@@ -3,7 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 from django.http import JsonResponse
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento
+from django.db.models import Prefetch
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
@@ -157,6 +158,25 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'id': request.POST.getlist('adquirente[]')[i] if i < len(request.POST.getlist('adquirente[]')) else ''
                     })
             
+            # Buscar lançamentos anteriores (para painel lateral mesmo em caso de erro)
+            lancamentos_anteriores = (
+                Lancamento.objects
+                .filter(documento=documento_ativo)
+                .select_related('tipo', 'documento')
+                .prefetch_related(
+                    Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+                )
+                .order_by('-data', '-id')[:20]
+            )
+            lancamentos_com_pessoas = []
+            for lanc in lancamentos_anteriores:
+                pessoas_dict = {lp.tipo: lp.pessoa for lp in lanc.pessoas.all()}
+                lancamentos_com_pessoas.append({
+                    'lancamento': lanc,
+                    'transmitente': pessoas_dict.get('transmitente'),
+                    'adquirente': pessoas_dict.get('adquirente'),
+                })
+
             context = {
                 'tis': tis,
                 'imovel': imovel,
@@ -193,6 +213,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     'forma_inicio': request.POST.get('forma_inicio'),
                 },
                 'numero_lancamento_error': numero_lancamento_error,
+                'lancamentos_com_pessoas': lancamentos_com_pessoas,
             }
             
             context['transmitentes'] = transmitentes_data
@@ -210,6 +231,25 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     duplicata_origem = ''
     duplicata_cartorio = ''
     
+    # Buscar lançamentos anteriores deste documento (para painel lateral)
+    lancamentos_anteriores = (
+        Lancamento.objects
+        .filter(documento=documento_ativo)
+        .select_related('tipo', 'documento')
+        .prefetch_related(
+            Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+        )
+        .order_by('-data', '-id')[:20]
+    )
+    lancamentos_com_pessoas = []
+    for lanc in lancamentos_anteriores:
+        pessoas_dict = {lp.tipo: lp.pessoa for lp in lanc.pessoas.all()}
+        lancamentos_com_pessoas.append({
+            'lancamento': lanc,
+            'transmitente': pessoas_dict.get('transmitente'),
+            'adquirente': pessoas_dict.get('adquirente'),
+        })
+
     context = {
         'tis': tis,
         'imovel': imovel,
@@ -224,6 +264,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'adquirentes': [],
         'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
         'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
+        'lancamentos_com_pessoas': lancamentos_com_pessoas,
     }
     
     # Verificar se é o primeiro lançamento do documento

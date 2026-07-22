@@ -12,6 +12,8 @@ from django.views.decorators.csrf import csrf_exempt
 from .cadeia_dominial_views import cadeia_dominial_tabela
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 import json
+import re
+import unicodedata
 
 @require_http_methods(["POST"])
 @login_required
@@ -205,6 +207,34 @@ def lancamentos(request):
     # Obter tipos para os filtros
     tipos = LancamentoConsultaService.obter_tipos_para_filtros()
     
+    # #53 — Palavras-chave para alertas visuais (word-boundary + accent + priority)
+    def _normalizar_para_match(texto):
+        """Remove acentos e lowercase para matching com word boundary."""
+        nfkd = unicodedata.normalize('NFKD', texto)
+        sem_acentos = ''.join(c for c in nfkd if not unicodedata.combining(c))
+        return sem_acentos.casefold()
+
+    PALAVRAS_CHAVE_ALERTA = [
+        {'label': 'URGENTE', 'slug': 'urgente', 'priority': 1, 'css_class': 'alerta-urgente'},
+        {'label': 'ATENÇÃO', 'slug': 'atencao', 'priority': 2, 'css_class': 'alerta-atencao'},
+        {'label': 'PENDENTE', 'slug': 'pendente', 'priority': 3, 'css_class': 'alerta-pendente'},
+    ]
+
+    def _buscar_keyword(observacoes):
+        if not observacoes:
+            return None
+        texto_norm = _normalizar_para_match(observacoes)
+        melhor = None
+        for kw in PALAVRAS_CHAVE_ALERTA:
+            pattern = re.compile(r'\b' + re.escape(kw['slug']) + r'\b')
+            if pattern.search(texto_norm):
+                if melhor is None or kw['priority'] < melhor['priority']:
+                    melhor = kw
+        return melhor
+
+    for lanc in resultado['lancamentos']:
+        lanc.keyword_encontrada = _buscar_keyword(lanc.observacoes)
+
     return render(request, 'dominial/lancamentos.html', {
         'lancamentos': resultado['lancamentos'],
         'tipos_documento': tipos['tipos_documento'],
