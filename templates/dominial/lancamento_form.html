@@ -293,6 +293,7 @@
                 this.classList.add('active');
 
                 // Mostrar loading
+                container.classList.add('com-resumo');
                 container.innerHTML = '<div class="resumo-loading">Carregando lançamento...</div>';
 
                 // Fetch do resumo
@@ -310,6 +311,7 @@
         // Botão Fechar — restaura card original sem reload
         document.addEventListener('click', function(e) {
             if (e.target.closest('.resumo-fechar')) {
+                container.classList.remove('com-resumo');
                 container.innerHTML = originalHTML;
                 // Remover active das abas
                 document.querySelectorAll('.sidebar-tab.active').forEach(function(t) {

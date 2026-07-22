@@ -13,26 +13,8 @@
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ cartorio_matricula_nome }}">
     </div>
     {% else %}
-    <!-- CRI da Origem para Lançamentos Subsequentes -->
+    <!-- CRI da Origem para Lançamentos Subsequentes — compacto -->
     <div class="form-group cartorio-origem-info">
-        <label>CRI da Origem</label>
-        <div class="cartorio-display">
-            <span class="cartorio-nome">
-                {% if modo_edicao %}
-                    {% if cartorio_origem_correto %}
-                        {{ cartorio_origem_correto.nome }}
-                    {% else %}
-                        CRI não definido
-                    {% endif %}
-                {% else %}
-                    CRI não definido
-                {% endif %}
-            </span>
-            <small class="form-text text-muted">
-                <strong>💡 Dica:</strong> Este é o registro imobiliário da origem do documento. 
-                Para lançamentos subsequentes, o registro imobiliário é definido pela origem do documento.
-            </small>
-        </div>
         <input type="hidden" name="cartorio" id="cartorio" 
                value="{% if modo_edicao and cartorio_origem_correto %}{{ cartorio_origem_correto.id }}{% endif %}">
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" 
