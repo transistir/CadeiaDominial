@@ -679,6 +679,23 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
     })
 
 @login_required
+def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
+    """Retorna HTML parcial com o resumo de um lançamento (para sidebar AJAX)."""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
+    transmitentes = lancamento.pessoas.filter(tipo='transmitente')
+    adquirentes = lancamento.pessoas.filter(tipo='adquirente')
+    return render(request, 'dominial/components/_lancamento_resumo_card.html', {
+        'lancamento': lancamento,
+        'transmitentes': transmitentes,
+        'adquirentes': adquirentes,
+        'tis': tis,
+        'imovel': imovel,
+    })
+
+
+@login_required
 def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
     """View para visualizar detalhes de um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)

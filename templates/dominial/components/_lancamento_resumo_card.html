@@ -1,0 +1,71 @@
+<!--
+  Partial para carregar resumo de um lançamento via AJAX no lugar do matricula-destaque-card.
+  Parâmetros: lancamento, transmitentes, adquirentes, tis, imovel
+-->
+<div class="lancamento-resumo-card">
+    <div class="resumo-card-header">
+        <div class="resumo-tipo-badge tipo-{{ lancamento.tipo.tipo }}">
+            {{ lancamento.tipo.get_tipo_display }}
+        </div>
+        <div class="resumo-card-actions">
+            <span class="resumo-numero">Lançamento {{ lancamento.numero_lancamento|default:"Sem número" }}</span>
+            <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}"
+               class="resumo-abrir-link" target="_blank">Abrir ↗</a>
+        </div>
+    </div>
+    <div class="resumo-card-body">
+        <div class="resumo-grid">
+            <div class="resumo-item">
+                <span class="resumo-label">Data</span>
+                <span class="resumo-value">{{ lancamento.data|date:"d/m/Y"|default:"—" }}</span>
+            </div>
+            <div class="resumo-item">
+                <span class="resumo-label">Área</span>
+                <span class="resumo-value">{{ lancamento.area|floatformat:2|default:"—" }} ha</span>
+            </div>
+            <div class="resumo-item">
+                <span class="resumo-label">Forma</span>
+                <span class="resumo-value">{{ lancamento.forma|default:"—" }}</span>
+            </div>
+            <div class="resumo-item">
+                <span class="resumo-label">Cartório</span>
+                <span class="resumo-value">
+                    {% if lancamento.documento.cartorio %}
+                        {{ lancamento.documento.cartorio.nome }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+        {% if transmitentes %}
+        <div class="resumo-pessoas">
+            <span class="resumo-label">Transmitente(s)</span>
+            <div class="resumo-pessoa-list">
+                {% for t in transmitentes %}
+                    <span class="resumo-pessoa-tag">{{ t.nome }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% if adquirentes %}
+        <div class="resumo-pessoas">
+            <span class="resumo-label">Adquirente(s)</span>
+            <div class="resumo-pessoa-list">
+                {% for a in adquirentes %}
+                    <span class="resumo-pessoa-tag">{{ a.nome }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% if lancamento.detalhes %}
+        <div class="resumo-detalhes">
+            <span class="resumo-label">Detalhes</span>
+            <p class="resumo-detalhes-texto">{{ lancamento.detalhes|truncatechars:150 }}</p>
+        </div>
+        {% endif %}
+    </div>
+    <div class="resumo-card-footer">
+        <button type="button" class="resumo-fechar" onclick="document.getElementById('lancamento-resumo-container').innerHTML = ''">✕ Fechar</button>
+    </div>
+</div>

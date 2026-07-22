@@ -1033,78 +1033,301 @@
 }
 
 /* ========================================
-   SIDEBAR DE LANÇAMENTOS DO DOCUMENTO
+   SIDEBAR + LAYOUT DE LANÇAMENTOS
    ======================================== */
+
+/* Layout de duas colunas para formulário de lançamento */
+.lancamento-layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.lancamento-layout .lancamento-sidebar {
+    flex: 0 0 280px;
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.lancamento-layout .lancamento-main {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Sidebar */
 .lancamento-sidebar {
     background: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 20px;
-    max-height: 400px;
+    padding: 0;
     overflow-y: auto;
+    font-size: 0.85rem;
 }
 
-.lancamento-sidebar-header {
+.sidebar-section {
+    padding: 12px 14px;
+}
+
+.sidebar-section + .sidebar-section {
+    border-top: 1px solid #dee2e6;
+}
+
+.sidebar-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6c757d;
     margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #dee2e6;
 }
 
-.lancamento-sidebar-header h4 {
-    margin: 0;
-    font-size: 0.95rem;
-    color: #495057;
-    font-weight: 600;
-}
-
-.lancamento-sidebar-tabs {
+/* Tabs da sidebar */
+.sidebar-tabs {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-direction: column;
+    gap: 3px;
 }
 
-.lancamento-tab {
-    display: inline-block;
-    padding: 5px 12px;
+.sidebar-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
     border-radius: 6px;
     font-size: 0.82rem;
     font-weight: 500;
-    text-decoration: none;
-    background: #e9ecef;
     color: #495057;
-    border: 1px solid #ced4da;
-    transition: all 0.15s ease;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: all 0.12s ease;
+    cursor: pointer;
 }
 
-.lancamento-tab:hover {
-    background: #dde2e6;
-    border-color: #adb5bd;
+.sidebar-tab:hover {
+    background: #e9ecef;
+    border-color: #ced4da;
     color: #212529;
 }
 
-.lancamento-tab.active {
-    background: #0d6efd;
-    color: #fff;
+.sidebar-tab.active {
+    background: #e7f1ff;
     border-color: #0d6efd;
-    pointer-events: none;
-    cursor: default;
-}
-
-.lancamento-tab.novo {
-    background: #fff3cd;
-    color: #856404;
-    border-color: #ffc107;
+    color: #0d6efd;
     font-weight: 600;
     pointer-events: none;
 }
 
+.sidebar-tab.novo {
+    background: #fff3cd;
+    border-color: #ffc107;
+    color: #856404;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.tab-marker {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #adb5bd;
+    flex-shrink: 0;
+}
+
+.sidebar-tab.active .tab-marker {
+    background: #0d6efd;
+}
+
+/* Info do imóvel dentro da sidebar */
+.sidebar-imovel-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidebar-imovel-nome {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 2px;
+}
+
+.sidebar-label {
+    font-size: 0.72rem;
+    color: #6c757d;
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sidebar-valor {
+    font-size: 0.85rem;
+    color: #212529;
+    font-weight: 500;
+}
+
+/* Card de resumo (carregado via AJAX no lugar do matricula-destaque-card) */
+.lancamento-resumo-card {
+    background: #fff;
+    border: 2px solid #0d6efd;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    animation: fadeInCard 0.2s ease;
+}
+
+@keyframes fadeInCard {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.resumo-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.resumo-tipo-badge {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: #e7f1ff;
+    color: #0d6efd;
+}
+
+.resumo-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.resumo-numero {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.resumo-abrir-link {
+    font-size: 0.78rem;
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.resumo-abrir-link:hover {
+    text-decoration: underline;
+}
+
+.resumo-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.resumo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.resumo-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.resumo-label {
+    font-size: 0.72rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.resumo-value {
+    font-size: 0.88rem;
+    color: #212529;
+}
+
+.resumo-pessoas {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.resumo-pessoa-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.resumo-pessoa-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #f1f3f5;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.resumo-detalhes-texto {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: #495057;
+    line-height: 1.4;
+}
+
+.resumo-card-footer {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #e9ecef;
+}
+
+.resumo-fechar {
+    background: none;
+    border: none;
+    color: #6c757d;
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.resumo-fechar:hover {
+    background: #f1f3f5;
+    color: #343a40;
+}
+
+.resumo-loading,
+.resumo-error {
+    padding: 20px;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.resumo-error {
+    color: #dc3545;
+}
+
 @media (max-width: 768px) {
-    .lancamento-sidebar-tabs {
+    .lancamento-layout {
         flex-direction: column;
     }
 
-    .lancamento-tab {
-        text-align: center;
+    .lancamento-layout .lancamento-sidebar {
+        flex: none;
+        width: 100%;
+        position: relative;
+        top: auto;
+        max-height: none;
+    }
+
+    .resumo-grid {
+        grid-template-columns: 1fr;
     }
 } 
