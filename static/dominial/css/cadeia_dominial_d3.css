@@ -435,100 +435,66 @@
     pointer-events: none;
 }
 
-/* Layout em tela cheia exclusivo da página da árvore D3 —
-   header e nav ficam fixos no topo, sobrepostos ao conteúdo */
+/* Tela cheia na página da árvore D3 —
+   header e nav do base.html são escondidos para maximizar espaço do organograma */
 @media screen {
-    body:has(.d3-tree-page) .header {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        z-index: 1000;
-        /* Mantém o gradiente original do base.css */
-        padding: 10px 20px !important;
+    body:has(.d3-tree-page) .header,
+    body:has(.d3-tree-page) .nav,
+    .d3-active .header,
+    .d3-active .nav {
+        display: none !important;
     }
 
-    body:has(.d3-tree-page) .header-title {
-        font-size: 1.2rem;
-        margin: 0;
-    }
-
-    body:has(.d3-tree-page) .header-subtitle {
-        display: none;  /* Economiza espaço vertical */
-    }
-
-    body:has(.d3-tree-page) .user-info {
-        font-size: 0.85rem;
-    }
-
-    body:has(.d3-tree-page) .user-info span {
-        display: none;  /* Só mostra o botão Sair na página D3 */
-    }
-
-    body:has(.d3-tree-page) .nav {
-        position: fixed;
-        top: 46px;       /* Logo abaixo do header compacto */
-        left: 0;
-        right: 0;
-        z-index: 999;
-        padding: 0 20px;
-        min-height: 26px;
-        line-height: 26px;
-    }
-
-    body:has(.d3-tree-page) .nav-list {
-        gap: 12px;
-    }
-
-    body:has(.d3-tree-page) .nav-link {
-        padding: 2px 0;
-        font-size: 0.8rem;
-    }
-
-    body:has(.d3-tree-page) .main-content {
+    body:has(.d3-tree-page) .main-content,
+    .d3-active .main-content {
         max-width: none !important;
-        padding-top: 72px !important;  /* header(46px) + nav(26px) */
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        padding: 0 !important;
     }
 
-    body:has(.d3-tree-page) .container.d3-tree-page {
+    body:has(.d3-tree-page) .container.d3-tree-page,
+    .d3-active .container.d3-tree-page {
         max-width: none !important;
-        padding: 0 8px !important;
+        padding: 0 !important;
+        margin: 0 !important;
     }
 
-    body:has(.d3-tree-page) .arvore-header {
-        padding: 10px 16px;
-        margin-bottom: 8px;
-    }
-
-    body:has(.d3-tree-page) .arvore-header h1 {
-        font-size: 1.3rem;
-        margin-bottom: 6px;
-    }
-
-    body:has(.d3-tree-page) .imovel-info {
-        gap: 6px;
-        padding-top: 0;
-        font-size: 0.8rem;
-    }
-
-    /* Oculta o aviso de scroll na página de tela cheia */
-    body:has(.d3-tree-page) .arvore-container::before {
-        display: none;
-    }
-
-    body:has(.d3-tree-page) .arvore-container {
-        padding: 8px;
+    body:has(.d3-tree-page) .arvore-header,
+    .d3-active .arvore-header {
+        padding: 8px 16px;
         margin-bottom: 0;
+        border-radius: 0;
+        border-bottom: 1px solid #eee;
     }
 
-    body:has(.d3-tree-page) #arvore-d3-svg {
-        height: calc(100vh - 130px) !important;  /* 72px overlay + 58px header+info */
+    body:has(.d3-tree-page) .arvore-header h1,
+    .d3-active .arvore-header h1 {
+        font-size: 1.15rem;
+        margin-bottom: 4px;
     }
 
-    /* Oculta os botões de navegação no final (estão no overlay) */
-    body:has(.d3-tree-page) .navigation-actions {
+    body:has(.d3-tree-page) .imovel-info,
+    .d3-active .imovel-info {
+        gap: 4px;
+        padding-top: 4px;
+        font-size: 0.75rem;
+    }
+
+    body:has(.d3-tree-page) .arvore-container::before,
+    .d3-active .arvore-container::before {
         display: none;
+    }
+
+    body:has(.d3-tree-page) .arvore-container,
+    .d3-active .arvore-container {
+        padding: 0;
+        margin: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    body:has(.d3-tree-page) #arvore-d3-svg,
+    .d3-active #arvore-d3-svg {
+        height: calc(100vh - 112px) !important;
+        border-radius: 0;
     }
 }

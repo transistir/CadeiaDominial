@@ -108,6 +108,9 @@
 {% block extra_js %}
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
+    // Fallback para navegadores sem suporte a :has()
+    document.documentElement.classList.add('d3-active');
+    
     window.tisId = {{ tis.id|safe }};
     window.imovelId = {{ imovel.id|safe }};
     window.imovelTipoDocumentoPrincipal = '{{ imovel.tipo_documento_principal }}';
