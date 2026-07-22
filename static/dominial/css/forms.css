@@ -541,12 +541,29 @@
     font-weight: 500;
 }
 
-/* cartorio-origem-info — container invisível só para hidden inputs */
+/* cartorio-origem-info — linha inline compacta */
 .cartorio-origem-info {
-    margin: 0;
-    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 10px;
     background: none;
     border: none;
+    padding: 0;
+}
+
+.cartorio-origem-info .cri-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.cartorio-origem-info .cri-valor {
+    font-size: 0.82rem;
+    color: #495057;
+    font-weight: 500;
 }
 
 /* Estilos comuns para exibição do cartório */
@@ -1030,13 +1047,13 @@
 }
 
 /* ========================================
-   SIDEBAR + LAYOUT DE LANÇAMENTOS
+   SIDEBAR + LAYOUT DE LANÇAMENTOS (abas de navegador)
    ======================================== */
 
-/* Layout de duas colunas para formulário de lançamento */
+/* Layout de duas colunas — gap mínimo pra abas ficarem vizinhas */
 .lancamento-layout {
     display: flex;
-    gap: 20px;
+    gap: 6px;
     align-items: flex-start;
 }
 
@@ -1052,25 +1069,26 @@
     min-width: 0;
 }
 
-/* Sidebar compacta — só a sequência de lançamentos */
+/* Sidebar — barra lateral com visual de abas */
 .lancamento-sidebar {
-    background: #f8f9fa;
+    background: #f4f6f9;
     border: 1px solid #dee2e6;
-    border-radius: 6px;
-    padding: 10px 12px;
+    border-radius: 10px;
+    padding: 10px 10px;
     font-size: 0.78rem;
 }
 
 .sidebar-section-title {
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #6c757d;
-    margin-bottom: 8px;
+    color: #889099;
+    margin-bottom: 6px;
+    padding: 0 6px;
 }
 
-/* Tabs verticais compactas */
+/* Tabs verticais */
 .sidebar-tabs {
     display: flex;
     flex-direction: column;
@@ -1079,14 +1097,15 @@
 
 .sidebar-tab {
     display: block;
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 5px 10px;
+    border-radius: 8px;
     font-size: 0.75rem;
     font-weight: 500;
     color: #495057;
     text-decoration: none;
-    transition: all 0.1s ease;
+    transition: all 0.12s ease;
     font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    border: 1px solid transparent;
 }
 
 .sidebar-tab:hover {
@@ -1094,10 +1113,14 @@
     color: #212529;
 }
 
+/* Aba ativa — fundo igual ao resumo-card para conectar visualmente */
 .sidebar-tab.active {
-    background: #0d6efd;
-    color: #fff;
+    background: #f0f4ff;
+    color: #1a56db;
+    border-color: #d0d8e8;
+    font-weight: 600;
     pointer-events: none;
+    box-shadow: inset 2px 0 0 #1a56db;
 }
 
 .sidebar-tab.novo {
@@ -1106,13 +1129,14 @@
     font-weight: 700;
     pointer-events: none;
     margin-top: 4px;
+    border-color: #ffecb5;
 }
 
-/* Card de resumo compacto (carregado via AJAX, substitui matricula-destaque-card) */
+/* Card de resumo — mesmo fundo da aba ativa, conectado visualmente */
 .resumo-card {
-    background: #fff;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
+    background: #f0f4ff;
+    border: 1px solid #d0d8e8;
+    border-radius: 10px;
     margin: 0;
     animation: fadeInCard 0.2s ease;
     font-size: 0.82rem;
@@ -1123,15 +1147,15 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Topo: tipo + código + data em uma linha */
+/* Topo: tipo + código + data */
 .resumo-topo {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 12px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e9ecef;
-    border-radius: 5px 5px 0 0;
+    background: #e8edf8;
+    border-bottom: 1px solid #d0d8e8;
+    border-radius: 9px 9px 0 0;
 }
 
 .resumo-tipo {
@@ -1143,9 +1167,9 @@
     border-radius: 4px;
 }
 
-.resumo-tipo-averbacao  { background: #e7f1ff; color: #0d6efd; }
+.resumo-tipo-averbacao  { background: #dce7f7; color: #0d6efd; }
 .resumo-tipo-registro   { background: #d1e7dd; color: #0a5c36; }
-.resumo-tipo-inicio_matricula { background: #f8d7da; color: #842029; }
+.resumo-tipo-inicio_matricula { background: #f0d4d8; color: #842029; }
 
 .resumo-codigo {
     font-weight: 600;
@@ -1159,7 +1183,7 @@
     font-size: 0.78rem;
 }
 
-/* Corpo: linhas label + valor */
+/* Corpo */
 .resumo-corpo {
     padding: 8px 12px;
     display: flex;
@@ -1196,9 +1220,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 12px;
-    border-top: 1px solid #e9ecef;
-    background: #f8f9fa;
-    border-radius: 0 0 5px 5px;
+    border-top: 1px solid #d0d8e8;
+    background: #e8edf8;
+    border-radius: 0 0 9px 9px;
 }
 
 .resumo-fechar {
@@ -1208,17 +1232,17 @@
     font-size: 0.72rem;
     cursor: pointer;
     padding: 2px 8px;
-    border-radius: 3px;
+    border-radius: 4px;
 }
 
 .resumo-fechar:hover {
-    background: #e9ecef;
+    background: #d0d8e8;
     color: #343a40;
 }
 
 .resumo-abrir {
     font-size: 0.72rem;
-    color: #0d6efd;
+    color: #1a56db;
     text-decoration: none;
     font-weight: 500;
 }

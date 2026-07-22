@@ -13,8 +13,12 @@
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" value="{{ cartorio_matricula_nome }}">
     </div>
     {% else %}
-    <!-- CRI da Origem para Lançamentos Subsequentes — compacto -->
+    <!-- CRI da Origem para Lançamentos Subsequentes — inline -->
     <div class="form-group cartorio-origem-info">
+        {% if modo_edicao and cartorio_origem_correto %}
+            <span class="cri-label">CRI:</span>
+            <span class="cri-valor">{{ cartorio_origem_correto.nome }}</span>
+        {% endif %}
         <input type="hidden" name="cartorio" id="cartorio" 
                value="{% if modo_edicao and cartorio_origem_correto %}{{ cartorio_origem_correto.id }}{% endif %}">
         <input type="hidden" name="cartorio_nome" id="cartorio_nome" 
