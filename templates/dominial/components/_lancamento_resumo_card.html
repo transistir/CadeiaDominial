@@ -1,71 +1,126 @@
 <!--
-  Partial para carregar resumo de um lançamento via AJAX no lugar do matricula-destaque-card.
-  Parâmetros: lancamento, transmitentes, adquirentes, tis, imovel
+  Resumo compacto de lançamento, carregado via AJAX.
+  Mostra campos diferentes conforme o tipo:
+    - Averbação: descrição, forma
+    - Registro: título, cartório origem, transmitentes/adquirentes
+    - Início de Matrícula: cartório origem, livro/folha/data origem, transmitentes/adquirentes
 -->
-<div class="lancamento-resumo-card">
-    <div class="resumo-card-header">
-        <div class="resumo-tipo-badge tipo-{{ lancamento.tipo.tipo }}">
-            {{ lancamento.tipo.get_tipo_display }}
-        </div>
-        <div class="resumo-card-actions">
-            <span class="resumo-numero">Lançamento {{ lancamento.numero_lancamento|default:"Sem número" }}</span>
-            <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}"
-               class="resumo-abrir-link" target="_blank">Abrir ↗</a>
-        </div>
+<div class="resumo-card">
+  <div class="resumo-topo">
+    <span class="resumo-tipo resumo-tipo-{{ lancamento.tipo.tipo }}">{{ lancamento.tipo.get_tipo_display }}</span>
+    <span class="resumo-codigo">#{{ lancamento.numero_lancamento|default:"—" }}</span>
+    <span class="resumo-data">{{ lancamento.data|date:"d/m/Y"|default:"—" }}</span>
+  </div>
+
+  <div class="resumo-corpo">
+    {% if lancamento.tipo.tipo == 'averbacao' %}
+      {# --- Averbação: descrição, forma, detalhes --- #}
+      {% if lancamento.descricao %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Descrição</span>
+        <span class="resumo-r-valor">{{ lancamento.descricao|truncatechars:120 }}</span>
+      </div>
+      {% endif %}
+      {% if lancamento.forma %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Forma</span>
+        <span class="resumo-r-valor">{{ lancamento.forma }}</span>
+      </div>
+      {% endif %}
+      {% if lancamento.detalhes %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Detalhes</span>
+        <span class="resumo-r-valor">{{ lancamento.detalhes|truncatechars:150 }}</span>
+      </div>
+      {% endif %}
+
+    {% elif lancamento.tipo.tipo == 'registro' %}
+      {# --- Registro: título, cartório, transmitentes/adquirentes, forma --- #}
+      {% if lancamento.titulo %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Título</span>
+        <span class="resumo-r-valor">{{ lancamento.titulo }}</span>
+      </div>
+      {% endif %}
+      {% if lancamento.cartorio_origem %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Cartório</span>
+        <span class="resumo-r-valor">{{ lancamento.cartorio_origem.nome }}</span>
+      </div>
+      {% endif %}
+      {% if lancamento.forma %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Forma</span>
+        <span class="resumo-r-valor">{{ lancamento.forma }}</span>
+      </div>
+      {% endif %}
+      {% if transmitentes %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Transmitente(s)</span>
+        <span class="resumo-r-valor">{% for t in transmitentes %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      </div>
+      {% endif %}
+      {% if adquirentes %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Adquirente(s)</span>
+        <span class="resumo-r-valor">{% for a in adquirentes %}{{ a.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      </div>
+      {% endif %}
+
+    {% elif lancamento.tipo.tipo == 'inicio_matricula' %}
+      {# --- Início de Matrícula: cartório origem, livro/folha/data origem --- #}
+      {% if lancamento.cartorio_origem %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Cartório</span>
+        <span class="resumo-r-valor">{{ lancamento.cartorio_origem.nome }}</span>
+      </div>
+      {% endif %}
+      {% if lancamento.livro_origem or lancamento.folha_origem %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Origem</span>
+        <span class="resumo-r-valor">{% if lancamento.livro_origem %}Livro {{ lancamento.livro_origem }}{% endif %}{% if lancamento.livro_origem and lancamento.folha_origem %} · {% endif %}{% if lancamento.folha_origem %}Folha {{ lancamento.folha_origem }}{% endif %}</span>
+      </div>
+      {% endif %}
+      {% if lancamento.data_origem %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Data Origem</span>
+        <span class="resumo-r-valor">{{ lancamento.data_origem|date:"d/m/Y" }}</span>
+      </div>
+      {% endif %}
+      {% if transmitentes %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Transmitente(s)</span>
+        <span class="resumo-r-valor">{% for t in transmitentes %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      </div>
+      {% endif %}
+      {% if adquirentes %}
+      <div class="resumo-linha">
+        <span class="resumo-r-label">Adquirente(s)</span>
+        <span class="resumo-r-valor">{% for a in adquirentes %}{{ a.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      </div>
+      {% endif %}
+
+    {% endif %}
+
+    {# --- Comum a todos: área --- #}
+    {% if lancamento.area %}
+    <div class="resumo-linha">
+      <span class="resumo-r-label">Área</span>
+      <span class="resumo-r-valor">{{ lancamento.area|floatformat:2 }} ha</span>
     </div>
-    <div class="resumo-card-body">
-        <div class="resumo-grid">
-            <div class="resumo-item">
-                <span class="resumo-label">Data</span>
-                <span class="resumo-value">{{ lancamento.data|date:"d/m/Y"|default:"—" }}</span>
-            </div>
-            <div class="resumo-item">
-                <span class="resumo-label">Área</span>
-                <span class="resumo-value">{{ lancamento.area|floatformat:2|default:"—" }} ha</span>
-            </div>
-            <div class="resumo-item">
-                <span class="resumo-label">Forma</span>
-                <span class="resumo-value">{{ lancamento.forma|default:"—" }}</span>
-            </div>
-            <div class="resumo-item">
-                <span class="resumo-label">Cartório</span>
-                <span class="resumo-value">
-                    {% if lancamento.documento.cartorio %}
-                        {{ lancamento.documento.cartorio.nome }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </span>
-            </div>
-        </div>
-        {% if transmitentes %}
-        <div class="resumo-pessoas">
-            <span class="resumo-label">Transmitente(s)</span>
-            <div class="resumo-pessoa-list">
-                {% for t in transmitentes %}
-                    <span class="resumo-pessoa-tag">{{ t.nome }}</span>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        {% if adquirentes %}
-        <div class="resumo-pessoas">
-            <span class="resumo-label">Adquirente(s)</span>
-            <div class="resumo-pessoa-list">
-                {% for a in adquirentes %}
-                    <span class="resumo-pessoa-tag">{{ a.nome }}</span>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        {% if lancamento.detalhes %}
-        <div class="resumo-detalhes">
-            <span class="resumo-label">Detalhes</span>
-            <p class="resumo-detalhes-texto">{{ lancamento.detalhes|truncatechars:150 }}</p>
-        </div>
-        {% endif %}
+    {% endif %}
+
+    {# --- Comum a todos: observações --- #}
+    {% if lancamento.observacoes %}
+    <div class="resumo-linha">
+      <span class="resumo-r-label">Observações</span>
+      <span class="resumo-r-valor">{{ lancamento.observacoes|truncatechars:100 }}</span>
     </div>
-    <div class="resumo-card-footer">
-        <button type="button" class="resumo-fechar" onclick="document.getElementById('lancamento-resumo-container').innerHTML = ''">✕ Fechar</button>
-    </div>
+    {% endif %}
+  </div>
+
+  <div class="resumo-rodape">
+    <button type="button" class="resumo-fechar">✕ Fechar</button>
+    <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lancamento.id %}" class="resumo-abrir">Detalhes →</a>
+  </div>
 </div>

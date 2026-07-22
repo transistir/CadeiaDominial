@@ -1111,138 +1111,123 @@
     margin-top: 4px;
 }
 
-/* Card de resumo (carregado via AJAX) */
-.lancamento-resumo-card {
+/* Card de resumo compacto (carregado via AJAX, substitui matricula-destaque-card) */
+.resumo-card {
     background: #fff;
     border: 2px solid #0d6efd;
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 20px;
+    border-radius: 6px;
+    margin-bottom: 16px;
     animation: fadeInCard 0.2s ease;
+    font-size: 0.82rem;
 }
 
 @keyframes fadeInCard {
-    from { opacity: 0; transform: translateY(-4px); }
+    from { opacity: 0; transform: translateY(-3px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.resumo-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.resumo-tipo-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 2px 10px;
-    border-radius: 10px;
-    background: #e7f1ff;
-    color: #0d6efd;
-}
-
-.resumo-card-actions {
+/* Topo: tipo + código + data em uma linha */
+.resumo-topo {
     display: flex;
     align-items: center;
     gap: 10px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    border-radius: 5px 5px 0 0;
 }
 
-.resumo-numero {
-    font-size: 0.85rem;
+.resumo-tipo {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.resumo-tipo-averbacao  { background: #e7f1ff; color: #0d6efd; }
+.resumo-tipo-registro   { background: #d1e7dd; color: #0a5c36; }
+.resumo-tipo-inicio_matricula { background: #f8d7da; color: #842029; }
+
+.resumo-codigo {
     font-weight: 600;
     color: #212529;
+    font-size: 0.85rem;
 }
 
-.resumo-abrir-link {
-    font-size: 0.72rem;
-    color: #0d6efd;
-    text-decoration: none;
+.resumo-data {
+    margin-left: auto;
+    color: #6c757d;
+    font-size: 0.78rem;
 }
 
-.resumo-abrir-link:hover {
-    text-decoration: underline;
-}
-
-.resumo-card-body {
+/* Corpo: linhas label + valor */
+.resumo-corpo {
+    padding: 8px 12px;
     display: flex;
     flex-direction: column;
+    gap: 4px;
+}
+
+.resumo-linha {
+    display: flex;
+    align-items: baseline;
     gap: 8px;
+    line-height: 1.4;
 }
 
-.resumo-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-}
-
-.resumo-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.resumo-label {
+.resumo-r-label {
+    flex: 0 0 90px;
     font-size: 0.68rem;
     color: #6c757d;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    font-weight: 600;
 }
 
-.resumo-value {
-    font-size: 0.82rem;
+.resumo-r-valor {
+    flex: 1;
     color: #212529;
+    font-size: 0.82rem;
+    word-break: break-word;
 }
 
-.resumo-pessoas {
+/* Rodapé */
+.resumo-rodape {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.resumo-pessoa-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-}
-
-.resumo-pessoa-tag {
-    display: inline-block;
-    padding: 1px 7px;
-    background: #f1f3f5;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    color: #495057;
-    border: 1px solid #dee2e6;
-}
-
-.resumo-detalhes-texto {
-    margin: 3px 0 0;
-    font-size: 0.78rem;
-    color: #495057;
-    line-height: 1.35;
-}
-
-.resumo-card-footer {
-    margin-top: 10px;
-    padding-top: 6px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
     border-top: 1px solid #e9ecef;
+    background: #f8f9fa;
+    border-radius: 0 0 5px 5px;
 }
 
 .resumo-fechar {
     background: none;
     border: none;
     color: #6c757d;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     cursor: pointer;
-    padding: 3px 8px;
+    padding: 2px 8px;
     border-radius: 3px;
 }
 
 .resumo-fechar:hover {
-    background: #f1f3f5;
+    background: #e9ecef;
     color: #343a40;
+}
+
+.resumo-abrir {
+    font-size: 0.72rem;
+    color: #0d6efd;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.resumo-abrir:hover {
+    text-decoration: underline;
 }
 
 .resumo-loading,

@@ -277,6 +277,9 @@
         const container = document.getElementById('lancamento-resumo-container');
         if (!container) return;
 
+        // Salvar HTML original do card para restaurar depois
+        const originalHTML = container.innerHTML;
+
         document.querySelectorAll('.js-lancamento-resumo').forEach(function(link) {
             link.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -304,12 +307,14 @@
             });
         });
 
-        // Botão "Voltar" que restaura o card do imóvel
+        // Botão Fechar — restaura card original sem reload
         document.addEventListener('click', function(e) {
             if (e.target.closest('.resumo-fechar')) {
-                // Recarregar a página para restaurar o card original
-                // (simples e confiável)
-                location.reload();
+                container.innerHTML = originalHTML;
+                // Remover active das abas
+                document.querySelectorAll('.sidebar-tab.active').forEach(function(t) {
+                    t.classList.remove('active');
+                });
             }
         });
     });
