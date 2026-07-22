@@ -1,0 +1,119 @@
+name: Deploy develop
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy no servidor de testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Build e deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 188.245.225.127
+          username: root
+          port: 22
+          key: ${{ secrets.DEPLOY_KEY }}
+          timeout: 60s
+          command_timeout: 55m
+
+          script: |
+            bash -se <<'DEPLOY_SCRIPT'
+            set -Eeuo pipefail
+
+            trap 'rc=$?; echo "ERRO: deploy falhou na linha ${LINENO}: ${BASH_COMMAND} (exit ${rc})" >&2; exit "${rc}"' ERR
+
+            APP_DIR="/root/CadeiaDominial"
+
+            echo "==> Validando ambiente"
+
+            if ! command -v docker-compose >/dev/null 2>&1; then
+              echo "ERRO: docker-compose não está instalado ou não está no PATH." >&2
+              exit 1
+            fi
+
+            if [ ! -d "${APP_DIR}/.git" ]; then
+              echo "ERRO: ${APP_DIR} não existe ou não é um repositório Git." >&2
+              exit 1
+            fi
+
+            cd "${APP_DIR}"
+
+            echo "==> Atualizando branch develop"
+
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "ERRO: existem alterações locais rastreadas no servidor." >&2
+              git status --short
+              exit 1
+            fi
+
+            git fetch --prune origin develop
+
+            if git show-ref --verify --quiet refs/heads/develop; then
+              git checkout develop
+            else
+              git checkout --track -b develop origin/develop
+            fi
+
+            git pull --ff-only origin develop
+
+            echo "==> Commit que será implantado"
+            git log -1 --oneline
+
+            echo "==> Executando build sem cache"
+
+            if ! docker-compose build --no-cache web; then
+              echo "ERRO: docker-compose build --no-cache web falhou." >&2
+              exit 1
+            fi
+
+            echo "==> Subindo os containers"
+            docker-compose up -d
+
+            echo "==> Aguardando healthcheck do serviço web"
+
+            HEALTHY=false
+
+            for attempt in $(seq 1 60); do
+              if docker-compose ps web | grep -qw healthy; then
+                HEALTHY=true
+                echo "Serviço web saudável."
+                break
+              fi
+
+              echo "Healthcheck pendente: tentativa ${attempt}/60"
+              sleep 5
+            done
+
+            if [ "${HEALTHY}" != "true" ]; then
+              echo "ERRO: serviço web não ficou saudável em 5 minutos." >&2
+              docker-compose ps
+              docker-compose logs --tail=100 web || true
+              exit 1
+            fi
+
+            echo "==> Executando collectstatic explicitamente"
+
+            if ! docker-compose exec -T web \
+              python manage.py collectstatic --noinput; then
+              echo "ERRO: collectstatic falhou." >&2
+              exit 1
+            fi
+
+            echo "==> Estado final dos containers"
+            docker-compose ps
+
+            echo "Deploy da branch develop concluído com sucesso."
+            DEPLOY_SCRIPT
