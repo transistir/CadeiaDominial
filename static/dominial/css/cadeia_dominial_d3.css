@@ -335,22 +335,55 @@
         display: none !important;
     }
 
+    html,
+    body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: #fff;
+    }
+
+    .main-content {
+        width: 100%;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .container.d3-tree-page {
+        width: 100%;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+
     /* Ajustar header para impressão */
     .arvore-header {
         box-shadow: none;
         border-bottom: 2px solid #000;
-        padding: 10px 0;
-        margin-bottom: 10px;
+        padding: 8px 0;
+        margin-bottom: 6px;
     }
 
     .arvore-header h1 {
-        font-size: 1.4em;
+        font-size: 1.25em;
         color: #000;
-        margin-bottom: 5px;
+        margin-bottom: 4px;
     }
 
     .imovel-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        padding-top: 5px;
         font-size: 0.9em;
+    }
+
+    .imovel-info > div {
+        flex: 1 1 180px;
+        min-width: 0;
+        gap: 0;
     }
 
     /* Container da árvore ocupa página toda */
@@ -364,9 +397,10 @@
 
     /* SVG da árvore — ocupa largura total da página */
     #arvore-d3-svg {
+        display: block;
         width: 100% !important;
-        height: auto !important;
-        max-height: none;
+        height: calc(100vh - 160px) !important;
+        max-height: calc(100vh - 160px);
         background: #fff;
         border-radius: 0;
         overflow: visible !important;
@@ -399,4 +433,56 @@
     opacity: 0.4;
     cursor: not-allowed;
     pointer-events: none;
-} 
+}
+
+/* Layout em tela cheia exclusivo da página da árvore D3 */
+@media screen {
+    body:has(.d3-tree-page) .header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 8px 20px !important;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        color: var(--primary-color);
+    }
+
+    body:has(.d3-tree-page) .header-title {
+        margin: 0;
+        font-size: 1.25rem;
+        line-height: 1.2;
+    }
+
+    body:has(.d3-tree-page) .header-subtitle {
+        margin: 0;
+        font-size: 0.8rem;
+        line-height: 1.2;
+    }
+
+    body:has(.d3-tree-page) .nav {
+        position: absolute;
+        top: 56px;
+        left: 0;
+        right: 0;
+        z-index: 999;
+    }
+
+    body:has(.d3-tree-page) .main-content {
+        max-width: none !important;
+        padding-top: 120px !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    body:has(.d3-tree-page) .container.d3-tree-page {
+        max-width: none !important;
+        padding: 0 8px !important;
+    }
+
+    body:has(.d3-tree-page) #arvore-d3-svg {
+        height: calc(100vh - 180px) !important;
+    }
+}

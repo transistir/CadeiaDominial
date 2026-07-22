@@ -51,11 +51,11 @@ function fitTreeToViewport(options = {}) {
     if (match) {
       const x = parseFloat(match[1]);
       const y = parseFloat(match[2]);
-      // Cards têm 140x80 px — considerar bounding box completo
-      minX = Math.min(minX, x - 70);
-      maxX = Math.max(maxX, x + 70);
-      minY = Math.min(minY, y - 40);
-      maxY = Math.max(maxY, y + 40);
+      // Cards têm 150x90 px — considerar bounding box completo
+      minX = Math.min(minX, x - 75);
+      maxX = Math.max(maxX, x + 75);
+      minY = Math.min(minY, y - 45);
+      maxY = Math.max(maxY, y + 45);
     }
   });
 
@@ -405,8 +405,8 @@ function calcularEspacamentoAdaptativo(root) {
   });
 
   // Calcular espaçamento baseado na quantidade máxima de nós
-  // Considerando que cada card tem 140px de largura e 80px de altura
-  let espacamentoHorizontal = 200; // padrão equilibrado
+  // Considerando que cada card tem 150px de largura e 90px de altura
+  let espacamentoHorizontal = 220; // padrão equilibrado
   if (maxNos > 20) {
     espacamentoHorizontal = 350; // bem espaçado para muitos nós
   } else if (maxNos > 15) {
@@ -474,7 +474,7 @@ function corrigirSobreposicoes(root) {
       // Ordenar por posição X (vertical no layout horizontal)
       nosNivel.sort((a, b) => a.x - b.x);
 
-      const alturaCard = 80;
+      const alturaCard = 90;
       const margemMinima = 40;
 
       // Verificar se há documentos importados no nível
@@ -532,7 +532,7 @@ function ajustarPosicoesPorNivel(root) {
   root.descendants().forEach((node) => {
     if (node.data.is_fim_cadeia) {
       const nivel = node.data.nivel || 0;
-      node.y = nivel * 200 + 120;
+      node.y = nivel * 220 + 120;
       console.log(
         `DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivel}, posição Y: ${node.y}`,
       );
@@ -541,11 +541,11 @@ function ajustarPosicoesPorNivel(root) {
 
     if (node.data.nivel_manual != null) {
       const nivel = node.data.nivel ?? node.depth;
-      node.y = nivel * 200 + 120;
+      node.y = nivel * 220 + 120;
       return;
     }
 
-    node.y = node.depth * 200 + 120;
+    node.y = node.depth * 220 + 120;
   });
 }
 
@@ -657,7 +657,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
   const treeLayout = d3
     .tree()
     .size([height, width - 20]) // Reduzir ao máximo a margem para mais espaço horizontal
-    .nodeSize([80, 200]) // [altura, largura] - 200px entre níveis
+    .nodeSize([90, 220]) // [altura, largura] - 220px entre níveis
     .separation((a, b) => {
       // Separação baseada na quantidade de irmãos - AUMENTADA
       const irmaos = a.parent ? a.parent.children.length : 1;
@@ -851,10 +851,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
   // Card base
   node
     .append("rect")
-    .attr("width", 140)
-    .attr("height", 80)
-    .attr("x", -70)
-    .attr("y", -40)
+    .attr("width", 150)
+    .attr("height", 90)
+    .attr("x", -75)
+    .attr("y", -45)
     .attr("rx", 12)
     .attr("fill", (d) => {
       // Cards especiais de fim de cadeia
@@ -964,7 +964,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("text-anchor", "middle")
     .attr("y", -6)
     .attr("fill", "white")
-    .attr("font-size", 20)
+    .attr("font-size", 15)
     .attr("font-weight", 700)
     .text((d) => {
       // Cards especiais de fim de cadeia
@@ -988,7 +988,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("text-anchor", "middle")
     .attr("y", 14)
     .attr("fill", "white")
-    .attr("font-size", 11)
+    .attr("font-size", 10)
     .attr("opacity", 0.7)
     .text((d) =>
       d.data.total_lancamentos !== undefined
@@ -1025,7 +1025,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("y", -21)
     .attr("text-anchor", "middle")
     .attr("fill", "white")
-    .attr("font-size", 10)
+    .attr("font-size", 9)
     .attr("font-weight", "bold")
     .text("✓")
     .attr("title", (d) => {
@@ -1062,7 +1062,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("y", -21)
     .attr("text-anchor", "middle")
     .attr("fill", "white")
-    .attr("font-size", 10)
+    .attr("font-size", 9)
     .attr("font-weight", "bold")
     .text("↔")
     .attr("title", (d) => {
@@ -1082,7 +1082,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .append("text")
     .attr("x", 0)
     .attr("y", 0)
-    .attr("font-size", 16)
+    .attr("font-size", 14)
     .attr("cursor", "pointer")
     .attr("opacity", 0.9)
     .attr("text-anchor", "middle")
@@ -1094,10 +1094,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
       window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/novo-lancamento/${d.data.id}/`;
     })
     .on("mouseover", function () {
-      d3.select(this).attr("opacity", 1).attr("font-size", 18);
+      d3.select(this).attr("opacity", 1).attr("font-size", 16);
     })
     .on("mouseout", function () {
-      d3.select(this).attr("opacity", 0.9).attr("font-size", 16);
+      d3.select(this).attr("opacity", 0.9).attr("font-size", 14);
     });
 }
 
@@ -1158,10 +1158,10 @@ window.resetZoom = function () {
   });
 
   // Adicionar margem extra para os cards
-  minX -= 70;
-  maxX += 70;
-  minY -= 40;
-  maxY += 40;
+  minX -= 75;
+  maxX += 75;
+  minY -= 45;
+  maxY += 45;
 
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
@@ -1210,10 +1210,10 @@ window.fimDaArvore = function () {
   });
 
   // Adicionar margem extra para os cards
-  minX -= 70;
-  maxX += 70;
-  minY -= 40;
-  maxY += 40;
+  minX -= 75;
+  maxX += 75;
+  minY -= 45;
+  maxY += 45;
 
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
@@ -1274,10 +1274,10 @@ window.fimDaArvore = function () {
       if (m) {
         const x = parseFloat(m[1]), y = parseFloat(m[2]);
         if (isFinite(x) && isFinite(y)) {
-          minX = Math.min(minX, x - 70);
-          maxX = Math.max(maxX, x + 70);
-          minY = Math.min(minY, y - 40);
-          maxY = Math.max(maxY, y + 40);
+          minX = Math.min(minX, x - 75);
+          maxX = Math.max(maxX, x + 75);
+          minY = Math.min(minY, y - 45);
+          maxY = Math.max(maxY, y + 45);
         }
       }
     });
