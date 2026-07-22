@@ -78,16 +78,16 @@
                         <span class="lancamento-anterior-data">{{ item.lancamento.data|date:"d/m/Y" }}</span>
                     </div>
                     <div class="lancamento-anterior-body">
-                        {% if item.transmitente %}
+                        {% if item.transmitentes %}
                         <div class="lancamento-anterior-field">
-                            <span class="field-label">Transmitente:</span>
-                            <span>{{ item.transmitente.nome }}</span>
+                            <span class="field-label">Transmitente(s):</span>
+                            <span>{% for t in item.transmitentes %}{{ t.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}</span>
                         </div>
                         {% endif %}
-                        {% if item.adquirente %}
+                        {% if item.adquirentes %}
                         <div class="lancamento-anterior-field">
-                            <span class="field-label">Adquirente:</span>
-                            <span>{{ item.adquirente.nome }}</span>
+                            <span class="field-label">Adquirente(s):</span>
+                            <span>{% for a in item.adquirentes %}{{ a.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}</span>
                         </div>
                         {% endif %}
                         {% if item.lancamento.area %}
