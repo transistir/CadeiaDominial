@@ -1205,26 +1205,26 @@
 .resumo-planilha-headers {
     display: grid;
     grid-template-columns:
-        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
-        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
-        minmax(110px, 11fr) minmax(80px, 8fr) minmax(80px, 8fr)
-        minmax(100px, 10fr) minmax(42px, 3fr) minmax(42px, 3fr)
-        minmax(76px, 8fr) minmax(70px, 6fr) minmax(100px, 10fr)
-        minmax(90px, 8fr);
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(70px, 8fr) minmax(70px, 8fr)
+        minmax(80px, 10fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(70px, 8fr) minmax(60px, 6fr) minmax(80px, 10fr)
+        minmax(80px, 8fr);
     background: #e9ecef;
     border-bottom: 2px solid #333;
 }
 
 .resumo-planilha-headers--averbacao {
     grid-template-columns:
-        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
-        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
-        minmax(110px, 11fr) minmax(260px, 26fr) minmax(70px, 6fr)
-        minmax(100px, 10fr) minmax(90px, 8fr);
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(220px, 26fr) minmax(60px, 6fr)
+        minmax(80px, 10fr) minmax(80px, 8fr);
 }
 
 .resumo-planilha-header-cell {
-    padding: 4px 8px;
+    padding: 5px 6px;
     font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1232,9 +1232,8 @@
     color: #495057;
     text-align: center;
     border-right: 1px solid #333;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .resumo-planilha-header-cell:last-child {
@@ -1244,34 +1243,33 @@
 .resumo-planilha-row {
     display: grid;
     grid-template-columns:
-        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
-        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
-        minmax(110px, 11fr) minmax(80px, 8fr) minmax(80px, 8fr)
-        minmax(100px, 10fr) minmax(42px, 3fr) minmax(42px, 3fr)
-        minmax(76px, 8fr) minmax(70px, 6fr) minmax(100px, 10fr)
-        minmax(90px, 8fr);
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(70px, 8fr) minmax(70px, 8fr)
+        minmax(80px, 10fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(70px, 8fr) minmax(60px, 6fr) minmax(80px, 10fr)
+        minmax(80px, 8fr);
     background: #f9f9f9;
 }
 
 .resumo-planilha-row--averbacao {
     grid-template-columns:
-        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
-        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
-        minmax(110px, 11fr) minmax(260px, 26fr) minmax(70px, 6fr)
-        minmax(100px, 10fr) minmax(90px, 8fr);
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(220px, 26fr) minmax(60px, 6fr)
+        minmax(80px, 10fr) minmax(80px, 8fr);
 }
 
 .resumo-planilha-cell {
     min-width: 0;
-    padding: 6px 8px;
+    padding: 8px 6px;
     border-right: 1px solid #333;
     color: #212529;
-    line-height: 1.35;
+    line-height: 1.4;
     text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    vertical-align: top;
 }
 
 .resumo-planilha-cell:last-child {
@@ -1279,30 +1277,9 @@
 }
 
 .resumo-planilha-cell--descricao {
-    display: flex;
-    align-items: center;
-    gap: 4px;
     background: #fffbe6;
     font-style: italic;
     text-align: left;
-}
-
-.resumo-descricao-curta {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.resumo-ler-mais {
-    flex: 0 0 auto;
-    color: #1a56db;
-    font-size: 0.72rem;
-    font-style: normal;
-    text-decoration: none;
-}
-
-.resumo-ler-mais:hover {
-    text-decoration: underline;
 }
 
 /* Rodapé */
