@@ -1044,12 +1044,10 @@
 }
 
 .lancamento-layout .lancamento-sidebar {
-    flex: 0 0 280px;
+    flex: 0 0 200px;
     position: sticky;
     top: 20px;
     align-self: flex-start;
-    max-height: calc(100vh - 100px);
-    overflow-y: auto;
 }
 
 .lancamento-layout .lancamento-main {
@@ -1057,123 +1055,68 @@
     min-width: 0;
 }
 
-/* Sidebar */
+/* Sidebar compacta — só a sequência de lançamentos */
 .lancamento-sidebar {
     background: #f8f9fa;
     border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 0;
-    overflow-y: auto;
-    font-size: 0.85rem;
-}
-
-.sidebar-section {
-    padding: 12px 14px;
-}
-
-.sidebar-section + .sidebar-section {
-    border-top: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
 }
 
 .sidebar-section-title {
-    font-size: 0.78rem;
+    font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: #6c757d;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
-/* Tabs da sidebar */
+/* Tabs verticais compactas */
 .sidebar-tabs {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
 }
 
 .sidebar-tab {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 0.82rem;
+    display: block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
     font-weight: 500;
     color: #495057;
     text-decoration: none;
-    border: 1px solid transparent;
-    transition: all 0.12s ease;
-    cursor: pointer;
+    transition: all 0.1s ease;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 }
 
 .sidebar-tab:hover {
     background: #e9ecef;
-    border-color: #ced4da;
     color: #212529;
 }
 
 .sidebar-tab.active {
-    background: #e7f1ff;
-    border-color: #0d6efd;
-    color: #0d6efd;
-    font-weight: 600;
+    background: #0d6efd;
+    color: #fff;
     pointer-events: none;
 }
 
 .sidebar-tab.novo {
     background: #fff3cd;
-    border-color: #ffc107;
     color: #856404;
     font-weight: 700;
     pointer-events: none;
+    margin-top: 4px;
 }
 
-.tab-marker {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #adb5bd;
-    flex-shrink: 0;
-}
-
-.sidebar-tab.active .tab-marker {
-    background: #0d6efd;
-}
-
-/* Info do imóvel dentro da sidebar */
-.sidebar-imovel-info {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.sidebar-imovel-nome {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #212529;
-    margin-bottom: 2px;
-}
-
-.sidebar-label {
-    font-size: 0.72rem;
-    color: #6c757d;
-    display: block;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.sidebar-valor {
-    font-size: 0.85rem;
-    color: #212529;
-    font-weight: 500;
-}
-
-/* Card de resumo (carregado via AJAX no lugar do matricula-destaque-card) */
+/* Card de resumo (carregado via AJAX) */
 .lancamento-resumo-card {
     background: #fff;
     border: 2px solid #0d6efd;
     border-radius: 8px;
-    padding: 16px;
+    padding: 14px;
     margin-bottom: 20px;
     animation: fadeInCard 0.2s ease;
 }
@@ -1187,16 +1130,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
-    padding-bottom: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
     border-bottom: 1px solid #e9ecef;
 }
 
 .resumo-tipo-badge {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 12px;
+    padding: 2px 10px;
+    border-radius: 10px;
     background: #e7f1ff;
     color: #0d6efd;
 }
@@ -1204,17 +1147,17 @@
 .resumo-card-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 }
 
 .resumo-numero {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: #212529;
 }
 
 .resumo-abrir-link {
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     color: #0d6efd;
     text-decoration: none;
 }
@@ -1226,13 +1169,13 @@
 .resumo-card-body {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 .resumo-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 6px;
 }
 
 .resumo-item {
@@ -1241,49 +1184,49 @@
 }
 
 .resumo-label {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     color: #6c757d;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
 .resumo-value {
-    font-size: 0.88rem;
+    font-size: 0.82rem;
     color: #212529;
 }
 
 .resumo-pessoas {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
 }
 
 .resumo-pessoa-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 3px;
 }
 
 .resumo-pessoa-tag {
     display: inline-block;
-    padding: 2px 8px;
+    padding: 1px 7px;
     background: #f1f3f5;
-    border-radius: 4px;
-    font-size: 0.8rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
     color: #495057;
     border: 1px solid #dee2e6;
 }
 
 .resumo-detalhes-texto {
-    margin: 4px 0 0;
-    font-size: 0.82rem;
+    margin: 3px 0 0;
+    font-size: 0.78rem;
     color: #495057;
-    line-height: 1.4;
+    line-height: 1.35;
 }
 
 .resumo-card-footer {
-    margin-top: 12px;
-    padding-top: 8px;
+    margin-top: 10px;
+    padding-top: 6px;
     border-top: 1px solid #e9ecef;
 }
 
@@ -1291,10 +1234,10 @@
     background: none;
     border: none;
     color: #6c757d;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 3px 8px;
+    border-radius: 3px;
 }
 
 .resumo-fechar:hover {
@@ -1304,14 +1247,21 @@
 
 .resumo-loading,
 .resumo-error {
-    padding: 20px;
+    padding: 16px;
     text-align: center;
     color: #6c757d;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
 }
 
 .resumo-error {
     color: #dc3545;
+}
+
+/* Full width na página de formulário de lançamento */
+.lancamento-form-page {
+    max-width: 100% !important;
+    padding-left: 24px !important;
+    padding-right: 24px !important;
 }
 
 @media (max-width: 768px) {
@@ -1324,10 +1274,14 @@
         width: 100%;
         position: relative;
         top: auto;
-        max-height: none;
     }
 
     .resumo-grid {
         grid-template-columns: 1fr;
+    }
+
+    .lancamento-form-page {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
     }
 } 

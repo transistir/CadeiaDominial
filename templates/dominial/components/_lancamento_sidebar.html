@@ -5,57 +5,24 @@
     - tis: objeto TIs (para construir URLs)
     - imovel: objeto Imovel (para construir URLs)
     - is_novo_lancamento: True quando está criando novo lançamento (mostra aba [NOVO])
-    - modo_edicao: True quando editando (não mostra [NOVO])
 -->
 {% if documento_lancamentos %}
 <aside class="lancamento-sidebar">
-    <div class="sidebar-section">
-        <div class="sidebar-section-title">Sequência de Lançamentos</div>
-        <nav class="sidebar-tabs">
-            {% for lanc in documento_lancamentos %}
-                {% if lanc.is_current %}
-                    <span class="sidebar-tab active" title="Lançamento atual">
-                        <span class="tab-marker"></span>
-                        {{ lanc.display }}
-                    </span>
-                {% else %}
-                    <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lanc.id %}"
-                       class="sidebar-tab js-lancamento-resumo"
-                       data-lancamento-id="{{ lanc.id }}"
-                       title="Ver resumo de {{ lanc.display }}">
-                        <span class="tab-marker"></span>
-                        {{ lanc.display }}
-                    </a>
-                {% endif %}
-            {% endfor %}
-            {% if is_novo_lancamento %}
-                <span class="sidebar-tab novo" title="Novo lançamento (em preenchimento)">
-                    ➕ NOVO
-                </span>
+    <div class="sidebar-section-title">Sequência</div>
+    <nav class="sidebar-tabs">
+        {% for lanc in documento_lancamentos %}
+            {% if lanc.is_current %}
+                <span class="sidebar-tab active" title="Lançamento atual">{{ lanc.display }}</span>
+            {% else %}
+                <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lanc.id %}"
+                   class="sidebar-tab js-lancamento-resumo"
+                   data-lancamento-id="{{ lanc.id }}"
+                   title="Ver resumo de {{ lanc.display }}">{{ lanc.display }}</a>
             {% endif %}
-        </nav>
-    </div>
-    <div class="sidebar-section">
-        <div class="sidebar-section-title">Imóvel</div>
-        <div class="sidebar-imovel-info">
-            <div class="sidebar-imovel-nome">{{ imovel.nome }}</div>
-            <div class="sidebar-matricula">
-                <span class="sidebar-label">{{ imovel.get_tipo_documento_principal_display|default:"Matrícula" }}</span>
-                <span class="sidebar-valor">{{ imovel.matricula }}</span>
-            </div>
-            <div class="sidebar-documento">
-                <span class="sidebar-label">Documento</span>
-                <span class="sidebar-valor">{{ documento.tipo.get_tipo_display }} {{ documento.numero }}</span>
-            </div>
-            <div class="sidebar-sncr">
-                <span class="sidebar-label">SNCR</span>
-                <span class="sidebar-valor">{{ imovel.sncr }}</span>
-            </div>
-            <div class="sidebar-propietario">
-                <span class="sidebar-label">Proprietário</span>
-                <span class="sidebar-valor">{{ imovel.proprietario.nome }}</span>
-            </div>
-        </div>
-    </div>
+        {% endfor %}
+        {% if is_novo_lancamento %}
+            <span class="sidebar-tab novo" title="Novo lançamento (em preenchimento)">+ NOVO</span>
+        {% endif %}
+    </nav>
 </aside>
 {% endif %}

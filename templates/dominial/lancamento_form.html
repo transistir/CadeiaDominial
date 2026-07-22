@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container-fluid lancamento-form-page">
     <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
 
 <div class="lancamento-layout">
@@ -66,8 +66,6 @@
             </div>
         </div>
     </div>
-
-    {% include "dominial/components/_lancamento_sidebar.html" %}
 
     <form method="post" id="lancamento-form" {% if numero_lancamento_error %}data-numero-lancamento-error="true"{% endif %}>
         {% csrf_token %}
