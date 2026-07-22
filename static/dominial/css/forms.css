@@ -1202,6 +1202,45 @@
     scrollbar-width: thin;
 }
 
+.resumo-planilha-headers {
+    display: grid;
+    grid-template-columns:
+        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
+        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
+        minmax(110px, 11fr) minmax(80px, 8fr) minmax(80px, 8fr)
+        minmax(100px, 10fr) minmax(42px, 3fr) minmax(42px, 3fr)
+        minmax(76px, 8fr) minmax(70px, 6fr) minmax(100px, 10fr)
+        minmax(90px, 8fr);
+    background: #e9ecef;
+    border-bottom: 2px solid #333;
+}
+
+.resumo-planilha-headers--averbacao {
+    grid-template-columns:
+        minmax(120px, 14fr) minmax(42px, 3fr) minmax(42px, 3fr)
+        minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
+        minmax(110px, 11fr) minmax(260px, 26fr) minmax(70px, 6fr)
+        minmax(100px, 10fr) minmax(90px, 8fr);
+}
+
+.resumo-planilha-header-cell {
+    padding: 4px 8px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #495057;
+    text-align: center;
+    border-right: 1px solid #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.resumo-planilha-header-cell:last-child {
+    border-right: 0;
+}
+
 .resumo-planilha-row {
     display: grid;
     grid-template-columns:
@@ -1211,7 +1250,6 @@
         minmax(100px, 10fr) minmax(42px, 3fr) minmax(42px, 3fr)
         minmax(76px, 8fr) minmax(70px, 6fr) minmax(100px, 10fr)
         minmax(90px, 8fr);
-    min-width: 1450px;
     background: #f9f9f9;
 }
 
@@ -1221,7 +1259,6 @@
         minmax(120px, 14fr) minmax(76px, 8fr) minmax(110px, 11fr)
         minmax(110px, 11fr) minmax(260px, 26fr) minmax(70px, 6fr)
         minmax(100px, 10fr) minmax(90px, 8fr);
-    min-width: 1250px;
 }
 
 .resumo-planilha-cell {
@@ -1315,6 +1352,12 @@
 
 .resumo-error {
     color: #dc3545;
+}
+
+/* Override do main-content para tela cheia na página de lançamento */
+.main-content:has(.lancamento-form-page) {
+    max-width: none;
+    padding: 12px 16px;
 }
 
 /* Full width na página de formulário de lançamento */

@@ -10,6 +10,28 @@
   </div>
 
   <div class="resumo-corpo">
+    <div class="resumo-planilha-headers{% if lancamento.tipo.tipo == 'averbacao' %} resumo-planilha-headers--averbacao{% endif %}" role="row">
+      <div class="resumo-planilha-header-cell">Nº</div>
+      <div class="resumo-planilha-header-cell">L</div>
+      <div class="resumo-planilha-header-cell">Fls.</div>
+      <div class="resumo-planilha-header-cell">CRI</div>
+      <div class="resumo-planilha-header-cell">Data</div>
+      <div class="resumo-planilha-header-cell">Transmitente</div>
+      <div class="resumo-planilha-header-cell">Adquirente</div>
+      {% if lancamento.tipo.tipo == 'averbacao' %}
+        <div class="resumo-planilha-header-cell">Descrição</div>
+      {% else %}
+        <div class="resumo-planilha-header-cell">Forma</div>
+        <div class="resumo-planilha-header-cell">Título</div>
+        <div class="resumo-planilha-header-cell">Cartório</div>
+        <div class="resumo-planilha-header-cell">L</div>
+        <div class="resumo-planilha-header-cell">Fls.</div>
+        <div class="resumo-planilha-header-cell">Data</div>
+      {% endif %}
+      <div class="resumo-planilha-header-cell">Área</div>
+      <div class="resumo-planilha-header-cell">Origem</div>
+      <div class="resumo-planilha-header-cell">Obs.</div>
+    </div>
     <div class="resumo-planilha-scroll">
       <div class="resumo-planilha-row{% if lancamento.tipo.tipo == 'averbacao' %} resumo-planilha-row--averbacao{% endif %}" role="row">
         <div class="resumo-planilha-cell" role="cell" title="Nº: {{ lancamento|numero_documento_criado|default:'-' }}">
