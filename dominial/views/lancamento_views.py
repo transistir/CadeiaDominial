@@ -12,16 +12,23 @@ import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 from ..services.documento_service import DocumentoService
+from ..services.lancamento_consulta_service import LancamentoConsultaService
 
 
 def _build_documento_lancamentos(documento, current_lancamento_id=None):
-    """Constrói lista de lançamentos do documento para o sidebar de navegação."""
-    lancamentos = (
+    """Constrói lista de lançamentos do documento para o sidebar de navegação.
+       Ordem: do maior número simples para o menor (igual à tabela detalhada)."""
+    lancamentos = list(
         Lancamento.objects
         .filter(documento=documento)
         .select_related('tipo')
-        .order_by('-id')
     )
+    # Mesma ordenação do documento_detalhado:
+    # número extraído decrescente, depois id crescente
+    lancamentos.sort(key=lambda x: (
+        -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
+        x.id
+    ))
     return [
         {
             'id': lanc.id,
