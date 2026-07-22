@@ -20,7 +20,7 @@ def _build_documento_lancamentos(documento, current_lancamento_id=None):
         Lancamento.objects
         .filter(documento=documento)
         .select_related('tipo')
-        .order_by('data', 'id')
+        .order_by('-id')
     )
     return [
         {
