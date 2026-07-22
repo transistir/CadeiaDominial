@@ -54,7 +54,8 @@
 
     <div class="lancamentos">
         {% for lancamento in lancamentos %}
-            <div class="lancamento">
+            {% with keyword=lancamento.keyword_encontrada %}
+            <div class="lancamento{% if keyword %} lancamento-{{ keyword.css_class }}{% endif %}">
                 <div class="lancamento-header">
                     <div class="documento-info">
                         {{ lancamento.documento.tipo.get_tipo_display }} - {{ lancamento.documento.numero }}
@@ -62,6 +63,9 @@
                     <div class="data">
                         {{ lancamento.data|date:"d/m/Y" }}
                     </div>
+                    {% if keyword %}
+                    <div class="alerta-badge alerta-badge-{{ keyword.slug }}">{{ keyword.label }}</div>
+                    {% endif %}
                 </div>
                 <div class="detalhes">
                     <div class="detalhe-item">
@@ -94,6 +98,7 @@
                         </div>
                     {% endif %}
                 </div>
+            {% endwith %}
             </div>
         {% empty %}
             <div class="no-results">

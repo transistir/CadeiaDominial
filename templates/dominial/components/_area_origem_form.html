@@ -14,9 +14,9 @@
     <div class="grid-2">
         <div class="form-group">
             <label for="area">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
-            <input type="number" name="area" id="area" step="0.0001" min="0" 
+            <input type="text" name="area" id="area" step="0.0001" inputmode="decimal" 
                    value="{% if modo_edicao and lancamento.area %}{{ lancamento.area }}{% elif form_data and form_data.area %}{{ form_data.area }}{% endif %}"
-                   placeholder="Ex: 150.5000">
+                   placeholder="Ex: 150,5000">
             <small>Área em hectares com 4 casas decimais</small>
         </div>
     </div>
@@ -44,7 +44,7 @@
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
                             <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_{{ origem.index }}" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off" 
+                               placeholder="Digite o nome do registro imobiliário" autocomplete="off" 
                                    value="{{ origem.cartorio_nome }}">
                             <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_{{ origem.index }}" class="cartorio-origem-id" 
                                    value="{{ origem.cartorio_id }}">
@@ -136,10 +136,10 @@
                     <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_0" value="">
                 </div>
                 <div class="form-group cartorio-field">
-                    <label class="field-label">Cartório{% if origem_obrigatorio %} *{% endif %}</label>
+                    <label class="field-label">CRI{% if origem_obrigatorio %} *{% endif %}</label>
                     <div class="autocomplete-container">
                         <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_0" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off">
+                               placeholder="Digite o nome do registro imobiliário" autocomplete="off">
                         <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_0" class="cartorio-origem-id">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
@@ -218,7 +218,7 @@
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
                         <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_0" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off">
+                               placeholder="Digite o nome do registro imobiliário" autocomplete="off">
                         <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_0" class="cartorio-origem-id">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
@@ -293,4 +293,52 @@
     <button type="button" class="btn btn-sm btn-outline" onclick="adicionarOrigem()">
         ➕ Adicionar Origem
     </button>
-</div> 
+</div>
+
+<script>
+(function() {
+    const areaInput = document.getElementById('area');
+    if (!areaInput) return;
+
+    function normalizarArea() {
+        let valor = areaInput.value;
+
+        if (!valor.trim()) {
+            areaInput.setCustomValidity('');
+            areaInput.classList.remove('is-invalid');
+            const errEl = document.getElementById('area-error-area_origem');
+            if (errEl) errEl.style.display = 'none';
+            return;
+        }
+
+        // Substitui TODAS as vírgulas por ponto (replaceAll)
+        valor = valor.replace(/\,/g, '.');
+        areaInput.value = valor;
+
+        // Valida se é número decimal válido (só dígitos, vírgula ou ponto como separador)
+        const regex = /^\d+([\.,]\d+)?$/;
+        if (!regex.test(valor)) {
+            areaInput.setCustomValidity('Valor inválido. Use apenas números.');
+            areaInput.classList.add('is-invalid');
+            let errEl = document.getElementById('area-error-area_origem');
+            if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.id = 'area-error-area_origem';
+                errEl.className = 'error-message';
+                errEl.style.marginTop = '5px';
+                areaInput.parentNode.appendChild(errEl);
+            }
+            errEl.textContent = 'Valor inválido. Use vírgula ou ponto para decimal.';
+            errEl.style.display = 'block';
+        } else {
+            areaInput.setCustomValidity('');
+            areaInput.classList.remove('is-invalid');
+            const errEl = document.getElementById('area-error-area_origem');
+            if (errEl) errEl.style.display = 'none';
+        }
+    }
+
+    areaInput.addEventListener('input', normalizarArea);
+    areaInput.addEventListener('blur', normalizarArea);
+})();
+</script> 

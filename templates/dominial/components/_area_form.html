@@ -9,8 +9,57 @@
 -->
 <div class="form-group">
     <label for="{{ area_id|default:'area' }}">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
-    <input type="number" name="area" id="{{ area_id|default:'area' }}" step="0.0001" min="0" 
+    <input type="text" name="area" id="{{ area_id|default:'area' }}" step="0.0001" inputmode="decimal"
            value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}"
-           placeholder="Ex: 150.5000">
+           placeholder="Ex: 150,5000">
     <small>Área em hectares com 4 casas decimais (opcional)</small>
-</div> 
+</div>
+
+<script>
+(function() {
+    const areaInput = document.getElementById('{{ area_id|default:"area" }}');
+    if (!areaInput) return;
+
+    function normalizarArea() {
+        let valor = areaInput.value;
+
+        // Se vazio, limpa erro e retorna
+        if (!valor.trim()) {
+            areaInput.setCustomValidity('');
+            areaInput.classList.remove('is-invalid');
+            const errEl = document.getElementById('area-error-{{ area_id|default:"area" }}');
+            if (errEl) errEl.style.display = 'none';
+            return;
+        }
+
+        // Substitui TODAS as vírgulas por ponto (replaceAll)
+        valor = valor.replace(/\,/g, '.');
+        areaInput.value = valor;
+
+        // Valida se é número decimal válido (só dígitos, vírgula ou ponto como separador)
+        const regex = /^\d+([\.,]\d+)?$/;
+        if (!regex.test(valor)) {
+            areaInput.setCustomValidity('Valor inválido. Use apenas números.');
+            areaInput.classList.add('is-invalid');
+            let errEl = document.getElementById('area-error-{{ area_id|default:"area" }}');
+            if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.id = 'area-error-{{ area_id|default:"area" }}';
+                errEl.className = 'error-message';
+                errEl.style.marginTop = '5px';
+                areaInput.parentNode.appendChild(errEl);
+            }
+            errEl.textContent = 'Valor inválido. Use vírgula ou ponto para decimal.';
+            errEl.style.display = 'block';
+        } else {
+            areaInput.setCustomValidity('');
+            areaInput.classList.remove('is-invalid');
+            const errEl = document.getElementById('area-error-{{ area_id|default:"area" }}');
+            if (errEl) errEl.style.display = 'none';
+        }
+    }
+
+    areaInput.addEventListener('input', normalizarArea);
+    areaInput.addEventListener('blur', normalizarArea);
+})();
+</script> 

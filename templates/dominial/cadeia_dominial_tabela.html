@@ -10,7 +10,7 @@
 
 {% block content %}
 {% csrf_token %}
-<div class="container">
+<div class="container cadeia-tabela-page">
     <div class="cadeia-header">
         <h1>
             <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -43,7 +43,7 @@
             {% endif %}
             {% if imovel.cartorio %}
             <div>
-                <strong>Cartório:</strong>
+                <strong>CRI:</strong>
                 {{ imovel.cartorio.nome }}
             </div>
             {% endif %}
@@ -113,7 +113,7 @@
                         <tr>
                             <th>Documento</th>
                             <th>Data</th>
-                            <th>Cartório</th>
+                            <th>CRI</th>
                             <th>Lançamentos</th>
                             <th>Ações</th>
                         </tr>
@@ -188,7 +188,7 @@
                                                 <th>Nº</th>
                                                 <th>L</th>
                                                 <th>Fls.</th>
-                                                <th>Cartório</th>
+                                                <th>CRI</th>
                                                 <th>Data</th>
                                                 <!-- Transmitente/Adquirente -->
                                                 <th>Transmitente</th>

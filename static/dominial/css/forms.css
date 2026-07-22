@@ -541,23 +541,29 @@
     font-weight: 500;
 }
 
-/* Estilos para o cartório da origem nos lançamentos subsequentes */
+/* cartorio-origem-info — linha inline */
 .cartorio-origem-info {
-    background-color: #fff3cd;
-    border: 2px solid #ffc107;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    background: none;
+    border: none;
+    padding: 0;
 }
 
-.cartorio-origem-info label {
-    color: #856404;
-    font-weight: bold;
+.cartorio-origem-info .cri-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #495057;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
-.cartorio-origem-info .form-text {
-    color: #856404;
-    font-style: italic;
+.cartorio-origem-info .cri-valor {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1a56db;
 }
 
 /* Estilos comuns para exibição do cartório */
@@ -813,4 +819,562 @@
     .fim-cadeia-toggle:checked + .fim-cadeia-label::after {
         font-size: 10px;
     }
-} 
+}
+
+/* ========================================
+   PAINEL DE LANÇAMENTOS ANTERIORES
+   ======================================== */
+.lancamentos-anteriores-panel {
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.lancamentos-anteriores-panel summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: none;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--primary-color, #2c3e50);
+    text-align: left;
+    transition: background 0.2s ease;
+    list-style: none;
+}
+
+.lancamentos-anteriores-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.lancamentos-anteriores-panel summary::marker {
+    display: none;
+    content: '';
+}
+
+.lancamentos-anteriores-panel summary:hover {
+    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.lancamentos-anteriores-panel[open] summary {
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+}
+
+.lancamentos-anteriores-content {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 12px 16px;
+    border-top: none;
+}
+
+.lancamentos-anteriores-content h5 {
+    margin: 0 0 10px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 8px;
+}
+
+.lancamentos-anteriores-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.lancamento-anterior-card {
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lancamento-anterior-card:hover {
+    border-color: var(--accent-color, #007bff);
+    box-shadow: 0 1px 4px rgba(0, 123, 255, 0.1);
+}
+
+.lancamento-anterior-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.lancamento-anterior-numero {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--primary-color, #2c3e50);
+    font-family: monospace;
+    background: #e9ecef;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+.lancamento-anterior-tipo {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #495057;
+    background: #d4edda;
+    color: #155724;
+    padding: 1px 8px;
+    border-radius: 10px;
+}
+
+.lancamento-anterior-data {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-left: auto;
+}
+
+.lancamento-anterior-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.lancamento-anterior-field {
+    font-size: 0.82rem;
+    color: #495057;
+    display: flex;
+    gap: 4px;
+}
+
+.lancamento-anterior-field .field-label {
+    font-weight: 600;
+    color: #6c757d;
+    flex-shrink: 0;
+}
+
+.lancamento-anterior-detalhes {
+    font-style: italic;
+    color: #6c757d;
+}
+
+/* Scroll personalizado para a lista */
+.lancamentos-anteriores-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.lancamentos-anteriores-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.lancamentos-anteriores-content::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+}
+
+.lancamentos-anteriores-content::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
+}
+
+/* ========================================
+   CARD DE DESTAQUE DA MATRÍCULA (Issue #51)
+   ======================================== */
+.matricula-destaque-card {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border: 1px solid #90caf9;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(25, 118, 210, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+/* Card de imóvel ainda mais compacto quando contém resumo (via JS) */
+.matricula-destaque-card.com-resumo {
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+.matricula-destaque-card .matricula-numero {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: #0d47a1;
+}
+.matricula-destaque-card .matricula-label {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: #1565c0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.matricula-destaque-card .imovel-nome {
+    font-weight: 600;
+    color: #1a237e;
+    margin-bottom: 6px;
+}
+.matricula-destaque-card .documento-target-info {
+    font-size: 0.9em;
+    color: #1565c0;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(25, 118, 210, 0.2);
+}
+.matricula-destaque-card .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+}
+.matricula-destaque-card .grid-3 div {
+    font-size: 0.9em;
+}
+.matricula-destaque-card .grid-3 strong {
+    color: #37474f;
+}
+@media (max-width: 768px) {
+    .matricula-destaque-card {
+        position: relative;  /* Remove sticky no mobile */
+    }
+    .matricula-destaque-card .grid-3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
+   SIDEBAR + LAYOUT DE LANÇAMENTOS (abas de navegador)
+   ======================================== */
+
+/* Layout de duas colunas — gap mínimo pra abas ficarem vizinhas */
+.lancamento-layout {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+}
+
+.lancamento-layout .lancamento-sidebar {
+    flex: 0 0 200px;
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+}
+
+.lancamento-layout .lancamento-main {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Sidebar — barra lateral com visual de abas */
+.lancamento-sidebar {
+    background: #f4f6f9;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 10px 10px;
+    font-size: 0.78rem;
+}
+
+.sidebar-section-title {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #889099;
+    margin-bottom: 6px;
+    padding: 0 6px;
+}
+
+/* Tabs verticais */
+.sidebar-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sidebar-tab {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #495057;
+    text-decoration: none;
+    transition: all 0.12s ease;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    border: 1px solid transparent;
+}
+
+.sidebar-tab:hover {
+    background: #e9ecef;
+    color: #212529;
+}
+
+/* Aba ativa — fundo igual ao resumo-card para conectar visualmente */
+.sidebar-tab.active {
+    background: #f0f4ff;
+    color: #1a56db;
+    border-color: #d0d8e8;
+    font-weight: 600;
+    pointer-events: none;
+    box-shadow: inset 2px 0 0 #1a56db;
+}
+
+.sidebar-tab.novo {
+    background: #fff3cd;
+    color: #856404;
+    font-weight: 700;
+    pointer-events: none;
+    margin-top: 4px;
+    border-color: #ffecb5;
+}
+
+/* Card de resumo — mesmo fundo da aba ativa, conectado visualmente */
+.resumo-card {
+    background: #f0f4ff;
+    border: 1px solid #d0d8e8;
+    border-radius: 10px;
+    margin: 0;
+    animation: fadeInCard 0.2s ease;
+    font-size: 0.82rem;
+}
+
+@keyframes fadeInCard {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Topo: tipo + código + data */
+.resumo-topo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #e8edf8;
+    border-bottom: 1px solid #d0d8e8;
+    border-radius: 9px 9px 0 0;
+}
+
+.resumo-tipo {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.resumo-tipo-averbacao  { background: #dce7f7; color: #0d6efd; }
+.resumo-tipo-registro   { background: #d1e7dd; color: #0a5c36; }
+.resumo-tipo-inicio_matricula { background: #f0d4d8; color: #842029; }
+
+.resumo-codigo {
+    font-weight: 600;
+    color: #212529;
+    font-size: 0.85rem;
+}
+
+.resumo-data {
+    color: #6c757d;
+    font-size: 0.78rem;
+}
+
+.resumo-separador {
+    color: #889099;
+}
+
+.resumo-fechar.resumo-fechar-topo {
+    margin-left: auto;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+/* Corpo */
+.resumo-corpo {
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.resumo-corpo::-webkit-scrollbar {
+    width: 6px;
+}
+
+.resumo-corpo::-webkit-scrollbar-thumb {
+    background: #b0b8c4;
+    border-radius: 3px;
+}
+
+.resumo-planilha-scroll {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.resumo-planilha-headers {
+    display: grid;
+    grid-template-columns:
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(70px, 8fr) minmax(70px, 8fr)
+        minmax(80px, 10fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(70px, 8fr) minmax(60px, 6fr) minmax(80px, 10fr)
+        minmax(80px, 8fr);
+    background: #e9ecef;
+    border-bottom: 2px solid #333;
+}
+
+.resumo-planilha-headers--averbacao {
+    grid-template-columns:
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(220px, 26fr) minmax(60px, 6fr)
+        minmax(80px, 10fr) minmax(80px, 8fr);
+}
+
+.resumo-planilha-header-cell {
+    padding: 5px 6px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #495057;
+    text-align: center;
+    border-right: 1px solid #333;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.resumo-planilha-header-cell:last-child {
+    border-right: 0;
+}
+
+.resumo-planilha-row {
+    display: grid;
+    grid-template-columns:
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(70px, 8fr) minmax(70px, 8fr)
+        minmax(80px, 10fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(70px, 8fr) minmax(60px, 6fr) minmax(80px, 10fr)
+        minmax(80px, 8fr);
+    background: #f9f9f9;
+}
+
+.resumo-planilha-row--averbacao {
+    grid-template-columns:
+        minmax(80px, 14fr) minmax(36px, 3fr) minmax(36px, 3fr)
+        minmax(90px, 14fr) minmax(70px, 8fr) minmax(90px, 11fr)
+        minmax(90px, 11fr) minmax(220px, 26fr) minmax(60px, 6fr)
+        minmax(80px, 10fr) minmax(80px, 8fr);
+}
+
+.resumo-planilha-cell {
+    min-width: 0;
+    padding: 8px 6px;
+    border-right: 1px solid #333;
+    color: #212529;
+    line-height: 1.4;
+    text-align: center;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    vertical-align: top;
+}
+
+.resumo-planilha-cell:last-child {
+    border-right: 0;
+}
+
+.resumo-planilha-cell--descricao {
+    background: #fffbe6;
+    font-style: italic;
+    text-align: left;
+}
+
+/* Rodapé */
+.resumo-rodape {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-top: 1px solid #d0d8e8;
+    background: #e8edf8;
+    border-radius: 0 0 9px 9px;
+}
+
+.resumo-fechar {
+    background: none;
+    border: none;
+    color: #6c757d;
+    font-size: 0.72rem;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.resumo-fechar:hover {
+    background: #d0d8e8;
+    color: #343a40;
+}
+
+.resumo-abrir {
+    font-size: 0.72rem;
+    color: #1a56db;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.resumo-abrir:hover {
+    text-decoration: underline;
+}
+
+.resumo-loading,
+.resumo-error {
+    padding: 16px;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.82rem;
+}
+
+.resumo-error {
+    color: #dc3545;
+}
+
+/* Override do main-content para tela cheia na página de lançamento */
+.main-content:has(.lancamento-form-page, .documento-detalhado-page, .cadeia-tabela-page) {
+    max-width: none;
+    padding: 12px 16px;
+}
+
+/* Full width na página de formulário de lançamento */
+.lancamento-form-page,
+.container.documento-detalhado-page,
+.container.cadeia-tabela-page {
+    max-width: none !important;
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+}
+
+@media (max-width: 768px) {
+    .lancamento-layout {
+        flex-direction: column;
+    }
+
+    .lancamento-layout .lancamento-sidebar {
+        flex: none;
+        width: 100%;
+        position: relative;
+        top: auto;
+    }
+
+    .resumo-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .lancamento-form-page {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+}

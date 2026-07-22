@@ -14,64 +14,95 @@ function debounce(func, wait) {
   };
 }
 
-// Definir função expandirArvore globalmente imediatamente
-window.expandirArvore = debounce(function () {
+// ========================================================
+// fitTreeToViewport — função única de enquadramento da árvore
+// ========================================================
+// Substitui as antigas enquadrarArvoreNoSVG, expandirArvore e
+// centralizarArvore. Usa requestAnimationFrame internamente
+// quando chamada sem options.animate.
+//
+// Edge cases tratados:
+//   - Árvore vazia (sem nós) → retorna sem erro
+//   - Nó único → limita zoom máximo a 1.5x
+//   - Árvore muito grande → aplica zoom out mínimo (0.1)
+//   - Erro de fetch → nunca chamada (catch não tenta fit)
+// ========================================================
+function fitTreeToViewport(options = {}) {
   const svg = window._d3svg;
   const zoomGroup = window._zoomGroup;
-  if (!svg || !zoomGroup) {
-    console.warn("Árvore ainda não foi inicializada");
-    return;
-  }
+  if (!svg || !zoomGroup) return;
 
-  const width = svg.attr("width");
-  const height = svg.attr("height");
+  const svgNode = svg.node();
+  if (!svgNode) return;
 
-  // Pegar todos os nós
+  // Dimensões reais do container via getBoundingClientRect
+  const rect = svgNode.getBoundingClientRect();
+  const width = (rect.width > 0 ? rect.width : +svg.attr("width")) || 1000;
+  const height = (rect.height > 0 ? rect.height : +svg.attr("height")) || 600;
+
   const nodes = zoomGroup.selectAll(".node");
   if (nodes.size() === 0) return;
 
-  // Calcular bounding box atual
-  let minX = Infinity,
-    maxX = -Infinity,
-    minY = Infinity,
-    maxY = -Infinity;
+  // Calcular bounding box de todos os nós
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   nodes.each(function () {
     const transform = this.getAttribute("transform");
-    const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+    const match = transform && transform.match(/translate\(([^,]+),([^)]+)\)/);
     if (match) {
       const x = parseFloat(match[1]);
       const y = parseFloat(match[2]);
-      minX = Math.min(minX, x);
-      maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y);
-      maxY = Math.max(maxY, y);
+      // Cards têm 150x90 px — considerar bounding box completo
+      minX = Math.min(minX, x - 75);
+      maxX = Math.max(maxX, x + 75);
+      minY = Math.min(minY, y - 45);
+      maxY = Math.max(maxY, y + 45);
     }
   });
 
-  // Adicionar margem para os cards (140x80)
-  minX -= 70; // metade da largura do card
-  maxX += 70;
-  minY -= 40; // metade da altura do card
-  maxY += 40;
+  // Edge case: nenhum nó com posição válida
+  if (!isFinite(minX)) return;
 
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
 
-  // Calcular escala para caber tudo com margem extra
-  const scale = Math.min(
-    (width - 120) / treeWidth,
-    (height - 120) / treeHeight,
-    1,
+  const minScale = options.minScale ?? 0.1;
+  const maxScale = options.maxScale ?? 3.0;
+  const margin = options.margin ?? 60;
+
+  let scale = Math.min(
+    (width - 2 * margin) / treeWidth,
+    (height - 2 * margin) / treeHeight,
   );
 
-  // Centralizar com margem extra
+  // Edge case: nó único — não aplicar zoom extremo
+  if (nodes.size() === 1) {
+    scale = Math.min(scale, 1.5);
+  }
+
+  // Edge case: árvore muito grande — respeitar zoom mínimo
+  scale = Math.max(scale, minScale);
+  scale = Math.min(scale, maxScale);
+
   const tx = (width - treeWidth * scale) / 2 - minX * scale;
   const ty = (height - treeHeight * scale) / 2 - minY * scale;
 
   const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
-  svg.transition().duration(600).call(window._d3zoom.transform, t);
   window._zoomTransform = t;
-}, 300); // Debounce de 300ms
+
+  const duration = options.duration ?? 400;
+  if (options.animate !== false) {
+    svg.transition().duration(duration).call(window._d3zoom.transform, t);
+  } else {
+    svg.call(window._d3zoom.transform, t);
+  }
+
+  return { scale, tx, ty, minX, minY, maxX, maxY };
+}
+
+// Botão "Expandir Árvore" — debounced para evitar múltiplas chamadas
+window.expandirArvore = debounce(function () {
+  fitTreeToViewport();
+}, 300);
 
 document.addEventListener("DOMContentLoaded", function () {
   const svg = d3.select("#arvore-d3-svg");
@@ -165,11 +196,19 @@ document.addEventListener("DOMContentLoaded", function () {
         .style("opacity", "0")
         .remove();
 
-      // Enquadrar após renderizar
-      setTimeout(
-        () => enquadrarArvoreNoSVG(svg, zoomGroup, width, height),
-        100,
-      );
+      // Enquadrar após renderizar (usa requestAnimationFrame,
+      // não setTimeout frágil)
+      requestAnimationFrame(() => {
+        fitTreeToViewport();
+      });
+
+      // Habilitar botão de salvar SVG (estava disabled durante carga)
+      const btnSalvar = document.getElementById("btn-salvar-svg");
+      if (btnSalvar) {
+        btnSalvar.disabled = false;
+        btnSalvar.style.opacity = "1";
+        btnSalvar.style.cursor = "pointer";
+      }
     })
     .catch((err) => {
       loadingIndicator.remove();
@@ -312,17 +351,6 @@ function converterParaArvoreD3(data) {
   return raiz;
 }
 
-function centralizarArvore(width, height) {
-  // Centraliza o grupo na tela
-  const svg = window._d3svg;
-  const zoom = window._d3zoom;
-  const zoomGroup = window._zoomGroup;
-  // Centralizar em (width/2, height/2)
-  const t = d3.zoomIdentity.translate(width / 2, 60).scale(1);
-  svg.transition().duration(400).call(zoom.transform, t);
-  window._zoomTransform = t;
-}
-
 function centralizarArvoreInteligente(root, height) {
   // Centralizar baseado no bounding box real da árvore
   const nodes = root.descendants();
@@ -377,8 +405,8 @@ function calcularEspacamentoAdaptativo(root) {
   });
 
   // Calcular espaçamento baseado na quantidade máxima de nós
-  // Considerando que cada card tem 140px de largura e 80px de altura
-  let espacamentoHorizontal = 200; // padrão equilibrado
+  // Considerando que cada card tem 150px de largura e 90px de altura
+  let espacamentoHorizontal = 220; // padrão equilibrado
   if (maxNos > 20) {
     espacamentoHorizontal = 350; // bem espaçado para muitos nós
   } else if (maxNos > 15) {
@@ -446,7 +474,7 @@ function corrigirSobreposicoes(root) {
       // Ordenar por posição X (vertical no layout horizontal)
       nosNivel.sort((a, b) => a.x - b.x);
 
-      const alturaCard = 80;
+      const alturaCard = 90;
       const margemMinima = 40;
 
       // Verificar se há documentos importados no nível
@@ -504,7 +532,7 @@ function ajustarPosicoesPorNivel(root) {
   root.descendants().forEach((node) => {
     if (node.data.is_fim_cadeia) {
       const nivel = node.data.nivel || 0;
-      node.y = nivel * 200 + 120;
+      node.y = nivel * 220 + 120;
       console.log(
         `DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivel}, posição Y: ${node.y}`,
       );
@@ -513,11 +541,11 @@ function ajustarPosicoesPorNivel(root) {
 
     if (node.data.nivel_manual != null) {
       const nivel = node.data.nivel ?? node.depth;
-      node.y = nivel * 200 + 120;
+      node.y = nivel * 220 + 120;
       return;
     }
 
-    node.y = node.depth * 200 + 120;
+    node.y = node.depth * 220 + 120;
   });
 }
 
@@ -629,7 +657,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
   const treeLayout = d3
     .tree()
     .size([height, width - 20]) // Reduzir ao máximo a margem para mais espaço horizontal
-    .nodeSize([80, 200]) // [altura, largura] - 200px entre níveis
+    .nodeSize([90, 220]) // [altura, largura] - 220px entre níveis
     .separation((a, b) => {
       // Separação baseada na quantidade de irmãos - AUMENTADA
       const irmaos = a.parent ? a.parent.children.length : 1;
@@ -823,10 +851,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
   // Card base
   node
     .append("rect")
-    .attr("width", 140)
-    .attr("height", 80)
-    .attr("x", -70)
-    .attr("y", -40)
+    .attr("width", 150)
+    .attr("height", 90)
+    .attr("x", -75)
+    .attr("y", -45)
     .attr("rx", 12)
     .attr("fill", (d) => {
       // Cards especiais de fim de cadeia
@@ -936,7 +964,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("text-anchor", "middle")
     .attr("y", -6)
     .attr("fill", "white")
-    .attr("font-size", 20)
+    .attr("font-size", 15)
     .attr("font-weight", 700)
     .text((d) => {
       // Cards especiais de fim de cadeia
@@ -960,7 +988,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("text-anchor", "middle")
     .attr("y", 14)
     .attr("fill", "white")
-    .attr("font-size", 11)
+    .attr("font-size", 10)
     .attr("opacity", 0.7)
     .text((d) =>
       d.data.total_lancamentos !== undefined
@@ -997,7 +1025,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("y", -21)
     .attr("text-anchor", "middle")
     .attr("fill", "white")
-    .attr("font-size", 10)
+    .attr("font-size", 9)
     .attr("font-weight", "bold")
     .text("✓")
     .attr("title", (d) => {
@@ -1034,7 +1062,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("y", -21)
     .attr("text-anchor", "middle")
     .attr("fill", "white")
-    .attr("font-size", 10)
+    .attr("font-size", 9)
     .attr("font-weight", "bold")
     .text("↔")
     .attr("title", (d) => {
@@ -1054,7 +1082,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .append("text")
     .attr("x", 0)
     .attr("y", 0)
-    .attr("font-size", 16)
+    .attr("font-size", 14)
     .attr("cursor", "pointer")
     .attr("opacity", 0.9)
     .attr("text-anchor", "middle")
@@ -1066,10 +1094,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
       window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/novo-lancamento/${d.data.id}/`;
     })
     .on("mouseover", function () {
-      d3.select(this).attr("opacity", 1).attr("font-size", 18);
+      d3.select(this).attr("opacity", 1).attr("font-size", 16);
     })
     .on("mouseout", function () {
-      d3.select(this).attr("opacity", 0.9).attr("font-size", 16);
+      d3.select(this).attr("opacity", 0.9).attr("font-size", 14);
     });
 }
 
@@ -1130,10 +1158,10 @@ window.resetZoom = function () {
   });
 
   // Adicionar margem extra para os cards
-  minX -= 70;
-  maxX += 70;
-  minY -= 40;
-  maxY += 40;
+  minX -= 75;
+  maxX += 75;
+  minY -= 45;
+  maxY += 45;
 
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
@@ -1182,10 +1210,10 @@ window.fimDaArvore = function () {
   });
 
   // Adicionar margem extra para os cards
-  minX -= 70;
-  maxX += 70;
-  minY -= 40;
-  maxY += 40;
+  minX -= 75;
+  maxX += 75;
+  minY -= 45;
+  maxY += 45;
 
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
@@ -1213,71 +1241,157 @@ window.fimDaArvore = function () {
   currentZoom = 1;
 };
 
-function enquadrarArvoreNoSVG(svg, zoomGroup, width, height) {
-  // Pega o bounding box do grupo de nós
-  const nodes = zoomGroup.selectAll(".node");
-  if (nodes.size() === 0) return;
-  let minX = Infinity,
-    maxX = -Infinity,
-    minY = Infinity,
-    maxY = -Infinity;
-  nodes.each(function () {
-    const bbox = this.getBBox();
-    const x = +this.getAttribute("transform").split("(")[1].split(",")[0];
-    const y = +this.getAttribute("transform").split(",")[1].split(")")[0];
-    minX = Math.min(minX, x + bbox.x);
-    maxX = Math.max(maxX, x + bbox.x + bbox.width);
-    minY = Math.min(minY, y + bbox.y);
-    maxY = Math.max(maxY, y + bbox.y + bbox.height);
+// ========================================================
+// IMPRESSÃO (#49) — beforeprint / afterprint
+// IMPRESSÃO (#49) — beforeprint / afterprint
+// CUIDADO: Greptile T-Rex reproduziu 2 bugs na implementação anterior:
+//   (a) fitTreeToViewport aplica zoom transform + viewBox juntos → árvore em 8.7%×11.5%
+//   (b) width="100%" no beforeprint quebra zoom no afterprint (NaN)
+// Fix: usar SÓ viewBox (limpar transform d3 primeiro), restaurar dimensões no afterprint.
+(function () {
+  let _printSavedTransform = null;
+  let _printSavedWidth = null;
+  let _printSavedHeight = null;
+  let _printSavedViewBox = null;
+
+  window.addEventListener("beforeprint", () => {
+    const svg = window._d3svg;
+    if (!svg || !window._zoomGroup) return;
+
+    // Salvar estado atual
+    _printSavedTransform = window._zoomTransform;
+    _printSavedWidth = svg.attr("width");
+    _printSavedHeight = svg.attr("height");
+
+    // Calcular bounds da árvore a partir das posições reais dos nós
+    const nodes = window._zoomGroup.selectAll(".node");
+    if (nodes.size() === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.each(function () {
+      const t = this.getAttribute("transform");
+      const m = t && t.match(/translate\(([^,]+),([^)]+)\)/);
+      if (m) {
+        const x = parseFloat(m[1]), y = parseFloat(m[2]);
+        if (isFinite(x) && isFinite(y)) {
+          minX = Math.min(minX, x - 75);
+          maxX = Math.max(maxX, x + 75);
+          minY = Math.min(minY, y - 45);
+          maxY = Math.max(maxY, y + 45);
+        }
+      }
+    });
+    if (!isFinite(minX)) return;
+
+    // Salvar viewBox original ANTES de resetar
+    const svgNode = svg.node();
+    _printSavedViewBox = svgNode.getAttribute("viewBox");
+
+    // Interromper transições ativas para evitar reaplicação de transform
+    svg.interrupt();
+
+    // Resetar zoom d3 — viewBox será o ÚNICO mecanismo de enquadramento
+    svg.call(window._d3zoom.transform, d3.zoomIdentity);
+    window._zoomTransform = d3.zoomIdentity;
+
+    // Aplicar viewBox para capturar a árvore inteira
+    const extraMargin = 40;
+    svgNode.setAttribute("viewBox", [
+      minX - extraMargin, minY - extraMargin,
+      maxX - minX + 2 * extraMargin, maxY - minY + 2 * extraMargin,
+    ].join(" "));
+    // NÃO sobrescrever width/height — CSS @media print cuida do layout
   });
 
-  // Adicionar margem extra para os cards
-  minX -= 70; // metade da largura do card
-  maxX += 70;
-  minY -= 40; // metade da altura do card
-  maxY += 40;
+  window.addEventListener("afterprint", () => {
+    const svg = window._d3svg;
+    if (!svg) return;
 
-  const treeWidth = maxX - minX;
-  const treeHeight = maxY - minY;
+    // Remover viewBox ou restaurar original
+    const svgNode = svg.node();
+    if (svgNode) {
+      if (_printSavedViewBox != null) {
+        svgNode.setAttribute("viewBox", _printSavedViewBox);
+      } else {
+        svgNode.removeAttribute("viewBox");
+      }
+      // Restaurar dimensões originais para d3 zoom funcionar
+      if (_printSavedWidth != null) svgNode.setAttribute("width", _printSavedWidth);
+      if (_printSavedHeight != null) svgNode.setAttribute("height", _printSavedHeight);
+    }
 
-  console.log(
-    `DEBUG: Enquadramento - Árvore: ${treeWidth}x${treeHeight}, Container: ${width}x${height}`,
-  );
-  console.log(
-    `DEBUG: Enquadramento - minY: ${minY}, maxY: ${maxY}, centro Y: ${(minY + maxY) / 2}`,
-  );
+    // Restaurar zoom
+    if (_printSavedTransform) {
+      svg.call(window._d3zoom.transform, _printSavedTransform);
+      window._zoomTransform = _printSavedTransform;
+      _printSavedTransform = null;
+      _printSavedWidth = null;
+      _printSavedHeight = null;
+      _printSavedViewBox = null;
+    }
+  });
+})();
 
-  // Calcular escala para caber tudo com margem extra
-  // Se a árvore for muito grande, não forçar o enquadramento completo
-  const scale = Math.min(
-    (width - 120) / treeWidth,
-    (height - 120) / treeHeight,
-    1,
-  );
+/* ── Salvar SVG do Organograma Completo ── */
+window.salvarArvoreSVG = function () {
+  const svg = window._d3svg;
+  if (!svg || !window._zoomGroup) return;
 
-  // Para árvores muito grandes, usar uma escala mínima para não ficar muito pequena
-  const finalScale = Math.max(scale, 0.3);
+  // Calcular bounds a partir das posições reais dos nós
+  const nodes = window._zoomGroup.selectAll(".node");
+  if (nodes.size() === 0) return;
 
-  // Centralizar a árvore verticalmente na div (não apenas o centro)
-  const centroDivX = width / 2;
-  const centroDivY = height / 2;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.each(function () {
+    const t = this.getAttribute("transform");
+    const m = t && t.match(/translate\(([^,]+),([^)]+)\)/);
+    if (m) {
+      const x = parseFloat(m[1]), y = parseFloat(m[2]);
+      if (isFinite(x) && isFinite(y)) {
+        minX = Math.min(minX, x - 75);
+        maxX = Math.max(maxX, x + 75);
+        minY = Math.min(minY, y - 45);
+        maxY = Math.max(maxY, y + 45);
+      }
+    }
+  });
+  if (!isFinite(minX)) return;
 
-  // Calcular translação para centralizar toda a árvore na div
-  const tx = centroDivX - (minX + treeWidth / 2) * finalScale;
-  const ty = centroDivY - (minY + treeHeight / 2) * finalScale;
+  const extraMargin = 40;
+  const w = maxX - minX + 2 * extraMargin;
+  const h = maxY - minY + 2 * extraMargin;
 
-  console.log(
-    `DEBUG: Centralizando centro da árvore - Centro árvore: (${minX + treeWidth / 2}, ${minY + treeHeight / 2}) -> Centro div: (${centroDivX}, ${centroDivY})`,
-  );
-  console.log(
-    `DEBUG: Translação calculada - tx: ${tx}, ty: ${ty}, escala: ${finalScale}`,
-  );
+  // Clonar o SVG para não interferir na visualização atual
+  const svgNode = svg.node();
+  const clone = svgNode.cloneNode(true);
 
-  console.log(
-    `DEBUG: Enquadramento - Escala: ${finalScale}, tx: ${tx}, ty: ${ty}`,
-  );
+  // Embedar estilos essenciais que vêm do CSS externo
+  const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+  styleEl.textContent = [
+    ".link { fill: none; stroke: #28a745; stroke-width: 2; }",
+    ".link-extra { fill: none; stroke: #28a745; stroke-width: 2; stroke-dasharray: 5,5; }",
+    ".card-buttons text { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); }",
+  ].join("\n");
+  clone.insertBefore(styleEl, clone.firstChild);
 
-  const t = d3.zoomIdentity.translate(tx, ty).scale(finalScale);
-  svg.transition().duration(400).call(window._d3zoom.transform, t);
-  window._zoomTransform = t;
-}
+  // Aplicar viewBox e dimensões fixas no clone
+  clone.setAttribute("viewBox", `${minX - extraMargin} ${minY - extraMargin} ${w} ${h}`);
+  clone.setAttribute("width", w);
+  clone.setAttribute("height", h);
+  clone.removeAttribute("style");
+
+  // Serializar
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(clone);
+
+  // Download
+  const blob = new Blob([svgString], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cadeia-dominial-${new Date().toISOString().slice(0, 10)}.svg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};

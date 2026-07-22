@@ -1,0 +1,28 @@
+<!--
+  Sidebar de navegação entre lançamentos do mesmo documento.
+  Parâmetros esperados:
+    - documento_lancamentos: lista de {id, display, is_current} (da view)
+    - tis: objeto TIs (para construir URLs)
+    - imovel: objeto Imovel (para construir URLs)
+    - is_novo_lancamento: True quando está criando novo lançamento (mostra aba [NOVO])
+-->
+{% if documento_lancamentos %}
+<aside class="lancamento-sidebar">
+    <div class="sidebar-section-title">Sequência</div>
+    <nav class="sidebar-tabs">
+        {% for lanc in documento_lancamentos %}
+            {% if lanc.is_current %}
+                <span class="sidebar-tab active" title="Lançamento atual">{{ lanc.display }}</span>
+            {% else %}
+                <a href="{% url 'lancamento_detail' tis_id=tis.id imovel_id=imovel.id lancamento_id=lanc.id %}"
+                   class="sidebar-tab js-lancamento-resumo"
+                   data-lancamento-id="{{ lanc.id }}"
+                   title="Ver resumo de {{ lanc.display }}">{{ lanc.display }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if is_novo_lancamento %}
+            <span class="sidebar-tab novo" title="Novo lançamento (em preenchimento)">+ NOVO</span>
+        {% endif %}
+    </nav>
+</aside>
+{% endif %}

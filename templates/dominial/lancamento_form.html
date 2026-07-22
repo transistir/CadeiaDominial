@@ -12,9 +12,13 @@
 {% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container-fluid lancamento-form-page">
     <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
-    
+
+<div class="lancamento-layout">
+    {% include "dominial/components/_lancamento_sidebar.html" %}
+
+    <main class="lancamento-main">
     <!-- Seção de Documento Importado -->
     {% if is_documento_importado %}
     <div class="alert alert-info documento-importado-alert">
@@ -44,12 +48,16 @@
     </div>
     {% endif %}
     
-    <div class="field-group">
-        <h4>{{ imovel.nome }}</h4>
+    <div class="matricula-destaque-card" id="lancamento-resumo-container">
+        <div class="imovel-nome">{{ imovel.nome }}</div>
+        <div>
+            <span class="matricula-label">{{ imovel.get_tipo_documento_principal_display|default:"Matrícula" }}</span><br>
+            <span class="matricula-numero">{{ imovel.matricula }}</span>
+        </div>
+        <div class="documento-target-info">
+            <strong>Lançamento em:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}
+        </div>
         <div class="grid-3">
-            <div>
-                <strong>Matrícula:</strong> {{ imovel.matricula }}
-            </div>
             <div>
                 <strong>SNCR:</strong> {{ imovel.sncr }}
             </div>
@@ -144,7 +152,9 @@
             <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
         </div>
     </form>
-</div>
+</main>
+</div>  <!-- /.lancamento-layout -->
+</div>  <!-- /.container -->
 {% endblock %}
 
 {% block extra_js %}
@@ -168,7 +178,6 @@
     document.body.classList.add('documento-transcricao');
     {% endif %}
     
-    // Bloqueio de duplicata cancelada
     {% if duplicata_cancelada %}
     document.addEventListener('DOMContentLoaded', function() {
         // Marcar campos de origem e cartório como inválidos
@@ -262,5 +271,54 @@
         });
     });
     {% endif %}
+
+    // Sidebar: carregar resumo do lançamento no lugar do card de imóvel
+    document.addEventListener('DOMContentLoaded', function() {
+        const container = document.getElementById('lancamento-resumo-container');
+        if (!container) return;
+
+        // Salvar HTML original do card para restaurar depois
+        const originalHTML = container.innerHTML;
+
+        document.querySelectorAll('.js-lancamento-resumo').forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const lancId = this.dataset.lancamentoId;
+                const url = this.href.replace(/\/$/, '') + '/resumo/';
+
+                // Atualizar aba ativa
+                document.querySelectorAll('.sidebar-tab').forEach(function(t) {
+                    t.classList.remove('active');
+                });
+                this.classList.add('active');
+
+                // Mostrar loading
+                container.classList.add('com-resumo');
+                container.innerHTML = '<div class="resumo-loading">Carregando lançamento...</div>';
+
+                // Fetch do resumo
+                fetch(url)
+                    .then(function(r) { return r.text(); })
+                    .then(function(html) {
+                        container.innerHTML = html;
+                    })
+                    .catch(function() {
+                        container.innerHTML = '<div class="resumo-error">Erro ao carregar lançamento.</div>';
+                    });
+            });
+        });
+
+        // Botão Fechar — restaura card original sem reload
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.resumo-fechar')) {
+                container.classList.remove('com-resumo');
+                container.innerHTML = originalHTML;
+                // Remover active das abas
+                document.querySelectorAll('.sidebar-tab.active').forEach(function(t) {
+                    t.classList.remove('active');
+                });
+            }
+        });
+    });
 </script>
 {% endblock %} 

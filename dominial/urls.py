@@ -7,7 +7,7 @@ from dal import autocomplete
 from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, imovel_detail, imovel_delete, arquivar_imovel
 from .views.imovel_views import imovel_form
 from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico, ajustar_nivel_documento
-from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail
+from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail, lancamento_resumo_partial
 from .views.duplicata_views import verificar_duplicata_ajax, importar_duplicata, cancelar_importacao_duplicata
 from .views.cadeia_dominial_views import cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela, cadeia_dominial_d3, documento_detalhado, exportar_cadeia_completa_pdf, exportar_cadeia_dominial_pdf, exportar_cadeia_dominial_excel, obter_arvore_cadeia_dominial
 from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos, escolher_origem_documento, escolher_origem_lancamento, get_cadeia_dominial_atualizada, limpar_escolhas_origem
@@ -55,6 +55,7 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/editar/', editar_lancamento, name='editar_lancamento'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/excluir/', excluir_lancamento, name='excluir_lancamento'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/', lancamento_detail, name='lancamento_detail'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/resumo/', lancamento_resumo_partial, name='lancamento_resumo_partial'),
     
     # Verificação e importação de duplicatas
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/verificar-duplicata/', verificar_duplicata_ajax, name='verificar_duplicata_ajax'),

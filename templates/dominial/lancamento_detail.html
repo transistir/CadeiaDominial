@@ -6,6 +6,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/lancamento_detail.css' %}">
+<link rel="stylesheet" href="{% static 'dominial/css/forms.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -24,6 +25,8 @@
             <span class="breadcrumb-item active">{{ lancamento.numero_lancamento|default:"Lançamento" }}</span>
             </nav>
     </div>
+
+    {% include "dominial/components/_lancamento_sidebar.html" %}
 
     <!-- Header Principal -->
     <div class="lancamento-header">
@@ -91,7 +94,7 @@
                                 <span class="info-value">{{ lancamento.documento.numero }}</span>
                             </div>
                             <div class="info-item">
-                                <span class="info-label">Cartório</span>
+                                <span class="info-label">CRI</span>
                                 <span class="info-value">{{ lancamento.documento.cartorio.nome }}</span>
                             </div>
                             <div class="info-item">
@@ -214,7 +217,7 @@
                                 {% endif %}
                                 {% if lancamento.cartorio_origem %}
                             <div class="info-item">
-                                <span class="info-label">Cartório</span>
+                                <span class="info-label">CRI</span>
                                 <span class="info-value">{{ lancamento.cartorio_origem.nome }}</span>
                             </div>
                             {% endif %}
@@ -258,7 +261,7 @@
                                 {% endif %}
                             {% if lancamento.cartorio_origem %}
                             <div class="info-item">
-                                <span class="info-label">Cartório</span>
+                                <span class="info-label">CRI</span>
                                 <span class="info-value">{{ lancamento.cartorio_origem.nome }}</span>
                                 </div>
                                 {% endif %}

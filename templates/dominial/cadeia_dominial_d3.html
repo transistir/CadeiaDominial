@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container d3-tree-page">
     <div class="arvore-header">
         <h1>
             <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -64,6 +64,11 @@
                 <path d="M12 5L19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </button>
+        <button class="zoom-btn" id="btn-salvar-svg" disabled
+                onclick="salvarArvoreSVG()" title="Salvar SVG do Organograma"
+                aria-label="Salvar visualização da árvore da cadeia dominial como SVG">
+            💾
+        </button>
     </div>
 
         <!-- Aqui será renderizada a árvore D3.js -->
@@ -103,9 +108,12 @@
 {% block extra_js %}
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
+    // Fallback para navegadores sem suporte a :has()
+    document.documentElement.classList.add('d3-active');
+    
     window.tisId = {{ tis.id|safe }};
     window.imovelId = {{ imovel.id|safe }};
     window.imovelTipoDocumentoPrincipal = '{{ imovel.tipo_documento_principal }}';
 </script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3.js' %}"></script>
-{% endblock %} 
+{% endblock %}
