@@ -435,44 +435,59 @@
     pointer-events: none;
 }
 
-/* Layout em tela cheia exclusivo da página da árvore D3 */
+/* Layout em tela cheia exclusivo da página da árvore D3 —
+   header e nav ficam fixos no topo, sobrepostos ao conteúdo */
 @media screen {
     body:has(.d3-tree-page) .header {
-        position: absolute;
+        position: fixed;
         top: 0;
         left: 0;
         right: 0;
         z-index: 1000;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        padding: 8px 20px !important;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        color: var(--primary-color);
+        /* Mantém o gradiente original do base.css */
+        padding: 10px 20px !important;
     }
 
     body:has(.d3-tree-page) .header-title {
+        font-size: 1.2rem;
         margin: 0;
-        font-size: 1.25rem;
-        line-height: 1.2;
     }
 
     body:has(.d3-tree-page) .header-subtitle {
-        margin: 0;
-        font-size: 0.8rem;
-        line-height: 1.2;
+        display: none;  /* Economiza espaço vertical */
+    }
+
+    body:has(.d3-tree-page) .user-info {
+        font-size: 0.85rem;
+    }
+
+    body:has(.d3-tree-page) .user-info span {
+        display: none;  /* Só mostra o botão Sair na página D3 */
     }
 
     body:has(.d3-tree-page) .nav {
-        position: absolute;
-        top: 56px;
+        position: fixed;
+        top: 46px;       /* Logo abaixo do header compacto */
         left: 0;
         right: 0;
         z-index: 999;
+        padding: 0 20px;
+        min-height: 26px;
+        line-height: 26px;
+    }
+
+    body:has(.d3-tree-page) .nav-list {
+        gap: 12px;
+    }
+
+    body:has(.d3-tree-page) .nav-link {
+        padding: 2px 0;
+        font-size: 0.8rem;
     }
 
     body:has(.d3-tree-page) .main-content {
         max-width: none !important;
-        padding-top: 120px !important;
+        padding-top: 72px !important;  /* header(46px) + nav(26px) */
         padding-left: 0 !important;
         padding-right: 0 !important;
     }
@@ -482,7 +497,38 @@
         padding: 0 8px !important;
     }
 
+    body:has(.d3-tree-page) .arvore-header {
+        padding: 10px 16px;
+        margin-bottom: 8px;
+    }
+
+    body:has(.d3-tree-page) .arvore-header h1 {
+        font-size: 1.3rem;
+        margin-bottom: 6px;
+    }
+
+    body:has(.d3-tree-page) .imovel-info {
+        gap: 6px;
+        padding-top: 0;
+        font-size: 0.8rem;
+    }
+
+    /* Oculta o aviso de scroll na página de tela cheia */
+    body:has(.d3-tree-page) .arvore-container::before {
+        display: none;
+    }
+
+    body:has(.d3-tree-page) .arvore-container {
+        padding: 8px;
+        margin-bottom: 0;
+    }
+
     body:has(.d3-tree-page) #arvore-d3-svg {
-        height: calc(100vh - 180px) !important;
+        height: calc(100vh - 130px) !important;  /* 72px overlay + 58px header+info */
+    }
+
+    /* Oculta os botões de navegação no final (estão no overlay) */
+    body:has(.d3-tree-page) .navigation-actions {
+        display: none;
     }
 }
