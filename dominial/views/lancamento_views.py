@@ -170,11 +170,13 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             )
             lancamentos_com_pessoas = []
             for lanc in lancamentos_anteriores:
-                pessoas_dict = {lp.tipo: lp.pessoa for lp in lanc.pessoas.all()}
+                relacoes = lanc.pessoas.all()
+                transmitentes = [lp.pessoa for lp in relacoes if lp.tipo == 'transmitente']
+                adquirentes = [lp.pessoa for lp in relacoes if lp.tipo == 'adquirente']
                 lancamentos_com_pessoas.append({
                     'lancamento': lanc,
-                    'transmitente': pessoas_dict.get('transmitente'),
-                    'adquirente': pessoas_dict.get('adquirente'),
+                    'transmitentes': transmitentes,
+                    'adquirentes': adquirentes,
                 })
 
             context = {
@@ -243,9 +245,9 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     )
     lancamentos_com_pessoas = []
     for lanc in lancamentos_anteriores:
-        pessoas = lanc.pessoas.all()
-        transmitentes = [lp.pessoa for lp in pessoas if lp.tipo == 'transmitente']
-        adquirentes = [lp.pessoa for lp in pessoas if lp.tipo == 'adquirente']
+        relacoes = lanc.pessoas.all()
+        transmitentes = [lp.pessoa for lp in relacoes if lp.tipo == 'transmitente']
+        adquirentes = [lp.pessoa for lp in relacoes if lp.tipo == 'adquirente']
         lancamentos_com_pessoas.append({
             'lancamento': lanc,
             'transmitentes': transmitentes,

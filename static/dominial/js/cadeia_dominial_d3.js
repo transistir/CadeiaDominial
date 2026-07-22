@@ -1252,6 +1252,7 @@ window.fimDaArvore = function () {
   let _printSavedTransform = null;
   let _printSavedWidth = null;
   let _printSavedHeight = null;
+  let _printSavedViewBox = null;
 
   window.addEventListener("beforeprint", () => {
     const svg = window._d3svg;
@@ -1282,13 +1283,19 @@ window.fimDaArvore = function () {
     });
     if (!isFinite(minX)) return;
 
+    // Salvar viewBox original ANTES de resetar
+    const svgNode = svg.node();
+    _printSavedViewBox = svgNode.getAttribute("viewBox");
+
+    // Interromper transições ativas para evitar reaplicação de transform
+    svg.interrupt();
+
     // Resetar zoom d3 — viewBox será o ÚNICO mecanismo de enquadramento
     svg.call(window._d3zoom.transform, d3.zoomIdentity);
     window._zoomTransform = d3.zoomIdentity;
 
     // Aplicar viewBox para capturar a árvore inteira
     const extraMargin = 40;
-    const svgNode = svg.node();
     svgNode.setAttribute("viewBox", [
       minX - extraMargin, minY - extraMargin,
       maxX - minX + 2 * extraMargin, maxY - minY + 2 * extraMargin,
@@ -1300,10 +1307,14 @@ window.fimDaArvore = function () {
     const svg = window._d3svg;
     if (!svg) return;
 
-    // Remover viewBox
+    // Remover viewBox ou restaurar original
     const svgNode = svg.node();
     if (svgNode) {
-      svgNode.removeAttribute("viewBox");
+      if (_printSavedViewBox != null) {
+        svgNode.setAttribute("viewBox", _printSavedViewBox);
+      } else {
+        svgNode.removeAttribute("viewBox");
+      }
       // Restaurar dimensões originais para d3 zoom funcionar
       if (_printSavedWidth != null) svgNode.setAttribute("width", _printSavedWidth);
       if (_printSavedHeight != null) svgNode.setAttribute("height", _printSavedHeight);
@@ -1316,6 +1327,7 @@ window.fimDaArvore = function () {
       _printSavedTransform = null;
       _printSavedWidth = null;
       _printSavedHeight = null;
+      _printSavedViewBox = null;
     }
   });
 })();
