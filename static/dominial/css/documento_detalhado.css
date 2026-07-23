@@ -161,3 +161,19 @@
 .container.documento-detalhado-page {
     max-width: none !important;
 }
+
+.alerta-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.alerta-badge-urgente { background: #dc3545; color: white; }
+.alerta-badge-pendente { background: #ffc107; color: #333; }
+.alerta-badge-atencao { background: #fd7e14; color: white; }

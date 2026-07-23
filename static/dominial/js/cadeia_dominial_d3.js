@@ -109,7 +109,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const containerWidth =
     document.getElementById("arvore-d3-svg").clientWidth || 1000;
   const width = Math.max(containerWidth, 2000); // Permitir largura maior para árvores extensas
-  const height = 600;
+  // Altura dinâmica: usar 80% da viewport height, mínimo 500px
+  const height = Math.max(500, window.innerHeight * 0.8);
   svg.attr("width", width).attr("height", height);
 
   // Limpar SVG
@@ -121,7 +122,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Comportamento de zoom/pan
   const zoom = d3
     .zoom()
-    .scaleExtent([0.2, 3.0]) // Limites mais amplos para zoom
+    .scaleExtent([0.1, 3.0]) // Limites mais amplos para zoom
     .wheelDelta((event) => -event.deltaY * 0.002) // Velocidade do scroll
     .on("zoom", (event) => {
       zoomGroup.attr("transform", event.transform);
@@ -1172,7 +1173,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
 // Controle de zoom para o SVG D3
 let currentZoom = 1;
-const minZoom = 0.3;
+const minZoom = 0.1;
 const maxZoom = 2.5;
 const zoomStep = 0.2;
 
@@ -1434,6 +1435,12 @@ window.salvarArvoreSVG = function () {
   const svgNode = svg.node();
   const clone = svgNode.cloneNode(true);
 
+  // Encontrar e limpar transform da zoomGroup no clone
+  const zoomGroupClone = clone.querySelector('#zoom-group, [id="zoom-group"]');
+  if (zoomGroupClone) {
+    zoomGroupClone.removeAttribute('transform');
+  }
+
   // Embedar estilos essenciais que vêm do CSS externo
   const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
   styleEl.textContent = [
@@ -1448,6 +1455,12 @@ window.salvarArvoreSVG = function () {
   clone.setAttribute("width", w);
   clone.setAttribute("height", h);
   clone.removeAttribute("style");
+
+  // Se o SVG ficar muito grande, limitar altura e usar preserveAspectRatio
+  if (h > 2000) {
+    clone.setAttribute('height', '2000');
+    clone.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+  }
 
   // Serializar
   const serializer = new XMLSerializer();

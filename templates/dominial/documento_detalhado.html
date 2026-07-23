@@ -217,7 +217,14 @@
                             -
                           {% endif %}
                         </td>
-                        <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                        <td>
+                          {% with keyword=lancamento.keyword_encontrada %}
+                            {% if keyword %}
+                              <div class="alerta-badge alerta-badge-{{ keyword.slug }}">{{ keyword.label }}</div>
+                            {% endif %}
+                            {{ lancamento.observacoes|default_if_none:"-" }}
+                          {% endwith %}
+                        </td>
                         <td class="acoes-cell">
                             <button class="btn-edit-lancamento" onclick="event.stopPropagation(); editarLancamento({{ lancamento.id }})" title="Editar lançamento">
                                 ✏️
@@ -287,4 +294,4 @@
         }
     }
 </script>
-{% endblock %} 
+{% endblock %}
