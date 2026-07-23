@@ -65,7 +65,7 @@ function fitTreeToViewport(options = {}) {
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
 
-  const minScale = options.minScale ?? 0.2;
+  const minScale = options.minScale ?? 0.1;
   const maxScale = options.maxScale ?? 3.0;
   const margin = options.margin ?? 60;
 
@@ -122,7 +122,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Comportamento de zoom/pan
   const zoom = d3
     .zoom()
-    .scaleExtent([0.2, 3.0]) // Limites mais amplos para zoom
+    .scaleExtent([0.1, 3.0]) // Limites mais amplos para zoom
     .wheelDelta((event) => -event.deltaY * 0.002) // Velocidade do scroll
     .on("zoom", (event) => {
       zoomGroup.attr("transform", event.transform);
@@ -1173,7 +1173,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
 // Controle de zoom para o SVG D3
 let currentZoom = 1;
-const minZoom = 0.2;
+const minZoom = 0.1;
 const maxZoom = 2.5;
 const zoomStep = 0.2;
 
