@@ -606,6 +606,127 @@ function aplicarEspacamentoAdicional(root) {
   });
 }
 
+// ========================================================
+// Edge routing — saída sempre pela DIREITA da origem,
+// entrada sempre pela ESQUERDA do destino.
+// ========================================================
+const EDGE_GEOMETRY = Object.freeze({
+  nodeOffsetX: 120,
+  nodeOffsetY: 20,
+  cardHalfWidth: 75,
+  cardHalfHeight: 45,
+  minForwardGap: 24,
+  minControlOffset: 16,
+  maxControlOffset: 150,
+  detourMargin: 30,
+  detourCornerRadius: 12,
+});
+
+function getEdgeRoutingBounds(nodes) {
+  return nodes.reduce(
+    (bounds, node) => {
+      const centerX = node.y + EDGE_GEOMETRY.nodeOffsetX;
+      const centerY = node.x + EDGE_GEOMETRY.nodeOffsetY;
+      bounds.minX = Math.min(bounds.minX, centerX - EDGE_GEOMETRY.cardHalfWidth);
+      bounds.maxX = Math.max(bounds.maxX, centerX + EDGE_GEOMETRY.cardHalfWidth);
+      bounds.minY = Math.min(bounds.minY, centerY - EDGE_GEOMETRY.cardHalfHeight);
+      bounds.maxY = Math.max(bounds.maxY, centerY + EDGE_GEOMETRY.cardHalfHeight);
+      return bounds;
+    },
+    { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
+  );
+}
+
+/**
+ * Gera path SVG para aresta que:
+ * - sai da borda DIREITA da origem
+ * - entra na borda ESQUERDA do destino
+ * - usa Bézier monotônica para rotas normais
+ * - usa arco externo (contornando a árvore) para rotas reversas/coincidentes
+ */
+function customEdgePath(source, target, bounds) {
+  if (!source || !target) return "";
+  const coords = [source.x, source.y, target.x, target.y];
+  if (!coords.every(Number.isFinite)) return "";
+
+  const sx = source.y + EDGE_GEOMETRY.nodeOffsetX + EDGE_GEOMETRY.cardHalfWidth;
+  const sy = source.x + EDGE_GEOMETRY.nodeOffsetY;
+  const tx = target.y + EDGE_GEOMETRY.nodeOffsetX - EDGE_GEOMETRY.cardHalfWidth;
+  const ty = target.x + EDGE_GEOMETRY.nodeOffsetY;
+
+  const forwardGap = tx - sx;
+  const verticalDistance = Math.abs(ty - sy);
+
+  // --- Rota normal: source está à esquerda do target ---
+  if (forwardGap >= EDGE_GEOMETRY.minForwardGap) {
+    // Mesma posição vertical → reta horizontal
+    if (verticalDistance < 0.001) {
+      return `M${sx},${sy} H${tx}`;
+    }
+
+    // Bezier cúbica monotônica: mantém trecho horizontal nas bordas
+    const verticalFactor = Math.min(verticalDistance / 500, 1);
+    const controlRatio = 0.4 + verticalFactor * 0.1;
+    const offset = Math.min(
+      EDGE_GEOMETRY.maxControlOffset,
+      forwardGap / 2,
+      Math.max(EDGE_GEOMETRY.minControlOffset, forwardGap * controlRatio),
+    );
+
+    return [
+      `M${sx},${sy}`,
+      `C${sx + offset},${sy}`,
+      `${tx - offset},${ty}`,
+      `${tx},${ty}`,
+    ].join(" ");
+  }
+
+  // --- Rota reversa/coincidente: arco externo contornando a árvore ---
+  const validBounds =
+    bounds &&
+    [bounds.minX, bounds.maxX, bounds.minY, bounds.maxY].every(Number.isFinite);
+
+  const rb = validBounds
+    ? bounds
+    : {
+        minX: Math.min(sx, tx) - EDGE_GEOMETRY.cardHalfWidth,
+        maxX: Math.max(sx, tx) + EDGE_GEOMETRY.cardHalfWidth,
+        minY: Math.min(sy, ty) - EDGE_GEOMETRY.cardHalfHeight,
+        maxY: Math.max(sy, ty) + EDGE_GEOMETRY.cardHalfHeight,
+      };
+
+  const pairCenterY = (sy + ty) / 2;
+  const treeCenterY = (rb.minY + rb.maxY) / 2;
+  const routeAbove = pairCenterY <= treeCenterY;
+
+  const routeY = routeAbove
+    ? rb.minY - EDGE_GEOMETRY.detourMargin
+    : rb.maxY + EDGE_GEOMETRY.detourMargin;
+
+  const routeRight = Math.max(rb.maxX, sx) + EDGE_GEOMETRY.detourMargin;
+  const routeLeft = Math.min(rb.minX, tx) - EDGE_GEOMETRY.detourMargin;
+  const dir = routeAbove ? -1 : 1;
+
+  const radius = Math.max(0, Math.min(
+    EDGE_GEOMETRY.detourCornerRadius,
+    (routeRight - sx) / 2, (tx - routeLeft) / 2,
+    Math.abs(routeY - sy) / 2, Math.abs(ty - routeY) / 2,
+  ));
+
+  return [
+    `M${sx},${sy}`,
+    `H${routeRight - radius}`,
+    `Q${routeRight},${sy} ${routeRight},${sy + dir * radius}`,
+    `V${routeY - dir * radius}`,
+    `Q${routeRight},${routeY} ${routeRight - radius},${routeY}`,
+    `H${routeLeft + radius}`,
+    `Q${routeLeft},${routeY} ${routeLeft},${routeY - dir * radius}`,
+    `V${ty + dir * radius}`,
+    `Q${routeLeft},${ty} ${routeLeft + radius},${ty}`,
+    `H${tx}`,
+  ].join(" ");
+}
+
 function renderArvoreD3(data, svgGroup, width, height) {
   // Converter para d3.hierarchy
   const root = d3.hierarchy(data);
@@ -708,6 +829,9 @@ function renderArvoreD3(data, svgGroup, width, height) {
   // Aplicar espaçamento adicional se necessário
   aplicarEspacamentoAdicional(root);
 
+  // Calcular bounding box de roteamento para arestas anormais
+  const edgeRoutingBounds = getEdgeRoutingBounds(root.descendants());
+
   // Desenhar links da árvore principal com animações suaves
   const links = svgGroup
     .selectAll("path.link")
@@ -719,12 +843,8 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("stroke-width", 2)
     .attr("stroke-linecap", "round")
     .style("opacity", "0")
-    .attr(
-      "d",
-      d3
-        .linkHorizontal()
-        .x((d) => d.y + 120)
-        .y((d) => d.x + 20),
+    .attr("d", (d) =>
+      customEdgePath(d.source, d.target, edgeRoutingBounds),
     )
     .on("mouseover", function (event, d) {
       d3.select(this)
@@ -775,17 +895,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
       .attr("stroke-linecap", "round")
       .style("opacity", "0")
       .attr("d", (d) => {
-        const fromNode = nodesMap.get(d.from);
-        const toNode = nodesMap.get(d.to);
-        if (fromNode && toNode) {
-          return d3
-            .linkHorizontal()
-            .x((d) => d.y + 120)
-            .y((d) => d.x + 20)
-            .source(() => fromNode)
-            .target(() => toNode)();
-        }
-        return "";
+        const source = nodesMap.get(d.from);
+        const target = nodesMap.get(d.to);
+        return source && target
+          ? customEdgePath(source, target, edgeRoutingBounds)
+          : "";
       })
       .on("mouseover", function (event, d) {
         d3.select(this)
