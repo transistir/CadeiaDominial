@@ -19,7 +19,12 @@ CSRF_TRUSTED_ORIGINS = [
     'https://cadeiadominial.com.br',
     'http://leiadominial.com.br',
     'https://leiadominial.com.br',
+    'http://teste.cadeiadominial.com.br',
+    'https://teste.cadeiadominial.com.br',
 ]
+
+# Proxy reverso (Nginx) termina SSL; Django precisa confiar no header X-Forwarded-Proto
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Configurações adicionais de CSRF para resolver problemas de login/logout
 CSRF_COOKIE_DOMAIN = None
