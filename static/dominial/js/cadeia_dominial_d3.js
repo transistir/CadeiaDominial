@@ -65,7 +65,7 @@ function fitTreeToViewport(options = {}) {
   const treeWidth = maxX - minX;
   const treeHeight = maxY - minY;
 
-  const minScale = options.minScale ?? 0.1;
+  const minScale = options.minScale ?? 0.2;
   const maxScale = options.maxScale ?? 3.0;
   const margin = options.margin ?? 60;
 
@@ -109,7 +109,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const containerWidth =
     document.getElementById("arvore-d3-svg").clientWidth || 1000;
   const width = Math.max(containerWidth, 2000); // Permitir largura maior para árvores extensas
-  const height = 600;
+  // Altura dinâmica: usar 80% da viewport height, mínimo 500px
+  const height = Math.max(500, window.innerHeight * 0.8);
   svg.attr("width", width).attr("height", height);
 
   // Limpar SVG
@@ -1172,7 +1173,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
 // Controle de zoom para o SVG D3
 let currentZoom = 1;
-const minZoom = 0.3;
+const minZoom = 0.2;
 const maxZoom = 2.5;
 const zoomStep = 0.2;
 
