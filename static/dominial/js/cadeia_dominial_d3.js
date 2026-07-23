@@ -1434,6 +1434,12 @@ window.salvarArvoreSVG = function () {
   const svgNode = svg.node();
   const clone = svgNode.cloneNode(true);
 
+  // Encontrar e limpar transform da zoomGroup no clone
+  const zoomGroupClone = clone.querySelector('#zoom-group, [id="zoom-group"]');
+  if (zoomGroupClone) {
+    zoomGroupClone.removeAttribute('transform');
+  }
+
   // Embedar estilos essenciais que vêm do CSS externo
   const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
   styleEl.textContent = [
@@ -1448,6 +1454,12 @@ window.salvarArvoreSVG = function () {
   clone.setAttribute("width", w);
   clone.setAttribute("height", h);
   clone.removeAttribute("style");
+
+  // Se o SVG ficar muito grande, limitar altura e usar preserveAspectRatio
+  if (h > 2000) {
+    clone.setAttribute('height', '2000');
+    clone.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+  }
 
   // Serializar
   const serializer = new XMLSerializer();
