@@ -606,6 +606,85 @@ function aplicarEspacamentoAdicional(root) {
   });
 }
 
+// ========================================================
+// Edge routing — saída sempre pela DIREITA da origem,
+// entrada sempre pela ESQUERDA do destino.
+// ========================================================
+const EDGE_GEOMETRY = Object.freeze({
+  nodeOffsetX: 120,
+  nodeOffsetY: 20,
+  cardHalfWidth: 75,
+  minForwardGap: 24,
+  minControlOffset: 16,
+  maxControlOffset: 150,
+  bypassExtraSpan: 200,
+  maxBypassControlOffset: 200,
+});
+
+/**
+ * Gera path SVG para aresta que:
+ * - sai da borda DIREITA da origem
+ * - entra na borda ESQUERDA do destino
+ * - usa Bézier monotônica para rotas normais
+ * - usa Bézier de bypass local para rotas reversas/coincidentes
+ *   (sem depender do bounding box da árvore)
+ */
+function customEdgePath(source, target) {
+  if (!source || !target) return "";
+  const coords = [source.x, source.y, target.x, target.y];
+  if (!coords.every(Number.isFinite)) return "";
+
+  const sx =
+    source.y + EDGE_GEOMETRY.nodeOffsetX + EDGE_GEOMETRY.cardHalfWidth;
+  const sy = source.x + EDGE_GEOMETRY.nodeOffsetY;
+  const tx =
+    target.y + EDGE_GEOMETRY.nodeOffsetX - EDGE_GEOMETRY.cardHalfWidth;
+  const ty = target.x + EDGE_GEOMETRY.nodeOffsetY;
+
+  const forwardGap = tx - sx;
+  const verticalDistance = Math.abs(ty - sy);
+  const verticalFactor = Math.min(verticalDistance / 500, 1);
+
+  // Rota normal: source está à esquerda do target.
+  if (forwardGap >= EDGE_GEOMETRY.minForwardGap) {
+    if (verticalDistance < 0.001) {
+      return `M${sx},${sy} H${tx}`;
+    }
+
+    const controlRatio = 0.4 + verticalFactor * 0.1;
+    const offset = Math.min(
+      EDGE_GEOMETRY.maxControlOffset,
+      forwardGap / 2,
+      Math.max(EDGE_GEOMETRY.minControlOffset, forwardGap * controlRatio),
+    );
+
+    return [
+      `M${sx},${sy}`,
+      `C${sx + offset},${sy}`,
+      `${tx - offset},${ty}`,
+      `${tx},${ty}`,
+    ].join(" ");
+  }
+
+  // Rota reversa/coincidente: bypass local.
+  // Os controles avançam para a direita da origem e ficam à esquerda
+  // do destino, sem depender do bounding box global da árvore.
+  const bypassSpan =
+    Math.abs(forwardGap) + EDGE_GEOMETRY.bypassExtraSpan;
+  const bypassRatio = 0.4 + verticalFactor * 0.1;
+  const offset = Math.min(
+    EDGE_GEOMETRY.maxBypassControlOffset,
+    bypassSpan * bypassRatio,
+  );
+
+  return [
+    `M${sx},${sy}`,
+    `C${sx + offset},${sy}`,
+    `${tx - offset},${ty}`,
+    `${tx},${ty}`,
+  ].join(" ");
+}
+
 function renderArvoreD3(data, svgGroup, width, height) {
   // Converter para d3.hierarchy
   const root = d3.hierarchy(data);
@@ -719,12 +798,8 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .attr("stroke-width", 2)
     .attr("stroke-linecap", "round")
     .style("opacity", "0")
-    .attr(
-      "d",
-      d3
-        .linkHorizontal()
-        .x((d) => d.y + 120)
-        .y((d) => d.x + 20),
+    .attr("d", (d) =>
+      customEdgePath(d.source, d.target),
     )
     .on("mouseover", function (event, d) {
       d3.select(this)
@@ -775,17 +850,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
       .attr("stroke-linecap", "round")
       .style("opacity", "0")
       .attr("d", (d) => {
-        const fromNode = nodesMap.get(d.from);
-        const toNode = nodesMap.get(d.to);
-        if (fromNode && toNode) {
-          return d3
-            .linkHorizontal()
-            .x((d) => d.y + 120)
-            .y((d) => d.x + 20)
-            .source(() => fromNode)
-            .target(() => toNode)();
-        }
-        return "";
+        const source = nodesMap.get(d.from);
+        const target = nodesMap.get(d.to);
+        return source && target
+          ? customEdgePath(source, target)
+          : "";
       })
       .on("mouseover", function (event, d) {
         d3.select(this)
