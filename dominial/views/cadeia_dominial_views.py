@@ -272,6 +272,9 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
         -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
         x.id
     ))
+    from ..services.keyword_alerta_service import buscar_keyword
+    for lanc in lancamentos_list:
+        lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
     lancamentos = lancamentos_list
     
     context = {
@@ -772,4 +775,4 @@ def expandir_origens_hierarquicamente(documento, conexoes, docs_por_id, document
             visitados.add(origem['id'])
             
             # Recursivamente expandir origens desta origem
-            expandir_origens_hierarquicamente(origem, conexoes, docs_por_id, documentos_organizados, visitados) 
+            expandir_origens_hierarquicamente(origem, conexoes, docs_por_id, documentos_organizados, visitados)
