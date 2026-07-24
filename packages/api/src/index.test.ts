@@ -794,7 +794,7 @@ describe("pendencia cartorio API", () => {
     expect(res.status).toBe(400);
   });
 
-  it("POST /api/pendencias/:id/rejeitar \u2014 404 when pendencia was already rejected", async () => {
+  it("POST /api/pendencias/:id/rejeitar — 409 when pendencia was already rejected", async () => {
     const env = makeTestEnv();
     const pendencia = seedPendencia(env);
     pendencia.status = "rejeitada";
@@ -813,6 +813,6 @@ describe("pendencia cartorio API", () => {
       env
     );
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(409);
   });
 });

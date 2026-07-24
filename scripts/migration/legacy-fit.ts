@@ -951,7 +951,8 @@ function run(): Report {
          SELECT o.id, o.cri_id, 'fraca', 'pendente', ?
          FROM origem o
          WHERE o.documento_id IS NULL AND o.deleted_at IS NULL
-           AND o.id NOT IN (SELECT origem_id FROM origem_fim_cadeia)`
+           AND o.id NOT IN (SELECT origem_id FROM origem_fim_cadeia)
+           AND o.tipo IN ('matricula', 'transcricao')`
       )
       .run(now);
     const pendenciaCount =

@@ -836,7 +836,7 @@ const handleRejeitarPendencia = async (c: Context<Env>) => {
   }
 
   if (pendencia.status !== "pendente") {
-    return c.json({ error: "Pendência not found or already resolved." }, 404);
+    return c.json({ error: "Pendência already resolved." }, 409);
   }
 
   // Use meta.changes from D1 run() — if 0, another request already resolved.
@@ -851,7 +851,7 @@ const handleRejeitarPendencia = async (c: Context<Env>) => {
     .run() as { meta: { changes: number } };
 
   if (rejectResult.meta.changes === 0) {
-    return c.json({ error: "Pendência not found or already resolved." }, 404);
+    return c.json({ error: "Pendência already resolved." }, 409);
   }
 
   return c.json({ ok: true, id, status: "rejeitada" });
