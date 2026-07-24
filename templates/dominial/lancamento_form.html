@@ -348,22 +348,11 @@
             const primaryId = AREA_FIELD_MAP[selectedTipo];
             let valor = '';
 
-            // 1) Tenta o campo principal do tipo selecionado
+            // Pega o valor do campo principal do tipo selecionado
             if (primaryId) {
                 const primary = document.getElementById(primaryId);
-                if (primary && primary.offsetParent !== null && primary.value.trim()) {
-                    valor = primary.value.trim();
-                }
-            }
-
-            // 2) Fallback: busca qualquer area_* visível (transmissão, etc.)
-            if (!valor) {
-                const areaInputs = document.querySelectorAll('[id^="area_"]');
-                for (const inp of areaInputs) {
-                    if (inp.offsetParent !== null && inp.value.trim()) {
-                        valor = inp.value.trim();
-                        break;
-                    }
+                if (primary && primary.offsetParent !== null) {
+                    valor = (primary.value || '').trim();
                 }
             }
 
