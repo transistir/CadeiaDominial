@@ -9,7 +9,7 @@
 -->
 <div class="form-group">
     <label for="{{ area_id|default:'area' }}">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
-    <input type="text" name="area" id="{{ area_id|default:'area' }}" step="0.0001" inputmode="decimal"
+    <input type="text" name="area_{{ area_id|default:'area' }}" id="{{ area_id|default:'area' }}" step="0.0001" inputmode="decimal"
            value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}"
            placeholder="Ex: 150,5000">
     <small>Área em hectares com 4 casas decimais (opcional)</small>
