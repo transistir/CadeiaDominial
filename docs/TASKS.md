@@ -239,7 +239,7 @@ Phase 0: Decisions ──┐
 | T-502 | ✅ done | #38 |
 | T-503 | ✅ done | #43 |
 
-**Current gate: Phase 2 — T-202 ready to start** (seed orchestrator). All Phases 1/1.5/3 done. T-300 shipped ahead of schedule using real production data from the legacy PostgreSQL dump; T-202 synthetic seed generator is the last remaining task.
+| **Current gate: Phase 2 — T-202 ready to start** ([#66](https://github.com/transistir/CadeiaDominial/issues/66)). All Phases 1/1.5/3 done. T-300 shipped ahead of schedule using real production data from the legacy PostgreSQL dump; T-202 synthetic seed generator is the last remaining task. Issues for follow-up work tracked on GitHub with `v2` label.
 
 ---
 
@@ -269,3 +269,22 @@ Phase 0: Decisions ──┐
 - `docs/MIGRATION_GUIDE.md` — overall migration architecture
 - `docs/ARCHITECTURE_DECISIONS.md` — log of past architecture decisions
 - PR #17 — `docs(structure): reorganize docs/ for navigation and clarity` (T-403)
+
+## GitHub Issues (v2)
+
+As tarefas do roadmap são acompanhadas via **GitHub Issues** com a tag `v2`. Principais issues abertas:
+
+| # | Título | Tipo |
+|---|---|---|
+| [#66](https://github.com/transistir/CadeiaDominial/issues/66) | T-202 — Seed orchestrator | 🚀 Próximo passo |
+| [#61](https://github.com/transistir/CadeiaDominial/issues/61) | RBAC — autorização por papel | 🚫 Blocker |
+| [#62](https://github.com/transistir/CadeiaDominial/issues/62) | Atomicidade confirm + origem | 🚫 Blocker |
+| [#63](https://github.com/transistir/CadeiaDominial/issues/63) | Paginação GET /api/pendencias | 🟡 Melhoria |
+| [#64](https://github.com/transistir/CadeiaDominial/issues/64) | Dropdown CRI na UI | 🟡 Melhoria |
+| [#65](https://github.com/transistir/CadeiaDominial/issues/65) | Testes de integração | 🟡 Melhoria |
+| [#67](https://github.com/transistir/CadeiaDominial/issues/67) | UX do grafo React Flow | 🟡 Melhoria |
+| [#68](https://github.com/transistir/CadeiaDominial/issues/68) | Testes E2E + CI coverage | 🟡 Melhoria |
+| [#69](https://github.com/transistir/CadeiaDominial/issues/69) | Vite proxy + rotas duplicadas | 🐛 Bug |
+| [#70](https://github.com/transistir/CadeiaDominial/issues/70) | Aprovar schema pendencia | 📋 Decisão |
+| [#71](https://github.com/transistir/CadeiaDominial/issues/71) | Feedback de erro na UI | 🟡 Melhoria |
+| [#72](https://github.com/transistir/CadeiaDominial/issues/72) | Planejar deploy produção | 📋 Planejamento |
