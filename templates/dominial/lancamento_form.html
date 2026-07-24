@@ -88,6 +88,9 @@
                 {% include "dominial/components/_pessoa_form.html" with tipo="transmitente" label="Transmitente(s)" container_id="transmitentes-container-inicio" sugestao_class="transmitente-suggestions" pessoas=transmitentes %}
                 {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container-inicio" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
             </div>
+            
+            <!-- Campo de área opcional -->
+            {% include "dominial/components/_area_form.html" with area_obrigatorio=False area_id="area_inicio_matricula" %}
         </div>
 
         <!-- Campos Opcionais de Transação -->
@@ -140,6 +143,9 @@
                            value="{% if modo_edicao and lancamento.data_transacao %}{{ lancamento.data_transacao|date:'Y-m-d' }}{% elif form_data and form_data.data_transacao and form_data.data_transacao != 'None' %}{{ form_data.data_transacao }}{% endif %}">
                 </div>
             </div>
+            
+            <!-- Campo de área opcional -->
+            {% include "dominial/components/_area_form.html" with area_obrigatorio=False area_id="area_transmissao" %}
         </div>
 
         <!-- Campo de área e origem -->
@@ -151,6 +157,7 @@
             <button type="submit" class="btn btn-success">Salvar Lançamento</button>
             <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
         </div>
+        <input type="hidden" name="area" id="area_hidden" value="{% if form_data and form_data.area is not None %}{{ form_data.area }}{% elif modo_edicao and lancamento.area is not None %}{{ lancamento.area }}{% endif %}">
     </form>
 </main>
 </div>  <!-- /.lancamento-layout -->
@@ -320,5 +327,40 @@
             }
         });
     });
+
+    // ── Área: copia valor do campo correto conforme o tipo selecionado ──
+    (function() {
+        const areaHidden = document.getElementById('area_hidden');
+        const form = document.getElementById('lancamento-form');
+        const tipoSelect = document.getElementById('tipo_lancamento');
+        if (!areaHidden || !form || !tipoSelect) return;
+
+        // Mapeia tipo de lançamento → id do campo de área principal
+        // Para averbação transcrição, usa area_transmissao (area_averbacao é omitida)
+        const isTranscricao = window.isTranscricao === true;
+        const AREA_FIELD_MAP = {
+            'averbacao': isTranscricao ? 'area_transmissao' : 'area_averbacao',
+            'registro': 'area_transmissao',
+            'inicio_matricula': 'area_inicio_matricula',
+        };
+
+        form.addEventListener('submit', function() {
+            const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+            const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+            const primaryId = AREA_FIELD_MAP[selectedTipo];
+            let valor = '';
+
+            // Pega o valor do campo principal do tipo selecionado
+            if (primaryId) {
+                const primary = document.getElementById(primaryId);
+                if (primary && primary.offsetParent !== null) {
+                    valor = (primary.value || '').trim();
+                }
+            }
+
+            // Converte vírgula (padrão brasileiro) para ponto (padrão do backend)
+            areaHidden.value = valor.replace(',', '.');
+        });
+    })();
 </script>
 {% endblock %} 

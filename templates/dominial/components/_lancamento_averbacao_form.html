@@ -16,6 +16,8 @@
         {% include "dominial/components/_pessoa_form.html" with tipo="adquirente" label="Adquirente(s)" container_id="adquirentes-container-averbacao" sugestao_class="adquirente-suggestions" pessoas=adquirentes %}
     </div>
     
-    <!-- Campo de área opcional -->
+    <!-- Campo de área opcional (omitido para transcrições — a seção Transmissão tem o próprio) -->
+    {% if documento.tipo.tipo != 'transcricao' %}
     {% include "dominial/components/_area_form.html" with area_obrigatorio=False area_id="area_averbacao" %}
+    {% endif %}
 </div> 
