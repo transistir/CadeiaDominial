@@ -328,25 +328,47 @@
         });
     });
 
-    // ── Área: copia valor da seção visível para o campo hidden unificado ──
+    // ── Área: copia valor do campo correto conforme o tipo selecionado ──
     (function() {
         const areaHidden = document.getElementById('area_hidden');
         const form = document.getElementById('lancamento-form');
-        if (!areaHidden || !form) return;
+        const tipoSelect = document.getElementById('tipo_lancamento');
+        if (!areaHidden || !form || !tipoSelect) return;
+
+        // Mapeia tipo de lançamento → id do campo de área principal
+        const AREA_FIELD_MAP = {
+            'averbacao': 'area_averbacao',
+            'registro': 'area_transmissao',
+            'inicio_matricula': 'area_inicio_matricula',
+        };
 
         form.addEventListener('submit', function() {
-            // Encontra o campo area_* visível com valor não vazio
-            const areaInputs = document.querySelectorAll('[id^="area_"]');
+            const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+            const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
+            const primaryId = AREA_FIELD_MAP[selectedTipo];
             let valor = '';
-            for (const inp of areaInputs) {
-                if (inp.offsetParent !== null && inp.value.trim()) {
-                    valor = inp.value.trim();
-                    // Converte vírgula (padrão brasileiro) para ponto (padrão do backend)
-                    valor = valor.replace(',', '.');
-                    break;
+
+            // 1) Tenta o campo principal do tipo selecionado
+            if (primaryId) {
+                const primary = document.getElementById(primaryId);
+                if (primary && primary.offsetParent !== null && primary.value.trim()) {
+                    valor = primary.value.trim();
                 }
             }
-            areaHidden.value = valor;
+
+            // 2) Fallback: busca qualquer area_* visível (transmissão, etc.)
+            if (!valor) {
+                const areaInputs = document.querySelectorAll('[id^="area_"]');
+                for (const inp of areaInputs) {
+                    if (inp.offsetParent !== null && inp.value.trim()) {
+                        valor = inp.value.trim();
+                        break;
+                    }
+                }
+            }
+
+            // Converte vírgula (padrão brasileiro) para ponto (padrão do backend)
+            areaHidden.value = valor.replace(',', '.');
         });
     })();
 </script>
