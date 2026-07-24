@@ -34,6 +34,7 @@ import { auditLog } from "./audit_log";
 import { tis } from "./tis";
 import { tisImovel } from "./tis_imovel";
 import { terraIndigenaReferencia } from "./terra_indigena_referencia";
+import { pendenciaCartorio } from "./pendencia_cartorio";
 
 // =============================================================================
 // CRI relations
@@ -280,4 +281,23 @@ export const tisImovelRelations = relations(tisImovel, ({ one }) => ({
 
 export const terraIndigenaReferenciaRelations = relations(terraIndigenaReferencia, ({ many }) => ({
   tis: many(tis),
+}));
+
+// =============================================================================
+// PendenciaCartorio relations
+// =============================================================================
+
+export const pendenciaCartorioRelations = relations(pendenciaCartorio, ({ one }) => ({
+  origem: one(origem, {
+    fields: [pendenciaCartorio.origemId],
+    references: [origem.id],
+  }),
+  criSugerido: one(cri, {
+    fields: [pendenciaCartorio.criSugeridoId],
+    references: [cri.id],
+  }),
+  criConfirmado: one(cri, {
+    fields: [pendenciaCartorio.criConfirmadoId],
+    references: [cri.id],
+  }),
 }));

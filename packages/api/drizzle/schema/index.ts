@@ -27,6 +27,7 @@ export * from "./audit_log";
 export * from "./tis";
 export * from "./tis_imovel";
 export * from "./terra_indigena_referencia";
+export * from "./pendencia_cartorio";
 
 export * from "./relations";
 export * from "./views";
