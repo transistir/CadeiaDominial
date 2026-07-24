@@ -528,6 +528,7 @@ const DOMINIAL = {
 
 /** Reverse-FK delete order, then forward insert order (for truncation). */
 const LOAD_TABLES = [
+  "pendencia_cartorio",
   "origem_fim_cadeia",
   "origem",
   "lancamento_pessoa",
@@ -939,6 +940,27 @@ function run(): Report {
       table: "origem_fim_cadeia",
       dumpRows: origemRows.filter((o) => o.fim).length,
       loaded: fimLoaded,
+    });
+
+    // Auto-populate pendencia_cartorio: any origem with documento_id IS NULL
+    // represents an unresolved citation that needs human review.
+    // Cross-CRI match without cartório confirmation → confianca 'fraca'.
+    const pendenciaResult = db
+      .prepare(
+        `INSERT INTO pendencia_cartorio (origem_id, cri_sugerido_id, confianca, status, created_at)
+         SELECT o.id, o.cri_id, 'fraca', 'pendente', ?
+         FROM origem o
+         WHERE o.documento_id IS NULL AND o.deleted_at IS NULL
+           AND o.id NOT IN (SELECT origem_id FROM origem_fim_cadeia)
+           AND o.tipo IN ('matricula', 'transcricao')`
+      )
+      .run(now);
+    const pendenciaCount =
+      typeof pendenciaResult.changes === "number" ? pendenciaResult.changes : 0;
+    stats.push({
+      table: "pendencia_cartorio",
+      dumpRows: pendenciaCount,
+      loaded: pendenciaCount,
     });
   });
   tx();

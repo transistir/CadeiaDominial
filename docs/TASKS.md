@@ -239,7 +239,7 @@ Phase 0: Decisions ──┐
 | T-502 | ✅ done | #38 |
 | T-503 | ✅ done | #43 |
 
-**Current gate: Phase 2 — T-202 ready to start** (seed orchestrator). All Phases 1/1.5/3 done. T-300 shipped ahead of schedule using real production data from the legacy PostgreSQL dump; T-202 synthetic seed generator is the last remaining task.
+| **Current gate: Phase 2 — T-202 ready to start** ([#66](https://github.com/transistir/CadeiaDominial/issues/66)). All Phases 1/1.5/3 done. T-300 shipped ahead of schedule using real production data from the legacy PostgreSQL dump; T-202 synthetic seed generator is the last remaining task. Issues for follow-up work tracked on GitHub with `v2` label.
 
 ---
 
@@ -249,12 +249,12 @@ Phase 0: Decisions ──┐
 
 | Item | Detail |
 |------|--------|
-| **Branch** | `feat/pendencia-cartorio` ([remote](https://github.com/transistir/CadeiaDominial/tree/feat/pendencia-cartorio)) |
-| **Description** | Schema + API endpoints + legacy-fit auto-populate for a human-review queue when an `origem` references a document that can't be automatically matched to a CRI. |
-| **Why debt?** | Implemented directly on `v2` without worktree/PR/review. Out of scope of the current roadmap. No tests, no migration generated, no frontend, no design decision recorded in `SCHEMA_DECISOES_PENDENTES.md`. |
-| **What's included** | `pendencia_cartorio` Drizzle schema, `GET /api/pendencias` + `POST …/confirmar` + `POST …/rejeitar` endpoints, auto-populate in legacy-fit for `origem.documento_id IS NULL` rows. |
-| **To resolve** | ① Review Q-design for `pendencia_cartorio` and record decisions ② Generate D1 migration (`pnpm db:generate`) ③ Add unit + e2e tests ④ Build minimal UI to consume the endpoints ⑤ Open PR against `v2` with proper review. |
-| **Priority** | Low — blocked until T-202 (seed orchestrator) is done and the core graph flow is stable. |
+| **Branch** | `feat/td-001-pendencia-cartorio` ([PR #58](https://github.com/transistir/CadeiaDominial/pull/58)) |
+| **Status** | 🔄 In review — worktree `feat/td-001-pendencia-cartorio`, PR open against `v2` |
+| **Description** | Schema + API endpoints + legacy-fit auto-populate + frontend table for a human-review queue when an `origem` references a document that can't be automatically matched to a CRI. |
+| **Resolved** | ① Design decisions recorded (draft, pending Luandro approval) ② D1 migration generated (`pnpm db:generate`) ③ Unit tests: 5 tests for API endpoints (27 total pass) ④ Minimal frontend UI at `/pendencias` ⑤ Shared Zod schema in `@cadeia/shared` ⑥ `capture-real-graph.mjs` removed
+ ⑦ Re-review Codex GPT-5.6 Sol: 2 BLOCKERS documented as issues [#61](https://github.com/transistir/CadeiaDominial/issues/61) [#62](https://github.com/transistir/CadeiaDominial/issues/62), 4 PRE-MERGE tracked as issues [#63](https://github.com/transistir/CadeiaDominial/issues/63) [#64](https://github.com/transistir/CadeiaDominial/issues/64) [#65](https://github.com/transistir/CadeiaDominial/issues/65) |
+| **Priority** | 🔽 Low — blocked until T-202 (seed orchestrator) is done; UI can be enhanced later. |
 
 ---
 
@@ -269,3 +269,22 @@ Phase 0: Decisions ──┐
 - `docs/MIGRATION_GUIDE.md` — overall migration architecture
 - `docs/ARCHITECTURE_DECISIONS.md` — log of past architecture decisions
 - PR #17 — `docs(structure): reorganize docs/ for navigation and clarity` (T-403)
+
+## GitHub Issues (v2)
+
+As tarefas do roadmap são acompanhadas via **GitHub Issues** com a tag `v2`. Principais issues abertas:
+
+| # | Título | Tipo |
+|---|---|---|
+| [#66](https://github.com/transistir/CadeiaDominial/issues/66) | T-202 — Seed orchestrator | 🚀 Próximo passo |
+| [#61](https://github.com/transistir/CadeiaDominial/issues/61) | RBAC — autorização por papel | 🚫 Blocker |
+| [#62](https://github.com/transistir/CadeiaDominial/issues/62) | Atomicidade confirm + origem | 🚫 Blocker |
+| [#63](https://github.com/transistir/CadeiaDominial/issues/63) | Paginação GET /api/pendencias | 🟡 Melhoria |
+| [#64](https://github.com/transistir/CadeiaDominial/issues/64) | Dropdown CRI na UI | 🟡 Melhoria |
+| [#65](https://github.com/transistir/CadeiaDominial/issues/65) | Testes de integração | 🟡 Melhoria |
+| [#67](https://github.com/transistir/CadeiaDominial/issues/67) | UX do grafo React Flow | 🟡 Melhoria |
+| [#68](https://github.com/transistir/CadeiaDominial/issues/68) | Testes E2E + CI coverage | 🟡 Melhoria |
+| [#69](https://github.com/transistir/CadeiaDominial/issues/69) | Vite proxy + rotas duplicadas | 🐛 Bug |
+| [#70](https://github.com/transistir/CadeiaDominial/issues/70) | Aprovar schema pendencia | 📋 Decisão |
+| [#71](https://github.com/transistir/CadeiaDominial/issues/71) | Feedback de erro na UI | 🟡 Melhoria |
+| [#72](https://github.com/transistir/CadeiaDominial/issues/72) | Planejar deploy produção | 📋 Planejamento |

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "./api";
 
 const GraphRoute = lazy(() => import("./routes/graph"));
+const PendenciasRoute = lazy(() => import("./routes/pendencias"));
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />
@@ -74,7 +75,17 @@ const graphRoute = createRoute({
   )
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, graphRoute]);
+const pendenciasRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pendencias",
+  component: () => (
+    <Suspense fallback={<div className="route-loading">Carregando pendências...</div>}>
+      <PendenciasRoute />
+    </Suspense>
+  )
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, graphRoute, pendenciasRoute]);
 
 export const router = createRouter({ routeTree });
 

@@ -657,4 +657,207 @@ app.get("/api/files/:key/sign-download", authMiddleware, async (c) => {
   });
 });
 
+// =============================================================================
+// Pending Cartório Queue (pendencia_cartorio)
+// =============================================================================
+
+/**
+ * GET /api/pendencias — list all pending items, joined with origem for context.
+ */
+const handleListPendencias = async (c: Context<Env>) => {
+  const rows = (
+    await c.env.DB.prepare(
+      `SELECT
+         pc.id,
+         pc.origem_id AS origemId,
+         pc.cri_sugerido_id AS criSugeridoId,
+         pc.confianca,
+         pc.status,
+         pc.resolvido_por AS resolvidoPor,
+         pc.resolvido_em AS resolvidoEm,
+         pc.cri_confirmado_id AS criConfirmadoId,
+         pc.created_at AS createdAt,
+         o.tipo AS origemTipo,
+         o.numero AS origemNumero,
+         o.numero_raw AS origemNumeroRaw,
+         cr.nome AS criNome,
+         cr.cidade AS criCidade,
+         cr.uf AS criUf
+       FROM pendencia_cartorio pc
+       JOIN origem o ON o.id = pc.origem_id
+       LEFT JOIN cri cr ON cr.id = pc.cri_sugerido_id
+       WHERE pc.status = 'pendente'
+         AND o.deleted_at IS NULL
+       ORDER BY pc.created_at DESC`
+    )
+      .bind()
+      .all<{
+        id: number;
+        origemId: number;
+        criSugeridoId: number | null;
+        confianca: string;
+        status: string;
+        resolvidoPor: string | null;
+        resolvidoEm: string | null;
+        criConfirmadoId: number | null;
+        createdAt: string;
+        origemTipo: string;
+        origemNumero: string | null;
+        origemNumeroRaw: string | null;
+        criNome: string | null;
+        criCidade: string | null;
+        criUf: string | null;
+      }>()
+  ).results;
+
+  return c.json(rows);
+};
+
+app.get("/api/pendencias", authMiddleware, handleListPendencias);
+app.get("/pendencias", authMiddleware, handleListPendencias);
+
+/**
+ * POST /api/pendencias/:id/confirmar — confirm a pending match.
+ * Body: { cri_confirmado_id?: number, documento_id?: number }
+ */
+const handleConfirmarPendencia = async (c: Context<Env>) => {
+  const idParam = c.req.param("id");
+  if (!idParam || !isPositiveInteger(idParam)) {
+    return c.json({ error: "id must be a positive integer." }, 400);
+  }
+  const id = Number(idParam);
+  const payload = c.get("jwtPayload") as { sub?: string; role?: string };
+  const resolvidoPor = payload?.sub ?? "unknown";
+
+  const body = await c.req.json().catch(() => ({}));
+  let criConfirmadoId: number | null = null;
+  let documentoId: number | null = null;
+
+  if (body?.cri_confirmado_id !== undefined && body?.cri_confirmado_id !== null) {
+    if (typeof body.cri_confirmado_id !== "number" || !Number.isInteger(body.cri_confirmado_id) || body.cri_confirmado_id < 1) {
+      return c.json({ error: "cri_confirmado_id must be a positive integer." }, 400);
+    }
+    criConfirmadoId = body.cri_confirmado_id;
+  }
+
+  if (body?.documento_id !== undefined && body?.documento_id !== null) {
+    if (typeof body.documento_id !== "number" || !Number.isInteger(body.documento_id) || body.documento_id < 1) {
+      return c.json({ error: "documento_id must be a positive integer." }, 400);
+    }
+    documentoId = body.documento_id;
+  }
+
+  const now = new Date().toISOString();
+
+  // Fetch the pendencia to get required FK fields AND check status.
+  const pendencia = await c.env.DB.prepare(
+    "SELECT id, origem_id, cri_sugerido_id, status FROM pendencia_cartorio WHERE id = ?"
+  )
+    .bind(id)
+    .first<{ id: number; origem_id: number; cri_sugerido_id: number | null; status: string }>();
+
+  if (!pendencia) {
+    return c.json({ error: "Pendência not found." }, 404);
+  }
+
+  if (pendencia.status !== "pendente") {
+    return c.json({ error: "Pendência not found or already resolved." }, 409);
+  }
+
+  // Transition pendente → confirmada (guarded: only if currently pendente).
+  // Use meta.changes from D1 run() — if 0, another request beat us to it.
+  const confirmResult = await c.env.DB.prepare(
+    `UPDATE pendencia_cartorio
+     SET status = 'confirmada',
+         resolvido_em = ?,
+         resolvido_por = ?,
+         cri_confirmado_id = ?
+     WHERE id = ? AND status = 'pendente'`
+  )
+    .bind(now, resolvidoPor, criConfirmadoId, id)
+    .run() as { meta: { changes: number } };
+
+  if (confirmResult.meta.changes === 0) {
+    return c.json({ error: "Pendência not found or already resolved." }, 409);
+  }
+
+  // Update the origem (separate statement — D1 batch not available in current types).
+  const effectiveCriId = criConfirmadoId ?? pendencia.cri_sugerido_id;
+  if (effectiveCriId !== null || documentoId !== null) {
+    const updates: string[] = [];
+    const binds: unknown[] = [];
+
+    if (effectiveCriId !== null) {
+      updates.push("cri_id = ?");
+      binds.push(effectiveCriId);
+    }
+    if (documentoId !== null) {
+      updates.push("documento_id = ?");
+      binds.push(documentoId);
+    }
+
+    binds.push(pendencia.origem_id);
+
+    await c.env.DB.prepare(
+      `UPDATE origem SET ${updates.join(", ")} WHERE id = ?`
+    )
+      .bind(...binds)
+      .run();
+  }
+
+  return c.json({ ok: true, id, status: "confirmada" });
+};
+
+app.post("/api/pendencias/:id/confirmar", authMiddleware, handleConfirmarPendencia);
+app.post("/pendencias/:id/confirmar", authMiddleware, handleConfirmarPendencia);
+
+/**
+ * POST /api/pendencias/:id/rejeitar — reject a pending match.
+ */
+const handleRejeitarPendencia = async (c: Context<Env>) => {
+  const idParam = c.req.param("id");
+  if (!idParam || !isPositiveInteger(idParam)) {
+    return c.json({ error: "id must be a positive integer." }, 400);
+  }
+  const id = Number(idParam);
+  const payload = c.get("jwtPayload") as { sub?: string; role?: string };
+  const resolvidoPor = payload?.sub ?? "unknown";
+  const now = new Date().toISOString();
+
+  // Fetch pendencia to check current status before rejecting.
+  const pendencia = await c.env.DB.prepare(
+    "SELECT id, status FROM pendencia_cartorio WHERE id = ?"
+  )
+    .bind(id)
+    .first<{ id: number; status: string }>();
+
+  if (!pendencia) {
+    return c.json({ error: "Pendência not found." }, 404);
+  }
+
+  if (pendencia.status !== "pendente") {
+    return c.json({ error: "Pendência already resolved." }, 409);
+  }
+
+  // Use meta.changes from D1 run() — if 0, another request already resolved.
+  const rejectResult = await c.env.DB.prepare(
+    `UPDATE pendencia_cartorio
+     SET status = 'rejeitada',
+         resolvido_em = ?,
+         resolvido_por = ?
+     WHERE id = ? AND status = 'pendente'`
+  )
+    .bind(now, resolvidoPor, id)
+    .run() as { meta: { changes: number } };
+
+  if (rejectResult.meta.changes === 0) {
+    return c.json({ error: "Pendência already resolved." }, 409);
+  }
+
+  return c.json({ ok: true, id, status: "rejeitada" });
+};
+
+app.post("/api/pendencias/:id/rejeitar", authMiddleware, handleRejeitarPendencia);
+app.post("/pendencias/:id/rejeitar", authMiddleware, handleRejeitarPendencia);
+
 export default app;

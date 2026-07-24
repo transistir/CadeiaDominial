@@ -8,8 +8,21 @@ type UserRecord = {
   password_hash: string;
 };
 
+type PendenciaRecord = {
+  id: number;
+  origem_id: number;
+  cri_sugerido_id: number | null;
+  confianca: string;
+  status: string;
+  resolvido_por: string | null;
+  resolvido_em: string | null;
+  cri_confirmado_id: number | null;
+  created_at: string;
+};
+
 const makeTestEnv = () => {
   const users = new Map<string, UserRecord>();
+  const pendencias = new Map<number, PendenciaRecord>();
 
   return {
     JWT_SECRET: "test-secret",
@@ -33,6 +46,17 @@ const makeTestEnv = () => {
               const email = String(values[0] ?? "");
               return users.get(email) ?? null;
             }
+            if (query.includes("SELECT") && query.includes("FROM pendencia_cartorio")) {
+              const id = Number(values[0] ?? 0);
+              const p = pendencias.get(id);
+              if (!p) return null;
+              // Honor status filter if present (post-update verification)
+              if (query.includes("status =")) {
+                if (query.includes("'confirmada'") && p.status !== "confirmada") return null;
+                if (query.includes("'rejeitada'") && p.status !== "rejeitada") return null;
+              }
+              return p ?? null;
+            }
             return null;
           },
           run: async () => {
@@ -54,12 +78,75 @@ const makeTestEnv = () => {
                 }
               }
             }
-            return {};
+            let runChanges = 0;
+            // UPDATE pendencia_cartorio SET status = 'confirmada' ... WHERE id = ? AND status = 'pendente'
+            if (query.includes("UPDATE pendencia_cartorio") && query.includes("confirmada") && query.includes("pendente")) {
+              const [now, resolvidoPor, criConfirmadoId] = values as [string, string, number | null];
+              const idNum = Number(values[values.length - 1]);
+              const existing = pendencias.get(idNum);
+              if (existing && existing.status === "pendente") {
+                pendencias.set(idNum, {
+                  ...existing,
+                  status: "confirmada",
+                  resolvido_em: now,
+                  resolvido_por: resolvidoPor,
+                  cri_confirmado_id: criConfirmadoId,
+                });
+                runChanges = 1;
+              }
+            }
+            // UPDATE pendencia_cartorio SET status = 'rejeitada' ... WHERE id = ? AND status = 'pendente'
+            if (query.includes("UPDATE pendencia_cartorio") && query.includes("rejeitada") && query.includes("pendente")) {
+              const [now, resolvidoPor] = values as [string, string];
+              const idNum = Number(values[values.length - 1]);
+              const existing = pendencias.get(idNum);
+              if (existing && existing.status === "pendente") {
+                pendencias.set(idNum, {
+                  ...existing,
+                  status: "rejeitada",
+                  resolvido_em: now,
+                  resolvido_por: resolvidoPor,
+                });
+                runChanges = 1;
+              }
+            }
+            // UPDATE origem SET cri_id
+            if (query.includes("UPDATE origem")) {
+              // no-op for test — just verify it doesn't throw
+            }
+            return { meta: { changes: runChanges } };
+          },
+          all: async () => {
+            // GET /api/pendencias
+            if (query.includes("FROM pendencia_cartorio pc")) {
+              const results = Array.from(pendencias.values())
+                .filter(p => p.status === "pendente")
+                .map(p => ({
+                  id: p.id,
+                  origemId: p.origem_id,
+                  criSugeridoId: p.cri_sugerido_id,
+                  confianca: p.confianca,
+                  status: p.status,
+                  resolvidoPor: p.resolvido_por,
+                  resolvidoEm: p.resolvido_em,
+                  criConfirmadoId: p.cri_confirmado_id,
+                  createdAt: p.created_at,
+                  origemTipo: "matricula",
+                  origemNumero: "1234",
+                  origemNumeroRaw: null,
+                  criNome: "Cartório Teste",
+                  criCidade: "São Paulo",
+                  criUf: "SP",
+                }));
+              return { results };
+            }
+            return { results: [] };
           }
         })
       })
     },
-    __users: users
+    __users: users,
+    __pendencias: pendencias
   };
 };
 
@@ -424,5 +511,308 @@ describe("pdf export", () => {
     );
 
     expect(res.status).toBe(501);
+  });
+});
+
+// =============================================================================
+// Pendência Cartório API tests
+// =============================================================================
+
+describe("pendencia cartorio API", () => {
+  const seedPendencia = (env: ReturnType<typeof makeTestEnv>) => {
+    const pendencia: PendenciaRecord = {
+      id: 1,
+      origem_id: 100,
+      cri_sugerido_id: 50,
+      confianca: "fraca",
+      status: "pendente",
+      resolvido_por: null,
+      resolvido_em: null,
+      cri_confirmado_id: null,
+      created_at: "2026-07-24T12:00:00.000Z",
+    };
+    env.__pendencias.set(1, pendencia);
+    return pendencia;
+  };
+
+  it("rejects unauthenticated requests", async () => {
+    const res = await app.request("/api/pendencias", {}, makeTestEnv());
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/pendencias — lists pending items", async () => {
+    const env = makeTestEnv();
+    seedPendencia(env);
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias",
+      { headers: { Authorization: `Bearer ${token}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as Array<Record<string, unknown>>;
+    expect(Array.isArray(json)).toBe(true);
+    expect(json).toHaveLength(1);
+    expect(json[0]).toMatchObject({
+      id: 1,
+      origemId: 100,
+      confianca: "fraca",
+      status: "pendente",
+      origemTipo: "matricula",
+    });
+  });
+
+  it("GET /api/pendencias — empty list when no pendencies", async () => {
+    const env = makeTestEnv();
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias",
+      { headers: { Authorization: `Bearer ${token}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(Array.isArray(json)).toBe(true);
+    expect(json).toHaveLength(0);
+  });
+
+  it("POST /api/pendencias/:id/confirmar — confirms a pending item", async () => {
+    const env = makeTestEnv();
+    seedPendencia(env);
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cri_confirmado_id: 50 }),
+      },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { ok: boolean };
+    expect(json.ok).toBe(true);
+  });
+
+  it("POST /api/pendencias/:id/confirmar — 404 for unknown pendencia", async () => {
+    const env = makeTestEnv();
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/999/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      env
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/pendencias/:id/confirmar — 400 for non-integer id", async () => {
+    const env = makeTestEnv();
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/abc/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      env
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/pendencias/:id/rejeitar — rejects a pending item", async () => {
+    const env = makeTestEnv();
+    seedPendencia(env);
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/rejeitar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { ok: boolean; status: string };
+    expect(json.ok).toBe(true);
+    expect(json.status).toBe("rejeitada");
+  });
+
+  it("POST /api/pendencias/:id/rejeitar — 404 for unknown pendencia", async () => {
+    const env = makeTestEnv();
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/999/rejeitar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      env
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/pendencias/:id/rejeitar — 400 for non-integer id", async () => {
+    const env = makeTestEnv();
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/xyz/rejeitar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      env
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+
+  it("POST /api/pendencias/:id/confirmar \u2014 409 when already resolved", async () => {
+    const env = makeTestEnv();
+    const pendencia = seedPendencia(env);
+    // Pre-resolve: set as confirmed
+    pendencia.status = "confirmada";
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cri_confirmado_id: 50 }),
+      },
+      env
+    );
+
+    expect(res.status).toBe(409);
+  });
+
+  it("POST /api/pendencias/:id/confirmar \u2014 400 for negative cri_confirmado_id", async () => {
+    const env = makeTestEnv();
+    seedPendencia(env);
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cri_confirmado_id: -1 }),
+      },
+      env
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/pendencias/:id/confirmar \u2014 400 for zero cri_confirmado_id", async () => {
+    const env = makeTestEnv();
+    seedPendencia(env);
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cri_confirmado_id: 0 }),
+      },
+      env
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/pendencias/:id/confirmar \u2014 400 for fractional cri_confirmado_id", async () => {
+    const env = makeTestEnv();
+    seedPendencia(env);
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/confirmar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cri_confirmado_id: 1.5 }),
+      },
+      env
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/pendencias/:id/rejeitar — 409 when pendencia was already rejected", async () => {
+    const env = makeTestEnv();
+    const pendencia = seedPendencia(env);
+    pendencia.status = "rejeitada";
+    const token = await loginAndGetToken(env);
+
+    const res = await app.request(
+      "/api/pendencias/1/rejeitar",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      env
+    );
+
+    expect(res.status).toBe(409);
   });
 });
