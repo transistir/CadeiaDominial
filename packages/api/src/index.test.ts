@@ -78,6 +78,7 @@ const makeTestEnv = () => {
                 }
               }
             }
+            let runChanges = 0;
             // UPDATE pendencia_cartorio SET status = 'confirmada' ... WHERE id = ? AND status = 'pendente'
             if (query.includes("UPDATE pendencia_cartorio") && query.includes("confirmada") && query.includes("pendente")) {
               const [now, resolvidoPor, criConfirmadoId] = values as [string, string, number | null];
@@ -91,6 +92,7 @@ const makeTestEnv = () => {
                   resolvido_por: resolvidoPor,
                   cri_confirmado_id: criConfirmadoId,
                 });
+                runChanges = 1;
               }
             }
             // UPDATE pendencia_cartorio SET status = 'rejeitada' ... WHERE id = ? AND status = 'pendente'
@@ -105,13 +107,14 @@ const makeTestEnv = () => {
                   resolvido_em: now,
                   resolvido_por: resolvidoPor,
                 });
+                runChanges = 1;
               }
             }
             // UPDATE origem SET cri_id
             if (query.includes("UPDATE origem")) {
               // no-op for test — just verify it doesn't throw
             }
-            return {};
+            return { meta: { changes: runChanges } };
           },
           all: async () => {
             // GET /api/pendencias

@@ -664,7 +664,7 @@ app.get("/api/files/:key/sign-download", authMiddleware, async (c) => {
 /**
  * GET /api/pendencias — list all pending items, joined with origem for context.
  */
-app.get("/api/pendencias", authMiddleware, async (c) => {
+const handleListPendencias = async (c: Context<Env>) => {
   const rows = (
     await c.env.DB.prepare(
       `SELECT
@@ -711,13 +711,16 @@ app.get("/api/pendencias", authMiddleware, async (c) => {
   ).results;
 
   return c.json(rows);
-});
+};
+
+app.get("/api/pendencias", authMiddleware, handleListPendencias);
+app.get("/pendencias", authMiddleware, handleListPendencias);
 
 /**
  * POST /api/pendencias/:id/confirmar — confirm a pending match.
  * Body: { cri_confirmado_id?: number, documento_id?: number }
  */
-app.post("/api/pendencias/:id/confirmar", authMiddleware, async (c) => {
+const handleConfirmarPendencia = async (c: Context<Env>) => {
   const idParam = c.req.param("id");
   if (!idParam || !isPositiveInteger(idParam)) {
     return c.json({ error: "id must be a positive integer." }, 400);
@@ -727,7 +730,6 @@ app.post("/api/pendencias/:id/confirmar", authMiddleware, async (c) => {
   const resolvidoPor = payload?.sub ?? "unknown";
 
   const body = await c.req.json().catch(() => ({}));
-  // Validate cri_confirmado_id: must be positive integer if present.
   let criConfirmadoId: number | null = null;
   let documentoId: number | null = null;
 
@@ -763,7 +765,8 @@ app.post("/api/pendencias/:id/confirmar", authMiddleware, async (c) => {
   }
 
   // Transition pendente → confirmada (guarded: only if currently pendente).
-  await c.env.DB.prepare(
+  // Use meta.changes from D1 run() — if 0, another request beat us to it.
+  const confirmResult = await c.env.DB.prepare(
     `UPDATE pendencia_cartorio
      SET status = 'confirmada',
          resolvido_em = ?,
@@ -772,16 +775,9 @@ app.post("/api/pendencias/:id/confirmar", authMiddleware, async (c) => {
      WHERE id = ? AND status = 'pendente'`
   )
     .bind(now, resolvidoPor, criConfirmadoId, id)
-    .run();
+    .run() as { meta: { changes: number } };
 
-  // Verify the transition actually happened (was pendente, not already resolved).
-  const updated = await c.env.DB.prepare(
-    "SELECT id FROM pendencia_cartorio WHERE id = ? AND status = 'confirmada'"
-  )
-    .bind(id)
-    .first();
-
-  if (!updated) {
+  if (confirmResult.meta.changes === 0) {
     return c.json({ error: "Pendência not found or already resolved." }, 409);
   }
 
@@ -810,12 +806,15 @@ app.post("/api/pendencias/:id/confirmar", authMiddleware, async (c) => {
   }
 
   return c.json({ ok: true, id, status: "confirmada" });
-});
+};
+
+app.post("/api/pendencias/:id/confirmar", authMiddleware, handleConfirmarPendencia);
+app.post("/pendencias/:id/confirmar", authMiddleware, handleConfirmarPendencia);
 
 /**
  * POST /api/pendencias/:id/rejeitar — reject a pending match.
  */
-app.post("/api/pendencias/:id/rejeitar", authMiddleware, async (c) => {
+const handleRejeitarPendencia = async (c: Context<Env>) => {
   const idParam = c.req.param("id");
   if (!idParam || !isPositiveInteger(idParam)) {
     return c.json({ error: "id must be a positive integer." }, 400);
@@ -840,7 +839,8 @@ app.post("/api/pendencias/:id/rejeitar", authMiddleware, async (c) => {
     return c.json({ error: "Pendência not found or already resolved." }, 404);
   }
 
-  await c.env.DB.prepare(
+  // Use meta.changes from D1 run() — if 0, another request already resolved.
+  const rejectResult = await c.env.DB.prepare(
     `UPDATE pendencia_cartorio
      SET status = 'rejeitada',
          resolvido_em = ?,
@@ -848,21 +848,16 @@ app.post("/api/pendencias/:id/rejeitar", authMiddleware, async (c) => {
      WHERE id = ? AND status = 'pendente'`
   )
     .bind(now, resolvidoPor, id)
-    .run();
+    .run() as { meta: { changes: number } };
 
-  // D1 .run() returns { success: true } with no changes info in current API;
-  // check if the pendencia exists via a follow-up query.
-  const updated = await c.env.DB.prepare(
-    "SELECT id FROM pendencia_cartorio WHERE id = ? AND status = 'rejeitada'"
-  )
-    .bind(id)
-    .first();
-
-  if (!updated) {
+  if (rejectResult.meta.changes === 0) {
     return c.json({ error: "Pendência not found or already resolved." }, 404);
   }
 
   return c.json({ ok: true, id, status: "rejeitada" });
-});
+};
+
+app.post("/api/pendencias/:id/rejeitar", authMiddleware, handleRejeitarPendencia);
+app.post("/pendencias/:id/rejeitar", authMiddleware, handleRejeitarPendencia);
 
 export default app;
