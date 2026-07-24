@@ -249,12 +249,11 @@ Phase 0: Decisions ──┐
 
 | Item | Detail |
 |------|--------|
-| **Branch** | `feat/pendencia-cartorio` ([remote](https://github.com/transistir/CadeiaDominial/tree/feat/pendencia-cartorio)) |
-| **Description** | Schema + API endpoints + legacy-fit auto-populate for a human-review queue when an `origem` references a document that can't be automatically matched to a CRI. |
-| **Why debt?** | Implemented directly on `v2` without worktree/PR/review. Out of scope of the current roadmap. No tests, no migration generated, no frontend, no design decision recorded in `SCHEMA_DECISOES_PENDENTES.md`. |
-| **What's included** | `pendencia_cartorio` Drizzle schema, `GET /api/pendencias` + `POST …/confirmar` + `POST …/rejeitar` endpoints, auto-populate in legacy-fit for `origem.documento_id IS NULL` rows. |
-| **To resolve** | ① Review Q-design for `pendencia_cartorio` and record decisions ② Generate D1 migration (`pnpm db:generate`) ③ Add unit + e2e tests ④ Build minimal UI to consume the endpoints ⑤ Open PR against `v2` with proper review. |
-| **Priority** | Low — blocked until T-202 (seed orchestrator) is done and the core graph flow is stable. |
+| **Branch** | `feat/td-001-pendencia-cartorio` ([PR #17](https://github.com/transistir/CadeiaDominial/pull/17)) |
+| **Status** | 🔄 In review — worktree `feat/td-001-pendencia-cartorio`, PR open against `v2` |
+| **Description** | Schema + API endpoints + legacy-fit auto-populate + frontend table for a human-review queue when an `origem` references a document that can't be automatically matched to a CRI. |
+| **Resolved** | ① Design decisions recorded (draft, pending Luandro approval) ② D1 migration generated (`pnpm db:generate`) ③ Unit tests: 5 tests for API endpoints (27 total pass) ④ Minimal frontend UI at `/pendencias` ⑤ Shared Zod schema in `@cadeia/shared` ⑥ `capture-real-graph.mjs` removed |
+| **Priority** | 🔽 Low — blocked until T-202 (seed orchestrator) is done; UI can be enhanced later.
 
 ---
 

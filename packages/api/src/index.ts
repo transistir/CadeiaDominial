@@ -727,37 +727,65 @@ app.post("/api/pendencias/:id/confirmar", authMiddleware, async (c) => {
   const resolvidoPor = payload?.sub ?? "unknown";
 
   const body = await c.req.json().catch(() => ({}));
-  const criConfirmadoId =
-    typeof body?.cri_confirmado_id === "number" ? body.cri_confirmado_id : null;
-  const documentoId =
-    typeof body?.documento_id === "number" ? body.documento_id : null;
+  // Validate cri_confirmado_id: must be positive integer if present.
+  let criConfirmadoId: number | null = null;
+  let documentoId: number | null = null;
+
+  if (body?.cri_confirmado_id !== undefined && body?.cri_confirmado_id !== null) {
+    if (typeof body.cri_confirmado_id !== "number" || !Number.isInteger(body.cri_confirmado_id) || body.cri_confirmado_id < 1) {
+      return c.json({ error: "cri_confirmado_id must be a positive integer." }, 400);
+    }
+    criConfirmadoId = body.cri_confirmado_id;
+  }
+
+  if (body?.documento_id !== undefined && body?.documento_id !== null) {
+    if (typeof body.documento_id !== "number" || !Number.isInteger(body.documento_id) || body.documento_id < 1) {
+      return c.json({ error: "documento_id must be a positive integer." }, 400);
+    }
+    documentoId = body.documento_id;
+  }
 
   const now = new Date().toISOString();
 
-  // Fetch the pendencia to get origemId
+  // Fetch the pendencia to get required FK fields AND check status.
   const pendencia = await c.env.DB.prepare(
-    "SELECT id, origem_id, cri_sugerido_id FROM pendencia_cartorio WHERE id = ?"
+    "SELECT id, origem_id, cri_sugerido_id, status FROM pendencia_cartorio WHERE id = ?"
   )
     .bind(id)
-    .first<{ id: number; origem_id: number; cri_sugerido_id: number | null }>();
+    .first<{ id: number; origem_id: number; cri_sugerido_id: number | null; status: string }>();
 
   if (!pendencia) {
     return c.json({ error: "Pendência not found." }, 404);
   }
 
-  // Update pendencia status
+  if (pendencia.status !== "pendente") {
+    return c.json({ error: "Pendência not found or already resolved." }, 409);
+  }
+
+  // Transition pendente → confirmada (guarded: only if currently pendente).
   await c.env.DB.prepare(
     `UPDATE pendencia_cartorio
      SET status = 'confirmada',
          resolvido_em = ?,
          resolvido_por = ?,
          cri_confirmado_id = ?
-     WHERE id = ?`
+     WHERE id = ? AND status = 'pendente'`
   )
     .bind(now, resolvidoPor, criConfirmadoId, id)
     .run();
 
-  // Update origem: set cri_id and documento_id if provided
+  // Verify the transition actually happened (was pendente, not already resolved).
+  const updated = await c.env.DB.prepare(
+    "SELECT id FROM pendencia_cartorio WHERE id = ? AND status = 'confirmada'"
+  )
+    .bind(id)
+    .first();
+
+  if (!updated) {
+    return c.json({ error: "Pendência not found or already resolved." }, 409);
+  }
+
+  // Update the origem (separate statement — D1 batch not available in current types).
   const effectiveCriId = criConfirmadoId ?? pendencia.cri_sugerido_id;
   if (effectiveCriId !== null || documentoId !== null) {
     const updates: string[] = [];
@@ -796,6 +824,21 @@ app.post("/api/pendencias/:id/rejeitar", authMiddleware, async (c) => {
   const payload = c.get("jwtPayload") as { sub?: string; role?: string };
   const resolvidoPor = payload?.sub ?? "unknown";
   const now = new Date().toISOString();
+
+  // Fetch pendencia to check current status before rejecting.
+  const pendencia = await c.env.DB.prepare(
+    "SELECT id, status FROM pendencia_cartorio WHERE id = ?"
+  )
+    .bind(id)
+    .first<{ id: number; status: string }>();
+
+  if (!pendencia) {
+    return c.json({ error: "Pendência not found." }, 404);
+  }
+
+  if (pendencia.status !== "pendente") {
+    return c.json({ error: "Pendência not found or already resolved." }, 404);
+  }
 
   await c.env.DB.prepare(
     `UPDATE pendencia_cartorio

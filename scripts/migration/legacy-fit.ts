@@ -950,7 +950,8 @@ function run(): Report {
         `INSERT INTO pendencia_cartorio (origem_id, cri_sugerido_id, confianca, status, created_at)
          SELECT o.id, o.cri_id, 'fraca', 'pendente', ?
          FROM origem o
-         WHERE o.documento_id IS NULL AND o.deleted_at IS NULL`
+         WHERE o.documento_id IS NULL AND o.deleted_at IS NULL
+           AND o.id NOT IN (SELECT origem_id FROM origem_fim_cadeia)`
       )
       .run(now);
     const pendenciaCount =
