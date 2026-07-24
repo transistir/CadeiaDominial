@@ -1435,6 +1435,9 @@ window.salvarArvoreSVG = function () {
   const svgNode = svg.node();
   const clone = svgNode.cloneNode(true);
 
+  // Remover indicadores temporários adicionados diretamente ao SVG
+  clone.querySelectorAll(":scope > text").forEach((text) => text.remove());
+
   // Encontrar e limpar transform da zoomGroup no clone
   const zoomGroupClone = clone.querySelector('#zoom-group, [id="zoom-group"]');
   if (zoomGroupClone) {
