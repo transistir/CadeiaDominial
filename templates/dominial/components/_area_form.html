@@ -10,7 +10,7 @@
 <div class="form-group">
     <label for="{{ area_id|default:'area' }}">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
     <input type="text" name="area_{{ area_id|default:'area' }}" id="{{ area_id|default:'area' }}" step="0.0001" inputmode="decimal"
-           value="{% if modo_edicao %}{{ lancamento.area }}{% elif form_data %}{{ form_data.area }}{% endif %}"
+           value="{% if modo_edicao %}{% if lancamento.area is not None %}{{ lancamento.area }}{% else %}0{% endif %}{% elif form_data and form_data.area is not None %}{{ form_data.area }}{% endif %}"
            placeholder="Ex: 150,5000">
     <small>Área em hectares com 4 casas decimais (opcional)</small>
 </div>
@@ -20,7 +20,7 @@
     const areaInput = document.getElementById('{{ area_id|default:"area" }}');
     if (!areaInput) return;
 
-    function normalizarArea() {
+    function validarArea() {
         let valor = areaInput.value;
 
         // Se vazio, limpa erro e retorna
@@ -32,11 +32,8 @@
             return;
         }
 
-        // Substitui TODAS as vírgulas por ponto (replaceAll)
-        valor = valor.replace(/\,/g, '.');
-        areaInput.value = valor;
-
         // Valida se é número decimal válido (só dígitos, vírgula ou ponto como separador)
+        // Aceita formato brasileiro com vírgula (Ex: 150,5000)
         const regex = /^\d+([\.,]\d+)?$/;
         if (!regex.test(valor)) {
             areaInput.setCustomValidity('Valor inválido. Use apenas números.');
@@ -59,7 +56,7 @@
         }
     }
 
-    areaInput.addEventListener('input', normalizarArea);
-    areaInput.addEventListener('blur', normalizarArea);
+    areaInput.addEventListener('input', validarArea);
+    areaInput.addEventListener('blur', validarArea);
 })();
 </script> 
