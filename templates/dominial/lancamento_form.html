@@ -336,8 +336,10 @@
         if (!areaHidden || !form || !tipoSelect) return;
 
         // Mapeia tipo de lançamento → id do campo de área principal
+        // Para averbação transcrição, usa area_transmissao (area_averbacao é omitida)
+        const isTranscricao = window.isTranscricao === true;
         const AREA_FIELD_MAP = {
-            'averbacao': 'area_averbacao',
+            'averbacao': isTranscricao ? 'area_transmissao' : 'area_averbacao',
             'registro': 'area_transmissao',
             'inicio_matricula': 'area_inicio_matricula',
         };
