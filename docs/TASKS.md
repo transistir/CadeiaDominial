@@ -243,6 +243,21 @@ Phase 0: Decisions ──┐
 
 ---
 
+## Technical Debt
+
+### TD-001 — Pendência Cartório queue (unplanned feature)
+
+| Item | Detail |
+|------|--------|
+| **Branch** | `feat/pendencia-cartorio` ([remote](https://github.com/transistir/CadeiaDominial/tree/feat/pendencia-cartorio)) |
+| **Description** | Schema + API endpoints + legacy-fit auto-populate for a human-review queue when an `origem` references a document that can't be automatically matched to a CRI. |
+| **Why debt?** | Implemented directly on `v2` without worktree/PR/review. Out of scope of the current roadmap. No tests, no migration generated, no frontend, no design decision recorded in `SCHEMA_DECISOES_PENDENTES.md`. |
+| **What's included** | `pendencia_cartorio` Drizzle schema, `GET /api/pendencias` + `POST …/confirmar` + `POST …/rejeitar` endpoints, auto-populate in legacy-fit for `origem.documento_id IS NULL` rows. |
+| **To resolve** | ① Review Q-design for `pendencia_cartorio` and record decisions ② Generate D1 migration (`pnpm db:generate`) ③ Add unit + e2e tests ④ Build minimal UI to consume the endpoints ⑤ Open PR against `v2` with proper review. |
+| **Priority** | Low — blocked until T-202 (seed orchestrator) is done and the core graph flow is stable. |
+
+---
+
 ## Related documents
 
 - `docs/SCHEMA_V2_BLINDSPOT_REVIEW.md` — the 27-issue audit (PR #15)
