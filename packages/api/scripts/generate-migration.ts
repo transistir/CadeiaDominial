@@ -80,7 +80,7 @@ async function main() {
     const dir = resolve(API_ROOT, "drizzle/migrations");
     mkdirSync(join(dir, "meta"), { recursive: true });
 
-    writeFileSync(join(dir, sqlFile), sqlStatements.join("\n") + "\n");
+    writeFileSync(join(dir, sqlFile), sqlStatements.join("\n\n--> statement-breakpoint\n") + "\n");
     // Snapshot must live under `meta/` so `drizzle-kit generate` (CLI) finds
     // it on subsequent runs — the standard layout is `meta/{tag}_snapshot.json`.
     writeFileSync(join(dir, "meta", snapshotFile), JSON.stringify(current, null, 2));

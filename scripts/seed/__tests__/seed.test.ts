@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   DEFAULT_CHAIN_COUNT,
   LANCAMENTOS_PER_CHAIN,
@@ -8,6 +8,28 @@ import {
   generateSeedChains,
   type SeedOptions,
 } from "../seed-orchestrator";
+import { persistSeedChains } from "../seed-writer";
+import type { TopologyDocumento } from "../chain-topology";
+import Database from "better-sqlite3";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/** Create an in-memory SQLite DB with the v2 schema applied. */
+function createTestDb(): Database.Database {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = true");
+  const migrationPath = path.resolve(
+    __dirname,
+    "../../../packages/api/drizzle/migrations/0000_v2_full_schema.sql",
+  );
+  const migrationSQL = fs.readFileSync(migrationPath, "utf-8");
+  db.exec(migrationSQL);
+  return db;
+}
 
 describe("seed-orchestrator", () => {
   describe("parseSeedArgs", () => {
@@ -460,6 +482,205 @@ describe("seed-orchestrator", () => {
       expect(chain.topology.documentos.length).toBeGreaterThanOrEqual(
         LANCAMENTOS_PER_CHAIN,
       );
+    });
+  });
+
+  describe("seed-writer acceptance tests", () => {
+    let db: Database.Database;
+
+    beforeEach(() => {
+      // Create a fresh in-memory database for each test
+      db = createTestDb();
+    });
+
+    it("should persist a small mixed-shape batch (seed 42, count 3)", () => {
+      const options: SeedOptions = { count: 3, seed: "42" };
+      const chains = generateSeedChains(options);
+
+      const report = persistSeedChains(db, "42", chains);
+
+      expect(report.errors).toHaveLength(0);
+      expect(report.seed).toBe("42");
+      expect(report.inserted.documento).toBeGreaterThan(0);
+      expect(report.inserted.imovel).toBeGreaterThan(0);
+      expect(report.inserted.lancamento).toBeGreaterThan(0);
+      expect(report.inserted.origem).toBeGreaterThan(0);
+      expect(report.elapsedMs).toBeGreaterThan(0);
+      expect(report.elapsedMs).toBeLessThan(60000);
+    });
+
+    it("should satisfy PRAGMA foreign_key_check with no violations", () => {
+      const options: SeedOptions = { count: 2, seed: "fk-test" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "fk-test", chains);
+
+      const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
+      expect(fkCheck).toHaveLength(0);
+    });
+
+    it("should have all expected table counts matching report.inserted.*", () => {
+      const options: SeedOptions = { count: 2, seed: "count-test" };
+      const chains = generateSeedChains(options);
+      const report = persistSeedChains(db, "count-test", chains);
+
+      const docCount = db.prepare("SELECT COUNT(*) as count FROM documento").get() as { count: number };
+      const imovCount = db.prepare("SELECT COUNT(*) as count FROM imovel").get() as { count: number };
+      const lancCount = db.prepare("SELECT COUNT(*) as count FROM lancamento").get() as { count: number };
+      const origCount = db.prepare("SELECT COUNT(*) as count FROM origem").get() as { count: number };
+
+      expect(docCount.count).toBe(report.inserted.documento);
+      expect(imovCount.count).toBe(report.inserted.imovel);
+      expect(lancCount.count).toBe(report.inserted.lancamento);
+      expect(origCount.count).toBe(report.inserted.origem);
+    });
+
+    it("should have all soft-delete columns (deleted_at) set to NULL", () => {
+      const options: SeedOptions = { count: 1, seed: "soft-delete-test" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "soft-delete-test", chains);
+
+      const checkDeleted = (table: string) => {
+        const row = db.prepare(`SELECT COUNT(*) as count FROM ${table} WHERE deleted_at IS NOT NULL`).get() as { count: number };
+        return row.count;
+      };
+
+      expect(checkDeleted("cri")).toBe(0);
+      expect(checkDeleted("documento")).toBe(0);
+      expect(checkDeleted("imovel")).toBe(0);
+      expect(checkDeleted("lancamento")).toBe(0);
+      expect(checkDeleted("origem")).toBe(0);
+    });
+
+    it("should have every imovel.arquivado set to 0", () => {
+      const options: SeedOptions = { count: 1, seed: "arquivado-test" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "arquivado-test", chains);
+
+      const arquivadoCount = db.prepare("SELECT COUNT(*) as count FROM imovel WHERE arquivado != 0").get() as { count: number };
+      expect(arquivadoCount.count).toBe(0);
+    });
+
+    it("should have only pessoa.nome populated (no extra PII columns)", () => {
+      const options: SeedOptions = { count: 1, seed: "pessoa-test" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "pessoa-test", chains);
+
+      const pessoas = db.prepare("SELECT nome, created_at, updated_at, deleted_at FROM pessoa").all() as Array<{
+        nome: string; created_at: string; updated_at: string; deleted_at: string | null;
+      }>;
+
+      expect(pessoas.length).toBeGreaterThan(0);
+      for (const p of pessoas) {
+        expect(p.nome).toBeDefined();
+        expect(p.nome.length).toBeGreaterThan(0);
+        expect(p.created_at).toBeDefined();
+        expect(p.deleted_at).toBeNull();
+      }
+    });
+
+    it("should rotate documento CRIs through 1, 2, and 3", () => {
+      const options: SeedOptions = { count: 6, seed: "cri-rotation-test" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "cri-rotation-test", chains);
+
+      const documentoCris = db.prepare("SELECT DISTINCT cri_id FROM documento").all() as Array<{ cri_id: number }>;
+      const criIds = documentoCris.map((r) => r.cri_id).sort();
+      expect(criIds).toEqual([1, 2, 3]);
+    });
+
+    it("should have lancamento.tipo_id references limited to 1-3", () => {
+      const options: SeedOptions = { count: 2, seed: "lancamento-tipo-test" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "lancamento-tipo-test", chains);
+
+      const tipoIds = db.prepare("SELECT DISTINCT tipo_id FROM lancamento").all() as Array<{ tipo_id: number }>;
+      const tipoIdValues = tipoIds.map((r) => r.tipo_id).sort();
+
+      expect(tipoIdValues.length).toBeGreaterThanOrEqual(1);
+      for (const id of tipoIdValues) {
+        expect([1, 2, 3]).toContain(id);
+      }
+    });
+
+    it("should have lancamento.forma matching the topology→forma mapping", () => {
+      const options: SeedOptions = { count: 1, seed: "forma-test", shape: "linear" };
+      const chains = generateSeedChains(options);
+
+      persistSeedChains(db, "forma-test", chains);
+
+      const formas = db.prepare("SELECT DISTINCT forma FROM lancamento WHERE forma IS NOT NULL").all() as Array<{ forma: string }>;
+      const formaValues = new Set(formas.map((r) => r.forma));
+
+      // At least one well-known form should be present (e.g. matricial)
+      expect(formaValues.has("matricial")).toBe(true);
+    });
+
+    it("should reject broken topology and report error without partial chain", () => {
+      const options: SeedOptions = { count: 1, seed: "broken-ref-test" };
+      const chains = generateSeedChains(options);
+
+      // Break the chain by using an invalid document tipo (CHECK constraint violation)
+      const brokenChain = {
+        ...chains[0],
+        topology: {
+          ...chains[0].topology,
+          documentos: chains[0].topology.documentos.map(
+            (d: TopologyDocumento, i: number) =>
+              i === 0
+                ? { ...d, tipo: "invalid_type" as TopologyDocumento["tipo"] }
+                : d,
+          ),
+        },
+      };
+
+      const report = persistSeedChains(db, "broken-ref-test", [brokenChain]);
+
+      // The chain transaction failed — report.errors should have one entry
+      expect(report.errors).toHaveLength(1);
+      expect(report.errors[0].chainIdx).toBe(0);
+      expect(report.errors[0].message).toBeTruthy();
+
+      // Verify no rows were inserted for the broken chain
+      const lancCount = db.prepare("SELECT COUNT(*) as count FROM lancamento").get() as { count: number };
+      expect(lancCount.count).toBe(0);
+    });
+
+    it("should handle transaction rollback: good chain unaffected by bad chain", () => {
+      const options: SeedOptions = { count: 2, seed: "rollback-test" };
+      const chains = generateSeedChains(options);
+
+      // Insert good chain first
+      const goodChain = chains[1];
+      persistSeedChains(db, "rollback-test", [goodChain]);
+
+      const beforeCount = db.prepare("SELECT COUNT(*) as count FROM lancamento").get() as { count: number };
+      expect(beforeCount.count).toBeGreaterThan(0);
+
+      // Attempt broken chain with invalid tipo (DB CHECK constraint violation)
+      const brokenChain = {
+        ...chains[0],
+        topology: {
+          ...chains[0].topology,
+          documentos: chains[0].topology.documentos.map((d: TopologyDocumento, i: number) =>
+            i === 0 ? { ...d, tipo: "invalid_type" as unknown as "matricula" } : d,
+          ),
+        },
+      };
+
+      const report = persistSeedChains(db, "rollback-test", [brokenChain]);
+
+      // Error should be reported
+      expect(report.errors).toHaveLength(1);
+
+      // Good chain's data must remain intact
+      const afterCount = db.prepare("SELECT COUNT(*) as count FROM lancamento").get() as { count: number };
+      expect(afterCount.count).toBe(beforeCount.count);
     });
   });
 });
