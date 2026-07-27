@@ -32,19 +32,26 @@ jobs:
 
           script: |
             bash -se <<'DEPLOY_SCRIPT'
-            set -Eeuo pipefail
+            set -Euo pipefail
 
             trap 'rc=$?; echo "ERRO: deploy falhou na linha ${LINENO}: ${BASH_COMMAND} (exit ${rc})" >&2; exit "${rc}"' ERR
 
             APP_DIR="/root/CadeiaDominial"
             TAG_NAME="${GITHUB_REF_NAME}"
 
-            echo "==> Validando ambiente"
-
-            if ! command -v docker-compose >/dev/null 2>&1; then
-              echo "ERRO: docker-compose não está instalado ou não está no PATH." >&2
+            # ── Detecta docker compose v1 vs v2 ──
+            DOCKER_CMD=""
+            if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+              DOCKER_CMD="docker compose"
+            elif command -v docker-compose >/dev/null 2>&1; then
+              DOCKER_CMD="docker-compose"
+            else
+              echo "ERRO: nem docker compose v2 nem docker-compose v1 encontrados." >&2
               exit 1
             fi
+            echo "==> Docker: ${DOCKER_CMD}"
+
+            echo "==> Validando ambiente"
 
             if [ ! -d "${APP_DIR}/.git" ]; then
               echo "ERRO: ${APP_DIR} não existe ou não é um repositório Git." >&2
@@ -61,36 +68,45 @@ jobs:
               exit 1
             fi
 
-            # Busca todas as tags e a tag específica
             git fetch --prune origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
-
-            # Checkout direto na tag (detached HEAD — seguro para produção)
             git checkout "tags/${TAG_NAME}"
 
             echo "==> Tag que será implantada"
             git log -1 --oneline --decorate
 
+            # ── Backup (não bloqueia) ──
             echo "==> Fazendo backup do banco antes do deploy"
             BACKUP_DIR="${APP_DIR}/backups"
             mkdir -p "${BACKUP_DIR}"
             BACKUP_FILE="${BACKUP_DIR}/pre_deploy_${TAG_NAME}_$(date +%Y%m%d_%H%M%S).sql"
-            docker-compose exec -T db pg_dump -U ${DB_USER:-cadeia_user} -d ${DB_NAME:-cadeia_dominial} > "${BACKUP_FILE}" || {
-              echo "AVISO: backup automático falhou. Faça manualmente antes de prosseguir se necessário." >&2
-            }
-
-            echo "==> Executando build sem cache"
-            if ! docker-compose build --no-cache web; then
-              echo "ERRO: docker-compose build --no-cache web falhou." >&2
-              exit 1
+            set +e
+            ${DOCKER_CMD} exec -T db pg_dump -U "${DB_USER:-cadeia_user}" "${DB_NAME:-cadeia_dominial}" > "${BACKUP_FILE}" 2>/tmp/backup_err.log
+            BACKUP_RC=$?
+            set -e
+            if [ "${BACKUP_RC}" -ne 0 ]; then
+              echo "AVISO: backup automático falhou (exit ${BACKUP_RC})."
+              echo "  stderr do pg_dump:"
+              cat /tmp/backup_err.log 2>/dev/null || true
+              echo "  Faça backup manual antes de prosseguir se necessário."
+            else
+              echo "  Backup salvo em: ${BACKUP_FILE}"
             fi
 
+            # ── Build ──
+            echo "==> Executando build sem cache"
+            ${DOCKER_CMD} build --no-cache web || {
+              echo "ERRO: build falhou." >&2
+              exit 1
+            }
+
+            # ── Deploy ──
             echo "==> Subindo os containers"
-            docker-compose up -d
+            ${DOCKER_CMD} up -d
 
             echo "==> Aguardando healthcheck do serviço web"
             HEALTHY=false
             for attempt in $(seq 1 60); do
-              if docker-compose ps web | grep -qw healthy; then
+              if ${DOCKER_CMD} ps | grep -qw 'healthy'; then
                 HEALTHY=true
                 echo "Serviço web saudável."
                 break
@@ -101,25 +117,27 @@ jobs:
 
             if [ "${HEALTHY}" != "true" ]; then
               echo "ERRO: serviço web não ficou saudável em 5 minutos." >&2
-              docker-compose ps
-              docker-compose logs --tail=100 web || true
+              ${DOCKER_CMD} ps || true
+              ${DOCKER_CMD} logs --tail=100 web || true
               exit 1
             fi
 
+            # ── Migrations ──
             echo "==> Executando migrations"
-            docker-compose exec -T web python manage.py migrate --noinput || {
+            ${DOCKER_CMD} exec -T web python manage.py migrate --noinput || {
               echo "ERRO: migrate falhou. O container pode precisar de rollback." >&2
               exit 1
             }
 
+            # ── Static files ──
             echo "==> Executando collectstatic"
-            if ! docker-compose exec -T web python manage.py collectstatic --noinput; then
+            ${DOCKER_CMD} exec -T web python manage.py collectstatic --noinput || {
               echo "ERRO: collectstatic falhou." >&2
               exit 1
-            fi
+            }
 
             echo "==> Estado final dos containers"
-            docker-compose ps
+            ${DOCKER_CMD} ps
 
             echo "=========================================="
             echo "  ✅ Deploy da tag ${TAG_NAME} concluído!"
