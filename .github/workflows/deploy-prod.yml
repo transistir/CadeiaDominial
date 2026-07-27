@@ -68,7 +68,7 @@ jobs:
               exit 1
             fi
 
-            git fetch --prune origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+            git fetch --prune --force origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
             git checkout "tags/${TAG_NAME}"
 
             echo "==> Tag que será implantada"
