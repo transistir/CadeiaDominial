@@ -4,8 +4,8 @@ corresponde à identidade oferecida.
 
 Critérios de aceite (CHECKPOINT_ATUAL.md / TAREFAS.md):
 - O botão de seleção de documento usa `novo_lancamento_documento`
-  (com `documento_id`), e o backend recusa um `documento_id` que não
-  pertença ao imóvel da URL.
+  (com `documento_id`), e o backend redireciona um `documento_id` que não
+  pertença ao imóvel da URL para o imóvel de origem.
 - A importação de duplicata (`documento_origem_id` e
   `documentos_importaveis[]`) é validada contra uma duplicata
   recalculada no servidor a partir da origem/cartório originalmente
@@ -32,7 +32,7 @@ def _request_com_messages(factory, path, data):
 
 
 class T26SelecaoDocumentoTest(IdentidadeDocumentoFixture):
-    """`novo_lancamento_documento` deve recusar documento de outro imóvel."""
+    """`novo_lancamento_documento` deve redirecionar documento de outro imóvel."""
 
     @classmethod
     def setUpTestData(cls):
@@ -44,7 +44,7 @@ class T26SelecaoDocumentoTest(IdentidadeDocumentoFixture):
         self.client = Client()
         self.client.login(username="t26", password="t26pass")
 
-    def test_documento_id_de_outro_imovel_e_recusado(self):
+    def test_documento_id_de_outro_imovel_redireciona_para_origem(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
         imovel_b = self.criar_imovel("456", self.cartorio_b, nome="Imóvel B")
         doc_a = self.criar_documento(imovel_a, self.tipo_matricula, "M123", self.cartorio_a)
@@ -54,7 +54,10 @@ class T26SelecaoDocumentoTest(IdentidadeDocumentoFixture):
         })
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, 404)
+        url_origem = reverse("novo_lancamento_documento", kwargs={
+            "tis_id": self.ti.id, "imovel_id": imovel_a.id, "documento_id": doc_a.id,
+        })
+        self.assertRedirects(response, url_origem, fetch_redirect_response=False)
 
     def test_documento_id_do_proprio_imovel_e_aceito(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")

@@ -8,6 +8,7 @@ from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
+from ..services.keyword_alerta_service import buscar_keyword
 from django.views.decorators.csrf import csrf_exempt
 from .cadeia_dominial_views import cadeia_dominial_tabela
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
@@ -205,6 +206,9 @@ def lancamentos(request):
     # Obter tipos para os filtros
     tipos = LancamentoConsultaService.obter_tipos_para_filtros()
     
+    for lanc in resultado['lancamentos']:
+        lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
+
     return render(request, 'dominial/lancamentos.html', {
         'lancamentos': resultado['lancamentos'],
         'tipos_documento': tipos['tipos_documento'],

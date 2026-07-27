@@ -2,8 +2,9 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
-from django.http import JsonResponse
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento
+from django.http import Http404, JsonResponse
+from django.db.models import Prefetch
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
@@ -11,6 +12,32 @@ import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 from ..services.documento_service import DocumentoService
+from ..services.lancamento_consulta_service import LancamentoConsultaService
+
+
+def _build_documento_lancamentos(documento, current_lancamento_id=None):
+    """Constrói lista de lançamentos do documento para o sidebar de navegação.
+       Ordem: do maior número simples para o menor (igual à tabela detalhada)."""
+    lancamentos = list(
+        Lancamento.objects
+        .filter(documento=documento)
+        .select_related('tipo')
+    )
+    # Mesma ordenação do documento_detalhado:
+    # número extraído decrescente, depois id crescente
+    lancamentos.sort(key=lambda x: (
+        -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
+        x.id
+    ))
+    return [
+        {
+            'id': lanc.id,
+            'display': lanc.numero_lancamento or f'#{lanc.id}',
+            'is_current': current_lancamento_id is not None and lanc.id == current_lancamento_id,
+        }
+        for lanc in lancamentos
+    ]
+
 
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
@@ -25,7 +52,23 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     documento_ativo = None
     
     if documento_id:
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        # Primeiro, tentar encontrar no imóvel atual
+        try:
+            documento_ativo = Documento.objects.get(id=documento_id, imovel=imovel)
+        except Documento.DoesNotExist:
+            # Se não encontrou no imóvel atual, pode ser um documento importado
+            try:
+                documento_ativo = Documento.objects.get(id=documento_id)
+                # Redirecionar para o imóvel correto
+                messages.info(request, '📄 Documento importado — redirecionado para o imóvel de origem.')
+                return redirect(
+                    'novo_lancamento_documento',
+                    tis_id=tis.id,
+                    imovel_id=documento_ativo.imovel.id,
+                    documento_id=documento_id,
+                )
+            except Documento.DoesNotExist:
+                raise Http404("Documento não encontrado")
     else:
         # Buscar documento ativo do imóvel (primeiro documento)
         documento_ativo = imovel.documentos.first()
@@ -157,6 +200,27 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'id': request.POST.getlist('adquirente[]')[i] if i < len(request.POST.getlist('adquirente[]')) else ''
                     })
             
+            # Buscar lançamentos anteriores (para painel lateral mesmo em caso de erro)
+            lancamentos_anteriores = (
+                Lancamento.objects
+                .filter(documento=documento_ativo)
+                .select_related('tipo', 'documento')
+                .prefetch_related(
+                    Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+                )
+                .order_by('-data', '-id')[:20]
+            )
+            lancamentos_com_pessoas = []
+            for lanc in lancamentos_anteriores:
+                relacoes = lanc.pessoas.all()
+                transmitentes = [lp.pessoa for lp in relacoes if lp.tipo == 'transmitente']
+                adquirentes = [lp.pessoa for lp in relacoes if lp.tipo == 'adquirente']
+                lancamentos_com_pessoas.append({
+                    'lancamento': lanc,
+                    'transmitentes': transmitentes,
+                    'adquirentes': adquirentes,
+                })
+
             context = {
                 'tis': tis,
                 'imovel': imovel,
@@ -193,6 +257,9 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     'forma_inicio': request.POST.get('forma_inicio'),
                 },
                 'numero_lancamento_error': numero_lancamento_error,
+                'lancamentos_com_pessoas': lancamentos_com_pessoas,
+                'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
+                'is_novo_lancamento': True,
             }
             
             context['transmitentes'] = transmitentes_data
@@ -210,6 +277,27 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     duplicata_origem = ''
     duplicata_cartorio = ''
     
+    # Buscar lançamentos anteriores deste documento (para painel lateral)
+    lancamentos_anteriores = (
+        Lancamento.objects
+        .filter(documento=documento_ativo)
+        .select_related('tipo', 'documento')
+        .prefetch_related(
+            Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+        )
+        .order_by('-data', '-id')[:20]
+    )
+    lancamentos_com_pessoas = []
+    for lanc in lancamentos_anteriores:
+        relacoes = lanc.pessoas.all()
+        transmitentes = [lp.pessoa for lp in relacoes if lp.tipo == 'transmitente']
+        adquirentes = [lp.pessoa for lp in relacoes if lp.tipo == 'adquirente']
+        lancamentos_com_pessoas.append({
+            'lancamento': lanc,
+            'transmitentes': transmitentes,
+            'adquirentes': adquirentes,
+        })
+
     context = {
         'tis': tis,
         'imovel': imovel,
@@ -224,6 +312,9 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'adquirentes': [],
         'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
         'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
+        'lancamentos_com_pessoas': lancamentos_com_pessoas,
+        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
+        'is_novo_lancamento': True,
     }
     
     # Verificar se é o primeiro lançamento do documento
@@ -394,7 +485,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'modo_edicao': True,
         'cartorio_origem_correto': cartorio_origem_correto,
         'is_lancamento_do_imovel': is_lancamento_do_imovel,
-        'is_lancamento_compartilhado': not is_lancamento_do_imovel
+        'is_lancamento_compartilhado': not is_lancamento_do_imovel,
+        'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
     }
     
     # Preparar dados para o template
@@ -610,6 +702,29 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
     })
 
 @login_required
+def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
+    """Retorna HTML parcial com o resumo de um lançamento (para sidebar AJAX)."""
+    tis = get_object_or_404(TIs, id=tis_id)
+    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    lancamento = get_object_or_404(
+        Lancamento.objects.select_related('documento', 'tipo').prefetch_related(
+            Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+        ),
+        id=lancamento_id, documento__imovel=imovel
+    )
+    transmitentes = lancamento.pessoas.filter(tipo='transmitente')
+    adquirentes = lancamento.pessoas.filter(tipo='adquirente')
+    return render(request, 'dominial/components/_lancamento_resumo_card.html', {
+        'lancamento': lancamento,
+        'documento': lancamento.documento,
+        'transmitentes': transmitentes,
+        'adquirentes': adquirentes,
+        'tis': tis,
+        'imovel': imovel,
+    })
+
+
+@login_required
 def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
     """View para visualizar detalhes de um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
@@ -626,7 +741,8 @@ def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
         'lancamento': lancamento,
         'documento': lancamento.documento,
         'transmitentes': transmitentes,
-        'adquirentes': adquirentes
+        'adquirentes': adquirentes,
+        'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
     }
     
-    return render(request, 'dominial/lancamento_detail.html', context) 
+    return render(request, 'dominial/lancamento_detail.html', context)

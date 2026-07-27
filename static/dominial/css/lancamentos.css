@@ -198,4 +198,49 @@ select, input {
     .detalhes {
         grid-template-columns: 1fr;
     }
+}
+
+/* ========================================
+   #53 - ALERTAS POR PALAVRA-CHAVE
+   ======================================== */
+.lancamento-alerta-urgente {
+    border-left: 5px solid #dc3545;
+    background: linear-gradient(135deg, #fff5f5, #ffffff);
+}
+
+.lancamento-alerta-pendente {
+    border-left: 5px solid #ffc107;
+    background: linear-gradient(135deg, #fffef5, #ffffff);
+}
+
+.lancamento-alerta-atencao {
+    border-left: 5px solid #fd7e14;
+    background: linear-gradient(135deg, #fffaf0, #ffffff);
+}
+
+.alerta-badge {
+    display: inline-block;
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.alerta-badge-urgente {
+    background: #dc3545;
+    color: white;
+}
+
+.alerta-badge-pendente {
+    background: #ffc107;
+    color: #212529;
+}
+
+.alerta-badge-atencao {
+    background: #fd7e14;
+    color: white;
 } 

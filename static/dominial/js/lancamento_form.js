@@ -1287,4 +1287,4 @@ function setupTipoFimCadeiaSelectPorOrigem(select) {
         select.addEventListener('change', toggleEspecificacaoField);
         toggleEspecificacaoField(); // Estado inicial
     }
-} 
+}

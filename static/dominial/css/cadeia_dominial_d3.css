@@ -311,4 +311,160 @@
         max-width: 300px;
         justify-content: center;
     }
-} 
+}
+
+/* ========================================
+   IMPRESSÃO
+   ======================================== */
+@media print {
+    @page {
+        size: landscape;
+        margin: 1cm;
+    }
+
+    /* Esconder elementos de navegação e chrome do base.html */
+    .navbar,
+    .nav,
+    header,
+    .main-nav,
+    .navigation-actions,
+    .zoom-controls,
+    .arvore-container::before,
+    .arvore-header .header-icon,
+    .nav-btn {
+        display: none !important;
+    }
+
+    html,
+    body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: #fff;
+    }
+
+    .main-content {
+        width: 100%;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .container.d3-tree-page {
+        width: 100%;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* Ajustar header para impressão */
+    .arvore-header {
+        box-shadow: none;
+        border-bottom: 2px solid #000;
+        padding: 8px 0;
+        margin-bottom: 6px;
+    }
+
+    .arvore-header h1 {
+        font-size: 1.25em;
+        color: #000;
+        margin-bottom: 4px;
+    }
+
+    .imovel-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        padding-top: 5px;
+        font-size: 0.9em;
+    }
+
+    .imovel-info > div {
+        flex: 1 1 180px;
+        min-width: 0;
+        gap: 0;
+    }
+
+    /* Container da árvore ocupa página toda */
+    .arvore-container {
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        page-break-inside: avoid;
+        overflow: visible !important;
+    }
+
+    /* SVG da árvore — ocupa largura total da página */
+    #arvore-d3-svg {
+        display: block;
+        width: 100% !important;
+        height: calc(100vh - 160px) !important;
+        max-height: calc(100vh - 160px);
+        background: #fff;
+        border-radius: 0;
+        overflow: visible !important;
+    }
+
+    /* Ajustar links para impressão */
+    .link {
+        stroke: #000 !important;
+        stroke-width: 1.5 !important;
+    }
+
+    .link-extra {
+        stroke: #666 !important;
+        stroke-width: 1 !important;
+    }
+
+    /* Manter cores dos cards mas mais sóbrias */
+    .node rect {
+        filter: none !important;
+    }
+
+    /* Garantir que texto fique preto */
+    .node text {
+        fill: #fff !important;
+    }
+}
+
+/* Print button disabled state */
+.zoom-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Full-width na página D3 — header/nav já compactos globalmente */
+body:has(.d3-tree-page) .main-content,
+.d3-active .main-content {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+body:has(.d3-tree-page) .container.d3-tree-page,
+.d3-active .container.d3-tree-page {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+body:has(.d3-tree-page) .arvore-container,
+.d3-active .arvore-container {
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+body:has(.d3-tree-page) .arvore-container::before,
+.d3-active .arvore-container::before {
+    display: none;
+}
+
+body:has(.d3-tree-page) #arvore-d3-svg,
+.d3-active #arvore-d3-svg {
+    height: calc(100vh - 140px) !important;
+    border-radius: 0;
+}

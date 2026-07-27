@@ -49,7 +49,7 @@ class LancamentoCamposService:
         
         # Processar área
         area_value = request.POST.get('area', '').strip()
-        lancamento.area = float(area_value) if area_value else None
+        lancamento.area = float(area_value.replace(',', '.')) if area_value else None
         
         # Processar origem (se presente)
         origem_value = request.POST.get('origem_completa', '').strip()
@@ -86,7 +86,7 @@ class LancamentoCamposService:
         
         # Processar área
         area_value = request.POST.get('area', '').strip()
-        lancamento.area = float(area_value) if area_value else None
+        lancamento.area = float(area_value.replace(',', '.')) if area_value else None
         
         # Processar origem (se presente)
         origem_value = request.POST.get('origem_completa', '').strip()
@@ -302,7 +302,7 @@ class LancamentoCamposService:
         area = request.POST.get('area', '').strip()
         if area:
             try:
-                lancamento.area = float(area)
+                lancamento.area = float(area.replace(',', '.'))
             except ValueError:
                 pass
         

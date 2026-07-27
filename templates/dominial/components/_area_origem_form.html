@@ -9,17 +9,7 @@
     - container_id: id do container de origens (opcional, padrão: 'origens-container')
 -->
 <div class="area-origem-group">
-    <h5>Área e Origem</h5>
-    
-    <div class="grid-2">
-        <div class="form-group">
-            <label for="area">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
-            <input type="number" name="area" id="area" step="0.0001" min="0" 
-                   value="{% if modo_edicao and lancamento.area %}{{ lancamento.area }}{% elif form_data and form_data.area %}{{ form_data.area }}{% endif %}"
-                   placeholder="Ex: 150.5000">
-            <small>Área em hectares com 4 casas decimais</small>
-        </div>
-    </div>
+    <h5>Origem</h5>
     
     <div id="{{ container_id|default:'origens-container' }}">
         {% if modo_edicao %}
@@ -44,7 +34,7 @@
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
                             <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_{{ origem.index }}" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off" 
+                               placeholder="Digite o nome do registro imobiliário" autocomplete="off" 
                                    value="{{ origem.cartorio_nome }}">
                             <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_{{ origem.index }}" class="cartorio-origem-id" 
                                    value="{{ origem.cartorio_id }}">
@@ -136,10 +126,10 @@
                     <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_0" value="">
                 </div>
                 <div class="form-group cartorio-field">
-                    <label class="field-label">Cartório{% if origem_obrigatorio %} *{% endif %}</label>
+                    <label class="field-label">CRI{% if origem_obrigatorio %} *{% endif %}</label>
                     <div class="autocomplete-container">
                         <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_0" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off">
+                               placeholder="Digite o nome do registro imobiliário" autocomplete="off">
                         <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_0" class="cartorio-origem-id">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
@@ -218,7 +208,7 @@
                 <div class="form-group cartorio-field">
                     <div class="autocomplete-container">
                         <input type="text" name="cartorio_origem_nome[]" id="cartorio_origem_nome_0" class="cartorio-origem-nome" 
-                               placeholder="Digite o nome do cartório" autocomplete="off">
+                               placeholder="Digite o nome do registro imobiliário" autocomplete="off">
                         <input type="hidden" name="cartorio_origem[]" id="cartorio_origem_0" class="cartorio-origem-id">
                         <div class="autocomplete-suggestions cartorio-origem-suggestions"></div>
                     </div>
@@ -293,4 +283,4 @@
     <button type="button" class="btn btn-sm btn-outline" onclick="adicionarOrigem()">
         ➕ Adicionar Origem
     </button>
-</div> 
+</div>

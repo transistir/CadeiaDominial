@@ -53,8 +53,8 @@
         </div>
         
         <div class="form-group">
-            <label for="cartorio">Cartório:</label>
-            <input type="text" id="cartorio" name="cartorio" value="{{ documento.cartorio.nome|default:'' }}" placeholder="Digite o nome do cartório..." autocomplete="off">
+            <label for="cartorio">CRI:</label>
+            <input type="text" id="cartorio" name="cartorio" value="{{ documento.cartorio.nome|default:'' }}" placeholder="Digite o nome do registro imobiliário..." autocomplete="off">
             <input type="hidden" id="cartorio_id" name="cartorio_id" value="{{ documento.cartorio.id|default:'' }}">
             <div id="cartorio-sugestoes" class="sugestoes-container" style="display: none;"></div>
         </div>

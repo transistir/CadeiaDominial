@@ -180,11 +180,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         break;
                     case 'em_andamento':
                         progressBarFill.style.width = '50%';
-                        statusText.textContent = 'Importando cartórios...';
+                        statusText.textContent = 'Importando registros imobiliários...';
                         break;
                     case 'concluido':
                         progressBarFill.style.width = '100%';
-                        statusText.textContent = `Importação concluída! Total de cartórios: ${data.total_cartorios}`;
+                        statusText.textContent = `Importação concluída! Total de registros imobiliários: ${data.total_cartorios}`;
                         setTimeout(() => {
                             hideProgress();
                             window.location.reload();
