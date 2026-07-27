@@ -26,9 +26,9 @@ jobs:
           username: root
           port: 22
           key: ${{ secrets.DEPLOY_KEY_PROD }}
-          fingerprint: ${{ secrets.PROD_HOST_FINGERPRINT }}
           timeout: 60s
           command_timeout: 55m
+          envs: GITHUB_REF_NAME
 
           script: |
             bash -se <<'DEPLOY_SCRIPT'
