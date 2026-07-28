@@ -368,6 +368,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                         'area': lancamento.area,
                         'origem': lancamento.origem,
                         'observacoes': lancamento.observacoes,
+                        'keyword_encontrada': getattr(lancamento, 'keyword_encontrada', None),
                         'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,
                         'cartorio_origem_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else None,
                         'livro_transacao': lancamento.livro_transacao,

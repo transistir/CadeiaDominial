@@ -457,7 +457,11 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
             <!-- Restante -->
             <td>${lancamento.area || '-'}</td>
             <td>${formatarOrigemCompleta(lancamento)}</td>
-            <td>${lancamento.observacoes || '-'}</td>
+            <td>${
+              lancamento.keyword_encontrada
+                ? `<div class="alerta-badge alerta-badge-${lancamento.keyword_encontrada.slug}">${lancamento.keyword_encontrada.label}</div>`
+                : ''
+            }${lancamento.observacoes || '-'}</td>
         </tr>
     `;
     
@@ -1277,4 +1281,4 @@ function formatarOrigemCompleta(lancamento) {
     
     // Juntar com quebras de linha para melhor visualização
     return origens_formatadas.join('<br>');
-} 
+}
