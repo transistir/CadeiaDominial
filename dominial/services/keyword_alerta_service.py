@@ -3,7 +3,6 @@ import unicodedata
 
 
 PALAVRAS_CHAVE_ALERTA = [
-    {'label': 'URGENTE', 'slug': 'urgente', 'priority': 1, 'css_class': 'alerta-urgente'},
     {'label': 'ATENÇÃO', 'slug': 'atencao', 'priority': 2, 'css_class': 'alerta-atencao'},
     {'label': 'PENDENTE', 'slug': 'pendente', 'priority': 3, 'css_class': 'alerta-pendente'},
 ]
