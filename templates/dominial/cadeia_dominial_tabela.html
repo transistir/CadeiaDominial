@@ -257,7 +257,14 @@
                                                     -
                                                   {% endif %}
                                                 </td>
-                                                <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                                                <td>
+                                                  {% with keyword=lancamento.keyword_encontrada %}
+                                                    {% if keyword %}
+                                                      <div class="alerta-badge alerta-badge-{{ keyword.slug }}">{{ keyword.label }}</div>
+                                                    {% endif %}
+                                                    {{ lancamento.observacoes|default_if_none:"-" }}
+                                                  {% endwith %}
+                                                </td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>

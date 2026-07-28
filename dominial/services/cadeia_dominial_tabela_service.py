@@ -8,6 +8,7 @@ from ..models import TIs, Imovel, Documento, Lancamento, DocumentoImportado
 from ..services.hierarquia_service import HierarquiaService
 from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+from ..services.keyword_alerta_service import buscar_keyword
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 
 
@@ -113,6 +114,8 @@ class CadeiaDominialTabelaService:
                 -self._extrair_numero_simples(x.numero_lancamento),
                 x.id
             ))
+            for lanc in lancamentos_list:
+                lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
             lancamentos = lancamentos_list
             
             # Verificar se tem múltiplas origens
@@ -265,6 +268,8 @@ class CadeiaDominialTabelaService:
                 -CadeiaDominialTabelaService._extrair_numero_simples(x.numero_lancamento),
                 x.id
             ))
+            for lanc in lancamentos_list:
+                lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
             lancamentos = lancamentos_list
             
             # Verificar se tem múltiplas origens
