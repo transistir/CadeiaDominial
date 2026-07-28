@@ -20,6 +20,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.urls import reverse
 
+from dominial.models import Imovel, TIs
 from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
 from dominial.tests.test_identidade_documento import IdentidadeDocumentoFixture
 
@@ -58,6 +59,36 @@ class T26SelecaoDocumentoTest(IdentidadeDocumentoFixture):
             "tis_id": self.ti.id, "imovel_id": imovel_a.id, "documento_id": doc_a.id,
         })
         self.assertRedirects(response, url_origem, fetch_redirect_response=False)
+
+    def test_documento_importado_de_outra_ti_redireciona_com_ti_correta(self):
+        """Ao clicar em novo lançamento de um documento importado que
+        pertence a um imóvel de outra TI, o redirect deve usar a TI do
+        imóvel de origem do documento, não a TI da URL atual."""
+        ti_b = TIs.objects.create(nome="TI Outra", codigo="TI-OUT", etnia="Outra")
+        imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
+        imovel_b = Imovel.objects.create(
+            terra_indigena_id=ti_b,
+            nome="Imóvel B",
+            proprietario=self.pessoa,
+            matricula="456",
+            tipo_documento_principal="matricula",
+            cartorio=self.cartorio_b,
+        )
+        doc_a = self.criar_documento(imovel_a, self.tipo_matricula, "M123", self.cartorio_a)
+
+        # Usuário está na cadeia do imóvel_b (TI_B), mas clica no documento
+        # importado doc_a que pertence ao imóvel_a (TI self.ti).
+        url = reverse("novo_lancamento_documento", kwargs={
+            "tis_id": ti_b.id, "imovel_id": imovel_b.id, "documento_id": doc_a.id,
+        })
+        response = self.client.get(url)
+
+        url_esperada = reverse("novo_lancamento_documento", kwargs={
+            "tis_id": self.ti.id,        # TI do imóvel de origem do documento
+            "imovel_id": imovel_a.id,
+            "documento_id": doc_a.id,
+        })
+        self.assertRedirects(response, url_esperada, fetch_redirect_response=False)
 
     def test_documento_id_do_proprio_imovel_e_aceito(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
