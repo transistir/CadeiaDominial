@@ -769,4 +769,20 @@
 /* Documentos ocultos baseados na escolha de origem */
 .documento-oculto {
     display: none !important;
-} 
+}
+
+/* #53 - Alertas por palavra-chave */
+.alerta-badge {
+    display: inline-block;
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-right: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.alerta-badge-pendente { background: #ffc107; color: #212529; }
+.alerta-badge-atencao { background: #fd7e14; color: white; }
