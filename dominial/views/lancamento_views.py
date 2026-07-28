@@ -63,7 +63,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 messages.info(request, '📄 Documento importado — redirecionado para o imóvel de origem.')
                 return redirect(
                     'novo_lancamento_documento',
-                    tis_id=tis.id,
+                    tis_id=documento_ativo.imovel.terra_indigena_id_id,
                     imovel_id=documento_ativo.imovel.id,
                     documento_id=documento_id,
                 )
