@@ -268,6 +268,8 @@ class CadeiaDominialTabelaService:
                 -CadeiaDominialTabelaService._extrair_numero_simples(x.numero_lancamento),
                 x.id
             ))
+            for lanc in lancamentos_list:
+                lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
             lancamentos = lancamentos_list
             
             # Verificar se tem múltiplas origens
