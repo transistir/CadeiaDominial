@@ -308,7 +308,7 @@ class FimCadeia(models.Model):
         ('sem_origem', 'Sem Origem'),
         ('inconclusa', 'Situação Inconclusa'),
     ]
-    classificacao = models.CharField(max_length=50, choices=CLASSIFICACAO_CHOICES, default='origem_lidima')
+    classificacao = models.CharField(max_length=50, choices=CLASSIFICACAO_CHOICES)
     
     sigla = models.CharField(max_length=50, blank=True, null=True, help_text="Sigla do órgão (ex: INCRA, SPU)")
     descricao = models.TextField(blank=True, null=True, help_text="Descrição detalhada do fim de cadeia")
