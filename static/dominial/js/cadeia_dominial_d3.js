@@ -998,7 +998,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
           classificacao = "Situação Inconclusa";
         }
 
-        return `Fim de Cadeia\nTipo: ${tipo}\nClassificação: ${classificacao}`;
+        return `Fim de Cadeia\nTipo: ${tipo}\nClassificação: ${classificacao}\n\nVisualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.`;
       }
 
       // Tooltip normal para documentos

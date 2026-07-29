@@ -9,6 +9,10 @@
     <link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_pdf.css' %}">
 </head>
 <body>
+    <div class="disclaimer" style="background: #fff3cd; border-left: 4px solid #856404; padding: 8px 12px; margin: 10px 0; font-size: 9pt; color: #856404;">
+        <strong>⚠️ Atenção:</strong> Visualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.
+    </div>
+
     <div class="header">
         <h1>RELATÓRIO DE CADEIA DOMINIAL</h1>
         <p><strong>Imóvel:</strong> {{ imovel.nome }} | <strong>Matrícula:</strong> {{ imovel.matricula }}</p>
@@ -207,4 +211,4 @@
     
 
 </body>
-</html> 
+</html>
