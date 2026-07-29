@@ -148,7 +148,7 @@ class Command(BaseCommand):
         
         # Mapear classificações para nomes legíveis
         classificacao_nomes = {
-            'origem_lidima': 'Origem Lídima',
+            'origem_lidima': 'Origem Identificada',
             'sem_origem': 'Sem Origem',
             'inconclusa': 'Situação Inconclusa'
         }

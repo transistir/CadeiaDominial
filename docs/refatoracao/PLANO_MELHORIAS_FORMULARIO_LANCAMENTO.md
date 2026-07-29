@@ -72,7 +72,7 @@
 - **Solução**: 
   - Marcar visualmente documentos finais
   - Solicitar classificação da origem:
-    - Imóvel com origem lídima
+    - Imóvel com origem identificada
     - Imóvel sem origem
     - Situação inconclusa
 
@@ -226,7 +226,7 @@ class OrigemTipo(models.Model):
 
 class OrigemClassificacao(models.Model):
     CLASSIFICACAO_CHOICES = [
-        ('lídima', 'Imóvel com Origem Lídima'),
+        ('identificada', 'Imóvel com Origem Identificada'),
         ('sem_origem', 'Imóvel Sem Origem'),
         ('inconclusa', 'Situação Inconclusa')
     ]
@@ -366,4 +366,4 @@ def relatorio_origem_imoveis(request, tis_id):
 2. **Priorização**: Definir quais melhorias são mais críticas
 3. **Desenvolvimento**: Iniciar implementação seguindo o cronograma
 4. **Testes**: Testes extensivos com usuários reais
-5. **Deploy**: Implementação gradual em produção 
+5. **Deploy**: Implementação gradual em produção

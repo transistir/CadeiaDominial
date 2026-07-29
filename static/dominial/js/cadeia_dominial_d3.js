@@ -930,7 +930,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
-          return "#28a745"; // Verde para origem lídima
+          return "#28a745"; // Verde para origem identificada
         } else {
           return "#dc3545"; // Vermelho para sem origem ou inconclusa
         }
@@ -944,7 +944,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
-          return "#1e7e34"; // Verde escuro para origem lídima
+          return "#1e7e34"; // Verde escuro para origem identificada
         } else {
           return "#b02a37"; // Vermelho escuro para sem origem ou inconclusa
         }
@@ -991,7 +991,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
         let classificacao = "";
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
-          classificacao = "Origem Lídima";
+          classificacao = "Origem Identificada";
         } else if (d.data.classificacao_fim_cadeia === "sem_origem") {
           classificacao = "Sem Origem";
         } else if (d.data.classificacao_fim_cadeia === "inconclusa") {

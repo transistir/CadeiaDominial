@@ -15,7 +15,7 @@ Este documento descreve o plano de desenvolvimento para implementar a nova funci
 6. **Sem Origem** - Reprodução de fala da transcrição (termina cadeia)
 
 ### Classificação Final da Origem
-- **Imóvel com Origem Lídima**
+- **Imóvel com Origem Identificada**
 - **Imóvel sem Origem**
 - **Situação Inconclusa**
 
@@ -80,7 +80,7 @@ class TipoOrigem(models.Model):
 class ClassificacaoOrigem(models.Model):
     """Classificação final da origem"""
     CLASSIFICACAO_CHOICES = [
-        ('origem_lidima', 'Imóvel com Origem Lídima'),
+        ('origem_lidima', 'Imóvel com Origem Identificada'),
         ('sem_origem', 'Imóvel sem Origem'),
         ('inconclusa', 'Situação Inconclusa')
     ]
@@ -748,4 +748,4 @@ Este plano garante uma implementação segura, aditiva e bem testada da funciona
 - ✅ Interface intuitiva para usuários
 - ✅ Indicadores visuais claros
 - ✅ Retrocompatibilidade total
-- ✅ Código limpo e testável 
+- ✅ Código limpo e testável

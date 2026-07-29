@@ -1,7 +1,7 @@
 # 📋 RESUMO EXECUTIVO - FIM DE CADEIA NA ORIGEM TRADICIONAL
 
 ## 🎯 **O que é**
-Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente. Quando ativado, o usuário poderá selecionar a classificação da origem (Imóvel com Origem Lídima, Imóvel sem Origem, Situação Inconclusa) e adicionar observações.
+Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente. Quando ativado, o usuário poderá selecionar a classificação da origem (Imóvel com Origem Identificada, Imóvel sem Origem, Situação Inconclusa) e adicionar observações.
 
 ## 🔄 **Retrocompatibilidade**
 - ✅ **100% segura** - Todas as modificações são aditivas
@@ -43,7 +43,7 @@ Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente
                               ▼ (após selecionar tipo)
 ┌─────────────────────────────────────────────────────────────┐
 │ ℹ️ Classificação do Fim de Cadeia                           │
-│ Classificação: [Imóvel com Origem Lídima ▼] *              │
+│ Classificação: [Imóvel com Origem Identificada ▼] *         │
 │ Observações: [Campo de texto livre]                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -71,7 +71,7 @@ Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente
 
 ### **3. Classificação**
 - **3 opções fixas:**
-  - Imóvel com Origem Lídima
+  - Imóvel com Origem Identificada
   - Imóvel sem Origem
   - Situação Inconclusa
 - Campo obrigatório após selecionar tipo
@@ -164,4 +164,4 @@ Para detalhes técnicos completos, consulte:
 - ✅ **Risco baixo vs risco alto**
 - ✅ **Rollback fácil vs rollback complexo**
 
-**🎯 Esta solução atende exatamente à necessidade com simplicidade máxima!** 
+**🎯 Esta solução atende exatamente à necessidade com simplicidade máxima!**

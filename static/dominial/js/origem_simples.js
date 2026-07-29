@@ -317,7 +317,7 @@ function criarContainerFimCadeia(index) {
                 <label for="classificacao_fim_cadeia_${index}">Classificação do Fim de Cadeia *</label>
                 <select name="classificacao_fim_cadeia[]" id="classificacao_fim_cadeia_${index}" class="form-control classificacao-fim-cadeia-select">
                     <option value="">Selecione a classificação...</option>
-                    <option value="origem_lidima">Imóvel com Origem Lídima</option>
+                    <option value="origem_lidima">Imóvel com Origem Identificada</option>
                     <option value="sem_origem">Imóvel sem Origem</option>
                     <option value="inconclusa">Situação Inconclusa</option>
                 </select>

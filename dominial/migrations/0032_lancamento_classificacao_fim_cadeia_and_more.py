@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='lancamento',
             name='classificacao_fim_cadeia',
-            field=models.CharField(blank=True, choices=[('origem_lidima', 'Imóvel com Origem Lídima'), ('sem_origem', 'Imóvel sem Origem'), ('inconclusa', 'Situação Inconclusa')], help_text='Classificação do imóvel quando a cadeia termina', max_length=50, null=True),
+            field=models.CharField(blank=True, choices=[('origem_lidima', 'Imóvel com Origem Identificada'), ('sem_origem', 'Imóvel sem Origem'), ('inconclusa', 'Situação Inconclusa')], help_text='Classificação do imóvel quando a cadeia termina', max_length=50, null=True),
         ),
         migrations.AddField(
             model_name='lancamento',

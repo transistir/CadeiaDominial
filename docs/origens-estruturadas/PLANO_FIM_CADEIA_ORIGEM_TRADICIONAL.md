@@ -2,7 +2,7 @@
 
 ## 📋 **RESUMO EXECUTIVO**
 
-Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente. Quando ativado, o usuário poderá selecionar a classificação da origem (Imóvel com Origem Lídima, Imóvel sem Origem, Situação Inconclusa) e adicionar observações.
+Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente. Quando ativado, o usuário poderá selecionar a classificação da origem (Imóvel com Origem Identificada, Imóvel sem Origem, Situação Inconclusa) e adicionar observações.
 
 ## 🎯 **OBJETIVOS**
 
@@ -47,7 +47,7 @@ Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente
 ┌─────────────────────────────────────────────────────────────┐
 │                CLASSIFICAÇÃO FIM DE CADEIA                 │
 ├─────────────────────────────────────────────────────────────┤
-│ • Select: Imóvel com Origem Lídima                         │
+│ • Select: Imóvel com Origem Identificada                    │
 │ • Select: Imóvel sem Origem                                │
 │ • Select: Situação Inconclusa                              │
 │ • Textarea: Observações                                    │
@@ -93,7 +93,7 @@ class Lancamento(models.Model):
     classificacao_fim_cadeia = models.CharField(
         max_length=50,
         choices=[
-            ('origem_lidima', 'Imóvel com Origem Lídima'),
+            ('origem_lidima', 'Imóvel com Origem Identificada'),
             ('sem_origem', 'Imóvel sem Origem'),
             ('inconclusa', 'Situação Inconclusa')
         ],
@@ -183,7 +183,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 choices=[
-                    ('origem_lidima', 'Imóvel com Origem Lídima'),
+                    ('origem_lidima', 'Imóvel com Origem Identificada'),
                     ('sem_origem', 'Imóvel sem Origem'),
                     ('inconclusa', 'Situação Inconclusa')
                 ],
@@ -304,7 +304,7 @@ class Migration(migrations.Migration):
                         <label for="classificacao_fim_cadeia">Classificação *</label>
                         <select name="classificacao_fim_cadeia" id="classificacao_fim_cadeia" class="form-control" required>
                             <option value="">Selecione a classificação</option>
-                            <option value="origem_lidima">Imóvel com Origem Lídima</option>
+                            <option value="origem_lidima">Imóvel com Origem Identificada</option>
                             <option value="sem_origem">Imóvel sem Origem</option>
                             <option value="inconclusa">Situação Inconclusa</option>
                         </select>
@@ -819,4 +819,4 @@ Ao final da implementação, o sistema terá:
 5. **Retrocompatibilidade total** com sistema existente
 6. **Implementação rápida** e manutenção simples
 
-**🎉 Esta solução é muito mais simples, rápida e eficaz!** 
+**🎉 Esta solução é muito mais simples, rápida e eficaz!**

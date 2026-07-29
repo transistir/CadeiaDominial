@@ -24,13 +24,13 @@ A funcionalidade "fim de cadeia" foi completamente reformulada para resolver pro
 ### **1. Comportamento Correto**
 - **Fim de cadeia NÃO gera documento** - apenas indicador visual
 - **Ícone circular** na árvore com Tipo + Sigla/Especificação
-- **Cores**: Vermelho (Sem Origem), Verde (Origem Lídima)
+- **Cores**: Vermelho (Sem Origem), Verde (Origem Identificada)
 - **Múltiplas origens**: Fim de cadeia + origens normais funcionam juntas
 - **Sugestões de cartório**: Apenas para origens normais (não fim de cadeia)
 
 ### **2. Formato da Coluna Origem**
 ```
-M123(CartórioOrigem); Destacamento Público:INCRA:Origem Lídima; T456(CartórioOrigem)
+M123(CartórioOrigem); Destacamento Público:INCRA:Origem Identificada; T456(CartórioOrigem)
 ```
 
 ### **3. Tipos de Fim de Cadeia**
@@ -39,7 +39,7 @@ M123(CartórioOrigem); Destacamento Público:INCRA:Origem Lídima; T456(Cartóri
 - **Sem Origem**: Sem especificação adicional
 
 ### **4. Classificações**
-- **Imóvel com Origem Lídima** (Verde)
+- **Imóvel com Origem Identificada** (Verde)
 - **Imóvel sem Origem** (Vermelho)
 - **Situação Inconclusa** (Amarelo)
 
@@ -107,7 +107,7 @@ python manage.py migrar_fim_cadeia --force
 ### **Exemplos de Conversão:**
 ```
 ANTES: FIM_CADEIA:destacamento_publico::destacamento_publico:origem_lidima:Estado da Bahia
-DEPOIS: Destacamento Público:Estado da Bahia:Origem Lídima
+DEPOIS: Destacamento Público:Estado da Bahia:Origem Identificada
 
 ANTES: FIM_CADEIA:sem_origem::sem_origem:sem_origem:
 DEPOIS: Sem Origem::Sem Origem
