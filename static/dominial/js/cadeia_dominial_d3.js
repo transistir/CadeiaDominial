@@ -1109,6 +1109,66 @@ function renderArvoreD3(data, svgGroup, width, height) {
       return tooltip;
     });
 
+  // Badge de keyword de alerta (URGENTE/ATENÇÃO/PENDENTE)
+  const KEYWORD_CORES = {
+    "alerta-urgente": "#dc3545", // vermelho
+    "alerta-atencao": "#ffc107", // amarelo
+    "alerta-pendente": "#17a2b8", // ciano
+  };
+
+  const KEYWORD_LETRAS = {
+    "alerta-urgente": "!",
+    "alerta-atencao": "A",
+    "alerta-pendente": "P",
+  };
+
+  // Círculo do badge
+  node
+    .filter(
+      (d) =>
+        d.data.keyword_encontrada &&
+        d.data.keyword_encontrada.css_class,
+    )
+    .append("circle")
+    .attr("cx", 55)
+    .attr("cy", (d) => {
+      // Se tem badge de importado ou compartilhado, deslocar keyword para cima
+      return d.data.is_importado || d.data.is_compartilhado ? -38 : -25;
+    })
+    .attr("r", 8)
+    .attr(
+      "fill",
+      (d) =>
+        KEYWORD_CORES[d.data.keyword_encontrada.css_class] || "#6c757d",
+    )
+    .attr("stroke", "white")
+    .attr("stroke-width", 2)
+    .attr(
+      "title",
+      (d) => `Keyword: ${d.data.keyword_encontrada.label}`,
+    );
+
+  // Letra dentro do badge
+  node
+    .filter(
+      (d) =>
+        d.data.keyword_encontrada &&
+        d.data.keyword_encontrada.css_class,
+    )
+    .append("text")
+    .attr("x", 55)
+    .attr("y", (d) =>
+      d.data.is_importado || d.data.is_compartilhado ? -34 : -21,
+    )
+    .attr("text-anchor", "middle")
+    .attr("fill", "white")
+    .attr("font-size", 9)
+    .attr("font-weight", "bold")
+    .text(
+      (d) =>
+        KEYWORD_LETRAS[d.data.keyword_encontrada.css_class] || "?",
+    );
+
   // Badge de documento compartilhado (verde)
   node
     .filter((d) => d.data.is_compartilhado && !d.data.is_importado)
