@@ -1109,15 +1109,14 @@ function renderArvoreD3(data, svgGroup, width, height) {
       return tooltip;
     });
 
-  // Badge de keyword de alerta (URGENTE/ATENÇÃO/PENDENTE)
+  // Badge de keyword de alerta (ATENÇÃO/PENDENTE)
+  // Cores alinhadas com o sistema de alerta do app (lancamentos.css, etc.)
   const KEYWORD_CORES = {
-    "alerta-urgente": "#dc3545", // vermelho
-    "alerta-atencao": "#ffc107", // amarelo
-    "alerta-pendente": "#17a2b8", // ciano
+    "alerta-atencao": "#fd7e14", // laranja (canônico)
+    "alerta-pendente": "#ffc107", // amarelo (canônico)
   };
 
   const KEYWORD_LETRAS = {
-    "alerta-urgente": "!",
     "alerta-atencao": "A",
     "alerta-pendente": "P",
   };
