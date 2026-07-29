@@ -6,6 +6,7 @@ from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
+from ..services.keyword_alerta_service import buscar_keyword
 from datetime import date
 import json
 from weasyprint import HTML
@@ -15,6 +16,24 @@ import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+
+def _buscar_keyword_prioritaria(lancamentos):
+    keyword_doc = None
+    for lancamento in lancamentos:
+        observacoes = (
+            lancamento.get('observacoes', '')
+            if isinstance(lancamento, dict)
+            else lancamento.observacoes
+        )
+        keyword = buscar_keyword(observacoes)
+        if keyword and (
+            keyword_doc is None
+            or keyword['priority'] < keyword_doc['priority']
+        ):
+            keyword_doc = keyword
+    return keyword_doc
+
 
 @login_required
 def cadeia_dominial(request, tis_id, imovel_id):
@@ -64,6 +83,25 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         # criar_documentos_automaticos=False: não criar documentos fantasma ao
         # carregar a árvore (estanca a geração de ramos espúrios).
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False)
+
+        # Expor no JSON consumido pelo D3 a keyword de maior prioridade de
+        # cada documento.
+        documentos_por_id = {
+            documento.id: documento
+            for documento in Documento.objects.filter(
+                id__in=[
+                    documento['id']
+                    for documento in arvore.get('documentos', [])
+                ]
+            ).prefetch_related('lancamentos')
+        }
+        for documento_node in arvore.get('documentos', []):
+            documento = documentos_por_id.get(documento_node['id'])
+            documento_node['keyword_encontrada'] = (
+                _buscar_keyword_prioritaria(documento.lancamentos.all())
+                if documento
+                else None
+            )
         
         # Adicionar headers para evitar cache
         response = JsonResponse(arvore, safe=False)
@@ -272,7 +310,6 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
         -LancamentoConsultaService._extrair_numero_simples(x.numero_lancamento),
         x.id
     ))
-    from ..services.keyword_alerta_service import buscar_keyword
     for lanc in lancamentos_list:
         lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
     lancamentos = lancamentos_list

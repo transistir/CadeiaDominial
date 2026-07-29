@@ -1109,6 +1109,64 @@ function renderArvoreD3(data, svgGroup, width, height) {
       return tooltip;
     });
 
+  // Badge de keyword de alerta (ATENÇÃO/PENDENTE)
+  // Cores alinhadas com o sistema de alerta do app (lancamentos.css, etc.)
+  const KEYWORD_CORES = {
+    "alerta-atencao": "#fd7e14", // laranja (canônico)
+    "alerta-pendente": "#ffc107", // amarelo (canônico)
+  };
+
+  const KEYWORD_LETRAS = {
+    "alerta-atencao": "A",
+    "alerta-pendente": "P",
+  };
+
+  // Círculo do badge
+  node
+    .filter(
+      (d) =>
+        d.data.keyword_encontrada &&
+        d.data.keyword_encontrada.css_class,
+    )
+    .append("circle")
+    .attr("cx", (d) =>
+      d.data.is_importado || d.data.is_compartilhado ? 35 : 55,
+    )
+    .attr("cy", -25)
+    .attr("r", 8)
+    .attr(
+      "fill",
+      (d) =>
+        KEYWORD_CORES[d.data.keyword_encontrada.css_class] || "#6c757d",
+    )
+    .attr("stroke", "white")
+    .attr("stroke-width", 2)
+    .attr(
+      "title",
+      (d) => `Keyword: ${d.data.keyword_encontrada.label}`,
+    );
+
+  // Letra dentro do badge
+  node
+    .filter(
+      (d) =>
+        d.data.keyword_encontrada &&
+        d.data.keyword_encontrada.css_class,
+    )
+    .append("text")
+    .attr("x", (d) =>
+      d.data.is_importado || d.data.is_compartilhado ? 35 : 55,
+    )
+    .attr("y", -21)
+    .attr("text-anchor", "middle")
+    .attr("fill", "white")
+    .attr("font-size", 9)
+    .attr("font-weight", "bold")
+    .text(
+      (d) =>
+        KEYWORD_LETRAS[d.data.keyword_encontrada.css_class] || "?",
+    );
+
   // Badge de documento compartilhado (verde)
   node
     .filter((d) => d.data.is_compartilhado && !d.data.is_importado)
