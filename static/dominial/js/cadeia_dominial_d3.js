@@ -930,9 +930,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
-          return "#28a745"; // Verde para origem identificada
+          return "#6c757d"; // Cinza neutro para origem identificada
+        } else if (d.data.classificacao_fim_cadeia === "inconclusa") {
+          return "#ffc107"; // Amarelo para situação inconclusa
         } else {
-          return "#dc3545"; // Vermelho para sem origem ou inconclusa
+          return "#dc3545"; // Vermelho para sem origem
         }
       } else if (d.data.tipo_documento === "transcricao") {
         return "#6f42c1"; // Roxo para transcrição
@@ -944,9 +946,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
-          return "#1e7e34"; // Verde escuro para origem identificada
+          return "#495057"; // Cinza escuro para origem identificada
+        } else if (d.data.classificacao_fim_cadeia === "inconclusa") {
+          return "#e0a800"; // Amarelo escuro para situação inconclusa
         } else {
-          return "#b02a37"; // Vermelho escuro para sem origem ou inconclusa
+          return "#b02a37"; // Vermelho escuro para sem origem
         }
       }
       // Documentos importados têm borda laranja tracejada

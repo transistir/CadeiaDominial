@@ -66,9 +66,9 @@
                     <!-- Lista hierárquica dos documentos e lançamentos da cadeia dominial -->
                     <div class="tree-list">
                         {% for documento in documentos %}
-                        <div class="documento-node {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}documento-fim-cadeia-verde{% else %}documento-fim-cadeia-vermelho{% endif %}{% else %}documento-normal{% endif %}" style="border-left: 4px solid {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}#28a745{% else %}#dc3545{% endif %}{% else %}var(--primary-color){% endif %};">
+                        <div class="documento-node {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}documento-fim-cadeia-verde{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}documento-fim-cadeia-amarelo{% else %}documento-fim-cadeia-vermelho{% endif %}{% else %}documento-normal{% endif %}" style="border-left: 4px solid {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}#6c757d{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}#ffc107{% else %}#dc3545{% endif %}{% else %}var(--primary-color){% endif %};">
                             <div class="documento-header">
-                                {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}🟢{% else %}🔴{% endif %}{% else %}📄{% endif %} {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
+                                {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}⚪{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}🟡{% else %}🔴{% endif %}{% else %}📄{% endif %} {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
                                 <span>({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
                                 {% if forloop.first %}
                                 <span class="lancamento-badge primary-dark">
@@ -76,8 +76,8 @@
                                 </span>
                                 {% endif %}
                                 {% if documento.classificacao_fim_cadeia %}
-                                <span class="lancamento-badge {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}fim-cadeia-verde{% else %}fim-cadeia-vermelho{% endif %}">
-                                    {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}🟢{% else %}🔴{% endif %} Fim de Cadeia
+                                <span class="lancamento-badge {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}fim-cadeia-verde{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}fim-cadeia-amarelo{% else %}fim-cadeia-vermelho{% endif %}">
+                                    {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}⚪{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}🟡{% else %}🔴{% endif %} Fim de Cadeia
                                 </span>
                                 {% endif %}
                             </div>
@@ -170,4 +170,4 @@
         <a href="{% url 'tis_detail' tis_id=tis.id %}" class="btn btn-secondary">← Voltar</a>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

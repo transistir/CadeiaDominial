@@ -24,7 +24,7 @@ A funcionalidade "fim de cadeia" foi completamente reformulada para resolver pro
 ### **1. Comportamento Correto**
 - **Fim de cadeia NÃO gera documento** - apenas indicador visual
 - **Ícone circular** na árvore com Tipo + Sigla/Especificação
-- **Cores**: Vermelho (Sem Origem), Verde (Origem Identificada)
+- **Cores**: Vermelho (Sem Origem), cinza neutro (Origem Identificada)
 - **Múltiplas origens**: Fim de cadeia + origens normais funcionam juntas
 - **Sugestões de cartório**: Apenas para origens normais (não fim de cadeia)
 
@@ -39,7 +39,7 @@ M123(CartórioOrigem); Destacamento Público:INCRA:Origem Identificada; T456(Car
 - **Sem Origem**: Sem especificação adicional
 
 ### **4. Classificações**
-- **Imóvel com Origem Identificada** (Verde)
+- **Imóvel com Origem Identificada** (Cinza neutro)
 - **Imóvel sem Origem** (Vermelho)
 - **Situação Inconclusa** (Amarelo)
 

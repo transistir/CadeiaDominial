@@ -329,7 +329,7 @@ class FimCadeia(models.Model):
     def get_cor_css(self):
         """Retorna a cor CSS baseada na classificação"""
         cores = {
-            'origem_lidima': '#28a745',  # Verde
+            'origem_lidima': '#6c757d',  # Cinza neutro
             'sem_origem': '#dc3545',     # Vermelho
             'inconclusa': '#ffc107',     # Amarelo
         }
@@ -338,7 +338,7 @@ class FimCadeia(models.Model):
     def get_cor_borda_css(self):
         """Retorna a cor da borda CSS baseada na classificação"""
         cores = {
-            'origem_lidima': '#1e7e34',  # Verde escuro
+            'origem_lidima': '#495057',  # Cinza escuro
             'sem_origem': '#b02a37',     # Vermelho escuro
             'inconclusa': '#e0a800',     # Amarelo escuro
         }
