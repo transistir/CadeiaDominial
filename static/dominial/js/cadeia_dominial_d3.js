@@ -1130,11 +1130,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
         d.data.keyword_encontrada.css_class,
     )
     .append("circle")
-    .attr("cx", 55)
-    .attr("cy", (d) => {
-      // Se tem badge de importado ou compartilhado, deslocar keyword para cima
-      return d.data.is_importado || d.data.is_compartilhado ? -38 : -25;
-    })
+    .attr("cx", (d) =>
+      d.data.is_importado || d.data.is_compartilhado ? 35 : 55,
+    )
+    .attr("cy", -25)
     .attr("r", 8)
     .attr(
       "fill",
@@ -1156,10 +1155,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
         d.data.keyword_encontrada.css_class,
     )
     .append("text")
-    .attr("x", 55)
-    .attr("y", (d) =>
-      d.data.is_importado || d.data.is_compartilhado ? -34 : -21,
+    .attr("x", (d) =>
+      d.data.is_importado || d.data.is_compartilhado ? 35 : 55,
     )
+    .attr("y", -21)
     .attr("text-anchor", "middle")
     .attr("fill", "white")
     .attr("font-size", 9)
