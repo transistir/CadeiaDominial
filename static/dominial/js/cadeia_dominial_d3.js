@@ -990,7 +990,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
         } else if (d.data.tipo_fim_cadeia === "outra") {
           tipo = "Outra Origem";
         } else {
-          tipo = "Sem Origem";
+          tipo = "Tipo não classificado";
         }
 
         let classificacao = "";
