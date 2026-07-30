@@ -1211,8 +1211,8 @@ function formatarClassificacaoFimCadeia(classificacao) {
         .toLowerCase()
         .replace(/ /g, '_');
     const labels = {
-        origem_lidima: 'Origem Identificada',
-        origem_identificada: 'Origem Identificada',
+        origem_lidima: 'Origem Lídima',
+        origem_identificada: 'Origem Lídima',
         sem_origem: 'Sem Origem',
         situacao_inconclusa: 'Situação Inconclusa',
         inconclusa: 'Situação Inconclusa'

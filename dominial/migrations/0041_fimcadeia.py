@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(primary_key=True, serialize=False)),
                 ('nome', models.CharField(help_text='Nome do fim de cadeia (ex: Estado da Bahia, INCRA)', max_length=100, unique=True)),
                 ('tipo', models.CharField(choices=[('destacamento_publico', 'Destacamento Público'), ('outra', 'Outra'), ('sem_origem', 'Sem Origem')], default='destacamento_publico', max_length=50)),
-                ('classificacao', models.CharField(choices=[('origem_lidima', 'Origem Identificada'), ('sem_origem', 'Sem Origem'), ('inconclusa', 'Situação Inconclusa')], max_length=50)),
+                ('classificacao', models.CharField(choices=[('origem_lidima', 'Origem Lídima'), ('sem_origem', 'Sem Origem'), ('inconclusa', 'Situação Inconclusa')], max_length=50)),
                 ('sigla', models.CharField(blank=True, help_text='Sigla do órgão (ex: INCRA, SPU)', max_length=50, null=True)),
                 ('descricao', models.TextField(blank=True, help_text='Descrição detalhada do fim de cadeia', null=True)),
                 ('ativo', models.BooleanField(default=True, help_text='Se o fim de cadeia está ativo')),

@@ -13,8 +13,8 @@ def _classificacao_fim_cadeia_display(classificacao):
         if unicodedata.category(caractere) != 'Mn'
     ).lower().replace(' ', '_')
     labels = {
-        'origem_lidima': 'Origem Identificada',
-        'origem_identificada': 'Origem Identificada',
+        'origem_lidima': 'Origem Lídima',
+        'origem_identificada': 'Origem Lídima',
         'sem_origem': 'Sem Origem',
         'situacao_inconclusa': 'Situação Inconclusa',
         'inconclusa': 'Situação Inconclusa',
@@ -132,7 +132,7 @@ def origem_formatada(lancamento):
 @register.filter
 def origem_formatada_completa(lancamento):
     """
-    Template filter para formatar origem completa: M123(Cartório); Destacamento Público:INCRA:Origem Identificada
+    Template filter para formatar origem completa: M123(Cartório); Destacamento Público:INCRA:Origem Lídima
     """
     if not lancamento.origem:
         return '-'

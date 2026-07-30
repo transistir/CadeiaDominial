@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
                 ('fim_cadeia', models.BooleanField(default=False, help_text='Indica se esta origem marca o fim da cadeia')),
                 ('tipo_fim_cadeia', models.CharField(blank=True, choices=[('destacamento_publico', 'Destacamento do Patrimônio Público'), ('outra', 'Outra'), ('sem_origem', 'Sem Origem')], help_text='Tipo do fim de cadeia para esta origem', max_length=50, null=True)),
                 ('especificacao_fim_cadeia', models.TextField(blank=True, help_text="Especificação quando o tipo é 'Outra' para esta origem", null=True)),
-                ('classificacao_fim_cadeia', models.CharField(blank=True, choices=[('origem_lidima', 'Imóvel com Origem Identificada'), ('sem_origem', 'Imóvel sem Origem'), ('inconclusa', 'Situação Inconclusa')], help_text='Classificação do imóvel quando a cadeia termina nesta origem', max_length=50, null=True)),
+                ('classificacao_fim_cadeia', models.CharField(blank=True, choices=[('origem_lidima', 'Imóvel com Origem Lídima'), ('sem_origem', 'Imóvel sem Origem'), ('inconclusa', 'Situação Inconclusa')], help_text='Classificação do imóvel quando a cadeia termina nesta origem', max_length=50, null=True)),
                 ('lancamento', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='origens_fim_cadeia', to='dominial.lancamento')),
             ],
             options={

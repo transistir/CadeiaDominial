@@ -587,6 +587,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         classificacao_mapping = {
                             'origem_identificada': 'origem_lidima',
                             'origem_lidima': 'origem_lidima',
+                            'origem_lídima': 'origem_lidima',
                             'sem_origem': 'sem_origem',
                             'situacao_inconclusa': 'inconclusa'
                         }

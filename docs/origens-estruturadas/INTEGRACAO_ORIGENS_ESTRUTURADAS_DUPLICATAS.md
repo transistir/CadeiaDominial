@@ -728,7 +728,7 @@ const duplicataEstruturadaHandler = new DuplicataEstruturadaHandler();
 ### **✅ Para Importação:**
 - **Rastreabilidade**: Registra origem estruturada da importação
 - **Destaque visual**: Fim de matrícula claramente identificado
-- **Classificação preservada**: Mantém informações de origem identificada
+- **Classificação preservada**: Mantém informações de origem lídima
 - **Performance**: Queries otimizadas com relacionamentos
 
 ### **✅ Para Visualização:**
@@ -771,7 +771,7 @@ Ao final da implementação, o sistema terá:
 1. **Detecção automática** de duplicatas em origens estruturadas
 2. **Importação inteligente** preservando contexto estruturado
 3. **Destaque visual** de fim de matrícula em documentos importados
-4. **Classificação preservada** de origens identificadas
+4. **Classificação preservada** de origens lídimas
 5. **Retrocompatibilidade total** com sistema existente
 6. **Performance otimizada** com relacionamentos estruturados
 

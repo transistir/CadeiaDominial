@@ -72,7 +72,7 @@
 - **Solução**: 
   - Marcar visualmente documentos finais
   - Solicitar classificação da origem:
-    - Imóvel com origem identificada
+    - Imóvel com origem lídima
     - Imóvel sem origem
     - Situação inconclusa
 
@@ -226,7 +226,7 @@ class OrigemTipo(models.Model):
 
 class OrigemClassificacao(models.Model):
     CLASSIFICACAO_CHOICES = [
-        ('identificada', 'Imóvel com Origem Identificada'),
+        ('identificada', 'Imóvel com Origem Lídima'),
         ('sem_origem', 'Imóvel Sem Origem'),
         ('inconclusa', 'Situação Inconclusa')
     ]

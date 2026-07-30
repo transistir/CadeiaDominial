@@ -28,7 +28,7 @@ Integração entre o novo sistema de **Origens Estruturadas** e o sistema existe
 ### **Tabela da Cadeia Dominial**
 - **Borda amarela** para documentos com fim de matrícula
 - **Badge "FIM DE MATRÍCULA"** em documentos importados
-- **Badge de classificação** (Origem Identificada, Sem Origem, etc.)
+- **Badge de classificação** (Origem Lídima, Sem Origem, etc.)
 - **Ícone 🛑** para documentos que terminam a cadeia
 
 ### **Árvore D3**
@@ -105,7 +105,7 @@ Ao final da implementação, o sistema terá:
 1. **Detecção automática** de duplicatas em origens estruturadas
 2. **Importação inteligente** preservando contexto estruturado
 3. **Destaque visual** de fim de matrícula em documentos importados
-4. **Classificação preservada** de origens identificadas
+4. **Classificação preservada** de origens lídimas
 5. **Retrocompatibilidade total** com sistema existente
 6. **Performance otimizada** com relacionamentos estruturados
 

@@ -46,7 +46,7 @@ class Documento(models.Model):
         null=True,
         blank=True,
         choices=[
-            ('origem_lidima', 'Imóvel com Origem Identificada'),
+            ('origem_lidima', 'Imóvel com Origem Lídima'),
             ('sem_origem', 'Imóvel sem Origem'),
             ('inconclusa', 'Situação Inconclusa'),
         ],
