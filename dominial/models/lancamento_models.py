@@ -266,7 +266,7 @@ class OrigemFimCadeia(models.Model):
         null=True,
         blank=True,
         choices=[
-            ('origem_lidima', 'Imóvel com Origem Identificada'),
+            ('origem_lidima', 'Imóvel com Origem Lídima'),
             ('sem_origem', 'Imóvel sem Origem'),
             ('inconclusa', 'Situação Inconclusa'),
         ],
@@ -304,7 +304,7 @@ class FimCadeia(models.Model):
     tipo = models.CharField(max_length=50, choices=TIPO_CHOICES, default='destacamento_publico')
     
     CLASSIFICACAO_CHOICES = [
-        ('origem_lidima', 'Origem Identificada'),
+        ('origem_lidima', 'Origem Lídima'),
         ('sem_origem', 'Sem Origem'),
         ('inconclusa', 'Situação Inconclusa'),
     ]
