@@ -262,13 +262,11 @@ export function persistSeedChains(
           const papel = i === 0 ? "outorgante" : "adquirente";
 
           const insertPessoa = database.prepare(`
-            INSERT INTO pessoa (nome, cpf_cnpj, tipo, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO pessoa (nome, created_at, updated_at)
+            VALUES (?, ?, ?)
           `);
           const pessoaResult = insertPessoa.run(
             pessoa.nome,
-            pessoa.cpfCnpj,
-            pessoa.tipo === "pf" ? "fisica" : "juridica",
             now,
             now,
           );
