@@ -112,7 +112,26 @@ class HierarquiaArvoreService:
                 documento_atual, imovel, nivel
             )
             arvore['documentos'].append(doc_node)
-            
+
+            # Injetar nós de fim de cadeia (issue #85)
+            for lanc_fc in documento_atual.lancamentos.filter(
+                origens_fim_cadeia__isnull=False
+            ).distinct():
+                origem_fc = lanc_fc.origens_fim_cadeia.first()
+                if not origem_fc:
+                    continue
+                arvore['documentos'].append(
+                    HierarquiaArvoreService._criar_no_fim_cadeia(
+                        documento_atual, lanc_fc, origem_fc)
+                )
+                arvore['conexoes'].append({
+                    'from': documento_atual.id,
+                    'to': f"fim_cadeia_{documento_atual.id}",
+                    'from_numero': documento_atual.numero,
+                    'to_numero': 'Fim de Cadeia',
+                    'tipo': 'fim_cadeia',
+                })
+
             # Buscar documentos pais (origens) deste documento
             documentos_pais = HierarquiaArvoreService._buscar_documentos_pais(
                 documento_atual, imovel, criar_documentos_automaticos
@@ -325,58 +344,50 @@ class HierarquiaArvoreService:
         }
     
     @staticmethod
+    def _criar_no_fim_cadeia(documento, lancamento_fc, origem_fc):
+        """Cria um nó especial de fim de cadeia para a árvore D3 (issue #85)."""
+        # Extrair sigla de patrimônio público do campo origem do lançamento
+        sigla = None
+        if lancamento_fc.origem:
+            if 'FIM_CADEIA' in lancamento_fc.origem:
+                parts = lancamento_fc.origem.split(':')
+                if len(parts) >= 6:
+                    sigla = parts[5]
+            elif ':' in lancamento_fc.origem:
+                parts = lancamento_fc.origem.split(':')
+                if len(parts) >= 2:
+                    sigla = parts[1]
+
+        tipo_fc = origem_fc.tipo_fim_cadeia or 'sem_origem'
+        classificacao = origem_fc.classificacao_fim_cadeia or 'sem_origem'
+        espec = origem_fc.especificacao_fim_cadeia
+
+        if tipo_fc == 'destacamento_publico' and sigla:
+            titulo, numero = f"Destacamento Público\n{sigla}", sigla
+        elif tipo_fc == 'outra' and espec:
+            titulo = f"Outra Origem\n{espec}"
+            numero = espec[:10] + "..." if len(espec) > 10 else espec
+        else:
+            titulo, numero = "Sem Origem", "Sem Origem"
+
+        return {
+            'id': f"fim_cadeia_{documento.id}",
+            'numero': numero, 'tipo': 'fim_cadeia',
+            'tipo_display': 'Fim de Cadeia', 'tipo_documento': 'fim_cadeia',
+            'data': '', 'cartorio': '', 'livro': '', 'folha': '',
+            'origem': '', 'observacoes': '', 'total_lancamentos': 0,
+            'x': 0, 'y': 0, 'nivel': 0, 'nivel_manual': None,
+            'is_importado': False, 'is_compartilhado': False,
+            'imoveis_compartilhando': [], 'info_importacao': '',
+            'tooltip_importacao': '', 'cadeias_dominiais': [],
+            'total_cadeias': 0, 'is_fim_cadeia': True,
+            'tipo_fim_cadeia': tipo_fc, 'classificacao_fim_cadeia': classificacao,
+            'sigla_patrimonio_publico': sigla, 'titulo_fim_cadeia': titulo,
+            'documento_origem_id': documento.id,
+        }
+
+    @staticmethod
     def _recalcular_niveis(arvore, documento_principal_id):
-        """
-        Recalcula níveis baseado na hierarquia real
-        Mantém apenas conexões diretas pai-filho
-        """
-        # Mapear conexões diretas
-        filhos_por_pai = {}  # pai -> [filhos]
-        pais_por_filho = {}  # filho -> [pais]
-        
-        for conexao in arvore['conexoes']:
-            filho = conexao['from']
-            pai = conexao['to']
-            
-            if pai not in filhos_por_pai:
-                filhos_por_pai[pai] = []
-            filhos_por_pai[pai].append(filho)
-            
-            if filho not in pais_por_filho:
-                pais_por_filho[filho] = []
-            pais_por_filho[filho].append(pai)
-        
-        # Calcular níveis usando busca em largura a partir do documento principal
-        niveis = {}
-        fila = deque([(documento_principal_id, 0)])
-        visitados = set()
-        
-        while fila:
-            documento_id, nivel = fila.popleft()
-            
-            if documento_id in visitados:
-                continue
-            visitados.add(documento_id)
-            
-            niveis[documento_id] = nivel
-            
-            # Adicionar pais diretos à fila (nível + 1)
-            if documento_id in pais_por_filho:
-                for pai in pais_por_filho[documento_id]:
-                    if pai not in visitados:
-                        fila.append((pai, nivel + 1))
-        
-        # Aplicar níveis aos documentos
-        for doc_node in arvore['documentos']:
-            nivel_calculado = niveis.get(doc_node['id'], 0)
-            doc_node['nivel'] = doc_node['nivel_manual'] if doc_node['nivel_manual'] is not None else nivel_calculado
-        
-        # Calcular nível do fim de cadeia (nível máximo + 1)
-        if arvore['documentos']:
-            nivel_maximo = max(doc['nivel'] for doc in arvore['documentos'])
-            nivel_fim_cadeia = nivel_maximo + 1
-            
-            # Aplicar nível do fim de cadeia aos nós de fim de cadeia
-            for doc_node in arvore['documentos']:
-                if doc_node.get('is_fim_cadeia'):
-                    doc_node['nivel'] = nivel_fim_cadeia
+        """Recalcula níveis — delega para helper para manter arquivo ≤400 linhas."""
+        from .hierarquia_arvore_niveis_helper import recalcular_niveis
+        recalcular_niveis(arvore, documento_principal_id)
