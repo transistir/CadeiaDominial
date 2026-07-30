@@ -88,7 +88,7 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertIsInstance(no_fc['id'], str)
-        self.assertEqual(no_fc['id'], f"fim_cadeia_{self.documento.id}")
+        self.assertEqual(no_fc['id'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_0")
 
     def test_arvore_sem_fim_cadeia(self):
         """Documento sem origem de fim de cadeia não deve gerar nó is_fim_cadeia."""
@@ -133,7 +133,7 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         self.assertTrue(len(conexoes_fc) > 0)
         conexao = conexoes_fc[0]
         self.assertEqual(conexao['from'], self.documento.id)
-        self.assertEqual(conexao['to'], f"fim_cadeia_{self.documento.id}")
+        self.assertEqual(conexao['to'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_0")
 
     def test_classificacao_fallback_none(self):
         """classificacao_fim_cadeia=None deve cair para 'sem_origem'."""
@@ -144,6 +144,30 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['classificacao_fim_cadeia'], 'sem_origem')
+
+    def test_multiplos_fim_cadeia_mesmo_documento(self):
+        """Documento com múltiplas origens fim_cadeia gera nós com IDs únicos."""
+        # Adicionar segunda origem com indice diferente
+        OrigemFimCadeia.objects.create(
+            lancamento=self.lancamento,
+            indice_origem=1,
+            fim_cadeia=True,
+            tipo_fim_cadeia='sem_origem',
+            classificacao_fim_cadeia='sem_origem',
+        )
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        nos_fc = self._extrair_fim_cadeia(arvore)
+        self.assertEqual(len(nos_fc), 2)
+        # IDs devem ser únicos
+        ids = {n['id'] for n in nos_fc}
+        self.assertEqual(len(ids), 2)
+
+    def test_fim_cadeia_false_nao_gera_no(self):
+        """Origem com fim_cadeia=False não deve gerar nó de fim de cadeia."""
+        OrigemFimCadeia.objects.filter(lancamento=self.lancamento).update(fim_cadeia=False)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        nos_fc = self._extrair_fim_cadeia(arvore)
+        self.assertEqual(len(nos_fc), 0)
 
     def test_tipo_destacamento_com_sigla(self):
         """Tipo destacamento_publico com sigla na origem gera título apropriado."""

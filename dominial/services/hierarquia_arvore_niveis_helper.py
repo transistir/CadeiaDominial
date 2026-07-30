@@ -55,8 +55,9 @@ def recalcular_niveis(arvore, documento_principal_id):
         doc_node['nivel'] = doc_node['nivel_manual'] if doc_node['nivel_manual'] is not None else nivel_calculado
 
     # Calcular nível do fim de cadeia (nível máximo + 1)
-    if arvore['documentos']:
-        nivel_maximo = max(doc['nivel'] for doc in arvore['documentos'])
+    documentos_reais = [d for d in arvore['documentos'] if not d.get('is_fim_cadeia')]
+    if documentos_reais:
+        nivel_maximo = max(doc['nivel'] for doc in documentos_reais)
         nivel_fim_cadeia = nivel_maximo + 1
 
         # Aplicar nível do fim de cadeia aos nós de fim de cadeia

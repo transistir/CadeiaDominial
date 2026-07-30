@@ -9,6 +9,7 @@ from .hierarquia_origem_service import HierarquiaOrigemService
 from .documento_service import DocumentoService
 from .documento_identidade_service import DocumentoIdentidadeService
 from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+from .hierarquia_arvore_niveis_helper import recalcular_niveis
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 import re
 from collections import deque
@@ -115,22 +116,23 @@ class HierarquiaArvoreService:
 
             # Injetar nós de fim de cadeia (issue #85)
             for lanc_fc in documento_atual.lancamentos.filter(
-                origens_fim_cadeia__isnull=False
+                origens_fim_cadeia__fim_cadeia=True
             ).distinct():
-                origem_fc = lanc_fc.origens_fim_cadeia.first()
-                if not origem_fc:
-                    continue
-                arvore['documentos'].append(
-                    HierarquiaArvoreService._criar_no_fim_cadeia(
-                        documento_atual, lanc_fc, origem_fc)
-                )
-                arvore['conexoes'].append({
-                    'from': documento_atual.id,
-                    'to': f"fim_cadeia_{documento_atual.id}",
-                    'from_numero': documento_atual.numero,
-                    'to_numero': 'Fim de Cadeia',
-                    'tipo': 'fim_cadeia',
-                })
+                for origem_fc in lanc_fc.origens_fim_cadeia.filter(
+                    fim_cadeia=True
+                ).order_by('indice_origem'):
+                    no_fc_id = f"fim_cadeia_{documento_atual.id}_{lanc_fc.id}_{origem_fc.indice_origem}"
+                    arvore['documentos'].append(
+                        HierarquiaArvoreService._criar_no_fim_cadeia(
+                            documento_atual, lanc_fc, origem_fc)
+                    )
+                    arvore['conexoes'].append({
+                        'from': documento_atual.id,
+                        'to': no_fc_id,
+                        'from_numero': documento_atual.numero,
+                        'to_numero': 'Fim de Cadeia',
+                        'tipo': 'fim_cadeia',
+                    })
 
             # Buscar documentos pais (origens) deste documento
             documentos_pais = HierarquiaArvoreService._buscar_documentos_pais(
@@ -371,7 +373,7 @@ class HierarquiaArvoreService:
             titulo, numero = "Sem Origem", "Sem Origem"
 
         return {
-            'id': f"fim_cadeia_{documento.id}",
+            'id': f"fim_cadeia_{documento.id}_{lancamento_fc.id}_{origem_fc.indice_origem}",
             'numero': numero, 'tipo': 'fim_cadeia',
             'tipo_display': 'Fim de Cadeia', 'tipo_documento': 'fim_cadeia',
             'data': '', 'cartorio': '', 'livro': '', 'folha': '',
@@ -389,5 +391,4 @@ class HierarquiaArvoreService:
     @staticmethod
     def _recalcular_niveis(arvore, documento_principal_id):
         """Recalcula níveis — delega para helper para manter arquivo ≤400 linhas."""
-        from .hierarquia_arvore_niveis_helper import recalcular_niveis
         recalcular_niveis(arvore, documento_principal_id)
