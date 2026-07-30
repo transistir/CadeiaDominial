@@ -121,14 +121,12 @@ class HierarquiaArvoreService:
                 for origem_fc in lanc_fc.origens_fim_cadeia.filter(
                     fim_cadeia=True
                 ).order_by('indice_origem'):
-                    no_fc_id = f"fim_cadeia_{documento_atual.id}_{lanc_fc.id}_{origem_fc.indice_origem}"
-                    arvore['documentos'].append(
-                        HierarquiaArvoreService._criar_no_fim_cadeia(
-                            documento_atual, lanc_fc, origem_fc)
-                    )
+                    no_fc = HierarquiaArvoreService._criar_no_fim_cadeia(
+                        documento_atual, lanc_fc, origem_fc)
+                    arvore['documentos'].append(no_fc)
                     arvore['conexoes'].append({
                         'from': documento_atual.id,
-                        'to': no_fc_id,
+                        'to': no_fc['id'],
                         'from_numero': documento_atual.numero,
                         'to_numero': 'Fim de Cadeia',
                         'tipo': 'fim_cadeia',
@@ -373,7 +371,7 @@ class HierarquiaArvoreService:
             titulo, numero = "Sem Origem", "Sem Origem"
 
         return {
-            'id': f"fim_cadeia_{documento.id}_{lancamento_fc.id}_{origem_fc.indice_origem}",
+            'id': f"fim_cadeia_{documento.id}_{lancamento_fc.id}_{origem_fc.id}",
             'numero': numero, 'tipo': 'fim_cadeia',
             'tipo_display': 'Fim de Cadeia', 'tipo_documento': 'fim_cadeia',
             'data': '', 'cartorio': '', 'livro': '', 'folha': '',

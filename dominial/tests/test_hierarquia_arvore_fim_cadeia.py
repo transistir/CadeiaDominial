@@ -56,7 +56,7 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         self._criar_infra_base()
         self._criar_documento_com_lancamento()
         # OrigemFimCadeia padrão: destacamento público + origem lídima
-        OrigemFimCadeia.objects.create(
+        self.origem_fc = OrigemFimCadeia.objects.create(
             lancamento=self.lancamento,
             indice_origem=0,
             fim_cadeia=True,
@@ -88,7 +88,7 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertIsInstance(no_fc['id'], str)
-        self.assertEqual(no_fc['id'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_0")
+        self.assertEqual(no_fc['id'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_{self.origem_fc.id}")
 
     def test_arvore_sem_fim_cadeia(self):
         """Documento sem origem de fim de cadeia não deve gerar nó is_fim_cadeia."""
@@ -133,7 +133,7 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         self.assertTrue(len(conexoes_fc) > 0)
         conexao = conexoes_fc[0]
         self.assertEqual(conexao['from'], self.documento.id)
-        self.assertEqual(conexao['to'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_0")
+        self.assertEqual(conexao['to'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_{self.origem_fc.id}")
 
     def test_classificacao_fallback_none(self):
         """classificacao_fim_cadeia=None deve cair para 'sem_origem'."""
@@ -179,3 +179,12 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['tipo_fim_cadeia'], 'destacamento_publico')
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'INCRA')
+
+    def test_nivel_fim_cadeia_eh_maximo_real_mais_um(self):
+        """Nó de fim de cadeia deve ter nível = máximo dos documentos reais + 1."""
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        docs_reais = [d for d in arvore['documentos'] if not d.get('is_fim_cadeia')]
+        nos_fc = [d for d in arvore['documentos'] if d.get('is_fim_cadeia')]
+        nivel_max_real = max(d['nivel'] for d in docs_reais)
+        for no_fc in nos_fc:
+            self.assertEqual(no_fc['nivel'], nivel_max_real + 1)
