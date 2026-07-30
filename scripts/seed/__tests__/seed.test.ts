@@ -704,7 +704,7 @@ describe("seed-orchestrator", () => {
       const documentoCount = db.prepare("SELECT COUNT(*) as count FROM documento").get() as { count: number };
       expect(imovelDocCount.count).toBe(documentoCount.count);
 
-      // Verify origem.indice values match topology (contiguous 0..k-1)
+      // Verify origem.indice values match topology (writer stores topoOrigem.indice)
       const origens = db.prepare("SELECT indice FROM origem ORDER BY id").all() as Array<{ indice: number }>;
       let expectedIndice = 0;
       for (const chain of chains) {
