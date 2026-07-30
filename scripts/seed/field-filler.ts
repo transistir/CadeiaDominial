@@ -45,11 +45,11 @@ function generateCpfWithFaker(faker: FakerType, invalid = false): string {
   const digits = Array.from({ length: 9 }, () => faker.number.int({ min: 0, max: 9 }));
   const [d10, d11] = computeCpfCheckDigits(digits);
 
-  if (invalid) {
-    digits[0] = (digits[0] + 1) % 10;
-  }
+  // If invalid, corrupt the first check digit so validation fails
+  // (d10 + 1) % 10 changes it to a wrong value
+  const finalD10 = invalid ? (d10 + 1) % 10 : d10;
 
-  const all = [...digits, d10, d11];
+  const all = [...digits, finalD10, d11];
   return `${all.slice(0, 3).join("")}.${all.slice(3, 6).join("")}.${all.slice(6, 9).join("")}-${all[9]}${all[10]}`;
 }
 
