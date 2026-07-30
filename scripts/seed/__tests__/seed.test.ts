@@ -682,5 +682,66 @@ describe("seed-orchestrator", () => {
       const afterCount = db.prepare("SELECT COUNT(*) as count FROM lancamento").get() as { count: number };
       expect(afterCount.count).toBe(beforeCount.count);
     });
+
+    it("end-to-end: S-1 generateSeedChains → S-2 persistSeedChains with filled data", () => {
+      const options: SeedOptions = { count: 3, seed: "e2e-test" };
+      const chains = generateSeedChains(options);
+      const report = persistSeedChains(db, "e2e-test", chains);
+
+      // All 3 chains persisted successfully
+      expect(report.errors).toHaveLength(0);
+      expect(report.inserted.documento).toBeGreaterThan(0);
+      expect(report.inserted.imovel).toBe(3); // ONE imovel per chain
+      expect(report.inserted.lancamento).toBeGreaterThan(0);
+      expect(report.inserted.origem).toBeGreaterThan(0);
+
+      // Each chain has exactly 1 imovel (not N)
+      const imovelCount = db.prepare("SELECT COUNT(*) as count FROM imovel").get() as { count: number };
+      expect(imovelCount.count).toBe(3);
+
+      // Verify imovel_documento count matches documentos count (N:N via link table)
+      const imovelDocCount = db.prepare("SELECT COUNT(*) as count FROM imovel_documento").get() as { count: number };
+      const documentoCount = db.prepare("SELECT COUNT(*) as count FROM documento").get() as { count: number };
+      expect(imovelDocCount.count).toBe(documentoCount.count);
+
+      // Verify origem.indice values match topology (contiguous 0..k-1)
+      const origens = db.prepare("SELECT indice FROM origem ORDER BY id").all() as Array<{ indice: number }>;
+      let expectedIndice = 0;
+      for (const chain of chains) {
+        for (const origem of chain.topology.origens) {
+          expect(origens[expectedIndice].indice).toBe(origem.indice);
+          expectedIndice++;
+        }
+      }
+
+      // Verify imovel.denominacao matches filled.imoveis[0].denominacao
+      for (let i = 0; i < chains.length; i++) {
+        const chain = chains[i];
+        const filledDenominacao = chain.filled.imoveis[0].denominacao;
+
+        // Get the imovel for this chain (round-robin CRI assignment means we can't query by chain ID directly,
+        // but we can verify the denominacao exists somewhere)
+        const imovel = db.prepare("SELECT nome FROM imovel WHERE nome = ? LIMIT 1").get(filledDenominacao) as { nome: string } | undefined;
+        expect(imovel?.nome).toBe(filledDenominacao);
+      }
+
+      // Verify documento.numero matches filled.documentos[i].numero
+      for (let i = 0; i < chains.length; i++) {
+        const chain = chains[i];
+        for (let j = 0; j < chain.filled.documentos.length; j++) {
+          const filledNumero = chain.filled.documentos[j].numero;
+          const doc = db.prepare("SELECT numero FROM documento WHERE numero = ? LIMIT 1").get(filledNumero) as { numero: string } | undefined;
+          expect(doc?.numero).toBe(filledNumero);
+        }
+      }
+
+      // Verify origem count matches topology.origens.length
+      const totalOrigensInTopology = chains.reduce(
+        (sum, chain) => sum + chain.topology.origens.length,
+        0
+      );
+      const totalOrigensInDb = db.prepare("SELECT COUNT(*) as count FROM origem").get() as { count: number };
+      expect(totalOrigensInDb.count).toBe(totalOrigensInTopology);
+    });
   });
 });
