@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.db import transaction
 from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
+from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
 
@@ -27,6 +28,14 @@ admin.site.register(Pessoas)
 admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
+
+
+@admin.register(DocumentoDigital)
+class DocumentoDigitalAdmin(admin.ModelAdmin):
+    list_display = ('nome_original', 'documento', 'tipo_mime', 'tamanho_formatado', 'data_upload', 'upload_por')
+    list_filter = ('tipo_mime',)
+    search_fields = ('nome_original',)
+    readonly_fields = ('tamanho_bytes', 'data_upload')
 
 class NumeroDocumentoFilter(admin.SimpleListFilter):
     title = 'Número do Documento'
