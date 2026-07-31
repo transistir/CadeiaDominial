@@ -95,6 +95,14 @@ class HierarquiaArvoreService:
             'conexoes': []
         }
         
+        # Otimização: prefetch_related para evitar N+1 queries (issue #93)
+        documento_principal = Documento.objects.select_related(
+            'tipo', 'cartorio'
+        ).prefetch_related(
+            'lancamentos__tipo',
+            'lancamentos__origens_fim_cadeia'
+        ).get(id=documento_principal.id)
+        
         # Usar busca em largura para construir a árvore
         documentos_processados = set()
         conexoes_processadas = set()
@@ -347,12 +355,23 @@ class HierarquiaArvoreService:
     def _criar_no_fim_cadeia(documento, lancamento_fc, origem_fc):
         """Cria um nó especial de fim de cadeia para a árvore D3 (issue #85)."""
         # Extrair sigla de patrimônio público do campo origem do lançamento
+        # Trata múltiplas origens separadas por ';' e formato legado de 5 partes (issue #92)
         sigla = None
         if lancamento_fc.origem:
-            if 'FIM_CADEIA' in lancamento_fc.origem:
-                parts = lancamento_fc.origem.split(':')
+            origens_texto = [o.strip() for o in lancamento_fc.origem.split(';') if o.strip()]
+            texto = None
+            if 0 <= origem_fc.indice_origem < len(origens_texto):
+                candidato = origens_texto[origem_fc.indice_origem]
+                if 'FIM_CADEIA' in candidato:
+                    texto = candidato
+            if texto is None:
+                texto = next((o for o in origens_texto if 'FIM_CADEIA' in o), None)
+            if texto:
+                parts = texto.split(':')
                 if len(parts) >= 6:
                     sigla = parts[5]
+                elif len(parts) == 5:
+                    sigla = parts[4]
             elif ':' in lancamento_fc.origem:
                 parts = lancamento_fc.origem.split(':')
                 if len(parts) >= 2:

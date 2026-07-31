@@ -162,6 +162,24 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         ids = {n['id'] for n in nos_fc}
         self.assertEqual(len(ids), 2)
 
+    def test_multiplas_origens_com_ponto_virgula(self):
+        """Origem com múltiplas entradas separadas por ';' deve extrair a correta (issue #92)."""
+        Lancamento.objects.filter(id=self.lancamento.id).update(
+            origem="FIM_CADEIA:M:1:Cartório:123:INCRA; FIM_CADEIA::outra:sem_origem:XYZ"
+        )
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        no_fc = self._extrair_fim_cadeia(arvore)[0]
+        self.assertEqual(no_fc['sigla_patrimonio_publico'], 'INCRA')
+
+    def test_formato_legado_5_partes(self):
+        """Formato legado de 5 partes (sem índice) deve extrair sigla da posição 4 (issue #92)."""
+        Lancamento.objects.filter(id=self.lancamento.id).update(
+            origem="FIM_CADEIA::destacamento_publico:origem_lidima:FUNAI"
+        )
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        no_fc = self._extrair_fim_cadeia(arvore)[0]
+        self.assertEqual(no_fc['sigla_patrimonio_publico'], 'FUNAI')
+
     def test_fim_cadeia_false_nao_gera_no(self):
         """Origem com fim_cadeia=False não deve gerar nó de fim de cadeia."""
         OrigemFimCadeia.objects.filter(lancamento=self.lancamento).update(fim_cadeia=False)
@@ -179,6 +197,33 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['tipo_fim_cadeia'], 'destacamento_publico')
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'INCRA')
+
+    def test_multiplas_origens_fim_cadeia_siglas_por_indice(self):
+        """Cada OrigemFimCadeia deve extrair a sigla correspondente ao seu próprio
+        indice_origem, e não sempre a primeira entrada FIM_CADEIA (bug P1 do review)."""
+        Lancamento.objects.filter(id=self.lancamento.id).update(
+            origem="FIM_CADEIA:M:1:Cartório:123:INCRA; FIM_CADEIA:M:2:Cartório:456:FUNAI"
+        )
+        # self.origem_fc já existe com indice_origem=0
+        origem_fc_1 = OrigemFimCadeia.objects.create(
+            lancamento=self.lancamento,
+            indice_origem=1,
+            fim_cadeia=True,
+            tipo_fim_cadeia='destacamento_publico',
+            classificacao_fim_cadeia='origem_lidima',
+        )
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        nos_fc = self._extrair_fim_cadeia(arvore)
+        self.assertEqual(len(nos_fc), 2)
+
+        no_indice_0 = next(
+            n for n in nos_fc if n['id'].endswith(f"_{self.origem_fc.id}")
+        )
+        no_indice_1 = next(
+            n for n in nos_fc if n['id'].endswith(f"_{origem_fc_1.id}")
+        )
+        self.assertEqual(no_indice_0['sigla_patrimonio_publico'], 'INCRA')
+        self.assertEqual(no_indice_1['sigla_patrimonio_publico'], 'FUNAI')
 
     def test_nivel_fim_cadeia_eh_maximo_real_mais_um(self):
         """Nó de fim de cadeia deve ter nível = máximo dos documentos reais + 1."""
