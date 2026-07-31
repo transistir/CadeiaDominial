@@ -72,7 +72,8 @@ class LancamentoCamposService:
                 cartorio = Cartorios.objects.create(
                     nome=cartorio_origem_nome,
                     cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    cidade=None,
+                    estado=None
                 )
                 lancamento.cartorio_origem = cartorio
     
@@ -109,7 +110,8 @@ class LancamentoCamposService:
                 cartorio = Cartorios.objects.create(
                     nome=cartorio_origem_nome,
                     cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    cidade=None,
+                    estado=None
                 )
                 lancamento.cartorio_origem = cartorio
 
@@ -141,7 +143,8 @@ class LancamentoCamposService:
                 cartorio = Cartorios.objects.create(
                     nome=cartorio_transmissao_nome,
                     cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    cidade=None,
+                    estado=None
                 )
                 lancamento.cartorio_transmissao = cartorio
         else:
@@ -222,7 +225,8 @@ class LancamentoCamposService:
                         cartorio_origem = Cartorios.objects.create(
                             nome=cartorios_origem_nomes[i],
                             cns=cns_unico,
-                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                            cidade=None,
+                            estado=None
                         )
                 
                 # Adicionar origem com seu cartório ao mapeamento

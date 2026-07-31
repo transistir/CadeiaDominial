@@ -6,6 +6,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction
+from django.db.models import Count
 from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
 from .models.documento_digital_models import DocumentoDigital
@@ -23,11 +24,42 @@ admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 # Register your models here.
 
 admin.site.register(TIs)
-admin.site.register(Cartorios)
 admin.site.register(Pessoas)
 admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
+
+
+class EstadoVazioFilter(admin.SimpleListFilter):
+    title = 'Estado vazio/nulo'
+    parameter_name = 'estado_vazio'
+    
+    def lookups(self, request, model_admin):
+        return [('sim', 'Sim'), ('nao', 'Não')]
+    
+    def queryset(self, request, queryset):
+        if self.value() == 'sim':
+            from django.db.models import Q
+            return queryset.filter(Q(estado__isnull=True) | Q(estado=''))
+        if self.value() == 'nao':
+            return queryset.exclude(estado__isnull=True).exclude(estado='')
+        return queryset
+
+
+@admin.register(Cartorios)
+class CartoriosAdmin(admin.ModelAdmin):
+    list_display = ['id', 'nome', 'cns', 'cidade', 'estado', 'tipo', 'contagem_documentos']
+    list_filter = ['estado', 'cidade', 'tipo', EstadoVazioFilter]
+    search_fields = ['id', 'nome', 'cns', 'cidade', 'estado']
+    list_per_page = 50
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(documentos_count=Count('documento', distinct=True))
+
+    def contagem_documentos(self, obj):
+        return obj.documentos_count
+    contagem_documentos.short_description = 'Documentos'
+    contagem_documentos.admin_order_field = 'documentos_count'
 
 
 @admin.register(DocumentoDigital)
