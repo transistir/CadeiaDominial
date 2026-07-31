@@ -287,7 +287,7 @@
                         <a href="{% url 'servir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}" target="_blank" class="btn btn-sm btn-primary" title="Visualizar/Download">
                             👁️
                         </a>
-                        <form method="post" action="{% url 'excluir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}" style="display: inline;" onsubmit="return confirm('Excluir arquivo {{ arquivo.nome_original }}? Esta ação não pode ser desfeita.');">
+                        <form method="post" action="{% url 'excluir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}" style="display: inline;" onsubmit="return confirm('Excluir arquivo {{ arquivo.nome_original|escapejs }}? Esta ação não pode ser desfeita.');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-sm btn-danger" title="Excluir">🗑️</button>
                         </form>

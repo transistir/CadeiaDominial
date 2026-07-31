@@ -18,6 +18,25 @@ TIPOS_PERMITIDOS = {
 TAMANHO_MAXIMO = 20 * 1024 * 1024  # 20MB
 
 
+def _validar_magic_bytes(arquivo):
+    """Valida o conteúdo real do arquivo por assinatura binária."""
+    header = arquivo.read(12)
+    arquivo.seek(0)
+    # PDF: %PDF-
+    if header[:5] == b'%PDF-':
+        return True
+    # PNG: \x89PNG\r\n\x1a\n
+    if header[:8] == b'\x89PNG\r\n\x1a\n':
+        return True
+    # JPEG: \xFF\xD8\xFF
+    if header[:3] == b'\xFF\xD8\xFF':
+        return True
+    # WebP: RIFF....WEBP
+    if header[:4] == b'RIFF' and header[8:12] == b'WEBP':
+        return True
+    return False
+
+
 def _get_contexto_documento(tis_id, imovel_id, documento_id):
     """Helper: resolve TI, Imóvel e Documento com validação de hierarquia."""
     tis = get_object_or_404(TIs, id=tis_id)
@@ -43,6 +62,11 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
         tipo_mime = mimetypes.guess_type(arquivo.name)[0] or 'application/octet-stream'
         if tipo_mime not in TIPOS_PERMITIDOS:
             messages.error(request, f'Tipo de arquivo não permitido: {tipo_mime}. Aceitos: PDF, PNG, JPEG, WebP.')
+            return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
+
+        # Validar magic bytes (conteúdo real)
+        if not _validar_magic_bytes(arquivo):
+            messages.error(request, f'Conteúdo do arquivo não corresponde ao tipo declarado ({tipo_mime}). Arquivo rejeitado.')
             return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
 
         # Validar tamanho
@@ -84,6 +108,7 @@ def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_i
             content_type=arquivo.tipo_mime,
         )
         response['Content-Disposition'] = f'inline; filename="{arquivo.nome_original}"'
+        response['X-Content-Type-Options'] = 'nosniff'
         return response
     except FileNotFoundError:
         raise Http404("Arquivo não encontrado no storage.")

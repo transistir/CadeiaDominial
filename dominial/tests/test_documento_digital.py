@@ -161,3 +161,18 @@ class DocumentoDigitalTestCase(TestCase):
         self.assertEqual(dd.tamanho_formatado, '2.0 KB')
         dd.tamanho_bytes = 5 * 1024 * 1024
         self.assertEqual(dd.tamanho_formatado, '5.0 MB')
+
+    def test_upload_magic_bytes_invalido(self):
+        """Arquivo com extensão .pdf mas conteúdo inválido é rejeitado."""
+        fake_pdf = SimpleUploadedFile(
+            'fake.pdf', b'not a real pdf content at all', content_type='application/pdf'
+        )
+        url = reverse('upload_documento_digital', kwargs={
+            'tis_id': self.ti.id, 'imovel_id': self.imovel.id,
+            'documento_id': self.documento.id
+        })
+        response = self.client.post(url, {'arquivo': fake_pdf})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(DocumentoDigital.objects.filter(
+            documento=self.documento, nome_original='fake.pdf'
+        ).exists())
