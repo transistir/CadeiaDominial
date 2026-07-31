@@ -359,7 +359,13 @@ class HierarquiaArvoreService:
         sigla = None
         if lancamento_fc.origem:
             origens_texto = [o.strip() for o in lancamento_fc.origem.split(';') if o.strip()]
-            texto = next((o for o in origens_texto if 'FIM_CADEIA' in o), None)
+            texto = None
+            if 0 <= origem_fc.indice_origem < len(origens_texto):
+                candidato = origens_texto[origem_fc.indice_origem]
+                if 'FIM_CADEIA' in candidato:
+                    texto = candidato
+            if texto is None:
+                texto = next((o for o in origens_texto if 'FIM_CADEIA' in o), None)
             if texto:
                 parts = texto.split(':')
                 if len(parts) >= 6:
