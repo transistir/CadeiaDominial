@@ -23,11 +23,42 @@ admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 # Register your models here.
 
 admin.site.register(TIs)
-admin.site.register(Cartorios)
 admin.site.register(Pessoas)
 admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
+
+
+class EstadoVazioFilter(admin.SimpleListFilter):
+    title = 'Estado vazio/nulo'
+    parameter_name = 'estado_vazio'
+    
+    def lookups(self, request, model_admin):
+        return [('sim', 'Sim'), ('nao', 'Não')]
+    
+    def queryset(self, request, queryset):
+        if self.value() == 'sim':
+            from django.db.models import Q
+            return queryset.filter(Q(estado__isnull=True) | Q(estado=''))
+        if self.value() == 'nao':
+            return queryset.exclude(estado__isnull=True).exclude(estado='')
+        return queryset
+
+
+@admin.register(Cartorios)
+class CartoriosAdmin(admin.ModelAdmin):
+    list_display = ['id', 'nome', 'cns', 'cidade', 'estado', 'tipo', 'contagem_documentos']
+    list_filter = ['estado', 'cidade', 'tipo', EstadoVazioFilter]
+    search_fields = ['id', 'nome', 'cns', 'cidade', 'estado']
+    list_per_page = 50
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('documento_set')
+    
+    def contagem_documentos(self, obj):
+        return obj.documento_set.count()
+    contagem_documentos.short_description = 'Documentos'
+    contagem_documentos.admin_order_field = 'documento_set__count'
 
 
 @admin.register(DocumentoDigital)
