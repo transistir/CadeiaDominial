@@ -44,7 +44,7 @@ window.salvarArvoreSVG = function () {
   const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
   styleEl.textContent = [
     ".link { fill: none; stroke: #28a745; stroke-width: 2; }",
-    ".link-extra { fill: none; stroke: #28a745; stroke-width: 2; stroke-dasharray: 5,5; }",
+    ".link-extra { fill: none; stroke: #6c757d; stroke-width: 2; stroke-dasharray: 5,5; }",
     ".card-buttons text { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); }",
   ].join("\n");
   clone.insertBefore(styleEl, clone.firstChild);
