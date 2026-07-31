@@ -14,6 +14,111 @@ function debounce(func, wait) {
   };
 }
 
+let cardFimCadeiaComFoco = null;
+
+const fecharPainelFimCadeia = () => {
+  const drawer = document.getElementById("fim-cadeia-drawer");
+  const backdrop = document.getElementById("fim-cadeia-drawer-backdrop");
+  if (!drawer || !backdrop) return;
+
+  drawer.classList.remove("is-open");
+  backdrop.classList.remove("is-open");
+  drawer.setAttribute("aria-hidden", "true");
+  document.removeEventListener("keydown", manejarTecladoPainelFimCadeia);
+
+  if (cardFimCadeiaComFoco) {
+    cardFimCadeiaComFoco.focus();
+    cardFimCadeiaComFoco = null;
+  }
+};
+
+const manejarTecladoPainelFimCadeia = (event) => {
+  if (event.key === "Escape") {
+    fecharPainelFimCadeia();
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+
+  const drawer = document.getElementById("fim-cadeia-drawer");
+  if (!drawer) return;
+
+  const elementosFocaveis = Array.from(
+    drawer.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((elemento) => !elemento.disabled);
+  if (!elementosFocaveis.length) return;
+
+  const primeiroElemento = elementosFocaveis[0];
+  const ultimoElemento = elementosFocaveis[elementosFocaveis.length - 1];
+
+  if (event.shiftKey && document.activeElement === primeiroElemento) {
+    event.preventDefault();
+    ultimoElemento.focus();
+  } else if (!event.shiftKey && document.activeElement === ultimoElemento) {
+    event.preventDefault();
+    primeiroElemento.focus();
+  }
+};
+
+const abrirPainelFimCadeia = (d) => {
+  const drawer = document.getElementById("fim-cadeia-drawer");
+  const backdrop = document.getElementById("fim-cadeia-drawer-backdrop");
+  const botaoFechar = document.getElementById("fim-cadeia-drawer-fechar");
+  const detalheTipo = document.getElementById("fim-cadeia-detalhe-tipo");
+  const detalheClassificacao = document.getElementById(
+    "fim-cadeia-detalhe-classificacao",
+  );
+  const detalheNome = document.getElementById("fim-cadeia-detalhe-nome");
+  const detalheTitulo = document.getElementById("fim-cadeia-detalhe-titulo");
+  const detalheDocumento = document.getElementById(
+    "fim-cadeia-detalhe-documento",
+  );
+  if (
+    !drawer ||
+    !backdrop ||
+    !botaoFechar ||
+    !detalheTipo ||
+    !detalheClassificacao ||
+    !detalheNome ||
+    !detalheTitulo ||
+    !detalheDocumento
+  )
+    return;
+
+  const tipos = {
+    destacamento_publico: "Destacamento do Patrimônio Público",
+    outra: "Outra",
+    sem_origem: "Sem Origem",
+  };
+  const classificacoes = {
+    origem_lidima: { texto: "Origem Lídima", classe: "origem-lidima" },
+    inconclusa: { texto: "Inconclusa", classe: "inconclusa" },
+    sem_origem: { texto: "Sem Origem", classe: "sem-origem" },
+  };
+  const classificacao = classificacoes[d.data.classificacao_fim_cadeia] || {
+    texto: "Não informada",
+    classe: "nao-informada",
+  };
+  const textoOuTraco = (valor) =>
+    typeof valor === "string" && valor.trim() ? valor : "—";
+
+  detalheTipo.textContent = tipos[d.data.tipo_fim_cadeia] || "—";
+  detalheClassificacao.textContent = classificacao.texto;
+  detalheClassificacao.className = `fim-cadeia-classificacao-badge ${classificacao.classe}`;
+  detalheNome.textContent = textoOuTraco(d.data.sigla_patrimonio_publico);
+  detalheTitulo.textContent = textoOuTraco(d.data.titulo_fim_cadeia);
+  detalheDocumento.textContent = d.data.documento_origem_id ?? "—";
+
+  cardFimCadeiaComFoco = cardFimCadeiaComFoco || document.activeElement;
+  drawer.classList.add("is-open");
+  backdrop.classList.add("is-open");
+  drawer.setAttribute("aria-hidden", "false");
+  document.addEventListener("keydown", manejarTecladoPainelFimCadeia);
+  botaoFechar.focus();
+};
+
 // ========================================================
 // fitTreeToViewport — função única de enquadramento da árvore
 // ========================================================
@@ -105,6 +210,13 @@ window.expandirArvore = debounce(function () {
 }, 300);
 
 document.addEventListener("DOMContentLoaded", function () {
+  document
+    .getElementById("fim-cadeia-drawer-fechar")
+    ?.addEventListener("click", fecharPainelFimCadeia);
+  document
+    .getElementById("fim-cadeia-drawer-backdrop")
+    ?.addEventListener("click", fecharPainelFimCadeia);
+
   const svg = d3.select("#arvore-d3-svg");
   const containerWidth =
     document.getElementById("arvore-d3-svg").clientWidth || 1000;
@@ -924,6 +1036,21 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr("filter", "drop-shadow(0 2px 8px rgba(0,0,0,0.10))");
     });
 
+  node
+    .filter((d) => d.data.is_fim_cadeia)
+    .attr("tabindex", 0)
+    .attr("role", "button")
+    .attr("aria-label", (d) =>
+      `Abrir detalhes: ${d.data.titulo_fim_cadeia || d.data.sigla_patrimonio_publico || "Fim de Cadeia"}`,
+    )
+    .on("keydown", function (event, d) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        cardFimCadeiaComFoco = this;
+        abrirPainelFimCadeia(d);
+      }
+    });
+
   // Aplicar apenas transição de opacidade (sem mover posição)
   node.transition().duration(600).ease(d3.easeQuadInOut).style("opacity", "1");
 
@@ -1037,11 +1164,22 @@ function renderArvoreD3(data, svgGroup, width, height) {
     })
     .on("click", (event, d) => {
       event.stopPropagation();
-      // Cards de fim de cadeia não redirecionam
-      if (!d.data.is_fim_cadeia) {
+      if (d.data.is_fim_cadeia) {
+        cardFimCadeiaComFoco = event.currentTarget.parentNode;
+        abrirPainelFimCadeia(d);
+      } else {
         window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
       }
     });
+
+  node
+    .filter((d) => d.data.is_fim_cadeia)
+    .append("title")
+    .text((d) =>
+      d.data.titulo_fim_cadeia ||
+      d.data.sigla_patrimonio_publico ||
+      "Fim de Cadeia",
+    );
 
   // Número do documento
   node
@@ -1054,7 +1192,12 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .text((d) => {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
-        return d.data.numero || "FIM";
+        const rotulosFimCadeia = {
+          destacamento_publico: "Dest. PP",
+          outra: "Outra",
+          sem_origem: "Sem Origem",
+        };
+        return rotulosFimCadeia[d.data.tipo_fim_cadeia] || "Fim";
       }
       // Se for destacamento público e tiver sigla, exibir a sigla
       if (
