@@ -26,12 +26,11 @@ jobs:
           username: root
           port: 22
           key: ${{ secrets.DEPLOY_KEY_PROD }}
-          fingerprint: ${{ secrets.PROD_HOST_FINGERPRINT }}
           timeout: 60s
           command_timeout: 55m
+          envs: GITHUB_REF_NAME
 
           script: |
-            bash -se <<'DEPLOY_SCRIPT'
             set -Eeuo pipefail
 
             trap 'rc=$?; echo "ERRO: deploy falhou na linha ${LINENO}: ${BASH_COMMAND} (exit ${rc})" >&2; exit "${rc}"' ERR
@@ -61,24 +60,23 @@ jobs:
               exit 1
             fi
 
-            # Busca todas as tags e a tag específica
-            git fetch --prune origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+            git fetch --prune --force origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
 
-            # Checkout direto na tag (detached HEAD — seguro para produção)
             git checkout "tags/${TAG_NAME}"
 
             echo "==> Tag que será implantada"
             git log -1 --oneline --decorate
 
-            echo "==> Fazendo backup do banco antes do deploy"
+            echo "==> Backup do banco (não-bloqueante)"
             BACKUP_DIR="${APP_DIR}/backups"
             mkdir -p "${BACKUP_DIR}"
             BACKUP_FILE="${BACKUP_DIR}/pre_deploy_${TAG_NAME}_$(date +%Y%m%d_%H%M%S).sql"
-            docker-compose exec -T db pg_dump -U ${DB_USER:-cadeia_user} -d ${DB_NAME:-cadeia_dominial} > "${BACKUP_FILE}" || {
-              echo "AVISO: backup automático falhou. Faça manualmente antes de prosseguir se necessário." >&2
+            docker-compose exec -T db pg_dump -U "${DB_USER:-cadeia_user}" -d "${DB_NAME:-cadeia_dominial}" > "${BACKUP_FILE}" || {
+              echo "AVISO: backup automático falhou. Faça manualmente se necessário." >&2
             }
 
             echo "==> Executando build sem cache"
+
             if ! docker-compose build --no-cache web; then
               echo "ERRO: docker-compose build --no-cache web falhou." >&2
               exit 1
@@ -88,13 +86,16 @@ jobs:
             docker-compose up -d
 
             echo "==> Aguardando healthcheck do serviço web"
+
             HEALTHY=false
+
             for attempt in $(seq 1 60); do
               if docker-compose ps web | grep -qw healthy; then
                 HEALTHY=true
                 echo "Serviço web saudável."
                 break
               fi
+
               echo "Healthcheck pendente: tentativa ${attempt}/60"
               sleep 5
             done
@@ -107,13 +108,16 @@ jobs:
             fi
 
             echo "==> Executando migrations"
-            docker-compose exec -T web python manage.py migrate --noinput || {
+
+            if ! docker-compose exec -T web python manage.py migrate --noinput; then
               echo "ERRO: migrate falhou. O container pode precisar de rollback." >&2
               exit 1
-            }
+            fi
 
             echo "==> Executando collectstatic"
-            if ! docker-compose exec -T web python manage.py collectstatic --noinput; then
+
+            if ! docker-compose exec -T web \
+              python manage.py collectstatic --noinput; then
               echo "ERRO: collectstatic falhou." >&2
               exit 1
             fi
@@ -121,7 +125,4 @@ jobs:
             echo "==> Estado final dos containers"
             docker-compose ps
 
-            echo "=========================================="
-            echo "  ✅ Deploy da tag ${TAG_NAME} concluído!"
-            echo "=========================================="
-            DEPLOY_SCRIPT
+            echo "  ✅ Deploy da tag ${TAG_NAME} concluído com sucesso."
