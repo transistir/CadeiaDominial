@@ -43,3 +43,15 @@ class CartoriosAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Cartório Teste 2')
         self.assertNotContains(response, 'Cartório Teste 1')
+
+    def test_cartorios_ordering_by_contagem_documentos_asc(self):
+        # Coluna "Documentos" é o índice 6 em list_display; sem o fix,
+        # admin_order_field = 'documento_set__count' levanta FieldError (HTTP 500).
+        url = reverse('admin:dominial_cartorios_changelist') + '?o=6'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_cartorios_ordering_by_contagem_documentos_desc(self):
+        url = reverse('admin:dominial_cartorios_changelist') + '?o=-6'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)

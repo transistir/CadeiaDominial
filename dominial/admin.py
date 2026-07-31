@@ -6,6 +6,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction
+from django.db.models import Count
 from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
 from .models.documento_digital_models import DocumentoDigital
@@ -53,12 +54,12 @@ class CartoriosAdmin(admin.ModelAdmin):
     list_per_page = 50
     
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related('documento_set')
-    
+        return super().get_queryset(request).annotate(documentos_count=Count('documento', distinct=True))
+
     def contagem_documentos(self, obj):
-        return obj.documento_set.count()
+        return obj.documentos_count
     contagem_documentos.short_description = 'Documentos'
-    contagem_documentos.admin_order_field = 'documento_set__count'
+    contagem_documentos.admin_order_field = 'documentos_count'
 
 
 @admin.register(DocumentoDigital)
