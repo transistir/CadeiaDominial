@@ -989,6 +989,8 @@ function renderArvoreD3(data, svgGroup, width, height) {
           tipo = `Destacamento Público: ${d.data.sigla_patrimonio_publico}`;
         } else if (d.data.tipo_fim_cadeia === "outra") {
           tipo = "Outra Origem";
+        } else if (d.data.tipo_fim_cadeia === "sem_origem") {
+          tipo = "Sem Origem";
         } else {
           tipo = "Tipo não classificado";
         }
