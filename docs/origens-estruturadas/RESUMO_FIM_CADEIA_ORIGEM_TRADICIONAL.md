@@ -43,7 +43,7 @@ Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente
                               ▼ (após selecionar tipo)
 ┌─────────────────────────────────────────────────────────────┐
 │ ℹ️ Classificação do Fim de Cadeia                           │
-│ Classificação: [Imóvel com Origem Lídima ▼] *              │
+│ Classificação: [Imóvel com Origem Lídima ▼] *         │
 │ Observações: [Campo de texto livre]                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -164,4 +164,4 @@ Para detalhes técnicos completos, consulte:
 - ✅ **Risco baixo vs risco alto**
 - ✅ **Rollback fácil vs rollback complexo**
 
-**🎯 Esta solução atende exatamente à necessidade com simplicidade máxima!** 
+**🎯 Esta solução atende exatamente à necessidade com simplicidade máxima!**

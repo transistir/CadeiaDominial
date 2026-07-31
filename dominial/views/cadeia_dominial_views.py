@@ -92,6 +92,7 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
                 id__in=[
                     documento['id']
                     for documento in arvore.get('documentos', [])
+                    if not documento.get('is_fim_cadeia')
                 ]
             ).prefetch_related('lancamentos')
         }

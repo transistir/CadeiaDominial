@@ -8,6 +8,7 @@ from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, Lan
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
+import unicodedata
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
@@ -584,11 +585,18 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         
                         # Mapear as classificações para os valores corretos do template
                         classificacao_mapping = {
+                            'origem_identificada': 'origem_lidima',
+                            'origem_lidima': 'origem_lidima',
                             'origem_lídima': 'origem_lidima',
                             'sem_origem': 'sem_origem',
-                            'situação_inconclusa': 'inconclusa'
+                            'situacao_inconclusa': 'inconclusa'
                         }
                         classificacao_raw = origem_parts[2].lower().replace(' ', '_')
+                        classificacao_raw = ''.join(
+                            caractere
+                            for caractere in unicodedata.normalize('NFD', classificacao_raw)
+                            if unicodedata.category(caractere) != 'Mn'
+                        )
                         classificacao = classificacao_mapping.get(classificacao_raw, classificacao_raw)
                         
                         origens_separadas.append({

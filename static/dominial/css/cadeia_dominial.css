@@ -213,6 +213,16 @@
     font-weight: bold;
 }
 
+.documento-fim-cadeia-amarelo {
+    background-color: #fff9e6 !important;
+    border-left: 4px solid #ffc107 !important;
+}
+
+.documento-fim-cadeia-amarelo .documento-header {
+    color: #856404 !important;
+    font-weight: bold;
+}
+
 .lancamento-badge.fim-cadeia-vermelho {
     background-color: #dc3545 !important;
     color: white !important;
@@ -225,7 +235,13 @@
     font-weight: bold;
 }
 
+.lancamento-badge.fim-cadeia-amarelo {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+    font-weight: bold;
+}
+
 .documento-normal {
     background-color: #f8fff9 !important;
     border-left: 4px solid #28a745 !important;
-} 
+}

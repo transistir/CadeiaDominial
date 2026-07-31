@@ -1,7 +1,26 @@
 from django import template
 import re
+import unicodedata
 
 register = template.Library()
+
+
+def _classificacao_fim_cadeia_display(classificacao):
+    """Converte classificações persistidas no rótulo vigente."""
+    chave = ''.join(
+        caractere
+        for caractere in unicodedata.normalize('NFD', classificacao)
+        if unicodedata.category(caractere) != 'Mn'
+    ).lower().replace(' ', '_')
+    labels = {
+        'origem_lidima': 'Origem Lídima',
+        'origem_identificada': 'Origem Lídima',
+        'sem_origem': 'Sem Origem',
+        'situacao_inconclusa': 'Situação Inconclusa',
+        'inconclusa': 'Situação Inconclusa',
+    }
+    return labels.get(chave, classificacao)
+
 
 @register.filter
 def get_item(dictionary, key):
@@ -140,6 +159,7 @@ def origem_formatada_completa(lancamento):
                 if len(partes) >= 2:
                     sigla = partes[1].strip() if len(partes) > 1 else ''
                     classificacao = partes[2].strip() if len(partes) > 2 else ''
+                    classificacao = _classificacao_fim_cadeia_display(classificacao)
                     if sigla:
                         origem_formatada = f"Destacamento Público : {sigla}"
                         if classificacao:
@@ -154,6 +174,7 @@ def origem_formatada_completa(lancamento):
                 if len(partes) >= 2:
                     especificacao = partes[1].strip() if len(partes) > 1 else ''
                     classificacao = partes[2].strip() if len(partes) > 2 else ''
+                    classificacao = _classificacao_fim_cadeia_display(classificacao)
                     if especificacao:
                         origem_formatada = f"Outra : {especificacao}"
                         if classificacao:
@@ -167,6 +188,7 @@ def origem_formatada_completa(lancamento):
                 partes = origem.split(':')
                 if len(partes) >= 3:
                     classificacao = partes[2].strip() if len(partes) > 2 else ''
+                    classificacao = _classificacao_fim_cadeia_display(classificacao)
                     origem_formatada = "Sem Origem"
                     if classificacao:
                         origem_formatada += f" ({classificacao})"
@@ -254,5 +276,3 @@ def numero_documento_criado(lancamento):
     else:
         # Fallback para outros tipos
         return f"{tipo_lancamento.upper()}{numero_lancamento} {numero_documento}"
-
- 

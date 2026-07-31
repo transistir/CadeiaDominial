@@ -931,8 +931,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
       if (d.data.is_fim_cadeia) {
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
           return "#28a745"; // Verde para origem lídima
+        } else if (d.data.classificacao_fim_cadeia === "inconclusa") {
+          return "#ffc107"; // Amarelo para situação inconclusa
         } else {
-          return "#dc3545"; // Vermelho para sem origem ou inconclusa
+          return "#dc3545"; // Vermelho para sem origem
         }
       } else if (d.data.tipo_documento === "transcricao") {
         return "#6f42c1"; // Roxo para transcrição
@@ -945,8 +947,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
       if (d.data.is_fim_cadeia) {
         if (d.data.classificacao_fim_cadeia === "origem_lidima") {
           return "#1e7e34"; // Verde escuro para origem lídima
+        } else if (d.data.classificacao_fim_cadeia === "inconclusa") {
+          return "#e0a800"; // Amarelo escuro para situação inconclusa
         } else {
-          return "#b02a37"; // Vermelho escuro para sem origem ou inconclusa
+          return "#b02a37"; // Vermelho escuro para sem origem
         }
       }
       // Documentos importados têm borda laranja tracejada
@@ -985,8 +989,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
           tipo = `Destacamento Público: ${d.data.sigla_patrimonio_publico}`;
         } else if (d.data.tipo_fim_cadeia === "outra") {
           tipo = "Outra Origem";
-        } else {
+        } else if (d.data.tipo_fim_cadeia === "sem_origem") {
           tipo = "Sem Origem";
+        } else {
+          tipo = "Tipo não classificado";
         }
 
         let classificacao = "";
@@ -998,7 +1004,7 @@ function renderArvoreD3(data, svgGroup, width, height) {
           classificacao = "Situação Inconclusa";
         }
 
-        return `Fim de Cadeia\nTipo: ${tipo}\nClassificação: ${classificacao}`;
+        return `Fim de Cadeia\nTipo: ${tipo}\nClassificação: ${classificacao}\n\nVisualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.`;
       }
 
       // Tooltip normal para documentos
