@@ -24,7 +24,7 @@ A funcionalidade "fim de cadeia" foi completamente reformulada para resolver pro
 ### **1. Comportamento Correto**
 - **Fim de cadeia NÃO gera documento** - apenas indicador visual
 - **Ícone circular** na árvore com Tipo + Sigla/Especificação
-- **Cores**: Vermelho (Sem Origem), Verde (Origem Lídima)
+- **Cores**: Vermelho (Sem Origem), Verde (Origem Lídima), Amarelo (Situação Inconclusa)
 - **Múltiplas origens**: Fim de cadeia + origens normais funcionam juntas
 - **Sugestões de cartório**: Apenas para origens normais (não fim de cadeia)
 

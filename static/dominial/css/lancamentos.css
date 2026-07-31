@@ -203,11 +203,6 @@ select, input {
 /* ========================================
    #53 - ALERTAS POR PALAVRA-CHAVE
    ======================================== */
-.lancamento-alerta-urgente {
-    border-left: 5px solid #dc3545;
-    background: linear-gradient(135deg, #fff5f5, #ffffff);
-}
-
 .lancamento-alerta-pendente {
     border-left: 5px solid #ffc107;
     background: linear-gradient(135deg, #fffef5, #ffffff);
@@ -228,11 +223,6 @@ select, input {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     white-space: nowrap;
-}
-
-.alerta-badge-urgente {
-    background: #dc3545;
-    color: white;
 }
 
 .alerta-badge-pendente {

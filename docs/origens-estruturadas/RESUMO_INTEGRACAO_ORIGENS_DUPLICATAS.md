@@ -114,4 +114,4 @@ Ao final da implementação, o sistema terá:
 Para detalhes técnicos completos, consulte:
 **[INTEGRACAO_ORIGENS_ESTRUTURADAS_DUPLICATAS.md](INTEGRACAO_ORIGENS_ESTRUTURADAS_DUPLICATAS.md)**
 
-**🎉 Esta integração transformará o sistema em uma ferramenta muito mais poderosa e informativa!** 
+**🎉 Esta integração transformará o sistema em uma ferramenta muito mais poderosa e informativa!**

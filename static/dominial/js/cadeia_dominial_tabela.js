@@ -457,7 +457,11 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
             <!-- Restante -->
             <td>${lancamento.area || '-'}</td>
             <td>${formatarOrigemCompleta(lancamento)}</td>
-            <td>${lancamento.observacoes || '-'}</td>
+            <td>${
+              lancamento.keyword_encontrada
+                ? `<div class="alerta-badge alerta-badge-${lancamento.keyword_encontrada.slug}">${lancamento.keyword_encontrada.label}</div>`
+                : ''
+            }${lancamento.observacoes || '-'}</td>
         </tr>
     `;
     
@@ -1200,6 +1204,22 @@ window.onclick = function(event) {
     }
 }
 
+function formatarClassificacaoFimCadeia(classificacao) {
+    const chave = classificacao
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/ /g, '_');
+    const labels = {
+        origem_lidima: 'Origem Lídima',
+        origem_identificada: 'Origem Lídima',
+        sem_origem: 'Sem Origem',
+        situacao_inconclusa: 'Situação Inconclusa',
+        inconclusa: 'Situação Inconclusa'
+    };
+    return labels[chave] || classificacao;
+}
+
 // Função para formatar origem completa igual ao filtro Django
 function formatarOrigemCompleta(lancamento) {
     if (!lancamento.origem) {
@@ -1226,7 +1246,7 @@ function formatarOrigemCompleta(lancamento) {
                 const partes = origem.split(':');
                 if (partes.length >= 2) {
                     const sigla = partes[1].trim();
-                    const classificacao = partes[2] ? partes[2].trim() : '';
+                    const classificacao = partes[2] ? formatarClassificacaoFimCadeia(partes[2].trim()) : '';
                     let origem_formatada = `Destacamento Público : ${sigla}`;
                     if (classificacao) {
                         origem_formatada += ` (${classificacao})`;
@@ -1239,7 +1259,7 @@ function formatarOrigemCompleta(lancamento) {
                 const partes = origem.split(':');
                 if (partes.length >= 2) {
                     const especificacao = partes[1].trim();
-                    const classificacao = partes[2] ? partes[2].trim() : '';
+                    const classificacao = partes[2] ? formatarClassificacaoFimCadeia(partes[2].trim()) : '';
                     let origem_formatada = `Outra : ${especificacao}`;
                     if (classificacao) {
                         origem_formatada += ` (${classificacao})`;
@@ -1251,7 +1271,7 @@ function formatarOrigemCompleta(lancamento) {
             } else if (origem.includes('Sem Origem:')) {
                 const partes = origem.split(':');
                 if (partes.length >= 3) {
-                    const classificacao = partes[2].trim();
+                    const classificacao = formatarClassificacaoFimCadeia(partes[2].trim());
                     let origem_formatada = 'Sem Origem';
                     if (classificacao) {
                         origem_formatada += ` (${classificacao})`;
@@ -1277,4 +1297,4 @@ function formatarOrigemCompleta(lancamento) {
     
     // Juntar com quebras de linha para melhor visualização
     return origens_formatadas.join('<br>');
-} 
+}

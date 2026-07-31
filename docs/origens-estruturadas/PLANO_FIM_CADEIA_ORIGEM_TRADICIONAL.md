@@ -47,7 +47,7 @@ Implementação de um **toggle "Fim de Cadeia"** na origem tradicional existente
 ┌─────────────────────────────────────────────────────────────┐
 │                CLASSIFICAÇÃO FIM DE CADEIA                 │
 ├─────────────────────────────────────────────────────────────┤
-│ • Select: Imóvel com Origem Lídima                         │
+│ • Select: Imóvel com Origem Lídima                    │
 │ • Select: Imóvel sem Origem                                │
 │ • Select: Situação Inconclusa                              │
 │ • Textarea: Observações                                    │
@@ -819,4 +819,4 @@ Ao final da implementação, o sistema terá:
 5. **Retrocompatibilidade total** com sistema existente
 6. **Implementação rápida** e manutenção simples
 
-**🎉 Esta solução é muito mais simples, rápida e eficaz!** 
+**🎉 Esta solução é muito mais simples, rápida e eficaz!**
