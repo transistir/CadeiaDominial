@@ -7,4 +7,6 @@ function renderArvoreD3(data, svgGroup, width, height) {
   renderizarArestas(data, root, svgGroup);
   const node = renderizarCards(root, svgGroup);
   renderizarCardOverlays(node);
+  window._d3root = root;
+  return { root, node };
 }

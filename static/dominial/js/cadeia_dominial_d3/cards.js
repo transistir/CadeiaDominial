@@ -146,9 +146,20 @@ function renderizarCards(root, svgGroup) {
     .on("click", (event, d) => {
       event.stopPropagation();
       // Cards de fim de cadeia não redirecionam
-      if (!d.data.is_fim_cadeia) {
-        window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
-      }
+      if (d.data.is_fim_cadeia) return;
+      
+      // Disparar evento customizado para permitir interceptação (ex: painel lateral)
+      const customEvent = new CustomEvent("d3:node-click", {
+        detail: { node: d, event: event },
+        bubbles: true,
+        cancelable: true
+      });
+      const allowed = window.dispatchEvent(customEvent);
+      
+      // Se o evento foi cancelado (preventDefault), não navegar
+      if (!allowed) return;
+      
+      window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
     });
 
   // Número do documento
