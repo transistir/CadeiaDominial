@@ -324,7 +324,8 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
         'tem_lancamentos': len(lancamentos) > 0,
         'is_importado': is_importado,
         'cadeias_dominiais': cadeias_dominiais,
-        'total_cadeias': len(cadeias_dominiais)
+        'total_cadeias': len(cadeias_dominiais),
+        'arquivos_digitais': documento.arquivos_digitais.all(),
     }
     
     return render(request, 'dominial/documento_detalhado.html', context) 
