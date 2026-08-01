@@ -508,7 +508,9 @@ function corrigirSobreposicoes(root) {
       // Só corrigir se houver sobreposição
       if (temSobreposicao) {
         const larguraTotal = (nosColuna.length - 1) * espacamentoMinimo;
-        const inicio = nosColuna[0].x - larguraTotal / 2;
+        const inicio =
+          (nosColuna[0].x + nosColuna[nosColuna.length - 1].x) / 2 -
+          larguraTotal / 2;
 
         nosColuna.forEach((node, index) => {
           node.x = inicio + index * espacamentoMinimo;
@@ -543,15 +545,18 @@ function ajustarPosicoesPorNivel(root) {
     documentNodes.push(node);
   });
 
-  const maxDocumentY = Math.max(...documentNodes.map((node) => node.y));
+  const finiteDocumentYs = documentNodes
+    .map((node) => node.y)
+    .filter(Number.isFinite);
+  const maxDocumentY =
+    finiteDocumentYs.length > 0 ? Math.max(...finiteDocumentYs) : null;
 
   nodes.forEach((node) => {
     if (!node.data.is_fim_cadeia) return;
 
     const nivelBackend = node.data.nivel;
-    node.y = Number.isFinite(maxDocumentY)
-      ? maxDocumentY + 220
-      : node.depth * 220 + 120;
+    node.y =
+      maxDocumentY !== null ? maxDocumentY + 220 : node.depth * 220 + 120;
     console.log(
       `DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivelBackend}, maxDocumentY: ${maxDocumentY}, posição final Y: ${node.y}`,
     );
@@ -592,24 +597,26 @@ function aplicarEspacamentoAdicional(root) {
         );
       }
 
-      // Verificar se o espaçamento atual é suficiente
-      let espacamentoAtual = 0;
+      // Verificar o menor espaçamento entre nós adjacentes (uma média mascara
+      // sobreposições quando um gap grande "esconde" outros gaps pequenos)
+      let minGap = Infinity;
       for (let i = 0; i < nosColuna.length - 1; i++) {
-        espacamentoAtual += nosColuna[i + 1].x - nosColuna[i].x;
+        minGap = Math.min(minGap, nosColuna[i + 1].x - nosColuna[i].x);
       }
-      espacamentoAtual = espacamentoAtual / (nosColuna.length - 1);
 
-      // Só aplicar espaçamento adicional se o atual for muito pequeno
-      if (espacamentoAtual < espacamentoMinimo) {
+      // Só aplicar espaçamento adicional se o menor espaçamento for muito pequeno
+      if (minGap < espacamentoMinimo) {
         const larguraTotal = (nosColuna.length - 1) * espacamentoMinimo;
-        const inicio = nosColuna[0].x - larguraTotal / 2;
+        const inicio =
+          (nosColuna[0].x + nosColuna[nosColuna.length - 1].x) / 2 -
+          larguraTotal / 2;
 
         nosColuna.forEach((node, index) => {
           node.x = inicio + index * espacamentoMinimo;
         });
 
         console.log(
-          `DEBUG: Coluna Y ${coluna} - Espaçamento adicional aplicado (atual: ${espacamentoAtual.toFixed(1)}px -> mínimo: ${espacamentoMinimo}px)`,
+          `DEBUG: Coluna Y ${coluna} - Espaçamento adicional aplicado (mínimo atual: ${minGap.toFixed(1)}px -> mínimo desejado: ${espacamentoMinimo}px)`,
         );
       }
     }
@@ -788,6 +795,10 @@ function renderArvoreD3(data, svgGroup, width, height) {
 
   treeLayout(root);
 
+  // ORDEM OBRIGATÓRIA: ajustarPosicoesPorNivel precisa rodar primeiro para
+  // fixar node.y (incluindo o clamp dos fins de cadeia em maxDocumentY+220)
+  // antes que corrigirSobreposicoes e aplicarEspacamentoAdicional agrupem os
+  // nós por coluna (Math.round(node.y)) e ajustem node.x dentro de cada coluna.
   // Ajustar posições baseado no campo 'nivel' dos dados
   ajustarPosicoesPorNivel(root);
 
@@ -1364,12 +1375,10 @@ window.fimDaArvore = function () {
   const limitesUltimaColuna = limitesNos.filter(
     (node) => node.coluna === ultimaColuna,
   );
-  const minXUltimaColuna = Math.min(
-    ...limitesUltimaColuna.map((node) => node.minX),
-  );
-  const maxXUltimaColuna = Math.max(
-    ...limitesUltimaColuna.map((node) => node.maxX),
-  );
+  const minXUltimaColuna =
+    Math.min(...limitesUltimaColuna.map((node) => node.minX)) - 75;
+  const maxXUltimaColuna =
+    Math.max(...limitesUltimaColuna.map((node) => node.maxX)) + 75;
 
   // Adicionar margem extra para os cards
   minX -= 75;
