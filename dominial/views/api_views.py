@@ -1,6 +1,5 @@
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.http import require_http_methods, require_POST
 from django.http import JsonResponse
 from django.core.paginator import Paginator
@@ -111,10 +110,13 @@ def importar_cartorios_estado(request):
     return JsonResponse(resultado)
 
 @require_POST
-@login_required
-@staff_member_required
 def criar_cartorio(request):
     """View para criar um novo cartório via AJAX"""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Autenticação necessária.'}, status=401)
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': 'Permissão insuficiente. Apenas administradores podem criar cartórios.'}, status=403)
+
     try:
         data = json.loads(request.body)
         
