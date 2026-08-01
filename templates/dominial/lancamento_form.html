@@ -165,6 +165,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ fim_cadeia_opcoes|json_script:"fim-cadeia-opcoes-data" }}
 <script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
 <script src="{% static 'dominial/js/origem_simples.js' %}"></script>
 <script>

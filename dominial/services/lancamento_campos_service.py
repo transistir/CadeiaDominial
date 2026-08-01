@@ -191,6 +191,7 @@ class LancamentoCamposService:
         especificacoes_fim_cadeia = request.POST.getlist('especificacao_fim_cadeia[]')
         classificacoes_fim_cadeia = request.POST.getlist('classificacao_fim_cadeia[]')
         siglas_patrimonio_publico = request.POST.getlist('sigla_patrimonio_publico[]')
+        infos_adicionais_fim_cadeia = request.POST.getlist('info_adicional_fim_cadeia[]')
         
         # Se há múltiplas origens, concatenar com ponto e vírgula
         if origens_completas:
@@ -333,7 +334,8 @@ class LancamentoCamposService:
                     tipo_fim_cadeia = None
                     especificacao_fim_cadeia = None
                     classificacao_fim_cadeia = None
-                    
+                    info_adicional_fim_cadeia = None
+
                     # Buscar nos arrays por índice
                     for j, indice in enumerate(fim_cadeia_indices):
                         if indice == str(i):
@@ -343,8 +345,10 @@ class LancamentoCamposService:
                                 especificacao_fim_cadeia = especificacoes_fim_cadeia[j]
                             if j < len(classificacoes_fim_cadeia):
                                 classificacao_fim_cadeia = classificacoes_fim_cadeia[j]
+                            if j < len(infos_adicionais_fim_cadeia):
+                                info_adicional_fim_cadeia = infos_adicionais_fim_cadeia[j].strip() or None
                             break
-                    
+
                     # Criar registro de fim de cadeia para esta origem
                     from ..models import OrigemFimCadeia
                     OrigemFimCadeia.objects.create(
@@ -353,5 +357,6 @@ class LancamentoCamposService:
                         fim_cadeia=True,
                         tipo_fim_cadeia=tipo_fim_cadeia,
                         especificacao_fim_cadeia=especificacao_fim_cadeia,
-                        classificacao_fim_cadeia=classificacao_fim_cadeia
-                    ) 
+                        classificacao_fim_cadeia=classificacao_fim_cadeia,
+                        info_adicional_fim_cadeia=info_adicional_fim_cadeia
+                    )

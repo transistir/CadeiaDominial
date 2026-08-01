@@ -771,11 +771,14 @@ function adicionarOrigem() {
                 </select>
             </div>
         </div>
-        
+
+        <!-- Campos de destacamento do patrimônio público (aparecem quando tipo = 'destacamento_publico') -->
+        ${typeof montarBlocoDestacamento === 'function' ? montarBlocoDestacamento(newIndex, false) : ''}
+
         <!-- Campo de especificação (aparece quando tipo = 'outra') -->
         <div class="form-group especificacao-container" id="especificacao-container_${newIndex}" style="display: none;">
             <label for="especificacao_fim_cadeia_${newIndex}">Especificação *</label>
-            <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_${newIndex}" class="form-control especificacao-fim-cadeia" 
+            <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_${newIndex}" class="form-control especificacao-fim-cadeia"
                       placeholder="Detalhe a especificação..."></textarea>
         </div>
     `;
@@ -1254,11 +1257,18 @@ function setupFimCadeiaTogglePorOrigem(toggle) {
                 const classificacaoSelect = container.querySelector('.classificacao-fim-cadeia-select');
                 const especificacaoContainer = container.querySelector('.especificacao-container');
                 const especificacaoTextarea = container.querySelector('.especificacao-fim-cadeia');
-                
+                const siglaContainer = container.querySelector('.sigla-patrimonio-container');
+                const siglaSelect = container.querySelector('.sigla-patrimonio-publico-select');
+                const infoAdicionalInput = container.querySelector('.info-adicional-fim-cadeia-input');
+
                 if (tipoSelect) tipoSelect.value = '';
                 if (classificacaoSelect) classificacaoSelect.value = '';
                 if (especificacaoContainer) especificacaoContainer.style.display = 'none';
                 if (especificacaoTextarea) especificacaoTextarea.value = '';
+                // Destacamento do patrimônio público (issue #104)
+                if (siglaContainer) siglaContainer.style.display = 'none';
+                if (siglaSelect) siglaSelect.value = '';
+                if (infoAdicionalInput) infoAdicionalInput.value = '';
             }
         }
         
@@ -1269,22 +1279,28 @@ function setupFimCadeiaTogglePorOrigem(toggle) {
 
 // Função para configurar selects de tipo de fim de cadeia por origem
 function setupTipoFimCadeiaSelectPorOrigem(select) {
+    if (!select) return;
+
     const origemIndex = select.id.replace('tipo_fim_cadeia_', '');
     const especificacaoContainer = document.getElementById(`especificacao-container_${origemIndex}`);
-    
-    if (select && especificacaoContainer) {
-        function toggleEspecificacaoField() {
-            if (select.value === 'outra') {
-                especificacaoContainer.style.display = 'block';
-            } else {
-                especificacaoContainer.style.display = 'none';
+    const siglaContainer = document.getElementById(`sigla-patrimonio-container_${origemIndex}`);
+
+    function toggleCamposPorTipo() {
+        if (especificacaoContainer) {
+            especificacaoContainer.style.display = select.value === 'outra' ? 'block' : 'none';
+            if (select.value !== 'outra') {
                 // Limpar especificação quando não for 'outra'
                 const especificacaoTextarea = especificacaoContainer.querySelector('.especificacao-fim-cadeia');
                 if (especificacaoTextarea) especificacaoTextarea.value = '';
             }
         }
-        
-        select.addEventListener('change', toggleEspecificacaoField);
-        toggleEspecificacaoField(); // Estado inicial
+
+        // Estado + informação adicional só valem para destacamento (issue #104)
+        if (siglaContainer) {
+            siglaContainer.style.display = select.value === 'destacamento_publico' ? 'block' : 'none';
+        }
     }
+
+    select.addEventListener('change', toggleCamposPorTipo);
+    toggleCamposPorTipo(); // Estado inicial
 }

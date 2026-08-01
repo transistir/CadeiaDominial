@@ -402,6 +402,7 @@ class HierarquiaArvoreService:
             'total_cadeias': 0, 'is_fim_cadeia': True,
             'tipo_fim_cadeia': tipo_fc, 'classificacao_fim_cadeia': classificacao,
             'sigla_patrimonio_publico': sigla, 'titulo_fim_cadeia': titulo,
+            'info_adicional_fim_cadeia': origem_fc.info_adicional_fim_cadeia,
             'documento_origem_id': documento.id,
         }
 

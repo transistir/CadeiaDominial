@@ -71,6 +71,9 @@ const abrirPainelFimCadeia = (d) => {
     "fim-cadeia-detalhe-classificacao",
   );
   const detalheNome = document.getElementById("fim-cadeia-detalhe-nome");
+  const detalheInfoAdicional = document.getElementById(
+    "fim-cadeia-detalhe-info-adicional",
+  );
   const detalheTitulo = document.getElementById("fim-cadeia-detalhe-titulo");
   const detalheDocumento = document.getElementById(
     "fim-cadeia-detalhe-documento",
@@ -82,6 +85,7 @@ const abrirPainelFimCadeia = (d) => {
     !detalheTipo ||
     !detalheClassificacao ||
     !detalheNome ||
+    !detalheInfoAdicional ||
     !detalheTitulo ||
     !detalheDocumento
   )
@@ -108,6 +112,9 @@ const abrirPainelFimCadeia = (d) => {
   detalheClassificacao.textContent = classificacao.texto;
   detalheClassificacao.className = `fim-cadeia-classificacao-badge ${classificacao.classe}`;
   detalheNome.textContent = textoOuTraco(d.data.sigla_patrimonio_publico);
+  detalheInfoAdicional.textContent = textoOuTraco(
+    d.data.info_adicional_fim_cadeia,
+  );
   detalheTitulo.textContent = textoOuTraco(d.data.titulo_fim_cadeia);
   detalheDocumento.textContent = d.data.documento_origem_id ?? "—";
 
@@ -1192,8 +1199,13 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .text((d) => {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
+        // Destacamento público mostra a sigla escolhida (issue #104); dados
+        // antigos sem sigla continuam caindo no rótulo genérico
+        if (d.data.tipo_fim_cadeia === "destacamento_publico") {
+          const sigla = (d.data.sigla_patrimonio_publico || "").trim();
+          return sigla || "Dest. PP";
+        }
         const rotulosFimCadeia = {
-          destacamento_publico: "Dest. PP",
           outra: "Outra",
           sem_origem: "Sem Origem",
         };

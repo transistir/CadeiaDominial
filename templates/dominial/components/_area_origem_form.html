@@ -90,16 +90,9 @@
                         </div>
                     </div>
                     
-                    <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
-                    <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_{{ origem.index }}" 
-                         style="display: {% if origem.tipo_fim_cadeia == 'destacamento_publico' %}block{% else %}none{% endif %};">
-                        <label for="sigla_patrimonio_publico_{{ origem.index }}">Sigla do Patrimônio Público *</label>
-                        <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_{{ origem.index }}" 
-                               class="form-control sigla-patrimonio-publico-input" 
-                               placeholder="Ex: INCRA, Estado, União, etc."
-                               value="{% if origem.sigla_patrimonio_publico %}{{ origem.sigla_patrimonio_publico }}{% endif %}">
-                    </div>
-                    
+                    <!-- Campos de destacamento do patrimônio público (aparecem quando tipo = 'destacamento_publico') -->
+                    {% include "dominial/components/_fim_cadeia_destacamento_fields.html" with indice=origem.index sigla_selecionada=origem.sigla_patrimonio_publico info_adicional=origem.info_adicional_fim_cadeia visivel=origem.is_destacamento_publico %}
+
                     <!-- Campo de especificação (aparece quando tipo = 'outra') -->
                     <div class="form-group especificacao-container" id="especificacao-container_{{ origem.index }}" 
                          style="display: {% if origem.tipo_fim_cadeia == 'outra' %}block{% else %}none{% endif %};">
@@ -181,11 +174,14 @@
                             </select>
                         </div>
                     </div>
-                    
+
+                    <!-- Campos de destacamento do patrimônio público (aparecem quando tipo = 'destacamento_publico') -->
+                    {% include "dominial/components/_fim_cadeia_destacamento_fields.html" with indice=0 sigla_selecionada='' info_adicional='' visivel=False %}
+
                     <!-- Campo de especificação (aparece quando tipo = 'outra') -->
                     <div class="form-group especificacao-container" id="especificacao-container_0" style="display: none;">
                         <label for="especificacao_fim_cadeia_0">Especificação *</label>
-                        <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_0" class="form-control especificacao-fim-cadeia" 
+                        <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_0" class="form-control especificacao-fim-cadeia"
                                   placeholder="Detalhe a especificação..."></textarea>
                     </div>
                 </div>
@@ -256,20 +252,9 @@
                     </div>
                 </div>
                 
-                <!-- Campo de teste temporário -->
-                <div class="form-group" id="teste-container_0" style="display: block;">
-                    <label for="teste_0">TESTE - Sempre visível</label>
-                    <input type="text" name="teste[]" id="teste_0" class="form-control" placeholder="Campo de teste">
-                </div>
-                
-                <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
-                <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_0" style="display: none;">
-                    <label for="sigla_patrimonio_publico_0">Sigla do Patrimônio Público *</label>
-                    <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_0" 
-                           class="form-control sigla-patrimonio-publico-input" 
-                           placeholder="Ex: INCRA, Estado, União, etc.">
-                </div>
-                
+                <!-- Campos de destacamento do patrimônio público (aparecem quando tipo = 'destacamento_publico') -->
+                {% include "dominial/components/_fim_cadeia_destacamento_fields.html" with indice=0 sigla_selecionada='' info_adicional='' visivel=False %}
+
                 <!-- Campo de especificação (aparece quando tipo = 'outra') -->
                 <div class="form-group especificacao-container" id="especificacao-container_0" style="display: none;">
                     <label for="especificacao_fim_cadeia_0">Especificação *</label>
