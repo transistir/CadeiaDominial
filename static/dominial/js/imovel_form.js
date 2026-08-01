@@ -36,27 +36,6 @@ class ImovelForm {
         
         // Mostrar detalhes do cartório quando selecionado
         this.cartorioSelect.addEventListener('change', (e) => {
-            if (e.target.value === 'novo') {
-                // Abrir modal para novo cartório
-                const modal = document.getElementById('modal-novo-cartorio');
-                if (modal) {
-                    modal.style.display = 'flex';
-                    
-                    // Copiar estado e cidade do formulário principal para o modal
-                    const modalEstadoInput = document.getElementById('novo-cartorio-estado');
-                    const modalCidadeInput = document.getElementById('novo-cartorio-cidade');
-                    const estadoPrincipal = document.getElementById('id_estado');
-                    const cidadePrincipal = document.getElementById('id_cidade');
-                    
-                    // Obter o texto do estado selecionado
-                    const estadoText = estadoPrincipal.options[estadoPrincipal.selectedIndex]?.text || '';
-                    const cidadeText = cidadePrincipal.options[cidadePrincipal.selectedIndex]?.text || '';
-                    
-                    modalEstadoInput.value = estadoText;
-                    modalCidadeInput.value = cidadeText;
-                }
-                return;
-            }
             this.mostrarDetalhesCartorio(e.target.value);
         });
     }
@@ -147,11 +126,6 @@ class ImovelForm {
             } else {
                 this.cartorioSelect.innerHTML = '<option value="">Nenhum cartório encontrado</option>';
             }
-            // Sempre adicionar a opção de novo cartório
-            const novoOption = document.createElement('option');
-            novoOption.value = 'novo';
-            novoOption.textContent = 'Adicionar novo cartório';
-            this.cartorioSelect.appendChild(novoOption);
 
             this.cartorioSelect.disabled = false;
         } catch (error) {
@@ -241,87 +215,3 @@ document.addEventListener('DOMContentLoaded', function() {
     validarNomeProprietario();
 });
 
-// Configurar modal de novo cartório
-function setupNovoCartorioModal() {
-    const modal = document.getElementById('modal-novo-cartorio');
-    const fecharBtn = document.getElementById('fechar-modal-cartorio');
-    const cancelarBtn = document.getElementById('cancelar-novo-cartorio');
-    const form = document.getElementById('form-novo-cartorio');
-    const cartorioSelect = document.getElementById('id_cartorio');
-
-    // Só ativa se o modal e o form existem
-    if (!modal || !fecharBtn || !cancelarBtn || !form || !cartorioSelect) {
-        return;
-    }
-    
-    // Fechar modal
-    fecharBtn.onclick = function() {
-        modal.style.display = 'none';
-        form.reset();
-        // Limpar campos de estado e cidade
-        document.getElementById('novo-cartorio-estado').value = '';
-        document.getElementById('novo-cartorio-cidade').value = '';
-        // Voltar o select para vazio
-        cartorioSelect.value = '';
-    };
-    
-    cancelarBtn.onclick = function() {
-        modal.style.display = 'none';
-        form.reset();
-        // Limpar campos de estado e cidade
-        document.getElementById('novo-cartorio-estado').value = '';
-        document.getElementById('novo-cartorio-cidade').value = '';
-        // Voltar o select para vazio
-        cartorioSelect.value = '';
-    };
-
-    // Submeter novo cartório via AJAX
-    form.onsubmit = async function(e) {
-        e.preventDefault();
-        e.stopPropagation(); // Impedir que o evento se propague para o formulário principal
-        
-        const data = {
-            nome: document.getElementById('novo-cartorio-nome').value,
-            cns: document.getElementById('novo-cartorio-cns').value,
-            estado: document.getElementById('id_estado').value, // Usar o código do estado do formulário principal
-            cidade: document.getElementById('id_cidade').value, // Usar o código da cidade do formulário principal
-            endereco: '',
-            telefone: '',
-            email: ''
-        };
-        try {
-            const resp = await fetch('/dominial/criar-cartorio/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify(data)
-            });
-            const result = await resp.json();
-            if (result.success) {
-                // Adicionar ao select e selecionar
-                const option = document.createElement('option');
-                option.value = result.cartorio.id;
-                option.textContent = result.cartorio.nome;
-                option.setAttribute('data-cartorio', JSON.stringify(result.cartorio));
-                cartorioSelect.appendChild(option);
-                cartorioSelect.value = result.cartorio.id;
-                // Fechar modal
-                modal.style.display = 'none';
-                form.reset();
-                // Disparar evento para mostrar detalhes
-                cartorioSelect.dispatchEvent(new Event('change'));
-            } else {
-                alert(result.error || 'Erro ao criar cartório.');
-            }
-        } catch (err) {
-            alert('Erro ao criar cartório.');
-        }
-    };
-}
-
-// Inicializar modal quando o DOM estiver pronto
-document.addEventListener('DOMContentLoaded', function() {
-    setupNovoCartorioModal();
-}); 

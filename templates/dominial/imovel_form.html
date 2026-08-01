@@ -131,40 +131,6 @@
         </div>
     </form>
 </div>
-
-<!-- Modal para adicionar novo cartório -->
-<div id="modal-novo-cartorio" class="modal" style="display:none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Adicionar Novo CRI</h3>
-            <span class="close" id="fechar-modal-cartorio">&times;</span>
-        </div>
-        <div class="modal-body">
-            <form id="form-novo-cartorio">
-                <div class="form-group">
-                    <label for="novo-cartorio-nome">Nome do CRI:</label>
-                    <input type="text" id="novo-cartorio-nome" name="nome" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="novo-cartorio-cns">CNS:</label>
-                    <input type="text" id="novo-cartorio-cns" name="cns" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="novo-cartorio-estado">Estado:</label>
-                    <input type="text" id="novo-cartorio-estado" name="estado" class="form-control" readonly required>
-                </div>
-                <div class="form-group">
-                    <label for="novo-cartorio-cidade">Cidade:</label>
-                    <input type="text" id="novo-cartorio-cidade" name="cidade" class="form-control" readonly required>
-                </div>
-                <div class="modal-buttons">
-                    <button type="button" class="btn btn-secondary" id="cancelar-novo-cartorio">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar CRI</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
