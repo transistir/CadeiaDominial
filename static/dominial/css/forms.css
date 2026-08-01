@@ -771,7 +771,8 @@
 }
 
 .fim-cadeia-origem-container select,
-.fim-cadeia-origem-container textarea {
+.fim-cadeia-origem-container textarea,
+.fim-cadeia-origem-container input[type="text"] {
     width: 100%;
     padding: 8px 12px;
     border: 1px solid #ffeaa7;
@@ -781,7 +782,8 @@
 }
 
 .fim-cadeia-origem-container select:focus,
-.fim-cadeia-origem-container textarea:focus {
+.fim-cadeia-origem-container textarea:focus,
+.fim-cadeia-origem-container input[type="text"]:focus {
     outline: none;
     border-color: #ffc107;
     box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);

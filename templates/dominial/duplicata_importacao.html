@@ -235,6 +235,9 @@
                 {% for sigla_patrimonio_publico in form_data.sigla_patrimonio_publico %}
                 <input type="hidden" name="sigla_patrimonio_publico[]" value="{{ sigla_patrimonio_publico }}">
                 {% endfor %}
+                {% for info_adicional_fim_cadeia in form_data.info_adicional_fim_cadeia %}
+                <input type="hidden" name="info_adicional_fim_cadeia[]" value="{{ info_adicional_fim_cadeia }}">
+                {% endfor %}
                 {% for especificacao_fim_cadeia in form_data.especificacao_fim_cadeia %}
                 <input type="hidden" name="especificacao_fim_cadeia[]" value="{{ especificacao_fim_cadeia }}">
                 {% endfor %}
