@@ -112,6 +112,11 @@ def importar_cartorios_estado(request):
 @require_POST
 def criar_cartorio(request):
     """View para criar um novo cartório via AJAX"""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Autenticação necessária.'}, status=401)
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': 'Permissão insuficiente. Apenas administradores podem criar cartórios.'}, status=403)
+
     try:
         data = json.loads(request.body)
         
