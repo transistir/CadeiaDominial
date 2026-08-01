@@ -763,6 +763,25 @@
     margin-bottom: 0;
 }
 
+/* Destacamento do patrimônio público: informação adicional larga, Estado
+   estreito e depois dela (issue #104) */
+.fim-cadeia-origem-container .destacamento-grid {
+    display: grid;
+    grid-template-columns: 4fr 1fr;
+    gap: 15px;
+}
+
+.fim-cadeia-origem-container .destacamento-grid select {
+    min-width: 0;
+}
+
+.destacamento-cadastro-link {
+    float: right;
+    font-weight: 400;
+    font-size: 12px;
+    text-decoration: underline;
+}
+
 .fim-cadeia-origem-container label {
     font-weight: 600;
     color: #856404;
@@ -808,11 +827,12 @@
 
 /* Responsividade */
 @media (max-width: 768px) {
-    .fim-cadeia-origem-container .grid-2 {
+    .fim-cadeia-origem-container .grid-2,
+    .fim-cadeia-origem-container .destacamento-grid {
         grid-template-columns: 1fr;
         gap: 10px;
     }
-    
+
     .fim-cadeia-label {
         width: 18px;
         height: 18px;

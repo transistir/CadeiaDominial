@@ -558,27 +558,36 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
 
 @admin.register(FimCadeia)
 class FimCadeiaAdmin(admin.ModelAdmin):
-    """Admin para gerenciar os tipos de fim de cadeia"""
-    list_display = ['nome', 'tipo', 'classificacao', 'sigla', 'ativo', 'data_criacao']
+    """Admin para gerenciar os tipos de fim de cadeia.
+
+    É aqui que se cadastram as siglas oferecidas no select "Estado" do
+    destacamento do patrimônio público: entram no formulário os registros com
+    tipo "Destacamento Público", sigla preenchida e ativo marcado (issue #104).
+    """
+    list_display = ['sigla', 'nome', 'tipo', 'classificacao', 'ativo', 'data_criacao']
+    list_display_links = ['sigla', 'nome']
     list_filter = ['tipo', 'classificacao', 'ativo', 'data_criacao']
     search_fields = ['nome', 'sigla', 'descricao']
     list_editable = ['ativo']
     ordering = ['nome']
-    
+
     fieldsets = (
         ('Informações Básicas', {
-            'fields': ('nome', 'tipo', 'classificacao', 'sigla')
+            'fields': ('nome', 'tipo', 'classificacao', 'sigla', 'ativo'),
+            'description': (
+                'A <strong>sigla</strong> é o valor gravado no lançamento e exibido na '
+                'árvore (ex: BA, SP, IMP-BR). Registros de tipo "Destacamento Público" '
+                'com sigla preenchida e <strong>ativo</strong> marcado aparecem no select '
+                '"Estado" do formulário de lançamento; desmarcar "ativo" tira a opção do '
+                'select sem apagar o histórico.'
+            ),
         }),
         ('Descrição', {
             'fields': ('descricao',),
             'classes': ('collapse',)
         }),
-        ('Controle', {
-            'fields': ('ativo',),
-            'classes': ('collapse',)
-        }),
     )
-    
+
     def get_queryset(self, request):
         return super().get_queryset(request).order_by('nome')
     

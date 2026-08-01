@@ -2,8 +2,15 @@
 formulário de lançamento (issue #104): as 27 unidades federativas e as duas
 coroas imperiais.
 
-Idempotente: usa ``get_or_create`` por ``nome``, então rodar de novo não
-duplica nem sobrescreve registros já editados pelo admin.
+Só essas 29 opções devem aparecer no select. Cadastros anteriores de
+destacamento — INCRA, números de matrícula digitados como texto livre — são
+DESATIVADOS, nunca apagados: quem quiser um deles de volta é só reativar pelo
+admin, sem perder o histórico.
+
+``update_or_create`` por ``nome`` normaliza tipo, classificação e sigla dos 29,
+porque bases antigas têm registros com o nome certo e a sigla errada (ex.:
+'Estado da Bahia' gravado com sigla 'Estado da Bahia' em vez de 'BA'). Rodar de
+novo converge para o mesmo estado.
 """
 
 from django.db import migrations
@@ -45,11 +52,25 @@ COROAS = [
 
 DESTACAMENTOS = ESTADOS + COROAS
 
+NOMES_COMBINADOS = [nome for nome, _ in DESTACAMENTOS]
+
+
+def desativar_destacamentos_legados(apps):
+    """Tira do select os destacamentos que não foram combinados, preservando o
+       registro para o admin reativar se precisar."""
+    FimCadeia = apps.get_model('dominial', 'FimCadeia')
+    return (
+        FimCadeia.objects
+        .filter(tipo='destacamento_publico')
+        .exclude(nome__in=NOMES_COMBINADOS)
+        .update(ativo=False)
+    )
+
 
 def semear_destacamentos(apps, schema_editor):
     FimCadeia = apps.get_model('dominial', 'FimCadeia')
     for nome, sigla in DESTACAMENTOS:
-        FimCadeia.objects.get_or_create(
+        FimCadeia.objects.update_or_create(
             nome=nome,
             defaults={
                 'tipo': 'destacamento_publico',
@@ -58,12 +79,15 @@ def semear_destacamentos(apps, schema_editor):
                 'ativo': True,
             },
         )
+    desativar_destacamentos_legados(apps)
 
 
 def remover_destacamentos(apps, schema_editor):
+    """Remove os 29 semeados. As desativações de registros legados não são
+       revertidas: não dá para saber quais já estavam inativos antes."""
     FimCadeia = apps.get_model('dominial', 'FimCadeia')
     FimCadeia.objects.filter(
-        nome__in=[nome for nome, _ in DESTACAMENTOS],
+        nome__in=NOMES_COMBINADOS,
         tipo='destacamento_publico',
     ).delete()
 

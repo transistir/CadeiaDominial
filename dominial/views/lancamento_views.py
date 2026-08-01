@@ -278,6 +278,9 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 'lancamentos_com_pessoas': lancamentos_com_pessoas,
                 'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
                 'is_novo_lancamento': True,
+                # Sem isso o select de destacamento volta vazio ao re-renderizar
+                # o formulário depois de um erro (issue #104)
+                'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
             }
             
             context['transmitentes'] = transmitentes_data

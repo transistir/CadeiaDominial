@@ -52,32 +52,34 @@ function escaparHtml(valor) {
 }
 
 /**
- * Monta o bloco "Sigla do Patrimônio Público" + "Informação adicional" (issue #104)
+ * Monta o bloco "Informação adicional" + "Estado" do destacamento (issue #104).
+ * Espelha templates/dominial/components/_fim_cadeia_destacamento_fields.html
  */
 function montarBlocoDestacamento(index, visivel) {
     const opcoes = obterOpcoesFimCadeia()
         .map(opcao => {
             const sigla = escaparHtml(opcao.sigla);
-            return `<option value="${sigla}">${sigla} — ${escaparHtml(opcao.nome)}</option>`;
+            const nome = escaparHtml(opcao.nome);
+            return `<option value="${sigla}" title="${nome}">${sigla} — ${nome}</option>`;
         })
         .join('');
 
     return `
         <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_${index}" style="display: ${visivel ? 'block' : 'none'};">
-            <div class="grid-2">
-                <div class="form-group">
-                    <label for="sigla_patrimonio_publico_${index}">Sigla do Patrimônio Público *</label>
-                    <select name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}"
-                            class="form-control sigla-patrimonio-publico-select" data-sigla-selecionada="">
-                        <option value="">Selecione a sigla...</option>
-                        ${opcoes}
-                    </select>
-                </div>
+            <div class="destacamento-grid">
                 <div class="form-group">
                     <label for="info_adicional_fim_cadeia_${index}">Informação adicional</label>
                     <input type="text" name="info_adicional_fim_cadeia[]" id="info_adicional_fim_cadeia_${index}"
                            class="form-control info-adicional-fim-cadeia-input"
                            placeholder="Ex: secretaria que concedeu o título">
+                </div>
+                <div class="form-group">
+                    <label for="sigla_patrimonio_publico_${index}">Estado *</label>
+                    <select name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}"
+                            class="form-control sigla-patrimonio-publico-select" data-sigla-selecionada="">
+                        <option value="">Selecione...</option>
+                        ${opcoes}
+                    </select>
                 </div>
             </div>
         </div>
@@ -564,12 +566,10 @@ function configurarValidacaoInicioMatricula(index) {
                 container.style.display = this.checked ? 'block' : 'none';
             }
             
-            // Controlar exibição do campo de sigla do patrimônio público
-            const siglaContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
-            if (siglaContainer) {
-                siglaContainer.style.display = this.checked ? 'block' : 'none';
-            }
-            
+            // Os campos de destacamento não seguem o toggle: só aparecem quando
+            // o tipo escolhido é 'destacamento_publico' (issue #104)
+            controlarExibicaoCamposFimCadeia(index);
+
             setTimeout(aplicarValidacao, 100); // Delay para permitir que outros eventos sejam processados
             atualizarOrigemCompleta(index); // Atualizar origem quando checkbox muda
         });
@@ -619,28 +619,20 @@ function configurarValidacaoInicioMatricula(index) {
  */
 function controlarExibicaoCamposFimCadeia(index) {
     const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
+    if (!tipoFimCadeia) return;
+
+    const tipoSelecionado = tipoFimCadeia.value;
+
+    // Cada bloco é opcional: a ausência de um não pode impedir a exibição do
+    // outro, então checar um a um em vez de exigir os dois (issue #104)
     const especificacaoContainer = document.getElementById(`especificacao-container_${index}`);
-    const siglaPatrimonioContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
-    
-    console.log(`DEBUG: Controlar exibição - index: ${index}`);
-    console.log(`DEBUG: tipoFimCadeia:`, tipoFimCadeia);
-    console.log(`DEBUG: especificacaoContainer:`, especificacaoContainer);
-    console.log(`DEBUG: siglaPatrimonioContainer:`, siglaPatrimonioContainer);
-    
-    if (tipoFimCadeia && especificacaoContainer && siglaPatrimonioContainer) {
-        const tipoSelecionado = tipoFimCadeia.value;
-        console.log(`DEBUG: Tipo selecionado: ${tipoSelecionado}`);
-        
-        // Controlar exibição do campo de especificação
+    if (especificacaoContainer) {
         especificacaoContainer.style.display = tipoSelecionado === 'outra' ? 'block' : 'none';
-        
-        // Controlar exibição do campo de sigla do patrimônio público
+    }
+
+    const siglaPatrimonioContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
+    if (siglaPatrimonioContainer) {
         siglaPatrimonioContainer.style.display = tipoSelecionado === 'destacamento_publico' ? 'block' : 'none';
-        
-        console.log(`DEBUG: Especificação display: ${especificacaoContainer.style.display}`);
-        console.log(`DEBUG: Sigla patrimônio display: ${siglaPatrimonioContainer.style.display}`);
-    } else {
-        console.log(`DEBUG: Algum elemento não foi encontrado para index ${index}`);
     }
 }
 
@@ -730,6 +722,7 @@ function criarCampoSiglaPatrimonio(index) {
 
 // Exportar funções para uso global
 window.adicionarOrigemSimples = adicionarOrigemSimples;
+window.montarBlocoDestacamento = montarBlocoDestacamento;
 window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
 window.controlarCamposFimCadeia = controlarCamposFimCadeia;
 window.criarCampoSiglaPatrimonio = criarCampoSiglaPatrimonio;

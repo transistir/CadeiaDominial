@@ -1,10 +1,13 @@
 """Testes do select de siglas de destacamento do patrimônio público (issue #104)."""
 
 from importlib import import_module
+from unittest.mock import patch
 
 from django.apps import apps
+from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase, RequestFactory
+from django.urls import reverse
 from django.utils import timezone
 
 from dominial.models import (
@@ -50,17 +53,54 @@ class SeedFimCadeiaTest(TestCase):
         SEED.semear_destacamentos(apps, None)
         self.assertEqual(FimCadeia.objects.count(), 29)
 
-    def test_semear_nao_sobrescreve_registro_existente(self):
-        """get_or_create por nome preserva ajustes feitos no admin."""
+    def test_semear_normaliza_sigla_de_registro_existente(self):
+        """Bases antigas gravaram o nome inteiro na sigla; o seed corrige."""
         FimCadeia.objects.create(
             nome='Estado da Bahia',
             tipo='destacamento_publico',
             classificacao='inconclusa',
-            sigla='BAHIA',
+            sigla='Estado da Bahia',
         )
         SEED.semear_destacamentos(apps, None)
-        self.assertEqual(FimCadeia.objects.get(nome='Estado da Bahia').sigla, 'BAHIA')
+        bahia = FimCadeia.objects.get(nome='Estado da Bahia')
+        self.assertEqual(bahia.sigla, 'BA')
+        self.assertEqual(bahia.classificacao, 'origem_lidima')
         self.assertEqual(FimCadeia.objects.count(), 29)
+
+    def test_semear_reativa_destacamento_combinado(self):
+        FimCadeia.objects.create(
+            nome='Estado de São Paulo', tipo='destacamento_publico',
+            classificacao='origem_lidima', sigla='SP', ativo=False,
+        )
+        SEED.semear_destacamentos(apps, None)
+        self.assertTrue(FimCadeia.objects.get(nome='Estado de São Paulo').ativo)
+
+    def test_semear_desativa_destacamentos_nao_combinados(self):
+        """INCRA e números de matrícula saem do select, mas não do banco."""
+        FimCadeia.objects.create(
+            nome='Incra', tipo='destacamento_publico',
+            classificacao='origem_lidima', sigla='Incra',
+        )
+        FimCadeia.objects.create(
+            nome='M19743', tipo='destacamento_publico',
+            classificacao='origem_lidima', sigla='M19743',
+        )
+        SEED.semear_destacamentos(apps, None)
+
+        self.assertFalse(FimCadeia.objects.get(nome='Incra').ativo)
+        self.assertFalse(FimCadeia.objects.get(nome='M19743').ativo)
+        self.assertEqual(FimCadeia.objects.count(), 31)
+        self.assertEqual(
+            FimCadeia.objects.filter(tipo='destacamento_publico', ativo=True).count(),
+            29,
+        )
+
+    def test_semear_nao_mexe_em_outros_tipos(self):
+        FimCadeia.objects.create(
+            nome='Sem Origem', tipo='sem_origem', classificacao='sem_origem',
+        )
+        SEED.semear_destacamentos(apps, None)
+        self.assertTrue(FimCadeia.objects.get(nome='Sem Origem').ativo)
 
 
 class FimCadeiaOpcoesTest(TestCase):
@@ -128,9 +168,29 @@ class FimCadeiaDestacamentoTemplateTest(TestCase):
     def test_renderiza_select_com_opcoes(self):
         html = self._renderizar()
         self.assertIn('<select name="sigla_patrimonio_publico[]"', html)
-        self.assertIn('<option value="BA">BA — Estado da Bahia</option>', html)
         self.assertIn(
-            '<option value="IMP-BR">IMP-BR — Coroa do Império Brasileiro</option>', html
+            '<option value="BA" title="Estado da Bahia">BA — Estado da Bahia</option>',
+            html,
+        )
+        self.assertIn(
+            '<option value="IMP-BR" title="Coroa do Império Brasileiro">'
+            'IMP-BR — Coroa do Império Brasileiro</option>',
+            html,
+        )
+
+    def test_label_do_select_e_estado(self):
+        """O campo identifica o estado, não uma 'sigla do patrimônio público'."""
+        html = self._renderizar()
+        self.assertIn('Estado *', html)
+        self.assertNotIn('Sigla do Patrimônio Público', html)
+
+    def test_info_adicional_vem_antes_do_select(self):
+        """Layout: informação adicional larga à esquerda, Estado estreito depois."""
+        html = self._renderizar()
+        self.assertIn('destacamento-grid', html)
+        self.assertLess(
+            html.index('info_adicional_fim_cadeia_0'),
+            html.index('sigla_patrimonio_publico_0'),
         )
 
     def test_renderiza_input_de_informacao_adicional(self):
@@ -154,6 +214,16 @@ class FimCadeiaDestacamentoTemplateTest(TestCase):
     def test_visivel_controla_display(self):
         self.assertIn('display: none;', self._renderizar())
         self.assertIn('display: block;', self._renderizar(visivel=True))
+
+    def test_link_de_cadastro_so_para_staff(self):
+        """Sem o atalho para o admin não há onde cadastrar novas siglas."""
+        comum = get_user_model()(username='comum', is_staff=False)
+        staff = get_user_model()(username='staff', is_staff=True)
+
+        self.assertNotIn('destacamento-cadastro-link', self._renderizar(user=comum))
+        html_staff = self._renderizar(user=staff)
+        self.assertIn('destacamento-cadastro-link', html_staff)
+        self.assertIn(reverse('admin:dominial_fimcadeia_changelist'), html_staff)
 
 
 class InfoAdicionalPersistenciaTest(TestCase):
@@ -210,6 +280,47 @@ class InfoAdicionalPersistenciaTest(TestCase):
         origem_fc = OrigemFimCadeia.objects.get(lancamento=self.lancamento, indice_origem=0)
         self.assertIsNone(origem_fc.info_adicional_fim_cadeia)
         self.assertEqual(origem_fc.tipo_fim_cadeia, 'destacamento_publico')
+
+
+class NovoLancamentoContextoErroTest(TestCase):
+    """Ao re-renderizar o formulário depois de um erro, o select não pode voltar
+       vazio — o contexto precisa carregar as opções em todos os caminhos."""
+
+    def setUp(self):
+        usuario = get_user_model().objects.create_user(
+            username='tester104', password='senha-104'
+        )
+        self.client.force_login(usuario)
+
+        tis = TIs.objects.create(nome='TI Teste', codigo='T106', etnia='Teste')
+        cartorio = Cartorios.objects.create(
+            nome='Cartório Teste', cns='106106', cidade='Cidade', estado='TS'
+        )
+        proprietario = Pessoas.objects.create(nome='Proprietário', cpf='10610610610')
+        self.imovel = Imovel.objects.create(
+            terra_indigena_id=tis, nome='Imóvel Teste', proprietario=proprietario,
+            matricula='M106', cartorio=cartorio,
+        )
+        self.documento = Documento.objects.create(
+            imovel=self.imovel, tipo=DocumentoTipo.objects.create(tipo='matricula'),
+            numero='M106', data=timezone.now().date(), cartorio=cartorio,
+            livro='1', folha='1',
+        )
+        self.tis = tis
+
+    @patch('dominial.views.lancamento_views.LancamentoService.criar_lancamento_completo')
+    def test_rerender_apos_excecao_mantem_opcoes(self, mock_criar):
+        mock_criar.side_effect = Exception('falha simulada')
+        url = reverse(
+            'novo_lancamento_documento',
+            args=[self.tis.id, self.imovel.id, self.documento.id],
+        )
+
+        response = self.client.post(url, {})
+
+        self.assertEqual(response.status_code, 200)
+        siglas = [o['sigla'] for o in response.context['fim_cadeia_opcoes']]
+        self.assertIn('BA', siglas)
 
 
 class NoFimCadeiaInfoAdicionalTest(TestCase):
