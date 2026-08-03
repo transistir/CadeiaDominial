@@ -306,16 +306,24 @@ class SimulacaoMergeTest(RelatorioFixtureMixin, TestCase):
         self.assertTrue(all(len(item['pks']) == 2 for item in conflitos))
 
     def test_simulacao_ciclo(self):
-        source = self.fantasmas[3488]
-        target = self.fantasmas[3707]
         pares = [
-            {'source_id': source.pk, 'target_id': target.pk, 'linha': 2},
-            {'source_id': target.pk, 'target_id': source.pk, 'linha': 3},
+            {'source_id': self.fantasmas[3488].pk, 'target_id': self.correto.pk, 'linha': 2},
+            {'source_id': self.correto.pk, 'target_id': self.fantasmas[3707].pk, 'linha': 3},
         ]
 
         resultados, _ = simular_merges(pares)
 
         self.assertEqual({item['status'] for item in resultados}, {'CICLO'})
+
+    def test_simulacao_rejeita_fantasma_para_fantasma(self):
+        pares = [{
+            'source_id': self.fantasmas[3488].pk,
+            'target_id': self.fantasmas[3707].pk,
+            'linha': 2,
+        }]
+
+        with self.assertRaisesMessage(CommandError, 'source e target são fantasmas'):
+            simular_merges(pares)
 
     def test_simulacao_fonte_repetida(self):
         source = self.fantasmas[3488]

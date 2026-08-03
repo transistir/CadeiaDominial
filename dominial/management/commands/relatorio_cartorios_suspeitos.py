@@ -81,7 +81,8 @@ CSV_FIELDS = (
     'em_cadeia', 'classificacao', 'duplicata_id', 'documento_id',
     'cartorio_origem_id', 'lancamento_origem_id', 'documento_pai_id',
     'fantasma_id', 'candidato_id', 'metodo', 'source_id', 'target_id',
-    'status', 'fk_counts', 'alertas', 'conflitos', 'constraint', 'model',
+    'status', 'fk_counts', 'alertas', 'conflitos', 'cascade_pks',
+    'cadeias_afetadas', 'constraint', 'model',
     'pks', 'descricao', 'chave', 'valor',
 )
 
@@ -328,6 +329,13 @@ def _validar_entrada_merge(pares):
             raise CommandError(f'Merge plan linha {par["linha"]}: ambos devem ser CRI.')
         if source.pk == target.pk:
             raise CommandError(f'Merge plan linha {par["linha"]}: source = target.')
+        # Mesmo critério de fantasma usado no diagnóstico (CRI sem estado):
+        # fundir um fantasma em outro apenas move o problema de lugar.
+        if not _estado_preenchido(source) and not _estado_preenchido(target):
+            raise CommandError(
+                f'Merge plan linha {par["linha"]}: source e target são fantasmas '
+                '(CRI sem estado); o target deve ser um cartório correto.'
+            )
 
 
 def _problemas_estrutura_merge(pares):

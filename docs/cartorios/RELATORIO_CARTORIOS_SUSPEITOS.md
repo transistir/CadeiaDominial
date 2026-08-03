@@ -39,7 +39,8 @@ python manage.py relatorio_cartorios_suspeitos \
 # Simulação de merge (NUNCA executa, apenas simula)
 python manage.py relatorio_cartorios_suspeitos \
   --merge-plan decisao.csv \
-  --output merge_simulacao.json
+  --output merge_simulacao.json \
+  --format json
 ```
 
 ### Flags
@@ -167,7 +168,7 @@ fantasma_id,correto_id
 3983,3102
 ```
 
-> **Importante:** Use IDs reais do relatório. O `fantasma_id` é o cartório suspeito; o `correto_id` é o cartório CRI com estado preenchido.
+> **Importante:** Use IDs reais do relatório. O `fantasma_id` é o cartório suspeito; o `correto_id` é o cartório CRI com estado preenchido. Pares em que **os dois** lados são fantasmas (CRI sem estado) são rejeitados com erro — fundir fantasma em fantasma só move o problema de lugar.
 
 ### Passo 4: Simular merge
 ```bash
