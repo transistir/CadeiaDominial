@@ -2,6 +2,8 @@
 Service especializado para operações com documentos relacionados a lançamentos
 """
 
+from django.utils import timezone
+
 from ..models import Documento
 
 
@@ -50,7 +52,8 @@ class LancamentoDocumentoService:
             imovel=imovel,
             tipo=tipo_matricula,
             numero=numero_documento,  # Usar o número da matrícula do imóvel com prefixo M
-            data='2024-01-01',
+            data=timezone.localdate(),
+            data_presumida=True,
             cartorio=imovel.cartorio if imovel.cartorio else None,
             livro='0',  # Valor padrão, será atualizado pelo primeiro lançamento
             folha='0',  # Valor padrão, será atualizado pelo primeiro lançamento
