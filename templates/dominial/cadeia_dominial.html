@@ -60,7 +60,7 @@
                         <div class="documento-node">
                             <div class="documento-header">
                                 📄 {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
-                                <span>({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
+                                <span>({{ documento.data_exibicao|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
                             </div>
                             
                             {% if documento.origem %}

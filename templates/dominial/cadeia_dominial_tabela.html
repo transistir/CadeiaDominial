@@ -152,7 +152,7 @@
                                     {% endif %}
                                 </button>
                             </td>
-                            <td>{{ item.documento.data|date:"d/m/Y" }}</td>
+                            <td>{{ item.documento.data_exibicao|date:"d/m/Y" }}</td>
                             <td>{{ item.documento.cartorio.nome }}</td>
                             <td>{{ item.lancamentos.count }} lanç.</td>
                             <td>

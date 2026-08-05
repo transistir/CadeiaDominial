@@ -103,7 +103,7 @@
                             {% endif %} -->
                             <br>
                             <small>
-                                Data: {{ item.documento.data|date:"d/m/Y" }} | 
+                                Data: {{ item.documento.data_exibicao|date:"d/m/Y" }} | 
                                 CRI: {{ item.documento.cartorio.nome }} | 
                                 Lançamentos: {{ item.lancamentos.count }}
                             </small>
