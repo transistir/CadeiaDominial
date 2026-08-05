@@ -90,7 +90,10 @@
             </div>
             
             <!-- Campo de área opcional -->
+            {# Transcrições usam a Área da seção Transmissão #}
+            {% if documento.tipo.tipo != 'transcricao' %}
             {% include "dominial/components/_area_form.html" with area_obrigatorio=False area_id="area_inicio_matricula" %}
+            {% endif %}
         </div>
 
         <!-- Campos Opcionais de Transação -->
@@ -342,7 +345,7 @@
         const AREA_FIELD_MAP = {
             'averbacao': isTranscricao ? 'area_transmissao' : 'area_averbacao',
             'registro': 'area_transmissao',
-            'inicio_matricula': 'area_inicio_matricula',
+            'inicio_matricula': isTranscricao ? 'area_transmissao' : 'area_inicio_matricula',
         };
 
         form.addEventListener('submit', function() {
@@ -364,4 +367,4 @@
         });
     })();
 </script>
-{% endblock %} 
+{% endblock %}

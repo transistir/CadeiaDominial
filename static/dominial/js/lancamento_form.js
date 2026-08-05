@@ -13,21 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
         const modoEdicao = document.body.classList.contains('modo-edicao');
         
-        // Verificar se o documento é do tipo transcrição
-        // Método 1: Verificar se há uma variável global definida no template
-        const isTranscricaoGlobal = window.isTranscricao === true;
-        
-        // Método 2: Verificar pelo número do documento (fallback)
-        const documentoNumero = document.querySelector('input[name="sigla_matricula"]');
-        const isTranscricaoByNumber = documentoNumero && documentoNumero.value && (
-            documentoNumero.value.startsWith('T') || 
-            documentoNumero.value.toUpperCase().includes('TRANS')
-        );
-        
-        // Método 3: Verificar se há um elemento com classe indicando transcrição
-        const isTranscricaoByClass = document.body.classList.contains('documento-transcricao');
-        
-        const isTranscricao = isTranscricaoGlobal || isTranscricaoByNumber || isTranscricaoByClass;
+        const isTranscricao = window.isTranscricao === true;
         
 
         
