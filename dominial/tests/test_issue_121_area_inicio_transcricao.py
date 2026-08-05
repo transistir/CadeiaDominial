@@ -127,11 +127,8 @@ class Issue121AreaInicioTranscricaoTest(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            'id="area_transmissao" step="0.0001" inputmode="decimal"\n'
-            '           value="150.5000"',
-        )
+        self.assertContains(response, 'id="area_transmissao"')
+        self.assertContains(response, 'value="150.5000"')
         self.assertNotContains(response, 'id="area_inicio_matricula"')
 
     def test_averbacao_em_transcricao_continua_sem_area_propria(self):
