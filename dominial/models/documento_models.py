@@ -32,6 +32,10 @@ class Documento(models.Model):
         editable=False,
     )
     data = models.DateField()
+    data_presumida = models.BooleanField(
+        default=False,
+        help_text='True quando a data não é um dado jurídico real, mas a data de cadastro no sistema.',
+    )
     cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT)
     livro = models.CharField(max_length=50)
     folha = models.CharField(max_length=50)
@@ -92,10 +96,15 @@ class Documento(models.Model):
                 name='unique_documento_identidade_canonica',
             ),
         ]
-        ordering = ['-data']
+        ordering = ['-data', '-id']
 
     def __str__(self):
         return f"{self.tipo.get_tipo_display()} {self.numero} - {self.cartorio.nome}"
+
+    @property
+    def label_data(self):
+        """Label contextual para exibição da data."""
+        return 'Análise iniciada em' if self.data_presumida else 'Data'
 
     def clean(self):
         # Verificar se o imóvel está sobreposto a uma terra indígena

@@ -41,7 +41,7 @@ def documentos(request, tis_id, imovel_id):
     documentos = Documento.objects.filter(imovel=imovel)\
         .select_related('cartorio', 'tipo')\
         .prefetch_related('lancamentos')\
-        .order_by('-data')
+        .order_by('-data', '-id')
     
     context = {
         'tis': tis,
@@ -185,7 +185,7 @@ def selecionar_documento_lancamento(request, tis_id, imovel_id):
     documentos = Documento.objects.filter(imovel=imovel)\
         .select_related('cartorio', 'tipo')\
         .prefetch_related('lancamentos')\
-        .order_by('-data')
+        .order_by('-data', '-id')
     
     context = {
         'tis': tis,
@@ -301,6 +301,7 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
             tipo=tipo_doc,
             numero=codigo_origem,
             data=date.today(),
+            data_presumida=True,
             cartorio=cartorio_documento,
             livro='1',  # Livro padrão
             folha='1',  # Folha padrão
