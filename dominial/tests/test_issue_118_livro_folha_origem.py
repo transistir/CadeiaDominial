@@ -12,7 +12,9 @@ Os 3 pontos de vazamento cobertos aqui:
 Os testes de múltiplas origens (Tarefa 6) garantem que CADA origem preserva seu
 próprio livro/folha nos registros ``LancamentoOrigem``.
 """
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from dominial.models import (
@@ -439,3 +441,83 @@ class TestIssue118MultiplasOrigens(TestCase):
         # T202 NÃO deve ter 5/10 (da M101)
         self.assertNotEqual(origens[1].livro, "5")
         self.assertNotEqual(origens[1].folha, "10")
+
+
+class TestIssue118NovoLancamentoViewSegundoLancamento(TestCase):
+    """Regressão P1 (review Codex, PR #119): a view ``novo_lancamento`` indexava
+    ``dados_primeiro['livro_origem']``/``['folha_origem']`` diretamente, mas esses
+    campos foram removidos do dict retornado por
+    ``LancamentoHerancaService.obter_dados_primeiro_lancamento``. Isso derrubava
+    a tela com ``KeyError`` sempre que o documento já tinha um primeiro
+    lançamento (ou seja, ao abrir o formulário do SEGUNDO lançamento)."""
+
+    def setUp(self):
+        self.tis = TIs.objects.create(nome="TI #118C", codigo="T118C", etnia="Teste")
+        self.pessoa = Pessoas.objects.create(nome="Pessoa #118C", cpf="77766655544")
+        self.cri = Cartorios.objects.create(
+            nome="CRI #118C", cns="118118C", cidade="Cidade", estado="SP"
+        )
+        self.tipo_matricula = DocumentoTipo.objects.create(tipo="matricula")
+        self.tipo_inicio = LancamentoTipo.objects.create(tipo="inicio_matricula")
+        self.imovel = Imovel.objects.create(
+            terra_indigena_id=self.tis,
+            nome="Imóvel #118C",
+            proprietario=self.pessoa,
+            matricula="118C",
+            tipo_documento_principal="matricula",
+            cartorio=self.cri,
+        )
+        self.documento_a = Documento.objects.create(
+            imovel=self.imovel,
+            tipo=self.tipo_matricula,
+            numero="100",
+            data=timezone.now().date(),
+            cartorio=self.cri,
+            livro="",
+            folha="",
+        )
+        # Primeiro lançamento do documento, com livro_origem/folha_origem
+        # preenchidos (dados da ORIGEM, não do documento atual).
+        Lancamento.objects.create(
+            documento=self.documento_a,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+            cartorio_origem=self.cri,
+            livro_origem="5",
+            folha_origem="10",
+        )
+
+        usuario = get_user_model().objects.create_user(
+            username="tester118c", password="senha-118c"
+        )
+        self.client.force_login(usuario)
+
+    def test_get_formulario_segundo_lancamento_nao_gera_keyerror(self):
+        """Abrir o formulário do segundo lançamento não deve estourar KeyError."""
+        url = reverse(
+            "novo_lancamento_documento",
+            args=[self.tis.id, self.imovel.id, self.documento_a.id],
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_formulario_segundo_lancamento_nao_herda_livro_folha_origem(self):
+        """O lançamento herdado no contexto não deve trazer livro/folha da origem."""
+        url = reverse(
+            "novo_lancamento_documento",
+            args=[self.tis.id, self.imovel.id, self.documento_a.id],
+        )
+
+        response = self.client.get(url)
+
+        lancamento_herdado = response.context["lancamento"]
+        self.assertFalse(
+            lancamento_herdado.livro_origem,
+            f"BUG #118 (P1): view herdou livro_origem: {lancamento_herdado.livro_origem!r}",
+        )
+        self.assertFalse(
+            lancamento_herdado.folha_origem,
+            f"BUG #118 (P1): view herdou folha_origem: {lancamento_herdado.folha_origem!r}",
+        )
