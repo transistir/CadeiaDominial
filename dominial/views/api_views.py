@@ -189,7 +189,7 @@ def pessoas(request):
 
 @login_required
 def alteracoes(request):
-    documentos = Documento.objects.all().order_by('-data')
+    documentos = Documento.objects.all().order_by('-data', '-id')
     return render(request, 'dominial/alteracoes.html', {'documentos': documentos})
 
 @login_required

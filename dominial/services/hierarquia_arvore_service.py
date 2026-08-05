@@ -293,6 +293,7 @@ class HierarquiaArvoreService:
                 cartorio=cartorio,
                 tipo=tipo_documento,
                 data=date.today(),  # Data padrão
+                data_presumida=True,
                 livro='',  # Campo obrigatório
                 folha='',  # Campo obrigatório
                 origem='',  # Será preenchido quando houver lançamentos

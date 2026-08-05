@@ -144,6 +144,7 @@ class HierarquiaOrigemService:
                 'tipo': tipo_doc,
                 'numero': origem_info['numero'],
                 'data': date.today(),
+                'data_presumida': True,
                 'cartorio': cartorio_origem,  # CRI da origem
                 'livro': '0',  # Valor padrão, será atualizado pelo primeiro lançamento
                 'folha': '0',  # Valor padrão, será atualizado pelo primeiro lançamento

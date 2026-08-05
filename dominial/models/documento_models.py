@@ -34,7 +34,6 @@ class Documento(models.Model):
     data = models.DateField()
     data_presumida = models.BooleanField(
         default=False,
-        db_index=True,
         help_text='True quando a data não é um dado jurídico real, mas a data de cadastro no sistema.',
     )
     cartorio = models.ForeignKey('Cartorios', on_delete=models.PROTECT)
@@ -97,7 +96,7 @@ class Documento(models.Model):
                 name='unique_documento_identidade_canonica',
             ),
         ]
-        ordering = ['-data']
+        ordering = ['-data', '-id']
 
     def __str__(self):
         return f"{self.tipo.get_tipo_display()} {self.numero} - {self.cartorio.nome}"

@@ -27,7 +27,7 @@ class LancamentoDocumentoService:
         if documento_id:
             return Documento.objects.get(id=documento_id, imovel=imovel)
         # Retorna o documento mais recente como ativo
-        return imovel.documentos.order_by('-data').first()
+        return imovel.documentos.order_by('-data', '-id').first()
     
     @staticmethod
     def criar_documento_matricula_automatico(imovel):
@@ -72,4 +72,4 @@ class LancamentoDocumentoService:
         Returns:
             QuerySet: Documentos do imóvel
         """
-        return imovel.documentos.all().order_by('-data', 'tipo', 'numero') 
+        return imovel.documentos.all().order_by('-data', 'tipo', 'numero', '-id')
