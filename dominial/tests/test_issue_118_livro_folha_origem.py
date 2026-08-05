@@ -28,6 +28,7 @@ from dominial.models import (
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_form_service import LancamentoFormService
+from dominial.services.lancamento_heranca_service import LancamentoHerancaService
 from dominial.services.regra_petrea_service import RegraPetreaService
 
 
@@ -212,6 +213,78 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
         # o documento preserva o livro que já tinha (9/11), não herda da origem
         self.assertEqual(self.documento_a.livro, "9")
         self.assertEqual(self.documento_a.folha, "11")
+
+    # ------------------------------------------------------------------
+    # Vetor 4 (review Codex): LancamentoHerancaService — herança não
+    # propaga livro_origem/folha_origem do primeiro lançamento para o
+    # segundo. Esses campos pertencem à ORIGEM, não ao documento atual.
+    # ------------------------------------------------------------------
+    def test_heranca_nao_propaga_livro_origem_para_novo_lancamento(self):
+        """O segundo lançamento de um documento NÃO herda livro_origem/folha_origem
+        do primeiro lançamento. Apenas cartorio_origem pode ser herdado."""
+        # Primeiro lançamento COM origem (livro_origem/folha_origem preenchidos)
+        Lancamento.objects.create(
+            documento=self.documento_a,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+            cartorio_origem=self.cri,
+            livro_origem="5",
+            folha_origem="10",
+        )
+
+        # Novo lançamento no mesmo documento (subsequente)
+        novo_lancamento = Lancamento.objects.create(
+            documento=self.documento_a,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+        )
+
+        LancamentoHerancaService.herdar_dados_para_novo_lancamento(
+            self.documento_a, novo_lancamento
+        )
+        novo_lancamento.refresh_from_db()
+
+        # livro_origem/folha_origem NÃO devem ser herdados (são da origem)
+        self.assertNotIn(
+            novo_lancamento.livro_origem, ("5",),
+            f"BUG #118: herança propagou livro_origem: {novo_lancamento.livro_origem!r}",
+        )
+        self.assertNotIn(
+            novo_lancamento.folha_origem, ("10",),
+            f"BUG #118: herança propagou folha_origem: {novo_lancamento.folha_origem!r}",
+        )
+        # cartorio_origem PODE ser herdado (legítimo)
+        # (não há assert de igualdade obrigatória — apenas confirmamos que
+        # livro/folha_origem não vazam)
+
+    def test_obter_dados_nao_retorna_livro_origem_do_primeiro(self):
+        """dados_primeiro não inclui livro_origem/folha_origem — são da origem,
+        não devem ser herdados por lançamentos subsequentes."""
+        # Primeiro lançamento com livro_origem/folha_origem preenchidos
+        Lancamento.objects.create(
+            documento=self.documento_a,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+            cartorio_origem=self.cri,
+            livro_origem="5",
+            folha_origem="10",
+        )
+
+        dados = LancamentoHerancaService.obter_dados_primeiro_lancamento(
+            self.documento_a
+        )
+
+        self.assertIsNotNone(dados, "Deve retornar dados do primeiro lançamento")
+        # livro_origem/folha_origem NÃO devem estar no resultado (ou devem ser
+        # vazios), pois pertencem à origem, não ao documento atual.
+        self.assertNotIn(
+            dados.get("livro_origem"), ("5",),
+            f"BUG #118: dados_primeiro incluiu livro_origem: {dados.get('livro_origem')!r}",
+        )
+        self.assertNotIn(
+            dados.get("folha_origem"), ("10",),
+            f"BUG #118: dados_primeiro incluiu folha_origem: {dados.get('folha_origem')!r}",
+        )
 
 
 class TestIssue118MultiplasOrigens(TestCase):

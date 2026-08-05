@@ -23,21 +23,12 @@ class LancamentoHerancaService:
         
         if not primeiro_lancamento:
             return None
-        
-        # HERANÇA MELHORADA: Usar campos do documento como fallback
-        livro_origem = primeiro_lancamento.livro_origem
-        folha_origem = primeiro_lancamento.folha_origem
-        
-        # Se os campos de origem não estiverem preenchidos, usar os campos do documento
-        if not livro_origem and documento.livro and documento.livro != '0':
-            livro_origem = documento.livro
-        
-        if not folha_origem and documento.folha and documento.folha != '0':
-            folha_origem = documento.folha
-        
+
+        # IMPORTANTE (#118): livro_origem/folha_origem pertencem à ORIGEM,
+        # não ao documento atual. Não devem ser propagados para lançamentos
+        # subsequentes (revisão Codex PR #119). Apenas cartorio_origem é
+        # herdado legitimamente.
         return {
-            'livro_origem': livro_origem,
-            'folha_origem': folha_origem,
             'cartorio_origem': primeiro_lancamento.cartorio_origem,
             # Não herdar campos que podem causar problemas com "None"
             # 'data_origem': primeiro_lancamento.data_origem,
@@ -86,32 +77,28 @@ class LancamentoHerancaService:
         if not dados_primeiro:
             return False
         
-        # Herdar dados apenas se não estiverem preenchidos no novo lançamento
-        if not lancamento.livro_origem and dados_primeiro['livro_origem']:
-            lancamento.livro_origem = dados_primeiro['livro_origem']
-        
-        if not lancamento.folha_origem and dados_primeiro['folha_origem']:
-            lancamento.folha_origem = dados_primeiro['folha_origem']
-        
-        if not lancamento.cartorio_origem and dados_primeiro['cartorio_origem']:
+        # IMPORTANTE (#118): livro_origem/folha_origem NÃO são herdados —
+        # pertencem à origem, não ao documento atual (revisão Codex PR #119).
+        # Herdar dados apenas se não estiverem preenchidos no novo lançamento.
+        if not lancamento.cartorio_origem and dados_primeiro.get('cartorio_origem'):
             lancamento.cartorio_origem = dados_primeiro['cartorio_origem']
-        
-        if not lancamento.data_origem and dados_primeiro['data_origem']:
+
+        if not lancamento.data_origem and dados_primeiro.get('data_origem'):
             lancamento.data_origem = dados_primeiro['data_origem']
-        
-        if not lancamento.origem and dados_primeiro['origem']:
+
+        if not lancamento.origem and dados_primeiro.get('origem'):
             lancamento.origem = dados_primeiro['origem']
-        
-        if not lancamento.area and dados_primeiro['area']:
+
+        if not lancamento.area and dados_primeiro.get('area'):
             lancamento.area = dados_primeiro['area']
-        
-        if not lancamento.forma and dados_primeiro['forma']:
+
+        if not lancamento.forma and dados_primeiro.get('forma'):
             lancamento.forma = dados_primeiro['forma']
-        
-        if not lancamento.descricao and dados_primeiro['descricao']:
+
+        if not lancamento.descricao and dados_primeiro.get('descricao'):
             lancamento.descricao = dados_primeiro['descricao']
-        
-        if not lancamento.titulo and dados_primeiro['titulo']:
+
+        if not lancamento.titulo and dados_primeiro.get('titulo'):
             lancamento.titulo = dados_primeiro['titulo']
-        
+
         return True 
