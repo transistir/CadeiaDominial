@@ -331,7 +331,7 @@ class HierarquiaArvoreService:
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
             'tipo_documento': documento.tipo.tipo,
-            'data': documento.data.strftime('%d/%m/%Y'),
+            'data': documento.data_exibicao.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,
             'folha': documento.folha,

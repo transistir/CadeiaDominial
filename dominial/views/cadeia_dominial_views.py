@@ -179,7 +179,7 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
                 'tipo': 'documento',
                 'id': documento.id,
                 'numero': documento.numero,
-                'data': documento.data.strftime('%d/%m/%Y'),
+                'data': documento.data_exibicao.strftime('%d/%m/%Y'),
                 'cartorio': documento.cartorio.nome,
                 'livro': documento.livro,
                 'folha': documento.folha,
@@ -670,7 +670,7 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
                 'numero': documento.numero,
                 'tipo': documento.tipo.tipo,
                 'tipo_display': documento.tipo.get_tipo_display(),
-                'data': documento.data.strftime('%d/%m/%Y'),
+                'data': documento.data_exibicao.strftime('%d/%m/%Y'),
                 'cartorio': documento.cartorio.nome,
                 'livro': documento.livro or '',
                 'folha': documento.folha or '',
@@ -679,7 +679,7 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
                 'is_importado': documento.imovel != imovel,
                 'is_compartilhado': False,
                 'lancamentos_count': documento.lancamentos.count(),
-                'detalhes': f"{documento.data.strftime('%d/%m/%Y')} - {documento.cartorio.nome}",
+                'detalhes': f"{documento.data_exibicao.strftime('%d/%m/%Y')} - {documento.cartorio.nome}",
                 'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,
                 'sigla_patrimonio_publico': documento.sigla_patrimonio_publico
             }
