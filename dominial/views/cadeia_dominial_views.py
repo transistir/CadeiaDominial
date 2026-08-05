@@ -172,14 +172,16 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
         'children': []
     }
     
-    for documento in documentos:
+    for idx, documento in enumerate(documentos):
+        is_primeiro = idx == 0
         doc_node = {
             'name': f'{documento.tipo.get_tipo_display()}: {documento.numero}',
             'data': {
                 'tipo': 'documento',
                 'id': documento.id,
                 'numero': documento.numero,
-                'data': documento.data_exibicao.strftime('%d/%m/%Y'),
+                'data': documento.data_exibicao.strftime('%d/%m/%Y') if is_primeiro else None,
+                'label_data': 'Análise iniciada em:' if is_primeiro else '',
                 'cartorio': documento.cartorio.nome,
                 'livro': documento.livro,
                 'folha': documento.folha,
@@ -664,13 +666,15 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
         documentos_processados_ids = set()
         
         # Primeiro, adicionar tronco principal
-        for documento in tronco_principal:
+        for idx, documento in enumerate(tronco_principal):
+            is_primeiro = idx == 0
             documento_processado = {
                 'id': documento.id,
                 'numero': documento.numero,
                 'tipo': documento.tipo.tipo,
                 'tipo_display': documento.tipo.get_tipo_display(),
-                'data': documento.data_exibicao.strftime('%d/%m/%Y'),
+                'data': documento.data_exibicao.strftime('%d/%m/%Y') if is_primeiro else None,
+                'label_data': 'Análise iniciada em:' if is_primeiro else '',
                 'cartorio': documento.cartorio.nome,
                 'livro': documento.livro or '',
                 'folha': documento.folha or '',
@@ -679,7 +683,7 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
                 'is_importado': documento.imovel != imovel,
                 'is_compartilhado': False,
                 'lancamentos_count': documento.lancamentos.count(),
-                'detalhes': f"{documento.data_exibicao.strftime('%d/%m/%Y')} - {documento.cartorio.nome}",
+                'detalhes': f"{documento.data_exibicao.strftime('%d/%m/%Y')} - {documento.cartorio.nome}" if is_primeiro else documento.cartorio.nome,
                 'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,
                 'sigla_patrimonio_publico': documento.sigla_patrimonio_publico
             }

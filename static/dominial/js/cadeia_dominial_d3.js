@@ -1151,7 +1151,11 @@ function renderArvoreD3(data, svgGroup, width, height) {
       }
 
       // Tooltip normal para documentos
-      return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\nLivro: ${d.data.livro}, Folha: ${d.data.folha}\nData: ${d.data.data}\n${d.data.total_lancamentos} lançamentos`;
+      // Issue #120: data/label_data controlam exibição (primeiro doc = "Análise iniciada em:")
+      const linhaData = d.data.label_data && d.data.data
+        ? `${d.data.label_data} ${d.data.data}`
+        : (d.data.data ? `Data: ${d.data.data}` : "");
+      return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\nLivro: ${d.data.livro}, Folha: ${d.data.folha}\n${linhaData}\n${d.data.total_lancamentos} lançamentos`;
     })
     .on("mouseover", function () {
       d3.select(this)

@@ -168,7 +168,20 @@ class HierarquiaArvoreService:
         
         # Recalcular níveis baseado na hierarquia real
         HierarquiaArvoreService._recalcular_niveis(arvore, documento_principal.id)
-        
+
+        # Issue #120: exibir "Análise iniciada em:" apenas no primeiro
+        # documento da cadeia; ocultar a data nos demais.
+        primeiro_doc_marcado = False
+        for doc_node in arvore['documentos']:
+            if doc_node.get('is_fim_cadeia'):
+                continue
+            if not primeiro_doc_marcado:
+                doc_node['label_data'] = 'Análise iniciada em:'
+                primeiro_doc_marcado = True
+            else:
+                doc_node['data'] = ''
+                doc_node['label_data'] = ''
+
         return arvore
     
     @staticmethod
