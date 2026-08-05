@@ -49,32 +49,32 @@ class RegraPetreaService:
             bool: True se foi definido, False se não foi possível
         """
         documento = lancamento.documento
-        
+
         # Obter livro e folha do lançamento
         livro_lancamento = None
         folha_lancamento = None
-        
-        # Verificar campos de origem do lançamento (prioridade 1)
-        if lancamento.livro_origem and lancamento.livro_origem.strip():
-            livro_lancamento = lancamento.livro_origem.strip()
-        if lancamento.folha_origem and lancamento.folha_origem.strip():
-            folha_lancamento = lancamento.folha_origem.strip()
-        
-        # Se não encontrou nos campos de origem, verificar campos de transação (prioridade 2)
-        if not livro_lancamento and lancamento.livro_transacao and lancamento.livro_transacao.strip():
+
+        # IMPORTANTE (#118): livro_origem/folha_origem pertencem à ORIGEM, não ao
+        # documento atual. A regra pétrea NÃO deve usar lancamento.livro_origem
+        # nem lancamento.folha_origem para definir o documento atual. Esses
+        # campos servem ao documento de origem (ver lancamento_origem_service:
+        # _obter_livro_folha_origem → _criar_documento_automatico_com_cartorio).
+
+        # Prioridade 1: campos de transação (se existirem)
+        if lancamento.livro_transacao and lancamento.livro_transacao.strip():
             livro_lancamento = lancamento.livro_transacao.strip()
-        if not folha_lancamento and lancamento.folha_transacao and lancamento.folha_transacao.strip():
+        if lancamento.folha_transacao and lancamento.folha_transacao.strip():
             folha_lancamento = lancamento.folha_transacao.strip()
-        
-        # Se ainda não encontrou, verificar campos básicos do formulário (prioridade 3)
-        # Estes dados vêm do processamento do formulário no LancamentoFormService
-        if not livro_lancamento and hasattr(lancamento, 'livro_origem'):
-            # O campo livro_origem do lançamento pode conter o livro básico
-            livro_lancamento = lancamento.livro_origem.strip() if lancamento.livro_origem else None
-        
-        if not folha_lancamento and hasattr(lancamento, 'folha_origem'):
-            # O campo folha_origem do lançamento pode conter a folha básica
-            folha_lancamento = lancamento.folha_origem.strip() if lancamento.folha_origem else None
+
+        # Prioridade 2: valor já aplicado ao documento pelo form service
+        # (_aplicar_campos_documento escreve livro_documento/folha_documento).
+        if not livro_lancamento and documento.livro:
+            livro_lancamento = documento.livro
+        if not folha_lancamento and documento.folha:
+            folha_lancamento = documento.folha
+
+        # NOTA: NUNCA usar lancamento.livro_origem/folha_origem aqui — esses
+        # campos pertencem ao documento de origem, não ao documento atual.
         
         # Atualizar documento se encontrou livro e folha
         if livro_lancamento or folha_lancamento:
