@@ -212,3 +212,157 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
         # o documento preserva o livro que já tinha (9/11), não herda da origem
         self.assertEqual(self.documento_a.livro, "9")
         self.assertEqual(self.documento_a.folha, "11")
+
+
+class TestIssue118MultiplasOrigens(TestCase):
+    """COM 2+ ORIGENS: cada uma preserva seu próprio livro/folha individualmente,
+    e o documento ATUAL não recebe livro/folha de nenhuma origem.
+
+    O fluxo que já funciona (e NÃO deve ser tocado):
+      lancamento_campos_service → cache 'mapeamento_origens_lancamento_{id}'
+      → lancamento_origem_service._sincronizar_origens_estruturadas
+      → cria LancamentoOrigem por origem com seu livro/folha
+    """
+
+    def setUp(self):
+        self.tis = TIs.objects.create(nome="TI #118B", codigo="T118B", etnia="Teste")
+        self.pessoa = Pessoas.objects.create(nome="Pessoa #118B", cpf="88877766655")
+        self.cri = Cartorios.objects.create(
+            nome="CRI #118B", cns="118118B", cidade="Cidade", estado="SP"
+        )
+        self.tipo_matricula = DocumentoTipo.objects.create(tipo="matricula")
+        self.tipo_transcricao = DocumentoTipo.objects.create(tipo="transcricao")
+        self.tipo_inicio = LancamentoTipo.objects.create(tipo="inicio_matricula")
+        self.imovel = Imovel.objects.create(
+            terra_indigena_id=self.tis,
+            nome="Imóvel #118B",
+            proprietario=self.pessoa,
+            matricula="118B",
+            tipo_documento_principal="matricula",
+            cartorio=self.cri,
+        )
+        # documento A (matrícula atual) — sem livro/folha
+        self.documento_a = Documento.objects.create(
+            imovel=self.imovel,
+            tipo=self.tipo_matricula,
+            numero="100",
+            data=timezone.now().date(),
+            cartorio=self.cri,
+            livro="",
+            folha="",
+        )
+
+    def _criar_lancamento_com_mapeamento_multiplas_origens(self):
+        """Cria um lançamento cujo cache de mapeamento tem 2 origens, cada uma
+        com seu próprio livro/folha — espelhando o que
+        ``lancamento_campos_service`` grava para ``livro_origem[]``/``folha_origem[]``.
+        """
+        from django.core.cache import cache
+
+        lancamento = Lancamento.objects.create(
+            documento=self.documento_a,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+            cartorio_origem=self.cri,
+            origem="M101; T202",
+        )
+
+        # Mapeamento por origem, exatamente como lancamento_campos_service faz.
+        cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
+        cache.set(cache_key, [
+            {
+                "origem": "M101",
+                "cartorio_id": self.cri.id,
+                "cartorio_nome": self.cri.nome,
+                "livro": "5",
+                "folha": "10",
+            },
+            {
+                "origem": "T202",
+                "cartorio_id": self.cri.id,
+                "cartorio_nome": self.cri.nome,
+                "livro": "12",
+                "folha": "20",
+            },
+        ], timeout=3600)
+        return lancamento
+
+    def test_multiplas_origens_cada_uma_preserva_seu_livro_folha(self):
+        """CADA LancamentoOrigem tem seu próprio livro/folha (M101→5/10, T202→12/20)."""
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+
+        lancamento = self._criar_lancamento_com_mapeamento_multiplas_origens()
+
+        # Processar origens (sincroniza origens estruturadas).
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento, lancamento.origem, self.imovel
+        )
+
+        origens = LancamentoOrigem.objects.filter(
+            lancamento=lancamento
+        ).order_by("indice_origem")
+        self.assertEqual(origens.count(), 2)
+
+        # M101 → livro=5, folha=10
+        origem_0 = origens[0]
+        self.assertEqual(origem_0.numero_normalizado, "101")
+        self.assertEqual(origem_0.livro, "5")
+        self.assertEqual(origem_0.folha, "10")
+
+        # T202 → livro=12, folha=20
+        origem_1 = origens[1]
+        self.assertEqual(origem_1.numero_normalizado, "202")
+        self.assertEqual(origem_1.livro, "12")
+        self.assertEqual(origem_1.folha, "20")
+
+    def test_multiplas_origens_documento_atual_nao_recebe_livro_folha(self):
+        """Com 2+ origens, o documento ATUAL não recebe livro/folha de nenhuma."""
+        from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+        from dominial.services.regra_petrea_service import RegraPetreaService
+
+        lancamento = self._criar_lancamento_com_mapeamento_multiplas_origens()
+
+        # Simular o pipeline: _aplicar_campos_documento (sem livro_documento) +
+        # regra pétrea + processar origens. Em nenhum momento o documento
+        # atual deve receber livro/folha das origens (5/10 nem 12/20).
+        LancamentoCriacaoService._aplicar_campos_documento(
+            lancamento,
+            {"livro_documento": "", "folha_documento": "",
+             "livro_origem": "5", "folha_origem": "10"},
+        )
+        RegraPetreaService.aplicar_regra_petrea(lancamento)
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento, lancamento.origem, self.imovel
+        )
+
+        self.documento_a.refresh_from_db()
+        self.assertNotIn(
+            self.documento_a.livro, ("5", "12"),
+            f"BUG #118: documento atual recebeu livro de uma origem: {self.documento_a.livro!r}",
+        )
+        self.assertNotIn(
+            self.documento_a.folha, ("10", "20"),
+            f"BUG #118: documento atual recebeu folha de uma origem: {self.documento_a.folha!r}",
+        )
+
+    def test_multiplas_origens_nao_se_cruzam(self):
+        """A origem 0 não recebe o livro/folha da origem 1 e vice-versa."""
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+
+        lancamento = self._criar_lancamento_com_mapeamento_multiplas_origens()
+
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento, lancamento.origem, self.imovel
+        )
+
+        origens = LancamentoOrigem.objects.filter(
+            lancamento=lancamento
+        ).order_by("indice_origem")
+
+        # M101 NÃO deve ter 12/20 (da T202)
+        self.assertNotEqual(origens[0].livro, "12")
+        self.assertNotEqual(origens[0].folha, "20")
+        # T202 NÃO deve ter 5/10 (da M101)
+        self.assertNotEqual(origens[1].livro, "5")
+        self.assertNotEqual(origens[1].folha, "10")
