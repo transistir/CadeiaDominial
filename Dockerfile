@@ -44,9 +44,9 @@ RUN adduser --disabled-password --gecos '' appuser
 RUN mkdir -p /var/log/cadeia_dominial \
     && chown -R appuser:appuser /var/log/cadeia_dominial
 
-# Criar diretório staticfiles e dar permissões
-RUN mkdir -p /app/staticfiles \
-    && chown -R appuser:appuser /app/staticfiles
+# Criar diretórios staticfiles e media e dar permissões
+RUN mkdir -p /app/staticfiles /app/media \
+    && chown -R appuser:appuser /app/staticfiles /app/media
 
 # Copiar script de inicialização e dar permissão (como root)
 COPY scripts/init.sh /app/init.sh
