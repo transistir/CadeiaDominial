@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.core.management import call_command
 from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from ..utils import normalizar_texto_opcional
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -369,19 +370,19 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                         'tipo': lancamento.tipo.tipo if lancamento.tipo else '',
                         'tipo_tipo': lancamento.tipo.tipo if lancamento.tipo else '',  # Adicionar para compatibilidade
                         'tipo_display': lancamento.tipo.get_tipo_display() if lancamento.tipo else '',
-                        'numero_lancamento': lancamento.numero_lancamento,
+                        'numero_lancamento': normalizar_texto_opcional(lancamento.numero_lancamento),
                         'data': lancamento.data.strftime('%d/%m/%Y') if lancamento.data else '',
-                        'forma': lancamento.forma,
-                        'titulo': lancamento.titulo,
-                        'descricao': lancamento.descricao,
+                        'forma': normalizar_texto_opcional(lancamento.forma),
+                        'titulo': normalizar_texto_opcional(lancamento.titulo),
+                        'descricao': normalizar_texto_opcional(lancamento.descricao),
                         'area': lancamento.area,
-                        'origem': lancamento.origem,
-                        'observacoes': lancamento.observacoes,
+                        'origem': normalizar_texto_opcional(lancamento.origem),
+                        'observacoes': normalizar_texto_opcional(lancamento.observacoes),
                         'keyword_encontrada': getattr(lancamento, 'keyword_encontrada', None),
                         'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,
                         'cartorio_origem_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else None,
-                        'livro_transacao': lancamento.livro_transacao,
-                        'folha_transacao': lancamento.folha_transacao,
+                        'livro_transacao': normalizar_texto_opcional(lancamento.livro_transacao),
+                        'folha_transacao': normalizar_texto_opcional(lancamento.folha_transacao),
                         'data_transacao': lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else None,
                         'pessoas': []
                     }
