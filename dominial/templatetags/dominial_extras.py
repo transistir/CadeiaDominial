@@ -2,6 +2,8 @@ from django import template
 import re
 import unicodedata
 
+from dominial.utils.formatacao_utils import normalizar_texto_opcional
+
 register = template.Library()
 
 
@@ -21,6 +23,11 @@ def _classificacao_fim_cadeia_display(classificacao):
     }
     return labels.get(chave, classificacao)
 
+
+@register.filter
+def limpar_none(valor, padrao="-"):
+    """Exibe o padrão para None, string 'None' ou texto vazio."""
+    return normalizar_texto_opcional(valor, padrao)
 
 @register.filter
 def get_item(dictionary, key):

@@ -65,7 +65,7 @@
             {{ lancamento.forma|default:"-" }}
           </div>
           <div class="resumo-planilha-cell" role="cell">
-            {{ lancamento.titulo|default:"-" }}
+            {{ lancamento.titulo|limpar_none }}
           </div>
           <div class="resumo-planilha-cell" role="cell">
             {{ lancamento.cartorio_transmissao_compat.nome|default:"-" }}

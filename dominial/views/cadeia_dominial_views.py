@@ -2,6 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
+from ..utils import normalizar_texto_opcional
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -185,7 +186,7 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
                 'cartorio': documento.cartorio.nome,
                 'livro': documento.livro,
                 'folha': documento.folha,
-                'origem': documento.origem or '',
+                'origem': normalizar_texto_opcional(documento.origem, ''),
                 'tipo_documento': documento.tipo.tipo,  # Adicionar tipo do documento
                 'classificacao_fim_cadeia': documento.classificacao_fim_cadeia,
                 'sigla_patrimonio_publico': documento.sigla_patrimonio_publico,  # Adicionar classificação de fim de cadeia
@@ -208,10 +209,13 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
                     'tipo_lancamento': lancamento.tipo.tipo,
                     'data': lancamento.data.strftime('%d/%m/%Y'),
                     'eh_inicio_matricula': lancamento.eh_inicio_matricula,
-                    'forma': lancamento.forma or '',
-                    'descricao': lancamento.descricao or '',
-                    'titulo': lancamento.titulo or '',
-                    'observacoes': lancamento.observacoes or ''
+                    'forma': normalizar_texto_opcional(lancamento.forma, ''),
+                    'descricao': normalizar_texto_opcional(lancamento.descricao, ''),
+                    'titulo': normalizar_texto_opcional(lancamento.titulo, ''),
+                    'observacoes': normalizar_texto_opcional(lancamento.observacoes, ''),
+                    'numero_lancamento': normalizar_texto_opcional(lancamento.numero_lancamento, ''),
+                    'livro_transacao': normalizar_texto_opcional(lancamento.livro_transacao, ''),
+                    'folha_transacao': normalizar_texto_opcional(lancamento.folha_transacao, '')
                 }
             }
             doc_node['children'].append(lanc_node)
@@ -579,7 +583,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
                     else:
                         # Para outros tipos, mostrar campos específicos
                         ws.cell(row=row, column=8, value=lancamento.forma or "-").border = border
-                        ws.cell(row=row, column=9, value=lancamento.titulo or "-").border = border
+                        ws.cell(row=row, column=9, value=normalizar_texto_opcional(lancamento.titulo, "-")).border = border
                         ws.cell(row=row, column=10, value=lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else "-").border = border
                         ws.cell(row=row, column=11, value=lancamento.livro_transacao or "-").border = border
                         ws.cell(row=row, column=12, value=lancamento.folha_transacao or "-").border = border

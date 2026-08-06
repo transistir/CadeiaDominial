@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load dominial_extras %}
 
 {% block title %}
     {% if modo_edicao %}Editar Lançamento{% else %}Novo Lançamento{% endif %} - {{ imovel.nome }}
@@ -113,8 +114,10 @@
                 </div>
                 <div class="form-group">
                     <label for="titulo_transacao">Título</label>
+                    {% with titulo_limpo=lancamento.titulo|limpar_none:"" %}
                     <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro"
-                           value="{% if modo_edicao and lancamento.titulo %}{{ lancamento.titulo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
+                           value="{% if modo_edicao and titulo_limpo %}{{ titulo_limpo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
+                    {% endwith %}
                 </div>
                 <div class="form-group">
                     <label for="cartorio_transmissao_nome">Cartório</label>

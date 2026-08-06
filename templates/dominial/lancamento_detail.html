@@ -129,12 +129,14 @@
                                 <span class="info-value">{{ lancamento.forma }}</span>
                             </div>
                             {% endif %}
-                            {% if lancamento.titulo %}
+                            {% with titulo=lancamento.titulo|limpar_none:"" %}
+                            {% if titulo %}
                             <div class="info-item">
                                 <span class="info-label">Título</span>
-                                <span class="info-value">{{ lancamento.titulo }}</span>
+                                <span class="info-value">{{ titulo }}</span>
                             </div>
                             {% endif %}
+                            {% endwith %}
                             {% if lancamento.area %}
                             <div class="info-item">
                                 <span class="info-label">Área</span>
@@ -327,7 +329,8 @@
                 {% endif %}
 
                 <!-- Transação (para Registro e outros tipos que tenham) -->
-                {% if lancamento.cartorio_transmissao_compat or lancamento.livro_transacao or lancamento.folha_transacao or lancamento.data_transacao or lancamento.titulo or lancamento.forma or lancamento.descricao or lancamento.valor_transacao or lancamento.area or lancamento.origem or lancamento.observacoes or lancamento.detalhes or lancamento.transmitente or lancamento.adquirente or lancamento.pessoas.all %}
+                {% with titulo_limpo=lancamento.titulo|limpar_none:"" forma_limpa=lancamento.forma|limpar_none:"" descricao_limpa=lancamento.descricao|limpar_none:"" origem_limpa=lancamento.origem|limpar_none:"" observacoes_limpa=lancamento.observacoes|limpar_none:"" detalhes_limpos=lancamento.detalhes|limpar_none:"" livro_transacao_limpo=lancamento.livro_transacao|limpar_none:"" folha_transacao_limpa=lancamento.folha_transacao|limpar_none:"" %}
+                {% if lancamento.cartorio_transmissao_compat or livro_transacao_limpo or folha_transacao_limpa or lancamento.data_transacao or titulo_limpo or forma_limpa or descricao_limpa or lancamento.valor_transacao or lancamento.area or origem_limpa or observacoes_limpa or detalhes_limpos or lancamento.transmitente or lancamento.adquirente or lancamento.pessoas.all %}
                 {% if lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}
                 <div class="info-card">
                     <div class="card-header">
@@ -359,12 +362,14 @@
                                 <span class="info-value">{{ lancamento|origem_formatada_completa|safe }}</span>
                             </div>
                             {% endif %}
-                            {% if lancamento.titulo %}
+                            {% with titulo=lancamento.titulo|limpar_none:"" %}
+                            {% if titulo %}
                             <div class="info-item full-width">
                                 <span class="info-label">Título</span>
-                                <span class="info-value">{{ lancamento.titulo }}</span>
+                                <span class="info-value">{{ titulo }}</span>
                             </div>
                             {% endif %}
+                            {% endwith %}
                             {% if lancamento.descricao %}
                             <div class="info-item full-width">
                                 <span class="info-label">Descrição</span>
@@ -389,10 +394,10 @@
                                 <span class="info-value">{{ lancamento.cartorio_transmissao_compat.nome }}</span>
                             </div>
                             {% endif %}
-                            {% if lancamento.livro_transacao or lancamento.folha_transacao %}
+                            {% if livro_transacao_limpo or folha_transacao_limpa %}
                             <div class="info-item">
                                 <span class="info-label">Livro/Folha</span>
-                                <span class="info-value">{{ lancamento.livro_transacao|default:"-" }}/{{ lancamento.folha_transacao|default:"-" }}</span>
+                                <span class="info-value">{{ livro_transacao_limpo|default:"-" }}/{{ folha_transacao_limpa|default:"-" }}</span>
                             </div>
                             {% endif %}
                             {% if lancamento.data_transacao %}
@@ -406,6 +411,7 @@
                 </div>
                 {% endif %}
                     {% endif %}
+                {% endwith %}
 
                 <!-- Observações -->
                 {% if lancamento.observacoes and lancamento.tipo.tipo != 'inicio_matricula' and lancamento.tipo.tipo != 'averbacao' %}

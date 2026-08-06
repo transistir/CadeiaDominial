@@ -438,7 +438,7 @@ class LancamentoOrigemService:
 
     @staticmethod
     def _normalizar_metadado_origem(valor):
-        if isinstance(valor, str) and valor.strip():
+        if isinstance(valor, str) and valor.strip() and valor.strip() != "None":
             return valor.strip()
         return None
 

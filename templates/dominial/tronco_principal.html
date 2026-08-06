@@ -128,11 +128,13 @@
                                     </div>
                                     {% endif %}
                                     
-                                    {% if lancamento.titulo %}
+                                    {% with titulo=lancamento.titulo|limpar_none:"" %}
+                                    {% if titulo %}
                                     <div class="lancamento-detail">
-                                        <strong>Título:</strong> {{ lancamento.titulo }}
+                                        <strong>Título:</strong> {{ titulo }}
                                     </div>
                                     {% endif %}
+                                    {% endwith %}
                                     
                                     {% if lancamento.observacoes %}
                                     <div class="lancamento-detail secondary">
