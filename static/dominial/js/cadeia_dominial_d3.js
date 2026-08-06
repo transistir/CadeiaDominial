@@ -241,6 +241,15 @@ document.addEventListener("DOMContentLoaded", function () {
   // Comportamento de zoom/pan
   const zoom = d3
     .zoom()
+    .filter((event) => {
+      // Bloquear zoom/pan quando gesto iniciar dentro de um card ou controle
+      if (event.target.closest?.(".node, .zoom-controls")) {
+        return false;
+      }
+      // Mesmo comportamento padrão do D3: ignora clique secundário,
+      // permite wheel com Ctrl
+      return (!event.ctrlKey || event.type === "wheel") && !event.button;
+    })
     .scaleExtent([0.1, 3.0]) // Limites mais amplos para zoom
     .wheelDelta((event) => -event.deltaY * 0.002) // Velocidade do scroll
     .on("zoom", (event) => {
@@ -1024,6 +1033,17 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .style("cursor", "pointer")
     .attr("transform", (d) => `translate(${d.y + 120},${d.x + 20})`) // Posicionar imediatamente
     .style("opacity", "0") // Começar invisível para animação de entrada
+    .on("click.card", (event, d) => {
+      event.stopPropagation();
+      if (d.data.is_fim_cadeia) {
+        cardFimCadeiaComFoco = event.currentTarget;
+        abrirPainelFimCadeia(d);
+      } else {
+        window.location.assign(
+          `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`,
+        );
+      }
+    })
     .on("mouseover", function (event, d) {
       // Destacar o nó atual
       d3.select(this)
@@ -1175,15 +1195,6 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr("filter", "drop-shadow(0 2px 8px rgba(0,0,0,0.10))")
         .attr("transform", "scale(1)");
     })
-    .on("click", (event, d) => {
-      event.stopPropagation();
-      if (d.data.is_fim_cadeia) {
-        cardFimCadeiaComFoco = event.currentTarget.parentNode;
-        abrirPainelFimCadeia(d);
-      } else {
-        window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
-      }
-    });
 
   node
     .filter((d) => d.data.is_fim_cadeia)
