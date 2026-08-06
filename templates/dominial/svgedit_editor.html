@@ -30,28 +30,30 @@
     <script type="module">
         import Editor from './Editor.js'
 
+        // Lê e consome a chave ANTES de qualquer await, para não competir
+        // com o cleanup de fallback do produtor.
+        const LS_KEY = 'cadeiaDominialSvgEdit'
+        const svg = localStorage.getItem(LS_KEY)
+        localStorage.removeItem(LS_KEY)
+
+        // O ext-storage do SVGEdit persiste o canvas em svgedit-<canvasName> e o
+        // restaura na init(), sobrescrevendo o organograma que injetamos. Aqui o
+        // conteúdo vem SEMPRE da aba de origem, então o estado salvo nunca serve.
+        localStorage.removeItem('svgedit-cadeia-dominial')
+
         const svgEditor = new Editor(document.getElementById('container'))
         svgEditor.setConfig({
-            // Isola o armazenamento local deste editor do SVGEdit padrão
             canvasName: 'cadeia-dominial',
             lang: 'pt-BR',
+            noStorageOnLoad: true,
+            storagePrompt: false,
             extensions: [],
             noDefaultExtensions: false
         })
-        svgEditor.init()
 
-        // A query string ?t= (cache-buster) força o navegador a recarregar a
-        // aba do editor, garantindo que o SVGEdit receba o SVG atual do
-        // localStorage em vez de reutilizar estado da cadeia anterior.
-        // O SVG viaja pelo localStorage (mesma origem) — árvores grandes
-        // estouram o limite de tamanho da query string (~2KB-8KB).
-        // A chave é removida pelo editor ao carregar; se o popup for bloqueado,
-        // setTimeout no produtor limpa como fallback.
-        const svg = localStorage.getItem('cadeiaDominialSvgEdit')
-        if (svg) {
-            localStorage.removeItem('cadeiaDominialSvgEdit')
-            svgEditor.loadFromString(svg)
-        }
+        // init() é async — carregar antes dela resolver faz o restore vencer.
+        await svgEditor.init()
+        if (svg) svgEditor.loadFromString(svg)
     </script>
 </body>
 </html>

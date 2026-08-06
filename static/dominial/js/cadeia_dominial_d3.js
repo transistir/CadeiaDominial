@@ -1760,8 +1760,8 @@ window.editarArvoreSVG = function () {
 
   // O SVG viaja pelo localStorage (mesma origem) em vez da query string:
   // árvores grandes estouram o limite de tamanho da URL (≈2KB-8KB).
-  // A chave é REMOVIDA pelo editor ao carregar; se o popup for bloqueado
-  // ou a aba fechada antes do load, um setTimeout de fallback limpa após 5s.
+  // A chave é REMOVIDA pelo editor ao carregar. Chave órfã (popup bloqueado
+  // ou aba fechada antes do load) é inofensiva: a próxima abertura sobrescreve.
   // NOTA: window.name NÃO funciona aqui — window.open("_blank") cria um novo
   // browsing context sem acesso ao window.name da aba de origem.
   const LS_KEY = "cadeiaDominialSvgEdit";
@@ -1774,9 +1774,6 @@ window.editarArvoreSVG = function () {
     );
     return;
   }
-
-  // Fallback cleanup: remove a chave se o editor não consumir em 5s
-  setTimeout(() => localStorage.removeItem(LS_KEY), 5000);
 
   window.open("/dominial/editor/?t=" + Date.now(), "_blank");
 };
