@@ -44,22 +44,21 @@ RUN adduser --disabled-password --gecos '' appuser
 RUN mkdir -p /var/log/cadeia_dominial \
     && chown -R appuser:appuser /var/log/cadeia_dominial
 
-# Criar diretórios staticfiles e media e dar permissões
+# Copiar scripts de inicialização e dar permissão (como root)
+COPY scripts/init.sh /app/init.sh
+COPY scripts/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/init.sh /app/entrypoint.sh
+
+# Criar diretório staticfiles e media (perms garantidas no entrypoint root)
 RUN mkdir -p /app/staticfiles /app/media \
     && chown -R appuser:appuser /app/staticfiles /app/media
 
-# Copiar script de inicialização e dar permissão (como root)
-COPY scripts/init.sh /app/init.sh
-RUN chmod +x /app/init.sh
-
-# Mudar para usuário appuser
-USER appuser
-
-# Coletar arquivos estáticos como appuser
+# Coletar arquivos estáticos como ROOT (entrypoint dropa privilegios depois)
 RUN python manage.py collectstatic --noinput
 
 # Expor porta
 EXPOSE 8000
 
-# Comando de inicialização
-CMD ["/app/init.sh"] 
+# Comando de inicialização: entrypoint como ROOT garante perms do bind mount,
+# entao dropa privilegios para appuser via su
+ENTRYPOINT ["/app/entrypoint.sh"]
