@@ -322,13 +322,15 @@ document.addEventListener("DOMContentLoaded", function () {
         fitTreeToViewport();
       });
 
-      // Habilitar botão de salvar SVG (estava disabled durante carga)
-      const btnSalvar = document.getElementById("btn-salvar-svg");
-      if (btnSalvar) {
-        btnSalvar.disabled = false;
-        btnSalvar.style.opacity = "1";
-        btnSalvar.style.cursor = "pointer";
-      }
+      // Habilitar botões de SVG (estavam disabled durante carga)
+      ["btn-salvar-svg", "btn-editar-svg"].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.disabled = false;
+          btn.style.opacity = "1";
+          btn.style.cursor = "pointer";
+        }
+      });
     })
     .catch((err) => {
       loadingIndicator.remove();
@@ -1653,14 +1655,17 @@ window.fimDaArvore = function () {
   });
 })();
 
-/* ── Salvar SVG do Organograma Completo ── */
-window.salvarArvoreSVG = function () {
+/* ── Exportar SVG do Organograma Completo ── */
+
+// Serializa o organograma inteiro (sem o zoom da tela) como string SVG.
+// Retorna null quando a árvore ainda não foi renderizada.
+function getSVGParaExportacao() {
   const svg = window._d3svg;
-  if (!svg || !window._zoomGroup) return;
+  if (!svg || !window._zoomGroup) return null;
 
   // Calcular bounds a partir das posições reais dos nós
   const nodes = window._zoomGroup.selectAll(".node");
-  if (nodes.size() === 0) return;
+  if (nodes.size() === 0) return null;
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   nodes.each(function () {
@@ -1676,7 +1681,7 @@ window.salvarArvoreSVG = function () {
       }
     }
   });
-  if (!isFinite(minX)) return;
+  if (!isFinite(minX)) return null;
 
   const extraMargin = 40;
   const w = maxX - minX + 2 * extraMargin;
@@ -1718,7 +1723,12 @@ window.salvarArvoreSVG = function () {
 
   // Serializar
   const serializer = new XMLSerializer();
-  const svgString = serializer.serializeToString(clone);
+  return serializer.serializeToString(clone);
+}
+
+window.salvarArvoreSVG = function () {
+  const svgString = getSVGParaExportacao();
+  if (!svgString) return;
 
   // Download
   const blob = new Blob([svgString], { type: "image/svg+xml" });
@@ -1730,4 +1740,24 @@ window.salvarArvoreSVG = function () {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+};
+
+/* ── Editar SVG do Organograma no SVGEdit ── */
+window.editarArvoreSVG = function () {
+  const svgString = getSVGParaExportacao();
+  if (!svgString) return;
+
+  // O SVG vai pelo localStorage (mesma origem) em vez da URL: árvores grandes
+  // estouram o limite de tamanho da query string. O editor consome e apaga.
+  try {
+    localStorage.setItem("cadeiaDominialSvgEdit", svgString);
+  } catch (err) {
+    alert(
+      "Não foi possível abrir o editor: o organograma é grande demais para o " +
+      "armazenamento do navegador. Use o botão de salvar e abra o arquivo no editor."
+    );
+    return;
+  }
+
+  window.open("/dominial/editor/", "_blank");
 };

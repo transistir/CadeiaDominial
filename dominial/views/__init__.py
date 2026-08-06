@@ -40,6 +40,7 @@ from .cadeia_dominial_views import (
     cadeia_dominial_dados,
     cadeia_dominial_tabela,
     cadeia_dominial_d3,
+    svgedit_editor,
 )
 
 # Views de Documentos Digitais
@@ -105,7 +106,8 @@ __all__ = [
     'cadeia_dominial_dados',
     'cadeia_dominial_tabela',
     'cadeia_dominial_d3',
-    
+    'svgedit_editor',
+
     # Views de Documentos Digitais
     'upload_documento_digital',
     'servir_documento_digital',

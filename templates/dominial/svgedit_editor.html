@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge, chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Editar SVG - Cadeia Dominial</title>
+
+    <!-- O SVGEdit resolve CSS, ícones e extensões por caminhos relativos ao
+         documento (./svgedit.css, ./images, ./extensions). O <base> aponta
+         todos eles para o CDN, evitando 404 no servidor da aplicação. -->
+    <base href="https://cdn.jsdelivr.net/npm/svgedit@7.4.2/dist/editor/">
+
+    <style id="styleoverrides" media="screen"></style>
+    <link href="svgedit.css" rel="stylesheet" media="all">
+</head>
+<body style="margin:0">
+    <!-- O container do SVGEdit precisa ter largura e altura definidas -->
+    <div id="container" style="width:100%;height:100vh"></div>
+
+    <script type="module">
+        import Editor from './Editor.js'
+
+        const svgEditor = new Editor(document.getElementById('container'))
+        svgEditor.setConfig({
+            // Isola o armazenamento local deste editor do SVGEdit padrão
+            canvasName: 'cadeia-dominial',
+            lang: 'pt-BR',
+            extensions: [],
+            noDefaultExtensions: false
+        })
+        svgEditor.init()
+
+        // O organograma chega pelo navegador (mesma origem), não pelo servidor:
+        // via `?source=` a URL estouraria o limite de tamanho em árvores
+        // grandes e o SVG apareceria nos logs de acesso.
+        const params = new URLSearchParams(location.search)
+        if (!params.has('source') && !params.has('url')) {
+            const svg = localStorage.getItem('cadeiaDominialSvgEdit')
+            if (svg) {
+                localStorage.removeItem('cadeiaDominialSvgEdit')
+                svgEditor.loadFromString(svg)
+            }
+        }
+    </script>
+</body>
+</html>
