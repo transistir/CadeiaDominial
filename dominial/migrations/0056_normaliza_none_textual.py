@@ -31,6 +31,7 @@ CAMPOS_POR_MODELO = {
         "folha_origem",
     ),
     "FimCadeia": ("descricao", "sigla"),
+    "LancamentoOrigem": ("livro", "folha"),
 }
 
 

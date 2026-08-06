@@ -21,6 +21,7 @@ CAMPOS_POR_MODELO = {
         'livro_origem', 'folha_origem',
     ),
     'FimCadeia': ('descricao', 'sigla'),
+    'LancamentoOrigem': ('livro', 'folha'),
 }
 
 
@@ -115,6 +116,19 @@ class NormalizaNoneTextualMigrationTest(TransactionTestCase):
             dados.update(
                 nome=f'Fim de Cadeia {extra_seq}',
                 classificacao='sem_origem',
+            )
+        elif model_name == 'LancamentoOrigem':
+            lanc = apps.get_model('dominial', 'Lancamento').objects.create(
+                documento_id=self.documento.pk,
+                tipo_id=self.lanc_tipo.pk,
+                data=date(2026, 1, 1),
+            )
+            dados.update(
+                lancamento_id=lanc.pk,
+                indice_origem=extra_seq or 1,
+                tipo_documento='matricula',
+                numero=f'LO-{extra_seq}',
+                cartorio_id=self.cartorio.pk,
             )
 
         return model.objects.create(**dados)
