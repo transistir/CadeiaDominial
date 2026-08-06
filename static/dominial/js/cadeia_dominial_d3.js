@@ -1759,5 +1759,5 @@ window.editarArvoreSVG = function () {
     return;
   }
 
-  window.open("/dominial/editor/", "_blank");
+  window.open("/dominial/editor/?t=" + Date.now(), "_blank");
 };

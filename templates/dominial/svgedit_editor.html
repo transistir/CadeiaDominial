@@ -33,7 +33,9 @@
 
         // O organograma chega pelo navegador (mesma origem), não pelo servidor:
         // via `?source=` a URL estouraria o limite de tamanho em árvores
-        // grandes e o SVG apareceria nos logs de acesso.
+        // grandes e o SVG apareceria nos logs de acesso. A query string `?t=`
+        // força o navegador a recarregar a aba (evita reutilizar aba aberta
+        // mostrando a cadeia anterior).
         const params = new URLSearchParams(location.search)
         if (!params.has('source') && !params.has('url')) {
             const svg = localStorage.getItem('cadeiaDominialSvgEdit')
