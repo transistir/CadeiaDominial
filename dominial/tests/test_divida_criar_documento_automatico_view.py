@@ -37,6 +37,10 @@ class CriarDocumentoAutomaticoViewTest(IdentidadeDocumentoFixture):
         self.client = Client()
         self.client.login(username="docauto", password="docautopass")
 
+    def criar_imovel(self, *args, **kwargs):
+        """Todo imóvel criado aqui é atribuído ao usuário autenticado (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
+
     def _url(self, imovel, codigo_origem):
         return reverse('criar_documento_automatico', kwargs={
             'tis_id': self.ti.id, 'imovel_id': imovel.id, 'codigo_origem': codigo_origem,
