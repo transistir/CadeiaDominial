@@ -1747,22 +1747,25 @@ window.editarArvoreSVG = function () {
   const svgString = getSVGParaExportacao();
   if (!svgString) return;
 
-  // O SVG vai via window.name (mesma origem) em vez da URL — árvores grandes
-  // estouram o limite de tamanho da query string. window.name é compartilhado
-  // entre abas da mesma janela e LIMPA AUTOMATICAMENTE quando todas as abas
-  // fecham, evitando persistência indesejada no disco (localStorage persiste
-  // entre sessões e pode ficar órfão se o popup for bloqueado).
-  const WIN_NAME_KEY = "cadeiaDominialSvgEdit";
+  // O SVG viaja pelo localStorage (mesma origem) em vez da query string:
+  // árvores grandes estouram o limite de tamanho da URL (≈2KB-8KB).
+  // A chave é REMOVIDA pelo editor ao carregar; se o popup for bloqueado
+  // ou a aba fechada antes do load, um setTimeout de fallback limpa após 5s.
+  // NOTA: window.name NÃO funciona aqui — window.open("_blank") cria um novo
+  // browsing context sem acesso ao window.name da aba de origem.
+  const LS_KEY = "cadeiaDominialSvgEdit";
   try {
-    window.name = WIN_NAME_KEY + "=" + svgString;
+    localStorage.setItem(LS_KEY, svgString);
   } catch (err) {
-    // window.name pode falhar em alguns browsers com conteúdo muito grande
     alert(
       "Não foi possível abrir o editor: o organograma é grande demais para o " +
-        "transporte entre abas. Use o botão de salvar e abra o arquivo no editor."
+        "armazenamento do navegador. Use o botão de salvar e abra o arquivo no editor."
     );
     return;
   }
+
+  // Fallback cleanup: remove a chave se o editor não consumir em 5s
+  setTimeout(() => localStorage.removeItem(LS_KEY), 5000);
 
   window.open("/dominial/editor/?t=" + Date.now(), "_blank");
 };

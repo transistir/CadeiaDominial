@@ -6,14 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Editar SVG - Cadeia Dominial</title>
 
-    <!-- O SVGEdit resolve CSS, ícones e extensões por caminhos relativos ao
+    <!--
+         O SVGEdit resolve CSS, ícones e extensões por caminhos relativos ao
          documento (./svgedit.css, ./images, ./extensions). O <base> aponta
-         todos eles para o CDN, evitando 404 no servidor da aplicação. -->
-    <!-- CSP restritivo: permite apenas o CDN do SVGEdit e estilos inline,
-         mitigando risco de supply-chain do CDN (Bug 1). Auto-hospedar
-         SVGEdit em PR futura removerá a dependência externa. -->
+         todos eles para o CDN, evitando 404 no servidor da aplicação.
+
+         CSP: restringe carregamento a 'self' + jsDelivr. O 'unsafe-inline'
+         em script-src é necessário porque o bootstrap é um <script> inline
+         que importa Editor.js dinamicamente do CDN. Auto-hospedar o SVGEdit
+         em PR futura permitirá CSP mais rígido (com nonce/hash).
+    -->
     <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' https://cdn.jsdelivr.net;">
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self';">
+    <base href="https://cdn.jsdelivr.net/npm/svgedit@7.4.2/dist/editor/">
 
     <style id="styleoverrides" media="screen"></style>
     <link href="svgedit.css" rel="stylesheet" media="all">
@@ -35,30 +40,18 @@
         })
         svgEditor.init()
 
-        // O organograma chega pelo navegador (mesma origem), não pelo servidor:
-        // via `?source=` a URL estouraria o limite de tamanho em árvores
-        // grandes e o SVG apareceria nos logs de acesso. A query string `?t=`
-        // força o navegador a recarregar a aba (cache-buster), garantindo
-        // que o editor sempre mostre a cadeia atual, nunca uma anterior.
-        // O SVG viaja em window.name (limpa automaticamente quando a aba
-        // fecha) em vez de localStorage (que persiste entre sessões e pode
-        // ficar órfão se o popup for bloqueado).
-        const svg = (() => {
-            const wn = window.name
-            const prefix = 'cadeiaDominialSvgEdit='
-            if (wn && wn.startsWith(prefix)) {
-                window.name = '' // limpa window.name após consumo
-                return wn.slice(prefix.length)
-            }
-            // Fallback: localStorage (caso window.name falhe)
-            const ls = localStorage.getItem('cadeiaDominialSvgEdit')
-            if (ls) {
-                localStorage.removeItem('cadeiaDominialSvgEdit')
-                return ls
-            }
-            return null
-        })()
-        if (svg) svgEditor.loadFromString(svg)
+        // A query string ?t= (cache-buster) força o navegador a recarregar a
+        // aba do editor, garantindo que o SVGEdit receba o SVG atual do
+        // localStorage em vez de reutilizar estado da cadeia anterior.
+        // O SVG viaja pelo localStorage (mesma origem) — árvores grandes
+        // estouram o limite de tamanho da query string (~2KB-8KB).
+        // A chave é removida pelo editor ao carregar; se o popup for bloqueado,
+        // setTimeout no produtor limpa como fallback.
+        const svg = localStorage.getItem('cadeiaDominialSvgEdit')
+        if (svg) {
+            localStorage.removeItem('cadeiaDominialSvgEdit')
+            svgEditor.loadFromString(svg)
+        }
     </script>
 </body>
 </html>
