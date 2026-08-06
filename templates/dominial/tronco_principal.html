@@ -69,11 +69,13 @@
                         <div class="documento-node {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}documento-fim-cadeia-verde{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}documento-fim-cadeia-amarelo{% else %}documento-fim-cadeia-vermelho{% endif %}{% else %}documento-normal{% endif %}" style="border-left: 4px solid {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}#28a745{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}#ffc107{% else %}#dc3545{% endif %}{% else %}var(--primary-color){% endif %};">
                             <div class="documento-header">
                                 {% if documento.classificacao_fim_cadeia %}{% if documento.classificacao_fim_cadeia == 'origem_lidima' %}🟢{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}🟡{% else %}🔴{% endif %}{% else %}📄{% endif %} {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
-                                <span>({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
                                 {% if forloop.first %}
+                                <span>(Análise iniciada em: {{ documento.data_exibicao|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
                                 <span class="lancamento-badge primary-dark">
                                     🏁 Início
                                 </span>
+                                {% else %}
+                                <span>({{ documento.cartorio.nome }})</span>
                                 {% endif %}
                                 {% if documento.classificacao_fim_cadeia %}
                                 <span class="lancamento-badge {% if documento.classificacao_fim_cadeia == 'origem_lidima' %}fim-cadeia-verde{% elif documento.classificacao_fim_cadeia == 'inconclusa' %}fim-cadeia-amarelo{% else %}fim-cadeia-vermelho{% endif %}">

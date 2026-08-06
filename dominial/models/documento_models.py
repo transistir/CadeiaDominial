@@ -1,7 +1,13 @@
+from datetime import date
+
 from django.db import models
 from django.core.exceptions import ValidationError
 
 from .identidade_expressions import numero_documento_normalizado_expression
+
+# Data fictícia gravada por engano em documentos de matrícula criados
+# automaticamente antes da correção da issue #120.
+DATA_FICTICIA_LEGADO = date(2024, 1, 1)
 
 
 class DocumentoTipo(models.Model):
@@ -105,6 +111,30 @@ class Documento(models.Model):
     def label_data(self):
         """Label contextual para exibição da data."""
         return 'Análise iniciada em' if self.data_presumida else 'Data'
+
+    @property
+    def data_exibicao(self):
+        """Data apropriada para exibição.
+
+        Documentos com data presumida ou com a data fictícia de legado
+        (2024-01-01) exibem `data_cadastro` — a data real em que o documento
+        foi criado no sistema — em vez da data sem valor jurídico.
+        """
+        if self.data_presumida or self.data == DATA_FICTICIA_LEGADO:
+            return self.data_cadastro
+        return self.data
+
+    @staticmethod
+    def data_exibicao_expression():
+        """Expressão SQL equivalente a ``data_exibicao`` para ordenação."""
+        return models.Case(
+            models.When(
+                models.Q(data_presumida=True) | models.Q(data=DATA_FICTICIA_LEGADO),
+                then=models.F('data_cadastro'),
+            ),
+            default=models.F('data'),
+            output_field=models.DateField(),
+        )
 
     def clean(self):
         # Verificar se o imóvel está sobreposto a uma terra indígena

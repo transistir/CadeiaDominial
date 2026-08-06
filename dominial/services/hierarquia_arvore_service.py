@@ -14,6 +14,8 @@ from ..utils.documento_identidade_utils import DocumentoIdentidade
 import re
 from collections import deque
 
+from django.utils import timezone
+
 
 class HierarquiaArvoreService:
     """
@@ -168,7 +170,20 @@ class HierarquiaArvoreService:
         
         # Recalcular níveis baseado na hierarquia real
         HierarquiaArvoreService._recalcular_niveis(arvore, documento_principal.id)
-        
+
+        # Issue #120: exibir "Análise iniciada em:" apenas no primeiro
+        # documento da cadeia; ocultar a data nos demais.
+        primeiro_doc_marcado = False
+        for doc_node in arvore['documentos']:
+            if doc_node.get('is_fim_cadeia'):
+                continue
+            if not primeiro_doc_marcado:
+                doc_node['label_data'] = 'Análise iniciada em:'
+                primeiro_doc_marcado = True
+            else:
+                doc_node['data'] = ''
+                doc_node['label_data'] = ''
+
         return arvore
     
     @staticmethod
@@ -286,13 +301,12 @@ class HierarquiaArvoreService:
                 return None
 
             # Criar documento
-            from datetime import date
             documento = Documento.objects.create(
                 numero=numero_documento,
                 imovel=imovel,
                 cartorio=cartorio,
                 tipo=tipo_documento,
-                data=date.today(),  # Data padrão
+                data=timezone.localdate(),  # Data padrão
                 data_presumida=True,
                 livro='',  # Campo obrigatório
                 folha='',  # Campo obrigatório
@@ -331,7 +345,7 @@ class HierarquiaArvoreService:
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
             'tipo_documento': documento.tipo.tipo,
-            'data': documento.data.strftime('%d/%m/%Y'),
+            'data': documento.data_exibicao.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,
             'folha': documento.folha,

@@ -161,7 +161,9 @@ class ImovelAdmin(admin.ModelAdmin):
             return redirect('admin:dominial_imovel_changelist')
         
         # Coletar informações sobre documentos e lançamentos
-        documentos = imovel.documentos.all()
+        documentos = imovel.documentos.all()\
+            .annotate(data_exibicao_ordenacao=Documento.data_exibicao_expression())\
+            .order_by('-data_exibicao_ordenacao', '-id')
         num_documentos = documentos.count()
         num_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).count()
         
