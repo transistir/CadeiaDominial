@@ -4,11 +4,13 @@ from django.contrib import messages
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
 from django.db.models import Q
+from ..managers import tis_for_user, usuario_ve_tudo
+from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 
 @login_required
 def home(request):
     busca = request.GET.get('busca', '').strip()
-    tis_cadastradas = TIs.objects.all()
+    tis_cadastradas = tis_for_user(request.user)
     terras_referencia = TerraIndigenaReferencia.objects.all()
     if busca:
         tis_cadastradas = tis_cadastradas.filter(
@@ -17,7 +19,10 @@ def home(request):
         terras_referencia = terras_referencia.filter(
             Q(nome__icontains=busca) | Q(etnia__icontains=busca) | Q(codigo__icontains=busca)
         )
-    tis_com_imoveis = {tis.id: Imovel.objects.filter(terra_indigena_id=tis).count() for tis in tis_cadastradas}
+    tis_com_imoveis = {
+        tis.id: Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis).count()
+        for tis in tis_cadastradas
+    }
     tis_ordenadas = sorted(
         tis_cadastradas,
         key=lambda x: (tis_com_imoveis.get(x.id, 0), x.nome),
@@ -26,6 +31,8 @@ def home(request):
     terras_referencia = terras_referencia.order_by('nome')
     codigos_tis_cadastradas = set(tis.codigo for tis in tis_cadastradas)
     terras_referencia_nao_cadastradas = [tr for tr in terras_referencia if tr.codigo not in codigos_tis_cadastradas]
+    if not usuario_ve_tudo(request.user) and not Imovel.objects.for_user(request.user).exists():
+        messages.info(request, MENSAGEM_SEM_IMOVEIS)
     return render(request, 'dominial/home.html', {
         'terras_indigenas': tis_ordenadas,
         'terras_referencia': terras_referencia_nao_cadastradas,
@@ -63,9 +70,17 @@ def tis_detail(request, tis_id):
     from ..models import Documento, Lancamento
     
     # Usar SQL raw para evitar problemas com campos do modelo
+    filtro_segregacao = ''
+    params = [tis_id, is_arquivado]
+    if not usuario_ve_tudo(request.user):
+        filtro_segregacao = (
+            'AND i.id IN (SELECT imovel_id FROM dominial_userimovel WHERE user_id = %s)'
+        )
+        params.append(request.user.id)
+
     with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT 
+        cursor.execute(f"""
+            SELECT
                 i.id,
                 i.nome,
                 i.matricula,
@@ -80,12 +95,12 @@ def tis_detail(request, tis_id):
             FROM dominial_imovel i
             LEFT JOIN dominial_documento d ON d.imovel_id = i.id
             LEFT JOIN dominial_lancamento l ON l.documento_id = d.id
-            WHERE i.terra_indigena_id_id = %s AND i.arquivado = %s
+            WHERE i.terra_indigena_id_id = %s AND i.arquivado = %s {filtro_segregacao}
             GROUP BY i.id, i.nome, i.matricula, i.data_cadastro, i.observacoes, i.cartorio_id, i.proprietario_id, i.terra_indigena_id_id, i.arquivado
-            ORDER BY 
+            ORDER BY
                 COALESCE(MAX(d.data_cadastro), MAX(l.data_cadastro), i.data_cadastro) DESC,
                 i.matricula ASC
-        """, [tis_id, is_arquivado])
+        """, params)
         
         # Converter resultados em objetos Imovel
         imoveis_data = cursor.fetchall()
@@ -134,15 +149,15 @@ def tis_delete(request, tis_id):
 def imoveis(request, tis_id=None):
     if tis_id:
         tis = get_object_or_404(TIs, id=tis_id)
-        imoveis = Imovel.objects.filter(terra_indigena_id=tis).order_by('matricula')
+        imoveis = Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis).order_by('matricula')
     else:
-        imoveis = Imovel.objects.all().order_by('matricula')
+        imoveis = Imovel.objects.for_user(request.user).order_by('matricula')
     return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
 
 @login_required
 def imovel_detail(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     if request.method == 'POST':
         form = ImovelForm(request.POST, instance=imovel)
@@ -165,7 +180,7 @@ def imovel_detail(request, tis_id, imovel_id):
 @login_required
 def imovel_delete(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     if request.method == 'POST':
         try:
@@ -185,7 +200,7 @@ def imovel_delete(request, tis_id, imovel_id):
 def arquivar_imovel(request, tis_id, imovel_id):
     """View para arquivar ou desarquivar um imóvel"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     try:
         # Alternar status de arquivado

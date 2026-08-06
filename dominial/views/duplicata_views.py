@@ -20,7 +20,7 @@ def verificar_duplicata_ajax(request, tis_id, imovel_id, documento_id):
     try:
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
         
         # Verificar duplicata
@@ -42,7 +42,11 @@ def verificar_duplicata_ajax(request, tis_id, imovel_id, documento_id):
                 'tem_duplicata': False,
                 'mensagem': resultado['mensagem']
             })
-            
+
+    except Http404:
+        # Não converter em JSON 200: imóvel/documento fora do escopo do
+        # usuário deve propagar como 404, não como falso "sem duplicata".
+        raise
     except Exception as e:
         return JsonResponse({
             'tem_duplicata': False,
@@ -59,7 +63,7 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
     try:
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
         
         # Processar importação
@@ -130,7 +134,7 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
     try:
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
         
         # Marcar na sessão que o usuário cancelou uma duplicata

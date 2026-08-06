@@ -8,10 +8,12 @@ from django.http import JsonResponse
 from django.db import transaction
 from django.db.models import Count
 from django.utils.safestring import mark_safe
-from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
+from .models import TIs, Cartorios, Pessoas, Imovel, UserImovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
 from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.models import User
 
 # Configurações do Admin
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -87,11 +89,100 @@ class NumeroDocumentoFilter(admin.SimpleListFilter):
             return queryset.filter(numero=self.value())
         return queryset
 
+class AtribuicaoAuditoriaMixin:
+    """
+    Carimba `atribuido_por` nas atribuições criadas via inline (#132).
+
+    Inlines não passam por `save_model`; a gravação acontece no formset do
+    admin pai, por isso o hook é `save_formset`.
+    """
+
+    def save_formset(self, request, form, formset, change):
+        if formset.model is not UserImovel:
+            return super().save_formset(request, form, formset, change)
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for instance in instances:
+            if instance.atribuido_por_id is None:
+                instance.atribuido_por = request.user
+            instance.save()
+        formset.save_m2m()
+
+
+class UserImovelPorImovelInline(admin.TabularInline):
+    """Usuários com acesso a este imóvel."""
+    model = UserImovel
+    fk_name = 'imovel'
+    extra = 1
+    autocomplete_fields = ['user']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    verbose_name = 'Usuário com acesso'
+    verbose_name_plural = 'Usuários com acesso'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user', 'atribuido_por')
+
+
+class UserImovelPorUserInline(admin.TabularInline):
+    """Imóveis atribuídos a este usuário."""
+    model = UserImovel
+    # UserImovel tem duas FKs para User (user e atribuido_por): fk_name é obrigatório.
+    fk_name = 'user'
+    extra = 1
+    autocomplete_fields = ['imovel']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    verbose_name = 'Imóvel atribuído'
+    verbose_name_plural = 'Imóveis atribuídos'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('imovel', 'atribuido_por')
+
+
+@admin.register(UserImovel)
+class UserImovelAdmin(admin.ModelAdmin):
+    """Gestão standalone das atribuições usuário ↔ imóvel (#132)."""
+    list_display = ['user', 'imovel', 'data_atribuicao', 'atribuido_por']
+    list_filter = ['user', 'data_atribuicao', 'imovel__terra_indigena_id']
+    search_fields = [
+        'user__username', 'user__first_name', 'user__last_name',
+        'imovel__matricula', 'imovel__nome',
+    ]
+    autocomplete_fields = ['user', 'imovel']
+    readonly_fields = ['data_atribuicao']
+    list_per_page = 50
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user', 'imovel', 'atribuido_por')
+
+    def save_model(self, request, obj, form, change):
+        # Auditoria: registra quem concedeu o acesso, sem sobrescrever em edições.
+        if not change and obj.atribuido_por_id is None:
+            obj.atribuido_por = request.user
+        super().save_model(request, obj, form, change)
+
+
+class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
+    """UserAdmin padrão + inline de imóveis atribuídos (#132)."""
+    inlines = [UserImovelPorUserInline]
+
+    def get_inline_instances(self, request, obj=None):
+        # O inline exige um User já salvo (FK obrigatória) — some na tela de criação.
+        if obj is None:
+            return []
+        return super().get_inline_instances(request, obj)
+
+
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)
+
+
 @admin.register(Imovel)
-class ImovelAdmin(admin.ModelAdmin):
+class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     """
     Admin customizado para Imóveis com funcionalidade de correção de TI.
     """
+    inlines = [UserImovelPorImovelInline]
     list_display = ['matricula', 'nome', 'terra_indigena_id', 'proprietario', 'cartorio', 'tipo_documento_principal', 'arquivado', 'data_cadastro', 'info_documentos_lancamentos']
     list_filter = ['terra_indigena_id', 'tipo_documento_principal', 'arquivado', 'cartorio', 'data_cadastro']
     search_fields = ['matricula', 'nome', 'terra_indigena_id__nome', 'proprietario__nome', 'cartorio__nome']

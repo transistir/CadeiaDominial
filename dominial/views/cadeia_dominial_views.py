@@ -3,6 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils import normalizar_texto_opcional
+from ..managers import documentos_for_user
+from ..utils.segregacao_utils import require_imovel_atribuido
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -40,7 +42,7 @@ def _buscar_keyword_prioritaria(lancamentos):
 def cadeia_dominial(request, tis_id, imovel_id):
     # Otimização: usar select_related para reduzir queries
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter documentos seguindo a hierarquia correta (tronco principal)
     tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
@@ -75,11 +77,12 @@ def cadeia_dominial(request, tis_id, imovel_id):
         return render(request, 'dominial/cadeia_dominial_arvore.html', context)
 
 @login_required
+@require_imovel_atribuido
 def cadeia_dominial_arvore(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato de árvore para o diagrama"""
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         # Delegar a construção da árvore para um service/utilitário
         # criar_documentos_automaticos=False: não criar documentos fantasma ao
         # carregar a árvore (estanca a geração de ramos espúrios).
@@ -120,7 +123,7 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
 def tronco_principal(request, tis_id, imovel_id):
     """Exibe o tronco principal da cadeia dominial em formato de tabela"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter escolhas de origem da URL (se houver)
     escolhas_origem = {}
@@ -161,7 +164,7 @@ def tronco_principal(request, tis_id, imovel_id):
 def cadeia_dominial_dados(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato JSON para o diagrama de árvore"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter documentos seguindo a hierarquia correta (tronco principal)
     tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
@@ -225,6 +228,7 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
     return JsonResponse(tree_data, safe=False)
 
 @login_required
+@require_imovel_atribuido
 def cadeia_dominial_tabela(request, tis_id, imovel_id):
     """
     View para visualização de tabela da cadeia dominial
@@ -248,7 +252,7 @@ def cadeia_dominial_tabela(request, tis_id, imovel_id):
 def cadeia_dominial_d3(request, tis_id, imovel_id):
     """Nova visualização D3.js da árvore da cadeia dominial"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     documentos = Documento.objects.filter(imovel=imovel)\
         .select_related('cartorio', 'tipo')\
         .prefetch_related('lancamentos', 'lancamentos__tipo')\
@@ -273,7 +277,7 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     Suporta documentos importados de outras cadeias dominiais
     """
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Buscar o documento - pode estar em outro imóvel se for importado
     documento = None
@@ -286,7 +290,7 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     except Documento.DoesNotExist:
         # Se não encontrou no imóvel atual, pode ser um documento importado
         try:
-            documento = Documento.objects.get(id=documento_id)
+            documento = documentos_for_user(request.user).get(id=documento_id)
             is_importado = True
             
             # Buscar informações de importação
@@ -337,13 +341,14 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     return render(request, 'dominial/documento_detalhado.html', context) 
 
 @login_required
+@require_imovel_atribuido
 def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
     """
     Exporta a cadeia dominial em formato PDF
     """
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # Obter dados da cadeia dominial
         service = CadeiaDominialTabelaService()
@@ -389,10 +394,11 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
         return HttpResponse(error_html, content_type='text/html')
 
 @login_required
+@require_imovel_atribuido
 def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # Verificar se há sequência personalizada
         sequencia_ids = request.GET.get('sequencia')
@@ -439,13 +445,14 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         return HttpResponse(error_html, content_type='text/html')
 
 @login_required
+@require_imovel_atribuido
 def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
     """
     Exporta a cadeia dominial geral em formato Excel (mesma estrutura da página ver-cadeia-dominial)
     """
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # Usar o CadeiaCompletaService (mesmo do PDF) para incluir TODOS os documentos
         from ..services.cadeia_completa_service import CadeiaCompletaService
@@ -653,11 +660,12 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         return error_response
 
 @login_required
+@require_imovel_atribuido
 def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
     """Retorna os dados da árvore da cadeia dominial para o modal de seleção de sequência"""
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # 1. Primeiro obter o tronco principal na sequência correta
         tronco_principal = HierarquiaService.obter_tronco_principal(imovel)

@@ -5,6 +5,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
 from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa, FimCadeia
+from ..managers import documentos_for_user, lancamentos_for_user
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
@@ -63,7 +64,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     """
     # Obter objetos básicos
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Determinar documento ativo - MODIFICAÇÃO PARA SUPORTAR DOCUMENTOS IMPORTADOS
     documento_ativo = None
@@ -75,7 +76,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         except Documento.DoesNotExist:
             # Se não encontrou no imóvel atual, pode ser um documento importado
             try:
-                documento_ativo = Documento.objects.get(id=documento_id)
+                documento_ativo = documentos_for_user(request.user).get(id=documento_id)
                 # Redirecionar para o imóvel correto
                 messages.info(request, '📄 Documento importado — redirecionado para o imóvel de origem.')
                 return redirect(
@@ -396,7 +397,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     """
     # Obter objetos básicos
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Permitir edição de lançamentos de documentos compartilhados
     # Primeiro, tentar buscar o lançamento no imóvel atual
@@ -406,7 +407,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     except Lancamento.DoesNotExist:
         # Se não encontrou, verificar se é um lançamento de documento compartilhado
         try:
-            lancamento = Lancamento.objects.get(id=lancamento_id)
+            lancamento = lancamentos_for_user(request.user).get(id=lancamento_id)
             is_lancamento_do_imovel = False
             
             # Verificar se o documento do lançamento é compartilhado (referenciado como origem)
@@ -714,7 +715,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
 def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
     """View para excluir um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
     
     if request.method == 'POST':
@@ -738,7 +739,7 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
 def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
     """Retorna HTML parcial com o resumo de um lançamento (para sidebar AJAX)."""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(
         Lancamento.objects.select_related('documento', 'tipo').prefetch_related(
             Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
@@ -761,7 +762,7 @@ def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
 def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
     """View para visualizar detalhes de um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
     
     # Obter pessoas do lançamento
