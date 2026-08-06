@@ -241,6 +241,15 @@ document.addEventListener("DOMContentLoaded", function () {
   // Comportamento de zoom/pan
   const zoom = d3
     .zoom()
+    .filter((event) => {
+      // Bloquear zoom/pan quando gesto iniciar dentro de um card ou controle
+      if (event.target.closest?.(".node, .zoom-controls")) {
+        return false;
+      }
+      // Mesmo comportamento padrão do D3: ignora clique secundário,
+      // permite wheel com Ctrl
+      return (!event.ctrlKey || event.type === "wheel") && !event.button;
+    })
     .scaleExtent([0.1, 3.0]) // Limites mais amplos para zoom
     .wheelDelta((event) => -event.deltaY * 0.002) // Velocidade do scroll
     .on("zoom", (event) => {
@@ -322,13 +331,15 @@ document.addEventListener("DOMContentLoaded", function () {
         fitTreeToViewport();
       });
 
-      // Habilitar botão de salvar SVG (estava disabled durante carga)
-      const btnSalvar = document.getElementById("btn-salvar-svg");
-      if (btnSalvar) {
-        btnSalvar.disabled = false;
-        btnSalvar.style.opacity = "1";
-        btnSalvar.style.cursor = "pointer";
-      }
+      // Habilitar botões de SVG (estavam disabled durante carga)
+      ["btn-salvar-svg", "btn-editar-svg"].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.disabled = false;
+          btn.style.opacity = "1";
+          btn.style.cursor = "pointer";
+        }
+      });
     })
     .catch((err) => {
       loadingIndicator.remove();
@@ -1022,6 +1033,17 @@ function renderArvoreD3(data, svgGroup, width, height) {
     .style("cursor", "pointer")
     .attr("transform", (d) => `translate(${d.y + 120},${d.x + 20})`) // Posicionar imediatamente
     .style("opacity", "0") // Começar invisível para animação de entrada
+    .on("click.card", (event, d) => {
+      event.stopPropagation();
+      if (d.data.is_fim_cadeia) {
+        cardFimCadeiaComFoco = event.currentTarget;
+        abrirPainelFimCadeia(d);
+      } else {
+        window.location.assign(
+          `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`,
+        );
+      }
+    })
     .on("mouseover", function (event, d) {
       // Destacar o nó atual
       d3.select(this)
@@ -1173,15 +1195,6 @@ function renderArvoreD3(data, svgGroup, width, height) {
         .attr("filter", "drop-shadow(0 2px 8px rgba(0,0,0,0.10))")
         .attr("transform", "scale(1)");
     })
-    .on("click", (event, d) => {
-      event.stopPropagation();
-      if (d.data.is_fim_cadeia) {
-        cardFimCadeiaComFoco = event.currentTarget.parentNode;
-        abrirPainelFimCadeia(d);
-      } else {
-        window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
-      }
-    });
 
   node
     .filter((d) => d.data.is_fim_cadeia)
@@ -1653,14 +1666,17 @@ window.fimDaArvore = function () {
   });
 })();
 
-/* ── Salvar SVG do Organograma Completo ── */
-window.salvarArvoreSVG = function () {
+/* ── Exportar SVG do Organograma Completo ── */
+
+// Serializa o organograma inteiro (sem o zoom da tela) como string SVG.
+// Retorna null quando a árvore ainda não foi renderizada.
+function getSVGParaExportacao() {
   const svg = window._d3svg;
-  if (!svg || !window._zoomGroup) return;
+  if (!svg || !window._zoomGroup) return null;
 
   // Calcular bounds a partir das posições reais dos nós
   const nodes = window._zoomGroup.selectAll(".node");
-  if (nodes.size() === 0) return;
+  if (nodes.size() === 0) return null;
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   nodes.each(function () {
@@ -1676,7 +1692,7 @@ window.salvarArvoreSVG = function () {
       }
     }
   });
-  if (!isFinite(minX)) return;
+  if (!isFinite(minX)) return null;
 
   const extraMargin = 40;
   const w = maxX - minX + 2 * extraMargin;
@@ -1718,7 +1734,12 @@ window.salvarArvoreSVG = function () {
 
   // Serializar
   const serializer = new XMLSerializer();
-  const svgString = serializer.serializeToString(clone);
+  return serializer.serializeToString(clone);
+}
+
+window.salvarArvoreSVG = function () {
+  const svgString = getSVGParaExportacao();
+  if (!svgString) return;
 
   // Download
   const blob = new Blob([svgString], { type: "image/svg+xml" });
@@ -1730,4 +1751,29 @@ window.salvarArvoreSVG = function () {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+};
+
+/* ── Editar SVG do Organograma no SVGEdit ── */
+window.editarArvoreSVG = function () {
+  const svgString = getSVGParaExportacao();
+  if (!svgString) return;
+
+  // O SVG viaja pelo localStorage (mesma origem) em vez da query string:
+  // árvores grandes estouram o limite de tamanho da URL (≈2KB-8KB).
+  // A chave é REMOVIDA pelo editor ao carregar. Chave órfã (popup bloqueado
+  // ou aba fechada antes do load) é inofensiva: a próxima abertura sobrescreve.
+  // NOTA: window.name NÃO funciona aqui — window.open("_blank") cria um novo
+  // browsing context sem acesso ao window.name da aba de origem.
+  const LS_KEY = "cadeiaDominialSvgEdit";
+  try {
+    localStorage.setItem(LS_KEY, svgString);
+  } catch (err) {
+    alert(
+      "Não foi possível abrir o editor: o organograma é grande demais para o " +
+        "armazenamento do navegador. Use o botão de salvar e abra o arquivo no editor."
+    );
+    return;
+  }
+
+  window.open("/dominial/editor/?t=" + Date.now(), "_blank");
 };

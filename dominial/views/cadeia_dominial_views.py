@@ -263,7 +263,17 @@ def cadeia_dominial_d3(request, tis_id, imovel_id):
         'tem_apenas_matricula': tem_apenas_matricula,
         'tem_lancamentos': tem_lancamentos,
     }
-    return render(request, 'dominial/cadeia_dominial_d3.html', context) 
+    return render(request, 'dominial/cadeia_dominial_d3.html', context)
+
+@login_required
+def svgedit_editor(request):
+    """Editor SVGEdit para ajuste manual do organograma da cadeia dominial.
+
+    O SVG não passa pelo servidor: a página do organograma o grava no
+    localStorage do navegador e esta view apenas serve o editor, que lê o
+    conteúdo do próprio navegador.
+    """
+    return render(request, 'dominial/svgedit_editor.html')
 
 @login_required
 def documento_detalhado(request, tis_id, imovel_id, documento_id):
