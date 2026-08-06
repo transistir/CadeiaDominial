@@ -113,3 +113,26 @@ class DataExibicaoTest(DataExibicaoFixture, TestCase):
 
         self.assertEqual(documento.data_exibicao, documento.data)
         self.assertNotEqual(documento.data_exibicao, documento.data_cadastro)
+
+    def test_expression_ordena_pela_mesma_data_exibida(self):
+        imovel = self.criar_imovel("103")
+        legado = self.criar_documento(
+            imovel, "103", data=DATA_FICTICIA_LEGADO,
+        )
+        presumido = self.criar_documento(
+            imovel, "104", data=date(1990, 1, 1), data_presumida=True,
+        )
+        data_real = self.criar_documento(
+            imovel, "105", data=date(2022, 1, 1),
+        )
+        Documento.objects.filter(pk=legado.pk).update(data_cadastro=date(2020, 1, 1))
+        Documento.objects.filter(pk=presumido.pk).update(data_cadastro=date(2021, 1, 1))
+
+        documentos = Documento.objects.filter(imovel=imovel).annotate(
+            data_exibicao_ordenacao=Documento.data_exibicao_expression(),
+        ).order_by('-data_exibicao_ordenacao', '-id')
+
+        self.assertEqual(
+            list(documentos.values_list('pk', flat=True)),
+            [data_real.pk, presumido.pk, legado.pk],
+        )

@@ -3,10 +3,10 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from ..models import Documento, DocumentoTipo, Imovel, TIs, Cartorios, Lancamento
 from ..forms import ImovelForm
-from datetime import date
 from ..services.documento_service import DocumentoService
 from ..services.cache_service import CacheService
 import json
@@ -39,9 +39,10 @@ def documentos(request, tis_id, imovel_id):
     
     # Otimização: usar select_related e prefetch_related
     documentos = Documento.objects.filter(imovel=imovel)\
+        .annotate(data_exibicao_ordenacao=Documento.data_exibicao_expression())\
         .select_related('cartorio', 'tipo')\
         .prefetch_related('lancamentos')\
-        .order_by('-data', '-id')
+        .order_by('-data_exibicao_ordenacao', '-id')
     
     context = {
         'tis': tis,
@@ -183,9 +184,10 @@ def selecionar_documento_lancamento(request, tis_id, imovel_id):
     
     # Otimização: usar select_related e prefetch_related
     documentos = Documento.objects.filter(imovel=imovel)\
+        .annotate(data_exibicao_ordenacao=Documento.data_exibicao_expression())\
         .select_related('cartorio', 'tipo')\
         .prefetch_related('lancamentos')\
-        .order_by('-data', '-id')
+        .order_by('-data_exibicao_ordenacao', '-id')
     
     context = {
         'tis': tis,
@@ -300,7 +302,7 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
             imovel=imovel,
             tipo=tipo_doc,
             numero=codigo_origem,
-            data=date.today(),
+            data=timezone.localdate(),
             data_presumida=True,
             cartorio=cartorio_documento,
             livro='1',  # Livro padrão
@@ -374,4 +376,4 @@ def ajustar_nivel_documento(request, documento_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Dados JSON inválidos'}, status=400)
     except Exception as e:
-        return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500) 
+        return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500)

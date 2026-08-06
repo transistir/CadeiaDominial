@@ -124,6 +124,18 @@ class Documento(models.Model):
             return self.data_cadastro
         return self.data
 
+    @staticmethod
+    def data_exibicao_expression():
+        """Expressão SQL equivalente a ``data_exibicao`` para ordenação."""
+        return models.Case(
+            models.When(
+                models.Q(data_presumida=True) | models.Q(data=DATA_FICTICIA_LEGADO),
+                then=models.F('data_cadastro'),
+            ),
+            default=models.F('data'),
+            output_field=models.DateField(),
+        )
+
     def clean(self):
         # Verificar se o imóvel está sobreposto a uma terra indígena
         pass

@@ -14,6 +14,8 @@ from ..utils.documento_identidade_utils import DocumentoIdentidade
 import re
 from collections import deque
 
+from django.utils import timezone
+
 
 class HierarquiaArvoreService:
     """
@@ -299,13 +301,12 @@ class HierarquiaArvoreService:
                 return None
 
             # Criar documento
-            from datetime import date
             documento = Documento.objects.create(
                 numero=numero_documento,
                 imovel=imovel,
                 cartorio=cartorio,
                 tipo=tipo_documento,
-                data=date.today(),  # Data padrão
+                data=timezone.localdate(),  # Data padrão
                 data_presumida=True,
                 livro='',  # Campo obrigatório
                 folha='',  # Campo obrigatório
