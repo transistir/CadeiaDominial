@@ -87,16 +87,13 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
             try:
                 from ..services.lancamento_criacao_service import LancamentoCriacaoService
                 
-                # Marcar que estamos criando após importação para pular verificação de duplicatas
-                request.POST = request.POST.copy()
-                request.POST['apos_importacao'] = 'true'
-                
                 # Criar o lançamento original usando os dados do POST
                 lancamento_criado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
                     request=request,
                     tis=tis,
                     imovel=imovel,
-                    documento_ativo=documento_ativo
+                    documento_ativo=documento_ativo,
+                    apos_importacao=True,
                 )
                 
                 if lancamento_criado:

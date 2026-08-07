@@ -11,7 +11,11 @@ def imovel_form(request, tis_id, imovel_id=None):
     tis = get_object_or_404(TIs, pk=tis_id)
     imovel = None
     if imovel_id:
-        imovel = get_object_or_404(Imovel.objects.for_user(request.user), pk=imovel_id)
+        imovel = get_object_or_404(
+            Imovel.objects.for_user(request.user),
+            pk=imovel_id,
+            terra_indigena_id=tis,
+        )
     
     if request.method == 'POST':
         form = ImovelForm(request.POST, instance=imovel)

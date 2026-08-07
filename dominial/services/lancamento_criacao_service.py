@@ -10,6 +10,7 @@ from .lancamento_campos_service import LancamentoCamposService
 from .regra_petrea_service import RegraPetreaService
 from .lancamento_duplicata_service import LancamentoDuplicataService
 from .lancamento_pessoa_service import LancamentoPessoaService
+from ..managers import documentos_for_user
 
 
 class LancamentoCriacaoService:
@@ -18,7 +19,14 @@ class LancamentoCriacaoService:
     """
     
     @staticmethod
-    def criar_lancamento_completo(request, tis, imovel, documento_ativo):
+    def criar_lancamento_completo(
+        request,
+        tis,
+        imovel,
+        documento_ativo,
+        *,
+        apos_importacao=False,
+    ):
         """
         Cria um lançamento completo com todas as validações e processamentos
         """
@@ -50,9 +58,8 @@ class LancamentoCriacaoService:
         dados_lancamento = LancamentoFormService.processar_dados_lancamento(request, tipo_lanc)
         print(f"DEBUG: Dados processados: {dados_lancamento}")
         
-        # Verificar duplicatas antes de criar o lançamento (pular se após importação)
-        apos_importacao = request.POST.get('apos_importacao') == 'true'
-        
+        # Esta flag é um argumento interno confiável. Dados enviados pelo
+        # cliente nunca podem desativar a verificação de duplicatas.
         if not apos_importacao:
             print("DEBUG: Verificando duplicatas...")
             print("DEBUG: Importando LancamentoDuplicataService...")
@@ -122,6 +129,7 @@ class LancamentoCriacaoService:
         print("DEBUG: Validação de cartórios das origens aprovada")
         
         try:
+            documentos_autorizados = documentos_for_user(request.user)
             print("DEBUG: Criando lançamento básico...")
             # Criar o lançamento
             lancamento = LancamentoCriacaoService._criar_lancamento_basico(documento_ativo, dados_lancamento, tipo_lanc)
@@ -133,7 +141,11 @@ class LancamentoCriacaoService:
             
             # Processar campos específicos por tipo de lançamento
             print("DEBUG: Processando campos específicos...")
-            LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+            LancamentoCamposService.processar_campos_por_tipo(
+                request,
+                lancamento,
+                documentos_queryset=documentos_autorizados,
+            )
             
             print("DEBUG: Salvando lançamento...")
             lancamento.save()
@@ -171,7 +183,10 @@ class LancamentoCriacaoService:
             # Processar origens para criar documentos automáticos
             print("DEBUG: Processando origens...")
             mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
-                lancamento, dados_lancamento['origem'], imovel
+                lancamento,
+                dados_lancamento['origem'],
+                imovel,
+                documentos_queryset=documentos_autorizados,
             )
             
             # Processar transmitentes
@@ -209,6 +224,7 @@ class LancamentoCriacaoService:
         Atualiza um lançamento completo com todas as validações e processamentos
         """
         try:
+            documentos_autorizados = documentos_for_user(request.user)
             print(f"DEBUG: Iniciando atualização do lançamento {lancamento.id}")
             
             # Obter e processar o tipo de lançamento
@@ -275,7 +291,11 @@ class LancamentoCriacaoService:
             
             # Processar campos específicos por tipo de lançamento
             print("DEBUG: Processando campos específicos por tipo...")
-            LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+            LancamentoCamposService.processar_campos_por_tipo(
+                request,
+                lancamento,
+                documentos_queryset=documentos_autorizados,
+            )
             
             # Salvar o lançamento
             print("DEBUG: Salvando lançamento...")
@@ -301,7 +321,10 @@ class LancamentoCriacaoService:
                 origem = request.POST.get('origem_completa', '').strip()
             
             mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
-                lancamento, origem, imovel
+                lancamento,
+                origem,
+                imovel,
+                documentos_queryset=documentos_autorizados,
             )
             
             # Limpar pessoas existentes do lançamento
@@ -411,4 +434,4 @@ class LancamentoCriacaoService:
         if dados_lancamento['origem']:
             lancamento.origem = dados_lancamento['origem']
         
-        return lancamento 
+        return lancamento

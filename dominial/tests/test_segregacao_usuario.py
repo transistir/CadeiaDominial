@@ -45,6 +45,7 @@ from dominial.services.hierarquia_service import HierarquiaService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.importacao_cadeia_service import ImportacaoCadeiaService
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 
 
 class SegregacaoBaseTestCase(TestCase):
@@ -578,6 +579,109 @@ class BlockersRound3Test(SegregacaoBaseTestCase):
         self.assertEqual(index.status_code, 200)
         self.assertNotContains(index, changelist_url)
         self.assertEqual(self.client.get(changelist_url).status_code, 403)
+
+
+class MustFixRound6Test(SegregacaoBaseTestCase):
+    """Regressões dos três vazamentos encontrados na re-review 3."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.dono)
+
+    def test_edicao_nao_herda_metadados_de_documento_alheio(self):
+        tipo_inicio = LancamentoTipo.objects.create(tipo='inicio_matricula')
+        self.documento_b.numero = '9000'
+        self.documento_b.save(update_fields=['numero'])
+        self.lancamento_b.livro_origem = 'LIVRO-SECRETO'
+        self.lancamento_b.folha_origem = 'FOLHA-SECRETA'
+        self.lancamento_b.save(
+            update_fields=['livro_origem', 'folha_origem'],
+        )
+        lancamento_editado = Lancamento(
+            documento=self.documento_a,
+            tipo=tipo_inicio,
+            numero_lancamento='INICIO-A',
+            data=date(2024, 3, 1),
+        )
+        # Evita executar o signal antes de montar o cenário da edição.
+        Lancamento.objects.bulk_create([lancamento_editado])
+
+        response = self.client.post(
+            reverse('editar_lancamento', kwargs={
+                'tis_id': self.tis_a.id,
+                'imovel_id': self.imovel_a.id,
+                'lancamento_id': lancamento_editado.id,
+            }),
+            {
+                'tipo_lancamento': str(tipo_inicio.id),
+                'numero_lancamento': lancamento_editado.numero_lancamento,
+                'data': '2024-03-02',
+                'origem_completa[]': ['9000'],
+                'cartorio_origem[]': [str(self.cartorio.id)],
+                'cartorio_origem_nome[]': [self.cartorio.nome],
+                'livro_origem[]': [''],
+                'folha_origem[]': [''],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        lancamento_editado.refresh_from_db()
+        self.assertIsNone(lancamento_editado.livro_origem)
+        self.assertIsNone(lancamento_editado.folha_origem)
+        origem = lancamento_editado.origens_estruturadas.get()
+        self.assertIsNone(origem.livro)
+        self.assertIsNone(origem.folha)
+
+    def test_edicao_de_imovel_em_url_de_outra_ti_da_404(self):
+        response = self.client.post(
+            reverse('imovel_editar', kwargs={
+                'tis_id': self.tis_b.id,
+                'imovel_id': self.imovel_a.id,
+            }),
+            {
+                'matricula': self.imovel_a.matricula,
+                'nome': 'Tentativa de mover imóvel',
+                'tipo_documento_principal': 'matricula',
+                'proprietario_nome': self.proprietario.nome,
+                'cartorio': self.cartorio.id,
+                'estado': 'SP',
+                'cidade': 'São Paulo',
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.imovel_a.refresh_from_db()
+        self.assertEqual(self.imovel_a.terra_indigena_id_id, self.tis_a.id)
+
+    @patch(
+        'dominial.services.lancamento_criacao_service.'
+        'LancamentoDuplicataService.verificar_duplicata_antes_criacao',
+        return_value={
+            'tem_duplicata': True,
+            'mensagem': 'duplicata bloqueada',
+        },
+    )
+    def test_flag_apos_importacao_do_post_nao_pula_duplicata(self, verificar):
+        request = RequestFactory().post('/', {
+            'tipo_lancamento': str(self.lanc_tipo.id),
+            'numero_lancamento_simples': '2',
+            'numero_lancamento': 'R2M1000',
+            'apos_importacao': 'true',
+        })
+        request.user = self.dono
+        quantidade_antes = Lancamento.objects.count()
+
+        resultado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
+            request,
+            self.tis_a,
+            self.imovel_a,
+            self.documento_a,
+        )
+
+        verificar.assert_called_once_with(request, self.documento_a)
+        self.assertEqual(resultado['tipo'], 'duplicata_encontrada')
+        self.assertEqual(mensagem, 'duplicata bloqueada')
+        self.assertEqual(Lancamento.objects.count(), quantidade_antes)
 
 
 class AdminSegregacaoRound4Test(SegregacaoBaseTestCase):

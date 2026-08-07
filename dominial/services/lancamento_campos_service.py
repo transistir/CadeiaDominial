@@ -12,7 +12,11 @@ class LancamentoCamposService:
     """
     
     @staticmethod
-    def processar_campos_por_tipo(request, lancamento):
+    def processar_campos_por_tipo(
+        request,
+        lancamento,
+        documentos_queryset=None,
+    ):
         """
         Processa campos específicos baseado no tipo de lançamento
         """
@@ -29,7 +33,11 @@ class LancamentoCamposService:
             # Para registro, também processar campos de transação
             LancamentoCamposService._processar_campos_transacao(request, lancamento)
         elif lancamento.tipo.tipo == 'inicio_matricula':
-            LancamentoCamposService._processar_campos_inicio_matricula(request, lancamento)
+            LancamentoCamposService._processar_campos_inicio_matricula(
+                request,
+                lancamento,
+                documentos_queryset=documentos_queryset,
+            )
             # Para transcrições, sempre processar campos de transação
             if is_transcricao:
                 LancamentoCamposService._processar_campos_transacao(request, lancamento)
@@ -173,7 +181,11 @@ class LancamentoCamposService:
             lancamento.data_transacao = None
     
     @staticmethod
-    def _processar_campos_inicio_matricula(request, lancamento):
+    def _processar_campos_inicio_matricula(
+        request,
+        lancamento,
+        documentos_queryset=None,
+    ):
         """
         Processa campos específicos para lançamentos do tipo início de matrícula
         HERANÇA: Livro e folha são herdados do primeiro lançamento do documento criado pela origem
@@ -278,12 +290,15 @@ class LancamentoCamposService:
             if numero_match:
                 numero_origem = numero_match.group()
                 
-                # Buscar documento da origem
-                from ..models import Documento
-                documento_origem = Documento.objects.filter(
-                    numero=numero_origem,
-                    cartorio=cartorio_origem_encontrado
-                ).first()
+                # Buscar documento da origem somente no escopo autorizado.
+                # Sem um queryset explícito, não há herança implícita de
+                # metadados de documentos potencialmente alheios.
+                documento_origem = None
+                if documentos_queryset is not None:
+                    documento_origem = documentos_queryset.filter(
+                        numero=numero_origem,
+                        cartorio=cartorio_origem_encontrado,
+                    ).first()
                 
                 if documento_origem:
                     # Buscar primeiro lançamento deste documento

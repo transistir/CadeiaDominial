@@ -84,15 +84,14 @@ class T27RegressaoCartorioDuplicataTest(IdentidadeDocumentoFixture):
         )
         self.assertTrue(resultado_importacao['sucesso'], resultado_importacao.get('mensagem'))
 
-        # Passo 2: criar o lançamento original (mesmo caminho da view,
-        # `apos_importacao=true` pula a nova verificação de duplicata).
-        request.POST = request.POST.copy()
-        request.POST['apos_importacao'] = 'true'
+        # Passo 2: criar o lançamento original (mesmo caminho da view; apenas
+        # o fluxo interno pós-importação pode pular a nova verificação).
         lancamento, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
             request=request,
             tis=self.ti,
             imovel=imovel_destino,
             documento_ativo=documento_ativo,
+            apos_importacao=True,
         )
         self.assertIsNotNone(lancamento, mensagem)
 
