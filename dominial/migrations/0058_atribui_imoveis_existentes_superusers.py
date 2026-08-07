@@ -47,6 +47,5 @@ class Migration(migrations.Migration):
             atribuir_imoveis_aos_superusers,
             # Irreversível por design: não há como distinguir com segurança
             # estas atribuições das que forem criadas manualmente depois.
-            migrations.RunPython.noop,
         ),
     ]

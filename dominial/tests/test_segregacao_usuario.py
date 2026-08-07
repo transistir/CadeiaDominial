@@ -16,7 +16,6 @@ from unittest.mock import patch
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, Permission, User
 from django.core.cache import cache
-from django.db import migrations
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
@@ -656,6 +655,42 @@ class AdminSegregacaoRound4Test(SegregacaoBaseTestCase):
             [self.digital_a, self.digital_b],
         )
 
+    def test_staff_ve_apenas_fks_dos_imoveis_atribuidos(self):
+        request = self._request_for(self.dono)
+
+        imovel_field = Alteracoes._meta.get_field('imovel_id')
+        imovel_formfield = AlteracoesAdmin(
+            Alteracoes, admin.site
+        ).formfield_for_foreignkey(imovel_field, request)
+        self.assertCountEqual(imovel_formfield.queryset, [self.imovel_a])
+
+        documento_field = DocumentoDigital._meta.get_field('documento')
+        documento_formfield = DocumentoDigitalAdmin(
+            DocumentoDigital, admin.site
+        ).formfield_for_foreignkey(documento_field, request)
+        self.assertCountEqual(documento_formfield.queryset, [self.documento_a])
+
+    def test_superuser_ve_todas_as_fks(self):
+        request = self._request_for(self.superuser)
+
+        imovel_field = Alteracoes._meta.get_field('imovel_id')
+        imovel_formfield = AlteracoesAdmin(
+            Alteracoes, admin.site
+        ).formfield_for_foreignkey(imovel_field, request)
+        self.assertCountEqual(
+            imovel_formfield.queryset,
+            [self.imovel_a, self.imovel_b],
+        )
+
+        documento_field = DocumentoDigital._meta.get_field('documento')
+        documento_formfield = DocumentoDigitalAdmin(
+            DocumentoDigital, admin.site
+        ).formfield_for_foreignkey(documento_field, request)
+        self.assertCountEqual(
+            documento_formfield.queryset,
+            [self.documento_a, self.documento_b],
+        )
+
 
 class GuardsSecundariosRound3Test(SegregacaoBaseTestCase):
     def setUp(self):
@@ -758,4 +793,5 @@ class DataMigrationAtribuicaoTest(TestCase):
         self.assertEqual(UserImovel.objects.filter(user=superuser).count(), 1)
 
         operacao = migracao.Migration.operations[0]
-        self.assertIs(operacao.reverse_code, migrations.RunPython.noop)
+        self.assertIsNone(operacao.reverse_code)
+        self.assertFalse(operacao.reversible)

@@ -48,6 +48,11 @@ class AlteracoesAdmin(admin.ModelAdmin):
             imovel_id__usuarios_atribuidos__user=request.user,
         ).distinct()
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if not request.user.is_superuser and db_field.name == 'imovel_id':
+            kwargs['queryset'] = Imovel.objects.for_user(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 class EstadoVazioFilter(admin.SimpleListFilter):
     title = 'Estado vazio/nulo'
@@ -95,6 +100,11 @@ class DocumentoDigitalAdmin(admin.ModelAdmin):
         return queryset.filter(
             documento__imovel__usuarios_atribuidos__user=request.user,
         ).distinct()
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if not request.user.is_superuser and db_field.name == 'documento':
+            kwargs['queryset'] = documentos_for_user(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 class NumeroDocumentoFilter(admin.SimpleListFilter):
