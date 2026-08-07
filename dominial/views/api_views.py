@@ -8,7 +8,7 @@ from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..managers import documentos_for_user, lancamentos_for_user
 from ..utils import normalizar_texto_opcional
-from ..utils.segregacao_utils import require_imovel_atribuido, usuario_tem_acesso_imovel, MENSAGEM_SEM_ACESSO
+from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_SEM_ACESSO
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -85,6 +85,7 @@ def buscar_cartorios(request):
     return JsonResponse(cartorios_list, safe=False)
 
 @require_POST
+@login_required
 def verificar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
@@ -99,6 +100,7 @@ def verificar_cartorios_estado(request):
     return JsonResponse(resultado)
 
 @require_POST
+@login_required
 def importar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
@@ -244,7 +246,11 @@ def escolher_origem_documento(request):
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
 
-        if not usuario_tem_acesso_imovel(request.user, imovel_id):
+        if not documentos_for_user(request.user).filter(
+            id=documento_id,
+            imovel_id=imovel_id,
+            imovel__terra_indigena_id_id=tis_id,
+        ).exists():
             return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
 
         # Salvar escolha na sessão
@@ -290,7 +296,11 @@ def escolher_origem_lancamento(request):
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
 
-        if not usuario_tem_acesso_imovel(request.user, imovel_id):
+        if not lancamentos_for_user(request.user).filter(
+            id=lancamento_id,
+            documento__imovel_id=imovel_id,
+            documento__imovel__terra_indigena_id_id=tis_id,
+        ).exists():
             return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
 
         # Salvar escolha na sessão
@@ -298,7 +308,7 @@ def escolher_origem_lancamento(request):
         request.session[session_key] = origem_numero
         
         # Recarregar dados da cadeia dominial com a nova escolha
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         cadeia_data = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
         
         return JsonResponse({
@@ -326,7 +336,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
     API para obter cadeia dominial atualizada com escolhas da sessão
     """
     try:
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         
         # Extrair escolhas de origem da sessão
         escolhas_origem = {}

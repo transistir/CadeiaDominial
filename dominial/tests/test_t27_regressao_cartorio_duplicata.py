@@ -50,6 +50,10 @@ class T27RegressaoCartorioDuplicataTest(IdentidadeDocumentoFixture):
             tipo='registro', requer_transmissao=False,
         )
 
+    def criar_imovel(self, *args, **kwargs):
+        """Toda a cadeia exercitada no teste é visível ao importador (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
+
     def test_confirmacao_duplicata_usa_cartorio_ponta_a_ponta(self):
         # Homônimos M123 em cartórios diferentes.
         imovel_origem_a = self.criar_imovel("123", self.cartorio_a, nome="Origem A")

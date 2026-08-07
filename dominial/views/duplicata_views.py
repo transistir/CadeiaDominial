@@ -7,8 +7,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 from django.http import JsonResponse, Http404
-from ..models import TIs, Imovel, Documento
+from ..models import TIs, Imovel
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
+from ..managers import documentos_for_user
 
 
 @login_required
@@ -21,7 +22,11 @@ def verificar_duplicata_ajax(request, tis_id, imovel_id, documento_id):
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        documento_ativo = get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel=imovel,
+        )
         
         # Verificar duplicata
         resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
@@ -64,7 +69,11 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        documento_ativo = get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel=imovel,
+        )
         
         # Processar importação
         resultado = LancamentoDuplicataService.processar_importacao_duplicata(
@@ -135,7 +144,11 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
         imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        documento_ativo = get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel=imovel,
+        )
         
         # Marcar na sessão que o usuário cancelou uma duplicata
         request.session['duplicata_cancelada'] = True
@@ -162,4 +175,4 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
                           imovel_id=imovel.id, 
                           documento_id=documento_ativo.id)
         else:
-            return redirect('imoveis', tis_id=tis_id) 
+            return redirect('imoveis', tis_id=tis_id)

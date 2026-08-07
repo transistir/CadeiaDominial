@@ -438,7 +438,10 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             lancamentos_referenciando_indireta = False
             if not lancamentos_referenciando_direta:
                 # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
-                arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+                arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+                    imovel,
+                    documentos_queryset=documentos_for_user(request.user),
+                )
                 documento_na_arvore = any(
                     doc['id'] == lancamento.documento.id and doc['is_compartilhado'] 
                     for doc in arvore['documentos']

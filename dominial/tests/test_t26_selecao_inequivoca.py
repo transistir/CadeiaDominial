@@ -123,6 +123,10 @@ class T26ImportacaoDuplicataIdentidadeTest(IdentidadeDocumentoFixture):
         super().setUp()
         self.factory = RequestFactory()
 
+    def criar_imovel(self, *args, **kwargs):
+        """Os imóveis desta fixture pertencem ao usuário que importa (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
+
     def test_importacao_aceita_quando_identidade_confere(self):
         imovel_origem = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
         imovel_destino = self.criar_imovel("999", self.cartorio_b, nome="Imóvel Destino")

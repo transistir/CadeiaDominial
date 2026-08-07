@@ -45,7 +45,10 @@ def cadeia_dominial(request, tis_id, imovel_id):
     imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter documentos seguindo a hierarquia correta (tronco principal)
-    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    tronco_principal = HierarquiaService.obter_tronco_principal(
+        imovel,
+        user=request.user,
+    )
     documentos = list(tronco_principal)  # Usar a ordem do tronco principal
     
     tem_documentos = len(documentos) > 0
@@ -58,7 +61,10 @@ def cadeia_dominial(request, tis_id, imovel_id):
     # Refatoração: delegar identificação de troncos para o service
     troncos_secundarios = []
     if tem_documentos:
-        troncos_secundarios = HierarquiaService.obter_troncos_secundarios(imovel)
+        troncos_secundarios = HierarquiaService.obter_troncos_secundarios(
+            imovel,
+            user=request.user,
+        )
 
     context = {
         'tis': tis,
@@ -86,13 +92,17 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         # Delegar a construção da árvore para um service/utilitário
         # criar_documentos_automaticos=False: não criar documentos fantasma ao
         # carregar a árvore (estanca a geração de ramos espúrios).
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            criar_documentos_automaticos=False,
+            documentos_queryset=documentos_for_user(request.user),
+        )
 
         # Expor no JSON consumido pelo D3 a keyword de maior prioridade de
         # cada documento.
         documentos_por_id = {
             documento.id: documento
-            for documento in Documento.objects.filter(
+            for documento in documentos_for_user(request.user).filter(
                 id__in=[
                     documento['id']
                     for documento in arvore.get('documentos', [])
@@ -135,7 +145,7 @@ def tronco_principal(request, tis_id, imovel_id):
             escolhas_origem = {}
     
     # Obter cadeia em formato de tabela
-    service = CadeiaDominialTabelaService()
+    service = CadeiaDominialTabelaService(user=request.user)
     
     # Se há escolhas de origem, usar o método completo
     if escolhas_origem:
@@ -167,7 +177,10 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
     imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter documentos seguindo a hierarquia correta (tronco principal)
-    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    tronco_principal = HierarquiaService.obter_tronco_principal(
+        imovel,
+        user=request.user,
+    )
     documentos = list(tronco_principal)  # Usar a ordem do tronco principal
     
     # Estrutura para o diagrama de árvore
@@ -237,9 +250,15 @@ def cadeia_dominial_tabela(request, tis_id, imovel_id):
     origem_escolhida = request.GET.get('origem')
     documento_id = request.GET.get('documento_id')
     if origem_escolhida and documento_id:
+        get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel_id=imovel_id,
+            imovel__terra_indigena_id_id=tis_id,
+        )
         request.session[f'origem_documento_{documento_id}'] = origem_escolhida
 
-    service = CadeiaDominialTabelaService()
+    service = CadeiaDominialTabelaService(user=request.user)
     context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
 
     # Adicionar estatísticas
@@ -351,7 +370,7 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
         imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # Obter dados da cadeia dominial
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
         
         # Adicionar estatísticas
@@ -404,7 +423,7 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         sequencia_ids = request.GET.get('sequencia')
         
         from ..services.cadeia_completa_service import CadeiaCompletaService
-        service = CadeiaCompletaService()
+        service = CadeiaCompletaService(user=request.user)
         
         if sequencia_ids:
             # Usar sequência personalizada
@@ -456,7 +475,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         
         # Usar o CadeiaCompletaService (mesmo do PDF) para incluir TODOS os documentos
         from ..services.cadeia_completa_service import CadeiaCompletaService
-        service = CadeiaCompletaService()
+        service = CadeiaCompletaService(user=request.user)
         context = service.get_cadeia_completa(tis_id, imovel_id)
         
         # Criar workbook Excel
@@ -668,10 +687,16 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
         imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # 1. Primeiro obter o tronco principal na sequência correta
-        tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+        tronco_principal = HierarquiaService.obter_tronco_principal(
+            imovel,
+            user=request.user,
+        )
         
         # 2. Obter todos os documentos da árvore
-        arvore = HierarquiaService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaService.construir_arvore_cadeia_dominial(
+            imovel,
+            user=request.user,
+        )
         
         # 3. Organizar documentos: tronco principal primeiro, depois o resto
         documentos_organizados = []

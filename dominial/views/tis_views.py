@@ -4,6 +4,7 @@ from django.contrib import messages
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
 from django.db.models import Q
+from django.http import Http404
 from ..managers import tis_for_user, usuario_ve_tudo
 from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 
@@ -130,13 +131,16 @@ def tis_detail(request, tis_id):
 
 @login_required
 def tis_delete(request, tis_id):
-    if not request.user.is_staff:
-        messages.error(request, 'Você não tem permissão para excluir terras indígenas.')
-        return redirect('home')
-    tis = get_object_or_404(TIs, id=tis_id)
+    tis = get_object_or_404(tis_for_user(request.user), id=tis_id)
+    if not request.user.is_superuser:
+        # Exclusão em cascata de uma TI é uma operação exclusiva de superuser.
+        # Responder 404 mantém o padrão de não revelar objetos fora do escopo.
+        raise Http404
     if request.method == 'POST':
         try:
-            Imovel.objects.filter(terra_indigena_id=tis).delete()
+            Imovel.objects.for_user(request.user).filter(
+                terra_indigena_id=tis
+            ).delete()
             nome = tis.nome
             tis.delete()
             messages.success(request, f'Terra Indígena "{nome}" excluída com sucesso!')
@@ -217,4 +221,4 @@ def arquivar_imovel(request, tis_id, imovel_id):
             return redirect(f'/dominial/tis/{tis.id}/?status=arquivados')
     except Exception as e:
         messages.error(request, f'Erro ao alterar status do imóvel: {str(e)}')
-        return redirect('tis_detail', tis_id=tis.id) 
+        return redirect('tis_detail', tis_id=tis.id)

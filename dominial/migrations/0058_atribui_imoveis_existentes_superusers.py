@@ -36,10 +36,10 @@ def atribuir_imoveis_aos_superusers(apps, schema_editor):
 
 
 def remover_atribuicoes_dos_superusers(apps, schema_editor):
-    User = apps.get_model('auth', 'User')
-    UserImovel = apps.get_model('dominial', 'UserImovel')
-
-    UserImovel.objects.filter(user__in=User.objects.filter(is_superuser=True)).delete()
+    # A tabela não registra se uma linha foi criada por esta migration ou
+    # manualmente depois dela. Uma reversão destrutiva seria necessariamente
+    # lossy, portanto preservamos as atribuições existentes.
+    return
 
 
 class Migration(migrations.Migration):

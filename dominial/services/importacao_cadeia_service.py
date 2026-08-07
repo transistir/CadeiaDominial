@@ -7,6 +7,7 @@ from django.db import transaction
 from django.contrib.auth.models import User
 from typing import Dict, List, Any
 from ..models import Documento, DocumentoImportado, Imovel
+from ..managers import documentos_for_user
 
 
 class ImportacaoCadeiaService:
@@ -35,14 +36,29 @@ class ImportacaoCadeiaService:
         """
         try:
             with transaction.atomic():
-                # Verificar se o imóvel destino existe
-                imovel_destino = Imovel.objects.get(id=imovel_destino_id)
-                
-                # Verificar se o documento origem existe
-                documento_origem = Documento.objects.get(id=documento_origem_id)
-                
                 # Verificar se o usuário existe
                 usuario = User.objects.get(id=usuario_id)
+
+                # Tanto o destino quanto todas as fontes são revalidados no
+                # service. A view não é uma fronteira de confiança para IDs
+                # recebidos no POST.
+                imovel_destino = Imovel.objects.for_user(usuario).get(
+                    id=imovel_destino_id
+                )
+                documentos_autorizados = documentos_for_user(usuario)
+                documento_origem = documentos_autorizados.get(
+                    id=documento_origem_id
+                )
+
+                ids_solicitados = set(documentos_importaveis_ids)
+                documentos_por_id = documentos_autorizados.filter(
+                    id__in=ids_solicitados
+                ).in_bulk()
+                if set(documentos_por_id) != ids_solicitados:
+                    return {
+                        'sucesso': False,
+                        'erro': 'Um ou mais documentos selecionados não estão disponíveis para este usuário.',
+                    }
                 
                 documentos_importados = []
                 erros = []
@@ -50,7 +66,7 @@ class ImportacaoCadeiaService:
                 # Importar cada documento da lista
                 for doc_id in documentos_importaveis_ids:
                     try:
-                        documento = Documento.objects.get(id=doc_id)
+                        documento = documentos_por_id[doc_id]
                         
                         # Verificar se já não foi importado
                         if DocumentoImportado.objects.filter(
@@ -74,8 +90,8 @@ class ImportacaoCadeiaService:
                             'data_importacao': documento_importado.data_importacao
                         })
                         
-                    except Documento.DoesNotExist:
-                        erros.append(f"Documento com ID {doc_id} não encontrado")
+                    except KeyError:
+                        erros.append('Documento selecionado não encontrado')
                     except Exception as e:
                         erros.append(f"Erro ao importar documento {doc_id}: {str(e)}")
                 
@@ -227,4 +243,4 @@ class ImportacaoCadeiaService:
             return {
                 'sucesso': False,
                 'erro': f'Erro ao desfazer importação: {str(e)}'
-            } 
+            }

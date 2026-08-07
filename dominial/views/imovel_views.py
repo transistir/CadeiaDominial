@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from ..models import Imovel, TIs, Pessoas, Cartorios, UserImovel
 from ..forms import ImovelForm
 from ..services.lancamento_documento_service import LancamentoDocumentoService
@@ -64,20 +65,20 @@ def imovel_form(request, tis_id, imovel_id=None):
             
             # Salvar imóvel
             try:
-                imovel.save()
-                
-                # Criar automaticamente o documento de matrícula para o imóvel
-                if not imovel_id:  # Apenas para novos imóveis
-                    # Atribuir o imóvel ao autor, senão o usuário comum cria e
-                    # perde acesso imediatamente (issue #132).
-                    UserImovel.objects.get_or_create(
-                        user=request.user, imovel=imovel, defaults={'atribuido_por': request.user}
-                    )
-                    try:
+                with transaction.atomic():
+                    imovel.save()
+
+                    # Criar automaticamente o documento de matrícula para o imóvel
+                    if not imovel_id:  # Apenas para novos imóveis
+                        # Atribuir o imóvel ao autor, senão o usuário comum cria e
+                        # perde acesso imediatamente (issue #132).
+                        UserImovel.objects.get_or_create(
+                            user=request.user,
+                            imovel=imovel,
+                            defaults={'atribuido_por': request.user},
+                        )
                         documento_matricula = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
                         messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
-                    except Exception as e:
-                        messages.warning(request, f'Imóvel criado, mas houve um problema ao criar o documento de matrícula: {str(e)}')
                 
                 messages.success(request, 'Imóvel cadastrado com sucesso!')
                 return redirect('tis_detail', tis_id=tis_id)
@@ -94,4 +95,4 @@ def imovel_form(request, tis_id, imovel_id=None):
     else:
         form = ImovelForm(instance=imovel)
     
-    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel}) 
+    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})

@@ -11,7 +11,10 @@ Cenários cobertos:
 
 from datetime import date
 
-from django.contrib.auth.models import AnonymousUser, User
+from unittest.mock import patch
+
+from django.contrib.auth.models import AnonymousUser, Permission, User
+from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -23,6 +26,7 @@ from dominial.managers import (
 from dominial.models import (
     Cartorios,
     Documento,
+    DocumentoImportado,
     DocumentoTipo,
     Imovel,
     Lancamento,
@@ -32,6 +36,10 @@ from dominial.models import (
     UserImovel,
 )
 from dominial.utils.segregacao_utils import usuario_tem_acesso_imovel
+from dominial.services.hierarquia_service import HierarquiaService
+from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
+from dominial.services.importacao_cadeia_service import ImportacaoCadeiaService
+from dominial.services.cadeia_completa_service import CadeiaCompletaService
 
 
 class SegregacaoBaseTestCase(TestCase):
@@ -431,6 +439,203 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
         )
         self.assertIn(novo, Imovel.objects.for_user(self.dono))
 
+    @patch(
+        'dominial.views.imovel_views.LancamentoDocumentoService.criar_documento_matricula_automatico',
+        side_effect=RuntimeError('falha simulada'),
+    )
+    def test_falha_no_documento_inicial_desfaz_imovel_e_atribuicao(self, _mock):
+        response = self.client.post(
+            reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id}),
+            {
+                'matricula': '3001',
+                'nome': 'Imóvel com falha',
+                'tipo_documento_principal': 'matricula',
+                'proprietario_nome': 'Proprietário Teste',
+                'cartorio': self.cartorio.id,
+                'estado': 'SP',
+                'cidade': 'São Paulo',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Imovel.objects.filter(matricula='3001').exists())
+        self.assertFalse(UserImovel.objects.filter(user=self.dono, imovel__matricula='3001').exists())
+
+
+class BlockersRound3Test(SegregacaoBaseTestCase):
+    """Regressões dos vetores cross-tenant encontrados na terceira revisão."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_staff_sem_atribuicao_nao_exclui_ti_alheia(self):
+        self.sem_acesso.is_staff = True
+        self.sem_acesso.save(update_fields=['is_staff'])
+        self.client.force_login(self.sem_acesso)
+
+        response = self.client.post(reverse('tis_delete', kwargs={'tis_id': self.tis_b.id}))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(TIs.objects.filter(pk=self.tis_b.pk).exists())
+        self.assertTrue(Imovel.objects.filter(pk=self.imovel_b.pk).exists())
+
+    def test_duplicata_de_imovel_alheio_retorna_apenas_conflito_generico(self):
+        self.client.force_login(self.dono)
+        response = self.client.post(
+            reverse('verificar_duplicata_ajax', kwargs={
+                'tis_id': self.tis_a.id,
+                'imovel_id': self.imovel_a.id,
+                'documento_id': self.documento_a.id,
+            }),
+            {
+                'origem_completa[]': [self.documento_b.numero],
+                'cartorio_origem[]': [str(self.cartorio.id)],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['tem_duplicata'])
+        self.assertIsNone(payload['dados_template'])
+        self.assertNotIn('documento_origem', payload)
+        self.assertNotIn(self.imovel_b.nome, response.content.decode())
+        self.assertNotIn(str(self.documento_b.id), response.content.decode())
+
+    def test_importacao_revalida_documentos_no_escopo_do_usuario(self):
+        resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
+            imovel_destino_id=self.imovel_a.id,
+            documento_origem_id=self.documento_b.id,
+            documentos_importaveis_ids=[self.documento_b.id],
+            usuario_id=self.dono.id,
+        )
+
+        self.assertFalse(resultado['sucesso'])
+        self.assertFalse(DocumentoImportado.objects.exists())
+
+    def test_services_hierarquicos_nao_cruzam_escopo_nem_cache(self):
+        self.lancamento_a.origem = self.documento_b.numero
+        self.lancamento_a.cartorio_origem = self.cartorio
+        self.lancamento_a.save(update_fields=['origem', 'cartorio_origem'])
+        cache.clear()
+
+        # Simula um cálculo global anterior que colocaria a origem alheia no
+        # cache legado do imóvel.
+        tronco_global = HierarquiaService.obter_tronco_principal(self.imovel_a)
+        self.assertIn(self.documento_b, tronco_global)
+
+        tronco_usuario = HierarquiaService.obter_tronco_principal(
+            self.imovel_a,
+            user=self.dono,
+        )
+        self.assertEqual([doc.id for doc in tronco_usuario], [self.documento_a.id])
+
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel_a,
+            documentos_queryset=documentos_for_user(self.dono),
+        )
+        ids_arvore = {
+            node['id'] for node in arvore['documentos']
+            if not node.get('is_fim_cadeia')
+        }
+        self.assertEqual(ids_arvore, {self.documento_a.id})
+
+        contexto = CadeiaCompletaService(user=self.dono).get_cadeia_completa_com_sequencia_personalizada(
+            self.tis_a.id,
+            self.imovel_a.id,
+            str(self.documento_b.id),
+        )
+        ids_exportados = {
+            item['documento'].id
+            for tronco in contexto['cadeia_completa']
+            for item in tronco['documentos']
+        }
+        self.assertNotIn(self.documento_b.id, ids_exportados)
+
+    def test_staff_nao_ve_admin_de_atribuicoes_nem_acessa_url_direta(self):
+        self.sem_acesso.is_staff = True
+        self.sem_acesso.save(update_fields=['is_staff'])
+        permissoes = Permission.objects.filter(
+            content_type__app_label='dominial',
+            codename__in=[
+                'add_userimovel',
+                'change_userimovel',
+                'view_userimovel',
+            ],
+        )
+        self.sem_acesso.user_permissions.set(permissoes)
+        self.client.force_login(self.sem_acesso)
+        changelist_url = reverse('admin:dominial_userimovel_changelist')
+
+        index = self.client.get(reverse('admin:index'))
+        self.assertEqual(index.status_code, 200)
+        self.assertNotContains(index, changelist_url)
+        self.assertEqual(self.client.get(changelist_url).status_code, 403)
+
+
+class GuardsSecundariosRound3Test(SegregacaoBaseTestCase):
+    def setUp(self):
+        self.client = Client()
+
+    def test_endpoints_de_cartorio_exigem_login(self):
+        for nome in ['verificar_cartorios_estado', 'importar_cartorios_estado']:
+            with self.subTest(endpoint=nome):
+                response = self.client.post(reverse(nome), {'estado': 'SP'})
+                self.assertEqual(response.status_code, 302)
+
+    def test_api_nao_grava_escolha_para_documento_alheio(self):
+        self.client.force_login(self.dono)
+        response = self.client.post(
+            reverse('escolher_origem_documento'),
+            data={
+                'documento_id': self.documento_b.id,
+                'origem_numero': 'M999',
+                'tis_id': self.tis_a.id,
+                'imovel_id': self.imovel_a.id,
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(
+            f'origem_documento_{self.documento_b.id}',
+            self.client.session,
+        )
+
+    def test_api_nao_grava_escolha_para_lancamento_alheio(self):
+        self.client.force_login(self.dono)
+        response = self.client.post(
+            reverse('escolher_origem_lancamento'),
+            data={
+                'lancamento_id': self.lancamento_b.id,
+                'origem_numero': 'M999',
+                'tis_id': self.tis_a.id,
+                'imovel_id': self.imovel_a.id,
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(
+            f'origem_lancamento_{self.lancamento_b.id}',
+            self.client.session,
+        )
+
+    def test_view_nao_grava_escolha_para_documento_alheio(self):
+        self.client.force_login(self.dono)
+        response = self.client.get(
+            reverse('cadeia_dominial_tabela', kwargs={
+                'tis_id': self.tis_a.id,
+                'imovel_id': self.imovel_a.id,
+            }),
+            {'origem': 'M999', 'documento_id': self.documento_b.id},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(
+            f'origem_documento_{self.documento_b.id}',
+            self.client.session,
+        )
+
 
 class DataMigrationAtribuicaoTest(TestCase):
     """Ponto 6 do plano: data migration defensiva."""
@@ -468,4 +673,4 @@ class DataMigrationAtribuicaoTest(TestCase):
         self.assertEqual(UserImovel.objects.filter(user=superuser).count(), 1)
 
         migracao.remover_atribuicoes_dos_superusers(apps, None)
-        self.assertFalse(UserImovel.objects.filter(user=superuser).exists())
+        self.assertTrue(UserImovel.objects.filter(user=superuser, imovel=imovel).exists())

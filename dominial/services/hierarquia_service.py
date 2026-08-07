@@ -7,6 +7,8 @@ from ..utils.hierarquia_utils import identificar_tronco_principal, identificar_t
 from .cache_service import CacheService
 from .hierarquia_arvore_service import HierarquiaArvoreService
 from .hierarquia_origem_service import HierarquiaOrigemService
+from ..managers import documentos_for_user
+from ..models import Documento
 
 
 class HierarquiaService:
@@ -18,45 +20,84 @@ class HierarquiaService:
     # ==================== TRONCO PRINCIPAL ====================
     
     @staticmethod
-    def obter_tronco_principal(imovel, escolhas_origem=None):
+    def obter_tronco_principal(
+        imovel,
+        escolhas_origem=None,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Obtém o tronco principal da cadeia dominial com cache
         """
         if escolhas_origem is None:
             escolhas_origem = {}
         
-        # Tentar obter do cache primeiro (apenas se não houver escolhas)
-        if not escolhas_origem:
+        escopo_explicito = user is not None or documentos_queryset is not None
+        if documentos_queryset is None:
+            documentos_queryset = (
+                documentos_for_user(user)
+                if user is not None
+                else Documento.objects.all()
+            )
+
+        # O cache legado é global por imóvel. Para requisições segregadas ele
+        # é deliberadamente ignorado, impedindo reutilização entre usuários.
+        if not escolhas_origem and not escopo_explicito:
             cached_tronco = CacheService.get_cached_tronco_principal(imovel.id)
             if cached_tronco:
                 return cached_tronco
         
         # Calcular tronco considerando escolhas de origem
-        tronco = identificar_tronco_principal(imovel, escolhas_origem)
+        tronco = identificar_tronco_principal(
+            imovel,
+            escolhas_origem,
+            documentos_queryset=documentos_queryset,
+        )
         
         # Armazenar em cache apenas se não houver escolhas
-        if not escolhas_origem:
+        if not escolhas_origem and not escopo_explicito:
             CacheService.set_cached_tronco_principal(imovel.id, tronco)
         
         return tronco
     
     @staticmethod
-    def obter_troncos_secundarios(imovel):
+    def obter_troncos_secundarios(
+        imovel,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Obtém os troncos secundários da cadeia dominial
         """
-        tronco_principal = identificar_tronco_principal(imovel)
+        if documentos_queryset is None:
+            documentos_queryset = (
+                documentos_for_user(user)
+                if user is not None
+                else Documento.objects.all()
+            )
+        tronco_principal = identificar_tronco_principal(
+            imovel,
+            documentos_queryset=documentos_queryset,
+        )
         return identificar_troncos_secundarios(imovel, tronco_principal)
     
     @staticmethod
-    def calcular_hierarquia_documentos(imovel):
+    def calcular_hierarquia_documentos(
+        imovel,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Calcula a hierarquia completa dos documentos de um imóvel
         """
-        from ..models import Documento
-        
         # Obter todos os documentos do imóvel
-        documentos = Documento.objects.filter(imovel=imovel).select_related('tipo', 'cartorio')
+        if documentos_queryset is None:
+            documentos_queryset = (
+                documentos_for_user(user)
+                if user is not None
+                else Documento.objects.all()
+            )
+        documentos = documentos_queryset.filter(imovel=imovel).select_related('tipo', 'cartorio')
         
         # Calcular hierarquia baseada nas origens
         hierarquia = {}
@@ -75,17 +116,32 @@ class HierarquiaService:
         return hierarquia
     
     @staticmethod
-    def validar_hierarquia(imovel):
+    def validar_hierarquia(
+        imovel,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Valida se a hierarquia de documentos está consistente
         """
         try:
-            tronco = HierarquiaService.obter_tronco_principal(imovel)
-            troncos_secundarios = HierarquiaService.obter_troncos_secundarios(imovel)
+            if documentos_queryset is None:
+                documentos_queryset = (
+                    documentos_for_user(user)
+                    if user is not None
+                    else Documento.objects.all()
+                )
+            tronco = HierarquiaService.obter_tronco_principal(
+                imovel,
+                documentos_queryset=documentos_queryset,
+            )
+            troncos_secundarios = HierarquiaService.obter_troncos_secundarios(
+                imovel,
+                documentos_queryset=documentos_queryset,
+            )
             
             # Verificar se há documentos órfãos
-            from ..models import Documento
-            todos_documentos = Documento.objects.filter(imovel=imovel)
+            todos_documentos = documentos_queryset.filter(imovel=imovel)
             documentos_hierarquia = set()
             
             # Adicionar documentos do tronco principal
@@ -119,11 +175,26 @@ class HierarquiaService:
     # ==================== ÁRVORE D3 ====================
     
     @staticmethod
-    def construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False):
+    def construir_arvore_cadeia_dominial(
+        imovel,
+        criar_documentos_automaticos=False,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         """
-        return HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos)
+        if documentos_queryset is None:
+            documentos_queryset = (
+                documentos_for_user(user)
+                if user is not None
+                else Documento.objects.all()
+            )
+        return HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            criar_documentos_automaticos,
+            documentos_queryset=documentos_queryset,
+        )
     
     # ==================== ORIGENS ====================
     

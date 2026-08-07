@@ -29,7 +29,7 @@ def _tipo_do_codigo(codigo):
     return None
 
 
-def _resolver_documento_por_codigo(codigo, cartorio):
+def _resolver_documento_por_codigo(codigo, cartorio, documentos_queryset=None):
     """
     Resolve um documento pela identidade completa (tipo, número normalizado e
     cartório), nunca por número isolado. Sem cartório, com tipo incompatível
@@ -46,7 +46,10 @@ def _resolver_documento_por_codigo(codigo, cartorio):
         identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
     except (TypeError, ValueError):
         return None
-    resultado = DocumentoIdentidadeService.resolver(identidade)
+    resultado = DocumentoIdentidadeService.resolver(
+        identidade,
+        queryset=documentos_queryset,
+    )
     return resultado.documento if resultado.status == 'encontrado' else None
 
 
@@ -89,17 +92,26 @@ def calcular_niveis_hierarquicos_otimizada(documentos, conexoes):
     pass
 
 
-def identificar_tronco_principal(imovel, escolhas_origem=None):
+def identificar_tronco_principal(
+    imovel,
+    escolhas_origem=None,
+    documentos_queryset=None,
+):
     """
     Identifica o tronco principal da cadeia dominial de um imóvel.
     """
     if escolhas_origem is None:
         escolhas_origem = {}
-    
-    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    if documentos_queryset is None:
+        documentos_queryset = Documento.objects.all()
+
+    documentos = documentos_queryset.filter(imovel=imovel).order_by('data')
     
     # Buscar documentos importados que são referenciados pelos lançamentos deste imóvel
-    documentos_importados = identificar_documentos_importados(imovel)
+    documentos_importados = identificar_documentos_importados(
+        imovel,
+        documentos_queryset=documentos_queryset,
+    )
     
     # Adicionar documentos importados à lista
     documentos = list(documentos) + documentos_importados
@@ -154,6 +166,7 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
                 doc_existente = _resolver_documento_por_codigo(
                     origem.codigo,
                     origem.cartorio,
+                    documentos_queryset,
                 )
                 if (
                     doc_existente
@@ -201,7 +214,7 @@ def identificar_troncos_secundarios(imovel, tronco_principal):
     pass
 
 
-def identificar_documentos_importados(imovel):
+def identificar_documentos_importados(imovel, documentos_queryset=None):
     """
     Identifica documentos compartilhados que são referenciados pelos lançamentos deste imóvel
     e também os documentos que são referenciados pelos documentos compartilhados (expansão recursiva)
@@ -212,8 +225,10 @@ def identificar_documentos_importados(imovel):
     Returns:
         list: Lista de documentos compartilhados (que pertencem a outros imóveis)
     """
-    from ..models import Documento, Lancamento
-    import re
+    from ..models import Lancamento
+
+    if documentos_queryset is None:
+        documentos_queryset = Documento.objects.all()
 
     # Buscar todos os lançamentos do imóvel que têm origens
     lancamentos_com_origem = Lancamento.objects.filter(documento__imovel=imovel)
@@ -236,7 +251,11 @@ def identificar_documentos_importados(imovel):
                 continue
             documentos_processados.add(chave)
 
-            doc_compartilhado = _resolver_documento_por_codigo(codigo, cartorio)
+            doc_compartilhado = _resolver_documento_por_codigo(
+                codigo,
+                cartorio,
+                documentos_queryset,
+            )
 
             if doc_compartilhado and doc_compartilhado.imovel_id != imovel.id:
                 if doc_compartilhado.id not in {doc.id for doc in documentos_compartilhados}:

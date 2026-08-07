@@ -5,6 +5,7 @@ from django import forms
 from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count
 from django.utils.safestring import mark_safe
@@ -14,6 +15,7 @@ from .management.commands.importar_cartorios_estado import Command as ImportarCa
 from django.conf import settings
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import User
+from .managers import documentos_for_user, lancamentos_for_user, tis_for_user
 
 # Configurações do Admin
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -78,7 +80,7 @@ class NumeroDocumentoFilter(admin.SimpleListFilter):
     def lookups(self, request, model_admin):
         # Buscar números únicos que aparecem mais de uma vez
         from django.db.models import Count
-        numeros_duplicados = Documento.objects.values('numero').annotate(
+        numeros_duplicados = documentos_for_user(request.user).values('numero').annotate(
             count=Count('id')
         ).filter(count__gt=1).order_by('numero')
         
@@ -100,6 +102,8 @@ class AtribuicaoAuditoriaMixin:
     def save_formset(self, request, form, formset, change):
         if formset.model is not UserImovel:
             return super().save_formset(request, form, formset, change)
+        if not request.user.is_superuser:
+            raise PermissionDenied
         instances = formset.save(commit=False)
         for obj in formset.deleted_objects:
             obj.delete()
@@ -108,6 +112,11 @@ class AtribuicaoAuditoriaMixin:
                 instance.atribuido_por = request.user
             instance.save()
         formset.save_m2m()
+
+    def get_inline_instances(self, request, obj=None):
+        if not request.user.is_superuser:
+            return []
+        return super().get_inline_instances(request, obj)
 
 
 class UserImovelPorImovelInline(admin.TabularInline):
@@ -149,11 +158,26 @@ class UserImovelAdmin(admin.ModelAdmin):
         'imovel__matricula', 'imovel__nome',
     ]
     autocomplete_fields = ['user', 'imovel']
-    readonly_fields = ['data_atribuicao']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
     list_per_page = 50
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('user', 'imovel', 'atribuido_por')
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
 
     def save_model(self, request, obj, form, change):
         # Auditoria: registra quem concedeu o acesso, sem sobrescrever em edições.
@@ -168,7 +192,7 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
 
     def get_inline_instances(self, request, obj=None):
         # O inline exige um User já salvo (FK obrigatória) — some na tela de criação.
-        if obj is None:
+        if obj is None or not request.user.is_superuser:
             return []
         return super().get_inline_instances(request, obj)
 
@@ -205,9 +229,14 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     readonly_fields = ['data_cadastro']
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
+        return Imovel.objects.for_user(request.user).select_related(
             'terra_indigena_id', 'proprietario', 'cartorio'
         ).prefetch_related('documentos', 'documentos__lancamentos')
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'terra_indigena_id':
+            kwargs['queryset'] = tis_for_user(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def info_documentos_lancamentos(self, obj):
         """
@@ -242,7 +271,7 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         from django.db.models import Count
         
         try:
-            imovel = Imovel.objects.select_related(
+            imovel = Imovel.objects.for_user(request.user).select_related(
                 'terra_indigena_id', 'proprietario', 'cartorio'
             ).prefetch_related(
                 'documentos', 'documentos__lancamentos'
@@ -250,6 +279,9 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         except Imovel.DoesNotExist:
             messages.error(request, 'Imóvel não encontrado.')
             return redirect('admin:dominial_imovel_changelist')
+
+        if not self.has_change_permission(request, imovel):
+            raise PermissionDenied
         
         # Coletar informações sobre documentos e lançamentos
         documentos = imovel.documentos.all()\
@@ -259,7 +291,7 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         num_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).count()
         
         ti_atual = imovel.terra_indigena_id
-        todas_tis = TIs.objects.all().order_by('nome')
+        todas_tis = tis_for_user(request.user).order_by('nome')
         
         if request.method == 'POST':
             nova_ti_id = request.POST.get('nova_ti')
@@ -269,7 +301,7 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
                 messages.error(request, 'Por favor, selecione uma nova Terra Indígena.')
             else:
                 try:
-                    nova_ti = TIs.objects.get(id=nova_ti_id)
+                    nova_ti = tis_for_user(request.user).get(id=nova_ti_id)
                     
                     if nova_ti.id == ti_atual.id:
                         messages.warning(request, 'O imóvel já está associado a esta Terra Indígena.')
@@ -344,7 +376,7 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         """
         extra_context = extra_context or {}
         try:
-            imovel = Imovel.objects.get(id=object_id)
+            imovel = Imovel.objects.for_user(request.user).get(id=object_id)
             extra_context['mostrar_botao_alterar_ti'] = True
             extra_context['imovel_id'] = object_id
         except Imovel.DoesNotExist:
@@ -376,9 +408,14 @@ class DocumentoAdmin(admin.ModelAdmin):
     )
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
+        return documentos_for_user(request.user).select_related(
             'cartorio', 'imovel', 'imovel__terra_indigena_id', 'tipo'
         ).prefetch_related('lancamentos')
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'imovel':
+            kwargs['queryset'] = Imovel.objects.for_user(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def contagem_lancamentos(self, obj):
         """
@@ -428,12 +465,12 @@ class DocumentoAdmin(admin.ModelAdmin):
             numeros_selecionados = queryset.values_list('numero', flat=True).distinct()
             
             # Buscar TODOS os documentos com esses números (não apenas os selecionados)
-            duplicatas = Documento.objects.filter(numero__in=numeros_selecionados).values('numero').annotate(
+            duplicatas = documentos_for_user(request.user).filter(numero__in=numeros_selecionados).values('numero').annotate(
                 count=Count('id')
             ).filter(count__gt=1)
         else:
             # Se nenhum documento selecionado, buscar todos os duplicados
-            duplicatas = Documento.objects.values('numero').annotate(
+            duplicatas = documentos_for_user(request.user).values('numero').annotate(
                 count=Count('id')
             ).filter(count__gt=1)
         
@@ -441,7 +478,7 @@ class DocumentoAdmin(admin.ModelAdmin):
             mensagem = "🔍 Documentos com mesmo número encontrados:\n"
             for dup in duplicatas:
                 numero = dup['numero']
-                documentos = Documento.objects.filter(numero=numero).select_related('cartorio').order_by('cartorio__nome')
+                documentos = documentos_for_user(request.user).filter(numero=numero).select_related('cartorio').order_by('cartorio__nome')
                 mensagem += f"\n📋 Número: {numero} ({dup['count']} documentos):\n"
                 for doc in documentos:
                     mensagem += f"  - ID: {doc.id}, Cartório: {doc.cartorio.nome}, Data: {doc.data}\n"
@@ -477,10 +514,15 @@ class LancamentoAdmin(admin.ModelAdmin):
     )
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
+        return lancamentos_for_user(request.user).select_related(
             'documento', 'documento__cartorio', 'documento__imovel', 
             'documento__imovel__terra_indigena_id', 'tipo', 'transmitente', 'adquirente'
         )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'documento':
+            kwargs['queryset'] = documentos_for_user(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 ESTADOS = [
     ('AC', 'Acre'),
