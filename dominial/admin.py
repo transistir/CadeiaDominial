@@ -27,11 +27,26 @@ admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 
 # Register your models here.
 
-admin.site.register(TIs)
 admin.site.register(Pessoas)
-admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
+
+
+@admin.register(TIs)
+class TIsAdmin(admin.ModelAdmin):
+    def get_queryset(self, request):
+        return tis_for_user(request.user)
+
+
+@admin.register(Alteracoes)
+class AlteracoesAdmin(admin.ModelAdmin):
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(
+            imovel_id__usuarios_atribuidos__user=request.user,
+        ).distinct()
 
 
 class EstadoVazioFilter(admin.SimpleListFilter):
@@ -72,6 +87,15 @@ class DocumentoDigitalAdmin(admin.ModelAdmin):
     list_filter = ('tipo_mime',)
     search_fields = ('nome_original',)
     readonly_fields = ('tamanho_bytes', 'data_upload')
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(
+            documento__imovel__usuarios_atribuidos__user=request.user,
+        ).distinct()
+
 
 class NumeroDocumentoFilter(admin.SimpleListFilter):
     title = 'Número do Documento'

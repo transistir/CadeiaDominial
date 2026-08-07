@@ -35,13 +35,6 @@ def atribuir_imoveis_aos_superusers(apps, schema_editor):
     ])
 
 
-def remover_atribuicoes_dos_superusers(apps, schema_editor):
-    # A tabela não registra se uma linha foi criada por esta migration ou
-    # manualmente depois dela. Uma reversão destrutiva seria necessariamente
-    # lossy, portanto preservamos as atribuições existentes.
-    return
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -52,6 +45,8 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(
             atribuir_imoveis_aos_superusers,
-            remover_atribuicoes_dos_superusers,
+            # Irreversível por design: não há como distinguir com segurança
+            # estas atribuições das que forem criadas manualmente depois.
+            migrations.RunPython.noop,
         ),
     ]

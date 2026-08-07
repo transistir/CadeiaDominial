@@ -24,39 +24,14 @@ def imovel_form(request, tis_id, imovel_id=None):
             imovel.terra_indigena_id = tis
             # Atribuir o cartório explicitamente
             imovel.cartorio = form.cleaned_data.get('cartorio')
-            # Processar proprietário
-            if nome_proprietario:
-                # Truncar nome se for muito longo (máximo 255 caracteres)
-                nome_truncado = nome_proprietario[:255] if len(nome_proprietario) > 255 else nome_proprietario
-                
-                # Avisar se o nome foi truncado
-                if len(nome_proprietario) > 255:
-                    messages.warning(request, f'O nome do proprietário foi truncado para {len(nome_truncado)} caracteres.')
-                
-                # Criar ou buscar proprietário
-                # Primeiro verificar se já existe uma pessoa com este nome
-                pessoas_existentes = Pessoas.objects.filter(nome=nome_truncado)
-                
-                if pessoas_existentes.exists():
-                    # Se existem múltiplas pessoas com o mesmo nome, usar a primeira
-                    if pessoas_existentes.count() > 1:
-                        messages.warning(request, f'Encontradas {pessoas_existentes.count()} pessoas com o nome "{nome_truncado}". Usando a primeira encontrada.')
-                    proprietario = pessoas_existentes.first()
-                    created = False
-                else:
-                    # Criar nova pessoa
-                    proprietario = Pessoas.objects.create(
-                        nome=nome_truncado,
-                        cpf=None,  # CPF é opcional, usar None em vez de string vazia
-                        rg='',
-                        email='',
-                        telefone=''
-                    )
-                    created = True
-                imovel.proprietario = proprietario
-            else:
+            if not nome_proprietario:
                 messages.error(request, 'Nome do proprietário é obrigatório.')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
+
+            # Truncar nome se for muito longo (máximo 255 caracteres)
+            nome_truncado = nome_proprietario[:255]
+            if len(nome_proprietario) > 255:
+                messages.warning(request, f'O nome do proprietário foi truncado para {len(nome_truncado)} caracteres.')
             
             # O cartório já foi processado pelo form.is_valid() e está em imovel.cartorio
             if not imovel.cartorio:
@@ -66,6 +41,23 @@ def imovel_form(request, tis_id, imovel_id=None):
             # Salvar imóvel
             try:
                 with transaction.atomic():
+                    # Resolver/criar o proprietário na mesma transação do imóvel
+                    # evita deixar Pessoas órfãs em falhas posteriores.
+                    pessoas_existentes = Pessoas.objects.filter(nome=nome_truncado)
+                    quantidade_pessoas = pessoas_existentes.count()
+                    if quantidade_pessoas:
+                        if quantidade_pessoas > 1:
+                            messages.warning(request, f'Encontradas {quantidade_pessoas} pessoas com o nome "{nome_truncado}". Usando a primeira encontrada.')
+                        proprietario = pessoas_existentes.first()
+                    else:
+                        proprietario = Pessoas.objects.create(
+                            nome=nome_truncado,
+                            cpf=None,
+                            rg='',
+                            email='',
+                            telefone='',
+                        )
+                    imovel.proprietario = proprietario
                     imovel.save()
 
                     # Criar automaticamente o documento de matrícula para o imóvel

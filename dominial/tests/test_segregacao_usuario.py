@@ -13,9 +13,11 @@ from datetime import date
 
 from unittest.mock import patch
 
+from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, Permission, User
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.db import migrations
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
 from dominial.managers import (
@@ -24,6 +26,8 @@ from dominial.managers import (
     tis_for_user,
 )
 from dominial.models import (
+    Alteracoes,
+    AlteracoesTipo,
     Cartorios,
     Documento,
     DocumentoImportado,
@@ -35,6 +39,8 @@ from dominial.models import (
     TIs,
     UserImovel,
 )
+from dominial.admin import AlteracoesAdmin, DocumentoDigitalAdmin, TIsAdmin
+from dominial.models.documento_digital_models import DocumentoDigital
 from dominial.utils.segregacao_utils import usuario_tem_acesso_imovel
 from dominial.services.hierarquia_service import HierarquiaService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
@@ -450,7 +456,7 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
                 'matricula': '3001',
                 'nome': 'Imóvel com falha',
                 'tipo_documento_principal': 'matricula',
-                'proprietario_nome': 'Proprietário Teste',
+                'proprietario_nome': 'Proprietário que deve ser revertido',
                 'cartorio': self.cartorio.id,
                 'estado': 'SP',
                 'cidade': 'São Paulo',
@@ -460,6 +466,9 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Imovel.objects.filter(matricula='3001').exists())
         self.assertFalse(UserImovel.objects.filter(user=self.dono, imovel__matricula='3001').exists())
+        self.assertFalse(
+            Pessoas.objects.filter(nome='Proprietário que deve ser revertido').exists()
+        )
 
 
 class BlockersRound3Test(SegregacaoBaseTestCase):
@@ -572,6 +581,82 @@ class BlockersRound3Test(SegregacaoBaseTestCase):
         self.assertEqual(self.client.get(changelist_url).status_code, 403)
 
 
+class AdminSegregacaoRound4Test(SegregacaoBaseTestCase):
+    """Admins derivados de imóvel respeitam a atribuição do usuário."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.dono.is_staff = True
+        cls.dono.save(update_fields=['is_staff'])
+        tipo_alteracao = AlteracoesTipo.objects.create(tipo='registro')
+        cls.alteracao_a = Alteracoes.objects.create(
+            imovel_id=cls.imovel_a,
+            tipo_alteracao_id=tipo_alteracao,
+            cartorio=cls.cartorio,
+            cartorio_origem=cls.cartorio,
+        )
+        cls.alteracao_b = Alteracoes.objects.create(
+            imovel_id=cls.imovel_b,
+            tipo_alteracao_id=tipo_alteracao,
+            cartorio=cls.cartorio,
+            cartorio_origem=cls.cartorio,
+        )
+        cls.digital_a = DocumentoDigital.objects.create(
+            documento=cls.documento_a,
+            arquivo='documentos_digitais/a.pdf',
+            nome_original='a.pdf',
+            tipo_mime='application/pdf',
+            tamanho_bytes=1,
+            upload_por=cls.superuser,
+        )
+        cls.digital_b = DocumentoDigital.objects.create(
+            documento=cls.documento_b,
+            arquivo='documentos_digitais/b.pdf',
+            nome_original='b.pdf',
+            tipo_mime='application/pdf',
+            tamanho_bytes=1,
+            upload_por=cls.superuser,
+        )
+
+    def _request_for(self, user):
+        request = RequestFactory().get('/admin/')
+        request.user = user
+        return request
+
+    def test_staff_ve_apenas_registros_dos_imoveis_atribuidos(self):
+        request = self._request_for(self.dono)
+
+        self.assertCountEqual(
+            TIsAdmin(TIs, admin.site).get_queryset(request),
+            [self.tis_a],
+        )
+        self.assertCountEqual(
+            AlteracoesAdmin(Alteracoes, admin.site).get_queryset(request),
+            [self.alteracao_a],
+        )
+        self.assertCountEqual(
+            DocumentoDigitalAdmin(DocumentoDigital, admin.site).get_queryset(request),
+            [self.digital_a],
+        )
+
+    def test_superuser_mantem_bypass_global(self):
+        request = self._request_for(self.superuser)
+
+        self.assertCountEqual(
+            TIsAdmin(TIs, admin.site).get_queryset(request),
+            [self.tis_a, self.tis_b],
+        )
+        self.assertCountEqual(
+            AlteracoesAdmin(Alteracoes, admin.site).get_queryset(request),
+            [self.alteracao_a, self.alteracao_b],
+        )
+        self.assertCountEqual(
+            DocumentoDigitalAdmin(DocumentoDigital, admin.site).get_queryset(request),
+            [self.digital_a, self.digital_b],
+        )
+
+
 class GuardsSecundariosRound3Test(SegregacaoBaseTestCase):
     def setUp(self):
         self.client = Client()
@@ -672,5 +757,5 @@ class DataMigrationAtribuicaoTest(TestCase):
         migracao.atribuir_imoveis_aos_superusers(apps, None)
         self.assertEqual(UserImovel.objects.filter(user=superuser).count(), 1)
 
-        migracao.remover_atribuicoes_dos_superusers(apps, None)
-        self.assertTrue(UserImovel.objects.filter(user=superuser, imovel=imovel).exists())
+        operacao = migracao.Migration.operations[0]
+        self.assertIs(operacao.reverse_code, migrations.RunPython.noop)
