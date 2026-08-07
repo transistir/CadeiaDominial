@@ -8,11 +8,15 @@ Regra única de autorização:
   desses imóveis.
 - Usuário anônimo (ou ``None``) não enxerga nada.
 
-``Cartorios`` e ``Pessoas`` são tabelas de referência GLOBAL e não são
-segregadas.
+``Cartorios`` e ``Pessoas`` são tabelas de referência GLOBAL para o app: os
+autocompletes precisam oferecer qualquer cartório/pessoa já cadastrado, senão
+o usuário recria registros duplicados. O admin é o caso oposto — lá a listagem
+de ``Pessoas`` é um cadastro de PII navegável, e por isso é escopada por
+``pessoas_for_user`` (ver ``PessoasAdmin``).
 """
 
 from django.db import models
+from django.db.models import Q
 
 
 def usuario_ve_tudo(user):
@@ -77,3 +81,32 @@ def tis_for_user(user):
     if usuario_ve_tudo(user):
         return TIs.objects.all()
     return TIs.objects.filter(imovel__usuarios_atribuidos__user=user).distinct()
+
+
+def pessoas_for_user(user):
+    """
+    Pessoas ligadas a algum imóvel atribuído ao usuário.
+
+    Uso restrito ao admin: ``Pessoas`` guarda CPF/RG/data de nascimento, e a
+    listagem do admin é um cadastro navegável — sem escopo, qualquer staff
+    lê o PII do sistema inteiro. Os autocompletes do app continuam globais
+    (ver docstring do módulo).
+
+    Um vínculo conta em qualquer uma das pontas: proprietário do imóvel, parte
+    de um lançamento (FK direta ou ``LancamentoPessoa``) ou parte de uma
+    alteração.
+    """
+    from .models import Pessoas
+
+    if not usuario_autenticado(user):
+        return Pessoas.objects.none()
+    if usuario_ve_tudo(user):
+        return Pessoas.objects.all()
+    return Pessoas.objects.filter(
+        Q(imovel__usuarios_atribuidos__user=user)
+        | Q(transmitente_lancamento__documento__imovel__usuarios_atribuidos__user=user)
+        | Q(adquirente_lancamento__documento__imovel__usuarios_atribuidos__user=user)
+        | Q(lancamentopessoa__lancamento__documento__imovel__usuarios_atribuidos__user=user)
+        | Q(transmitente__imovel_id__usuarios_atribuidos__user=user)
+        | Q(adquirente__imovel_id__usuarios_atribuidos__user=user)
+    ).distinct()

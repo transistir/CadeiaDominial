@@ -9,19 +9,23 @@ Cenários cobertos:
 - Cartorios/Pessoas permanecem globais.
 """
 
+import re
 from datetime import date
+from pathlib import Path
 
 from unittest.mock import patch
 
 from django.contrib import admin
-from django.contrib.auth.models import AnonymousUser, Permission, User
+from django.contrib.auth.models import AnonymousUser, Group, Permission, User
 from django.core.cache import cache
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
+import dominial
 from dominial.managers import (
     documentos_for_user,
     lancamentos_for_user,
+    pessoas_for_user,
     tis_for_user,
 )
 from dominial.models import (
@@ -33,19 +37,34 @@ from dominial.models import (
     DocumentoTipo,
     Imovel,
     Lancamento,
+    LancamentoPessoa,
     LancamentoTipo,
     Pessoas,
     TIs,
     UserImovel,
 )
-from dominial.admin import AlteracoesAdmin, DocumentoDigitalAdmin, TIsAdmin
+from dominial.admin import (
+    AlteracoesAdmin,
+    DocumentoDigitalAdmin,
+    ImovelAdmin,
+    PessoasAdmin,
+    TIsAdmin,
+    TIsSegregadaFilter,
+)
 from dominial.models.documento_digital_models import DocumentoDigital
 from dominial.utils.segregacao_utils import usuario_tem_acesso_imovel
 from dominial.services.hierarquia_service import HierarquiaService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.importacao_cadeia_service import ImportacaoCadeiaService
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
-from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
+from dominial.services.lancamento_criacao_service import (
+    ERRO_ATUALIZACAO,
+    ERRO_CRIACAO,
+    ERRO_DUPLICATA,
+    NAO_AUTORIZADO_DOCUMENTO,
+    NAO_AUTORIZADO_LANCAMENTO,
+    LancamentoCriacaoService,
+)
 
 
 class SegregacaoBaseTestCase(TestCase):
@@ -963,3 +982,390 @@ class MediaSegregacaoTest(SegregacaoBaseTestCase):
         response = self.client.get(self._url(self.digital_a))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
+
+
+class MustFixRound8Test(SegregacaoBaseTestCase):
+    """Achados da review de arquitetura (M-12 a M-17 + nice-to-haves)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.dono.is_staff = True
+        cls.dono.save(update_fields=['is_staff'])
+        cls.pessoa_a = Pessoas.objects.create(nome='Parte do Imóvel A', cpf='11111111111')
+        cls.pessoa_b = Pessoas.objects.create(nome='Parte do Imóvel B', cpf='22222222222')
+        LancamentoPessoa.objects.create(
+            lancamento=cls.lancamento_a, pessoa=cls.pessoa_a, tipo='transmitente'
+        )
+        LancamentoPessoa.objects.create(
+            lancamento=cls.lancamento_b, pessoa=cls.pessoa_b, tipo='transmitente'
+        )
+
+    def setUp(self):
+        self.client = Client()
+
+    def _request_for(self, user):
+        request = RequestFactory().get('/admin/')
+        request.user = user
+        return request
+
+    def _post_de_lancamento(self, user, **extras):
+        dados = {
+            'tipo_lancamento': str(self.lanc_tipo.id),
+            'numero_lancamento_simples': '9',
+            'numero_lancamento': 'R9M9999',
+            'data': '2024-05-01',
+        }
+        dados.update(extras)
+        request = RequestFactory().post('/', dados)
+        request.user = user
+        return request
+
+    # ------------------------------------------------------------------
+    # M-12: o filtro de TI da sidebar lia TIs._default_manager sem filtro
+    # ------------------------------------------------------------------
+    def test_filtro_de_ti_do_changelist_nao_oferece_ti_alheia(self):
+        request = self._request_for(self.dono)
+        campo = Imovel._meta.get_field('terra_indigena_id')
+
+        opcoes = TIsSegregadaFilter.field_choices(
+            None, campo, request, ImovelAdmin(Imovel, admin.site)
+        )
+
+        self.assertEqual([nome for _, nome in opcoes], [str(self.tis_a)])
+
+    def test_changelist_de_imovel_nao_vaza_ti_alheia_na_sidebar(self):
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='dominial', codename='view_imovel'
+            )
+        )
+        self.client.force_login(self.dono)
+
+        response = self.client.get(reverse('admin:dominial_imovel_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.tis_a.nome)
+        self.assertNotContains(response, self.tis_b.nome)
+
+    def test_superuser_continua_vendo_todas_as_tis_no_filtro(self):
+        request = self._request_for(self.superuser)
+        campo = Imovel._meta.get_field('terra_indigena_id')
+
+        opcoes = TIsSegregadaFilter.field_choices(
+            None, campo, request, ImovelAdmin(Imovel, admin.site)
+        )
+
+        self.assertCountEqual(
+            [nome for _, nome in opcoes], [str(self.tis_a), str(self.tis_b)]
+        )
+
+    # ------------------------------------------------------------------
+    # M-13: UserAdmin de série deixava staff marcar is_superuser em si mesmo
+    # ------------------------------------------------------------------
+    def test_staff_com_change_user_nao_se_promove_a_superuser(self):
+        grupo = Group.objects.create(name='Privilegiados')
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='auth',
+                codename__in=['change_user', 'view_user'],
+            )
+        )
+        self.client.force_login(self.dono)
+
+        response = self.client.post(
+            reverse('admin:auth_user_change', args=[self.dono.pk]),
+            {
+                'username': self.dono.username,
+                'first_name': 'Promovido',
+                'last_name': '',
+                'email': '',
+                'is_active': 'on',
+                'is_staff': 'on',
+                'is_superuser': 'on',
+                'groups': [str(grupo.pk)],
+                'date_joined_0': '2024-01-01',
+                'date_joined_1': '00:00:00',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.dono.refresh_from_db()
+        # O form salvou (não é um falso negativo por validação)...
+        self.assertEqual(self.dono.first_name, 'Promovido')
+        # ...mas os campos de escalação foram ignorados.
+        self.assertFalse(self.dono.is_superuser)
+        self.assertFalse(self.dono.groups.exists())
+
+    def test_superuser_continua_podendo_conceder_privilegio(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:auth_user_change', args=[self.sem_acesso.pk]),
+            {
+                'username': self.sem_acesso.username,
+                'first_name': '',
+                'last_name': '',
+                'email': '',
+                'is_active': 'on',
+                'is_staff': 'on',
+                'is_superuser': 'on',
+                'date_joined_0': '2024-01-01',
+                'date_joined_1': '00:00:00',
+                'imoveis_atribuidos-TOTAL_FORMS': '0',
+                'imoveis_atribuidos-INITIAL_FORMS': '0',
+                'imoveis_atribuidos-MIN_NUM_FORMS': '0',
+                'imoveis_atribuidos-MAX_NUM_FORMS': '1000',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.sem_acesso.refresh_from_db()
+        self.assertTrue(self.sem_acesso.is_superuser)
+
+    # ------------------------------------------------------------------
+    # M-14: Pessoas estava registrada sem segregação nenhuma (PII)
+    # ------------------------------------------------------------------
+    def test_staff_ve_apenas_pessoas_dos_imoveis_atribuidos(self):
+        request = self._request_for(self.dono)
+
+        self.assertCountEqual(
+            PessoasAdmin(Pessoas, admin.site).get_queryset(request),
+            # `proprietario` é dono do imóvel A (e do B) — o vínculo com A basta.
+            [self.proprietario, self.pessoa_a],
+        )
+
+    def test_superuser_ve_todas_as_pessoas(self):
+        request = self._request_for(self.superuser)
+
+        self.assertCountEqual(
+            PessoasAdmin(Pessoas, admin.site).get_queryset(request),
+            [self.proprietario, self.pessoa_a, self.pessoa_b],
+        )
+
+    def test_changelist_de_pessoas_nao_vaza_pii_alheio(self):
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='dominial', codename='view_pessoas'
+            )
+        )
+        self.client.force_login(self.dono)
+
+        response = self.client.get(reverse('admin:dominial_pessoas_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.pessoa_a.cpf)
+        self.assertNotContains(response, self.pessoa_b.cpf)
+
+    # ------------------------------------------------------------------
+    # M-15: has_*_permission hardcoded em True ignorava as permissões de model
+    # ------------------------------------------------------------------
+    def test_staff_sem_permissao_nao_escreve_em_importacao_nem_fim_cadeia(self):
+        self.client.force_login(self.dono)
+
+        self.assertEqual(
+            self.client.get(
+                reverse('admin:dominial_importacaocartorios_add')
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse('admin:dominial_fimcadeia_add')).status_code, 403
+        )
+
+    def test_staff_sem_permissao_nao_dispara_importacao_pela_url_customizada(self):
+        self.client.force_login(self.dono)
+
+        self.assertEqual(
+            self.client.get(reverse('admin:nova-importacao')).status_code, 403
+        )
+
+    def test_staff_com_permissao_de_add_continua_entrando(self):
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='dominial',
+                codename__in=['add_importacaocartorios', 'view_importacaocartorios'],
+            )
+        )
+        self.client.force_login(self.dono)
+
+        self.assertEqual(
+            self.client.get(reverse('admin:nova-importacao')).status_code, 200
+        )
+
+    # ------------------------------------------------------------------
+    # M-16: documento/lançamento eram aceitos do caller sem revalidação
+    # ------------------------------------------------------------------
+    def test_criacao_recusa_documento_de_outro_usuario(self):
+        request = self._post_de_lancamento(self.dono)
+        quantidade_antes = Lancamento.objects.count()
+
+        resultado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
+            request, self.tis_b, self.imovel_b, self.documento_b
+        )
+
+        self.assertIsNone(resultado)
+        self.assertEqual(mensagem, NAO_AUTORIZADO_DOCUMENTO)
+        self.assertEqual(Lancamento.objects.count(), quantidade_antes)
+
+    def test_atualizacao_recusa_lancamento_de_outro_usuario(self):
+        request = self._post_de_lancamento(self.dono)
+
+        ok, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
+            request, self.lancamento_b, self.imovel_b
+        )
+
+        self.assertFalse(ok)
+        self.assertEqual(mensagem, NAO_AUTORIZADO_LANCAMENTO)
+        # O `pessoas.all().delete()` do método nem chegou a rodar.
+        self.assertTrue(self.lancamento_b.pessoas.exists())
+
+    # ------------------------------------------------------------------
+    # M-17: sem atomic, uma falha entre o delete e a recriação perdia as partes
+    # ------------------------------------------------------------------
+    @patch(
+        'dominial.services.lancamento_criacao_service.'
+        'LancamentoPessoaService.processar_pessoas_lancamento',
+        side_effect=RuntimeError('falha logo depois do delete'),
+    )
+    def test_falha_apos_o_delete_devolve_as_partes_do_lancamento(self, _mock):
+        request = self._post_de_lancamento(
+            self.dono, numero_lancamento=self.lancamento_a.numero_lancamento
+        )
+
+        ok, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
+            request, self.lancamento_a, self.imovel_a
+        )
+
+        self.assertFalse(ok)
+        self.assertEqual(mensagem, ERRO_ATUALIZACAO)
+        self.assertNotIn('falha logo depois do delete', mensagem)
+        self.assertCountEqual(
+            [vinculo.pessoa for vinculo in self.lancamento_a.pessoas.all()],
+            [self.pessoa_a],
+        )
+
+    @patch(
+        'dominial.services.lancamento_criacao_service.'
+        'LancamentoPessoaService.processar_pessoas_lancamento',
+        side_effect=RuntimeError('falha no meio da criação'),
+    )
+    def test_falha_na_criacao_nao_deixa_lancamento_orfao(self, _mock):
+        request = self._post_de_lancamento(self.dono, apos_importacao='')
+        quantidade_antes = Lancamento.objects.count()
+
+        resultado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
+            request, self.tis_a, self.imovel_a, self.documento_a, apos_importacao=True
+        )
+
+        self.assertIsNone(resultado)
+        self.assertEqual(mensagem, ERRO_CRIACAO)
+        self.assertEqual(Lancamento.objects.count(), quantidade_antes)
+
+    # ------------------------------------------------------------------
+    # N-3/N-4: verificação de duplicata falhava aberto e vazava o str(e)
+    # ------------------------------------------------------------------
+    @patch(
+        'dominial.services.lancamento_criacao_service.'
+        'LancamentoDuplicataService.verificar_duplicata_antes_criacao',
+        side_effect=RuntimeError('coluna dominial_documento.numero fora do ar'),
+    )
+    def test_falha_na_verificacao_de_duplicata_aborta_a_criacao(self, _mock):
+        request = self._post_de_lancamento(self.dono)
+        quantidade_antes = Lancamento.objects.count()
+
+        resultado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
+            request, self.tis_a, self.imovel_a, self.documento_a
+        )
+
+        self.assertIsNone(resultado)
+        self.assertEqual(mensagem, ERRO_DUPLICATA)
+        self.assertNotIn('dominial_documento', mensagem)
+        self.assertEqual(Lancamento.objects.count(), quantidade_antes)
+
+    # ------------------------------------------------------------------
+    # N-5: nome do arquivo ia cru para o Content-Disposition
+    # ------------------------------------------------------------------
+    def test_content_disposition_escapa_nome_do_arquivo(self):
+        arquivo = DocumentoDigital.objects.create(
+            documento=self.documento_a,
+            arquivo='documentos_digitais/a.pdf',
+            nome_original='rela"torio.pdf',
+            tipo_mime='application/pdf',
+            tamanho_bytes=1,
+            upload_por=self.superuser,
+        )
+        self.client.force_login(self.dono)
+
+        response = self.client.get(
+            reverse('servir_documento_digital', kwargs={
+                'tis_id': self.tis_a.id,
+                'imovel_id': self.imovel_a.id,
+                'documento_id': self.documento_a.id,
+                'arquivo_id': arquivo.id,
+            })
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Disposition'], r'inline; filename="rela\"torio.pdf"'
+        )
+
+
+class ManagerOptInRegressaoTest(TestCase):
+    """
+    N-1: o manager é opt-in, então esquecer `.for_user()` falha aberto.
+
+    Guarda a camada onde existe `request.user` — `dominial/views/` e
+    `dominial/admin.py`. Ali todo acesso a `Imovel.objects` tem de passar por
+    `for_user`, e todo acesso a `Documento.objects` tem de estar preso a um
+    imóvel já escopado (`imovel=`). Os management commands e os services que
+    recebem `documentos_queryset` pronto ficam de fora: não têm usuário.
+    """
+
+    # `(?<![A-Za-z_])` evita casar `UserImovel.objects` / `DocumentoTipo.objects`.
+    CHAMADA_IMOVEL = re.compile(r'(?<![A-Za-z_])Imovel\.objects\.(\w+)')
+    CHAMADA_DOCUMENTO = re.compile(r'(?<![A-Za-z_])Documento\.objects\.(\w+)')
+
+    def _arquivos_com_request(self):
+        raiz = Path(dominial.__file__).parent
+        return sorted(raiz.glob('views/*.py')) + [raiz / 'admin.py']
+
+    @staticmethod
+    def _argumentos_da_chamada(fonte, inicio):
+        """Texto entre os parênteses da chamada que começa em `inicio`."""
+        abre = fonte.index('(', inicio)
+        profundidade = 0
+        for i in range(abre, len(fonte)):
+            if fonte[i] == '(':
+                profundidade += 1
+            elif fonte[i] == ')':
+                profundidade -= 1
+                if profundidade == 0:
+                    return fonte[abre + 1:i]
+        return fonte[abre:]
+
+    def test_views_e_admin_so_alcancam_imovel_via_for_user(self):
+        for caminho in self._arquivos_com_request():
+            fonte = caminho.read_text(encoding='utf-8')
+            for match in self.CHAMADA_IMOVEL.finditer(fonte):
+                linha = fonte.count('\n', 0, match.start()) + 1
+                self.assertEqual(
+                    match.group(1),
+                    'for_user',
+                    f'{caminho.name}:{linha} usa Imovel.objects.{match.group(1)}() '
+                    f'sem passar por for_user()',
+                )
+
+    def test_views_e_admin_so_alcancam_documento_preso_a_um_imovel(self):
+        for caminho in self._arquivos_com_request():
+            fonte = caminho.read_text(encoding='utf-8')
+            for match in self.CHAMADA_DOCUMENTO.finditer(fonte):
+                linha = fonte.count('\n', 0, match.start()) + 1
+                argumentos = self._argumentos_da_chamada(fonte, match.start())
+                self.assertIn(
+                    'imovel=',
+                    argumentos,
+                    f'{caminho.name}:{linha} usa Documento.objects.'
+                    f'{match.group(1)}() sem prender a um imóvel já escopado',
+                )

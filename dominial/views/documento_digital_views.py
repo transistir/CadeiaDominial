@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
+from django.utils.http import content_disposition_header
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
 
@@ -108,7 +109,11 @@ def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_i
     response = HttpResponse()
     response['X-Accel-Redirect'] = arquivo.arquivo.url
     response['Content-Type'] = arquivo.tipo_mime
-    response['Content-Disposition'] = f'inline; filename="{arquivo.nome_original}"'
+    # `nome_original` vem do upload: interpolar direto deixa aspas e quebras de
+    # linha injetarem headers. O helper do Django faz o escaping/RFC 5987.
+    response['Content-Disposition'] = content_disposition_header(
+        as_attachment=False, filename=arquivo.nome_original
+    )
     response['X-Content-Type-Options'] = 'nosniff'
     return response
 

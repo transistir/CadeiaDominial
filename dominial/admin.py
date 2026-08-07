@@ -15,7 +15,13 @@ from .management.commands.importar_cartorios_estado import Command as ImportarCa
 from django.conf import settings
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import User
-from .managers import documentos_for_user, lancamentos_for_user, tis_for_user
+from .managers import (
+    documentos_for_user,
+    lancamentos_for_user,
+    pessoas_for_user,
+    tis_for_user,
+    usuario_ve_tudo,
+)
 
 # Configurações do Admin
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -27,15 +33,62 @@ admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 
 # Register your models here.
 
-admin.site.register(Pessoas)
+
+def escopar(queryset, permitidos, user):
+    """
+    Restringe `queryset` ao escopo do usuário sem perder o que veio do super().
+
+    Filtrar por `pk__in` em vez de devolver o queryset do helper preserva o
+    ordering, os `select_related` e as annotations que o `ModelAdmin` monta em
+    `get_queryset` — trocar o queryset inteiro descartava tudo isso (#132).
+    """
+    if usuario_ve_tudo(user):
+        return queryset
+    return queryset.filter(pk__in=permitidos)
+
+
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
+
+
+class TIsSegregadaFilter(admin.RelatedFieldListFilter):
+    """
+    Filtro de TI na sidebar do changelist, respeitando a atribuição (#132).
+
+    O ``RelatedFieldListFilter`` padrão monta as opções via
+    ``field.get_choices()``, que lê ``TIs._default_manager`` sem filtro algum —
+    ou seja, passa ao largo de ``TIsAdmin.get_queryset`` e mostraria a lista
+    completa de TIs para qualquer staff.
+    """
+
+    def field_choices(self, field, request, model_admin):
+        return [(tis.pk, str(tis)) for tis in tis_for_user(request.user).order_by('nome')]
+
+
+@admin.register(Pessoas)
+class PessoasAdmin(admin.ModelAdmin):
+    """
+    Cadastro de pessoas escopado por imóvel atribuído (#132).
+
+    ``Pessoas`` guarda CPF, RG e data de nascimento; sem escopo a listagem do
+    admin entrega o PII do sistema inteiro a qualquer staff.
+    """
+    list_display = ['nome', 'cpf', 'rg', 'email', 'telefone']
+    search_fields = ['nome', 'cpf', 'rg']
+    list_per_page = 50
+
+    def get_queryset(self, request):
+        return escopar(
+            super().get_queryset(request), pessoas_for_user(request.user), request.user
+        )
 
 
 @admin.register(TIs)
 class TIsAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
-        return tis_for_user(request.user)
+        return escopar(
+            super().get_queryset(request), tis_for_user(request.user), request.user
+        )
 
 
 @admin.register(Alteracoes)
@@ -224,6 +277,21 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
     """UserAdmin padrão + inline de imóveis atribuídos (#132)."""
     inlines = [UserImovelPorUserInline]
 
+    # Campos que decidem quem escapa da segregação. Sem este bloqueio, um staff
+    # com `auth.change_user` marca `is_superuser` — no próprio usuário, inclusive
+    # — e ganha acesso a todos os imóveis do sistema.
+    CAMPOS_DE_ESCALACAO = ('is_superuser', 'is_staff', 'groups', 'user_permissions')
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if not request.user.is_superuser:
+            # `disabled` faz o Django ignorar o valor enviado e reusar o do banco,
+            # então um POST forjado também não passa.
+            for nome in self.CAMPOS_DE_ESCALACAO:
+                if nome in form.base_fields:
+                    form.base_fields[nome].disabled = True
+        return form
+
     def get_inline_instances(self, request, obj=None):
         # O inline exige um User já salvo (FK obrigatória) — some na tela de criação.
         if obj is None or not request.user.is_superuser:
@@ -242,7 +310,10 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     """
     inlines = [UserImovelPorImovelInline]
     list_display = ['matricula', 'nome', 'terra_indigena_id', 'proprietario', 'cartorio', 'tipo_documento_principal', 'arquivado', 'data_cadastro', 'info_documentos_lancamentos']
-    list_filter = ['terra_indigena_id', 'tipo_documento_principal', 'arquivado', 'cartorio', 'data_cadastro']
+    list_filter = [
+        ('terra_indigena_id', TIsSegregadaFilter),
+        'tipo_documento_principal', 'arquivado', 'cartorio', 'data_cadastro',
+    ]
     search_fields = ['matricula', 'nome', 'terra_indigena_id__nome', 'proprietario__nome', 'cartorio__nome']
     date_hierarchy = 'data_cadastro'
     list_per_page = 50
@@ -263,9 +334,10 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     readonly_fields = ['data_cadastro']
     
     def get_queryset(self, request):
-        return Imovel.objects.for_user(request.user).select_related(
+        queryset = super().get_queryset(request).select_related(
             'terra_indigena_id', 'proprietario', 'cartorio'
         ).prefetch_related('documentos', 'documentos__lancamentos')
+        return escopar(queryset, Imovel.objects.for_user(request.user), request.user)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'terra_indigena_id':
@@ -442,9 +514,10 @@ class DocumentoAdmin(admin.ModelAdmin):
     )
     
     def get_queryset(self, request):
-        return documentos_for_user(request.user).select_related(
+        queryset = super().get_queryset(request).select_related(
             'cartorio', 'imovel', 'imovel__terra_indigena_id', 'tipo'
         ).prefetch_related('lancamentos')
+        return escopar(queryset, documentos_for_user(request.user), request.user)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'imovel':
@@ -548,10 +621,11 @@ class LancamentoAdmin(admin.ModelAdmin):
     )
     
     def get_queryset(self, request):
-        return lancamentos_for_user(request.user).select_related(
-            'documento', 'documento__cartorio', 'documento__imovel', 
+        queryset = super().get_queryset(request).select_related(
+            'documento', 'documento__cartorio', 'documento__imovel',
             'documento__imovel__terra_indigena_id', 'tipo', 'transmitente', 'adquirente'
         )
+        return escopar(queryset, lancamentos_for_user(request.user), request.user)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'documento':
@@ -614,6 +688,10 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def iniciar_importacao(self, request, importacao_id):
+        # `admin_view` só exige is_staff; as permissões do model ficam por conta
+        # das views customizadas (#132).
+        if not self.has_change_permission(request):
+            raise PermissionDenied
         try:
             importacao = ImportacaoCartorios.objects.get(id=importacao_id)
             if importacao.status in ['em_andamento', 'concluido']:
@@ -650,6 +728,8 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
             })
 
     def verificar_progresso(self, request, importacao_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
         try:
             importacao = ImportacaoCartorios.objects.get(id=importacao_id)
             return JsonResponse({
@@ -661,6 +741,8 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
             return JsonResponse({'erro': 'Importação não encontrada'}, status=404)
 
     def nova_importacao_view(self, request):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
         if request.method == 'POST':
             form = ImportacaoCartoriosForm(request.POST)
             if form.is_valid():
@@ -715,15 +797,6 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
 
     importar_cartorios.short_description = 'Importar cartórios do estado selecionado'
 
-    def has_add_permission(self, request):
-        return True
-
-    def has_change_permission(self, request, obj=None):
-        return True
-
-    def has_delete_permission(self, request, obj=None):
-        return True
-
 
 @admin.register(FimCadeia)
 class FimCadeiaAdmin(admin.ModelAdmin):
@@ -766,12 +839,3 @@ class FimCadeiaAdmin(admin.ModelAdmin):
             obj.data_criacao = timezone.now()
         obj.data_atualizacao = timezone.now()
         super().save_model(request, obj, form, change)
-    
-    def has_add_permission(self, request):
-        return True
-    
-    def has_change_permission(self, request, obj=None):
-        return True
-    
-    def has_delete_permission(self, request, obj=None):
-        return True
