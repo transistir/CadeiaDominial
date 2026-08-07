@@ -2,7 +2,7 @@ import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import FileResponse, Http404
+from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
@@ -98,20 +98,19 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
 
 @login_required
 def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_id):
-    """Serve o arquivo para download/visualização (NUNCA expõe URL pública)."""
+    """Serve o arquivo via X-Accel-Redirect (nginx internal) — nunca expõe URL pública."""
     tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
-    try:
-        response = FileResponse(
-            arquivo.arquivo.open('rb'),
-            content_type=arquivo.tipo_mime,
-        )
-        response['Content-Disposition'] = f'inline; filename="{arquivo.nome_original}"'
-        response['X-Content-Type-Options'] = 'nosniff'
-        return response
-    except FileNotFoundError:
+    if not arquivo.arquivo:
         raise Http404("Arquivo não encontrado no storage.")
+
+    response = HttpResponse()
+    response['X-Accel-Redirect'] = arquivo.arquivo.url
+    response['Content-Type'] = arquivo.tipo_mime
+    response['Content-Disposition'] = f'inline; filename="{arquivo.nome_original}"'
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 @login_required

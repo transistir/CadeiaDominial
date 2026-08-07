@@ -899,3 +899,67 @@ class DataMigrationAtribuicaoTest(TestCase):
         operacao = migracao.Migration.operations[0]
         self.assertIsNone(operacao.reverse_code)
         self.assertFalse(operacao.reversible)
+
+
+class MediaSegregacaoTest(SegregacaoBaseTestCase):
+    """
+    M-11: /media/ não pode ser servido publicamente.
+
+    O nginx serve /media/ apenas via `internal` (X-Accel-Redirect). A view
+    protegida delega o download ao nginx e nunca expõe a URL pública direta.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.digital_a = DocumentoDigital.objects.create(
+            documento=cls.documento_a,
+            arquivo='documentos_digitais/a.pdf',
+            nome_original='a.pdf',
+            tipo_mime='application/pdf',
+            tamanho_bytes=1,
+            upload_por=cls.superuser,
+        )
+        cls.digital_b = DocumentoDigital.objects.create(
+            documento=cls.documento_b,
+            arquivo='documentos_digitais/b.pdf',
+            nome_original='b.pdf',
+            tipo_mime='application/pdf',
+            tamanho_bytes=1,
+            upload_por=cls.superuser,
+        )
+
+    def setUp(self):
+        self.client = Client()
+
+    def _url(self, arquivo):
+        imovel = arquivo.documento.imovel
+        return reverse('servir_documento_digital', kwargs={
+            'tis_id': imovel.terra_indigena_id_id,
+            'imovel_id': imovel.id,
+            'documento_id': arquivo.documento_id,
+            'arquivo_id': arquivo.id,
+        })
+
+    def test_media_nao_servido_direto_por_django(self):
+        # /media/ é responsabilidade do nginx (internal); o Django não tem rota
+        # pública para ele — request direto não deve devolver o arquivo.
+        response = self.client.get('/media/documentos_digitais/a.pdf')
+        self.assertEqual(response.status_code, 404)
+
+    def test_servir_documento_delega_via_x_accel_redirect(self):
+        self.client.force_login(self.dono)
+        response = self.client.get(self._url(self.digital_a))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['X-Accel-Redirect'], self.digital_a.arquivo.url)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+    def test_cross_tenant_nao_baixa_documento_alheio(self):
+        self.client.force_login(self.dono)
+        response = self.client.get(self._url(self.digital_b))
+        self.assertEqual(response.status_code, 404)
+
+    def test_anonimo_nao_baixa_documento(self):
+        response = self.client.get(self._url(self.digital_a))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
