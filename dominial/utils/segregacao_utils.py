@@ -33,7 +33,7 @@ def usuario_tem_acesso_imovel(user, imovel_id):
         return False
     if isinstance(imovel_id, Imovel):
         imovel_id = imovel_id.pk
-    return Imovel.objects.filter(pk=imovel_id, usuarios_atribuidos__user=user).exists()
+    return Imovel.objects.for_user(user).filter(pk=imovel_id).exists()
 
 
 def require_imovel_atribuido(view_func):

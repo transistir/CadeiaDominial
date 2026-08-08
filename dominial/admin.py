@@ -107,9 +107,7 @@ class AlteracoesAdmin(admin.ModelAdmin):
         queryset = super().get_queryset(request)
         if request.user.is_superuser:
             return queryset
-        return queryset.filter(
-            imovel_id__usuarios_atribuidos__user=request.user,
-        ).distinct()
+        return queryset.filter(imovel_id__in=Imovel.objects.for_user(request.user))
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if not request.user.is_superuser and db_field.name == 'imovel_id':
@@ -160,9 +158,7 @@ class DocumentoDigitalAdmin(admin.ModelAdmin):
         queryset = super().get_queryset(request)
         if request.user.is_superuser:
             return queryset
-        return queryset.filter(
-            documento__imovel__usuarios_atribuidos__user=request.user,
-        ).distinct()
+        return queryset.filter(documento__in=documentos_for_user(request.user))
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if not request.user.is_superuser and db_field.name == 'documento':

@@ -1589,3 +1589,142 @@ class ManagerOptInRegressaoTest(TestCase):
                     f'{caminho.name}:{linha} usa Documento.objects.'
                     f'{match.group(1)}() sem prender a um imóvel já escopado',
                 )
+
+
+class TisDetailOrderingTest(SegregacaoBaseTestCase):
+    """
+    `tis_detail` saiu do SQL cru (#132, fase 0): o ordering tem de continuar
+    sendo `COALESCE(MAX(doc), MAX(lanc), imovel.data_cadastro) DESC, matricula ASC`.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        # TI isolada: os imóveis/documentos da SegregacaoBaseTestCase (tis_a/tis_b)
+        # não podem interferir na ordenação testada aqui.
+        self.tis_gama = TIs.objects.create(nome='TI Gama', codigo='TI-G', etnia='Gama')
+
+    def _criar_imovel(self, matricula, data_cadastro):
+        imovel = Imovel.objects.create(
+            nome=f'Imóvel {matricula}', matricula=matricula,
+            terra_indigena_id=self.tis_gama,
+            proprietario=self.proprietario, cartorio=self.cartorio,
+        )
+        # `data_cadastro` é auto_now_add: só dá para "voltar no tempo" via update(),
+        # que ignora o auto_now_add por não passar pelo save().
+        Imovel.objects.filter(pk=imovel.pk).update(data_cadastro=data_cadastro)
+        imovel.refresh_from_db()
+        return imovel
+
+    def _criar_documento(self, imovel, numero, data_cadastro):
+        documento = Documento.objects.create(
+            imovel=imovel, tipo=self.doc_tipo, numero=numero,
+            data=data_cadastro, cartorio=self.cartorio, livro='1', folha='1',
+        )
+        Documento.objects.filter(pk=documento.pk).update(data_cadastro=data_cadastro)
+        documento.refresh_from_db()
+        return documento
+
+    def _criar_lancamento(self, documento, numero, data_cadastro):
+        lancamento = Lancamento.objects.create(
+            documento=documento, tipo=self.lanc_tipo,
+            numero_lancamento=numero, data=data_cadastro,
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(data_cadastro=data_cadastro)
+        lancamento.refresh_from_db()
+        return lancamento
+
+    def _get_como_superuser(self):
+        self.assertTrue(self.client.login(username='super', password='senha-super'))
+        return self.client.get(reverse('tis_detail', kwargs={'tis_id': self.tis_gama.id}))
+
+    def test_ordena_por_atividade_mais_recente_com_fallback_ao_cadastro(self):
+        """
+        Três níveis de atividade diferentes: a matrícula mais alta tem a
+        atividade mais recente e a mais baixa tem a mais antiga (via
+        fallback, por não ter documento algum) — de forma que nem "ordem de
+        inserção" nem "ordem crescente de matrícula" batem com o resultado
+        esperado.
+        """
+        # Inseridos em ordem crescente de matrícula — oposta ao resultado esperado.
+        imovel_sem_documento = self._criar_imovel('9100', date(2019, 1, 1))
+        imovel_intermediario = self._criar_imovel('9200', date(2020, 1, 1))
+        imovel_recente = self._criar_imovel('9300', date(2020, 1, 1))
+
+        self._criar_documento(imovel_intermediario, 'M9200', date(2022, 1, 1))
+        self._criar_documento(imovel_recente, 'M9300', date(2024, 6, 1))
+        # imovel_sem_documento não tem nenhum documento: cai para o próprio
+        # data_cadastro (2019-01-01), o mais antigo dos três.
+
+        response = self._get_como_superuser()
+
+        self.assertEqual(
+            [i.id for i in response.context['imoveis']],
+            [imovel_recente.id, imovel_intermediario.id, imovel_sem_documento.id],
+        )
+
+    def test_documento_antigo_com_lancamento_recente_ordena_pela_data_do_documento(self):
+        """
+        `COALESCE(MAX(documento), MAX(lançamento), cadastro)` devolve o
+        primeiro termo não nulo. Como o LEFT JOIN encadeia lançamento →
+        documento → imóvel, todo imóvel com lançamento necessariamente tem
+        documento — logo o segundo termo do COALESCE é inalcançável na
+        prática. O comportamento pré-existente (e que este teste preserva) é
+        ordenar pela data do DOCUMENTO, mesmo que exista um lançamento com
+        data mais recente.
+        """
+        imovel_doc_velho_lanc_novo = self._criar_imovel('9250', date(2020, 1, 1))
+        documento_velho = self._criar_documento(
+            imovel_doc_velho_lanc_novo, 'M9250', date(2021, 1, 1)
+        )
+        self._criar_lancamento(documento_velho, 'R1M9250', date(2025, 1, 1))
+
+        imovel_doc_novo = self._criar_imovel('9150', date(2020, 1, 1))
+        self._criar_documento(imovel_doc_novo, 'M9150', date(2023, 1, 1))
+
+        response = self._get_como_superuser()
+
+        self.assertEqual(
+            [i.id for i in response.context['imoveis']],
+            [imovel_doc_novo.id, imovel_doc_velho_lanc_novo.id],
+        )
+
+    def test_desempate_por_matricula_ascendente(self):
+        mesma_data = date(2022, 5, 5)
+        imovel_alto = self._criar_imovel('9400', mesma_data)
+        imovel_baixo = self._criar_imovel('9300', mesma_data)
+
+        response = self._get_como_superuser()
+
+        self.assertEqual(
+            [i.id for i in response.context['imoveis']],
+            [imovel_baixo.id, imovel_alto.id],
+        )
+
+    def test_segregacao_continua_valendo_com_a_query_orm(self):
+        # `self.dono` só está atribuído ao `imovel_a`, que é de outra TI
+        # (tis_a, da SegregacaoBaseTestCase) — nada aqui deve aparecer para ele,
+        # e as novas annotations não podem ressuscitar nenhum imóvel alheio.
+        imovel = self._criar_imovel('9500', date(2020, 1, 1))
+        self._criar_documento(imovel, 'M9500', date(2024, 1, 1))
+
+        self.assertTrue(self.client.login(username='dono', password='senha-dono'))
+        response = self.client.get(
+            reverse('tis_detail', kwargs={'tis_id': self.tis_gama.id})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['imoveis']), [])
+
+    def test_annotations_ultimo_documento_e_ultimo_lancamento_continuam_expostas(self):
+        # Paridade com os objetos montados à mão no SQL cru antigo: o template
+        # não lê esses atributos hoje, mas o refactor não pode deixar de
+        # anexá-los ao objeto.
+        imovel = self._criar_imovel('9600', date(2020, 1, 1))
+        documento = self._criar_documento(imovel, 'M9600', date(2023, 3, 3))
+        self._criar_lancamento(documento, 'R1M9600', date(2023, 4, 4))
+
+        response = self._get_como_superuser()
+
+        (obtido,) = [i for i in response.context['imoveis'] if i.id == imovel.id]
+        self.assertEqual(obtido.ultimo_documento, date(2023, 3, 3))
+        self.assertEqual(obtido.ultimo_lancamento, date(2023, 4, 4))

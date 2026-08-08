@@ -13,6 +13,9 @@ autocompletes precisam oferecer qualquer cartório/pessoa já cadastrado, senão
 o usuário recria registros duplicados. O admin é o caso oposto — lá a listagem
 de ``Pessoas`` é um cadastro de PII navegável, e por isso é escopada por
 ``pessoas_for_user`` (ver ``PessoasAdmin``).
+
+O filtro em si é definido em um único lugar (``Imovel.objects.for_user``); os
+helpers de documentos, lançamentos, TIs e pessoas abaixo derivam dele.
 """
 
 from django.db import models
@@ -29,6 +32,19 @@ def usuario_autenticado(user):
     return bool(user is not None and getattr(user, 'is_authenticated', False))
 
 
+def imoveis_diretos_ids(user):
+    """
+    PKs dos imóveis atribuídos um-a-um ao usuário, como subquery.
+
+    LEGADO: a atribuição por imóvel (``UserImovel``) sai da UI e é migrada para
+    nível de TI numa fase posterior da issue #132; este termo permanece como
+    rede de rollback até lá.
+    """
+    from .models import UserImovel
+
+    return UserImovel.objects.filter(user=user).values('imovel_id')
+
+
 class SegregacaoQuerySet(models.QuerySet):
     """QuerySet de ``Imovel`` com filtro de segregação por usuário."""
 
@@ -37,7 +53,7 @@ class SegregacaoQuerySet(models.QuerySet):
             return self.none()
         if usuario_ve_tudo(user):
             return self
-        return self.filter(usuarios_atribuidos__user=user)
+        return self.filter(pk__in=imoveis_diretos_ids(user))
 
 
 class SegregacaoManager(models.Manager.from_queryset(SegregacaoQuerySet)):
@@ -48,24 +64,24 @@ class SegregacaoManager(models.Manager.from_queryset(SegregacaoQuerySet)):
 
 def documentos_for_user(user):
     """Documentos visíveis ao usuário (via imóvel atribuído)."""
-    from .models import Documento
+    from .models import Documento, Imovel
 
     if not usuario_autenticado(user):
         return Documento.objects.none()
     if usuario_ve_tudo(user):
         return Documento.objects.all()
-    return Documento.objects.filter(imovel__usuarios_atribuidos__user=user)
+    return Documento.objects.filter(imovel__in=Imovel.objects.for_user(user))
 
 
 def lancamentos_for_user(user):
     """Lançamentos visíveis ao usuário (via documento → imóvel atribuído)."""
-    from .models import Lancamento
+    from .models import Imovel, Lancamento
 
     if not usuario_autenticado(user):
         return Lancamento.objects.none()
     if usuario_ve_tudo(user):
         return Lancamento.objects.all()
-    return Lancamento.objects.filter(documento__imovel__usuarios_atribuidos__user=user)
+    return Lancamento.objects.filter(documento__imovel__in=Imovel.objects.for_user(user))
 
 
 def tis_for_user(user):
@@ -74,13 +90,13 @@ def tis_for_user(user):
 
     Superuser vê todas as TIs, inclusive as que ainda não têm imóveis.
     """
-    from .models import TIs
+    from .models import Imovel, TIs
 
     if not usuario_autenticado(user):
         return TIs.objects.none()
     if usuario_ve_tudo(user):
         return TIs.objects.all()
-    return TIs.objects.filter(imovel__usuarios_atribuidos__user=user).distinct()
+    return TIs.objects.filter(imovel__in=Imovel.objects.for_user(user)).distinct()
 
 
 def pessoas_for_user(user):
@@ -96,17 +112,18 @@ def pessoas_for_user(user):
     de um lançamento (FK direta ou ``LancamentoPessoa``) ou parte de uma
     alteração.
     """
-    from .models import Pessoas
+    from .models import Imovel, Pessoas
 
     if not usuario_autenticado(user):
         return Pessoas.objects.none()
     if usuario_ve_tudo(user):
         return Pessoas.objects.all()
+    imoveis = Imovel.objects.for_user(user)
     return Pessoas.objects.filter(
-        Q(imovel__usuarios_atribuidos__user=user)
-        | Q(transmitente_lancamento__documento__imovel__usuarios_atribuidos__user=user)
-        | Q(adquirente_lancamento__documento__imovel__usuarios_atribuidos__user=user)
-        | Q(lancamentopessoa__lancamento__documento__imovel__usuarios_atribuidos__user=user)
-        | Q(transmitente__imovel_id__usuarios_atribuidos__user=user)
-        | Q(adquirente__imovel_id__usuarios_atribuidos__user=user)
+        Q(imovel__in=imoveis)
+        | Q(transmitente_lancamento__documento__imovel__in=imoveis)
+        | Q(adquirente_lancamento__documento__imovel__in=imoveis)
+        | Q(lancamentopessoa__lancamento__documento__imovel__in=imoveis)
+        | Q(transmitente__imovel_id__in=imoveis)
+        | Q(adquirente__imovel_id__in=imoveis)
     ).distinct()

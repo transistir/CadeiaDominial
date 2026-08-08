@@ -3,7 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
-from django.db.models import Q
+from django.db.models import F, Max, Q
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from ..managers import tis_for_user, usuario_ve_tudo
 from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
@@ -66,63 +67,24 @@ def tis_detail(request, tis_id):
     status = request.GET.get('status', 'ativos')
     is_arquivado = status == 'arquivados'
     
-    # Ordenar imóveis pela atividade mais recente na cadeia dominial
-    from django.db import connection
-    from ..models import Documento, Lancamento
-    
-    # Usar SQL raw para evitar problemas com campos do modelo
-    filtro_segregacao = ''
-    params = [tis_id, is_arquivado]
-    if not usuario_ve_tudo(request.user):
-        filtro_segregacao = (
-            'AND i.id IN (SELECT imovel_id FROM dominial_userimovel WHERE user_id = %s)'
+    # Ordenar imóveis pela atividade mais recente na cadeia dominial:
+    # documento mais recente, senão lançamento mais recente, senão o
+    # próprio cadastro do imóvel; matrícula como desempate.
+    imoveis_ordenados = (
+        Imovel.objects.for_user(request.user)
+        .filter(terra_indigena_id=tis, arquivado=is_arquivado)
+        .annotate(
+            ultimo_documento=Max('documentos__data_cadastro'),
+            ultimo_lancamento=Max('documentos__lancamentos__data_cadastro'),
+            atividade=Coalesce(
+                Max('documentos__data_cadastro'),
+                Max('documentos__lancamentos__data_cadastro'),
+                F('data_cadastro'),
+            ),
         )
-        params.append(request.user.id)
+        .order_by('-atividade', 'matricula')
+    )
 
-    with connection.cursor() as cursor:
-        cursor.execute(f"""
-            SELECT
-                i.id,
-                i.nome,
-                i.matricula,
-                i.data_cadastro,
-                i.observacoes,
-                i.cartorio_id,
-                i.proprietario_id,
-                i.terra_indigena_id_id,
-                i.arquivado,
-                MAX(d.data_cadastro) as ultimo_documento,
-                MAX(l.data_cadastro) as ultimo_lancamento
-            FROM dominial_imovel i
-            LEFT JOIN dominial_documento d ON d.imovel_id = i.id
-            LEFT JOIN dominial_lancamento l ON l.documento_id = d.id
-            WHERE i.terra_indigena_id_id = %s AND i.arquivado = %s {filtro_segregacao}
-            GROUP BY i.id, i.nome, i.matricula, i.data_cadastro, i.observacoes, i.cartorio_id, i.proprietario_id, i.terra_indigena_id_id, i.arquivado
-            ORDER BY
-                COALESCE(MAX(d.data_cadastro), MAX(l.data_cadastro), i.data_cadastro) DESC,
-                i.matricula ASC
-        """, params)
-        
-        # Converter resultados em objetos Imovel
-        imoveis_data = cursor.fetchall()
-        imoveis_ordenados = []
-        
-        for row in imoveis_data:
-            # Criar um objeto Imovel temporário com os dados do banco
-            imovel = Imovel()
-            imovel.id = row[0]
-            imovel.nome = row[1]
-            imovel.matricula = row[2]
-            imovel.data_cadastro = row[3]
-            imovel.observacoes = row[4]
-            imovel.cartorio_id = row[5]
-            imovel.proprietario_id = row[6]
-            imovel.terra_indigena_id_id = row[7]
-            imovel.arquivado = row[8]
-            imovel.ultimo_documento = row[9]
-            imovel.ultimo_lancamento = row[10]
-            imoveis_ordenados.append(imovel)
-    
     return render(request, 'dominial/tis_detail.html', {
         'tis': tis,
         'imoveis': imoveis_ordenados,
