@@ -1,7 +1,11 @@
 import copy
+import json
 import logging
 
 from django.contrib import admin
+from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.admin.widgets import FilteredSelectMultiple
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 from django.contrib import messages
 from django import forms
@@ -182,11 +186,22 @@ class PessoasAdmin(admin.ModelAdmin):
 class TIsAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     search_fields = ['nome', 'codigo', 'etnia']
     inlines = [GroupTIPorTIInline, UserTIPorTIInline]
+    actions = ['atribuir_tis_selecionadas']
 
     def get_queryset(self, request):
         return escopar(
             super().get_queryset(request), tis_for_user(request.user), request.user
         )
+
+    def atribuir_tis_selecionadas(self, request, queryset):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        ids = ','.join(str(pk) for pk in queryset.order_by('pk').values_list('pk', flat=True))
+        url = reverse('admin:dominial_atribuicao_em_massa')
+        return redirect(f'{url}?tis={ids}')
+
+    atribuir_tis_selecionadas.short_description = 'Atribuir TIs selecionadas em massa'
+    atribuir_tis_selecionadas.allowed_permissions = ('view',)
 
 
 @admin.register(Alteracoes)
@@ -382,10 +397,75 @@ class AtribuicaoTISuperuserAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class AtribuicaoEmMassaForm(forms.Form):
+    """Seleciona TIs e destinos para concessão ou revogação em massa."""
+
+    acao = forms.ChoiceField(
+        choices=[('conceder', 'Conceder acesso'), ('revogar', 'Revogar acesso')],
+        initial='conceder',
+        widget=forms.RadioSelect,
+    )
+    tis = forms.ModelMultipleChoiceField(
+        queryset=TIs.objects.order_by('nome'),
+        label='Terras Indígenas',
+        widget=FilteredSelectMultiple('Terras Indígenas', is_stacked=False),
+    )
+    equipes = forms.ModelMultipleChoiceField(
+        queryset=(
+            Group.objects.filter(acesso__tipo=GrupoAcesso.EQUIPE)
+            .annotate(total_membros=Count('user'))
+            .order_by('name')
+        ),
+        required=False,
+        widget=FilteredSelectMultiple('equipes', is_stacked=False),
+    )
+    usuarios = forms.ModelMultipleChoiceField(
+        queryset=(
+            User.objects.filter(is_active=True, is_superuser=False).order_by('username')
+        ),
+        required=False,
+        widget=FilteredSelectMultiple('usuários', is_stacked=False),
+        help_text='Use só quando a atribuição não couber em nenhuma equipe.',
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not (cleaned_data.get('equipes') or cleaned_data.get('usuarios')):
+            raise forms.ValidationError('Selecione ao menos uma equipe ou um usuário.')
+        return cleaned_data
+
+
+def _ids_da_querystring(params, *nomes):
+    """Lê IDs separados por vírgula, aceitando aliases e valores repetidos."""
+    ids = []
+    for nome in nomes:
+        for valor in params.getlist(nome):
+            for parte in valor.split(','):
+                parte = parte.strip()
+                if parte.isdigit() and int(parte) > 0 and int(parte) not in ids:
+                    ids.append(int(parte))
+    return ids
+
+
+def _resumo_atribuicao(acao, total_tis, total_equipes, total_usuarios):
+    if acao == 'conceder':
+        verbo = 'concedida' if total_tis == 1 else 'concedidas'
+    else:
+        verbo = 'revogada' if total_tis == 1 else 'revogadas'
+    tis = 'TI' if total_tis == 1 else 'TIs'
+    equipes = 'equipe' if total_equipes == 1 else 'equipes'
+    usuarios = 'usuário' if total_usuarios == 1 else 'usuários'
+    return (
+        f'Atribuição em massa: {verbo} {total_tis} {tis} a '
+        f'{total_equipes} {equipes} + {total_usuarios} {usuarios}'
+    )
+
+
 @admin.register(UserTI)
 class UserTIAdmin(AtribuicaoTISuperuserAdmin):
     """Gestão standalone das atribuições usuário ↔ TI (#132)."""
 
+    change_list_template = 'admin/dominial/userti/change_list.html'
     list_display = ['user', 'tis', 'data_atribuicao', 'atribuido_por']
     list_filter = ['user', 'data_atribuicao', 'tis']
     search_fields = [
@@ -396,6 +476,161 @@ class UserTIAdmin(AtribuicaoTISuperuserAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('user', 'tis', 'atribuido_por')
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'em-massa/',
+                self.admin_site.admin_view(self.atribuicao_em_massa_view),
+                name='dominial_atribuicao_em_massa',
+            ),
+            path(
+                'em-massa/previa/',
+                self.admin_site.admin_view(self.atribuicao_previa_view),
+                name='dominial_atribuicao_previa',
+            ),
+        ]
+        return custom_urls + urls
+
+    @staticmethod
+    def _dados_previa(request, cleaned_data):
+        tis = list(cleaned_data['tis'])
+        equipes = list(cleaned_data['equipes'])
+        usuarios = list(cleaned_data['usuarios'])
+        acao = cleaned_data['acao']
+
+        total_imoveis = Imovel.objects.for_user(request.user).filter(
+            terra_indigena_id__in=tis
+        ).count()
+        vinculos_existentes = (
+            UserTI.objects.filter(user__in=usuarios, tis__in=tis).count()
+            + GroupTI.objects.filter(group__in=equipes, tis__in=tis).count()
+        )
+
+        nomes_tis = ', '.join(ti.nome for ti in tis)
+        destinos = []
+        if equipes:
+            palavra = 'equipe' if len(equipes) == 1 else 'equipes'
+            detalhes = ', '.join(
+                f'{equipe.name} — {equipe.total_membros} membros' for equipe in equipes
+            )
+            destinos.append(f'{len(equipes)} {palavra} ({detalhes})')
+        if usuarios:
+            palavra = 'usuário' if len(usuarios) == 1 else 'usuários'
+            destinos.append(f'{len(usuarios)} {palavra}')
+
+        infinitivo = 'Conceder' if acao == 'conceder' else 'Revogar'
+        efeito = 'dá' if acao == 'conceder' else 'revoga'
+        if acao == 'conceder':
+            fechamento = (
+                f'{vinculos_existentes} vínculos já existem e serão ignorados.'
+            )
+        else:
+            fechamento = (
+                f'{vinculos_existentes} vínculos existem e serão removidos.'
+            )
+        frase = (
+            f'{infinitivo} {nomes_tis} a {" e ".join(destinos)}. '
+            f'Isso {efeito} acesso a {total_imoveis} imóveis (hoje) '
+            f'e a todos os imóveis futuros dessas TIs. {fechamento}'
+        )
+        return {
+            'acao': acao,
+            'tis': [{'id': ti.pk, 'nome': ti.nome} for ti in tis],
+            'equipes': [
+                {'id': equipe.pk, 'nome': equipe.name, 'membros': equipe.total_membros}
+                for equipe in equipes
+            ],
+            'usuarios': [{'id': usuario.pk, 'nome': str(usuario)} for usuario in usuarios],
+            'total_tis': len(tis),
+            'total_equipes': len(equipes),
+            'total_usuarios': len(usuarios),
+            'total_imoveis': total_imoveis,
+            'vinculos_existentes': vinculos_existentes,
+            'frase': frase,
+        }
+
+    def atribuicao_previa_view(self, request):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        if request.method != 'POST':
+            return JsonResponse({'erro': 'Método não permitido.'}, status=405)
+        try:
+            payload = json.loads(request.body or b'{}')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+        if not isinstance(payload, dict):
+            return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+
+        form = AtribuicaoEmMassaForm(payload)
+        if not form.is_valid():
+            return JsonResponse({'erros': form.errors.get_json_data()}, status=400)
+        return JsonResponse(self._dados_previa(request, form.cleaned_data))
+
+    def atribuicao_em_massa_view(self, request):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+
+        if request.method == 'POST':
+            form = AtribuicaoEmMassaForm(request.POST)
+            if form.is_valid():
+                acao = form.cleaned_data['acao']
+                tis = list(form.cleaned_data['tis'])
+                equipes = list(form.cleaned_data['equipes'])
+                usuarios = list(form.cleaned_data['usuarios'])
+                resumo = _resumo_atribuicao(
+                    acao, len(tis), len(equipes), len(usuarios)
+                )
+
+                with transaction.atomic():
+                    if acao == 'conceder':
+                        UserTI.objects.bulk_create(
+                            [
+                                UserTI(user=usuario, tis=ti, atribuido_por=request.user)
+                                for usuario in usuarios
+                                for ti in tis
+                            ],
+                            ignore_conflicts=True,
+                        )
+                        GroupTI.objects.bulk_create(
+                            [
+                                GroupTI(group=equipe, tis=ti, atribuido_por=request.user)
+                                for equipe in equipes
+                                for ti in tis
+                            ],
+                            ignore_conflicts=True,
+                        )
+                    else:
+                        UserTI.objects.filter(user__in=usuarios, tis__in=tis).delete()
+                        GroupTI.objects.filter(group__in=equipes, tis__in=tis).delete()
+
+                    LogEntry.objects.create(
+                        user_id=request.user.pk,
+                        content_type_id=ContentType.objects.get_for_model(UserTI).pk,
+                        object_id=None,
+                        object_repr='Atribuição em massa de TIs',
+                        action_flag=CHANGE,
+                        change_message=resumo,
+                    )
+
+                messages.success(request, resumo)
+                return redirect('admin:dominial_atribuicao_em_massa')
+        else:
+            form = AtribuicaoEmMassaForm(initial={
+                'tis': _ids_da_querystring(request.GET, 'tis'),
+                'equipes': _ids_da_querystring(request.GET, 'equipes'),
+                'usuarios': _ids_da_querystring(request.GET, 'usuarios', 'usuario'),
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            'form': form,
+            'opts': self.model._meta,
+            'title': 'Atribuição em massa de TIs',
+            'previa_url': reverse('admin:dominial_atribuicao_previa'),
+        }
+        return render(request, 'admin/atribuicao_em_massa.html', context)
 
 
 @admin.register(GroupTI)
@@ -543,6 +778,7 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
     list_display = ['username', 'first_name', 'last_name', 'perfil_exibido', 'is_active']
     list_filter = ['is_active', 'groups', PerfilListFilter, TIAtribuidaListFilter]
     search_fields = ['username', 'first_name', 'last_name', 'email']
+    actions = ['atribuir_tis_aos_usuarios']
 
     FIELDSETS_SIMPLES = (
         (None, {'fields': ('username', 'password')}),
@@ -683,6 +919,16 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
             return queryset
         return queryset.filter(is_superuser=False)
 
+    def atribuir_tis_aos_usuarios(self, request, queryset):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        ids = ','.join(str(pk) for pk in queryset.order_by('pk').values_list('pk', flat=True))
+        url = reverse('admin:dominial_atribuicao_em_massa')
+        return redirect(f'{url}?usuarios={ids}')
+
+    atribuir_tis_aos_usuarios.short_description = 'Atribuir TIs aos usuários selecionados'
+    atribuir_tis_aos_usuarios.allowed_permissions = ('view',)
+
     def _alvo_protegido(self, request, obj):
         """True quando um não-superuser tenta agir sobre um superuser."""
         return (
@@ -714,6 +960,8 @@ admin.site.register(User, UserAdmin)
 class GroupAdmin(DjangoGroupAdmin):
     """Protege os grupos estruturais de perfil contra rename e exclusão."""
 
+    actions = ['atribuir_tis_as_equipes']
+
     @staticmethod
     def _protegido(obj):
         return bool(
@@ -744,6 +992,16 @@ class GroupAdmin(DjangoGroupAdmin):
 
     def delete_queryset(self, request, queryset):
         super().delete_queryset(request, queryset.exclude(acesso__protegido=True))
+
+    def atribuir_tis_as_equipes(self, request, queryset):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        ids = ','.join(str(pk) for pk in queryset.order_by('pk').values_list('pk', flat=True))
+        url = reverse('admin:dominial_atribuicao_em_massa')
+        return redirect(f'{url}?equipes={ids}')
+
+    atribuir_tis_as_equipes.short_description = 'Atribuir TIs às equipes selecionadas'
+    atribuir_tis_as_equipes.allowed_permissions = ('view',)
 
 
 admin.site.unregister(Group)

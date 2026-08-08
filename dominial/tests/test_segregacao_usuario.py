@@ -17,7 +17,9 @@ from unittest.mock import patch
 
 from django.contrib import admin
 from django import forms
+from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import AnonymousUser, Group, Permission, User
+from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db import connection
@@ -736,6 +738,296 @@ class PerfilUsuarioAdminTest(SegregacaoBaseTestCase):
                 self.assertEqual(response.status_code, 403)
                 grupo.refresh_from_db()
                 self.assertEqual(grupo.name, nome_original)
+
+
+class AtribuicaoEmMassaTest(SegregacaoBaseTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.equipe = Group.objects.create(name='Equipe Norte')
+        GrupoAcesso.objects.create(group=cls.equipe, tipo=GrupoAcesso.EQUIPE)
+        cls.equipe.user_set.add(cls.dono, cls.sem_acesso)
+
+    def setUp(self):
+        self.client = Client()
+        self.url = reverse('admin:dominial_atribuicao_em_massa')
+        self.previa_url = reverse('admin:dominial_atribuicao_previa')
+
+    def _post(self, *, acao='conceder', tis=None, equipes=None, usuarios=None):
+        return self.client.post(
+            self.url,
+            {
+                'acao': acao,
+                'tis': [str(ti.pk) for ti in (tis or [])],
+                'equipes': [str(equipe.pk) for equipe in (equipes or [])],
+                'usuarios': [str(usuario.pk) for usuario in (usuarios or [])],
+            },
+        )
+
+    def _payload_previa(self, *, tis, equipes=None, usuarios=None, acao='conceder'):
+        return {
+            'acao': acao,
+            'tis': [ti.pk for ti in tis],
+            'equipes': [equipe.pk for equipe in (equipes or [])],
+            'usuarios': [usuario.pk for usuario in (usuarios or [])],
+        }
+
+    def test_superuser_atribui_varias_tis_a_equipes_e_usuarios(self):
+        self.client.force_login(self.superuser)
+
+        response = self._post(
+            tis=[self.tis_a, self.tis_b],
+            equipes=[self.equipe],
+            usuarios=[self.dono, self.sem_acesso],
+        )
+
+        self.assertRedirects(response, self.url)
+        self.assertEqual(UserTI.objects.count(), 4)
+        self.assertEqual(GroupTI.objects.count(), 2)
+        self.assertFalse(
+            UserTI.objects.exclude(atribuido_por=self.superuser).exists()
+        )
+        self.assertFalse(
+            GroupTI.objects.exclude(atribuido_por=self.superuser).exists()
+        )
+        log = LogEntry.objects.get(object_repr='Atribuição em massa de TIs')
+        self.assertIn('concedidas 2 TIs a 1 equipe + 2 usuários', log.change_message)
+
+    def test_operacao_e_idempotente(self):
+        self.client.force_login(self.superuser)
+        dados = {
+            'tis': [self.tis_a, self.tis_b],
+            'equipes': [self.equipe],
+            'usuarios': [self.dono, self.sem_acesso],
+        }
+
+        self._post(**dados)
+        response = self._post(**dados)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(UserTI.objects.count(), 4)
+        self.assertEqual(GroupTI.objects.count(), 2)
+
+    def test_staff_recebe_403_na_tela_e_no_post(self):
+        self.dono.is_staff = True
+        self.dono.save(update_fields=['is_staff'])
+        self.client.force_login(self.dono)
+        dados = {
+            'tis': [self.tis_a],
+            'equipes': [self.equipe],
+            'usuarios': [self.sem_acesso],
+        }
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self._post(**dados).status_code, 403)
+        self.assertEqual(self.client.get(self.previa_url).status_code, 403)
+        self.assertEqual(
+            self.client.post(
+                self.previa_url,
+                self._payload_previa(**dados),
+                content_type='application/json',
+            ).status_code,
+            403,
+        )
+        index = self.client.get(reverse('admin:index'))
+        self.assertEqual(index.status_code, 200)
+        self.assertNotContains(index, 'Atribuições de TI')
+        self.assertFalse(UserTI.objects.exists())
+        self.assertFalse(GroupTI.objects.exists())
+
+    def test_post_sem_csrf_e_recusado(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.superuser)
+        dados = {
+            'acao': 'conceder',
+            'tis': [str(self.tis_a.pk)],
+            'equipes': [str(self.equipe.pk)],
+            'usuarios': [],
+        }
+
+        self.assertEqual(client.post(self.url, dados).status_code, 403)
+        self.assertEqual(
+            client.post(
+                self.previa_url,
+                self._payload_previa(tis=[self.tis_a], equipes=[self.equipe]),
+                content_type='application/json',
+            ).status_code,
+            403,
+        )
+
+    def test_atribuido_por_carimbado_em_todas_as_linhas(self):
+        terceiro = User.objects.create_user(username='terceiro', password='senha')
+        equipe_sul = Group.objects.create(name='Equipe Sul')
+        GrupoAcesso.objects.create(group=equipe_sul, tipo=GrupoAcesso.EQUIPE)
+        self.client.force_login(self.superuser)
+
+        self._post(
+            tis=[self.tis_a, self.tis_b],
+            equipes=[self.equipe, equipe_sul],
+            usuarios=[self.dono, self.sem_acesso, terceiro],
+        )
+
+        self.assertEqual(UserTI.objects.count(), 6)
+        self.assertEqual(GroupTI.objects.count(), 4)
+        self.assertEqual(
+            set(UserTI.objects.values_list('atribuido_por_id', flat=True)),
+            {self.superuser.pk},
+        )
+        self.assertEqual(
+            set(GroupTI.objects.values_list('atribuido_por_id', flat=True)),
+            {self.superuser.pk},
+        )
+
+    def test_previa_conta_imoveis_corretamente(self):
+        ti_vazia = TIs.objects.create(
+            nome='TI Vazia', codigo='TI-VAZIA-F4', etnia='Sem imóveis'
+        )
+        self.client.force_login(self.superuser)
+
+        vazia = self.client.post(
+            self.previa_url,
+            self._payload_previa(tis=[ti_vazia], equipes=[self.equipe]),
+            content_type='application/json',
+        )
+        UserTI.objects.create(
+            user=self.dono, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        GroupTI.objects.create(
+            group=self.equipe, tis=self.tis_b, atribuido_por=self.superuser
+        )
+        com_imoveis = self.client.post(
+            self.previa_url,
+            self._payload_previa(
+                tis=[self.tis_a, self.tis_b],
+                equipes=[self.equipe],
+                usuarios=[self.dono, self.sem_acesso],
+            ),
+            content_type='application/json',
+        )
+
+        self.assertEqual(vazia.status_code, 200)
+        self.assertEqual(vazia.json()['total_imoveis'], 0)
+        self.assertIn(
+            'e a todos os imóveis futuros dessas TIs', vazia.json()['frase']
+        )
+        self.assertEqual(com_imoveis.status_code, 200)
+        self.assertEqual(com_imoveis.json()['total_imoveis'], 2)
+        self.assertEqual(com_imoveis.json()['vinculos_existentes'], 2)
+        self.assertIn(
+            'Conceder TI Alfa, TI Beta a 1 equipe', com_imoveis.json()['frase']
+        )
+        self.assertIn('Equipe Norte — 2 membros', com_imoveis.json()['frase'])
+        self.assertIn(
+            '2 vínculos já existem e serão ignorados', com_imoveis.json()['frase']
+        )
+
+    def test_revogar_remove_so_o_que_foi_pedido(self):
+        outro = User.objects.create_user(username='outro', password='senha')
+        for usuario in (self.dono, outro):
+            for ti in (self.tis_a, self.tis_b):
+                UserTI.objects.create(
+                    user=usuario, tis=ti, atribuido_por=self.superuser
+                )
+        for ti in (self.tis_a, self.tis_b):
+            GroupTI.objects.create(
+                group=self.equipe, tis=ti, atribuido_por=self.superuser
+            )
+        self.client.force_login(self.superuser)
+
+        response = self._post(
+            acao='revogar',
+            tis=[self.tis_a],
+            equipes=[self.equipe],
+            usuarios=[self.dono],
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(UserTI.objects.filter(user=self.dono, tis=self.tis_a).exists())
+        self.assertTrue(UserTI.objects.filter(user=self.dono, tis=self.tis_b).exists())
+        self.assertTrue(UserTI.objects.filter(user=outro, tis=self.tis_a).exists())
+        self.assertTrue(GroupTI.objects.filter(group=self.equipe, tis=self.tis_b).exists())
+        self.assertFalse(GroupTI.objects.filter(group=self.equipe, tis=self.tis_a).exists())
+
+    def test_aplicacao_tem_numero_constante_de_queries(self):
+        # A quantidade de INSERTs não cresce com o produto destinos × TIs:
+        # há um bulk INSERT por modelo, mesmo quando a matriz aumenta.
+        ContentType.objects.get_for_model(UserTI)
+        self.client.force_login(self.superuser)
+
+        with self.assertNumQueries(10):
+            primeira = self._post(
+                tis=[self.tis_a], equipes=[self.equipe], usuarios=[self.dono]
+            )
+        with self.assertNumQueries(10):
+            segunda = self._post(
+                tis=[self.tis_b],
+                equipes=[self.equipe],
+                usuarios=[self.dono, self.sem_acesso],
+            )
+
+        self.assertEqual(primeira.status_code, 302)
+        self.assertEqual(segunda.status_code, 302)
+
+    def test_get_aceita_alias_singular_e_plural_de_usuarios(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            self.url,
+            {
+                'tis': f'{self.tis_a.pk},{self.tis_b.pk}',
+                'equipes': str(self.equipe.pk),
+                'usuario': str(self.dono.pk),
+                'usuarios': str(self.sem_acesso.pk),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(
+            response.context['form'].initial['tis'], [self.tis_a.pk, self.tis_b.pk]
+        )
+        self.assertEqual(response.context['form'].initial['equipes'], [self.equipe.pk])
+        self.assertCountEqual(
+            response.context['form'].initial['usuarios'],
+            [self.dono.pk, self.sem_acesso.pk],
+        )
+        self.assertContains(response, 'Atribuição em massa')
+
+    def test_actions_redirecionam_para_a_tela_pre_preenchida(self):
+        request = RequestFactory().post('/')
+        request.user = self.superuser
+        casos = [
+            (
+                admin.site._registry[TIs].atribuir_tis_selecionadas,
+                TIs.objects.filter(pk__in=[self.tis_a.pk, self.tis_b.pk]),
+                f'tis={self.tis_a.pk},{self.tis_b.pk}',
+            ),
+            (
+                admin.site._registry[User].atribuir_tis_aos_usuarios,
+                User.objects.filter(pk__in=[self.dono.pk, self.sem_acesso.pk]),
+                f'usuarios={self.dono.pk},{self.sem_acesso.pk}',
+            ),
+            (
+                admin.site._registry[Group].atribuir_tis_as_equipes,
+                Group.objects.filter(pk=self.equipe.pk),
+                f'equipes={self.equipe.pk}',
+            ),
+        ]
+
+        for action, queryset, querystring in casos:
+            with self.subTest(action=action.__name__):
+                response = action(request, queryset)
+                self.assertEqual(response.url, f'{self.url}?{querystring}')
+                self.assertEqual(action.allowed_permissions, ('view',))
+
+        self.client.force_login(self.superuser)
+        changelist = self.client.get(reverse('admin:dominial_userti_changelist'))
+        self.assertContains(changelist, 'Atribuição em massa')
+
+        request.user = self.dono
+        for action, queryset, _querystring in casos:
+            with self.subTest(action=action.__name__, user='staff'):
+                with self.assertRaises(PermissionDenied):
+                    action(request, queryset)
 
 
 class GuardPosseTest(SegregacaoBaseTestCase):
