@@ -40,9 +40,9 @@ def imoveis_diretos_ids(user):
     """
     PKs dos imóveis atribuídos um-a-um ao usuário, como subquery.
 
-    LEGADO: a atribuição por imóvel (``UserImovel``) sai da UI e é migrada para
-    nível de TI numa fase posterior da issue #132; este termo permanece como
-    rede de rollback até lá.
+    LEGADO (Fase 6 / D7): mantido por 1 release como rede de rollback da
+    migração UserImovel→UserTI (2026-08). Remover após confirmar zero linhas
+    em produção.
     """
     from .models import UserImovel
 

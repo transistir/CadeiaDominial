@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
-from ..models import Imovel, TIs, Pessoas, Cartorios, UserImovel
+from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
 from ..services.lancamento_documento_service import LancamentoDocumentoService
 
@@ -66,13 +66,6 @@ def imovel_form(request, tis_id, imovel_id=None):
 
                     # Criar automaticamente o documento de matrícula para o imóvel
                     if not imovel_id:  # Apenas para novos imóveis
-                        # Atribuir o imóvel ao autor, senão o usuário comum cria e
-                        # perde acesso imediatamente (issue #132).
-                        UserImovel.objects.get_or_create(
-                            user=request.user,
-                            imovel=imovel,
-                            defaults={'atribuido_por': request.user},
-                        )
                         documento_matricula = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
                         messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
                 

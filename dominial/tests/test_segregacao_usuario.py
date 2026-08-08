@@ -11,6 +11,7 @@ Cenários cobertos:
 
 import re
 from datetime import date
+from io import StringIO
 from pathlib import Path
 
 from unittest.mock import patch
@@ -22,6 +23,7 @@ from django.contrib.auth.models import AnonymousUser, Group, Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
+from django.core.management import call_command
 from django.db import connection
 from django.test import Client, RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
@@ -1363,6 +1365,139 @@ class AtribuicaoEmMassaTest(SegregacaoBaseTestCase):
                     action(request, queryset)
 
 
+class MigracaoUserImovelTest(SegregacaoBaseTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        UserImovel.objects.all().delete()
+        cls.usuario_migracao = User.objects.create_user(
+            username='mariana', password='senha-mariana'
+        )
+        cls.tis_migracao = TIs.objects.create(
+            nome='TI Migração', codigo='TI-MIG', etnia='Migração'
+        )
+        cls.imoveis_migracao = [
+            Imovel.objects.create(
+                nome=f'Imóvel Migração {indice}',
+                matricula=f'40{indice:02d}',
+                terra_indigena_id=cls.tis_migracao,
+                proprietario=cls.proprietario,
+                cartorio=cls.cartorio,
+            )
+            for indice in range(1, 8)
+        ]
+        UserImovel.objects.bulk_create(
+            [
+                UserImovel(
+                    user=cls.usuario_migracao,
+                    imovel=imovel,
+                    atribuido_por=cls.superuser,
+                )
+                for imovel in cls.imoveis_migracao[:3]
+            ]
+        )
+
+    def test_dry_run_nao_escreve_nada(self):
+        antes = (UserTI.objects.count(), UserImovel.objects.count())
+
+        call_command('migrar_userimovel_para_userti', stdout=StringIO())
+
+        self.assertEqual(
+            (UserTI.objects.count(), UserImovel.objects.count()),
+            antes,
+        )
+
+    def test_dry_run_relata_ampliacao_de_acesso(self):
+        saida = StringIO()
+
+        call_command('migrar_userimovel_para_userti', stdout=saida)
+
+        texto = saida.getvalue()
+        self.assertIn('mariana | TI Migração | 3 de 7 | 7 | +4', texto)
+        self.assertIn(
+            'TOTAL: 1 UserTI a criar, 3 UserImovel a remover, '
+            '4 imóveis a mais visíveis hoje.',
+            texto,
+        )
+        self.assertIn(
+            'ATENÇÃO: após a conversão, estes usuários também verão TODO '
+            'imóvel FUTURO destas TIs.',
+            texto,
+        )
+
+    def test_aplicar_cria_userti_e_amplia_acesso(self):
+        call_command(
+            'migrar_userimovel_para_userti', aplicar=True, stdout=StringIO()
+        )
+
+        self.assertTrue(
+            UserTI.objects.filter(
+                user=self.usuario_migracao, tis=self.tis_migracao
+            ).exists()
+        )
+        self.assertFalse(UserImovel.objects.filter(user=self.usuario_migracao).exists())
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.usuario_migracao),
+            self.imoveis_migracao,
+        )
+
+        futuro = Imovel.objects.create(
+            nome='Imóvel Migração Futuro',
+            matricula='4099',
+            terra_indigena_id=self.tis_migracao,
+            proprietario=self.proprietario,
+            cartorio=self.cartorio,
+        )
+        self.assertIn(futuro, Imovel.objects.for_user(self.usuario_migracao))
+
+    def test_aplicar_duas_vezes_e_idempotente(self):
+        for _ in range(2):
+            call_command(
+                'migrar_userimovel_para_userti', aplicar=True, stdout=StringIO()
+            )
+
+        self.assertEqual(
+            UserTI.objects.filter(
+                user=self.usuario_migracao, tis=self.tis_migracao
+            ).count(),
+            1,
+        )
+        self.assertFalse(UserImovel.objects.filter(user=self.usuario_migracao).exists())
+
+    def test_aplicar_com_userti_preexistente_preserva_acesso_sem_duplicar(self):
+        UserTI.objects.create(
+            user=self.usuario_migracao,
+            tis=self.tis_migracao,
+            atribuido_por=self.superuser,
+        )
+
+        call_command(
+            'migrar_userimovel_para_userti', aplicar=True, stdout=StringIO()
+        )
+
+        self.assertEqual(
+            UserTI.objects.filter(
+                user=self.usuario_migracao, tis=self.tis_migracao
+            ).count(),
+            1,
+        )
+        self.assertFalse(UserImovel.objects.filter(user=self.usuario_migracao).exists())
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.usuario_migracao),
+            self.imoveis_migracao,
+        )
+
+    def test_userimovel_nao_aparece_no_index_do_admin(self):
+        self.client.force_login(self.superuser)
+        changelist_url = reverse('admin:dominial_userimovel_changelist')
+
+        index = self.client.get(reverse('admin:index'))
+
+        self.assertEqual(index.status_code, 200)
+        self.assertNotContains(index, changelist_url)
+        self.assertEqual(self.client.get(changelist_url).status_code, 403)
+
+
 class GuardPosseTest(SegregacaoBaseTestCase):
     """Ponto 3 do plano: verificação de posse."""
 
@@ -1606,17 +1741,17 @@ class AutocompleteSegregadoTest(SegregacaoBaseTestCase):
 
 class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
     """
-    Quem cria um imóvel precisa continuar enxergando-o.
-
-    Sem a atribuição automática, um usuário comum cadastraria o imóvel e o
-    perderia de vista no redirect seguinte.
+    Quem cria numa TI atribuída continua enxergando o imóvel pela própria TI.
     """
 
     def setUp(self):
         self.client = Client()
+        UserTI.objects.create(
+            user=self.dono, tis=self.tis_a, atribuido_por=self.superuser
+        )
         self.assertTrue(self.client.login(username='dono', password='senha-dono'))
 
-    def test_imovel_criado_fica_atribuido_ao_autor(self):
+    def test_imovel_criado_fica_visivel_ao_autor_via_ti(self):
         response = self.client.post(
             reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id}),
             {
@@ -1632,17 +1767,14 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
         self.assertEqual(response.status_code, 302)
 
         novo = Imovel.objects.get(matricula='3000')
-        self.assertTrue(
-            UserImovel.objects.filter(user=self.dono, imovel=novo).exists(),
-            'O autor do cadastro deve receber a atribuição automaticamente.',
-        )
+        self.assertFalse(UserImovel.objects.filter(user=self.dono, imovel=novo).exists())
         self.assertIn(novo, Imovel.objects.for_user(self.dono))
 
     @patch(
         'dominial.views.imovel_views.LancamentoDocumentoService.criar_documento_matricula_automatico',
         side_effect=RuntimeError('falha simulada'),
     )
-    def test_falha_no_documento_inicial_desfaz_imovel_e_atribuicao(self, _mock):
+    def test_falha_no_documento_inicial_desfaz_imovel_e_proprietario(self, _mock):
         response = self.client.post(
             reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id}),
             {
@@ -1658,7 +1790,6 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Imovel.objects.filter(matricula='3001').exists())
-        self.assertFalse(UserImovel.objects.filter(user=self.dono, imovel__matricula='3001').exists())
         self.assertFalse(
             Pessoas.objects.filter(nome='Proprietário que deve ser revertido').exists()
         )

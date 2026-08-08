@@ -334,7 +334,7 @@ class UserTIPorUserInline(admin.TabularInline):
 
 @admin.register(UserImovel)
 class UserImovelAdmin(admin.ModelAdmin):
-    """Gestão standalone das atribuições usuário ↔ imóvel (#132)."""
+    """Mantém as URLs legadas registradas, mas retira UserImovel da UI."""
     list_display = ['user', 'imovel', 'data_atribuicao', 'atribuido_por']
     list_filter = ['user', 'data_atribuicao', 'imovel__terra_indigena_id']
     search_fields = [
@@ -349,19 +349,19 @@ class UserImovelAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('user', 'imovel', 'atribuido_por')
 
     def has_module_permission(self, request):
-        return request.user.is_superuser
+        return False
 
     def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return False
 
     def has_add_permission(self, request):
-        return request.user.is_superuser
+        return False
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return False
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return False
 
     def save_model(self, request, obj, form, change):
         # Auditoria: registra quem concedeu o acesso, sem sobrescrever em edições.
@@ -824,10 +824,10 @@ class UserPerfilCreationForm(DjangoUserCreationForm):
 
 
 class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
-    """UserAdmin padrão + inlines de atribuições legadas e por TI (#132)."""
+    """UserAdmin padrão + inline de atribuições por TI (#132)."""
     form = UserPerfilForm
     add_form = UserPerfilCreationForm
-    inlines = [UserImovelPorUserInline, UserTIPorUserInline]
+    inlines = [UserTIPorUserInline]
     list_display = ['username', 'first_name', 'last_name', 'perfil_exibido', 'is_active']
     list_filter = ['is_active', 'groups', PerfilListFilter, TIAtribuidaListFilter]
     search_fields = ['username', 'first_name', 'last_name', 'email']
@@ -1206,7 +1206,6 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     """
     Admin customizado para Imóveis com funcionalidade de correção de TI.
     """
-    inlines = [UserImovelPorImovelInline]
     list_display = ['matricula', 'nome', 'terra_indigena_id', 'proprietario', 'cartorio', 'tipo_documento_principal', 'arquivado', 'data_cadastro', 'info_documentos_lancamentos']
     list_filter = [
         ('terra_indigena_id', TIsSegregadaFilter),
