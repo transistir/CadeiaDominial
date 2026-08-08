@@ -1,12 +1,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
 from django.db.models import Count, F, Max, Q
 from django.db.models.functions import Coalesce
 from django.http import Http404
 from ..managers import tis_for_user, usuario_ve_tudo
+from ..utils.permissoes_utils import usuario_pode_criar_ti
 from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 
 @login_required
@@ -52,10 +54,19 @@ def home(request):
         'total_tis_cadastradas': len(tis_ordenadas),
         'total_terras_referencia': len(terras_referencia_nao_cadastradas),
         'tis_com_imoveis': tis_com_imoveis,
+        'pode_criar_ti': usuario_pode_criar_ti(request.user),
     })
 
 @login_required
 def tis_form(request):
+    # Fase 3 (F8/F9): cadastrar TI exige perfil Administrador ou
+    # superusuário. Vale para GET e POST, e roda antes de instanciar/
+    # processar o TIsForm — esconder o botão na home não é suficiente,
+    # porque a URL pode ser acessada diretamente. Usuário autenticado sem o
+    # perfil recebe 403 (não é enumeração de objeto); anônimo continua
+    # redirecionado ao login pelo @login_required acima.
+    if not usuario_pode_criar_ti(request.user):
+        raise PermissionDenied('Apenas o perfil Administrador pode cadastrar Terras Indígenas.')
     if request.method == 'POST':
         form = TIsForm(request.POST)
         if form.is_valid():

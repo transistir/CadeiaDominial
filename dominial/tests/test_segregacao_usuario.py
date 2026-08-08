@@ -3465,3 +3465,131 @@ class TisDetailOrderingTest(SegregacaoBaseTestCase):
         (obtido,) = [i for i in response.context['imoveis'] if i.id == imovel.id]
         self.assertEqual(obtido.ultimo_documento, date(2023, 3, 3))
         self.assertEqual(obtido.ultimo_lancamento, date(2023, 4, 4))
+
+
+class CriacaoDeTITest(SegregacaoBaseTestCase):
+    """
+    Fase 3, F8/F9: cadastrar TI passa a exigir o perfil Administrador (ou
+    superusuário) — mudança consciente de D4 (risco 1 do plano). `is_staff`
+    isolado não basta (risco 7): uma conta staff legada sem o grupo
+    "Perfil: Administrador" continua sem poder cadastrar TI.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.perfil_administrador = Group.objects.get(name='Perfil: Administrador')
+        cls.perfil_editor = Group.objects.get(name='Perfil: Editor')
+
+        cls.editor = User.objects.create_user(username='editor_ti', password='senha-editor')
+        cls.editor.groups.add(cls.perfil_editor)
+
+        cls.administrador = User.objects.create_user(
+            username='administrador_ti', password='senha-administrador'
+        )
+        cls.administrador.groups.add(cls.perfil_administrador)
+
+        # Conta legada: tem acesso ao /admin/ mas nunca recebeu o perfil de
+        # produto Administrador.
+        cls.staff_legado = User.objects.create_user(
+            username='staff_legado', password='senha-staff', is_staff=True
+        )
+
+    def setUp(self):
+        self.client = Client()
+
+    def _payload_valido(self, codigo):
+        # Payload que passa em TIsForm.clean_codigo/clean_estado — usado para
+        # provar que o bloqueio do gate ocorre ANTES do form ser processado.
+        return {
+            'nome': 'Terra Indígena Nova',
+            'codigo': codigo,
+            'etnia': 'Etnia Nova',
+            'estado': ['SP'],
+            'area': '1000.50',
+        }
+
+    def test_editor_nao_ve_botao_nova_ti(self):
+        self.client.force_login(self.editor)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertFalse(response.context['pode_criar_ti'])
+        self.assertNotContains(response, 'Cadastrar Nova Terra Indígena')
+
+    def test_administrador_ve_botao_nova_ti(self):
+        self.client.force_login(self.administrador)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertTrue(response.context['pode_criar_ti'])
+        self.assertContains(response, 'Cadastrar Nova Terra Indígena')
+
+    def test_superuser_ve_botao_nova_ti(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertTrue(response.context['pode_criar_ti'])
+        self.assertContains(response, 'Cadastrar Nova Terra Indígena')
+
+    def test_editor_get_direto_tis_form_retorna_403(self):
+        self.client.force_login(self.editor)
+
+        response = self.client.get(reverse('tis_form'))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_editor_post_direto_tis_form_retorna_403_e_nao_cria_ti(self):
+        self.client.force_login(self.editor)
+        total_antes = TIs.objects.count()
+
+        response = self.client.post(
+            reverse('tis_form'), data=self._payload_valido('TI-EDITOR-BLOQUEADO')
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(TIs.objects.count(), total_antes)
+        self.assertFalse(TIs.objects.filter(codigo='TI-EDITOR-BLOQUEADO').exists())
+
+    def test_staff_legado_sem_grupo_administrador_nao_ve_nem_cria_ti(self):
+        self.client.force_login(self.staff_legado)
+
+        response_home = self.client.get(reverse('home'))
+        self.assertFalse(response_home.context['pode_criar_ti'])
+        self.assertNotContains(response_home, 'Cadastrar Nova Terra Indígena')
+
+        response_get = self.client.get(reverse('tis_form'))
+        self.assertEqual(response_get.status_code, 403)
+
+        total_antes = TIs.objects.count()
+        response_post = self.client.post(
+            reverse('tis_form'), data=self._payload_valido('TI-STAFF-LEGADO')
+        )
+        self.assertEqual(response_post.status_code, 403)
+        self.assertEqual(TIs.objects.count(), total_antes)
+
+    def test_administrador_consegue_get_e_postar_criacao_de_ti(self):
+        self.client.force_login(self.administrador)
+
+        response_get = self.client.get(reverse('tis_form'))
+        self.assertEqual(response_get.status_code, 200)
+
+        response_post = self.client.post(
+            reverse('tis_form'), data=self._payload_valido('TI-ADMIN-CRIADA')
+        )
+
+        self.assertEqual(response_post.status_code, 302)
+        self.assertTrue(TIs.objects.filter(codigo='TI-ADMIN-CRIADA').exists())
+
+    def test_anonimo_e_redirecionado_ao_login_no_get_e_post(self):
+        response_get = self.client.get(reverse('tis_form'))
+        self.assertEqual(response_get.status_code, 302)
+        self.assertIn('/accounts/login/', response_get.url)
+
+        response_post = self.client.post(
+            reverse('tis_form'), data=self._payload_valido('TI-ANONIMO-BLOQUEADO')
+        )
+        self.assertEqual(response_post.status_code, 302)
+        self.assertIn('/accounts/login/', response_post.url)
+        self.assertFalse(TIs.objects.filter(codigo='TI-ANONIMO-BLOQUEADO').exists())

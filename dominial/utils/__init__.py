@@ -16,6 +16,7 @@ from .formatacao_utils import (
     normalizar_texto_opcional
 )
 from .documento_identidade_utils import DocumentoIdentidade, normalizar_numero_documento
+from .permissoes_utils import usuario_pode_criar_ti
 
 # Exportar todos os utilitários para uso externo
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     'normalizar_texto_opcional',
     'DocumentoIdentidade',
     'normalizar_numero_documento',
+    'usuario_pode_criar_ti',
 ]
