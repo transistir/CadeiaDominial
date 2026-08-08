@@ -403,6 +403,36 @@ class UsuariosAtribuicaoEmMassaField(forms.ModelMultipleChoiceField):
         return f'{obj}{sufixo}'
 
 
+class GroupAdminForm(forms.ModelForm):
+    """Campos de equipe que não existem no ``auth.Group`` de série."""
+
+    descricao = forms.CharField(
+        label='Descrição',
+        required=False,
+        max_length=255,
+    )
+    usuarios = UsuariosAtribuicaoEmMassaField(
+        label='Usuários',
+        queryset=User.objects.filter(is_superuser=False).order_by('username'),
+        required=False,
+        widget=FilteredSelectMultiple('usuários', is_stacked=False),
+    )
+
+    class Meta:
+        model = Group
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            return
+        try:
+            self.initial['descricao'] = self.instance.acesso.descricao
+        except GrupoAcesso.DoesNotExist:
+            self.initial['descricao'] = ''
+        self.initial['usuarios'] = self.instance.user_set.order_by('pk')
+
+
 class AtribuicaoEmMassaForm(forms.Form):
     """Seleciona TIs e destinos para concessão ou revogação em massa."""
 
@@ -988,10 +1018,28 @@ admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
 
 
-class GroupAdmin(DjangoGroupAdmin):
-    """Protege os grupos estruturais de perfil contra rename e exclusão."""
+class GroupTIPorGroupInline(admin.TabularInline):
+    """TIs acessíveis por todos os membros desta equipe."""
 
+    model = GroupTI
+    fk_name = 'group'
+    extra = 1
+    autocomplete_fields = ['tis']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    verbose_name = 'TI atribuída à equipe'
+    verbose_name_plural = 'TIs atribuídas à equipe'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('tis', 'atribuido_por')
+
+
+class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
+    """Tela única de equipes, mantendo perfis estruturais somente para leitura."""
+
+    form = GroupAdminForm
+    inlines = [GroupTIPorGroupInline]
     actions = ['atribuir_tis_as_equipes']
+    list_display = ['name', 'tipo_acesso', 'numero_membros', 'numero_tis']
 
     @staticmethod
     def _protegido(obj):
@@ -1006,20 +1054,129 @@ class GroupAdmin(DjangoGroupAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
-    def save_model(self, request, obj, form, change):
-        nome_foi_alterado = (
-            change
-            and GrupoAcesso.objects.filter(group_id=obj.pk, protegido=True).exists()
-            and Group.objects.filter(pk=obj.pk).exclude(name=obj.name).exists()
-        )
-        if nome_foi_alterado:
-            raise PermissionDenied('Grupos de perfil protegidos não podem ser renomeados.')
-        super().save_model(request, obj, form, change)
-        if not change:
-            GrupoAcesso.objects.get_or_create(
-                group=obj,
-                defaults={'tipo': GrupoAcesso.EQUIPE},
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .select_related('acesso')
+            .annotate(
+                _numero_membros=Count('user', distinct=True),
+                _numero_tis=Count('tis_atribuidas', distinct=True),
             )
+        )
+
+    @admin.display(description='Tipo', ordering='acesso__tipo')
+    def tipo_acesso(self, obj):
+        try:
+            return obj.acesso.get_tipo_display()
+        except GrupoAcesso.DoesNotExist:
+            return 'Sem classificação'
+
+    @admin.display(description='Nº de membros', ordering='_numero_membros')
+    def numero_membros(self, obj):
+        return obj._numero_membros
+
+    @admin.display(description='Nº de TIs', ordering='_numero_tis')
+    def numero_tis(self, obj):
+        return obj._numero_tis
+
+    @admin.display(description='Descrição')
+    def descricao(self, obj):
+        try:
+            return obj.acesso.descricao or '-'
+        except GrupoAcesso.DoesNotExist:
+            return '-'
+
+    @admin.display(description='Usuários')
+    def usuarios(self, obj):
+        if obj is None or not obj.pk:
+            return '-'
+        usernames = obj.user_set.order_by('username').values_list('username', flat=True)
+        return ', '.join(usernames) or '-'
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._protegido(obj):
+            return ['name', 'permissions', 'descricao', 'usuarios']
+        if not request.user.is_superuser:
+            return ['usuarios']
+        return super().get_readonly_fields(request, obj)
+
+    def get_inline_instances(self, request, obj=None):
+        if self._protegido(obj):
+            return []
+        return super().get_inline_instances(request, obj)
+
+    @staticmethod
+    def _ids_postados(request, campo):
+        try:
+            return {int(pk) for pk in request.POST.getlist(campo)}
+        except (TypeError, ValueError):
+            raise PermissionDenied('Alteração inválida em grupo de perfil protegido.')
+
+    def _bloquear_post_protegido(self, request, obj, change):
+        if not change or not self._protegido(obj) or request.method != 'POST':
+            return
+
+        original = Group.objects.get(pk=obj.pk)
+        acesso = GrupoAcesso.objects.get(group=obj)
+        if 'name' in request.POST and request.POST['name'] != original.name:
+            raise PermissionDenied('Grupos de perfil protegidos não podem ser renomeados.')
+        if 'descricao' in request.POST and request.POST['descricao'] != acesso.descricao:
+            raise PermissionDenied('Grupos de perfil protegidos não podem ser alterados.')
+        if (
+            'permissions' in request.POST
+            and self._ids_postados(request, 'permissions')
+            != set(original.permissions.values_list('pk', flat=True))
+        ):
+            raise PermissionDenied('Permissões de perfis protegidos não podem ser alteradas.')
+        if (
+            'usuarios' in request.POST
+            and self._ids_postados(request, 'usuarios')
+            != set(original.user_set.values_list('pk', flat=True))
+        ):
+            raise PermissionDenied('Membros de perfis protegidos não podem ser alterados.')
+        if any(chave.startswith('tis_atribuidas-') for chave in request.POST):
+            raise PermissionDenied('TIs de perfis protegidos não podem ser alteradas.')
+
+    def save_model(self, request, obj, form, change):
+        self._bloquear_post_protegido(request, obj, change)
+        super().save_model(request, obj, form, change)
+        acesso, _ = GrupoAcesso.objects.get_or_create(
+            group=obj,
+            defaults={'tipo': GrupoAcesso.EQUIPE},
+        )
+        if 'descricao' in form.cleaned_data:
+            descricao = form.cleaned_data['descricao']
+            if acesso.descricao != descricao:
+                acesso.descricao = descricao
+                acesso.save(update_fields=['descricao'])
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if not request.user.is_superuser or 'usuarios' not in form.cleaned_data:
+            return
+
+        antigos = set(form.instance.user_set.values_list('username', flat=True))
+        novos = set(form.cleaned_data['usuarios'].values_list('username', flat=True))
+        form.instance.user_set.set(form.cleaned_data['usuarios'])
+        form._membership_diff = {
+            'adicionados': sorted(novos - antigos),
+            'removidos': sorted(antigos - novos),
+        }
+
+    def construct_change_message(self, request, form, formsets, add=False):
+        mensagem = super().construct_change_message(request, form, formsets, add)
+        diff = getattr(form, '_membership_diff', None)
+        if diff and any(diff.values()):
+            adicionados = ', '.join(diff['adicionados']) or 'nenhum'
+            removidos = ', '.join(diff['removidos']) or 'nenhum'
+            mensagem.append({
+                'changed': {
+                    'fields': [
+                        f'Usuários — adicionados: [{adicionados}]; removidos: [{removidos}]'
+                    ]
+                }
+            })
+        return mensagem
 
     def delete_model(self, request, obj):
         if self._protegido(obj):

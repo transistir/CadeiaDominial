@@ -57,6 +57,7 @@ from dominial.admin import (
     ERRO_IMPORTACAO,
     AlteracoesAdmin,
     DocumentoDigitalAdmin,
+    GroupAdmin,
     GroupTIPorTIInline,
     ImovelAdmin,
     ImportacaoCartoriosAdmin,
@@ -792,6 +793,263 @@ class PerfilUsuarioAdminTest(SegregacaoBaseTestCase):
                 self.assertEqual(response.status_code, 403)
                 grupo.refresh_from_db()
                 self.assertEqual(grupo.name, nome_original)
+
+
+class EquipesUXTest(SegregacaoBaseTestCase):
+    """Aceites da tela única de gestão de equipes da Fase 5."""
+
+    def setUp(self):
+        self.client = Client()
+
+    @staticmethod
+    def _inline_payload(*, existentes=(), novas_tis=()):
+        existentes = list(existentes)
+        novas_tis = list(novas_tis)
+        total = len(existentes) + len(novas_tis)
+        dados = {
+            'tis_atribuidas-TOTAL_FORMS': str(total),
+            'tis_atribuidas-INITIAL_FORMS': str(len(existentes)),
+            'tis_atribuidas-MIN_NUM_FORMS': '0',
+            'tis_atribuidas-MAX_NUM_FORMS': '1000',
+        }
+        for indice, atribuicao in enumerate(existentes):
+            dados.update({
+                f'tis_atribuidas-{indice}-id': str(atribuicao.pk),
+                f'tis_atribuidas-{indice}-tis': str(atribuicao.tis_id),
+            })
+        for deslocamento, tis in enumerate(novas_tis, start=len(existentes)):
+            dados[f'tis_atribuidas-{deslocamento}-tis'] = str(tis.pk)
+        return dados
+
+    def _criar_equipe(self, nome='Equipe UX', descricao='', usuarios=(), tis=()):
+        return self.client.post(
+            reverse('admin:auth_group_add'),
+            {
+                'name': nome,
+                'descricao': descricao,
+                'usuarios': [str(usuario.pk) for usuario in usuarios],
+                **self._inline_payload(novas_tis=tis),
+            },
+        )
+
+    def test_cria_equipe_com_nome_e_descricao_na_mesma_tela(self):
+        self.client.force_login(self.superuser)
+
+        response = self._criar_equipe(descricao='Equipe responsável pelo Norte')
+
+        self.assertEqual(response.status_code, 302)
+        equipe = Group.objects.get(name='Equipe UX')
+        self.assertEqual(equipe.acesso.tipo, GrupoAcesso.EQUIPE)
+        self.assertEqual(equipe.acesso.descricao, 'Equipe responsável pelo Norte')
+
+    def test_adiciona_cinco_usuarios_e_tres_tis_com_auditoria(self):
+        usuarios = [
+            User.objects.create_user(username=f'membro-{indice}', password='senha')
+            for indice in range(5)
+        ]
+        usuarios[-1].is_active = False
+        usuarios[-1].save(update_fields=['is_active'])
+        tis_c = TIs.objects.create(nome='TI Gama UX', codigo='TI-G-UX', etnia='Gama')
+        self.client.force_login(self.superuser)
+
+        response = self._criar_equipe(
+            nome='Equipe completa',
+            descricao='Cinco pessoas, três TIs',
+            usuarios=usuarios,
+            tis=[self.tis_a, self.tis_b, tis_c],
+        )
+
+        self.assertEqual(response.status_code, 302)
+        equipe = Group.objects.get(name='Equipe completa')
+        self.assertCountEqual(equipe.user_set.all(), usuarios)
+        self.assertCountEqual(
+            GroupTI.objects.filter(group=equipe).values_list('tis_id', flat=True),
+            [self.tis_a.pk, self.tis_b.pk, tis_c.pk],
+        )
+        self.assertFalse(
+            GroupTI.objects.filter(group=equipe).exclude(
+                atribuido_por=self.superuser
+            ).exists()
+        )
+        log = LogEntry.objects.get(object_id=str(equipe.pk))
+        for usuario in usuarios:
+            self.assertIn(usuario.username, log.change_message)
+
+        tela = self.client.get(reverse('admin:auth_group_change', args=[equipe.pk]))
+        campo = tela.context['adminform'].form.fields['usuarios']
+        self.assertNotIn(self.superuser, campo.queryset)
+        self.assertEqual(campo.label_from_instance(usuarios[-1]), 'membro-4 (inativo)')
+
+    def test_remover_membro_revoga_acesso_imediatamente_e_registra_log(self):
+        membro = User.objects.create_user(username='membro-removido', password='senha')
+        mantido = User.objects.create_user(username='membro-mantido', password='senha')
+        equipe = Group.objects.create(name='Equipe revogação')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        equipe.user_set.add(membro, mantido)
+        atribuicao = GroupTI.objects.create(
+            group=equipe, tis=self.tis_b, atribuido_por=self.superuser
+        )
+        self.assertIn(self.imovel_b, Imovel.objects.for_user(membro))
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:auth_group_change', args=[equipe.pk]),
+            {
+                'name': equipe.name,
+                'descricao': '',
+                'usuarios': [str(mantido.pk)],
+                **self._inline_payload(existentes=[atribuicao]),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn(self.imovel_b, Imovel.objects.for_user(membro))
+        self.assertIn(self.imovel_b, Imovel.objects.for_user(mantido))
+        log = LogEntry.objects.filter(object_id=str(equipe.pk)).latest('pk')
+        self.assertIn('removidos', log.change_message)
+        self.assertIn(membro.username, log.change_message)
+
+    def test_excluir_equipe_pela_tela_revoga_tis_e_membership(self):
+        membro = User.objects.create_user(username='membro-exclusao', password='senha')
+        equipe = Group.objects.create(name='Equipe descartável')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        equipe.user_set.add(membro)
+        GroupTI.objects.create(group=equipe, tis=self.tis_b, atribuido_por=self.superuser)
+        self.assertIn(self.imovel_b, Imovel.objects.for_user(membro))
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:auth_group_delete', args=[equipe.pk]),
+            {'post': 'yes'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Group.objects.filter(pk=equipe.pk).exists())
+        self.assertFalse(GroupTI.objects.filter(group_id=equipe.pk).exists())
+        self.assertNotIn(self.imovel_b, Imovel.objects.for_user(membro))
+
+    def test_post_nao_consegue_criar_equipe_com_tipo_perfil(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:auth_group_add'),
+            {
+                'name': 'Equipe não vira perfil',
+                'descricao': '',
+                'tipo': GrupoAcesso.PERFIL,
+                **self._inline_payload(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        equipe = Group.objects.get(name='Equipe não vira perfil')
+        self.assertEqual(equipe.acesso.tipo, GrupoAcesso.EQUIPE)
+
+    def test_perfil_protegido_e_readonly_e_post_forjado_nao_muda_nada(self):
+        perfil = Group.objects.get(name='Perfil: Editor')
+        permissao = Permission.objects.filter(content_type__app_label='dominial').first()
+        outra_permissao = Permission.objects.filter(
+            content_type__app_label='dominial'
+        ).exclude(pk=permissao.pk).first()
+        perfil.permissions.add(permissao)
+        perfil.user_set.add(self.sem_acesso)
+        nome_original = perfil.name
+        membros_originais = set(perfil.user_set.values_list('pk', flat=True))
+        permissoes_originais = set(perfil.permissions.values_list('pk', flat=True))
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[perfil.pk])
+
+        tela = self.client.get(url)
+        self.assertEqual(tela.status_code, 200)
+        self.assertEqual(tela.context['inline_admin_formsets'], [])
+        self.assertNotIn('name', tela.context['adminform'].form.fields)
+        self.assertNotIn('permissions', tela.context['adminform'].form.fields)
+        self.assertNotIn('usuarios', tela.context['adminform'].form.fields)
+
+        ataques = [
+            {'name': 'Perfil adulterado'},
+            {'permissions': [str(outra_permissao.pk)]},
+            {'usuarios': [str(self.dono.pk)]},
+            {
+                'tis_atribuidas-TOTAL_FORMS': '1',
+                'tis_atribuidas-INITIAL_FORMS': '0',
+                'tis_atribuidas-MIN_NUM_FORMS': '0',
+                'tis_atribuidas-MAX_NUM_FORMS': '1000',
+                'tis_atribuidas-0-tis': str(self.tis_a.pk),
+            },
+        ]
+
+        for dados in ataques:
+            with self.subTest(campos=list(dados)):
+                response = self.client.post(url, dados)
+                self.assertEqual(response.status_code, 403)
+        perfil.refresh_from_db()
+        self.assertEqual(perfil.name, nome_original)
+        self.assertEqual(set(perfil.user_set.values_list('pk', flat=True)), membros_originais)
+        self.assertEqual(
+            set(perfil.permissions.values_list('pk', flat=True)), permissoes_originais
+        )
+        self.assertFalse(GroupTI.objects.filter(group=perfil).exists())
+
+    def test_staff_nao_superuser_nao_altera_membership_nem_tis(self):
+        equipe = Group.objects.create(name='Equipe restrita')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        equipe.user_set.add(self.sem_acesso)
+        self.dono.is_staff = True
+        self.dono.save(update_fields=['is_staff'])
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='auth',
+                codename__in=['view_group', 'change_group'],
+            )
+        )
+        self.client.force_login(self.dono)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        tela = self.client.get(url)
+        self.assertEqual(tela.status_code, 200)
+        self.assertNotIn('usuarios', tela.context['adminform'].form.fields)
+        self.assertEqual(tela.context['inline_admin_formsets'], [])
+        response = self.client.post(
+            url,
+            {
+                'name': equipe.name,
+                'descricao': 'Descrição permitida',
+                'usuarios': [str(self.dono.pk)],
+                'tis_atribuidas-TOTAL_FORMS': '1',
+                'tis_atribuidas-INITIAL_FORMS': '0',
+                'tis_atribuidas-MIN_NUM_FORMS': '0',
+                'tis_atribuidas-MAX_NUM_FORMS': '1000',
+                'tis_atribuidas-0-tis': str(self.tis_a.pk),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertCountEqual(equipe.user_set.all(), [self.sem_acesso])
+        self.assertFalse(GroupTI.objects.filter(group=equipe).exists())
+
+    def test_changelist_exibe_contagens_sem_n_mais_um(self):
+        equipe = Group.objects.create(name='Equipe contada')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        equipe.user_set.add(self.dono, self.sem_acesso)
+        GroupTI.objects.create(group=equipe, tis=self.tis_a, atribuido_por=self.superuser)
+        GroupTI.objects.create(group=equipe, tis=self.tis_b, atribuido_por=self.superuser)
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_changelist')
+        self.client.get(url)  # aquece ContentTypes e sessão antes de comparar.
+
+        with CaptureQueriesContext(connection) as consultas:
+            response = self.client.get(url)
+        resultado = next(obj for obj in response.context['cl'].result_list if obj == equipe)
+        admin_group = GroupAdmin(Group, admin.site)
+        self.assertEqual(admin_group.numero_membros(resultado), 2)
+        self.assertEqual(admin_group.numero_tis(resultado), 2)
+
+        extra = Group.objects.create(name='Equipe contada extra')
+        GrupoAcesso.objects.create(group=extra, tipo=GrupoAcesso.EQUIPE)
+        with self.assertNumQueries(len(consultas)):
+            segunda = self.client.get(url)
+        self.assertEqual(segunda.status_code, 200)
 
 
 class AtribuicaoEmMassaTest(SegregacaoBaseTestCase):
