@@ -1,3 +1,4 @@
+import copy
 import logging
 
 from django.contrib import admin
@@ -9,7 +10,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils.safestring import mark_safe
 from .models import (
     Alteracoes,
@@ -31,8 +32,16 @@ from .models import (
 from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
-from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from django.contrib.auth.models import User
+from django.contrib.auth.admin import (
+    GroupAdmin as DjangoGroupAdmin,
+    UserAdmin as DjangoUserAdmin,
+)
+from django.contrib.auth.forms import (
+    UserChangeForm as DjangoUserChangeForm,
+    UserCreationForm as DjangoUserCreationForm,
+)
+from django.contrib.auth.models import Group, User
+from django.urls import NoReverseMatch, reverse
 from .managers import (
     documentos_for_user,
     lancamentos_for_user,
@@ -427,18 +436,206 @@ class GrupoAcessoAdmin(admin.ModelAdmin):
         return request.user.is_superuser and not (obj and obj.protegido)
 
 
+PERFIS = {
+    'editor': 'Perfil: Editor',
+    'admin': 'Perfil: Administrador',
+}
+PERFIL_CHOICES = [
+    ('editor', 'Editor — consulta e cadastra imóveis, documentos e lançamentos'),
+    ('admin', 'Administrador — Editor + acesso ao admin do sistema'),
+]
+
+
+class PerfilListFilter(admin.SimpleListFilter):
+    title = 'perfil de acesso'
+    parameter_name = 'perfil'
+
+    def lookups(self, request, model_admin):
+        return PERFIL_CHOICES
+
+    def queryset(self, request, queryset):
+        nome_grupo = PERFIS.get(self.value())
+        if nome_grupo:
+            return queryset.filter(groups__name=nome_grupo)
+        return queryset
+
+
+class TIAtribuidaListFilter(admin.SimpleListFilter):
+    title = 'acesso a TI'
+    parameter_name = 'ti_atribuida'
+
+    def lookups(self, request, model_admin):
+        return [('sim', 'Com TI atribuída'), ('nao', 'Sem TI atribuída')]
+
+    def queryset(self, request, queryset):
+        com_ti = queryset.filter(
+            Q(tis_atribuidas__isnull=False) | Q(groups__tis_atribuidas__isnull=False)
+        )
+        if self.value() == 'sim':
+            return com_ti.distinct()
+        if self.value() == 'nao':
+            return queryset.exclude(pk__in=com_ti.values('pk'))
+        return queryset
+
+
+class UserPerfilForm(DjangoUserChangeForm):
+    perfil = forms.ChoiceField(
+        label='Perfil de acesso',
+        widget=forms.RadioSelect,
+        choices=PERFIL_CHOICES,
+        initial='editor',
+        help_text=(
+            'Define se o usuário entra ou não no admin do sistema. O que ele VÊ é '
+            'definido pelas equipes e Terras Indígenas atribuídas abaixo.'
+        ),
+    )
+    equipes = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.filter(acesso__tipo=GrupoAcesso.EQUIPE),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label='Equipes',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        perfil = 'editor'
+        equipes = Group.objects.none()
+        if self.instance and self.instance.pk:
+            grupos = self.instance.groups.all()
+            if grupos.filter(name=PERFIS['admin']).exists():
+                perfil = 'admin'
+            equipes = grupos.filter(acesso__tipo=GrupoAcesso.EQUIPE)
+
+        self.initial['perfil'] = perfil
+        self.initial['equipes'] = list(equipes.values_list('pk', flat=True))
+
+        # Compatibilidade com formulários abertos antes desta fase. A ausência
+        # de ``perfil`` identifica o POST antigo; nesse caso, preserve também
+        # as equipes atuais em vez de interpretá-las como uma remoção em massa.
+        nome_perfil = self.add_prefix('perfil')
+        if self.is_bound and nome_perfil not in self.data:
+            self.data = self.data.copy()
+            self.data[nome_perfil] = perfil
+            self.data.setlist(
+                self.add_prefix('equipes'),
+                [str(pk) for pk in self.initial['equipes']],
+            )
+
+
+class UserPerfilCreationForm(DjangoUserCreationForm):
+    perfil = forms.ChoiceField(
+        label='Perfil de acesso',
+        widget=forms.RadioSelect,
+        choices=PERFIL_CHOICES,
+        initial='editor',
+        help_text=(
+            'Define se o usuário entra ou não no admin do sistema. O que ele VÊ é '
+            'definido pelas equipes e Terras Indígenas atribuídas abaixo.'
+        ),
+    )
+
+
 class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
     """UserAdmin padrão + inlines de atribuições legadas e por TI (#132)."""
+    form = UserPerfilForm
+    add_form = UserPerfilCreationForm
     inlines = [UserImovelPorUserInline, UserTIPorUserInline]
+    list_display = ['username', 'first_name', 'last_name', 'perfil_exibido', 'is_active']
+    list_filter = ['is_active', 'groups', PerfilListFilter, TIAtribuidaListFilter]
+    search_fields = ['username', 'first_name', 'last_name', 'email']
+
+    FIELDSETS_SIMPLES = (
+        (None, {'fields': ('username', 'password')}),
+        ('Identificação', {'fields': ('first_name', 'last_name', 'email')}),
+        ('Acesso', {
+            'fields': ('perfil', 'equipes', 'is_active'),
+            'description': (
+                'Perfil = entra ou não no admin. '
+                'Equipes e TIs (abaixo) = o que pode ver.'
+            ),
+        }),
+    )
+    FIELDSET_AVANCADO = ('Avançado — somente superusuário', {
+        'classes': ('collapse',),
+        'fields': (
+            'is_staff', 'is_superuser', 'groups', 'user_permissions',
+            'last_login', 'date_joined',
+        ),
+    })
+    add_fieldsets = ((None, {
+        'classes': ('wide',),
+        'fields': ('username', 'first_name', 'email', 'password1', 'password2', 'perfil'),
+    }),)
 
     # Campos que decidem quem escapa da segregação. Sem este bloqueio, um staff
     # com `auth.change_user` marca `is_superuser` — no próprio usuário, inclusive
     # — e ganha acesso a todos os imóveis do sistema.
-    CAMPOS_DE_ESCALACAO = ('is_superuser', 'is_staff', 'groups', 'user_permissions')
+    CAMPOS_DE_ESCALACAO = (
+        'is_superuser', 'is_staff', 'groups', 'user_permissions', 'perfil', 'equipes',
+    )
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is None:
+            return self.add_fieldsets
+        if request.user.is_superuser:
+            return self.FIELDSETS_SIMPLES + (self.FIELDSET_AVANCADO,)
+        return self.FIELDSETS_SIMPLES
+
+    @admin.display(description='Perfil')
+    def perfil_exibido(self, obj):
+        if obj.groups.filter(name=PERFIS['admin']).exists():
+            return 'Administrador'
+        return 'Editor'
+
+    def _sincronizar_perfil(self, obj, perfil, equipes):
+        with transaction.atomic():
+            grupos_de_perfil = list(Group.objects.filter(name__in=PERFIS.values()))
+            grupo_escolhido = next(
+                (grupo for grupo in grupos_de_perfil if grupo.name == PERFIS[perfil]),
+                None,
+            )
+            novos_grupos = list(equipes)
+            if grupo_escolhido is not None:
+                novos_grupos.append(grupo_escolhido)
+            obj.groups.set(novos_grupos)
+            obj.is_staff = perfil == 'admin'
+            obj.save(update_fields=['is_staff'])
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if request.user.is_superuser:
+            self._sincronizar_perfil(
+                obj,
+                form.cleaned_data['perfil'],
+                form.cleaned_data.get('equipes', []),
+            )
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if request.user.is_superuser:
+            # ``form.save_m2m()`` acabou de gravar o campo avançado ``groups``;
+            # reaplique a fonte canônica (perfil + equipes) por último.
+            self._sincronizar_perfil(
+                form.instance,
+                form.cleaned_data['perfil'],
+                form.cleaned_data.get('equipes', []),
+            )
+
+    def response_add(self, request, obj, post_url_continue=None):
+        try:
+            url = reverse('admin:dominial_atribuicao_em_massa')
+        except NoReverseMatch:
+            url = reverse('admin:auth_user_changelist')
+        else:
+            url = f'{url}?usuario={obj.pk}'
+        return redirect(url)
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         if not request.user.is_superuser:
+            # Campos declarados podem ser compartilhados entre as subclasses
+            # geradas por ``modelform_factory``; isole-os antes de desabilitar.
+            form.base_fields = copy.deepcopy(form.base_fields)
             # `disabled` faz o Django ignorar o valor enviado e reusar o do banco,
             # então um POST forjado também não passa.
             for nome in self.CAMPOS_DE_ESCALACAO:
@@ -512,6 +709,45 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
 
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
+
+
+class GroupAdmin(DjangoGroupAdmin):
+    """Protege os grupos estruturais de perfil contra rename e exclusão."""
+
+    @staticmethod
+    def _protegido(obj):
+        return bool(
+            obj
+            and obj.pk
+            and GrupoAcesso.objects.filter(group=obj, protegido=True).exists()
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        if self._protegido(obj):
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        nome_foi_alterado = (
+            change
+            and GrupoAcesso.objects.filter(group_id=obj.pk, protegido=True).exists()
+            and Group.objects.filter(pk=obj.pk).exclude(name=obj.name).exists()
+        )
+        if nome_foi_alterado:
+            raise PermissionDenied('Grupos de perfil protegidos não podem ser renomeados.')
+        super().save_model(request, obj, form, change)
+
+    def delete_model(self, request, obj):
+        if self._protegido(obj):
+            raise PermissionDenied('Grupos de perfil protegidos não podem ser excluídos.')
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        super().delete_queryset(request, queryset.exclude(acesso__protegido=True))
+
+
+admin.site.unregister(Group)
+admin.site.register(Group, GroupAdmin)
 
 
 @admin.register(Imovel)

@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib import admin
+from django import forms
 from django.contrib.auth.models import AnonymousUser, Group, Permission, User
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
@@ -550,6 +551,191 @@ class AdminInlinesFase2Test(SegregacaoFase2BaseTestCase):
                 FormsetFalso(),
                 change=True,
             )
+
+
+class PerfilUsuarioAdminTest(SegregacaoBaseTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.perfil_editor = Group.objects.get(name='Perfil: Editor')
+        cls.perfil_admin = Group.objects.get(name='Perfil: Administrador')
+
+    def setUp(self):
+        self.client = Client()
+
+    def _dar_permissoes_de_usuario_ao_dono(self):
+        self.dono.is_staff = True
+        self.dono.save(update_fields=['is_staff'])
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='auth',
+                codename__in=['view_user', 'change_user'],
+            )
+        )
+
+    def _post_criacao(self, username, perfil):
+        return self.client.post(
+            reverse('admin:auth_user_add'),
+            {
+                'username': username,
+                'first_name': 'Usuário',
+                'email': f'{username}@example.com',
+                'password1': 'Senha-forte-132!',
+                'password2': 'Senha-forte-132!',
+                'perfil': perfil,
+            },
+        )
+
+    def _management_forms_vazios(self):
+        dados = {}
+        for prefixo in ('imoveis_atribuidos', 'tis_atribuidas'):
+            dados.update({
+                f'{prefixo}-TOTAL_FORMS': '0',
+                f'{prefixo}-INITIAL_FORMS': '0',
+                f'{prefixo}-MIN_NUM_FORMS': '0',
+                f'{prefixo}-MAX_NUM_FORMS': '1000',
+            })
+        return dados
+
+    def test_cadastro_de_usuario_mostra_apenas_campos_simples(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse('admin:auth_user_add'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context['adminform'].form.fields),
+            ['username', 'first_name', 'email', 'password1', 'password2', 'perfil'],
+        )
+        self.assertNotContains(response, 'user_permissions')
+        self.assertNotContains(response, 'name="groups"')
+
+    def test_radio_de_perfil_tem_exatamente_duas_opcoes(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse('admin:auth_user_add'))
+        campo = response.context['adminform'].form.fields['perfil']
+
+        self.assertIsInstance(campo.widget, forms.RadioSelect)
+        self.assertEqual(
+            list(campo.choices),
+            [
+                ('editor', 'Editor — consulta e cadastra imóveis, documentos e lançamentos'),
+                ('admin', 'Administrador — Editor + acesso ao admin do sistema'),
+            ],
+        )
+
+    def test_fieldset_avancado_some_para_nao_superuser(self):
+        self._dar_permissoes_de_usuario_ao_dono()
+        request = RequestFactory().get('/admin/auth/user/')
+        request.user = self.dono
+
+        fieldsets = UserAdmin(User, admin.site).get_fieldsets(request, self.sem_acesso)
+
+        self.assertEqual(fieldsets, UserAdmin.FIELDSETS_SIMPLES)
+        campos = [campo for _titulo, opcoes in fieldsets for campo in opcoes['fields']]
+        self.assertNotIn('is_superuser', campos)
+        self.assertNotIn('groups', campos)
+        self.assertNotIn('user_permissions', campos)
+
+    def test_staff_nao_muda_o_proprio_perfil_por_post_forjado(self):
+        self._dar_permissoes_de_usuario_ao_dono()
+        self.dono.groups.add(self.perfil_editor)
+        self.client.force_login(self.dono)
+
+        response = self.client.post(
+            reverse('admin:auth_user_change', args=[self.dono.pk]),
+            {
+                'username': self.dono.username,
+                'first_name': self.dono.first_name,
+                'last_name': self.dono.last_name,
+                'email': self.dono.email,
+                'is_active': 'on',
+                'perfil': 'admin',
+                'groups': [str(self.perfil_admin.pk)],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.dono.refresh_from_db()
+        self.assertTrue(self.dono.is_staff)
+        self.assertTrue(self.dono.groups.filter(pk=self.perfil_editor.pk).exists())
+        self.assertFalse(self.dono.groups.filter(pk=self.perfil_admin.pk).exists())
+
+    def test_perfil_administrador_marca_is_staff(self):
+        self.client.force_login(self.superuser)
+
+        response = self._post_criacao('novo-admin', 'admin')
+
+        self.assertEqual(response.status_code, 302)
+        usuario = User.objects.get(username='novo-admin')
+        self.assertTrue(usuario.is_staff)
+        self.assertTrue(usuario.groups.filter(pk=self.perfil_admin.pk).exists())
+        self.assertFalse(usuario.groups.filter(pk=self.perfil_editor.pk).exists())
+
+    def test_perfil_editor_nao_e_staff_e_nao_entra_no_admin(self):
+        self.client.force_login(self.superuser)
+        response = self._post_criacao('novo-editor', 'editor')
+        self.assertEqual(response.status_code, 302)
+        usuario = User.objects.get(username='novo-editor')
+
+        self.assertFalse(usuario.is_staff)
+        self.assertTrue(usuario.groups.filter(pk=self.perfil_editor.pk).exists())
+        self.client.force_login(usuario)
+        response = self.client.get(reverse('admin:index'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/admin/login/', response.url)
+
+    def test_trocar_de_perfil_remove_o_grupo_anterior(self):
+        usuario = User.objects.create_user(
+            username='troca-perfil', password='senha-troca', is_staff=True
+        )
+        usuario.groups.add(self.perfil_admin)
+        self.client.force_login(self.superuser)
+        dados = {
+            'username': usuario.username,
+            'first_name': '',
+            'last_name': '',
+            'email': '',
+            'is_active': 'on',
+            'perfil': 'editor',
+            'groups': [str(self.perfil_admin.pk)],
+            'date_joined_0': '2024-01-01',
+            'date_joined_1': '00:00:00',
+            **self._management_forms_vazios(),
+        }
+
+        response = self.client.post(
+            reverse('admin:auth_user_change', args=[usuario.pk]), dados
+        )
+
+        self.assertEqual(response.status_code, 302)
+        usuario.refresh_from_db()
+        self.assertFalse(usuario.is_staff)
+        self.assertTrue(usuario.groups.filter(pk=self.perfil_editor.pk).exists())
+        self.assertFalse(usuario.groups.filter(pk=self.perfil_admin.pk).exists())
+
+    def test_grupos_de_perfil_sao_protegidos(self):
+        self.client.force_login(self.superuser)
+
+        for grupo in (self.perfil_editor, self.perfil_admin):
+            with self.subTest(grupo=grupo.name, operacao='delete'):
+                response = self.client.post(
+                    reverse('admin:auth_group_delete', args=[grupo.pk]),
+                    {'post': 'yes'},
+                )
+                self.assertEqual(response.status_code, 403)
+                self.assertTrue(Group.objects.filter(pk=grupo.pk).exists())
+
+            with self.subTest(grupo=grupo.name, operacao='rename'):
+                nome_original = grupo.name
+                response = self.client.post(
+                    reverse('admin:auth_group_change', args=[grupo.pk]),
+                    {'name': f'{nome_original} alterado'},
+                )
+                self.assertEqual(response.status_code, 403)
+                grupo.refresh_from_db()
+                self.assertEqual(grupo.name, nome_original)
 
 
 class GuardPosseTest(SegregacaoBaseTestCase):
