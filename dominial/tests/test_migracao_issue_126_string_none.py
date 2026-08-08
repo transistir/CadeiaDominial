@@ -4,6 +4,8 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+from .migration_utils import executor_para_migracao_historica
+
 
 CAMPOS_POR_MODELO = {
     'Lancamento': (
@@ -31,7 +33,7 @@ class NormalizaNoneTextualMigrationTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
-        executor = MigrationExecutor(connection)
+        executor = executor_para_migracao_historica(connection)
         executor.migrate(self.migrate_from)
         self.apps_antes = executor.loader.project_state(self.migrate_from).apps
         self._criar_base()

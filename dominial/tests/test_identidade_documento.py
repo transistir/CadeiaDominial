@@ -22,6 +22,7 @@ from dominial.models import (
     LancamentoTipo,
     Pessoas,
     TIs,
+    UserImovel,
 )
 from dominial.services.documento_identidade_service import DocumentoIdentidadeService
 from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
@@ -141,6 +142,11 @@ class IdentidadeDocumentoFixture(TestCase):
             tipo_documento_principal=tipo,
             cartorio=cartorio,
         )
+
+    def atribuir_imovel(self, imovel, user):
+        """Torna o imóvel visível ao usuário sob a segregação da issue #132."""
+        UserImovel.objects.create(user=user, imovel=imovel)
+        return imovel
 
     def criar_documento(self, imovel, tipo, numero, cartorio):
         return Documento.objects.create(

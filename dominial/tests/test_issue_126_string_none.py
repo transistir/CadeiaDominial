@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from dominial.models import (
     Cartorios, Documento, DocumentoTipo, Imovel, Lancamento, LancamentoTipo,
-    Pessoas, TIs,
+    Pessoas, TIs, UserImovel,
 )
 from dominial.utils.formatacao_utils import normalizar_texto_opcional
 from dominial.views.cadeia_dominial_views import cadeia_dominial_dados
@@ -98,6 +98,8 @@ class _Issue126EndpointFixture:
             livro='1',
             folha='1',
         )
+        # Segregação (#132): o usuário comum só enxerga imóveis atribuídos a ele.
+        UserImovel.objects.create(user=cls.user, imovel=cls.imovel)
 
     def _criar_lancamento(self, **kwargs):
         dados = dict(documento=self.documento, tipo=self.lanc_tipo, data=date(2026, 1, 1))

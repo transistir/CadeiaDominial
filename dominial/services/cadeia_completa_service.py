@@ -9,6 +9,7 @@ from ..services.hierarquia_service import HierarquiaService
 from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
+from ..managers import documentos_for_user
 
 
 class CadeiaCompletaService:
@@ -16,9 +17,21 @@ class CadeiaCompletaService:
     Service para gerar a cadeia dominial completa
     """
     
-    def __init__(self):
+    def __init__(self, user=None, documentos_queryset=None):
         self.hierarquia_service = HierarquiaService()
         self.imovel_atual = None
+        if documentos_queryset is None:
+            documentos_queryset = (
+                documentos_for_user(user)
+                if user is not None
+                else Documento.objects.all()
+            )
+        self.documentos_queryset = documentos_queryset
+        self.imoveis_queryset = (
+            Imovel.objects.for_user(user)
+            if user is not None
+            else Imovel.objects.all()
+        )
     
     @staticmethod
     def _extrair_numero_simples(numero_lancamento):
@@ -44,8 +57,12 @@ class CadeiaCompletaService:
         """
         Obtém a cadeia dominial completa organizada hierarquicamente
         """
-        tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id)
+        imovel = get_object_or_404(
+            self.imoveis_queryset,
+            id=imovel_id,
+            terra_indigena_id_id=tis_id,
+        )
+        tis = imovel.terra_indigena_id
         self.imovel_atual = imovel
         
         # 1. Obter tronco principal completo
@@ -72,17 +89,32 @@ class CadeiaCompletaService:
         Usa a mesma lógica da página ver-cadeia-dominial para garantir a sequência correta
         """
         # 1. Obter o tronco principal na sequência correta (como na página ver-cadeia-dominial)
-        tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel)
+        tronco_principal = self.hierarquia_service.obter_tronco_principal(
+            imovel,
+            documentos_queryset=self.documentos_queryset,
+        )
         
         # 2. Usar HierarquiaArvoreService para obter TODOS os documentos da cadeia
         from .hierarquia_arvore_service import HierarquiaArvoreService
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            documentos_queryset=self.documentos_queryset,
+        )
         
         # 3. Extrair todos os documentos da árvore
-        todos_documentos = []
-        for doc_node in arvore['documentos']:
-            documento = Documento.objects.get(id=doc_node['id'])
-            todos_documentos.append(documento)
+        ids_arvore = [
+            doc_node['id']
+            for doc_node in arvore['documentos']
+            if not doc_node.get('is_fim_cadeia')
+        ]
+        documentos_por_id = self.documentos_queryset.filter(
+            id__in=ids_arvore
+        ).in_bulk()
+        todos_documentos = [
+            documentos_por_id[doc_id]
+            for doc_id in ids_arvore
+            if doc_id in documentos_por_id
+        ]
         
         # 4. Organizar: tronco principal primeiro, depois todos os outros documentos
         documentos_organizados = []
@@ -118,7 +150,11 @@ class CadeiaCompletaService:
         return []
     
     @staticmethod
-    def _resolver_documento_por_codigo(codigo, cartorio):
+    def _resolver_documento_por_codigo(
+        codigo,
+        cartorio,
+        documentos_queryset=None,
+    ):
         """
         Resolve um documento pela identidade completa (tipo, número
         normalizado e cartório), nunca por número isolado. Sem cartório, com
@@ -137,7 +173,10 @@ class CadeiaCompletaService:
             identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade,
+            queryset=documentos_queryset,
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     def _expandir_todas_origens_documento(self, documento, documentos_processados=None):
@@ -156,7 +195,9 @@ class CadeiaCompletaService:
             for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
                 # Resolver documento de origem pela identidade completa
                 doc_origem = CadeiaCompletaService._resolver_documento_por_codigo(
-                    origem.codigo, origem.cartorio
+                    origem.codigo,
+                    origem.cartorio,
+                    self.documentos_queryset,
                 )
 
                 if doc_origem and doc_origem.id not in documentos_processados:
@@ -352,7 +393,10 @@ class CadeiaCompletaService:
         """
         try:
             # Obter imóvel
-            imovel = Imovel.objects.get(id=imovel_id, terra_indigena_id=tis_id)
+            imovel = self.imoveis_queryset.get(
+                id=imovel_id,
+                terra_indigena_id_id=tis_id,
+            )
             
             # Converter sequência de IDs em lista
             ids_documentos = [int(id.strip()) for id in sequencia_ids.split(',') if id.strip().isdigit()]
@@ -360,13 +404,29 @@ class CadeiaCompletaService:
             if not ids_documentos:
                 # Se não há IDs válidos, usar sequência padrão
                 return self.get_cadeia_completa(tis_id, imovel_id)
+
+            # Uma sequência personalizada só pode reordenar documentos que já
+            # pertencem à cadeia autorizada deste imóvel. IDs de outro imóvel,
+            # ainda que também visível ao usuário, não podem ser injetados.
+            from .hierarquia_arvore_service import HierarquiaArvoreService
+            arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+                imovel,
+                documentos_queryset=self.documentos_queryset,
+            )
+            ids_da_cadeia = {
+                node['id']
+                for node in arvore.get('documentos', [])
+                if not node.get('is_fim_cadeia')
+            }
+            if not set(ids_documentos).issubset(ids_da_cadeia):
+                return self.get_cadeia_completa(tis_id, imovel_id)
             
             # Buscar documentos na ordem especificada
             documentos_ordenados = []
             documentos_por_id = {}
             
             # Primeiro, buscar todos os documentos
-            documentos = Documento.objects.filter(id__in=ids_documentos)\
+            documentos = self.documentos_queryset.filter(id__in=ids_documentos)\
                 .select_related('cartorio', 'tipo', 'imovel')\
                 .prefetch_related('lancamentos', 'lancamentos__tipo')
             

@@ -24,7 +24,11 @@ class HierarquiaArvoreService:
     """
     
     @staticmethod
-    def construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False):
+    def construir_arvore_cadeia_dominial(
+        imovel,
+        criar_documentos_automaticos=False,
+        documentos_queryset=None,
+    ):
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         Lógica corrigida: filho -> pai (esquerda -> direita)
@@ -33,8 +37,14 @@ class HierarquiaArvoreService:
             imovel: Objeto Imovel
             criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
         """
+        if documentos_queryset is None:
+            documentos_queryset = Documento.objects.all()
+
         # 1. Identificar documento principal do imóvel
-        documento_principal = HierarquiaArvoreService._identificar_documento_principal(imovel)
+        documento_principal = HierarquiaArvoreService._identificar_documento_principal(
+            imovel,
+            documentos_queryset,
+        )
         
         if not documento_principal:
             return {
@@ -52,19 +62,25 @@ class HierarquiaArvoreService:
         
         # 2. Construir árvore a partir do documento principal
         arvore = HierarquiaArvoreService._construir_arvore_a_partir_documento(
-            documento_principal, imovel, criar_documentos_automaticos
+            documento_principal,
+            imovel,
+            criar_documentos_automaticos,
+            documentos_queryset,
         )
         
         return arvore
     
     @staticmethod
-    def _identificar_documento_principal(imovel):
+    def _identificar_documento_principal(imovel, documentos_queryset=None):
         """
         Identifica o documento principal do imóvel
         Prioridade: 1) Documento com número igual à matrícula, 2) Primeiro documento do imóvel
         """
+        if documentos_queryset is None:
+            documentos_queryset = Documento.objects.all()
+
         # Primeiro, tentar encontrar a identidade registral exata do imóvel.
-        documento_principal = Documento.objects.filter(
+        documento_principal = documentos_queryset.filter(
             imovel=imovel,
             tipo__tipo=imovel.tipo_documento_principal,
             numero_normalizado=imovel.matricula_normalizada,
@@ -75,15 +91,23 @@ class HierarquiaArvoreService:
             return documento_principal
         
         # Se não encontrar, usar o primeiro documento do imóvel
-        documento_principal = Documento.objects.filter(imovel=imovel).first()
+        documento_principal = documentos_queryset.filter(imovel=imovel).first()
         
         return documento_principal
     
     @staticmethod
-    def _construir_arvore_a_partir_documento(documento_principal, imovel, criar_documentos_automaticos):
+    def _construir_arvore_a_partir_documento(
+        documento_principal,
+        imovel,
+        criar_documentos_automaticos,
+        documentos_queryset=None,
+    ):
         """
         Constrói a árvore a partir do documento principal
         """
+        if documentos_queryset is None:
+            documentos_queryset = Documento.objects.all()
+
         # Inicializar estrutura da árvore
         arvore = {
             'imovel': {
@@ -98,7 +122,7 @@ class HierarquiaArvoreService:
         }
         
         # Otimização: prefetch_related para evitar N+1 queries (issue #93)
-        documento_principal = Documento.objects.select_related(
+        documento_principal = documentos_queryset.select_related(
             'tipo', 'cartorio'
         ).prefetch_related(
             'lancamentos__tipo',
@@ -144,7 +168,10 @@ class HierarquiaArvoreService:
 
             # Buscar documentos pais (origens) deste documento
             documentos_pais = HierarquiaArvoreService._buscar_documentos_pais(
-                documento_atual, imovel, criar_documentos_automaticos
+                documento_atual,
+                imovel,
+                criar_documentos_automaticos,
+                documentos_queryset,
             )
             
             # Adicionar conexões diretas e documentos pais à fila
@@ -187,7 +214,11 @@ class HierarquiaArvoreService:
         return arvore
     
     @staticmethod
-    def _resolver_documento_por_codigo(codigo, cartorio):
+    def _resolver_documento_por_codigo(
+        codigo,
+        cartorio,
+        documentos_queryset=None,
+    ):
         """
         Resolve um documento pela identidade completa (tipo, número
         normalizado e cartório), nunca por número isolado. Sem cartório, com
@@ -206,15 +237,26 @@ class HierarquiaArvoreService:
             identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade,
+            queryset=documentos_queryset,
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
-    def _buscar_documentos_pais(documento, imovel, criar_documentos_automaticos):
+    def _buscar_documentos_pais(
+        documento,
+        imovel,
+        criar_documentos_automaticos,
+        documentos_queryset=None,
+    ):
         """
         Busca documentos pais (origens) de um documento
         CORREÇÃO: Para o documento do imóvel atual, buscar apenas origens diretas
         """
+        if documentos_queryset is None:
+            documentos_queryset = Documento.objects.all()
+
         documentos_pais = []
         documentos_processados = set()
 
@@ -243,7 +285,9 @@ class HierarquiaArvoreService:
 
                     # Resolver documento pela identidade completa
                     doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
-                        origem.codigo, origem.cartorio
+                        origem.codigo,
+                        origem.cartorio,
+                        documentos_queryset,
                     )
 
                     if doc_pai:
@@ -260,7 +304,9 @@ class HierarquiaArvoreService:
 
                     # Resolver documento pela identidade completa
                     doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
-                        origem.codigo, origem.cartorio
+                        origem.codigo,
+                        origem.cartorio,
+                        documentos_queryset,
                     )
 
                     if doc_pai:

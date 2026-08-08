@@ -20,16 +20,28 @@ from ..utils.documento_identidade_utils import (
 
 class LancamentoOrigemService:
     @staticmethod
-    def processar_origens_automaticas(lancamento, origem, imovel):
+    def processar_origens_automaticas(
+        lancamento,
+        origem,
+        imovel,
+        documentos_queryset=None,
+    ):
         """
         Processa origens para criar documentos automáticos
         NOVO: Fim de cadeia não cria documentos, apenas formata a origem
         """
+        # Chamadas originadas de requests passam documentos_for_user(user).
+        # O fallback existe para signals/rotinas internas sem usuário e fica
+        # deliberadamente restrito ao imóvel do lançamento.
+        if documentos_queryset is None:
+            documentos_queryset = Documento.objects.filter(imovel=imovel)
+
         if not origem:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
                 lancamento,
                 [],
                 imovel,
+                documentos_queryset,
             )
             return None
         
@@ -50,13 +62,17 @@ class LancamentoOrigemService:
             lancamento,
             origens_individuals,
             imovel,
+            documentos_queryset,
         )
         
         # Processar apenas origens normais (que criam documentos)
         if origens_normais:
             origem_normais_texto = '; '.join(origens_normais)
             return LancamentoOrigemService._processar_origens_normais(
-                lancamento, origem_normais_texto, imovel
+                lancamento,
+                origem_normais_texto,
+                imovel,
+                documentos_queryset,
             )
         
         # Se só tem fim de cadeia, retornar mensagem informativa
@@ -66,7 +82,12 @@ class LancamentoOrigemService:
         return None
 
     @staticmethod
-    def _extrair_identidade_origem(origem_individual, imovel, lancamento):
+    def _extrair_identidade_origem(
+        origem_individual,
+        imovel,
+        lancamento,
+        documentos_queryset,
+    ):
         """Extrai uma identidade documental sem converter fins de cadeia."""
         numero_informado = origem_individual.strip()
         prefixo_direto = re.match(r'^([MT])\s*\d', numero_informado, re.IGNORECASE)
@@ -91,13 +112,19 @@ class LancamentoOrigemService:
             numero_informado,
             imovel,
             lancamento,
+            documentos_queryset=documentos_queryset,
         )
         if len(processadas) != 1:
             return None
         return processadas[0]['tipo'], processadas[0]['numero']
 
     @staticmethod
-    def _sincronizar_origens_estruturadas(lancamento, origens, imovel):
+    def _sincronizar_origens_estruturadas(
+        lancamento,
+        origens,
+        imovel,
+        documentos_queryset,
+    ):
         """
         Reconcilia o conjunto estruturado preservando IDs e o texto legado.
 
@@ -115,6 +142,7 @@ class LancamentoOrigemService:
                 origem_individual,
                 imovel,
                 lancamento,
+                documentos_queryset,
             )
             if not identidade:
                 continue
@@ -149,6 +177,7 @@ class LancamentoOrigemService:
                 tipo_documento,
                 numero,
                 cartorio,
+                documentos_queryset,
             )
             livro, folha = LancamentoOrigemService._obter_livro_folha_origem(
                 lancamento,
@@ -237,12 +266,22 @@ class LancamentoOrigemService:
         return False
     
     @staticmethod
-    def _processar_origens_normais(lancamento, origem, imovel):
+    def _processar_origens_normais(
+        lancamento,
+        origem,
+        imovel,
+        documentos_queryset,
+    ):
         """
         Processa origens normais (que criam documentos)
         """
         # Processar origens identificadas
-        origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
+        origens_processadas = processar_origens_para_documentos(
+            origem,
+            imovel,
+            lancamento,
+            documentos_queryset=documentos_queryset,
+        )
         
         if not origens_processadas:
             return None
@@ -253,7 +292,10 @@ class LancamentoOrigemService:
         # Se há múltiplas origens, processar cada uma com seu cartório específico
         if len(origens_individuals) > 1:
             return LancamentoOrigemService._processar_multiplas_origens(
-                lancamento, origens_individuals, imovel
+                lancamento,
+                origens_individuals,
+                imovel,
+                documentos_queryset,
             )
         else:
             # Processamento original para uma única origem
@@ -261,7 +303,10 @@ class LancamentoOrigemService:
         
         for origem_info in origens_processadas:
             documento_criado = LancamentoOrigemService._criar_documento_automatico(
-                imovel, lancamento, origem_info
+                imovel,
+                lancamento,
+                origem_info,
+                documentos_queryset,
             )
             if documento_criado:
                 documentos_criados.append(documento_criado)
@@ -360,7 +405,12 @@ class LancamentoOrigemService:
         return f'Documento de fim de cadeia criado: {documento_criado.numero} ({documento_criado.tipo.get_tipo_display()}) com classificação "{classificacao}"'
     
     @staticmethod
-    def _processar_multiplas_origens(lancamento, origens_individuals, imovel):
+    def _processar_multiplas_origens(
+        lancamento,
+        origens_individuals,
+        imovel,
+        documentos_queryset,
+    ):
         """
         Processa múltiplas origens com seus respectivos cartórios
         """
@@ -369,7 +419,12 @@ class LancamentoOrigemService:
         # Para cada origem individual, criar documento com cartório específico
         for origem_individual in origens_individuals:
             # Processar origem individual para extrair informações
-            origens_processadas = processar_origens_para_documentos(origem_individual, imovel, lancamento)
+            origens_processadas = processar_origens_para_documentos(
+                origem_individual,
+                imovel,
+                lancamento,
+                documentos_queryset=documentos_queryset,
+            )
             
             for origem_info in origens_processadas:
                 # Buscar cartório e metadados específicos desta origem.
@@ -384,6 +439,7 @@ class LancamentoOrigemService:
                     dados_origem['cartorio'],
                     livro_origem_informado=dados_origem['livro'],
                     folha_origem_informada=dados_origem['folha'],
+                    documentos_queryset=documentos_queryset,
                 )
                 if documento_criado:
                     documentos_criados.append(documento_criado)
@@ -483,7 +539,12 @@ class LancamentoOrigemService:
         return livro_origem, folha_origem
     
     @staticmethod
-    def _criar_documento_automatico(imovel, lancamento, origem_info):
+    def _criar_documento_automatico(
+        imovel,
+        lancamento,
+        origem_info,
+        documentos_queryset,
+    ):
         """
         Cria um documento automaticamente a partir de uma origem
         CORREÇÃO: Usa o cartório de origem do lançamento (lancamento.cartorio_origem)
@@ -506,7 +567,10 @@ class LancamentoOrigemService:
             # Buscar o documento de origem pela identidade completa (tipo,
             # número normalizado e cartório) - nunca por número isolado
             documento_origem = LancamentoOrigemService._resolver_documento(
-                origem_info['tipo'], origem_info['numero'], cartorio_origem
+                origem_info['tipo'],
+                origem_info['numero'],
+                cartorio_origem,
+                documentos_queryset,
             )
 
             livro_origem, folha_origem = (
@@ -536,9 +600,13 @@ class LancamentoOrigemService:
             }
 
             # Criar documento usando CRIService com CRI da origem
-            documento_criado = CRIService.criar_documento_com_cri(
-                imovel, dados_documento, cri_origem=cartorio_origem
-            )
+            # Uma identidade inacessível pode já existir globalmente. A
+            # tentativa de criação deve falhar em savepoint próprio, sem
+            # invalidar a transação que está editando o lançamento.
+            with transaction.atomic():
+                documento_criado = CRIService.criar_documento_com_cri(
+                    imovel, dados_documento, cri_origem=cartorio_origem
+                )
 
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
@@ -555,18 +623,26 @@ class LancamentoOrigemService:
             return None
 
     @staticmethod
-    def _resolver_documento(tipo, numero, cartorio):
+    def _resolver_documento(
+        tipo,
+        numero,
+        cartorio,
+        documentos_queryset,
+    ):
         """
         Resolve um documento pela identidade completa (tipo, número
         normalizado e cartório), nunca por número isolado.
         """
-        if not cartorio:
+        if not cartorio or documentos_queryset is None:
             return None
         try:
             identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade,
+            queryset=documentos_queryset,
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
@@ -577,6 +653,7 @@ class LancamentoOrigemService:
         cartorio_origem,
         livro_origem_informado=None,
         folha_origem_informada=None,
+        documentos_queryset=None,
     ):
         """
         Cria um documento automaticamente a partir de uma origem com cartório específico
@@ -588,7 +665,10 @@ class LancamentoOrigemService:
             # Buscar o documento de origem pela identidade completa (tipo,
             # número normalizado e cartório) - nunca por número isolado
             documento_origem = LancamentoOrigemService._resolver_documento(
-                origem_info['tipo'], origem_info['numero'], cartorio_origem
+                origem_info['tipo'],
+                origem_info['numero'],
+                cartorio_origem,
+                documentos_queryset,
             )
 
             livro_origem, folha_origem = (
@@ -620,9 +700,10 @@ class LancamentoOrigemService:
             }
             
             # Criar documento usando CRIService com CRI da origem
-            documento_criado = CRIService.criar_documento_com_cri(
-                imovel, dados_documento, cri_origem=cartorio_origem
-            )
+            with transaction.atomic():
+                documento_criado = CRIService.criar_documento_com_cri(
+                    imovel, dados_documento, cri_origem=cartorio_origem
+                )
             
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
