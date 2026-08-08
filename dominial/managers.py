@@ -6,8 +6,17 @@ Semântica canônica do acesso efetivo:
 ``imóveis_visíveis(u)`` = imóveis das TIs atribuídas a ``u`` ∪ imóveis ligados
 diretamente a ``u`` por ``UserImovel`` (legado temporário).
 
-``tis_atribuídas(u)`` = TIs herdadas das equipes de ``u`` ∪ TIs atribuídas
+``tis_atribuídas(u)`` = todas as TIs, se ``u`` for superuser OU pertencer a uma
+equipe "global" (``GrupoAcesso(tipo='equipe', acesso_todas_tis=True)``);
+senão, TIs herdadas das equipes de ``u`` (``GroupTI``) ∪ TIs atribuídas
 diretamente a ``u`` por ``UserTI``.
+
+Uma equipe global (issue #132, fase 3) não gera linhas em ``GroupTI``: a
+condição é resolvida por uma subquery ``EXISTS`` (``membership_global``) que
+não referencia a TI concreta, portanto vale para todas as linhas — inclusive
+TIs cadastradas depois da ativação da flag. Desativar a flag revoga o acesso
+amplo na próxima consulta; ``GroupTI``/``UserTI`` explícitos preexistentes não
+são afetados.
 
 Superusuários veem todos os imóveis e todas as TIs (bypass inalterado).
 Usuários anônimos ou ``None`` não veem nada.
@@ -23,7 +32,7 @@ helpers de documentos, lançamentos, TIs e pessoas abaixo derivam dele.
 """
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import Exists, Q
 
 
 def usuario_ve_tudo(user):
@@ -49,12 +58,35 @@ def imoveis_diretos_ids(user):
     return UserImovel.objects.filter(user=user).values('imovel_id')
 
 
+def membership_global(user):
+    """
+    Subquery ``EXISTS``: ``user`` pertence a alguma equipe com acesso a todas as TIs.
+
+    Não referencia a TI concreta (não é correlacionada por ``OuterRef``), então
+    o valor booleano resultante é o mesmo para toda linha de ``TIs`` — é assim
+    que "todas as TIs, inclusive futuras" é expresso sem materializar linhas em
+    ``GroupTI``.
+    """
+    from .models import GrupoAcesso
+
+    return Exists(GrupoAcesso.objects.filter(
+        tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True, group__user=user
+    ))
+
+
 def tis_atribuidas_ids(user):
-    """PKs das TIs atribuídas via equipe ou diretamente; subquery, não lista."""
+    """
+    PKs das TIs atribuídas via equipe (parcial ou global) ou diretamente.
+
+    Subquery, não lista — nunca avaliada em Python aqui, para preservar o
+    limite de 1 query SQL do ``for_user``.
+    """
     from .models import TIs
 
     return TIs.objects.filter(
-        Q(grupos_ti__group__user=user) | Q(usuarios_ti__user=user)
+        Q(grupos_ti__group__user=user)
+        | Q(usuarios_ti__user=user)
+        | Q(membership_global(user))
     ).values('pk')
 
 

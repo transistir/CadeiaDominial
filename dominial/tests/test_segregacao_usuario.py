@@ -22,7 +22,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import AnonymousUser, Group, Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.db import connection
 from django.test import Client, RequestFactory, TestCase
@@ -192,6 +192,15 @@ class SegregacaoFase2BaseTestCase(SegregacaoBaseTestCase):
         GroupTI.objects.create(
             group=cls.equipe_norte, tis=cls.tis_c, atribuido_por=cls.superuser
         )
+
+        cls.equipe_global = Group.objects.create(name='Equipe Global')
+        GrupoAcesso.objects.create(
+            group=cls.equipe_global, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        cls.membro_global = User.objects.create_user(
+            username='membro_global', password='senha-membro-global'
+        )
+        cls.membro_global.groups.add(cls.equipe_global)
 
 
 class ManagerSegregacaoTest(SegregacaoBaseTestCase):
@@ -430,6 +439,138 @@ class RevogacaoTest(SegregacaoFase2BaseTestCase):
         self.via_ti.delete()
 
         self.assertFalse(UserTI.objects.filter(user_id=usuario_id).exists())
+
+    # Fase 3 (issue #132): revogação de membership, incluindo a fonte "equipe
+    # global". Mantidos nesta classe (em vez de uma classe dedicada) porque
+    # cobrem exatamente a mesma pergunta das demais: "sair/perder a fonte
+    # revoga na hora?", só que para a fonte nova.
+
+    def test_membro_da_equipe_perde_acesso_ao_sair_da_equipe(self):
+        casos = [
+            ('parcial', self.via_equipe, self.equipe_norte),
+            ('global', self.membro_global, self.equipe_global),
+        ]
+        for rotulo, usuario, equipe in casos:
+            with self.subTest(rotulo=rotulo):
+                self.assertIn(self.tis_c, tis_for_user(usuario))
+                self.assertIn(self.imovel_c1, Imovel.objects.for_user(usuario))
+
+                usuario.groups.remove(equipe)
+
+                self.assertNotIn(self.tis_c, tis_for_user(usuario))
+                self.assertNotIn(self.imovel_c1, Imovel.objects.for_user(usuario))
+
+    def test_excluir_equipe_global_revoga_acesso(self):
+        self.assertIn(self.tis_c, tis_for_user(self.membro_global))
+
+        self.equipe_global.delete()
+
+        self.assertNotIn(self.tis_c, tis_for_user(self.membro_global))
+        self.assertEqual(Imovel.objects.for_user(self.membro_global).count(), 0)
+
+    def test_membro_em_duas_equipes_mantem_acesso_pela_fonte_restante(self):
+        equipe_sul = Group.objects.create(name='Equipe Sul')
+        GrupoAcesso.objects.create(group=equipe_sul, tipo=GrupoAcesso.EQUIPE)
+        GroupTI.objects.create(
+            group=equipe_sul, tis=self.tis_c, atribuido_por=self.superuser
+        )
+        # via_equipe já está em equipe_norte (que também cobre tis_c).
+        self.via_equipe.groups.add(equipe_sul)
+
+        self.via_equipe.groups.remove(self.equipe_norte)
+
+        self.assertIn(self.tis_c, tis_for_user(self.via_equipe))
+        self.assertIn(self.imovel_c1, Imovel.objects.for_user(self.via_equipe))
+
+
+class EquipeGlobalTest(SegregacaoFase2BaseTestCase):
+    """
+    Equipe "global" (fase 3 da issue #132): ``GrupoAcesso.acesso_todas_tis``.
+
+    Uma equipe global não gera linhas em ``GroupTI``; o acesso é calculado
+    dinamicamente e inclui TIs futuras.
+    """
+
+    def test_equipe_d_global_ve_todas_as_tis_sem_groupti(self):
+        self.assertEqual(GroupTI.objects.filter(group=self.equipe_global).count(), 0)
+
+        self.assertCountEqual(
+            tis_for_user(self.membro_global),
+            [self.tis_a, self.tis_b, self.tis_c, self.tis_vazia],
+        )
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.membro_global),
+            [self.imovel_a, self.imovel_b, self.imovel_c1, self.imovel_c2],
+        )
+
+    def test_equipe_global_ve_ti_criada_depois_da_ativacao(self):
+        tis_nova = TIs.objects.create(nome='TI Nova', codigo='TI-NOVA', etnia='Nova')
+        imovel_novo = Imovel.objects.create(
+            nome='Imóvel Novo', matricula='9000', terra_indigena_id=tis_nova,
+            proprietario=self.proprietario, cartorio=self.cartorio,
+        )
+
+        self.assertIn(tis_nova, tis_for_user(self.membro_global))
+        self.assertIn(imovel_novo, Imovel.objects.for_user(self.membro_global))
+        self.assertEqual(GroupTI.objects.filter(group=self.equipe_global).count(), 0)
+
+    def test_equipe_global_ve_ti_vazia_na_home(self):
+        client = Client()
+        client.force_login(self.membro_global)
+
+        response = client.get(reverse('home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.tis_vazia, response.context['terras_indigenas'])
+        self.assertEqual(response.context['tis_com_imoveis'][self.tis_vazia.pk], 0)
+
+    def test_desativar_global_preserva_apenas_groupti_e_userti_explicitos(self):
+        GroupTI.objects.create(
+            group=self.equipe_global, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        UserTI.objects.create(
+            user=self.membro_global, tis=self.tis_b, atribuido_por=self.superuser
+        )
+
+        acesso = self.equipe_global.acesso
+        acesso.acesso_todas_tis = False
+        acesso.save()
+
+        visiveis = tis_for_user(self.membro_global)
+        self.assertCountEqual(visiveis, [self.tis_a, self.tis_b])
+        self.assertNotIn(self.tis_c, visiveis)
+        self.assertNotIn(self.tis_vazia, visiveis)
+
+    def test_global_com_groupti_e_userti_nao_duplica_querysets(self):
+        GroupTI.objects.create(
+            group=self.equipe_global, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        UserTI.objects.create(
+            user=self.membro_global, tis=self.tis_b, atribuido_por=self.superuser
+        )
+
+        qs = Imovel.objects.for_user(self.membro_global)
+        self.assertEqual(qs.count(), Imovel.objects.count())
+        self.assertEqual(len(list(qs)), qs.values_list('pk', flat=True).distinct().count())
+
+    def test_for_user_do_membro_global_faz_uma_unica_query(self):
+        with self.assertNumQueries(1):
+            self.assertEqual(Imovel.objects.for_user(self.membro_global).count(), 4)
+
+    def test_perfil_nao_pode_ser_global_por_form_full_clean_e_constraint(self):
+        from django.db import IntegrityError, transaction
+
+        grupo_livre = Group.objects.create(name='Perfil Livre Sem Acesso')
+        with self.assertRaises(ValidationError):
+            GrupoAcesso(
+                group=grupo_livre, tipo=GrupoAcesso.PERFIL, acesso_todas_tis=True
+            ).full_clean()
+
+        grupo_perfil = Group.objects.create(name='Perfil Constraint Teste')
+        acesso_perfil = GrupoAcesso.objects.create(group=grupo_perfil, tipo=GrupoAcesso.PERFIL)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            GrupoAcesso.objects.filter(pk=acesso_perfil.pk).update(acesso_todas_tis=True)
 
 
 class TisForUserTest(SegregacaoFase2BaseTestCase):

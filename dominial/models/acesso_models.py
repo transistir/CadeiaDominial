@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 
 class UserTI(models.Model):
@@ -91,6 +92,37 @@ class GrupoAcesso(models.Model):
     tipo = models.CharField(max_length=10, choices=TIPOS)
     protegido = models.BooleanField(default=False)
     descricao = models.CharField(max_length=255, blank=True)
+    acesso_todas_tis = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Acesso a todas as TIs',
+        help_text=(
+            'Equipe "global": todo membro passa a ver todas as TIs — as atuais e '
+            'as cadastradas no futuro — e todos os imóveis dessas TIs. É uma '
+            'propriedade calculada dinamicamente pelo manager de segregação, não '
+            'gera linhas em GroupTI e não precisa de sincronização quando uma TI '
+            'nova é criada. Só é válido para equipes (tipo=EQUIPE); perfis nunca '
+            'podem ativá-lo.'
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(acesso_todas_tis=False) | Q(tipo='equipe'),
+                name='grupoacesso_global_so_equipe',
+                violation_error_message=(
+                    'Acesso a todas as TIs só pode ser ativado para equipes, não para perfis.'
+                ),
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.acesso_todas_tis and self.tipo != self.EQUIPE:
+            raise ValidationError(
+                {'acesso_todas_tis': 'Acesso a todas as TIs só pode ser ativado para equipes, não para perfis.'}
+            )
 
     def __str__(self):
         return str(self.group)
