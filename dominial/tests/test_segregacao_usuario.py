@@ -9,6 +9,7 @@ Cenários cobertos:
 - Cartorios/Pessoas permanecem globais.
 """
 
+import json
 import re
 from datetime import date
 from io import StringIO
@@ -1193,6 +1194,300 @@ class EquipesUXTest(SegregacaoBaseTestCase):
         with self.assertNumQueries(len(consultas)):
             segunda = self.client.get(url)
         self.assertEqual(segunda.status_code, 200)
+
+
+class EquipeGlobalAdminTest(SegregacaoBaseTestCase):
+    """
+    Fase 3 (F3/F5/F7/F10): gestão do acesso global (`acesso_todas_tis`) na
+    tela de equipe do admin. Reaproveita os helpers de payload de
+    `EquipesUXTest` (mesmo padrão de POST usado na Fase 2 desta tela).
+    """
+
+    def setUp(self):
+        self.client = Client()
+
+    def _payload_equipe(self, equipe, *, usuarios=(), existentes=(), extra=None):
+        dados = {
+            'name': equipe.name,
+            'descricao': '',
+            'usuarios': [str(usuario.pk) for usuario in usuarios],
+            **EquipesUXTest._inline_payload(existentes=existentes),
+        }
+        if extra:
+            dados.update(extra)
+        return dados
+
+    def test_staff_nao_superuser_nao_ativa_global_por_post_forjado(self):
+        equipe = Group.objects.create(name='Equipe forjada')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        membro = User.objects.create_user(username='membro-forjado', password='senha')
+        equipe.user_set.add(membro)
+        self.dono.is_staff = True
+        self.dono.save(update_fields=['is_staff'])
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='auth',
+                codename__in=['view_group', 'change_group'],
+            )
+        )
+        self.client.force_login(self.dono)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        tela = self.client.get(url)
+        self.assertNotIn('acesso_todas_tis', tela.context['adminform'].form.fields)
+
+        response = self.client.post(
+            url,
+            self._payload_equipe(
+                equipe, usuarios=[membro],
+                extra={'acesso_todas_tis': '1', 'confirmar_acesso_global': '1'},
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        equipe.acesso.refresh_from_db()
+        self.assertFalse(equipe.acesso.acesso_todas_tis)
+        self.assertNotIn(self.imovel_a, Imovel.objects.for_user(membro))
+        self.assertNotIn(self.imovel_b, Imovel.objects.for_user(membro))
+
+    def test_ativar_global_sem_confirmacao_nao_ativa(self):
+        equipe = Group.objects.create(name='Equipe sem confirmação')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        response = self.client.post(
+            url,
+            self._payload_equipe(equipe, extra={'acesso_todas_tis': '1'}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context['adminform'].form
+        self.assertFalse(form.is_valid())
+        self.assertIn('confirmar_acesso_global', form.errors)
+        equipe.acesso.refresh_from_db()
+        self.assertFalse(equipe.acesso.acesso_todas_tis)
+
+    def test_ativar_global_com_confirmacao_concede_acesso_a_todas_as_tis(self):
+        equipe = Group.objects.create(name='Equipe global nova')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        membro = User.objects.create_user(username='membro-global-novo', password='senha')
+        equipe.user_set.add(membro)
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        response = self.client.post(
+            url,
+            self._payload_equipe(
+                equipe, usuarios=[membro],
+                extra={'acesso_todas_tis': '1', 'confirmar_acesso_global': '1'},
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        equipe.acesso.refresh_from_db()
+        self.assertTrue(equipe.acesso.acesso_todas_tis)
+        self.assertIn(self.imovel_a, Imovel.objects.for_user(membro))
+        self.assertIn(self.imovel_b, Imovel.objects.for_user(membro))
+
+    def test_desligar_global_nao_exige_confirmacao(self):
+        equipe = Group.objects.create(name='Equipe desligando global')
+        GrupoAcesso.objects.create(
+            group=equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        response = self.client.post(url, self._payload_equipe(equipe))
+
+        self.assertEqual(response.status_code, 302)
+        equipe.acesso.refresh_from_db()
+        self.assertFalse(equipe.acesso.acesso_todas_tis)
+
+    def test_tela_exibe_texto_de_consequencia_e_contagens_de_impacto(self):
+        equipe = Group.objects.create(name='Equipe prévia')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        membro = User.objects.create_user(username='membro-previa', password='senha')
+        equipe.user_set.add(membro)
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse('admin:auth_group_change', args=[equipe.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        conteudo = response.content.decode()
+        self.assertIn('todas as TIs atuais', conteudo)
+        self.assertIn('todas as TIs futuras', conteudo)
+        self.assertIn('imóveis atuais e futuros', conteudo)
+        self.assertIn(f'{TIs.objects.count()} TIs', conteudo)
+        self.assertIn(f'{Imovel.objects.count()} imóveis', conteudo)
+        self.assertIn('1 membros', conteudo)
+
+    def test_logentry_registra_valor_anterior_novo_e_contagens(self):
+        equipe = Group.objects.create(name='Equipe log global')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        membro = User.objects.create_user(username='membro-log-global', password='senha')
+        equipe.user_set.add(membro)
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        self.client.post(
+            url,
+            self._payload_equipe(
+                equipe, usuarios=[membro],
+                extra={'acesso_todas_tis': '1', 'confirmar_acesso_global': '1'},
+            ),
+        )
+
+        log = LogEntry.objects.filter(object_id=str(equipe.pk)).latest('pk')
+        mudancas = json.loads(log.change_message)
+        campo_global = next(
+            campo
+            for entrada in mudancas
+            for campo in entrada.get('changed', {}).get('fields', [])
+            if campo.startswith('Acesso a todas as TIs —')
+        )
+        self.assertIn('de Não para Sim', campo_global)
+        self.assertIn(f'{TIs.objects.count()} TIs', campo_global)
+        self.assertIn(f'{Imovel.objects.count()} imóveis', campo_global)
+        self.assertIn('1 membros', campo_global)
+
+    def test_ativar_global_preserva_groupti_existentes_e_avisa(self):
+        equipe = Group.objects.create(name='Equipe com residuais')
+        GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        vinc_a = GroupTI.objects.create(
+            group=equipe, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        vinc_b = GroupTI.objects.create(
+            group=equipe, tis=self.tis_b, atribuido_por=self.superuser
+        )
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[equipe.pk])
+
+        response_post = self.client.post(
+            url,
+            self._payload_equipe(
+                equipe, existentes=[vinc_a, vinc_b],
+                extra={'acesso_todas_tis': '1', 'confirmar_acesso_global': '1'},
+            ),
+        )
+
+        self.assertEqual(response_post.status_code, 302)
+        self.assertEqual(GroupTI.objects.filter(group=equipe).count(), 2)
+
+        response_get = self.client.get(url)
+        mensagens = [str(mensagem) for mensagem in response_get.context['messages']]
+        self.assertTrue(
+            any('2 vínculos explícitos preservados' in mensagem for mensagem in mensagens)
+        )
+
+    def test_changelist_coluna_escopo_e_filtros_global_parcial_com_membros(self):
+        parcial = Group.objects.create(name='Equipe parcial escopo')
+        GrupoAcesso.objects.create(group=parcial, tipo=GrupoAcesso.EQUIPE)
+        GroupTI.objects.create(group=parcial, tis=self.tis_a, atribuido_por=self.superuser)
+
+        global_equipe = Group.objects.create(name='Equipe global escopo')
+        GrupoAcesso.objects.create(
+            group=global_equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        membro_global = User.objects.create_user(
+            username='membro-escopo-global', password='senha'
+        )
+        global_equipe.user_set.add(membro_global)
+
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_changelist')
+
+        response = self.client.get(url)
+        admin_group = GroupAdmin(Group, admin.site)
+        resultado_parcial = next(
+            obj for obj in response.context['cl'].result_list if obj == parcial
+        )
+        resultado_global = next(
+            obj for obj in response.context['cl'].result_list if obj == global_equipe
+        )
+        self.assertEqual(admin_group.escopo(resultado_parcial), '1 TIs')
+        self.assertEqual(admin_group.escopo(resultado_global), 'Todas (dinâmico)')
+
+        resposta_global = self.client.get(url, {'escopo_global': 'global'})
+        nomes_global = [g.name for g in resposta_global.context['cl'].result_list]
+        self.assertIn(global_equipe.name, nomes_global)
+        self.assertNotIn(parcial.name, nomes_global)
+
+        resposta_parcial = self.client.get(url, {'escopo_global': 'parcial'})
+        nomes_parcial = [g.name for g in resposta_parcial.context['cl'].result_list]
+        self.assertIn(parcial.name, nomes_parcial)
+        self.assertNotIn(global_equipe.name, nomes_parcial)
+
+        resposta_com_membros = self.client.get(url, {'com_membros': 'sim'})
+        nomes_com_membros = [g.name for g in resposta_com_membros.context['cl'].result_list]
+        self.assertIn(global_equipe.name, nomes_com_membros)
+        self.assertNotIn(parcial.name, nomes_com_membros)
+
+        resposta_sem_membros = self.client.get(url, {'com_membros': 'nao'})
+        nomes_sem_membros = [g.name for g in resposta_sem_membros.context['cl'].result_list]
+        self.assertIn(parcial.name, nomes_sem_membros)
+        self.assertNotIn(global_equipe.name, nomes_sem_membros)
+
+    def test_changelist_escopo_global_sem_n_mais_um(self):
+        equipe = Group.objects.create(name='Equipe global contada')
+        GrupoAcesso.objects.create(
+            group=equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        equipe.user_set.add(self.dono)
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_changelist')
+        self.client.get(url)  # aquece ContentTypes e sessão antes de comparar.
+
+        with CaptureQueriesContext(connection) as consultas:
+            response = self.client.get(url)
+        resultado = next(obj for obj in response.context['cl'].result_list if obj == equipe)
+        admin_group = GroupAdmin(Group, admin.site)
+        self.assertEqual(admin_group.escopo(resultado), 'Todas (dinâmico)')
+
+        extra = Group.objects.create(name='Equipe global contada extra')
+        GrupoAcesso.objects.create(
+            group=extra, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        with self.assertNumQueries(len(consultas)):
+            segunda = self.client.get(url)
+        self.assertEqual(segunda.status_code, 200)
+
+    def test_tela_ti_mostra_equipes_globais_em_leitura_sem_revogacao_individual(self):
+        global_equipe = Group.objects.create(name='Equipe global TI')
+        GrupoAcesso.objects.create(
+            group=global_equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse('admin:dominial_tis_change', args=[self.tis_a.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        conteudo = response.content.decode()
+        self.assertIn('Também têm acesso por escopo global', conteudo)
+        self.assertIn('Equipe global TI', conteudo)
+        for formset in response.context['inline_admin_formsets']:
+            if formset.opts.model is GroupTI:
+                for form in formset.forms:
+                    grupo_no_form = form.instance.group_id if form.instance.pk else None
+                    self.assertNotEqual(grupo_no_form, global_equipe.pk)
+
+    def test_perfil_protegido_campo_global_readonly_e_post_forjado_recusado(self):
+        perfil = Group.objects.get(name='Perfil: Editor')
+        self.client.force_login(self.superuser)
+        url = reverse('admin:auth_group_change', args=[perfil.pk])
+
+        tela = self.client.get(url)
+        self.assertEqual(tela.status_code, 200)
+        self.assertNotIn('acesso_todas_tis', tela.context['adminform'].form.fields)
+        self.assertNotIn('confirmar_acesso_global', tela.context['adminform'].form.fields)
+
+        response = self.client.post(url, {'acesso_todas_tis': '1'})
+
+        self.assertEqual(response.status_code, 403)
+        perfil.acesso.refresh_from_db()
+        self.assertFalse(perfil.acesso.acesso_todas_tis)
 
 
 class AtribuicaoEmMassaTest(SegregacaoBaseTestCase):

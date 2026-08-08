@@ -16,6 +16,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils.safestring import mark_safe
+from django.utils.html import format_html_join
 from .models import (
     Alteracoes,
     Cartorios,
@@ -192,6 +193,31 @@ class TIsAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         return escopar(
             super().get_queryset(request), tis_for_user(request.user), request.user
         )
+
+    def get_readonly_fields(self, request, obj=None):
+        campos = list(super().get_readonly_fields(request, obj))
+        if obj is not None:
+            campos.append('equipes_globais')
+        return campos
+
+    @admin.display(description='Também têm acesso por escopo global')
+    def equipes_globais(self, obj):
+        """
+        Bloco somente leitura (F7): a flag global só é editável na tela da
+        equipe. Aqui só listamos quem enxerga esta TI por ela; não é possível
+        revogar uma TI isolada de uma equipe global, pois a semântica é
+        "todas", sem lista de negação.
+        """
+        if obj is None:
+            return '-'
+        nomes = list(
+            Group.objects.filter(
+                acesso__tipo=GrupoAcesso.EQUIPE, acesso__acesso_todas_tis=True
+            ).order_by('name').values_list('name', flat=True)
+        )
+        if not nomes:
+            return 'Nenhuma equipe com acesso global no momento.'
+        return format_html_join(', ', '{}', ((nome,) for nome in nomes))
 
     def atribuir_tis_selecionadas(self, request, queryset):
         if not request.user.is_superuser:
@@ -406,6 +432,11 @@ class UsuariosAtribuicaoEmMassaField(forms.ModelMultipleChoiceField):
 class GroupAdminForm(forms.ModelForm):
     """Campos de equipe que não existem no ``auth.Group`` de série."""
 
+    TEXTO_IMPACTO_GLOBAL = (
+        'Esta equipe verá todas as TIs atuais, todas as TIs futuras e todos os '
+        'imóveis atuais e futuros dessas TIs.'
+    )
+
     descricao = forms.CharField(
         label='Descrição',
         required=False,
@@ -417,6 +448,19 @@ class GroupAdminForm(forms.ModelForm):
         required=False,
         widget=FilteredSelectMultiple('usuários', is_stacked=False),
     )
+    acesso_todas_tis = forms.BooleanField(
+        label='Acesso a todas as TIs',
+        required=False,
+    )
+    confirmar_acesso_global = forms.BooleanField(
+        label='Confirmo a ativação do acesso a todas as TIs',
+        required=False,
+        help_text=(
+            'Obrigatório somente ao ligar "Acesso a todas as TIs" (transição de '
+            'desligado para ligado). Desligar a flag ou mantê-la já ligada não exige '
+            'esta confirmação.'
+        ),
+    )
 
     class Meta:
         model = Group
@@ -424,13 +468,56 @@ class GroupAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not self.instance.pk:
-            return
-        try:
-            self.initial['descricao'] = self.instance.acesso.descricao
-        except GrupoAcesso.DoesNotExist:
-            self.initial['descricao'] = ''
-        self.initial['usuarios'] = self.instance.user_set.order_by('pk')
+        self._estado_anterior_global = False
+        total_membros = 0
+        if self.instance.pk:
+            try:
+                acesso = self.instance.acesso
+                self.initial['descricao'] = acesso.descricao
+                self.initial['acesso_todas_tis'] = acesso.acesso_todas_tis
+                self._estado_anterior_global = acesso.acesso_todas_tis
+            except GrupoAcesso.DoesNotExist:
+                self.initial['descricao'] = ''
+            self.initial['usuarios'] = self.instance.user_set.order_by('pk')
+            total_membros = self.instance.user_set.count()
+        # Campo só existe no form para superusuário (`GroupAdmin.get_readonly_fields`
+        # o remove para os demais via o mecanismo do `usuarios`) — por isso é seguro
+        # assumir `request.user.is_superuser` aqui, o que também mantém a leitura de
+        # `Imovel` presa a `for_user()` (guarda de `ManagerOptInRegressaoTest`).
+        if 'acesso_todas_tis' in self.fields:
+            request = getattr(self, 'request', None)
+            total_imoveis = (
+                Imovel.objects.for_user(request.user).count() if request is not None else 0
+            )
+            self.fields['acesso_todas_tis'].help_text = (
+                f'{self.TEXTO_IMPACTO_GLOBAL} Hoje isso afeta {TIs.objects.count()} '
+                f'TIs, {total_imoveis} imóveis e {total_membros} membros '
+                'desta equipe (contagem atual — apenas informativa).'
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        ligando_agora = bool(cleaned_data.get('acesso_todas_tis')) and not self._estado_anterior_global
+        if ligando_agora and not cleaned_data.get('confirmar_acesso_global'):
+            self.add_error(
+                'confirmar_acesso_global',
+                'Marque a confirmação para ativar o acesso a todas as TIs. '
+                f'{self.TEXTO_IMPACTO_GLOBAL}',
+            )
+        if cleaned_data.get('acesso_todas_tis'):
+            tipo_atual = GrupoAcesso.EQUIPE
+            if self.instance.pk:
+                try:
+                    tipo_atual = self.instance.acesso.tipo
+                except GrupoAcesso.DoesNotExist:
+                    tipo_atual = GrupoAcesso.EQUIPE
+            if tipo_atual != GrupoAcesso.EQUIPE:
+                self.add_error(
+                    'acesso_todas_tis',
+                    'Acesso a todas as TIs só pode ser ativado para equipes, não '
+                    'para perfis.',
+                )
+        return cleaned_data
 
 
 class AtribuicaoEmMassaForm(forms.Form):
@@ -1032,6 +1119,51 @@ class GroupTIPorGroupInline(admin.TabularInline):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('tis', 'atribuido_por')
 
+    def get_formset(self, request, obj=None, **kwargs):
+        """
+        Equipe global: os vínculos explícitos (redundantes) não podem ser
+        apagados por aqui — nem pelo checkbox de exclusão, nem por POST
+        forjado, já que ``can_delete=False`` remove o campo ``DELETE`` do
+        form (#132, F3).
+        """
+        if obj is not None:
+            try:
+                if obj.acesso.acesso_todas_tis:
+                    kwargs['can_delete'] = False
+            except GrupoAcesso.DoesNotExist:
+                pass
+        return super().get_formset(request, obj, **kwargs)
+
+
+class EscopoGlobalListFilter(admin.SimpleListFilter):
+    title = 'escopo (global/parcial)'
+    parameter_name = 'escopo_global'
+
+    def lookups(self, request, model_admin):
+        return [('global', 'Global (todas as TIs)'), ('parcial', 'Parcial')]
+
+    def queryset(self, request, queryset):
+        if self.value() == 'global':
+            return queryset.filter(acesso__acesso_todas_tis=True)
+        if self.value() == 'parcial':
+            return queryset.filter(acesso__acesso_todas_tis=False)
+        return queryset
+
+
+class ComMembrosListFilter(admin.SimpleListFilter):
+    title = 'membros'
+    parameter_name = 'com_membros'
+
+    def lookups(self, request, model_admin):
+        return [('sim', 'Com membros'), ('nao', 'Sem membros')]
+
+    def queryset(self, request, queryset):
+        if self.value() == 'sim':
+            return queryset.filter(user__isnull=False).distinct()
+        if self.value() == 'nao':
+            return queryset.filter(user__isnull=True)
+        return queryset
+
 
 class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
     """Tela única de equipes, mantendo perfis estruturais somente para leitura."""
@@ -1039,7 +1171,21 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
     form = GroupAdminForm
     inlines = [GroupTIPorGroupInline]
     actions = ['atribuir_tis_as_equipes']
-    list_display = ['name', 'tipo_acesso', 'numero_membros', 'numero_tis']
+    list_display = ['name', 'tipo_acesso', 'numero_membros', 'numero_tis', 'escopo']
+    list_filter = [EscopoGlobalListFilter, ComMembrosListFilter]
+
+    def get_form(self, request, obj=None, **kwargs):
+        """
+        Expõe ``request`` para o form montar a prévia de impacto do acesso
+        global (`GroupAdminForm.__init__`) sem sair de `for_user()`.
+
+        `ModelAdmin.get_form` monta uma classe nova a cada chamada
+        (`modelform_factory`), então marcar o atributo na classe não vaza
+        entre requisições concorrentes.
+        """
+        form = super().get_form(request, obj, **kwargs)
+        form.request = request
+        return form
 
     @staticmethod
     def _protegido(obj):
@@ -1079,6 +1225,29 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
     def numero_tis(self, obj):
         return obj._numero_tis
 
+    @admin.display(description='Escopo')
+    def escopo(self, obj):
+        try:
+            se_global = obj.acesso.acesso_todas_tis
+        except GrupoAcesso.DoesNotExist:
+            se_global = False
+        if se_global:
+            return 'Todas (dinâmico)'
+        return f'{obj._numero_tis} TIs'
+
+    @admin.display(description='Acesso a todas as TIs', boolean=True)
+    def acesso_todas_tis(self, obj):
+        if obj is None or not obj.pk:
+            return False
+        try:
+            return obj.acesso.acesso_todas_tis
+        except GrupoAcesso.DoesNotExist:
+            return False
+
+    @admin.display(description='Confirmação de ativação global')
+    def confirmar_acesso_global(self, obj):
+        return '-'
+
     @admin.display(description='Descrição')
     def descricao(self, obj):
         try:
@@ -1095,9 +1264,12 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         if self._protegido(obj):
-            return ['name', 'permissions', 'descricao', 'usuarios']
+            return [
+                'name', 'permissions', 'descricao', 'usuarios',
+                'acesso_todas_tis', 'confirmar_acesso_global',
+            ]
         if not request.user.is_superuser:
-            return ['usuarios']
+            return ['usuarios', 'acesso_todas_tis', 'confirmar_acesso_global']
         return super().get_readonly_fields(request, obj)
 
     def get_inline_instances(self, request, obj=None):
@@ -1136,6 +1308,14 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
             raise PermissionDenied('Membros de perfis protegidos não podem ser alterados.')
         if any(chave.startswith('tis_atribuidas-') for chave in request.POST):
             raise PermissionDenied('TIs de perfis protegidos não podem ser alteradas.')
+        if 'acesso_todas_tis' in request.POST:
+            valor_postado = request.POST.get('acesso_todas_tis') not in (
+                None, '', '0', 'false', 'False',
+            )
+            if valor_postado != acesso.acesso_todas_tis:
+                raise PermissionDenied(
+                    'Grupos de perfil protegidos não podem ter acesso a todas as TIs.'
+                )
 
     def save_model(self, request, obj, form, change):
         self._bloquear_post_protegido(request, obj, change)
@@ -1149,6 +1329,32 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
             if acesso.descricao != descricao:
                 acesso.descricao = descricao
                 acesso.save(update_fields=['descricao'])
+
+        # Equivalente a atribuir todas as TIs de uma vez: só superusuário
+        # aplica, mesmo que a flag chegue no POST por algum outro caminho
+        # (D3, risco 11 do plano da Fase 3). O form já remove o campo do HTML
+        # para não-superusuário (`get_readonly_fields`), então esta checagem
+        # é a segunda camada de defesa.
+        if (
+            request.user.is_superuser
+            and acesso.tipo == GrupoAcesso.EQUIPE
+            and 'acesso_todas_tis' in form.cleaned_data
+        ):
+            novo_valor = bool(form.cleaned_data['acesso_todas_tis'])
+            if acesso.acesso_todas_tis != novo_valor:
+                valor_anterior = acesso.acesso_todas_tis
+                total_tis = TIs.objects.count()
+                total_imoveis = Imovel.objects.for_user(request.user).count()
+                total_membros = obj.user_set.count()
+                acesso.acesso_todas_tis = novo_valor
+                acesso.save(update_fields=['acesso_todas_tis'])
+                form._global_diff = {
+                    'anterior': valor_anterior,
+                    'novo': novo_valor,
+                    'total_tis': total_tis,
+                    'total_imoveis': total_imoveis,
+                    'total_membros': total_membros,
+                }
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
@@ -1176,7 +1382,44 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
                     ]
                 }
             })
+        global_diff = getattr(form, '_global_diff', None)
+        if global_diff:
+            anterior = 'Sim' if global_diff['anterior'] else 'Não'
+            novo = 'Sim' if global_diff['novo'] else 'Não'
+            mensagem.append({
+                'changed': {
+                    'fields': [
+                        f'Acesso a todas as TIs — de {anterior} para {novo} '
+                        f'(impacto no momento da mudança: {global_diff["total_tis"]} TIs, '
+                        f'{global_diff["total_imoveis"]} imóveis, '
+                        f'{global_diff["total_membros"]} membros)'
+                    ]
+                }
+            })
         return mensagem
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        if request.method == 'GET':
+            obj = self.get_object(request, object_id)
+            if obj is not None:
+                try:
+                    acesso = obj.acesso
+                except GrupoAcesso.DoesNotExist:
+                    acesso = None
+                if acesso and acesso.acesso_todas_tis:
+                    vinculos = GroupTI.objects.filter(group=obj).count()
+                    if vinculos:
+                        rotulo = (
+                            'vínculo explícito preservado' if vinculos == 1
+                            else 'vínculos explícitos preservados'
+                        )
+                        messages.info(
+                            request,
+                            f'Acesso global ativo: {vinculos} {rotulo}. Eles ficam '
+                            'redundantes enquanto o acesso global estiver ligado e '
+                            'voltam a valer como escopo residual se ele for desativado.',
+                        )
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def delete_model(self, request, obj):
         if self._protegido(obj):
