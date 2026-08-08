@@ -29,6 +29,7 @@ from dominial.managers import (
     tis_for_user,
 )
 from dominial.models import (
+    ImportacaoCartorios,
     Alteracoes,
     AlteracoesTipo,
     Cartorios,
@@ -44,12 +45,15 @@ from dominial.models import (
     UserImovel,
 )
 from dominial.admin import (
+    ERRO_IMPORTACAO,
     AlteracoesAdmin,
     DocumentoDigitalAdmin,
     ImovelAdmin,
+    ImportacaoCartoriosAdmin,
     PessoasAdmin,
     TIsAdmin,
     TIsSegregadaFilter,
+    UserAdmin,
 )
 from dominial.models.documento_digital_models import DocumentoDigital
 from dominial.utils.segregacao_utils import usuario_tem_acesso_imovel
@@ -1310,6 +1314,222 @@ class MustFixRound8Test(SegregacaoBaseTestCase):
         self.assertEqual(
             response['Content-Disposition'], r'inline; filename="rela\"torio.pdf"'
         )
+
+
+class MustFixRound9Test(SegregacaoBaseTestCase):
+    """Achados da review final: senha de superuser, actions e vazamento de erro."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.dono.is_staff = True
+        cls.dono.save(update_fields=['is_staff'])
+        # Username improvável de aparecer solto no HTML do admin — as asserções
+        # de "não vaza no changelist" dependem disso.
+        cls.raiz = User.objects.create_superuser(
+            username='raiz-do-sistema', password='senha-raiz', email='raiz@example.com'
+        )
+
+    def setUp(self):
+        self.client = Client()
+
+    def _dar_permissoes(self, app_label, *codenames):
+        self.dono.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label=app_label, codename__in=codenames
+            )
+        )
+
+    def _request_do_dono(self):
+        # Recarrega do banco: `has_perm` cacheia as permissões na instância.
+        request = RequestFactory().get('/admin/')
+        request.user = User.objects.get(pk=self.dono.pk)
+        return request
+
+    # ------------------------------------------------------------------
+    # F-1: /admin/auth/user/<id>/password/ só olhava has_change_permission,
+    # então quem tinha `auth.change_user` resetava a senha de um superuser
+    # e entrava como ele — o mesmo destino que travar `is_superuser` fechou.
+    # ------------------------------------------------------------------
+    def test_staff_com_change_user_nao_ve_superuser_no_changelist(self):
+        self._dar_permissoes('auth', 'view_user', 'change_user')
+        self.client.force_login(self.dono)
+
+        response = self.client.get(reverse('admin:auth_user_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.dono.username)
+        self.assertNotContains(response, self.raiz.username)
+
+    def test_staff_com_change_user_nao_troca_senha_de_superuser(self):
+        self._dar_permissoes('auth', 'view_user', 'change_user')
+        self.client.force_login(self.dono)
+        url = reverse('admin:auth_user_password_change', args=[self.raiz.pk])
+
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+        response = self.client.post(url, {
+            'password1': 'senha-invadida-321',
+            'password2': 'senha-invadida-321',
+            'usable_password': 'true',
+        })
+
+        self.assertEqual(response.status_code, 404)
+        self.raiz.refresh_from_db()
+        self.assertFalse(self.raiz.check_password('senha-invadida-321'))
+        self.assertTrue(self.raiz.check_password('senha-raiz'))
+
+    def test_staff_com_change_user_nao_abre_o_change_de_superuser(self):
+        self._dar_permissoes('auth', 'view_user', 'change_user')
+        self.client.force_login(self.dono)
+        url = reverse('admin:auth_user_change', args=[self.raiz.pk])
+
+        # O admin redireciona para o índice com "objeto não existe".
+        self.assertEqual(self.client.get(url).status_code, 302)
+
+        self.client.post(url, {
+            'username': 'raiz-sequestrada',
+            'first_name': '', 'last_name': '', 'email': '',
+            'is_active': 'on',
+            'date_joined_0': '2024-01-01', 'date_joined_1': '00:00:00',
+        })
+
+        self.raiz.refresh_from_db()
+        self.assertEqual(self.raiz.username, 'raiz-do-sistema')
+        self.assertTrue(self.raiz.is_superuser)
+
+    def test_staff_com_delete_user_nao_apaga_superuser(self):
+        self._dar_permissoes('auth', 'view_user', 'change_user', 'delete_user')
+        self.client.force_login(self.dono)
+
+        response = self.client.post(
+            reverse('admin:auth_user_delete', args=[self.raiz.pk]), {'post': 'yes'}
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(pk=self.raiz.pk).exists())
+
+    def test_permissoes_de_objeto_recusam_superuser_mas_liberam_o_resto(self):
+        self._dar_permissoes('auth', 'view_user', 'change_user', 'delete_user')
+        user_admin = UserAdmin(User, admin.site)
+        request = self._request_do_dono()
+
+        self.assertFalse(user_admin.has_view_permission(request, self.raiz))
+        self.assertFalse(user_admin.has_change_permission(request, self.raiz))
+        self.assertFalse(user_admin.has_delete_permission(request, self.raiz))
+        # ...e continua funcionando para quem não é superuser.
+        self.assertTrue(user_admin.has_change_permission(request, self.sem_acesso))
+        self.assertNotIn(self.raiz, user_admin.get_queryset(request))
+        self.assertIn(self.sem_acesso, user_admin.get_queryset(request))
+
+    def test_superuser_continua_gerenciando_outros_superusers(self):
+        self.client.force_login(self.superuser)
+
+        changelist = self.client.get(reverse('admin:auth_user_changelist'))
+        senha = self.client.get(
+            reverse('admin:auth_user_password_change', args=[self.raiz.pk])
+        )
+
+        self.assertContains(changelist, self.raiz.username)
+        self.assertEqual(senha.status_code, 200)
+
+    # ------------------------------------------------------------------
+    # F-2: sem `allowed_permissions` o Django não filtra a action, então
+    # quem só tinha `view_importacaocartorios` disparava a importação.
+    # ------------------------------------------------------------------
+    def test_staff_so_com_view_nao_recebe_a_action_de_importacao(self):
+        self._dar_permissoes('dominial', 'view_importacaocartorios')
+
+        acoes = ImportacaoCartoriosAdmin(ImportacaoCartorios, admin.site).get_actions(
+            self._request_do_dono()
+        )
+
+        self.assertNotIn('importar_cartorios', acoes)
+
+    def test_staff_com_change_recebe_a_action_de_importacao(self):
+        self._dar_permissoes(
+            'dominial', 'view_importacaocartorios', 'change_importacaocartorios'
+        )
+
+        acoes = ImportacaoCartoriosAdmin(ImportacaoCartorios, admin.site).get_actions(
+            self._request_do_dono()
+        )
+
+        self.assertIn('importar_cartorios', acoes)
+
+    @patch('dominial.admin.ImportarCartoriosCommand')
+    def test_staff_so_com_view_nao_dispara_a_action_pelo_post(self, comando):
+        importacao = ImportacaoCartorios.objects.create(estado='SP')
+        self._dar_permissoes('dominial', 'view_importacaocartorios')
+        self.client.force_login(self.dono)
+
+        response = self.client.post(
+            reverse('admin:dominial_importacaocartorios_changelist'),
+            {'action': 'importar_cartorios', '_selected_action': [str(importacao.pk)]},
+        )
+
+        # Action recusada: o changelist volta com "nenhuma ação selecionada".
+        self.assertEqual(response.status_code, 200)
+        comando.assert_not_called()
+        importacao.refresh_from_db()
+        self.assertEqual(importacao.status, 'pendente')
+
+    def test_toda_action_customizada_declara_allowed_permissions(self):
+        sem_gate = []
+        for model_admin in admin.site._registry.values():
+            for nome in model_admin.actions or ():
+                if not isinstance(nome, str):
+                    continue
+                funcao = getattr(model_admin, nome, None)
+                if funcao is not None and not hasattr(funcao, 'allowed_permissions'):
+                    sem_gate.append(f'{type(model_admin).__name__}.{nome}')
+
+        self.assertEqual(sem_gate, [])
+
+    # ------------------------------------------------------------------
+    # F-3: str(e) ia para o JSON e ficava gravado em `erro`, que
+    # `verificar_progresso` devolve ao usuário.
+    # ------------------------------------------------------------------
+    @patch(
+        'dominial.admin.ImportarCartoriosCommand.handle',
+        side_effect=RuntimeError('conexão recusada em postgres://cadeia:hunter2@db'),
+    )
+    def test_erro_da_importacao_nao_vaza_a_excecao(self, _mock):
+        importacao = ImportacaoCartorios.objects.create(estado='SP')
+        self._dar_permissoes(
+            'dominial', 'view_importacaocartorios', 'change_importacaocartorios'
+        )
+        self.client.force_login(self.dono)
+
+        with self.assertLogs('dominial.admin', level='ERROR'):
+            response = self.client.get(
+                reverse('admin:iniciar-importacao', args=[importacao.pk])
+            )
+
+        self.assertEqual(response.json()['message'], ERRO_IMPORTACAO)
+        self.assertNotIn('hunter2', response.content.decode())
+        importacao.refresh_from_db()
+        self.assertEqual(importacao.status, 'erro')
+        self.assertEqual(importacao.erro, ERRO_IMPORTACAO)
+
+        # E o que `verificar_progresso` devolve também sai limpo.
+        progresso = self.client.get(
+            reverse('admin:verificar-progresso', args=[importacao.pk])
+        )
+        self.assertEqual(progresso.json()['erro'], ERRO_IMPORTACAO)
+
+    def test_importacao_inexistente_devolve_json_em_vez_de_500(self):
+        self._dar_permissoes(
+            'dominial', 'view_importacaocartorios', 'change_importacaocartorios'
+        )
+        self.client.force_login(self.dono)
+
+        with self.assertLogs('dominial.admin', level='ERROR'):
+            # Antes, o `if importacao` do except batia em UnboundLocalError.
+            response = self.client.get(reverse('admin:iniciar-importacao', args=[999999]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['message'], ERRO_IMPORTACAO)
 
 
 class ManagerOptInRegressaoTest(TestCase):

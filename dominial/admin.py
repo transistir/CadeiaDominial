@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin
 from django.utils import timezone
 from django.contrib import messages
@@ -22,6 +24,14 @@ from .managers import (
     tis_for_user,
     usuario_ve_tudo,
 )
+
+logger = logging.getLogger(__name__)
+
+# Mensagem fixa em vez do `str(e)` cru: o texto da exceção vaza nome de tabela,
+# URL de origem e credencial de integração na tela do usuário — e ainda fica
+# persistido em `ImportacaoCartorios.erro`, que `verificar_progresso` devolve
+# por JSON (#132).
+ERRO_IMPORTACAO = 'Erro ao importar cartórios. Consulte os logs do servidor.'
 
 # Configurações do Admin
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -297,6 +307,45 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
         if obj is None or not request.user.is_superuser:
             return []
         return super().get_inline_instances(request, obj)
+
+    def get_queryset(self, request):
+        """
+        Superusers somem da lista para quem não é superuser (#132).
+
+        `ModelAdmin.get_object()` lê daqui, então filtrar num lugar só fecha o
+        changelist, o change form, o delete e — o buraco que sobrava depois de
+        travar o checkbox `is_superuser` — o `/admin/auth/user/<id>/password/`
+        herdado do `UserAdmin`, que só checa `has_change_permission`. Sem isso,
+        um staff com `auth.change_user` troca a senha de um superuser e entra
+        como ele, chegando ao mesmo lugar por outra porta.
+        """
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(is_superuser=False)
+
+    def _alvo_protegido(self, request, obj):
+        """True quando um não-superuser tenta agir sobre um superuser."""
+        return (
+            obj is not None
+            and obj.is_superuser
+            and not request.user.is_superuser
+        )
+
+    def has_view_permission(self, request, obj=None):
+        if self._alvo_protegido(request, obj):
+            return False
+        return super().has_view_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if self._alvo_protegido(request, obj):
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if self._alvo_protegido(request, obj):
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 admin.site.unregister(User)
@@ -594,6 +643,9 @@ class DocumentoAdmin(admin.ModelAdmin):
             messages.success(request, "✅ Nenhum documento com mesmo número encontrado.")
     
     investigar_duplicatas.short_description = "🔍 Investigar documentos com mesmo número"
+    # Só lê e reporta, mas a action tem de declarar a permissão que exige para o
+    # Django filtrá-la — sem isso ela aparece para qualquer staff no changelist.
+    investigar_duplicatas.allowed_permissions = ('view',)
 
 @admin.register(Lancamento)
 class LancamentoAdmin(admin.ModelAdmin):
@@ -692,6 +744,9 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
         # das views customizadas (#132).
         if not self.has_change_permission(request):
             raise PermissionDenied
+        # Inicializado antes do try: um `DoesNotExist` no `.get()` deixava o
+        # `if importacao` do except estourando UnboundLocalError → 500.
+        importacao = None
         try:
             importacao = ImportacaoCartorios.objects.get(id=importacao_id)
             if importacao.status in ['em_andamento', 'concluido']:
@@ -717,14 +772,15 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
                 'status': 'success',
                 'message': f'Importação para {importacao.get_estado_display()} concluída com sucesso!'
             })
-        except Exception as e:
+        except Exception:
+            logger.exception('Erro ao importar cartórios da importação %s', importacao_id)
             if importacao:
                 importacao.status = 'erro'
-                importacao.erro = str(e)
+                importacao.erro = ERRO_IMPORTACAO
                 importacao.save()
             return JsonResponse({
                 'status': 'error',
-                'message': f'Erro ao importar cartórios: {str(e)}'
+                'message': ERRO_IMPORTACAO
             })
 
     def verificar_progresso(self, request, importacao_id):
@@ -789,13 +845,21 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
                 importacao.save()
 
                 messages.success(request, f'Importação para {importacao.get_estado_display()} concluída com sucesso!')
-            except Exception as e:
+            except Exception:
+                logger.exception('Erro ao importar cartórios da importação %s', importacao.pk)
                 importacao.status = 'erro'
-                importacao.erro = str(e)
+                importacao.erro = ERRO_IMPORTACAO
                 importacao.save()
-                messages.error(request, f'Erro ao importar cartórios de {importacao.get_estado_display()}: {str(e)}')
+                messages.error(
+                    request,
+                    f'{importacao.get_estado_display()}: {ERRO_IMPORTACAO}'
+                )
 
     importar_cartorios.short_description = 'Importar cartórios do estado selecionado'
+    # Sem `allowed_permissions`, o Django não filtra a action: qualquer staff que
+    # chegue ao changelist só com `view_importacaocartorios` dispararia a
+    # importação e mexeria no status (#132).
+    importar_cartorios.allowed_permissions = ('change',)
 
 
 @admin.register(FimCadeia)
