@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
-from django.db.models import F, Max, Q
+from django.db.models import Count, F, Max, Q
 from django.db.models.functions import Coalesce
 from django.http import Http404
 from ..managers import tis_for_user, usuario_ve_tudo
@@ -12,7 +12,17 @@ from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 @login_required
 def home(request):
     busca = request.GET.get('busca', '').strip()
-    tis_cadastradas = tis_for_user(request.user)
+    imoveis_visiveis = Imovel.objects.for_user(request.user)
+    tis_cadastradas = (
+        tis_for_user(request.user)
+        .select_related('terra_referencia')
+        .annotate(
+            quantidade_imoveis=Count(
+                'imovel',
+                filter=Q(imovel__in=imoveis_visiveis),
+            )
+        )
+    )
     terras_referencia = TerraIndigenaReferencia.objects.all()
     if busca:
         tis_cadastradas = tis_cadastradas.filter(
@@ -21,25 +31,25 @@ def home(request):
         terras_referencia = terras_referencia.filter(
             Q(nome__icontains=busca) | Q(etnia__icontains=busca) | Q(codigo__icontains=busca)
         )
-    tis_com_imoveis = {
-        tis.id: Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis).count()
-        for tis in tis_cadastradas
-    }
     tis_ordenadas = sorted(
         tis_cadastradas,
-        key=lambda x: (tis_com_imoveis.get(x.id, 0), x.nome),
-        reverse=True
+        key=lambda tis: (tis.quantidade_imoveis, tis.nome),
+        reverse=True,
     )
+    tis_com_imoveis = {
+        tis.id: tis.quantidade_imoveis
+        for tis in tis_ordenadas
+    }
     terras_referencia = terras_referencia.order_by('nome')
-    codigos_tis_cadastradas = set(tis.codigo for tis in tis_cadastradas)
+    codigos_tis_cadastradas = {tis.codigo for tis in tis_ordenadas}
     terras_referencia_nao_cadastradas = [tr for tr in terras_referencia if tr.codigo not in codigos_tis_cadastradas]
-    if not usuario_ve_tudo(request.user) and not Imovel.objects.for_user(request.user).exists():
+    if not usuario_ve_tudo(request.user) and not any(tis_com_imoveis.values()):
         messages.info(request, MENSAGEM_SEM_IMOVEIS)
     return render(request, 'dominial/home.html', {
         'terras_indigenas': tis_ordenadas,
         'terras_referencia': terras_referencia_nao_cadastradas,
         'busca': busca,
-        'total_tis_cadastradas': tis_cadastradas.count(),
+        'total_tis_cadastradas': len(tis_ordenadas),
         'total_terras_referencia': len(terras_referencia_nao_cadastradas),
         'tis_com_imoveis': tis_com_imoveis,
     })

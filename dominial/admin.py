@@ -91,6 +91,66 @@ class TIsSegregadaFilter(admin.RelatedFieldListFilter):
         return [(tis.pk, str(tis)) for tis in tis_for_user(request.user).order_by('nome')]
 
 
+class AtribuicaoAuditoriaMixin:
+    """
+    Carimba ``atribuido_por`` nas atribuições criadas via inline (#132).
+
+    Inlines não passam por ``save_model``; a gravação acontece no formset do
+    admin pai, por isso o hook é ``save_formset``.
+    """
+
+    MODELOS_ATRIBUICAO = {UserImovel, UserTI, GroupTI}
+
+    def save_formset(self, request, form, formset, change):
+        if formset.model not in self.MODELOS_ATRIBUICAO:
+            return super().save_formset(request, form, formset, change)
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for instance in instances:
+            if instance.atribuido_por_id is None:
+                instance.atribuido_por = request.user
+            instance.save()
+        formset.save_m2m()
+
+    def get_inline_instances(self, request, obj=None):
+        if not request.user.is_superuser:
+            return []
+        return super().get_inline_instances(request, obj)
+
+
+class GroupTIPorTIInline(admin.TabularInline):
+    """Equipes com acesso a esta TI (veículo principal)."""
+
+    model = GroupTI
+    fk_name = 'tis'
+    extra = 1
+    autocomplete_fields = ['group']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    verbose_name = 'Equipe com acesso'
+    verbose_name_plural = 'Equipes com acesso'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('group', 'atribuido_por')
+
+
+class UserTIPorTIInline(admin.TabularInline):
+    """Usuários com acesso direto a esta TI."""
+
+    model = UserTI
+    fk_name = 'tis'
+    extra = 1
+    autocomplete_fields = ['user']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    verbose_name = 'Usuário com acesso direto'
+    verbose_name_plural = 'Usuários com acesso direto'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user', 'atribuido_por')
+
+
 @admin.register(Pessoas)
 class PessoasAdmin(admin.ModelAdmin):
     """
@@ -110,8 +170,9 @@ class PessoasAdmin(admin.ModelAdmin):
 
 
 @admin.register(TIs)
-class TIsAdmin(admin.ModelAdmin):
+class TIsAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
     search_fields = ['nome', 'codigo', 'etnia']
+    inlines = [GroupTIPorTIInline, UserTIPorTIInline]
 
     def get_queryset(self, request):
         return escopar(
@@ -202,34 +263,6 @@ class NumeroDocumentoFilter(admin.SimpleListFilter):
             return queryset.filter(numero=self.value())
         return queryset
 
-class AtribuicaoAuditoriaMixin:
-    """
-    Carimba `atribuido_por` nas atribuições criadas via inline (#132).
-
-    Inlines não passam por `save_model`; a gravação acontece no formset do
-    admin pai, por isso o hook é `save_formset`.
-    """
-
-    def save_formset(self, request, form, formset, change):
-        if formset.model is not UserImovel:
-            return super().save_formset(request, form, formset, change)
-        if not request.user.is_superuser:
-            raise PermissionDenied
-        instances = formset.save(commit=False)
-        for obj in formset.deleted_objects:
-            obj.delete()
-        for instance in instances:
-            if instance.atribuido_por_id is None:
-                instance.atribuido_por = request.user
-            instance.save()
-        formset.save_m2m()
-
-    def get_inline_instances(self, request, obj=None):
-        if not request.user.is_superuser:
-            return []
-        return super().get_inline_instances(request, obj)
-
-
 class UserImovelPorImovelInline(admin.TabularInline):
     """Usuários com acesso a este imóvel."""
     model = UserImovel
@@ -257,6 +290,22 @@ class UserImovelPorUserInline(admin.TabularInline):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('imovel', 'atribuido_por')
+
+
+class UserTIPorUserInline(admin.TabularInline):
+    """TIs atribuídas diretamente a este usuário."""
+
+    model = UserTI
+    # UserTI tem duas FKs para User (user e atribuido_por).
+    fk_name = 'user'
+    extra = 1
+    autocomplete_fields = ['tis']
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    verbose_name = 'TI atribuída diretamente'
+    verbose_name_plural = 'TIs atribuídas diretamente'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('tis', 'atribuido_por')
 
 
 @admin.register(UserImovel)
@@ -379,8 +428,8 @@ class GrupoAcessoAdmin(admin.ModelAdmin):
 
 
 class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
-    """UserAdmin padrão + inline de imóveis atribuídos (#132)."""
-    inlines = [UserImovelPorUserInline]
+    """UserAdmin padrão + inlines de atribuições legadas e por TI (#132)."""
+    inlines = [UserImovelPorUserInline, UserTIPorUserInline]
 
     # Campos que decidem quem escapa da segregação. Sem este bloqueio, um staff
     # com `auth.change_user` marca `is_superuser` — no próprio usuário, inclusive
@@ -402,6 +451,24 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
         if obj is None or not request.user.is_superuser:
             return []
         return super().get_inline_instances(request, obj)
+
+    def get_formsets_with_inlines(self, request, obj=None):
+        """
+        Aceita POSTs abertos antes da inclusão do inline de TI.
+
+        Uma aba antiga do admin não envia o management form de ``UserTI``;
+        ignorar só esse formset ausente mantém a edição principal válida e não
+        concede, altera ou revoga qualquer atribuição de TI.
+        """
+        for formset, inline in super().get_formsets_with_inlines(request, obj):
+            prefix = formset.get_default_prefix()
+            if (
+                request.method == 'POST'
+                and inline.model is UserTI
+                and f'{prefix}-TOTAL_FORMS' not in request.POST
+            ):
+                continue
+            yield formset, inline
 
     def get_queryset(self, request):
         """

@@ -72,7 +72,7 @@ class ModelsAtribuicaoTITest(TestCase):
         self.assertEqual(user_ti.atribuido_por, self.superuser)
         self.assertEqual(group_ti.atribuido_por, self.superuser)
 
-    def test_novas_atribuicoes_ainda_nao_mudam_o_filtro(self):
+    def test_atribuicao_direta_de_ti_alimenta_o_filtro_na_fase2(self):
         cartorio = Cartorios.objects.create(nome='CRI Fase 1', cns='F1')
         proprietario = Pessoas.objects.create(nome='Proprietário Fase 1')
         imovel = Imovel.objects.create(
@@ -84,7 +84,7 @@ class ModelsAtribuicaoTITest(TestCase):
         )
         UserTI.objects.create(user=self.user, tis=self.tis)
 
-        self.assertNotIn(imovel, Imovel.objects.for_user(self.user))
+        self.assertIn(imovel, Imovel.objects.for_user(self.user))
 
 
 class AdminAtribuicaoTITest(TestCase):

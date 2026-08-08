@@ -18,7 +18,10 @@ from unittest.mock import patch
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, Group, Permission, User
 from django.core.cache import cache
+from django.core.exceptions import PermissionDenied
+from django.db import connection
 from django.test import Client, RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 import dominial
@@ -36,6 +39,8 @@ from dominial.models import (
     Documento,
     DocumentoImportado,
     DocumentoTipo,
+    GroupTI,
+    GrupoAcesso,
     Imovel,
     Lancamento,
     LancamentoPessoa,
@@ -43,17 +48,21 @@ from dominial.models import (
     Pessoas,
     TIs,
     UserImovel,
+    UserTI,
 )
 from dominial.admin import (
     ERRO_IMPORTACAO,
     AlteracoesAdmin,
     DocumentoDigitalAdmin,
+    GroupTIPorTIInline,
     ImovelAdmin,
     ImportacaoCartoriosAdmin,
     PessoasAdmin,
     TIsAdmin,
     TIsSegregadaFilter,
     UserAdmin,
+    UserTIPorTIInline,
+    UserTIPorUserInline,
 )
 from dominial.models.documento_digital_models import DocumentoDigital
 from dominial.utils.segregacao_utils import usuario_tem_acesso_imovel
@@ -132,6 +141,53 @@ class SegregacaoBaseTestCase(TestCase):
         )
 
 
+class SegregacaoFase2BaseTestCase(SegregacaoBaseTestCase):
+    """Cenário da Fase 2, isolado dos rounds de hardening legados."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.tis_c = TIs.objects.create(nome='TI Gama', codigo='TI-C', etnia='Gama')
+        cls.tis_vazia = TIs.objects.create(
+            nome='TI Vazia', codigo='TI-VAZIA', etnia='Sem imóveis'
+        )
+        cls.imovel_c1 = Imovel.objects.create(
+            nome='Imóvel C1', matricula='3000', terra_indigena_id=cls.tis_c,
+            proprietario=cls.proprietario, cartorio=cls.cartorio,
+        )
+        cls.imovel_c2 = Imovel.objects.create(
+            nome='Imóvel C2', matricula='3001', terra_indigena_id=cls.tis_c,
+            proprietario=cls.proprietario, cartorio=cls.cartorio,
+        )
+        cls.documento_c1 = Documento.objects.create(
+            imovel=cls.imovel_c1, tipo=cls.doc_tipo, numero='M3000',
+            data=date(2024, 1, 1), cartorio=cls.cartorio, livro='1', folha='1',
+        )
+        cls.documento_c2 = Documento.objects.create(
+            imovel=cls.imovel_c2, tipo=cls.doc_tipo, numero='M3001',
+            data=date(2024, 1, 1), cartorio=cls.cartorio, livro='1', folha='1',
+        )
+
+        cls.via_ti = User.objects.create_user(username='via_ti', password='senha-via-ti')
+        cls.via_equipe = User.objects.create_user(
+            username='via_equipe', password='senha-via-equipe'
+        )
+        cls.sem_nada = User.objects.create_user(username='sem_nada', password='senha-sem-nada')
+
+        cls.equipe_norte = Group.objects.create(name='Equipe Norte')
+        GrupoAcesso.objects.create(group=cls.equipe_norte, tipo=GrupoAcesso.EQUIPE)
+        cls.via_equipe.groups.add(cls.equipe_norte)
+        UserTI.objects.create(
+            user=cls.via_ti, tis=cls.tis_c, atribuido_por=cls.superuser
+        )
+        UserTI.objects.create(
+            user=cls.via_ti, tis=cls.tis_vazia, atribuido_por=cls.superuser
+        )
+        GroupTI.objects.create(
+            group=cls.equipe_norte, tis=cls.tis_c, atribuido_por=cls.superuser
+        )
+
+
 class ManagerSegregacaoTest(SegregacaoBaseTestCase):
     """Ponto 2 do plano: `Imovel.objects.for_user()` e helpers."""
 
@@ -191,6 +247,309 @@ class ManagerSegregacaoTest(SegregacaoBaseTestCase):
         # Referência compartilhada: não recebe manager segregado.
         self.assertFalse(hasattr(Cartorios.objects, 'for_user'))
         self.assertFalse(hasattr(Pessoas.objects, 'for_user'))
+
+
+class UniaoDeFontesTest(SegregacaoFase2BaseTestCase):
+    def test_uniao_das_fontes(self):
+        UserTI.objects.create(
+            user=self.via_equipe, tis=self.tis_a, atribuido_por=self.superuser
+        )
+
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.via_equipe),
+            [self.imovel_a, self.imovel_c1, self.imovel_c2],
+        )
+
+    def test_acesso_por_ti_alcanca_todos_os_imoveis_da_ti(self):
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.via_ti),
+            [self.imovel_c1, self.imovel_c2],
+        )
+
+    def test_acesso_por_equipe_alcanca_os_mesmos_imoveis(self):
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.via_equipe),
+            [self.imovel_c1, self.imovel_c2],
+        )
+
+    def test_ti_nao_atribuida_continua_invisivel(self):
+        self.assertNotIn(self.imovel_b, Imovel.objects.for_user(self.via_ti))
+        self.assertNotIn(self.tis_b, tis_for_user(self.via_ti))
+
+    def test_for_user_faz_uma_unica_query(self):
+        with self.assertNumQueries(1):
+            self.assertEqual(Imovel.objects.for_user(self.via_ti).count(), 2)
+
+    def test_for_user_nao_duplica_linhas(self):
+        UserTI.objects.create(
+            user=self.via_equipe, tis=self.tis_c, atribuido_por=self.superuser
+        )
+
+        self.assertEqual(
+            Imovel.objects.for_user(self.via_equipe).filter(terra_indigena_id=self.tis_c).count(),
+            2,
+        )
+
+
+class HomeTest(SegregacaoFase2BaseTestCase):
+    def setUp(self):
+        self.client = Client()
+
+    def test_usuario_sem_equipe_e_sem_ti_direta_nao_ve_nenhuma_ti(self):
+        self.client.force_login(self.sem_nada)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['terras_indigenas']), [])
+
+    def test_superuser_ve_todas_as_tis(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertCountEqual(
+            response.context['terras_indigenas'],
+            [self.tis_a, self.tis_b, self.tis_c, self.tis_vazia],
+        )
+
+    def test_ti_atribuida_sem_imoveis_aparece_na_home(self):
+        self.client.force_login(self.via_ti)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertIn(self.tis_vazia, response.context['terras_indigenas'])
+        self.assertEqual(response.context['tis_com_imoveis'][self.tis_vazia.pk], 0)
+
+    def test_ti_atribuida_so_por_equipe_aparece_na_home(self):
+        self.client.force_login(self.via_equipe)
+
+        response = self.client.get(reverse('home'))
+
+        self.assertEqual(list(response.context['terras_indigenas']), [self.tis_c])
+
+    def test_home_nao_faz_um_count_por_ti(self):
+        for indice in range(6):
+            tis = TIs.objects.create(
+                nome=f'TI Vazia {indice}', codigo=f'TI-VAZIA-{indice}', etnia='Teste'
+            )
+            UserTI.objects.create(user=self.via_ti, tis=tis, atribuido_por=self.superuser)
+        self.client.force_login(self.via_ti)
+
+        with CaptureQueriesContext(connection) as consultas:
+            response = self.client.get(reverse('home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(consultas), 5)
+
+
+class ImovelFuturoDeTIAtribuidaTest(SegregacaoFase2BaseTestCase):
+    def test_imovel_criado_depois_da_atribuicao_ja_nasce_visivel(self):
+        novo = Imovel.objects.create(
+            nome='Imóvel futuro', matricula='3999', terra_indigena_id=self.tis_c,
+            proprietario=self.proprietario, cartorio=self.cartorio,
+        )
+
+        self.assertIn(novo, Imovel.objects.for_user(self.via_ti))
+        self.assertIn(novo, Imovel.objects.for_user(self.via_equipe))
+
+    def test_imovel_que_muda_de_ti_troca_de_dono(self):
+        novo_responsavel = User.objects.create_user(username='responsavel_tis_a')
+        UserTI.objects.create(
+            user=novo_responsavel, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        self.assertIn(self.imovel_c1, Imovel.objects.for_user(self.via_ti))
+        self.assertNotIn(self.imovel_c1, Imovel.objects.for_user(novo_responsavel))
+
+        self.imovel_c1.terra_indigena_id = self.tis_a
+        self.imovel_c1.save(update_fields=['terra_indigena_id'])
+
+        self.assertNotIn(self.imovel_c1, Imovel.objects.for_user(self.via_ti))
+        self.assertIn(self.imovel_c1, Imovel.objects.for_user(novo_responsavel))
+
+
+class ImportacaoEntreCadeiasTest(SegregacaoFase2BaseTestCase):
+    def test_importa_de_uma_cadeia_para_outra_da_mesma_ti_com_a_ti_atribuida(self):
+        resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
+            imovel_destino_id=self.imovel_c1.id,
+            documento_origem_id=self.documento_c2.id,
+            documentos_importaveis_ids=[self.documento_c2.id],
+            usuario_id=self.via_ti.id,
+        )
+
+        self.assertTrue(resultado['sucesso'])
+        self.assertTrue(
+            DocumentoImportado.objects.filter(documento=self.documento_c2).exists()
+        )
+
+    def test_importacao_de_cadeia_de_ti_nao_atribuida_continua_404(self):
+        client = Client()
+        client.force_login(self.sem_nada)
+
+        response = client.post(reverse('verificar_duplicata_ajax', kwargs={
+            'tis_id': self.tis_b.id,
+            'imovel_id': self.imovel_b.id,
+            'documento_id': self.documento_b.id,
+        }))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(DocumentoImportado.objects.exists())
+
+
+class RevogacaoTest(SegregacaoFase2BaseTestCase):
+    def test_remover_userti_revoga_na_hora(self):
+        UserTI.objects.get(user=self.via_ti, tis=self.tis_c).delete()
+
+        self.assertNotIn(self.imovel_c1, Imovel.objects.for_user(self.via_ti))
+
+    def test_sair_da_equipe_revoga_na_hora(self):
+        self.via_equipe.groups.remove(self.equipe_norte)
+
+        self.assertNotIn(self.imovel_c1, Imovel.objects.for_user(self.via_equipe))
+
+    def test_excluir_equipe_revoga_na_hora(self):
+        atribuicao_id = GroupTI.objects.get(
+            group=self.equipe_norte, tis=self.tis_c
+        ).pk
+
+        self.equipe_norte.delete()
+
+        self.assertFalse(GroupTI.objects.filter(pk=atribuicao_id).exists())
+        self.assertNotIn(self.imovel_c1, Imovel.objects.for_user(self.via_equipe))
+
+    def test_excluir_usuario_limpa_userti(self):
+        usuario_id = self.via_ti.pk
+        self.assertTrue(UserTI.objects.filter(user_id=usuario_id).exists())
+
+        self.via_ti.delete()
+
+        self.assertFalse(UserTI.objects.filter(user_id=usuario_id).exists())
+
+
+class TisForUserTest(SegregacaoFase2BaseTestCase):
+    def _request_for(self, user):
+        request = RequestFactory().get('/admin/')
+        request.user = user
+        return request
+
+    def test_ti_atribuida_sem_imoveis_aparece(self):
+        self.assertIn(self.tis_vazia, tis_for_user(self.via_ti))
+
+    def test_dropdown_de_ti_do_imovel_admin_oferece_ti_atribuida(self):
+        campo = Imovel._meta.get_field('terra_indigena_id')
+        formfield = ImovelAdmin(Imovel, admin.site).formfield_for_foreignkey(
+            campo, self._request_for(self.via_ti)
+        )
+
+        self.assertCountEqual(formfield.queryset, [self.tis_c, self.tis_vazia])
+
+    def test_filtro_da_sidebar_nao_vaza_ti_alheia(self):
+        campo = Imovel._meta.get_field('terra_indigena_id')
+        opcoes = TIsSegregadaFilter.field_choices(
+            None,
+            campo,
+            self._request_for(self.via_ti),
+            ImovelAdmin(Imovel, admin.site),
+        )
+
+        self.assertEqual(
+            [pk for pk, _nome in opcoes],
+            [self.tis_c.pk, self.tis_vazia.pk],
+        )
+
+
+class SuperuserBypassFase2Test(SegregacaoFase2BaseTestCase):
+    def test_superuser_sem_userti_nem_equipe_ve_tudo(self):
+        self.assertFalse(UserTI.objects.filter(user=self.superuser).exists())
+        self.assertFalse(self.superuser.groups.exists())
+
+        self.assertCountEqual(
+            Imovel.objects.for_user(self.superuser),
+            [self.imovel_a, self.imovel_b, self.imovel_c1, self.imovel_c2],
+        )
+
+    def test_superuser_ve_ti_vazia(self):
+        self.assertIn(self.tis_vazia, tis_for_user(self.superuser))
+
+
+class AdminInlinesFase2Test(SegregacaoFase2BaseTestCase):
+    def _request_for(self, user, method='get'):
+        request = getattr(RequestFactory(), method)('/admin/')
+        request.user = user
+        return request
+
+    def _salvar_inline(self, model_admin, inline_class, parent, dados_linha):
+        request = self._request_for(self.superuser, method='post')
+        inline = inline_class(model_admin.model, admin.site)
+        formset_class = inline.get_formset(request, parent)
+        prefix = formset_class.get_default_prefix()
+        dados = {
+            f'{prefix}-TOTAL_FORMS': '1',
+            f'{prefix}-INITIAL_FORMS': '0',
+            f'{prefix}-MIN_NUM_FORMS': '0',
+            f'{prefix}-MAX_NUM_FORMS': '1000',
+        }
+        dados.update({f'{prefix}-0-{campo}': valor for campo, valor in dados_linha.items()})
+        formset = formset_class(data=dados, instance=parent, prefix=prefix)
+        self.assertTrue(formset.is_valid(), formset.errors)
+        model_admin.save_formset(request, None, formset, change=True)
+
+    def test_inlines_sao_superuser_only_e_equipe_vem_primeiro(self):
+        user_admin = UserAdmin(User, admin.site)
+        tis_admin = TIsAdmin(TIs, admin.site)
+        request = self._request_for(self.via_ti)
+
+        self.assertIn(UserTIPorUserInline, user_admin.inlines)
+        self.assertEqual(tis_admin.inlines, [GroupTIPorTIInline, UserTIPorTIInline])
+        self.assertEqual(user_admin.get_inline_instances(request, self.via_ti), [])
+        self.assertEqual(tis_admin.get_inline_instances(request, self.tis_c), [])
+
+    def test_inline_de_usuario_carimba_atribuido_por(self):
+        self._salvar_inline(
+            UserAdmin(User, admin.site),
+            UserTIPorUserInline,
+            self.sem_nada,
+            {'tis': str(self.tis_a.pk)},
+        )
+
+        atribuicao = UserTI.objects.get(user=self.sem_nada, tis=self.tis_a)
+        self.assertEqual(atribuicao.atribuido_por, self.superuser)
+
+    def test_inlines_da_ti_carimbam_atribuido_por(self):
+        tis_admin = TIsAdmin(TIs, admin.site)
+        self._salvar_inline(
+            tis_admin,
+            GroupTIPorTIInline,
+            self.tis_a,
+            {'group': str(self.equipe_norte.pk)},
+        )
+        self._salvar_inline(
+            tis_admin,
+            UserTIPorTIInline,
+            self.tis_a,
+            {'user': str(self.sem_nada.pk)},
+        )
+
+        self.assertEqual(
+            GroupTI.objects.get(group=self.equipe_norte, tis=self.tis_a).atribuido_por,
+            self.superuser,
+        )
+        self.assertEqual(
+            UserTI.objects.get(user=self.sem_nada, tis=self.tis_a).atribuido_por,
+            self.superuser,
+        )
+
+    def test_save_formset_recusa_nao_superuser(self):
+        class FormsetFalso:
+            model = UserTI
+
+        with self.assertRaises(PermissionDenied):
+            UserAdmin(User, admin.site).save_formset(
+                self._request_for(self.via_ti, method='post'),
+                None,
+                FormsetFalso(),
+                change=True,
+            )
 
 
 class GuardPosseTest(SegregacaoBaseTestCase):

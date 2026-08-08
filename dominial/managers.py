@@ -1,12 +1,16 @@
 """
 Managers e helpers de segregação de dados por usuário (issue #132).
 
-Regra única de autorização:
-- ``is_superuser`` enxerga todos os registros (bypass).
-- Usuário comum autenticado enxerga apenas os imóveis atribuídos a ele via
-  ``UserImovel``, e — por herança de FK — apenas os documentos e lançamentos
-  desses imóveis.
-- Usuário anônimo (ou ``None``) não enxerga nada.
+Semântica canônica do acesso efetivo:
+
+``imóveis_visíveis(u)`` = imóveis das TIs atribuídas a ``u`` ∪ imóveis ligados
+diretamente a ``u`` por ``UserImovel`` (legado temporário).
+
+``tis_atribuídas(u)`` = TIs herdadas das equipes de ``u`` ∪ TIs atribuídas
+diretamente a ``u`` por ``UserTI``.
+
+Superusuários veem todos os imóveis e todas as TIs (bypass inalterado).
+Usuários anônimos ou ``None`` não veem nada.
 
 ``Cartorios`` e ``Pessoas`` são tabelas de referência GLOBAL para o app: os
 autocompletes precisam oferecer qualquer cartório/pessoa já cadastrado, senão
@@ -45,6 +49,15 @@ def imoveis_diretos_ids(user):
     return UserImovel.objects.filter(user=user).values('imovel_id')
 
 
+def tis_atribuidas_ids(user):
+    """PKs das TIs atribuídas via equipe ou diretamente; subquery, não lista."""
+    from .models import TIs
+
+    return TIs.objects.filter(
+        Q(grupos_ti__group__user=user) | Q(usuarios_ti__user=user)
+    ).values('pk')
+
+
 class SegregacaoQuerySet(models.QuerySet):
     """QuerySet de ``Imovel`` com filtro de segregação por usuário."""
 
@@ -53,7 +66,10 @@ class SegregacaoQuerySet(models.QuerySet):
             return self.none()
         if usuario_ve_tudo(user):
             return self
-        return self.filter(pk__in=imoveis_diretos_ids(user))
+        return self.filter(
+            Q(terra_indigena_id__in=tis_atribuidas_ids(user))
+            | Q(pk__in=imoveis_diretos_ids(user))
+        )
 
 
 class SegregacaoManager(models.Manager.from_queryset(SegregacaoQuerySet)):
@@ -86,17 +102,21 @@ def lancamentos_for_user(user):
 
 def tis_for_user(user):
     """
-    TIs visíveis ao usuário: apenas as que possuem ao menos um imóvel atribuído.
+    TIs visíveis ao usuário: atribuídas via equipe ou diretamente.
 
-    Superuser vê todas as TIs, inclusive as que ainda não têm imóveis.
+    A compatibilidade com ``UserImovel`` mantém visível a TI de um imóvel
+    legado. TIs atribuídas aparecem mesmo sem imóveis. Superuser vê todas.
     """
-    from .models import Imovel, TIs
+    from .models import TIs
 
     if not usuario_autenticado(user):
         return TIs.objects.none()
     if usuario_ve_tudo(user):
         return TIs.objects.all()
-    return TIs.objects.filter(imovel__in=Imovel.objects.for_user(user)).distinct()
+    return TIs.objects.filter(
+        Q(pk__in=tis_atribuidas_ids(user))
+        | Q(imovel__in=imoveis_diretos_ids(user))
+    ).distinct()
 
 
 def pessoas_for_user(user):
