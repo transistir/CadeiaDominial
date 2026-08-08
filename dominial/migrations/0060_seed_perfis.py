@@ -7,6 +7,7 @@ PERFIS = (
     ('Perfil: Editor', False),
     ('Perfil: Administrador', True),
 )
+MODELOS_DE_ACESSO = {'userti', 'groupti', 'grupoacesso', 'userimovel'}
 
 
 def _permissoes_dominial(apps, db_alias):
@@ -17,6 +18,8 @@ def _permissoes_dominial(apps, db_alias):
     permissoes = []
 
     for model in apps.get_app_config('dominial').get_models():
+        if model._meta.model_name in MODELOS_DE_ACESSO:
+            continue
         content_type, _ = ContentType.objects.using(db_alias).get_or_create(
             app_label='dominial',
             model=model._meta.model_name,

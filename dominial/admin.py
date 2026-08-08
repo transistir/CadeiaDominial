@@ -397,6 +397,12 @@ class AtribuicaoTISuperuserAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class UsuariosAtribuicaoEmMassaField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        sufixo = ' (inativo)' if not obj.is_active else ''
+        return f'{obj}{sufixo}'
+
+
 class AtribuicaoEmMassaForm(forms.Form):
     """Seleciona TIs e destinos para concessão ou revogação em massa."""
 
@@ -419,9 +425,9 @@ class AtribuicaoEmMassaForm(forms.Form):
         required=False,
         widget=FilteredSelectMultiple('equipes', is_stacked=False),
     )
-    usuarios = forms.ModelMultipleChoiceField(
+    usuarios = UsuariosAtribuicaoEmMassaField(
         queryset=(
-            User.objects.filter(is_active=True, is_superuser=False).order_by('username')
+            User.objects.filter(is_superuser=False).order_by('username')
         ),
         required=False,
         widget=FilteredSelectMultiple('usuários', is_stacked=False),
@@ -582,6 +588,19 @@ class UserTIAdmin(AtribuicaoTISuperuserAdmin):
                 resumo = _resumo_atribuicao(
                     acao, len(tis), len(equipes), len(usuarios)
                 )
+                dados_auditoria = {
+                    'acao': acao,
+                    'tis': [{'id': ti.pk, 'nome': ti.nome} for ti in tis],
+                    'equipes': [
+                        {'id': equipe.pk, 'nome': equipe.name}
+                        for equipe in equipes
+                    ],
+                    'usuarios': [
+                        {'id': usuario.pk, 'nome': str(usuario)}
+                        for usuario in usuarios
+                    ],
+                    'resumo': resumo,
+                }
 
                 with transaction.atomic():
                     if acao == 'conceder':
@@ -611,7 +630,7 @@ class UserTIAdmin(AtribuicaoTISuperuserAdmin):
                         object_id=None,
                         object_repr='Atribuição em massa de TIs',
                         action_flag=CHANGE,
-                        change_message=resumo,
+                        change_message=json.dumps(dados_auditoria, ensure_ascii=False),
                     )
 
                 messages.success(request, resumo)
@@ -737,7 +756,11 @@ class UserPerfilForm(DjangoUserChangeForm):
         equipes = Group.objects.none()
         if self.instance and self.instance.pk:
             grupos = self.instance.groups.all()
-            if grupos.filter(name=PERFIS['admin']).exists():
+            if (
+                self.instance.is_superuser
+                or self.instance.is_staff
+                or grupos.filter(name=PERFIS['admin']).exists()
+            ):
                 perfil = 'admin'
             equipes = grupos.filter(acesso__tipo=GrupoAcesso.EQUIPE)
 
@@ -824,16 +847,24 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
         return 'Editor'
 
     def _sincronizar_perfil(self, obj, perfil, equipes):
+        if obj.is_superuser:
+            return
+
         with transaction.atomic():
             grupos_de_perfil = list(Group.objects.filter(name__in=PERFIS.values()))
             grupo_escolhido = next(
                 (grupo for grupo in grupos_de_perfil if grupo.name == PERFIS[perfil]),
                 None,
             )
-            novos_grupos = list(equipes)
-            if grupo_escolhido is not None:
-                novos_grupos.append(grupo_escolhido)
-            obj.groups.set(novos_grupos)
+            manter = list(
+                obj.groups.exclude(name__in=PERFIS.values())
+                .exclude(acesso__tipo=GrupoAcesso.EQUIPE)
+            )
+            obj.groups.set(
+                list(equipes)
+                + manter
+                + ([grupo_escolhido] if grupo_escolhido else [])
+            )
             obj.is_staff = perfil == 'admin'
             obj.save(update_fields=['is_staff'])
 
@@ -984,6 +1015,11 @@ class GroupAdmin(DjangoGroupAdmin):
         if nome_foi_alterado:
             raise PermissionDenied('Grupos de perfil protegidos não podem ser renomeados.')
         super().save_model(request, obj, form, change)
+        if not change:
+            GrupoAcesso.objects.get_or_create(
+                group=obj,
+                defaults={'tipo': GrupoAcesso.EQUIPE},
+            )
 
     def delete_model(self, request, obj):
         if self._protegido(obj):

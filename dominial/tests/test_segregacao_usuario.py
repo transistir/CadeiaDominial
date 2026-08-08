@@ -717,6 +717,60 @@ class PerfilUsuarioAdminTest(SegregacaoBaseTestCase):
         self.assertTrue(usuario.groups.filter(pk=self.perfil_editor.pk).exists())
         self.assertFalse(usuario.groups.filter(pk=self.perfil_admin.pk).exists())
 
+    def test_superuser_salvando_o_proprio_cadastro_mantem_staff_e_grupos(self):
+        grupo_extra = Group.objects.create(name='Auditoria externa')
+        self.superuser.groups.add(grupo_extra)
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:auth_user_change', args=[self.superuser.pk]),
+            {
+                'username': self.superuser.username,
+                'first_name': self.superuser.first_name,
+                'last_name': self.superuser.last_name,
+                'email': self.superuser.email,
+                'is_active': 'on',
+                'perfil': 'admin',
+                'is_staff': 'on',
+                'is_superuser': 'on',
+                'groups': [str(grupo_extra.pk)],
+                'date_joined_0': '2024-01-01',
+                'date_joined_1': '00:00:00',
+                **self._management_forms_vazios(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.superuser.refresh_from_db()
+        self.assertTrue(self.superuser.is_superuser)
+        self.assertTrue(self.superuser.is_staff)
+        self.assertTrue(self.superuser.groups.filter(pk=grupo_extra.pk).exists())
+
+    def test_save_do_admin_preserva_grupo_sem_grupoacesso(self):
+        grupo_legado = Group.objects.create(name='Integração legada')
+        self.sem_acesso.groups.add(self.perfil_editor, grupo_legado)
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:auth_user_change', args=[self.sem_acesso.pk]),
+            {
+                'username': self.sem_acesso.username,
+                'first_name': self.sem_acesso.first_name,
+                'last_name': self.sem_acesso.last_name,
+                'email': self.sem_acesso.email,
+                'is_active': 'on',
+                'perfil': 'editor',
+                'groups': [str(self.perfil_editor.pk), str(grupo_legado.pk)],
+                'date_joined_0': '2024-01-01',
+                'date_joined_1': '00:00:00',
+                **self._management_forms_vazios(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.sem_acesso.refresh_from_db()
+        self.assertTrue(self.sem_acesso.groups.filter(pk=grupo_legado.pk).exists())
+
     def test_grupos_de_perfil_sao_protegidos(self):
         self.client.force_login(self.superuser)
 
@@ -947,6 +1001,27 @@ class AtribuicaoEmMassaTest(SegregacaoBaseTestCase):
         self.assertTrue(UserTI.objects.filter(user=outro, tis=self.tis_a).exists())
         self.assertTrue(GroupTI.objects.filter(group=self.equipe, tis=self.tis_b).exists())
         self.assertFalse(GroupTI.objects.filter(group=self.equipe, tis=self.tis_a).exists())
+
+    def test_revogar_remove_ti_de_usuario_inativo(self):
+        self.sem_acesso.is_active = False
+        self.sem_acesso.save(update_fields=['is_active'])
+        UserTI.objects.create(
+            user=self.sem_acesso,
+            tis=self.tis_a,
+            atribuido_por=self.superuser,
+        )
+        self.client.force_login(self.superuser)
+
+        response = self._post(
+            acao='revogar',
+            tis=[self.tis_a],
+            usuarios=[self.sem_acesso],
+        )
+
+        self.assertRedirects(response, self.url)
+        self.assertFalse(
+            UserTI.objects.filter(user=self.sem_acesso, tis=self.tis_a).exists()
+        )
 
     def test_aplicacao_tem_numero_constante_de_queries(self):
         # A quantidade de INSERTs não cresce com o produto destinos × TIs:
