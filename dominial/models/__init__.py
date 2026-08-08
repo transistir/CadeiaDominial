@@ -9,6 +9,7 @@ from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa, Ori
 from .alteracao_models import Alteracoes, AlteracoesTipo, RegistroTipo, AverbacoesTipo
 from .documento_importado_models import DocumentoImportado
 from .documento_digital_models import DocumentoDigital
+from .acesso_models import UserTI, GroupTI, GrupoAcesso
 
 # Exportar todos os models para uso externo
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     'Alteracoes', 'AlteracoesTipo', 'RegistroTipo', 'AverbacoesTipo',
     'DocumentoImportado',
     'DocumentoDigital',
-] 
+    'UserTI', 'GroupTI', 'GrupoAcesso',
+]

@@ -11,7 +11,23 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count
 from django.utils.safestring import mark_safe
-from .models import TIs, Cartorios, Pessoas, Imovel, UserImovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
+from .models import (
+    Alteracoes,
+    Cartorios,
+    Documento,
+    DocumentoTipo,
+    FimCadeia,
+    GroupTI,
+    GrupoAcesso,
+    Imovel,
+    ImportacaoCartorios,
+    Lancamento,
+    LancamentoTipo,
+    Pessoas,
+    TIs,
+    UserImovel,
+    UserTI,
+)
 from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
@@ -95,6 +111,8 @@ class PessoasAdmin(admin.ModelAdmin):
 
 @admin.register(TIs)
 class TIsAdmin(admin.ModelAdmin):
+    search_fields = ['nome', 'codigo', 'etnia']
+
     def get_queryset(self, request):
         return escopar(
             super().get_queryset(request), tis_for_user(request.user), request.user
@@ -277,6 +295,87 @@ class UserImovelAdmin(admin.ModelAdmin):
         if not change and obj.atribuido_por_id is None:
             obj.atribuido_por = request.user
         super().save_model(request, obj, form, change)
+
+
+class AtribuicaoTISuperuserAdmin(admin.ModelAdmin):
+    """Pacote de segurança e auditoria das atribuições de TI (#132)."""
+
+    readonly_fields = ['data_atribuicao', 'atribuido_por']
+    list_per_page = 50
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.atribuido_por_id is None:
+            obj.atribuido_por = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(UserTI)
+class UserTIAdmin(AtribuicaoTISuperuserAdmin):
+    """Gestão standalone das atribuições usuário ↔ TI (#132)."""
+
+    list_display = ['user', 'tis', 'data_atribuicao', 'atribuido_por']
+    list_filter = ['user', 'data_atribuicao', 'tis']
+    search_fields = [
+        'user__username', 'user__first_name', 'user__last_name',
+        'tis__nome', 'tis__codigo',
+    ]
+    autocomplete_fields = ['user', 'tis']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user', 'tis', 'atribuido_por')
+
+
+@admin.register(GroupTI)
+class GroupTIAdmin(AtribuicaoTISuperuserAdmin):
+    """Gestão standalone das atribuições equipe ↔ TI (#132)."""
+
+    list_display = ['group', 'tis', 'data_atribuicao', 'atribuido_por']
+    list_filter = ['group', 'data_atribuicao', 'tis']
+    search_fields = ['group__name', 'tis__nome', 'tis__codigo']
+    autocomplete_fields = ['group', 'tis']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('group', 'tis', 'atribuido_por')
+
+
+@admin.register(GrupoAcesso)
+class GrupoAcessoAdmin(admin.ModelAdmin):
+    """Metadados de perfis/equipes, editáveis somente por superusuários."""
+
+    list_display = ['group', 'tipo', 'protegido', 'descricao']
+    list_filter = ['tipo', 'protegido']
+    search_fields = ['group__name', 'descricao']
+    autocomplete_fields = ['group']
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser and not (obj and obj.protegido)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser and not (obj and obj.protegido)
 
 
 class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
