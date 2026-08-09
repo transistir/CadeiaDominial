@@ -153,6 +153,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _normalizar_metadado(valor):
+        if valor is None or valor == "None":
+            return None
         return valor.strip() if isinstance(valor, str) and valor.strip() else None
 
     @staticmethod

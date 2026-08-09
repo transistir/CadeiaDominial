@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Anexar Arquivo - {{ documento.numero }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="cadeia-header">
+        <h1>
+            <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15V19A2 2 0 0119 21H5A2 2 0 013 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Anexar Arquivo Digital
+        </h1>
+        <div class="imovel-info">
+            <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
+            <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" style="max-width: 600px; margin: 2rem auto;">
+        {% csrf_token %}
+        <div style="margin-bottom: 1rem;">
+            <label for="arquivo" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">
+                Selecione o arquivo (PDF, PNG, JPEG ou WebP — máx. 20 MB):
+            </label>
+            <input type="file" name="arquivo" id="arquivo" required
+                   accept=".pdf,.png,.jpg,.jpeg,.webp"
+                   style="display: block; width: 100%; padding: 0.5rem;">
+        </div>
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-success">📎 Anexar</button>
+            <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">← Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

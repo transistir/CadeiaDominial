@@ -72,7 +72,8 @@ class LancamentoCamposService:
                 cartorio = Cartorios.objects.create(
                     nome=cartorio_origem_nome,
                     cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    cidade=None,
+                    estado=None
                 )
                 lancamento.cartorio_origem = cartorio
     
@@ -109,7 +110,8 @@ class LancamentoCamposService:
                 cartorio = Cartorios.objects.create(
                     nome=cartorio_origem_nome,
                     cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    cidade=None,
+                    estado=None
                 )
                 lancamento.cartorio_origem = cartorio
 
@@ -141,7 +143,8 @@ class LancamentoCamposService:
                 cartorio = Cartorios.objects.create(
                     nome=cartorio_transmissao_nome,
                     cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                    cidade=None,
+                    estado=None
                 )
                 lancamento.cartorio_transmissao = cartorio
         else:
@@ -188,6 +191,7 @@ class LancamentoCamposService:
         especificacoes_fim_cadeia = request.POST.getlist('especificacao_fim_cadeia[]')
         classificacoes_fim_cadeia = request.POST.getlist('classificacao_fim_cadeia[]')
         siglas_patrimonio_publico = request.POST.getlist('sigla_patrimonio_publico[]')
+        infos_adicionais_fim_cadeia = request.POST.getlist('info_adicional_fim_cadeia[]')
         
         # Se há múltiplas origens, concatenar com ponto e vírgula
         if origens_completas:
@@ -222,7 +226,8 @@ class LancamentoCamposService:
                         cartorio_origem = Cartorios.objects.create(
                             nome=cartorios_origem_nomes[i],
                             cns=cns_unico,
-                            cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
+                            cidade=None,
+                            estado=None
                         )
                 
                 # Adicionar origem com seu cartório ao mapeamento
@@ -295,6 +300,13 @@ class LancamentoCamposService:
             folha_origem_encontrada = folhas_origem[0] if folhas_origem[0] else None
         
         # Definir livro e folha de origem no lançamento
+        # IMPORTANTE (#118): lancamento.livro_origem/folha_origem armazenam o
+        # livro/folha do documento de ORIGEM (usado por _obter_livro_folha_origem
+        # e _criar_documento_automatico_com_cartorio em lancamento_origem_service).
+        # NÃO devem ser usados como fonte para o documento atual — ver
+        # LancamentoCriacaoService._aplicar_campos_documento e
+        # RegraPetreaService._definir_livro_folha_documento, que agora só usam
+        # livro_documento/folha_documento e livro_transacao/folha_transacao.
         lancamento.livro_origem = livro_origem_encontrado
         lancamento.folha_origem = folha_origem_encontrada
         
@@ -329,7 +341,8 @@ class LancamentoCamposService:
                     tipo_fim_cadeia = None
                     especificacao_fim_cadeia = None
                     classificacao_fim_cadeia = None
-                    
+                    info_adicional_fim_cadeia = None
+
                     # Buscar nos arrays por índice
                     for j, indice in enumerate(fim_cadeia_indices):
                         if indice == str(i):
@@ -339,8 +352,10 @@ class LancamentoCamposService:
                                 especificacao_fim_cadeia = especificacoes_fim_cadeia[j]
                             if j < len(classificacoes_fim_cadeia):
                                 classificacao_fim_cadeia = classificacoes_fim_cadeia[j]
+                            if j < len(infos_adicionais_fim_cadeia):
+                                info_adicional_fim_cadeia = infos_adicionais_fim_cadeia[j].strip() or None
                             break
-                    
+
                     # Criar registro de fim de cadeia para esta origem
                     from ..models import OrigemFimCadeia
                     OrigemFimCadeia.objects.create(
@@ -349,5 +364,6 @@ class LancamentoCamposService:
                         fim_cadeia=True,
                         tipo_fim_cadeia=tipo_fim_cadeia,
                         especificacao_fim_cadeia=especificacao_fim_cadeia,
-                        classificacao_fim_cadeia=classificacao_fim_cadeia
-                    ) 
+                        classificacao_fim_cadeia=classificacao_fim_cadeia,
+                        info_adicional_fim_cadeia=info_adicional_fim_cadeia
+                    )

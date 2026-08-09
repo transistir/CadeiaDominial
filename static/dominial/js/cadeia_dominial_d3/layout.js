@@ -197,6 +197,10 @@ function prepararLayoutArvore(data, width, height) {
 
   treeLayout(root);
 
+  // ORDEM OBRIGATÓRIA: ajustarPosicoesPorNivel precisa rodar primeiro para
+  // fixar node.y (incluindo o clamp dos fins de cadeia em maxDocumentY+220)
+  // antes que corrigirSobreposicoes e aplicarEspacamentoAdicional agrupem os
+  // nós por coluna (Math.round(node.y)) e ajustem node.x dentro de cada coluna.
   // Ajustar posições baseado no campo 'nivel' dos dados
   ajustarPosicoesPorNivel(root);
 

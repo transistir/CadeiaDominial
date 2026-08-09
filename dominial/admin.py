@@ -6,8 +6,10 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction
+from django.db.models import Count
 from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
+from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
 from django.conf import settings
 
@@ -22,11 +24,50 @@ admin.site.login = lambda request: redirect(settings.ADMIN_LOGIN_URL)
 # Register your models here.
 
 admin.site.register(TIs)
-admin.site.register(Cartorios)
 admin.site.register(Pessoas)
 admin.site.register(Alteracoes)
 admin.site.register(DocumentoTipo)
 admin.site.register(LancamentoTipo)
+
+
+class EstadoVazioFilter(admin.SimpleListFilter):
+    title = 'Estado vazio/nulo'
+    parameter_name = 'estado_vazio'
+
+    def lookups(self, request, model_admin):
+        return [('sim', 'Sim'), ('nao', 'Não')]
+
+    def queryset(self, request, queryset):
+        if self.value() == 'sim':
+            from django.db.models import Q
+            return queryset.filter(Q(estado__isnull=True) | Q(estado=''))
+        if self.value() == 'nao':
+            return queryset.exclude(estado__isnull=True).exclude(estado='')
+        return queryset
+
+
+@admin.register(Cartorios)
+class CartoriosAdmin(admin.ModelAdmin):
+    list_display = ['id', 'nome', 'cns', 'cidade', 'estado', 'tipo', 'contagem_documentos']
+    list_filter = ['estado', 'cidade', 'tipo', EstadoVazioFilter]
+    search_fields = ['id', 'nome', 'cns', 'cidade', 'estado']
+    list_per_page = 50
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(documentos_count=Count('documento', distinct=True))
+
+    def contagem_documentos(self, obj):
+        return obj.documentos_count
+    contagem_documentos.short_description = 'Documentos'
+    contagem_documentos.admin_order_field = 'documentos_count'
+
+
+@admin.register(DocumentoDigital)
+class DocumentoDigitalAdmin(admin.ModelAdmin):
+    list_display = ('nome_original', 'documento', 'tipo_mime', 'tamanho_formatado', 'data_upload', 'upload_por')
+    list_filter = ('tipo_mime',)
+    search_fields = ('nome_original',)
+    readonly_fields = ('tamanho_bytes', 'data_upload')
 
 class NumeroDocumentoFilter(admin.SimpleListFilter):
     title = 'Número do Documento'
@@ -120,7 +161,9 @@ class ImovelAdmin(admin.ModelAdmin):
             return redirect('admin:dominial_imovel_changelist')
         
         # Coletar informações sobre documentos e lançamentos
-        documentos = imovel.documentos.all()
+        documentos = imovel.documentos.all()\
+            .annotate(data_exibicao_ordenacao=Documento.data_exibicao_expression())\
+            .order_by('-data_exibicao_ordenacao', '-id')
         num_documentos = documentos.count()
         num_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).count()
         
@@ -517,27 +560,36 @@ class ImportacaoCartoriosAdmin(admin.ModelAdmin):
 
 @admin.register(FimCadeia)
 class FimCadeiaAdmin(admin.ModelAdmin):
-    """Admin para gerenciar os tipos de fim de cadeia"""
-    list_display = ['nome', 'tipo', 'classificacao', 'sigla', 'ativo', 'data_criacao']
+    """Admin para gerenciar os tipos de fim de cadeia.
+
+    É aqui que se cadastram as siglas oferecidas no select "Estado" do
+    destacamento do patrimônio público: entram no formulário os registros com
+    tipo "Destacamento Público", sigla preenchida e ativo marcado (issue #104).
+    """
+    list_display = ['sigla', 'nome', 'tipo', 'classificacao', 'ativo', 'data_criacao']
+    list_display_links = ['sigla', 'nome']
     list_filter = ['tipo', 'classificacao', 'ativo', 'data_criacao']
     search_fields = ['nome', 'sigla', 'descricao']
     list_editable = ['ativo']
     ordering = ['nome']
-    
+
     fieldsets = (
         ('Informações Básicas', {
-            'fields': ('nome', 'tipo', 'classificacao', 'sigla')
+            'fields': ('nome', 'tipo', 'classificacao', 'sigla', 'ativo'),
+            'description': (
+                'A <strong>sigla</strong> é o valor gravado no lançamento e exibido na '
+                'árvore (ex: BA, SP, IMP-BR). Registros de tipo "Destacamento Público" '
+                'com sigla preenchida e <strong>ativo</strong> marcado aparecem no select '
+                '"Estado" do formulário de lançamento; desmarcar "ativo" tira a opção do '
+                'select sem apagar o histórico.'
+            ),
         }),
         ('Descrição', {
             'fields': ('descricao',),
             'classes': ('collapse',)
         }),
-        ('Controle', {
-            'fields': ('ativo',),
-            'classes': ('collapse',)
-        }),
     )
-    
+
     def get_queryset(self, request):
         return super().get_queryset(request).order_by('nome')
     

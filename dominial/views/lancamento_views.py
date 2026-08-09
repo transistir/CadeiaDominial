@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa, FimCadeia
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
@@ -14,6 +14,22 @@ from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 from ..services.documento_service import DocumentoService
 from ..services.lancamento_consulta_service import LancamentoConsultaService
+
+
+def _build_fim_cadeia_opcoes():
+    """Siglas de destacamento do patrimônio público oferecidas no select do
+       formulário de fim de cadeia (issue #104).
+
+       A sigla é o valor gravado no lançamento, então cadastros sem sigla ficam
+       de fora — não teriam valor para selecionar."""
+    return list(
+        FimCadeia.objects
+        .filter(tipo='destacamento_publico', ativo=True)
+        .exclude(sigla__isnull=True)
+        .exclude(sigla='')
+        .order_by('nome')
+        .values('nome', 'sigla')
+    )
 
 
 def _build_documento_lancamentos(documento, current_lancamento_id=None):
@@ -139,6 +155,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'tipo_fim_cadeia': request.POST.getlist('tipo_fim_cadeia[]'),
                         'classificacao_fim_cadeia': request.POST.getlist('classificacao_fim_cadeia[]'),
                         'sigla_patrimonio_publico': request.POST.getlist('sigla_patrimonio_publico[]'),
+                        'info_adicional_fim_cadeia': request.POST.getlist('info_adicional_fim_cadeia[]'),
                         'especificacao_fim_cadeia': request.POST.getlist('especificacao_fim_cadeia[]'),
                     }
                     
@@ -261,6 +278,9 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 'lancamentos_com_pessoas': lancamentos_com_pessoas,
                 'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
                 'is_novo_lancamento': True,
+                # Sem isso o select de destacamento volta vazio ao re-renderizar
+                # o formulário depois de um erro (issue #104)
+                'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
             }
             
             context['transmitentes'] = transmitentes_data
@@ -316,6 +336,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         'lancamentos_com_pessoas': lancamentos_com_pessoas,
         'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
         'is_novo_lancamento': True,
+        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
     }
     
     # Verificar se é o primeiro lançamento do documento
@@ -359,12 +380,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         # CORREÇÃO: Usar o cartório do próprio documento (que foi definido quando ele foi criado)
         # O cartório do documento é o cartório que foi informado no lançamento de início de matrícula que criou este documento
         lancamento_herdado.cartorio_origem = documento_ativo.cartorio
-        
-        # Herdar livro e folha do primeiro lançamento se disponíveis
-        if dados_primeiro:
-            lancamento_herdado.livro_origem = dados_primeiro['livro_origem']
-            lancamento_herdado.folha_origem = dados_primeiro['folha_origem']
-        
+
         context['lancamento'] = lancamento_herdado
         context['modo_edicao'] = True  # Para usar os dados herdados no template
         
@@ -488,6 +504,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'is_lancamento_do_imovel': is_lancamento_do_imovel,
         'is_lancamento_compartilhado': not is_lancamento_do_imovel,
         'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
+        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
     }
     
     # Preparar dados para o template
@@ -529,7 +546,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                     'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia,
                     'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia,
                     'sigla_patrimonio_publico': sigla_patrimonio_publico,
-                    'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia
+                    'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia,
+                    'info_adicional_fim_cadeia': origem_fim_cadeia.info_adicional_fim_cadeia
                 })
             else:
                 # Processar formato antigo FIM_CADEIA ou novo formato
@@ -680,7 +698,14 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 })
     else:
         origens_separadas = []
-    
+
+    # Normaliza chaves usadas pelo bloco de destacamento do patrimônio público (issue #104)
+    for origem_separada in origens_separadas:
+        origem_separada.setdefault('info_adicional_fim_cadeia', '')
+        origem_separada['is_destacamento_publico'] = (
+            origem_separada.get('tipo_fim_cadeia') == 'destacamento_publico'
+        )
+
     context['origens_separadas'] = origens_separadas
     
     return render(request, 'dominial/lancamento_form.html', context)

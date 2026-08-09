@@ -97,7 +97,7 @@
         <div class="documento-info">
             <div class="info-grid">
                 <div class="info-item">
-                    <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
+                    <strong>Análise iniciada em:</strong> {{ documento.data_exibicao|date:'d/m/Y' }}
                 </div>
                 <div class="info-item">
                     <strong>CRI:</strong> {{ documento.cartorio.nome }}
@@ -196,7 +196,7 @@
                             </td>
                         {% else %}
                             <td>{{ lancamento.forma|default_if_none:"-" }}</td>
-                            <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
+                            <td>{{ lancamento.titulo|limpar_none }}</td>
                             <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
                             <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
                             <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
@@ -243,6 +243,66 @@
             <h3>Nenhum lançamento encontrado</h3>
             <p>Este documento ainda não possui lançamentos registrados.</p>
         </div>
+    {% endif %}
+
+    <!-- Documentos Digitais -->
+    {% if not is_importado %}
+    <div class="field-group" style="margin-top: 1.5rem;">
+        <h4>
+            <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15V19A2 2 0 0119 21H5A2 2 0 013 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Arquivos Digitais
+            <a href="{% url 'upload_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-sm btn-success" style="float: right; font-size: 0.85rem;">
+                📎 Anexar Arquivo
+            </a>
+        </h4>
+        {% if arquivos_digitais %}
+        <table class="cadeia-tabela-planilha" style="margin-top: 0.5rem;">
+            <thead>
+                <tr>
+                    <th>Arquivo</th>
+                    <th>Tipo</th>
+                    <th>Tamanho</th>
+                    <th>Upload</th>
+                    <th>Por</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for arquivo in arquivos_digitais %}
+                <tr>
+                    <td>
+                        <a href="{% url 'servir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}" target="_blank">
+                            {% if arquivo.is_pdf %}📄{% elif arquivo.is_imagem %}🖼️{% else %}📁{% endif %}
+                            {{ arquivo.nome_original }}
+                        </a>
+                    </td>
+                    <td>{{ arquivo.tipo_mime }}</td>
+                    <td>{{ arquivo.tamanho_formatado }}</td>
+                    <td>{{ arquivo.data_upload|date:'d/m/Y H:i' }}</td>
+                    <td>{{ arquivo.upload_por.get_full_name|default:arquivo.upload_por.username }}</td>
+                    <td>
+                        <a href="{% url 'servir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}" target="_blank" class="btn btn-sm btn-primary" title="Visualizar/Download">
+                            👁️
+                        </a>
+                        <form method="post" action="{% url 'excluir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}" style="display: inline;" onsubmit="return confirm('Excluir arquivo {{ arquivo.nome_original|escapejs }}? Esta ação não pode ser desfeita.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-danger" title="Excluir">🗑️</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #666; font-style: italic;">Nenhum arquivo digital anexado.</p>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted small">Documentos digitais gerenciados no imóvel de origem.</p>
     {% endif %}
 
     <!-- Botão para adicionar novo lançamento -->

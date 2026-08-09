@@ -763,6 +763,25 @@
     margin-bottom: 0;
 }
 
+/* Destacamento do patrimônio público: informação adicional larga, Estado
+   estreito e depois dela (issue #104) */
+.fim-cadeia-origem-container .destacamento-grid {
+    display: grid;
+    grid-template-columns: 4fr 1fr;
+    gap: 15px;
+}
+
+.fim-cadeia-origem-container .destacamento-grid select {
+    min-width: 0;
+}
+
+.destacamento-cadastro-link {
+    float: right;
+    font-weight: 400;
+    font-size: 12px;
+    text-decoration: underline;
+}
+
 .fim-cadeia-origem-container label {
     font-weight: 600;
     color: #856404;
@@ -771,7 +790,8 @@
 }
 
 .fim-cadeia-origem-container select,
-.fim-cadeia-origem-container textarea {
+.fim-cadeia-origem-container textarea,
+.fim-cadeia-origem-container input[type="text"] {
     width: 100%;
     padding: 8px 12px;
     border: 1px solid #ffeaa7;
@@ -781,7 +801,8 @@
 }
 
 .fim-cadeia-origem-container select:focus,
-.fim-cadeia-origem-container textarea:focus {
+.fim-cadeia-origem-container textarea:focus,
+.fim-cadeia-origem-container input[type="text"]:focus {
     outline: none;
     border-color: #ffc107;
     box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
@@ -806,11 +827,12 @@
 
 /* Responsividade */
 @media (max-width: 768px) {
-    .fim-cadeia-origem-container .grid-2 {
+    .fim-cadeia-origem-container .grid-2,
+    .fim-cadeia-origem-container .destacamento-grid {
         grid-template-columns: 1fr;
         gap: 10px;
     }
-    
+
     .fim-cadeia-label {
         width: 18px;
         height: 18px;

@@ -198,7 +198,7 @@ class DocumentoService:
         if tipo_documento:
             queryset = queryset.filter(tipo__tipo=tipo_documento)
         
-        return queryset.select_related('tipo', 'cartorio').order_by('-data')
+        return queryset.select_related('tipo', 'cartorio').order_by('-data', '-id')
     
     # ==================== ESTATÍSTICAS ====================
     

@@ -122,15 +122,32 @@ window.fimDaArvore = function () {
     maxX = -Infinity,
     minY = Infinity,
     maxY = -Infinity;
+  const limitesNos = [];
   nodes.each(function () {
     const bbox = this.getBBox();
     const x = +this.getAttribute("transform").split("(")[1].split(",")[0];
     const y = +this.getAttribute("transform").split(",")[1].split(")")[0];
-    minX = Math.min(minX, x + bbox.x);
-    maxX = Math.max(maxX, x + bbox.x + bbox.width);
+    const nodeMinX = x + bbox.x;
+    const nodeMaxX = nodeMinX + bbox.width;
+    minX = Math.min(minX, nodeMinX);
+    maxX = Math.max(maxX, nodeMaxX);
     minY = Math.min(minY, y + bbox.y);
     maxY = Math.max(maxY, y + bbox.y + bbox.height);
+    limitesNos.push({
+      coluna: Math.round(x),
+      minX: nodeMinX,
+      maxX: nodeMaxX,
+    });
   });
+
+  const ultimaColuna = Math.max(...limitesNos.map((node) => node.coluna));
+  const limitesUltimaColuna = limitesNos.filter(
+    (node) => node.coluna === ultimaColuna,
+  );
+  const minXUltimaColuna =
+    Math.min(...limitesUltimaColuna.map((node) => node.minX)) - 75;
+  const maxXUltimaColuna =
+    Math.max(...limitesUltimaColuna.map((node) => node.maxX)) + 75;
 
   // Adicionar margem extra para os cards
   minX -= 75;
@@ -142,7 +159,7 @@ window.fimDaArvore = function () {
   const treeHeight = maxY - minY;
 
   // Calcular escala para focar no último nível (mais à direita)
-  const ultimoNivelWidth = 300; // Largura estimada do último nível
+  const ultimoNivelWidth = maxXUltimaColuna - minXUltimaColuna;
   const finalScale = Math.min(
     (width - 100) / ultimoNivelWidth,
     (height - 100) / treeHeight,
@@ -150,7 +167,7 @@ window.fimDaArvore = function () {
   ); // Escala maior para zoom
 
   // Posicionar o último nível no centro da div
-  const centroUltimoNivel = maxX - ultimoNivelWidth / 2;
+  const centroUltimoNivel = (minXUltimaColuna + maxXUltimaColuna) / 2;
   const tx = width / 2 - centroUltimoNivel * finalScale;
   const ty = (height - treeHeight * finalScale) / 2 - minY * finalScale; // Centralizar verticalmente
 
