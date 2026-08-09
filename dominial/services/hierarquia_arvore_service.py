@@ -14,6 +14,8 @@ from ..utils.documento_identidade_utils import DocumentoIdentidade
 import re
 from collections import deque
 
+from django.utils import timezone
+
 
 class HierarquiaArvoreService:
     """
@@ -26,7 +28,7 @@ class HierarquiaArvoreService:
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         Lógica corrigida: filho -> pai (esquerda -> direita)
-        
+
         Args:
             imovel: Objeto Imovel
             criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
@@ -95,6 +97,14 @@ class HierarquiaArvoreService:
             'conexoes': []
         }
         
+        # Otimização: prefetch_related para evitar N+1 queries (issue #93)
+        documento_principal = Documento.objects.select_related(
+            'tipo', 'cartorio'
+        ).prefetch_related(
+            'lancamentos__tipo',
+            'lancamentos__origens_fim_cadeia'
+        ).get(id=documento_principal.id)
+
         # Usar busca em largura para construir a árvore
         documentos_processados = set()
         conexoes_processadas = set()
@@ -160,7 +170,20 @@ class HierarquiaArvoreService:
         
         # Recalcular níveis baseado na hierarquia real
         HierarquiaArvoreService._recalcular_niveis(arvore, documento_principal.id)
-        
+
+        # Issue #120: exibir "Análise iniciada em:" apenas no primeiro
+        # documento da cadeia; ocultar a data nos demais.
+        primeiro_doc_marcado = False
+        for doc_node in arvore['documentos']:
+            if doc_node.get('is_fim_cadeia'):
+                continue
+            if not primeiro_doc_marcado:
+                doc_node['label_data'] = 'Análise iniciada em:'
+                primeiro_doc_marcado = True
+            else:
+                doc_node['data'] = ''
+                doc_node['label_data'] = ''
+
         return arvore
     
     @staticmethod
@@ -278,13 +301,13 @@ class HierarquiaArvoreService:
                 return None
 
             # Criar documento
-            from datetime import date
             documento = Documento.objects.create(
                 numero=numero_documento,
                 imovel=imovel,
                 cartorio=cartorio,
                 tipo=tipo_documento,
-                data=date.today(),  # Data padrão
+                data=timezone.localdate(),  # Data padrão
+                data_presumida=True,
                 livro='',  # Campo obrigatório
                 folha='',  # Campo obrigatório
                 origem='',  # Será preenchido quando houver lançamentos
@@ -322,7 +345,7 @@ class HierarquiaArvoreService:
             'tipo': documento.tipo.tipo,
             'tipo_display': documento.tipo.get_tipo_display(),
             'tipo_documento': documento.tipo.tipo,
-            'data': documento.data.strftime('%d/%m/%Y'),
+            'data': documento.data_exibicao.strftime('%d/%m/%Y'),
             'cartorio': documento.cartorio.nome,
             'livro': documento.livro,
             'folha': documento.folha,
@@ -347,12 +370,23 @@ class HierarquiaArvoreService:
     def _criar_no_fim_cadeia(documento, lancamento_fc, origem_fc):
         """Cria um nó especial de fim de cadeia para a árvore D3 (issue #85)."""
         # Extrair sigla de patrimônio público do campo origem do lançamento
+        # Trata múltiplas origens separadas por ';' e formato legado de 5 partes (issue #92)
         sigla = None
         if lancamento_fc.origem:
-            if 'FIM_CADEIA' in lancamento_fc.origem:
-                parts = lancamento_fc.origem.split(':')
+            origens_texto = [o.strip() for o in lancamento_fc.origem.split(';') if o.strip()]
+            texto = None
+            if 0 <= origem_fc.indice_origem < len(origens_texto):
+                candidato = origens_texto[origem_fc.indice_origem]
+                if 'FIM_CADEIA' in candidato:
+                    texto = candidato
+            if texto is None:
+                texto = next((o for o in origens_texto if 'FIM_CADEIA' in o), None)
+            if texto:
+                parts = texto.split(':')
                 if len(parts) >= 6:
                     sigla = parts[5]
+                elif len(parts) == 5:
+                    sigla = parts[4]
             elif ':' in lancamento_fc.origem:
                 parts = lancamento_fc.origem.split(':')
                 if len(parts) >= 2:
@@ -383,6 +417,7 @@ class HierarquiaArvoreService:
             'total_cadeias': 0, 'is_fim_cadeia': True,
             'tipo_fim_cadeia': tipo_fc, 'classificacao_fim_cadeia': classificacao,
             'sigla_patrimonio_publico': sigla, 'titulo_fim_cadeia': titulo,
+            'info_adicional_fim_cadeia': origem_fc.info_adicional_fim_cadeia,
             'documento_origem_id': documento.id,
         }
 

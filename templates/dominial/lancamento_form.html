@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load dominial_extras %}
 
 {% block title %}
     {% if modo_edicao %}Editar Lançamento{% else %}Novo Lançamento{% endif %} - {{ imovel.nome }}
@@ -90,7 +91,10 @@
             </div>
             
             <!-- Campo de área opcional -->
+            {# Transcrições usam a Área da seção Transmissão #}
+            {% if documento.tipo.tipo != 'transcricao' %}
             {% include "dominial/components/_area_form.html" with area_obrigatorio=False area_id="area_inicio_matricula" %}
+            {% endif %}
         </div>
 
         <!-- Campos Opcionais de Transação -->
@@ -110,8 +114,10 @@
                 </div>
                 <div class="form-group">
                     <label for="titulo_transacao">Título</label>
+                    {% with titulo_limpo=lancamento.titulo|limpar_none:"" %}
                     <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro"
-                           value="{% if modo_edicao and lancamento.titulo %}{{ lancamento.titulo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
+                           value="{% if modo_edicao and titulo_limpo %}{{ titulo_limpo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
+                    {% endwith %}
                 </div>
                 <div class="form-group">
                     <label for="cartorio_transmissao_nome">Cartório</label>
@@ -165,6 +171,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ fim_cadeia_opcoes|json_script:"fim-cadeia-opcoes-data" }}
 <script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
 <script src="{% static 'dominial/js/origem_simples.js' %}"></script>
 <script>
@@ -341,7 +348,7 @@
         const AREA_FIELD_MAP = {
             'averbacao': isTranscricao ? 'area_transmissao' : 'area_averbacao',
             'registro': 'area_transmissao',
-            'inicio_matricula': 'area_inicio_matricula',
+            'inicio_matricula': isTranscricao ? 'area_transmissao' : 'area_inicio_matricula',
         };
 
         form.addEventListener('submit', function() {
@@ -363,4 +370,4 @@
         });
     })();
 </script>
-{% endblock %} 
+{% endblock %}

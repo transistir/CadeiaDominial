@@ -32,6 +32,21 @@ function renderizarCards(root, svgGroup) {
         .attr("filter", "drop-shadow(0 2px 8px rgba(0,0,0,0.10))");
     });
 
+  node
+    .filter((d) => d.data.is_fim_cadeia)
+    .attr("tabindex", 0)
+    .attr("role", "button")
+    .attr("aria-label", (d) =>
+      `Abrir detalhes: ${d.data.titulo_fim_cadeia || d.data.sigla_patrimonio_publico || "Fim de Cadeia"}`,
+    )
+    .on("keydown", function (event, d) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        cardFimCadeiaComFoco = this;
+        abrirPainelFimCadeia(d);
+      }
+    });
+
   // Aplicar apenas transição de opacidade (sem mover posição)
   node.transition().duration(600).ease(d3.easeQuadInOut).style("opacity", "1");
 
@@ -125,7 +140,11 @@ function renderizarCards(root, svgGroup) {
       }
 
       // Tooltip normal para documentos
-      return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\nLivro: ${d.data.livro}, Folha: ${d.data.folha}\nData: ${d.data.data}\n${d.data.total_lancamentos} lançamentos`;
+      // Issue #120: data/label_data controlam exibição (primeiro doc = "Análise iniciada em:")
+      const linhaData = d.data.label_data && d.data.data
+        ? `${d.data.label_data} ${d.data.data}`
+        : (d.data.data ? `Data: ${d.data.data}` : "");
+      return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\nLivro: ${d.data.livro}, Folha: ${d.data.folha}\n${linhaData}\n${d.data.total_lancamentos} lançamentos`;
     })
     .on("mouseover", function () {
       d3.select(this)
@@ -145,9 +164,13 @@ function renderizarCards(root, svgGroup) {
     })
     .on("click", (event, d) => {
       event.stopPropagation();
-      // Cards de fim de cadeia não redirecionam
-      if (d.data.is_fim_cadeia) return;
-      
+      // Cards de fim de cadeia abrem o painel lateral de detalhes
+      if (d.data.is_fim_cadeia) {
+        cardFimCadeiaComFoco = event.currentTarget.parentNode;
+        abrirPainelFimCadeia(d);
+        return;
+      }
+
       // Disparar evento customizado para permitir interceptação (ex: painel lateral)
       const customEvent = new CustomEvent("d3:node-click", {
         detail: { node: d, event: event },
@@ -162,6 +185,15 @@ function renderizarCards(root, svgGroup) {
       window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
     });
 
+  node
+    .filter((d) => d.data.is_fim_cadeia)
+    .append("title")
+    .text((d) =>
+      d.data.titulo_fim_cadeia ||
+      d.data.sigla_patrimonio_publico ||
+      "Fim de Cadeia",
+    );
+
   // Número do documento
   node
     .append("text")
@@ -173,7 +205,17 @@ function renderizarCards(root, svgGroup) {
     .text((d) => {
       // Cards especiais de fim de cadeia
       if (d.data.is_fim_cadeia) {
-        return d.data.numero || "FIM";
+        // Destacamento público mostra a sigla escolhida (issue #104); dados
+        // antigos sem sigla continuam caindo no rótulo genérico
+        if (d.data.tipo_fim_cadeia === "destacamento_publico") {
+          const sigla = (d.data.sigla_patrimonio_publico || "").trim();
+          return sigla || "Dest. PP";
+        }
+        const rotulosFimCadeia = {
+          outra: "Outra",
+          sem_origem: "Sem Origem",
+        };
+        return rotulosFimCadeia[d.data.tipo_fim_cadeia] || "Fim";
       }
       // Se for destacamento público e tiver sigla, exibir a sigla
       if (

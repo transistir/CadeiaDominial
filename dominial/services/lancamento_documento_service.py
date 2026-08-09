@@ -2,6 +2,8 @@
 Service especializado para operações com documentos relacionados a lançamentos
 """
 
+from django.utils import timezone
+
 from ..models import Documento
 
 
@@ -25,7 +27,7 @@ class LancamentoDocumentoService:
         if documento_id:
             return Documento.objects.get(id=documento_id, imovel=imovel)
         # Retorna o documento mais recente como ativo
-        return imovel.documentos.order_by('-data').first()
+        return imovel.documentos.order_by('-data', '-id').first()
     
     @staticmethod
     def criar_documento_matricula_automatico(imovel):
@@ -50,7 +52,8 @@ class LancamentoDocumentoService:
             imovel=imovel,
             tipo=tipo_matricula,
             numero=numero_documento,  # Usar o número da matrícula do imóvel com prefixo M
-            data='2024-01-01',
+            data=timezone.localdate(),
+            data_presumida=True,
             cartorio=imovel.cartorio if imovel.cartorio else None,
             livro='0',  # Valor padrão, será atualizado pelo primeiro lançamento
             folha='0',  # Valor padrão, será atualizado pelo primeiro lançamento
@@ -69,4 +72,4 @@ class LancamentoDocumentoService:
         Returns:
             QuerySet: Documentos do imóvel
         """
-        return imovel.documentos.all().order_by('-data', 'tipo', 'numero') 
+        return imovel.documentos.all().order_by('-data', 'tipo', 'numero', '-id')

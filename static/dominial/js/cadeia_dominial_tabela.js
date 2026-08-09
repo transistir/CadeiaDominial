@@ -285,7 +285,7 @@ function atualizarTabelaCadeia(cadeia) {
                     ${importadoBadge}
                 </button>
             </td>
-            <td>${item.documento.data}</td>
+            <td>${item.documento.label_data && item.documento.data ? item.documento.label_data + " " + item.documento.data : (item.documento.data || "—")}</td>
             <td>${item.documento.cartorio_nome}</td>
             <td>${item.lancamentos.length} lanç.</td>
             <td>

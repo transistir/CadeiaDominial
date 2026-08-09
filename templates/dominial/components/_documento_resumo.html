@@ -8,7 +8,7 @@
             <strong>Número:</strong> {{ documento.numero }}
         </div>
         <div>
-            <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
+            <strong>Data:</strong> {{ documento.data_exibicao|date:'d/m/Y' }}
         </div>
         {% if documento.cartorio %}
         <div>

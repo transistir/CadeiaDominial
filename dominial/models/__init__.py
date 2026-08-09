@@ -8,6 +8,7 @@ from .documento_models import Documento, DocumentoTipo
 from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa, OrigemFimCadeia, FimCadeia, LancamentoOrigem
 from .alteracao_models import Alteracoes, AlteracoesTipo, RegistroTipo, AverbacoesTipo
 from .documento_importado_models import DocumentoImportado
+from .documento_digital_models import DocumentoDigital
 
 # Exportar todos os models para uso externo
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     'Lancamento', 'LancamentoTipo', 'LancamentoPessoa', 'OrigemFimCadeia', 'FimCadeia', 'LancamentoOrigem',
     'Alteracoes', 'AlteracoesTipo', 'RegistroTipo', 'AverbacoesTipo',
     'DocumentoImportado',
+    'DocumentoDigital',
 ] 

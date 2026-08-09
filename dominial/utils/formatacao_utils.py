@@ -59,8 +59,21 @@ def formatar_area(area):
     """
     if area is None:
         return "0,00 ha"
-    
+
     try:
         return f"{area:,.2f} ha".replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
-        return "0,00 ha" 
+        return "0,00 ha"
+
+
+def normalizar_texto_opcional(valor, padrao=None):
+    """Substitui valores textuais ausentes ou o sentinela legado 'None'."""
+    if valor is None:
+        return padrao
+
+    if isinstance(valor, str):
+        valor_comparacao = valor.strip()
+        if not valor_comparacao or valor_comparacao == "None":
+            return padrao
+
+    return valor

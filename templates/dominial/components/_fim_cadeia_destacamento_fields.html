@@ -1,0 +1,36 @@
+<!--
+  Campos do destacamento do patrimônio público (issue #104)
+  Só aparece quando o tipo do fim de cadeia é 'destacamento_publico'.
+  Parâmetros esperados:
+    - indice: índice da origem
+    - sigla_selecionada: sigla já gravada (pode ser texto livre legado)
+    - info_adicional: informação adicional já gravada
+    - visivel: se o bloco começa visível
+    - fim_cadeia_opcoes: estados cadastrados (vem do contexto da view)
+-->
+<div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_{{ indice }}"
+     style="display: {% if visivel %}block{% else %}none{% endif %};">
+    <div class="destacamento-grid">
+        <div class="form-group">
+            <label for="info_adicional_fim_cadeia_{{ indice }}">Informação adicional</label>
+            <input type="text" name="info_adicional_fim_cadeia[]" id="info_adicional_fim_cadeia_{{ indice }}"
+                   class="form-control info-adicional-fim-cadeia-input"
+                   placeholder="Ex: secretaria que concedeu o título"
+                   value="{{ info_adicional|default_if_none:'' }}">
+        </div>
+        <div class="form-group">
+            <label for="sigla_patrimonio_publico_{{ indice }}">Estado *{% if user.is_staff %}
+                <a href="{% url 'admin:dominial_fimcadeia_changelist' %}" target="_blank"
+                   class="destacamento-cadastro-link" title="Cadastrar ou reativar siglas">cadastrar</a>
+            {% endif %}</label>
+            <select name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_{{ indice }}"
+                    class="form-control sigla-patrimonio-publico-select"
+                    data-sigla-selecionada="{{ sigla_selecionada|default_if_none:'' }}">
+                <option value="">Selecione...</option>
+                {% for opcao in fim_cadeia_opcoes %}
+                <option value="{{ opcao.sigla }}" title="{{ opcao.nome }}">{{ opcao.sigla }} — {{ opcao.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</div>

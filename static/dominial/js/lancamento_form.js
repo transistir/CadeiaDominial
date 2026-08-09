@@ -13,21 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
         const modoEdicao = document.body.classList.contains('modo-edicao');
         
-        // Verificar se o documento é do tipo transcrição
-        // Método 1: Verificar se há uma variável global definida no template
-        const isTranscricaoGlobal = window.isTranscricao === true;
-        
-        // Método 2: Verificar pelo número do documento (fallback)
-        const documentoNumero = document.querySelector('input[name="sigla_matricula"]');
-        const isTranscricaoByNumber = documentoNumero && documentoNumero.value && (
-            documentoNumero.value.startsWith('T') || 
-            documentoNumero.value.toUpperCase().includes('TRANS')
-        );
-        
-        // Método 3: Verificar se há um elemento com classe indicando transcrição
-        const isTranscricaoByClass = document.body.classList.contains('documento-transcricao');
-        
-        const isTranscricao = isTranscricaoGlobal || isTranscricaoByNumber || isTranscricaoByClass;
+        const isTranscricao = window.isTranscricao === true;
         
 
         
@@ -771,11 +757,14 @@ function adicionarOrigem() {
                 </select>
             </div>
         </div>
-        
+
+        <!-- Campos de destacamento do patrimônio público (aparecem quando tipo = 'destacamento_publico') -->
+        ${typeof montarBlocoDestacamento === 'function' ? montarBlocoDestacamento(newIndex, false) : ''}
+
         <!-- Campo de especificação (aparece quando tipo = 'outra') -->
         <div class="form-group especificacao-container" id="especificacao-container_${newIndex}" style="display: none;">
             <label for="especificacao_fim_cadeia_${newIndex}">Especificação *</label>
-            <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_${newIndex}" class="form-control especificacao-fim-cadeia" 
+            <textarea name="especificacao_fim_cadeia[]" id="especificacao_fim_cadeia_${newIndex}" class="form-control especificacao-fim-cadeia"
                       placeholder="Detalhe a especificação..."></textarea>
         </div>
     `;
@@ -936,17 +925,6 @@ function buscarCartoriosOrigem(input, hidden, suggestions, query) {
                     suggestions.appendChild(div);
                 });
 
-                // Adicionar opção "Adicionar novo cartório"
-                const adicionarDiv = document.createElement('div');
-                adicionarDiv.className = 'autocomplete-suggestion adicionar-cartorio';
-                adicionarDiv.innerHTML = `
-                    <span class="cartorio-nome">➕ Adicionar novo cartório</span>
-                `;
-                adicionarDiv.addEventListener('click', function() {
-                    abrirModalNovoCartorio(input, hidden, suggestions);
-                });
-                suggestions.appendChild(adicionarDiv);
-
                 suggestions.style.display = 'block';
                 suggestions.style.zIndex = '9999';
                 console.log('Resultados da busca exibidos');
@@ -958,139 +936,6 @@ function buscarCartoriosOrigem(input, hidden, suggestions, query) {
         .catch(error => {
             console.error('Erro ao buscar cartórios de imóveis:', error);
         });
-}
-
-// Função para abrir modal de novo cartório
-function abrirModalNovoCartorio(input, hidden, suggestions) {
-    console.log('Abrindo modal de novo cartório');
-    
-    // Fechar sugestões
-    suggestions.style.display = 'none';
-    
-    // Criar modal se não existir
-    let modal = document.getElementById('modal-novo-cartorio-lancamento');
-    if (!modal) {
-        modal = criarModalNovoCartorio();
-        document.body.appendChild(modal);
-    }
-    
-    // Mostrar modal
-    modal.style.display = 'flex';
-    
-    // Configurar callback para quando o cartório for criado
-    modal._callback = function(cartorio) {
-        console.log('Cartório criado:', cartorio);
-        input.value = cartorio.nome;
-        hidden.value = cartorio.id;
-        input.classList.remove('error');
-    };
-}
-
-// Função para criar o modal de novo cartório
-function criarModalNovoCartorio() {
-    const modal = document.createElement('div');
-    modal.id = 'modal-novo-cartorio-lancamento';
-    modal.className = 'modal';
-    modal.style.display = 'none';
-    
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Adicionar Novo Cartório</h3>
-                <span class="close" id="fechar-modal-cartorio-lancamento">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="form-novo-cartorio-lancamento">
-                    <div class="form-group">
-                        <label for="novo-cartorio-nome-lancamento">Nome do Cartório:</label>
-                        <input type="text" id="novo-cartorio-nome-lancamento" name="nome" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="novo-cartorio-cns-lancamento">CNS:</label>
-                        <input type="text" id="novo-cartorio-cns-lancamento" name="cns" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="novo-cartorio-estado-lancamento">Estado:</label>
-                        <input type="text" id="novo-cartorio-estado-lancamento" name="estado" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="novo-cartorio-cidade-lancamento">Cidade:</label>
-                        <input type="text" id="novo-cartorio-cidade-lancamento" name="cidade" class="form-control" required>
-                    </div>
-                    <div class="modal-buttons">
-                        <button type="button" class="btn btn-secondary" id="cancelar-novo-cartorio-lancamento">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Salvar Cartório</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    `;
-    
-    // Configurar eventos do modal
-    configurarEventosModalNovoCartorio(modal);
-    
-    return modal;
-}
-
-// Função para configurar eventos do modal
-function configurarEventosModalNovoCartorio(modal) {
-    const fecharBtn = modal.querySelector('#fechar-modal-cartorio-lancamento');
-    const cancelarBtn = modal.querySelector('#cancelar-novo-cartorio-lancamento');
-    const form = modal.querySelector('#form-novo-cartorio-lancamento');
-    
-    // Fechar modal
-    fecharBtn.onclick = function() {
-        modal.style.display = 'none';
-        form.reset();
-    };
-    
-    cancelarBtn.onclick = function() {
-        modal.style.display = 'none';
-        form.reset();
-    };
-    
-    // Submeter novo cartório via AJAX
-    form.onsubmit = async function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const data = {
-            nome: document.getElementById('novo-cartorio-nome-lancamento').value,
-            cns: document.getElementById('novo-cartorio-cns-lancamento').value,
-            estado: document.getElementById('novo-cartorio-estado-lancamento').value,
-            cidade: document.getElementById('novo-cartorio-cidade-lancamento').value,
-            endereco: '',
-            telefone: '',
-            email: ''
-        };
-        
-        try {
-            const resp = await fetch('/dominial/criar-cartorio/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify(data)
-            });
-            
-            const result = await resp.json();
-            if (result.success) {
-                // Fechar modal
-                modal.style.display = 'none';
-                form.reset();
-                
-                // Chamar callback se existir
-                if (modal._callback) {
-                    modal._callback(result.cartorio);
-                }
-            } else {
-                alert(result.error || 'Erro ao criar cartório.');
-            }
-        } catch (err) {
-            alert('Erro ao criar cartório.');
-        }
-    };
 }
 
 // Função para mostrar sugestões do cartório da origem
@@ -1137,17 +982,6 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
                     });
                     suggestions.appendChild(div);
                 });
-                
-                // Adicionar opção "Adicionar novo cartório"
-                const adicionarDiv = document.createElement('div');
-                adicionarDiv.className = 'autocomplete-suggestion adicionar-cartorio';
-                adicionarDiv.innerHTML = `
-                    <span class="cartorio-nome">➕ Adicionar novo cartório</span>
-                `;
-                adicionarDiv.addEventListener('click', function() {
-                    abrirModalNovoCartorio(input, hidden, suggestions);
-                });
-                suggestions.appendChild(adicionarDiv);
 
                 suggestions.style.display = 'block';
                 suggestions.style.zIndex = '9999';
@@ -1254,11 +1088,18 @@ function setupFimCadeiaTogglePorOrigem(toggle) {
                 const classificacaoSelect = container.querySelector('.classificacao-fim-cadeia-select');
                 const especificacaoContainer = container.querySelector('.especificacao-container');
                 const especificacaoTextarea = container.querySelector('.especificacao-fim-cadeia');
-                
+                const siglaContainer = container.querySelector('.sigla-patrimonio-container');
+                const siglaSelect = container.querySelector('.sigla-patrimonio-publico-select');
+                const infoAdicionalInput = container.querySelector('.info-adicional-fim-cadeia-input');
+
                 if (tipoSelect) tipoSelect.value = '';
                 if (classificacaoSelect) classificacaoSelect.value = '';
                 if (especificacaoContainer) especificacaoContainer.style.display = 'none';
                 if (especificacaoTextarea) especificacaoTextarea.value = '';
+                // Destacamento do patrimônio público (issue #104)
+                if (siglaContainer) siglaContainer.style.display = 'none';
+                if (siglaSelect) siglaSelect.value = '';
+                if (infoAdicionalInput) infoAdicionalInput.value = '';
             }
         }
         
@@ -1269,22 +1110,28 @@ function setupFimCadeiaTogglePorOrigem(toggle) {
 
 // Função para configurar selects de tipo de fim de cadeia por origem
 function setupTipoFimCadeiaSelectPorOrigem(select) {
+    if (!select) return;
+
     const origemIndex = select.id.replace('tipo_fim_cadeia_', '');
     const especificacaoContainer = document.getElementById(`especificacao-container_${origemIndex}`);
-    
-    if (select && especificacaoContainer) {
-        function toggleEspecificacaoField() {
-            if (select.value === 'outra') {
-                especificacaoContainer.style.display = 'block';
-            } else {
-                especificacaoContainer.style.display = 'none';
+    const siglaContainer = document.getElementById(`sigla-patrimonio-container_${origemIndex}`);
+
+    function toggleCamposPorTipo() {
+        if (especificacaoContainer) {
+            especificacaoContainer.style.display = select.value === 'outra' ? 'block' : 'none';
+            if (select.value !== 'outra') {
                 // Limpar especificação quando não for 'outra'
                 const especificacaoTextarea = especificacaoContainer.querySelector('.especificacao-fim-cadeia');
                 if (especificacaoTextarea) especificacaoTextarea.value = '';
             }
         }
-        
-        select.addEventListener('change', toggleEspecificacaoField);
-        toggleEspecificacaoField(); // Estado inicial
+
+        // Estado + informação adicional só valem para destacamento (issue #104)
+        if (siglaContainer) {
+            siglaContainer.style.display = select.value === 'destacamento_publico' ? 'block' : 'none';
+        }
     }
+
+    select.addEventListener('change', toggleCamposPorTipo);
+    toggleCamposPorTipo(); // Estado inicial
 }

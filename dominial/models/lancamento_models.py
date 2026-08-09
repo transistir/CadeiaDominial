@@ -257,9 +257,15 @@ class OrigemFimCadeia(models.Model):
         help_text="Tipo do fim de cadeia para esta origem"
     )
     especificacao_fim_cadeia = models.TextField(
-        null=True, 
+        null=True,
         blank=True,
         help_text="Especificação quando o tipo é 'Outra' para esta origem"
+    )
+    info_adicional_fim_cadeia = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Informação adicional do destacamento (ex: secretaria que concedeu o título)"
     )
     classificacao_fim_cadeia = models.CharField(
         max_length=50,

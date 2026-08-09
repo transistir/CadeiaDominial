@@ -22,7 +22,7 @@
                     <strong>Tipo:</strong> {{ documento.get_tipo_display }}
                 </div>
                 <div class="info-item">
-                    <strong>Data:</strong> {{ documento.data|date:'d/m/Y' }}
+                    <strong>Data:</strong> {{ documento.data_exibicao|date:'d/m/Y' }}
                 </div>
                 <div class="info-item">
                     <strong>CRI:</strong> {{ documento.cartorio.nome }}
@@ -94,12 +94,14 @@
                                             <span class="detalhe-valor">{{ lancamento.forma|truncatechars:25 }}</span>
                                         </div>
                                     {% endif %}
-                                    {% if lancamento.titulo %}
+                                    {% with titulo=lancamento.titulo|limpar_none:"" %}
+                                    {% if titulo %}
                                         <div class="detalhe-item">
                                             <span class="detalhe-label">Título:</span>
-                                            <span class="detalhe-valor">{{ lancamento.titulo|truncatechars:25 }}</span>
+                                            <span class="detalhe-valor">{{ titulo|truncatechars:25 }}</span>
                                         </div>
                                     {% endif %}
+                                    {% endwith %}
                                     <!-- INFORMAÇÕES DE TRANSMISSÃO PARA REGISTRO -->
                                     {% if lancamento.cartorio_transmissao_compat %}
                                         <div class="detalhe-item">

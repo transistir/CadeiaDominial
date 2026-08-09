@@ -236,6 +236,137 @@
     user-select: none;
 }
 
+.node[role="button"]:focus {
+    outline: none;
+}
+
+.node[role="button"]:focus rect {
+    stroke-width: 4;
+    filter: drop-shadow(0 6px 20px rgba(0,0,0,0.25));
+}
+
+/* Painel lateral de detalhes do fim de cadeia */
+.fim-cadeia-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+    z-index: 1040;
+}
+
+.fim-cadeia-drawer-backdrop.is-open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fim-cadeia-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    box-sizing: border-box;
+    width: min(320px, 100vw);
+    height: 100vh;
+    padding: 24px;
+    background: #fff;
+    box-shadow: -4px 0 18px rgba(0, 0, 0, 0.2);
+    overflow-y: auto;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 0.25s ease, visibility 0s linear 0.25s;
+    z-index: 1050;
+}
+
+.fim-cadeia-drawer.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.25s ease;
+}
+
+.fim-cadeia-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.fim-cadeia-drawer-header h2 {
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 1.35rem;
+}
+
+.fim-cadeia-drawer-fechar {
+    border: 0;
+    padding: 0 4px;
+    background: transparent;
+    color: #495057;
+    cursor: pointer;
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.fim-cadeia-drawer-fechar:hover,
+.fim-cadeia-drawer-fechar:focus {
+    color: #000;
+}
+
+.fim-cadeia-drawer-detalhes {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-top: 20px;
+}
+
+.fim-cadeia-detalhe {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fim-cadeia-detalhe-rotulo {
+    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.fim-cadeia-classificacao-badge {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.fim-cadeia-classificacao-badge.origem-lidima {
+    background: #28a745;
+}
+
+.fim-cadeia-classificacao-badge.inconclusa {
+    background: #ffc107;
+    color: #212529;
+}
+
+.fim-cadeia-classificacao-badge.sem-origem {
+    background: #dc3545;
+}
+
+.fim-cadeia-classificacao-badge.nao-informada {
+    background: #dc3545;
+}
+
+.fim-cadeia-nome-completo {
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
 /* Botões dos cards */
 .card-buttons text {
     pointer-events: all;
@@ -329,6 +460,8 @@
     .main-nav,
     .navigation-actions,
     .zoom-controls,
+    .fim-cadeia-drawer,
+    .fim-cadeia-drawer-backdrop,
     .arvore-container::before,
     .arvore-header .header-icon,
     .nav-btn {

@@ -3,38 +3,39 @@
 
 // Corrigir sobreposições mantendo o layout natural da D3
 function corrigirSobreposicoes(root) {
-  // Agrupar nós por profundidade (nível)
-  const niveis = {};
+  // Agrupar nós pela coluna horizontal real
+  const colunas = {};
   root.descendants().forEach((node) => {
-    if (!niveis[node.depth]) niveis[node.depth] = [];
-    niveis[node.depth].push(node);
+    const coluna = Math.round(node.y);
+    if (!colunas[coluna]) colunas[coluna] = [];
+    colunas[coluna].push(node);
   });
 
   console.log(
-    `DEBUG: Verificando sobreposições em ${Object.keys(niveis).length} níveis`,
+    `DEBUG: Verificando sobreposições em ${Object.keys(colunas).length} colunas`,
   );
 
-  // Para cada nível, verificar e corrigir apenas sobreposições
-  Object.keys(niveis).forEach((depth) => {
-    const nosNivel = niveis[depth];
-    if (nosNivel.length > 1) {
+  // Para cada coluna, verificar e corrigir apenas sobreposições
+  Object.keys(colunas).forEach((coluna) => {
+    const nosColuna = colunas[coluna];
+    if (nosColuna.length > 1) {
       // Ordenar por posição X (vertical no layout horizontal)
-      nosNivel.sort((a, b) => a.x - b.x);
+      nosColuna.sort((a, b) => a.x - b.x);
 
       const alturaCard = 90;
       const margemMinima = 40;
 
-      // Verificar se há documentos importados no nível
-      const importadosNivel = nosNivel.filter(
+      // Verificar se há documentos importados na coluna
+      const importadosColuna = nosColuna.filter(
         (node) => node.data.is_importado,
       ).length;
       let margemAjustada = margemMinima;
 
       // Aumentar margem se há documentos importados
-      if (importadosNivel > 0) {
+      if (importadosColuna > 0) {
         margemAjustada = margemMinima * 1.2; // 20% mais margem vertical
         console.log(
-          `DEBUG: Nível ${depth} - Aumentando margem vertical de ${margemMinima} para ${margemAjustada} devido a ${importadosNivel} documentos importados`,
+          `DEBUG: Coluna Y ${coluna} - Aumentando margem vertical de ${margemMinima} para ${margemAjustada} devido a ${importadosColuna} documentos importados`,
         );
       }
 
@@ -42,8 +43,8 @@ function corrigirSobreposicoes(root) {
 
       // Verificar se há sobreposições
       let temSobreposicao = false;
-      for (let i = 0; i < nosNivel.length - 1; i++) {
-        const distancia = Math.abs(nosNivel[i + 1].x - nosNivel[i].x);
+      for (let i = 0; i < nosColuna.length - 1; i++) {
+        const distancia = Math.abs(nosColuna[i + 1].x - nosColuna[i].x);
         if (distancia < espacamentoMinimo) {
           temSobreposicao = true;
           break;
@@ -52,101 +53,116 @@ function corrigirSobreposicoes(root) {
 
       // Só corrigir se houver sobreposição
       if (temSobreposicao) {
-        const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-        const inicio = nosNivel[0].x - larguraTotal / 2;
+        const larguraTotal = (nosColuna.length - 1) * espacamentoMinimo;
+        const inicio =
+          (nosColuna[0].x + nosColuna[nosColuna.length - 1].x) / 2 -
+          larguraTotal / 2;
 
-        nosNivel.forEach((node, index) => {
+        nosColuna.forEach((node, index) => {
           node.x = inicio + index * espacamentoMinimo;
         });
 
         console.log(
-          `DEBUG: Nível ${depth} - Corrigidas sobreposições para ${nosNivel.length} nós`,
+          `DEBUG: Coluna Y ${coluna} - Corrigidas sobreposições para ${nosColuna.length} nós`,
         );
       }
     }
   });
 }
 
-// Função otimizada: Aplicar espaçamento adicional para evitar sobreposições
+// Ajustar posições horizontais por nível e manter fins de cadeia à direita
 function ajustarPosicoesPorNivel(root) {
-  // Cards de fim de cadeia continuam usando o nível calculado pelo backend.
-  // Um documento com nível ajustado manualmente (nivel_manual, endpoint
-  // ajustar-nivel) também respeita a escolha do usuário. Os demais nós
-  // usam node.depth (profundidade calculada pelo d3.hierarchy a partir da
-  // estrutura de árvore que converterParaArvoreD3 já monta corretamente)
-  // -- usar node.data.nivel para todo mundo prenderia a posição X ao nível
-  // antigo do backend, ignorando o pai primário escolhido acima.
-  root.descendants().forEach((node) => {
-    if (node.data.is_fim_cadeia) {
-      const nivel = node.data.nivel || 0;
-      node.y = nivel * 220 + 120;
-      console.log(
-        `DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivel}, posição Y: ${node.y}`,
-      );
-      return;
-    }
+  // Primeiro posicionar os documentos pela profundidade real da árvore,
+  // preservando o nível escolhido manualmente quando houver. Depois, usar a
+  // posição final real do documento mais à direita para colocar todos os fins
+  // de cadeia na mesma coluna, sem depender do nível calculado pelo backend.
+  const nodes = root.descendants();
+  const documentNodes = [];
+  nodes.forEach((node) => {
+    if (node.data.is_fim_cadeia) return;
 
     if (node.data.nivel_manual != null) {
       const nivel = node.data.nivel ?? node.depth;
       node.y = nivel * 220 + 120;
-      return;
+    } else {
+      node.y = node.depth * 220 + 120;
     }
 
-    node.y = node.depth * 220 + 120;
+    documentNodes.push(node);
+  });
+
+  const finiteDocumentYs = documentNodes
+    .map((node) => node.y)
+    .filter(Number.isFinite);
+  const maxDocumentY =
+    finiteDocumentYs.length > 0 ? Math.max(...finiteDocumentYs) : null;
+
+  nodes.forEach((node) => {
+    if (!node.data.is_fim_cadeia) return;
+
+    const nivelBackend = node.data.nivel;
+    node.y =
+      maxDocumentY !== null ? maxDocumentY + 220 : node.depth * 220 + 120;
+    console.log(
+      `DEBUG POSIÇÃO FIM CADEIA: ${node.data.numero} - nível backend: ${nivelBackend}, maxDocumentY: ${maxDocumentY}, posição final Y: ${node.y}`,
+    );
   });
 }
 
 function aplicarEspacamentoAdicional(root) {
-  // Agrupar nós por profundidade
-  const niveis = {};
+  // Agrupar nós pela coluna horizontal real
+  const colunas = {};
   root.descendants().forEach((node) => {
-    if (!niveis[node.depth]) niveis[node.depth] = [];
-    niveis[node.depth].push(node);
+    const coluna = Math.round(node.y);
+    if (!colunas[coluna]) colunas[coluna] = [];
+    colunas[coluna].push(node);
   });
 
   console.log(
-    `DEBUG: Verificando espaçamento adicional para ${Object.keys(niveis).length} níveis`,
+    `DEBUG: Verificando espaçamento adicional para ${Object.keys(colunas).length} colunas`,
   );
 
-  // Para cada nível, aplicar espaçamento adicional se necessário
-  Object.keys(niveis).forEach((depth) => {
-    const nosNivel = niveis[depth];
-    if (nosNivel.length > 1) {
+  // Para cada coluna, aplicar espaçamento adicional se necessário
+  Object.keys(colunas).forEach((coluna) => {
+    const nosColuna = colunas[coluna];
+    if (nosColuna.length > 1) {
       // Ordenar por posição X (vertical no layout horizontal)
-      nosNivel.sort((a, b) => a.x - b.x);
+      nosColuna.sort((a, b) => a.x - b.x);
 
-      // Verificar se há documentos importados no nível
-      const importadosNivel = nosNivel.filter(
+      // Verificar se há documentos importados na coluna
+      const importadosColuna = nosColuna.filter(
         (node) => node.data.is_importado,
       ).length;
       let espacamentoMinimo = 120; // espaçamento base
 
       // Aumentar espaçamento se há documentos importados
-      if (importadosNivel > 0) {
+      if (importadosColuna > 0) {
         espacamentoMinimo = 150; // 25% mais espaçamento vertical
         console.log(
-          `DEBUG: Nível ${depth} - Aumentando espaçamento vertical adicional de 120 para ${espacamentoMinimo} devido a ${importadosNivel} documentos importados`,
+          `DEBUG: Coluna Y ${coluna} - Aumentando espaçamento vertical adicional de 120 para ${espacamentoMinimo} devido a ${importadosColuna} documentos importados`,
         );
       }
 
-      // Verificar se o espaçamento atual é suficiente
-      let espacamentoAtual = 0;
-      for (let i = 0; i < nosNivel.length - 1; i++) {
-        espacamentoAtual += nosNivel[i + 1].x - nosNivel[i].x;
+      // Verificar o menor espaçamento entre nós adjacentes (uma média mascara
+      // sobreposições quando um gap grande "esconde" outros gaps pequenos)
+      let minGap = Infinity;
+      for (let i = 0; i < nosColuna.length - 1; i++) {
+        minGap = Math.min(minGap, nosColuna[i + 1].x - nosColuna[i].x);
       }
-      espacamentoAtual = espacamentoAtual / (nosNivel.length - 1);
 
-      // Só aplicar espaçamento adicional se o atual for muito pequeno
-      if (espacamentoAtual < espacamentoMinimo) {
-        const larguraTotal = (nosNivel.length - 1) * espacamentoMinimo;
-        const inicio = nosNivel[0].x - larguraTotal / 2;
+      // Só aplicar espaçamento adicional se o menor espaçamento for muito pequeno
+      if (minGap < espacamentoMinimo) {
+        const larguraTotal = (nosColuna.length - 1) * espacamentoMinimo;
+        const inicio =
+          (nosColuna[0].x + nosColuna[nosColuna.length - 1].x) / 2 -
+          larguraTotal / 2;
 
-        nosNivel.forEach((node, index) => {
+        nosColuna.forEach((node, index) => {
           node.x = inicio + index * espacamentoMinimo;
         });
 
         console.log(
-          `DEBUG: Nível ${depth} - Espaçamento adicional aplicado (atual: ${espacamentoAtual.toFixed(1)}px -> mínimo: ${espacamentoMinimo}px)`,
+          `DEBUG: Coluna Y ${coluna} - Espaçamento adicional aplicado (mínimo atual: ${minGap.toFixed(1)}px -> mínimo desejado: ${espacamentoMinimo}px)`,
         );
       }
     }

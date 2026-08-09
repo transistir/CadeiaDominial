@@ -30,7 +30,7 @@
         <div class="form-group">
             <label for="livro_documento">Livro do Documento *</label>
             <input type="text" name="livro_documento" id="livro_documento" required
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif modo_edicao and lancamento.livro_origem %}{{ lancamento.livro_origem }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
+                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">Livro do documento atual (herdado da origem)</small>
         </div>
@@ -38,7 +38,7 @@
         <div class="form-group">
             <label for="folha_documento">Folha do Documento *</label>
             <input type="text" name="folha_documento" id="folha_documento" required
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif modo_edicao and lancamento.folha_origem %}{{ lancamento.folha_origem }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
+                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">Folha do documento atual (herdada da origem)</small>
         </div>

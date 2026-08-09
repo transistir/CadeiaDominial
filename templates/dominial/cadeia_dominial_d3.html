@@ -75,6 +75,48 @@
         <svg id="arvore-d3-svg" width="100%" height="600"></svg>
     </div>
 
+    <div class="fim-cadeia-drawer-backdrop" id="fim-cadeia-drawer-backdrop"></div>
+    <aside class="fim-cadeia-drawer" id="fim-cadeia-drawer"
+           role="dialog" aria-modal="true" aria-hidden="true"
+           aria-labelledby="fim-cadeia-drawer-titulo">
+        <div class="fim-cadeia-drawer-header">
+            <h2 id="fim-cadeia-drawer-titulo">Fim de Cadeia</h2>
+            <button type="button" class="fim-cadeia-drawer-fechar"
+                    id="fim-cadeia-drawer-fechar" aria-label="Fechar painel de fim de cadeia">
+                &times;
+            </button>
+        </div>
+        <div class="fim-cadeia-drawer-detalhes">
+            <div class="fim-cadeia-detalhe">
+                <span class="fim-cadeia-detalhe-rotulo">Tipo</span>
+                <span id="fim-cadeia-detalhe-tipo"></span>
+            </div>
+            <div class="fim-cadeia-detalhe">
+                <span class="fim-cadeia-detalhe-rotulo">Classificação</span>
+                <span class="fim-cadeia-classificacao-badge"
+                      id="fim-cadeia-detalhe-classificacao"></span>
+            </div>
+            <div class="fim-cadeia-detalhe">
+                <span class="fim-cadeia-detalhe-rotulo">Nome/órgão completo</span>
+                <span class="fim-cadeia-nome-completo"
+                      id="fim-cadeia-detalhe-nome"></span>
+            </div>
+            <div class="fim-cadeia-detalhe">
+                <span class="fim-cadeia-detalhe-rotulo">Informação adicional</span>
+                <span class="fim-cadeia-nome-completo"
+                      id="fim-cadeia-detalhe-info-adicional"></span>
+            </div>
+            <div class="fim-cadeia-detalhe">
+                <span class="fim-cadeia-detalhe-rotulo">Título completo</span>
+                <span id="fim-cadeia-detalhe-titulo"></span>
+            </div>
+            <div class="fim-cadeia-detalhe">
+                <span class="fim-cadeia-detalhe-rotulo">Documento de origem</span>
+                <span id="fim-cadeia-detalhe-documento"></span>
+            </div>
+        </div>
+    </aside>
+
     <div class="navigation-actions">
         <a href="{% url 'selecionar_documento_lancamento' tis_id=tis.id imovel_id=imovel.id %}" class="nav-btn nav-btn-success">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -126,5 +168,6 @@
 <script src="{% static 'dominial/js/cadeia_dominial_d3/zoom_controls.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/print.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/svg_export.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/fim_cadeia_drawer.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/bootstrap.js' %}"></script>
 {% endblock %}

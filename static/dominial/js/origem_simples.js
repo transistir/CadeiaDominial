@@ -20,9 +20,90 @@ function inicializarOrigensSimples() {
     
     // CORREÇÃO: Processar todas as origens existentes (modo de edição)
     processarTodasOrigensExistentes();
-    
+
+    // Restaurar as siglas gravadas em todos os selects renderizados (issue #104)
+    document.querySelectorAll('.sigla-patrimonio-publico-select').forEach(select => {
+        const match = select.id.match(/sigla_patrimonio_publico_(\d+)/);
+        if (match) aplicarSiglaSelecionada(parseInt(match[1]));
+    });
+
     // Configurar eventos globais
     configurarEventosGlobais();
+}
+
+/**
+ * Siglas de destacamento do patrimônio público publicadas pela view (issue #104)
+ */
+function obterOpcoesFimCadeia() {
+    const dados = document.getElementById('fim-cadeia-opcoes-data');
+    if (!dados) return [];
+    try {
+        return JSON.parse(dados.textContent) || [];
+    } catch (erro) {
+        console.warn('Não foi possível ler as siglas de fim de cadeia:', erro);
+        return [];
+    }
+}
+
+function escaparHtml(valor) {
+    const elemento = document.createElement('span');
+    elemento.textContent = valor == null ? '' : String(valor);
+    return elemento.innerHTML.replace(/"/g, '&quot;');
+}
+
+/**
+ * Monta o bloco "Informação adicional" + "Estado" do destacamento (issue #104).
+ * Espelha templates/dominial/components/_fim_cadeia_destacamento_fields.html
+ */
+function montarBlocoDestacamento(index, visivel) {
+    const opcoes = obterOpcoesFimCadeia()
+        .map(opcao => {
+            const sigla = escaparHtml(opcao.sigla);
+            const nome = escaparHtml(opcao.nome);
+            return `<option value="${sigla}" title="${nome}">${sigla} — ${nome}</option>`;
+        })
+        .join('');
+
+    return `
+        <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_${index}" style="display: ${visivel ? 'block' : 'none'};">
+            <div class="destacamento-grid">
+                <div class="form-group">
+                    <label for="info_adicional_fim_cadeia_${index}">Informação adicional</label>
+                    <input type="text" name="info_adicional_fim_cadeia[]" id="info_adicional_fim_cadeia_${index}"
+                           class="form-control info-adicional-fim-cadeia-input"
+                           placeholder="Ex: secretaria que concedeu o título">
+                </div>
+                <div class="form-group">
+                    <label for="sigla_patrimonio_publico_${index}">Estado *</label>
+                    <select name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}"
+                            class="form-control sigla-patrimonio-publico-select" data-sigla-selecionada="">
+                        <option value="">Selecione...</option>
+                        ${opcoes}
+                    </select>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Garante que a sigla gravada apareça no select, mesmo quando for texto livre
+ * de lançamentos antigos que não corresponde a nenhum FimCadeia (issue #104)
+ */
+function aplicarSiglaSelecionada(index) {
+    const select = document.getElementById(`sigla_patrimonio_publico_${index}`);
+    if (!select || select.tagName !== 'SELECT') return;
+
+    const siglaGravada = (select.dataset.siglaSelecionada || '').trim();
+    if (!siglaGravada) return;
+
+    select.value = siglaGravada;
+    if (select.value !== siglaGravada) {
+        // Valor legado sem correspondência no cadastro: preservar como opção própria
+        const opcaoLegada = new Option(`${siglaGravada} (cadastro anterior)`, siglaGravada);
+        select.add(opcaoLegada, 1);
+        select.value = siglaGravada;
+    }
 }
 
 function configurarOrigem(index) {
@@ -31,7 +112,10 @@ function configurarOrigem(index) {
     const hiddenInput = document.getElementById(`origem_completa_hidden_${index}`);
     
     if (!tipoSelect || !numeroInput || !hiddenInput) return;
-    
+
+    // Restaurar a sigla gravada no select de destacamento (issue #104)
+    aplicarSiglaSelecionada(index);
+
     // Inicializar estado do campo número (bloqueado por padrão)
     numeroInput.disabled = !tipoSelect.value;
     console.log(`Origem ${index}: tipoSelect.value = "${tipoSelect.value}", numeroInput.disabled = ${numeroInput.disabled}`);
@@ -324,14 +408,9 @@ function criarContainerFimCadeia(index) {
             </div>
         </div>
         
-        <!-- Campo de sigla do patrimônio público (aparece quando tipo = 'destacamento_publico') -->
-        <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_${index}" style="display: none;">
-            <label for="sigla_patrimonio_publico_${index}">Sigla do Patrimônio Público *</label>
-            <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}" 
-                   class="form-control sigla-patrimonio-publico-input" 
-                   placeholder="Ex: INCRA, Estado, União, etc.">
-        </div>
-        
+        <!-- Campos de destacamento do patrimônio público (aparecem quando tipo = 'destacamento_publico') -->
+        ${montarBlocoDestacamento(index, false)}
+
         <!-- Campo de especificação (aparece quando tipo = 'outra') -->
         <div class="form-group especificacao-container" id="especificacao-container_${index}" style="display: none;">
             <label for="especificacao_fim_cadeia_${index}">Especificação *</label>
@@ -487,12 +566,10 @@ function configurarValidacaoInicioMatricula(index) {
                 container.style.display = this.checked ? 'block' : 'none';
             }
             
-            // Controlar exibição do campo de sigla do patrimônio público
-            const siglaContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
-            if (siglaContainer) {
-                siglaContainer.style.display = this.checked ? 'block' : 'none';
-            }
-            
+            // Os campos de destacamento não seguem o toggle: só aparecem quando
+            // o tipo escolhido é 'destacamento_publico' (issue #104)
+            controlarExibicaoCamposFimCadeia(index);
+
             setTimeout(aplicarValidacao, 100); // Delay para permitir que outros eventos sejam processados
             atualizarOrigemCompleta(index); // Atualizar origem quando checkbox muda
         });
@@ -525,7 +602,7 @@ function configurarValidacaoInicioMatricula(index) {
     
     const siglaPatrimonioPublico = document.getElementById(`sigla_patrimonio_publico_${index}`);
     if (siglaPatrimonioPublico) {
-        siglaPatrimonioPublico.addEventListener('input', function() {
+        siglaPatrimonioPublico.addEventListener('change', function() {
             atualizarOrigemCompleta(index);
         });
     }
@@ -542,28 +619,20 @@ function configurarValidacaoInicioMatricula(index) {
  */
 function controlarExibicaoCamposFimCadeia(index) {
     const tipoFimCadeia = document.getElementById(`tipo_fim_cadeia_${index}`);
+    if (!tipoFimCadeia) return;
+
+    const tipoSelecionado = tipoFimCadeia.value;
+
+    // Cada bloco é opcional: a ausência de um não pode impedir a exibição do
+    // outro, então checar um a um em vez de exigir os dois (issue #104)
     const especificacaoContainer = document.getElementById(`especificacao-container_${index}`);
-    const siglaPatrimonioContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
-    
-    console.log(`DEBUG: Controlar exibição - index: ${index}`);
-    console.log(`DEBUG: tipoFimCadeia:`, tipoFimCadeia);
-    console.log(`DEBUG: especificacaoContainer:`, especificacaoContainer);
-    console.log(`DEBUG: siglaPatrimonioContainer:`, siglaPatrimonioContainer);
-    
-    if (tipoFimCadeia && especificacaoContainer && siglaPatrimonioContainer) {
-        const tipoSelecionado = tipoFimCadeia.value;
-        console.log(`DEBUG: Tipo selecionado: ${tipoSelecionado}`);
-        
-        // Controlar exibição do campo de especificação
+    if (especificacaoContainer) {
         especificacaoContainer.style.display = tipoSelecionado === 'outra' ? 'block' : 'none';
-        
-        // Controlar exibição do campo de sigla do patrimônio público
+    }
+
+    const siglaPatrimonioContainer = document.getElementById(`sigla-patrimonio-container_${index}`);
+    if (siglaPatrimonioContainer) {
         siglaPatrimonioContainer.style.display = tipoSelecionado === 'destacamento_publico' ? 'block' : 'none';
-        
-        console.log(`DEBUG: Especificação display: ${especificacaoContainer.style.display}`);
-        console.log(`DEBUG: Sigla patrimônio display: ${siglaPatrimonioContainer.style.display}`);
-    } else {
-        console.log(`DEBUG: Algum elemento não foi encontrado para index ${index}`);
     }
 }
 
@@ -628,25 +697,18 @@ function criarCampoSiglaPatrimonio(index) {
         const fimCadeiaContainer = document.getElementById(`fim-cadeia-origem-container_${index}`);
         
         if (fimCadeiaContainer) {
-            // Criar o campo de sigla do patrimônio público
-            const siglaHTML = `
-                <div class="form-group sigla-patrimonio-container" id="sigla-patrimonio-container_${index}" style="display: block;">
-                    <label for="sigla_patrimonio_publico_${index}">Sigla do Patrimônio Público *</label>
-                    <input type="text" name="sigla_patrimonio_publico[]" id="sigla_patrimonio_publico_${index}" 
-                           class="form-control sigla-patrimonio-publico-input" 
-                           placeholder="Ex: INCRA, Estado, União, etc.">
-                </div>
-            `;
-            
+            // Criar os campos de destacamento do patrimônio público
+            const siglaHTML = montarBlocoDestacamento(index, true);
+
             // Inserir o campo após o grid-2
             const grid2 = fimCadeiaContainer.querySelector('.grid-2');
             if (grid2) {
                 grid2.insertAdjacentHTML('afterend', siglaHTML);
-                
+
                 // Adicionar event listener para o novo campo
-                const siglaInput = document.getElementById(`sigla_patrimonio_publico_${index}`);
-                if (siglaInput) {
-                    siglaInput.addEventListener('input', function() {
+                const siglaSelect = document.getElementById(`sigla_patrimonio_publico_${index}`);
+                if (siglaSelect) {
+                    siglaSelect.addEventListener('change', function() {
                         atualizarOrigemCompleta(index);
                     });
                 }
@@ -660,6 +722,7 @@ function criarCampoSiglaPatrimonio(index) {
 
 // Exportar funções para uso global
 window.adicionarOrigemSimples = adicionarOrigemSimples;
+window.montarBlocoDestacamento = montarBlocoDestacamento;
 window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
 window.controlarCamposFimCadeia = controlarCamposFimCadeia;
 window.criarCampoSiglaPatrimonio = criarCampoSiglaPatrimonio;

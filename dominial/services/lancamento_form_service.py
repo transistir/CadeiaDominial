@@ -45,9 +45,15 @@ class LancamentoFormService:
         livro_documento = request.POST.get('livro_documento') if request.POST.get('livro_documento') and request.POST.get('livro_documento').strip() else None
         folha_documento = request.POST.get('folha_documento') if request.POST.get('folha_documento') and request.POST.get('folha_documento').strip() else None
         
-        # Campos de origem (livro e folha de outros documentos)
-        livro_origem = request.POST.get('livro_origem') if request.POST.get('livro_origem') and request.POST.get('livro_origem').strip() else None
-        folha_origem = request.POST.get('folha_origem') if request.POST.get('folha_origem') and request.POST.get('folha_origem').strip() else None
+        # Campos de origem (livro e folha dos documentos de ORIGEM — arrays do form)
+        # IMPORTANTE (#118): livro_origem[]/folha_origem[] pertencem à ORIGEM,
+        # NÃO ao documento atual. São lidos aqui e repassados para alimentar o
+        # fluxo de criação do documento de origem (lancamento_campos_service →
+        # lancamento_origem_service). Jamais devem alimentar o documento atual.
+        livros_origem = request.POST.getlist('livro_origem[]')
+        folhas_origem = request.POST.getlist('folha_origem[]')
+        livro_origem = livros_origem[0].strip() if livros_origem and livros_origem[0].strip() else None
+        folha_origem = folhas_origem[0].strip() if folhas_origem and folhas_origem[0].strip() else None
         cartorio_id = request.POST.get('cartorio')
         cartorio_nome = request.POST.get('cartorio_nome', '').strip()
         
