@@ -1457,6 +1457,11 @@ class EquipeGlobalAdminTest(SegregacaoBaseTestCase):
         GrupoAcesso.objects.create(
             group=global_equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
         )
+        # Vínculo residual REAL: sem ele o teste passaria vacuamente, pois não
+        # haveria linha alguma da equipe global no inline.
+        residual = GroupTI.objects.create(
+            group=global_equipe, tis=self.tis_a, atribuido_por=self.superuser
+        )
         self.client.force_login(self.superuser)
 
         response = self.client.get(
@@ -1467,11 +1472,83 @@ class EquipeGlobalAdminTest(SegregacaoBaseTestCase):
         conteudo = response.content.decode()
         self.assertIn('Também têm acesso por escopo global', conteudo)
         self.assertIn('Equipe global TI', conteudo)
-        for formset in response.context['inline_admin_formsets']:
-            if formset.opts.model is GroupTI:
-                for form in formset.forms:
-                    grupo_no_form = form.instance.group_id if form.instance.pk else None
-                    self.assertNotEqual(grupo_no_form, global_equipe.pk)
+        inline_groupti = next(
+            formset
+            for formset in response.context['inline_admin_formsets']
+            if formset.opts.model is GroupTI
+        )
+        self.assertNotIn(residual, inline_groupti.formset.get_queryset())
+        for form in inline_groupti.formset.forms:
+            grupo_no_form = form.instance.group_id if form.instance.pk else None
+            self.assertNotEqual(grupo_no_form, global_equipe.pk)
+
+    def test_post_forjado_no_inline_da_ti_nao_apaga_vinculo_de_equipe_global(self):
+        """
+        O vínculo residual fica fora do queryset do inline, então nem o POST
+        forjado que reivindica a linha como inicial consegue deletá-lo (#132).
+        """
+        global_equipe = Group.objects.create(name='Equipe global TI forjada')
+        GrupoAcesso.objects.create(
+            group=global_equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        residual = GroupTI.objects.create(
+            group=global_equipe, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse('admin:dominial_tis_change', args=[self.tis_a.pk]),
+            {
+                'nome': self.tis_a.nome,
+                'codigo': self.tis_a.codigo,
+                'etnia': self.tis_a.etnia or '',
+                'estado': self.tis_a.estado or '',
+                'grupos_ti-TOTAL_FORMS': '1',
+                'grupos_ti-INITIAL_FORMS': '1',
+                'grupos_ti-MIN_NUM_FORMS': '0',
+                'grupos_ti-MAX_NUM_FORMS': '1000',
+                'grupos_ti-0-id': str(residual.pk),
+                'grupos_ti-0-tis': str(self.tis_a.pk),
+                'grupos_ti-0-group': str(global_equipe.pk),
+                'grupos_ti-0-DELETE': 'on',
+                'usuarios_ti-TOTAL_FORMS': '0',
+                'usuarios_ti-INITIAL_FORMS': '0',
+                'usuarios_ti-MIN_NUM_FORMS': '0',
+                'usuarios_ti-MAX_NUM_FORMS': '1000',
+            },
+        )
+
+        self.assertIn(response.status_code, (200, 302))
+        self.assertTrue(GroupTI.objects.filter(pk=residual.pk).exists())
+
+    def test_grupoacesso_admin_nao_permite_ativar_flag_global(self):
+        """
+        M-1: a única superfície de edição da flag é o GroupAdmin (confirmação,
+        prévia e LogEntry com anterior/novo). O ModelAdmin standalone de
+        GrupoAcesso não pode expor o campo nem aceitar POST forjado.
+        """
+        equipe = Group.objects.create(name='Equipe via GrupoAcessoAdmin')
+        acesso = GrupoAcesso.objects.create(group=equipe, tipo=GrupoAcesso.EQUIPE)
+        self.client.force_login(self.superuser)
+        url = reverse('admin:dominial_grupoacesso_change', args=[acesso.pk])
+
+        tela = self.client.get(url)
+        self.assertEqual(tela.status_code, 200)
+        self.assertNotIn('acesso_todas_tis', tela.context['adminform'].form.fields)
+
+        response = self.client.post(
+            url,
+            {
+                'group': str(equipe.pk),
+                'tipo': GrupoAcesso.EQUIPE,
+                'descricao': '',
+                'acesso_todas_tis': '1',
+            },
+        )
+
+        self.assertIn(response.status_code, (200, 302))
+        acesso.refresh_from_db()
+        self.assertFalse(acesso.acesso_todas_tis)
 
     def test_perfil_protegido_campo_global_readonly_e_post_forjado_recusado(self):
         perfil = Group.objects.get(name='Perfil: Editor')

@@ -147,7 +147,24 @@ class GroupTIPorTIInline(admin.TabularInline):
     verbose_name_plural = 'Equipes com acesso'
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('group', 'atribuido_por')
+        """
+        Esconde vínculos residuais de equipes globais (#132, F7).
+
+        Um ``GroupTI`` de equipe global é redundante: o acesso vem da flag, não
+        do vínculo. Deixá-lo editável aqui ofereceria uma "revogação
+        individual" falsa — o checkbox apagaria o registro sem tirar o acesso e
+        ainda destruiria o escopo de rollback (desligar a flag deve restaurar
+        os vínculos explícitos). Essas equipes seguem visíveis no bloco
+        somente leitura ``equipes_globais``.
+        """
+        return (
+            super().get_queryset(request)
+            .exclude(
+                group__acesso__tipo=GrupoAcesso.EQUIPE,
+                group__acesso__acesso_todas_tis=True,
+            )
+            .select_related('group', 'atribuido_por')
+        )
 
 
 class UserTIPorTIInline(admin.TabularInline):
@@ -790,6 +807,9 @@ class GrupoAcessoAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'protegido']
     search_fields = ['group__name', 'descricao']
     autocomplete_fields = ['group']
+    # A flag global só é editável no GroupAdmin, que exige confirmação, mostra
+    # a prévia de impacto e registra anterior/novo no LogEntry (#132, F3/F10).
+    readonly_fields = ['acesso_todas_tis']
 
     def has_module_permission(self, request):
         return request.user.is_superuser
