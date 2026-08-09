@@ -27,6 +27,7 @@ from dominial.models import (
     LancamentoTipo,
     Pessoas,
     TIs,
+    UserImovel,
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_form_service import LancamentoFormService
@@ -490,6 +491,8 @@ class TestIssue118NovoLancamentoViewSegundoLancamento(TestCase):
         usuario = get_user_model().objects.create_user(
             username="tester118c", password="senha-118c"
         )
+        # Segregação (#132): o usuário comum só enxerga imóveis atribuídos a ele.
+        UserImovel.objects.create(user=usuario, imovel=self.imovel)
         self.client.force_login(usuario)
 
     def test_get_formulario_segundo_lancamento_nao_gera_keyerror(self):

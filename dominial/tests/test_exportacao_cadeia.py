@@ -75,7 +75,9 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
     def _request(self, path, query=None):
         request = self.factory.get(path, data=query or {})
-        request.user = SimpleNamespace(is_authenticated=True)
+        # Superuser: estes testes cobrem a exportação em si (SimpleTestCase, sem
+        # banco), então a segregação da #132 precisa passar direto sem query.
+        request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
         return request
 
     def test_botao_pdf_padrao_aponta_para_exportacao_completa(self):

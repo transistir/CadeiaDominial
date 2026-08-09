@@ -6,7 +6,9 @@ from django.core.paginator import Paginator
 from django.core.management import call_command
 from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from ..managers import documentos_for_user, lancamentos_for_user
 from ..utils import normalizar_texto_opcional
+from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_SEM_ACESSO
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -83,6 +85,7 @@ def buscar_cartorios(request):
     return JsonResponse(cartorios_list, safe=False)
 
 @require_POST
+@login_required
 def verificar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
@@ -97,6 +100,7 @@ def verificar_cartorios_estado(request):
     return JsonResponse(resultado)
 
 @require_POST
+@login_required
 def importar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
@@ -190,7 +194,7 @@ def pessoas(request):
 
 @login_required
 def alteracoes(request):
-    documentos = Documento.objects.all().order_by('-data', '-id')
+    documentos = documentos_for_user(request.user).order_by('-data', '-id')
     return render(request, 'dominial/alteracoes.html', {'documentos': documentos})
 
 @login_required
@@ -206,7 +210,8 @@ def lancamentos(request):
     resultado = LancamentoConsultaService.filtrar_lancamentos(
         filtros=filtros,
         pagina=request.GET.get('page'),
-        itens_por_pagina=10
+        itens_por_pagina=10,
+        queryset_base=lancamentos_for_user(request.user)
     )
     
     # Obter tipos para os filtros
@@ -240,7 +245,14 @@ def escolher_origem_documento(request):
                 'success': False,
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
-        
+
+        if not documentos_for_user(request.user).filter(
+            id=documento_id,
+            imovel_id=imovel_id,
+            imovel__terra_indigena_id_id=tis_id,
+        ).exists():
+            return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
+
         # Salvar escolha na sessão
         session_key = f'origem_documento_{documento_id}'
         request.session[session_key] = origem_numero
@@ -283,13 +295,20 @@ def escolher_origem_lancamento(request):
                 'success': False,
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
-        
+
+        if not lancamentos_for_user(request.user).filter(
+            id=lancamento_id,
+            documento__imovel_id=imovel_id,
+            documento__imovel__terra_indigena_id_id=tis_id,
+        ).exists():
+            return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
+
         # Salvar escolha na sessão
         session_key = f'origem_lancamento_{lancamento_id}'
         request.session[session_key] = origem_numero
         
         # Recarregar dados da cadeia dominial com a nova escolha
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         cadeia_data = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
         
         return JsonResponse({
@@ -310,13 +329,14 @@ def escolher_origem_lancamento(request):
         }, status=500)
 
 @login_required
+@require_imovel_atribuido
 @require_http_methods(["GET"])
 def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
     """
     API para obter cadeia dominial atualizada com escolhas da sessão
     """
     try:
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         
         # Extrair escolhas de origem da sessão
         escolhas_origem = {}
@@ -331,7 +351,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         else:
             # Se não há escolhas, usar o método simples (tronco principal)
             from ..models import Imovel
-            imovel = Imovel.objects.get(id=imovel_id)
+            imovel = Imovel.objects.for_user(request.user).get(id=imovel_id)
             cadeia_simples = service.obter_cadeia_tabela(imovel, escolhas_origem)
             cadeia_data = {'cadeia': cadeia_simples}
         

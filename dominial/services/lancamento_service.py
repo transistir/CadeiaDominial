@@ -179,11 +179,21 @@ class LancamentoService:
     # ==================== ORIGENS ====================
     
     @staticmethod
-    def processar_origens_automaticas(lancamento, origem, imovel):
+    def processar_origens_automaticas(
+        lancamento,
+        origem,
+        imovel,
+        documentos_queryset=None,
+    ):
         """
         Processa origens para criar documentos automáticos
         """
-        return LancamentoOrigemService.processar_origens_automaticas(lancamento, origem, imovel)
+        return LancamentoOrigemService.processar_origens_automaticas(
+            lancamento,
+            origem,
+            imovel,
+            documentos_queryset=documentos_queryset,
+        )
     
     # ==================== CONSULTAS ====================
     

@@ -1,0 +1,181 @@
+"""
+Managers e helpers de segregação de dados por usuário (issue #132).
+
+Semântica canônica do acesso efetivo:
+
+``imóveis_visíveis(u)`` = imóveis das TIs atribuídas a ``u`` ∪ imóveis ligados
+diretamente a ``u`` por ``UserImovel`` (legado temporário).
+
+``tis_atribuídas(u)`` = todas as TIs, se ``u`` for superuser OU pertencer a uma
+equipe "global" (``GrupoAcesso(tipo='equipe', acesso_todas_tis=True)``);
+senão, TIs herdadas das equipes de ``u`` (``GroupTI``) ∪ TIs atribuídas
+diretamente a ``u`` por ``UserTI``.
+
+Uma equipe global (issue #132, fase 3) não gera linhas em ``GroupTI``: a
+condição é resolvida por uma subquery ``EXISTS`` (``membership_global``) que
+não referencia a TI concreta, portanto vale para todas as linhas — inclusive
+TIs cadastradas depois da ativação da flag. Desativar a flag revoga o acesso
+amplo na próxima consulta; ``GroupTI``/``UserTI`` explícitos preexistentes não
+são afetados.
+
+Superusuários veem todos os imóveis e todas as TIs (bypass inalterado).
+Usuários anônimos ou ``None`` não veem nada.
+
+``Cartorios`` e ``Pessoas`` são tabelas de referência GLOBAL para o app: os
+autocompletes precisam oferecer qualquer cartório/pessoa já cadastrado, senão
+o usuário recria registros duplicados. O admin é o caso oposto — lá a listagem
+de ``Pessoas`` é um cadastro de PII navegável, e por isso é escopada por
+``pessoas_for_user`` (ver ``PessoasAdmin``).
+
+O filtro em si é definido em um único lugar (``Imovel.objects.for_user``); os
+helpers de documentos, lançamentos, TIs e pessoas abaixo derivam dele.
+"""
+
+from django.db import models
+from django.db.models import Exists, Q
+
+
+def usuario_ve_tudo(user):
+    """Retorna True se o usuário deve ignorar a segregação (superuser)."""
+    return bool(user is not None and getattr(user, 'is_superuser', False))
+
+
+def usuario_autenticado(user):
+    """Retorna True se há um usuário autenticado (não anônimo, não None)."""
+    return bool(user is not None and getattr(user, 'is_authenticated', False))
+
+
+def imoveis_diretos_ids(user):
+    """
+    PKs dos imóveis atribuídos um-a-um ao usuário, como subquery.
+
+    LEGADO (Fase 6 / D7): mantido por 1 release como rede de rollback da
+    migração UserImovel→UserTI (2026-08). Remover após confirmar zero linhas
+    em produção.
+    """
+    from .models import UserImovel
+
+    return UserImovel.objects.filter(user=user).values('imovel_id')
+
+
+def membership_global(user):
+    """
+    Subquery ``EXISTS``: ``user`` pertence a alguma equipe com acesso a todas as TIs.
+
+    Não referencia a TI concreta (não é correlacionada por ``OuterRef``), então
+    o valor booleano resultante é o mesmo para toda linha de ``TIs`` — é assim
+    que "todas as TIs, inclusive futuras" é expresso sem materializar linhas em
+    ``GroupTI``.
+    """
+    from .models import GrupoAcesso
+
+    return Exists(GrupoAcesso.objects.filter(
+        tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True, group__user=user
+    ))
+
+
+def tis_atribuidas_ids(user):
+    """
+    PKs das TIs atribuídas via equipe (parcial ou global) ou diretamente.
+
+    Subquery, não lista — nunca avaliada em Python aqui, para preservar o
+    limite de 1 query SQL do ``for_user``.
+    """
+    from .models import TIs
+
+    return TIs.objects.filter(
+        Q(grupos_ti__group__user=user)
+        | Q(usuarios_ti__user=user)
+        | Q(membership_global(user))
+    ).values('pk')
+
+
+class SegregacaoQuerySet(models.QuerySet):
+    """QuerySet de ``Imovel`` com filtro de segregação por usuário."""
+
+    def for_user(self, user):
+        if not usuario_autenticado(user):
+            return self.none()
+        if usuario_ve_tudo(user):
+            return self
+        return self.filter(
+            Q(terra_indigena_id__in=tis_atribuidas_ids(user))
+            | Q(pk__in=imoveis_diretos_ids(user))
+        )
+
+
+class SegregacaoManager(models.Manager.from_queryset(SegregacaoQuerySet)):
+    """Manager padrão de ``Imovel``, expondo ``for_user(user)``."""
+
+    pass
+
+
+def documentos_for_user(user):
+    """Documentos visíveis ao usuário (via imóvel atribuído)."""
+    from .models import Documento, Imovel
+
+    if not usuario_autenticado(user):
+        return Documento.objects.none()
+    if usuario_ve_tudo(user):
+        return Documento.objects.all()
+    return Documento.objects.filter(imovel__in=Imovel.objects.for_user(user))
+
+
+def lancamentos_for_user(user):
+    """Lançamentos visíveis ao usuário (via documento → imóvel atribuído)."""
+    from .models import Imovel, Lancamento
+
+    if not usuario_autenticado(user):
+        return Lancamento.objects.none()
+    if usuario_ve_tudo(user):
+        return Lancamento.objects.all()
+    return Lancamento.objects.filter(documento__imovel__in=Imovel.objects.for_user(user))
+
+
+def tis_for_user(user):
+    """
+    TIs visíveis ao usuário: atribuídas via equipe ou diretamente.
+
+    A compatibilidade com ``UserImovel`` mantém visível a TI de um imóvel
+    legado. TIs atribuídas aparecem mesmo sem imóveis. Superuser vê todas.
+    """
+    from .models import TIs
+
+    if not usuario_autenticado(user):
+        return TIs.objects.none()
+    if usuario_ve_tudo(user):
+        return TIs.objects.all()
+    return TIs.objects.filter(
+        Q(pk__in=tis_atribuidas_ids(user))
+        | Q(imovel__in=imoveis_diretos_ids(user))
+    ).distinct()
+
+
+def pessoas_for_user(user):
+    """
+    Pessoas ligadas a algum imóvel atribuído ao usuário.
+
+    Uso restrito ao admin: ``Pessoas`` guarda CPF/RG/data de nascimento, e a
+    listagem do admin é um cadastro navegável — sem escopo, qualquer staff
+    lê o PII do sistema inteiro. Os autocompletes do app continuam globais
+    (ver docstring do módulo).
+
+    Um vínculo conta em qualquer uma das pontas: proprietário do imóvel, parte
+    de um lançamento (FK direta ou ``LancamentoPessoa``) ou parte de uma
+    alteração.
+    """
+    from .models import Imovel, Pessoas
+
+    if not usuario_autenticado(user):
+        return Pessoas.objects.none()
+    if usuario_ve_tudo(user):
+        return Pessoas.objects.all()
+    imoveis = Imovel.objects.for_user(user)
+    return Pessoas.objects.filter(
+        Q(imovel__in=imoveis)
+        | Q(transmitente_lancamento__documento__imovel__in=imoveis)
+        | Q(adquirente_lancamento__documento__imovel__in=imoveis)
+        | Q(lancamentopessoa__lancamento__documento__imovel__in=imoveis)
+        | Q(transmitente__imovel_id__in=imoveis)
+        | Q(adquirente__imovel_id__in=imoveis)
+    ).distinct()

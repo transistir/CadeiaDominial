@@ -1,6 +1,8 @@
+from django.conf import settings
 from django.db import models
 from django.core.exceptions import ValidationError
 
+from ..managers import SegregacaoManager
 from .identidade_expressions import numero_documento_normalizado_expression
 
 
@@ -44,6 +46,9 @@ class Imovel(models.Model):
     data_cadastro = models.DateField(auto_now_add=True) # Data de cadastro do imóvel
     arquivado = models.BooleanField(default=False, verbose_name="Arquivado") # Campo para arquivar imóveis
 
+    # Segregação por usuário (#132): expõe Imovel.objects.for_user(user)
+    objects = SegregacaoManager()
+
     class Meta:
         verbose_name = "Imóvel"
         verbose_name_plural = "Imóveis"
@@ -81,6 +86,46 @@ class Imovel(models.Model):
             return f"T{self.matricula}"
         else:
             return self.matricula
+
+
+class UserImovel(models.Model):
+    """
+    Atribuição de um imóvel a um usuário (issue #132).
+
+    Through model da M2M ``User ↔ Imovel``. A presença de uma linha aqui é o
+    que autoriza um usuário comum a enxergar/editar o imóvel — e, por herança
+    de FK, seus documentos e lançamentos. Superusers ignoram esta tabela.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='imoveis_atribuidos',
+        verbose_name='Usuário',
+    )
+    imovel = models.ForeignKey(
+        'Imovel',
+        on_delete=models.CASCADE,
+        related_name='usuarios_atribuidos',
+        verbose_name='Imóvel',
+    )
+    data_atribuicao = models.DateTimeField(auto_now_add=True, verbose_name='Data da atribuição')
+    atribuido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='atribuicoes_feitas',
+        verbose_name='Atribuído por',
+    )
+
+    class Meta:
+        unique_together = ('user', 'imovel')
+        verbose_name = 'Atribuição de Imóvel'
+        verbose_name_plural = 'Atribuições de Imóveis'
+        ordering = ['user__username', 'imovel__matricula']
+
+    def __str__(self):
+        return f"{self.user} → {self.imovel}"
 
 
 class Cartorios(models.Model):

@@ -1,14 +1,30 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
-from django.db.models import Q
+from django.db.models import Count, F, Max, Q
+from django.db.models.functions import Coalesce
+from django.http import Http404
+from ..managers import tis_for_user, usuario_ve_tudo
+from ..utils.permissoes_utils import usuario_pode_criar_ti
+from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 
 @login_required
 def home(request):
     busca = request.GET.get('busca', '').strip()
-    tis_cadastradas = TIs.objects.all()
+    imoveis_visiveis = Imovel.objects.for_user(request.user)
+    tis_cadastradas = (
+        tis_for_user(request.user)
+        .select_related('terra_referencia')
+        .annotate(
+            quantidade_imoveis=Count(
+                'imovel',
+                filter=Q(imovel__in=imoveis_visiveis),
+            )
+        )
+    )
     terras_referencia = TerraIndigenaReferencia.objects.all()
     if busca:
         tis_cadastradas = tis_cadastradas.filter(
@@ -17,26 +33,40 @@ def home(request):
         terras_referencia = terras_referencia.filter(
             Q(nome__icontains=busca) | Q(etnia__icontains=busca) | Q(codigo__icontains=busca)
         )
-    tis_com_imoveis = {tis.id: Imovel.objects.filter(terra_indigena_id=tis).count() for tis in tis_cadastradas}
     tis_ordenadas = sorted(
         tis_cadastradas,
-        key=lambda x: (tis_com_imoveis.get(x.id, 0), x.nome),
-        reverse=True
+        key=lambda tis: (tis.quantidade_imoveis, tis.nome),
+        reverse=True,
     )
+    tis_com_imoveis = {
+        tis.id: tis.quantidade_imoveis
+        for tis in tis_ordenadas
+    }
     terras_referencia = terras_referencia.order_by('nome')
-    codigos_tis_cadastradas = set(tis.codigo for tis in tis_cadastradas)
+    codigos_tis_cadastradas = {tis.codigo for tis in tis_ordenadas}
     terras_referencia_nao_cadastradas = [tr for tr in terras_referencia if tr.codigo not in codigos_tis_cadastradas]
+    if not usuario_ve_tudo(request.user) and not any(tis_com_imoveis.values()):
+        messages.info(request, MENSAGEM_SEM_IMOVEIS)
     return render(request, 'dominial/home.html', {
         'terras_indigenas': tis_ordenadas,
         'terras_referencia': terras_referencia_nao_cadastradas,
         'busca': busca,
-        'total_tis_cadastradas': tis_cadastradas.count(),
+        'total_tis_cadastradas': len(tis_ordenadas),
         'total_terras_referencia': len(terras_referencia_nao_cadastradas),
         'tis_com_imoveis': tis_com_imoveis,
+        'pode_criar_ti': usuario_pode_criar_ti(request.user),
     })
 
 @login_required
 def tis_form(request):
+    # Fase 3 (F8/F9): cadastrar TI exige perfil Administrador ou
+    # superusuário. Vale para GET e POST, e roda antes de instanciar/
+    # processar o TIsForm — esconder o botão na home não é suficiente,
+    # porque a URL pode ser acessada diretamente. Usuário autenticado sem o
+    # perfil recebe 403 (não é enumeração de objeto); anônimo continua
+    # redirecionado ao login pelo @login_required acima.
+    if not usuario_pode_criar_ti(request.user):
+        raise PermissionDenied('Apenas o perfil Administrador pode cadastrar Terras Indígenas.')
     if request.method == 'POST':
         form = TIsForm(request.POST)
         if form.is_valid():
@@ -58,55 +88,24 @@ def tis_detail(request, tis_id):
     status = request.GET.get('status', 'ativos')
     is_arquivado = status == 'arquivados'
     
-    # Ordenar imóveis pela atividade mais recente na cadeia dominial
-    from django.db import connection
-    from ..models import Documento, Lancamento
-    
-    # Usar SQL raw para evitar problemas com campos do modelo
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT 
-                i.id,
-                i.nome,
-                i.matricula,
-                i.data_cadastro,
-                i.observacoes,
-                i.cartorio_id,
-                i.proprietario_id,
-                i.terra_indigena_id_id,
-                i.arquivado,
-                MAX(d.data_cadastro) as ultimo_documento,
-                MAX(l.data_cadastro) as ultimo_lancamento
-            FROM dominial_imovel i
-            LEFT JOIN dominial_documento d ON d.imovel_id = i.id
-            LEFT JOIN dominial_lancamento l ON l.documento_id = d.id
-            WHERE i.terra_indigena_id_id = %s AND i.arquivado = %s
-            GROUP BY i.id, i.nome, i.matricula, i.data_cadastro, i.observacoes, i.cartorio_id, i.proprietario_id, i.terra_indigena_id_id, i.arquivado
-            ORDER BY 
-                COALESCE(MAX(d.data_cadastro), MAX(l.data_cadastro), i.data_cadastro) DESC,
-                i.matricula ASC
-        """, [tis_id, is_arquivado])
-        
-        # Converter resultados em objetos Imovel
-        imoveis_data = cursor.fetchall()
-        imoveis_ordenados = []
-        
-        for row in imoveis_data:
-            # Criar um objeto Imovel temporário com os dados do banco
-            imovel = Imovel()
-            imovel.id = row[0]
-            imovel.nome = row[1]
-            imovel.matricula = row[2]
-            imovel.data_cadastro = row[3]
-            imovel.observacoes = row[4]
-            imovel.cartorio_id = row[5]
-            imovel.proprietario_id = row[6]
-            imovel.terra_indigena_id_id = row[7]
-            imovel.arquivado = row[8]
-            imovel.ultimo_documento = row[9]
-            imovel.ultimo_lancamento = row[10]
-            imoveis_ordenados.append(imovel)
-    
+    # Ordenar imóveis pela atividade mais recente na cadeia dominial:
+    # documento mais recente, senão lançamento mais recente, senão o
+    # próprio cadastro do imóvel; matrícula como desempate.
+    imoveis_ordenados = (
+        Imovel.objects.for_user(request.user)
+        .filter(terra_indigena_id=tis, arquivado=is_arquivado)
+        .annotate(
+            ultimo_documento=Max('documentos__data_cadastro'),
+            ultimo_lancamento=Max('documentos__lancamentos__data_cadastro'),
+            atividade=Coalesce(
+                Max('documentos__data_cadastro'),
+                Max('documentos__lancamentos__data_cadastro'),
+                F('data_cadastro'),
+            ),
+        )
+        .order_by('-atividade', 'matricula')
+    )
+
     return render(request, 'dominial/tis_detail.html', {
         'tis': tis,
         'imoveis': imoveis_ordenados,
@@ -115,13 +114,16 @@ def tis_detail(request, tis_id):
 
 @login_required
 def tis_delete(request, tis_id):
-    if not request.user.is_staff:
-        messages.error(request, 'Você não tem permissão para excluir terras indígenas.')
-        return redirect('home')
-    tis = get_object_or_404(TIs, id=tis_id)
+    tis = get_object_or_404(tis_for_user(request.user), id=tis_id)
+    if not request.user.is_superuser:
+        # Exclusão em cascata de uma TI é uma operação exclusiva de superuser.
+        # Responder 404 mantém o padrão de não revelar objetos fora do escopo.
+        raise Http404
     if request.method == 'POST':
         try:
-            Imovel.objects.filter(terra_indigena_id=tis).delete()
+            Imovel.objects.for_user(request.user).filter(
+                terra_indigena_id=tis
+            ).delete()
             nome = tis.nome
             tis.delete()
             messages.success(request, f'Terra Indígena "{nome}" excluída com sucesso!')
@@ -134,15 +136,15 @@ def tis_delete(request, tis_id):
 def imoveis(request, tis_id=None):
     if tis_id:
         tis = get_object_or_404(TIs, id=tis_id)
-        imoveis = Imovel.objects.filter(terra_indigena_id=tis).order_by('matricula')
+        imoveis = Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis).order_by('matricula')
     else:
-        imoveis = Imovel.objects.all().order_by('matricula')
+        imoveis = Imovel.objects.for_user(request.user).order_by('matricula')
     return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
 
 @login_required
 def imovel_detail(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     if request.method == 'POST':
         form = ImovelForm(request.POST, instance=imovel)
@@ -165,7 +167,7 @@ def imovel_detail(request, tis_id, imovel_id):
 @login_required
 def imovel_delete(request, tis_id, imovel_id):
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     if request.method == 'POST':
         try:
@@ -185,7 +187,7 @@ def imovel_delete(request, tis_id, imovel_id):
 def arquivar_imovel(request, tis_id, imovel_id):
     """View para arquivar ou desarquivar um imóvel"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     try:
         # Alternar status de arquivado
@@ -202,4 +204,4 @@ def arquivar_imovel(request, tis_id, imovel_id):
             return redirect(f'/dominial/tis/{tis.id}/?status=arquivados')
     except Exception as e:
         messages.error(request, f'Erro ao alterar status do imóvel: {str(e)}')
-        return redirect('tis_detail', tis_id=tis.id) 
+        return redirect('tis_detail', tis_id=tis.id)

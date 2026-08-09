@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+{{ form.media }}
+<style>
+    .atribuicao-form .form-row { padding: 12px; }
+    .atribuicao-form .errorlist { color: var(--error-fg); }
+    .previa { margin: 20px 0; padding: 16px; border: 1px solid var(--hairline-color); }
+    .previa[hidden] { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <form method="post" class="atribuicao-form" id="atribuicao-form">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <fieldset class="module aligned">
+            {% for field in form %}
+                <div class="form-row field-{{ field.name }}">
+                    {{ field.errors }}
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+                </div>
+            {% endfor %}
+        </fieldset>
+
+        <section class="previa" id="previa" aria-live="polite">
+            <h2>Prévia obrigatória</h2>
+            <p id="previa-texto">
+                Revise o impacto antes de aplicar. A atribuição dá acesso aos imóveis de hoje
+                e a todos os imóveis futuros dessas TIs.
+            </p>
+        </section>
+
+        <div class="submit-row">
+            <button type="button" id="revisar">Revisar</button>
+            <input type="submit" class="default" id="aplicar" value="Aplicar atribuição" disabled>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('atribuicao-form');
+    const revisar = document.getElementById('revisar');
+    const aplicar = document.getElementById('aplicar');
+    const texto = document.getElementById('previa-texto');
+
+    form.addEventListener('change', function () { aplicar.disabled = true; });
+    form.addEventListener('click', function (event) {
+        if (event.target.closest('.selector button')) aplicar.disabled = true;
+    });
+
+    function valoresEscolhidos(nome, dados) {
+        const escolhidos = document.getElementById('id_' + nome + '_to');
+        if (escolhidos) {
+            return Array.from(escolhidos.options, function (option) {
+                return option.value;
+            });
+        }
+        return dados.getAll(nome);
+    }
+
+    revisar.addEventListener('click', function () {
+        const dados = new FormData(form);
+        fetch('{{ previa_url|escapejs }}', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': dados.get('csrfmiddlewaretoken')
+            },
+            body: JSON.stringify({
+                acao: dados.get('acao'),
+                tis: valoresEscolhidos('tis', dados),
+                equipes: valoresEscolhidos('equipes', dados),
+                usuarios: valoresEscolhidos('usuarios', dados)
+            })
+        })
+        .then(function (response) {
+            return response.json().then(function (json) {
+                if (!response.ok) throw json;
+                return json;
+            });
+        })
+        .then(function (json) {
+            texto.textContent = json.frase;
+            aplicar.disabled = false;
+        })
+        .catch(function (json) {
+            texto.textContent = json.erro || 'Corrija os campos destacados antes de revisar.';
+            aplicar.disabled = true;
+        });
+    });
+});
+</script>
+{% endblock %}

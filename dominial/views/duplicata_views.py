@@ -2,13 +2,19 @@
 Views para processamento de duplicatas na criação de lançamentos
 """
 
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 from django.http import JsonResponse, Http404
-from ..models import TIs, Imovel, Documento
+from ..models import TIs, Imovel
+from ..services.lancamento_criacao_service import ERRO_DUPLICATA
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
+from ..managers import documentos_for_user
+
+logger = logging.getLogger(__name__)
 
 
 @login_required
@@ -20,8 +26,12 @@ def verificar_duplicata_ajax(request, tis_id, imovel_id, documento_id):
     try:
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
+        documento_ativo = get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel=imovel,
+        )
         
         # Verificar duplicata
         resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
@@ -42,12 +52,19 @@ def verificar_duplicata_ajax(request, tis_id, imovel_id, documento_id):
                 'tem_duplicata': False,
                 'mensagem': resultado['mensagem']
             })
-            
-    except Exception as e:
-        return JsonResponse({
-            'tem_duplicata': False,
-            'mensagem': f'Erro na verificação: {str(e)}'
-        })
+
+    except Http404:
+        # Não converter em JSON 200: imóvel/documento fora do escopo do
+        # usuário deve propagar como 404, não como falso "sem duplicata".
+        raise
+    except Exception:
+        # Mesmo motivo do service: responder 200 com `tem_duplicata: False`
+        # transformava uma falha da verificação em "não há duplicata", e ainda
+        # devolvia o texto da exceção ao cliente (#132).
+        logger.exception('Falha ao verificar duplicatas do documento %s', documento_id)
+        return JsonResponse(
+            {'tem_duplicata': None, 'mensagem': ERRO_DUPLICATA}, status=500
+        )
 
 
 @login_required
@@ -59,8 +76,12 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
     try:
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
+        documento_ativo = get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel=imovel,
+        )
         
         # Processar importação
         resultado = LancamentoDuplicataService.processar_importacao_duplicata(
@@ -74,16 +95,13 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
             try:
                 from ..services.lancamento_criacao_service import LancamentoCriacaoService
                 
-                # Marcar que estamos criando após importação para pular verificação de duplicatas
-                request.POST = request.POST.copy()
-                request.POST['apos_importacao'] = 'true'
-                
                 # Criar o lançamento original usando os dados do POST
                 lancamento_criado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
                     request=request,
                     tis=tis,
                     imovel=imovel,
-                    documento_ativo=documento_ativo
+                    documento_ativo=documento_ativo,
+                    apos_importacao=True,
                 )
                 
                 if lancamento_criado:
@@ -130,8 +148,12 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
     try:
         # Obter objetos básicos
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-        documento_ativo = get_object_or_404(Documento, id=documento_id, imovel=imovel)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
+        documento_ativo = get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel=imovel,
+        )
         
         # Marcar na sessão que o usuário cancelou uma duplicata
         request.session['duplicata_cancelada'] = True
@@ -158,4 +180,4 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
                           imovel_id=imovel.id, 
                           documento_id=documento_ativo.id)
         else:
-            return redirect('imoveis', tis_id=tis_id) 
+            return redirect('imoveis', tis_id=tis_id)
