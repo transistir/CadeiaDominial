@@ -46,7 +46,7 @@ from django.contrib.auth.forms import (
     UserCreationForm as DjangoUserCreationForm,
 )
 from django.contrib.auth.models import Group, User
-from django.urls import NoReverseMatch, reverse
+from django.urls import reverse
 from .managers import (
     documentos_for_user,
     lancamentos_for_user,
@@ -1024,15 +1024,6 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
                 form.cleaned_data['perfil'],
                 form.cleaned_data.get('equipes', []),
             )
-
-    def response_add(self, request, obj, post_url_continue=None):
-        try:
-            url = reverse('admin:dominial_atribuicao_em_massa')
-        except NoReverseMatch:
-            url = reverse('admin:auth_user_changelist')
-        else:
-            url = f'{url}?usuario={obj.pk}'
-        return redirect(url)
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
