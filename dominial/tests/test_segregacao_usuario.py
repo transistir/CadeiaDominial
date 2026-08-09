@@ -1550,6 +1550,43 @@ class EquipeGlobalAdminTest(SegregacaoBaseTestCase):
         acesso.refresh_from_db()
         self.assertFalse(acesso.acesso_todas_tis)
 
+    def test_filtro_parcial_nao_inclui_perfis(self):
+        equipe_parcial = Group.objects.create(name='Equipe parcial sem perfil')
+        GrupoAcesso.objects.create(group=equipe_parcial, tipo=GrupoAcesso.EQUIPE)
+        perfil_avulso = Group.objects.create(name='Perfil avulso parcial')
+        GrupoAcesso.objects.create(group=perfil_avulso, tipo=GrupoAcesso.PERFIL)
+        perfil_protegido = Group.objects.get(name='Perfil: Editor')
+        self.assertTrue(perfil_protegido.acesso.protegido)
+
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse('admin:auth_group_changelist'), {'escopo_global': 'parcial'}
+        )
+
+        nomes = [g.name for g in response.context['cl'].result_list]
+        self.assertIn(equipe_parcial.name, nomes)
+        self.assertNotIn(perfil_avulso.name, nomes)
+        self.assertNotIn(perfil_protegido.name, nomes)
+
+    def test_coluna_numero_tis_e_dinamica_para_equipe_global(self):
+        equipe = Group.objects.create(name='Equipe global com residual')
+        GrupoAcesso.objects.create(
+            group=equipe, tipo=GrupoAcesso.EQUIPE, acesso_todas_tis=True
+        )
+        GroupTI.objects.create(group=equipe, tis=self.tis_a, atribuido_por=self.superuser)
+        parcial = Group.objects.create(name='Equipe parcial com uma TI')
+        GrupoAcesso.objects.create(group=parcial, tipo=GrupoAcesso.EQUIPE)
+        GroupTI.objects.create(group=parcial, tis=self.tis_a, atribuido_por=self.superuser)
+
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('admin:auth_group_changelist'))
+
+        admin_group = GroupAdmin(Group, admin.site)
+        resultados = {obj: obj for obj in response.context['cl'].result_list}
+        self.assertEqual(admin_group.numero_tis(resultados[equipe]), '—')
+        self.assertEqual(admin_group.escopo(resultados[equipe]), 'Todas (dinâmico)')
+        self.assertEqual(admin_group.numero_tis(resultados[parcial]), 1)
+
     def test_perfil_protegido_campo_global_readonly_e_post_forjado_recusado(self):
         perfil = Group.objects.get(name='Perfil: Editor')
         self.client.force_login(self.superuser)

@@ -1166,7 +1166,11 @@ class EscopoGlobalListFilter(admin.SimpleListFilter):
         if self.value() == 'global':
             return queryset.filter(acesso__acesso_todas_tis=True)
         if self.value() == 'parcial':
-            return queryset.filter(acesso__acesso_todas_tis=False)
+            # Só equipes: perfis não têm escopo de TI, e sem o filtro de tipo
+            # eles entrariam em "Parcial" apenas por terem a flag falsa.
+            return queryset.filter(
+                acesso__tipo=GrupoAcesso.EQUIPE, acesso__acesso_todas_tis=False
+            )
         return queryset
 
 
@@ -1243,7 +1247,21 @@ class GroupAdmin(AtribuicaoAuditoriaMixin, DjangoGroupAdmin):
 
     @admin.display(description='Nº de TIs', ordering='_numero_tis')
     def numero_tis(self, obj):
+        """
+        Para equipe global a contagem de vínculos é ruído: ela vê todas as TIs
+        independentemente dos ``GroupTI`` residuais. A coluna "Escopo" é a
+        fonte canônica; aqui só marcamos que o número não se aplica.
+        """
+        if self._acesso_global(obj):
+            return '—'
         return obj._numero_tis
+
+    @staticmethod
+    def _acesso_global(obj):
+        try:
+            return obj.acesso.acesso_todas_tis
+        except GrupoAcesso.DoesNotExist:
+            return False
 
     @admin.display(description='Escopo')
     def escopo(self, obj):
