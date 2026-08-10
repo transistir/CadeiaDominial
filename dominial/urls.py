@@ -17,13 +17,13 @@ from .views.autocomplete_views import pessoa_autocomplete, cartorio_autocomplete
 urlpatterns = [
     # Páginas principais
     path('', home, name='home'),
-    
+
     # TIs
     path('tis/', tis_form, name='tis_form'),
     path('tis/<int:tis_id>/', tis_detail, name='tis_detail'),
     path('tis/<int:tis_id>/excluir/', tis_delete, name='tis_delete'),
     path('tis/<int:tis_id>/imoveis/', imoveis, name='imoveis'),
-    
+
     # Imóveis
     path('tis/<int:tis_id>/imovel/cadastro/', imovel_form, name='imovel_cadastro'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/', imovel_detail, name='imovel_detail'),

@@ -77,8 +77,8 @@ jobs:
 
             echo "==> Executando build sem cache"
 
-            if ! docker-compose build --no-cache web; then
-              echo "ERRO: docker-compose build --no-cache web falhou." >&2
+            if ! docker-compose build --no-cache web nginx; then
+              echo "ERRO: docker-compose build --no-cache web nginx falhou." >&2
               exit 1
             fi
 

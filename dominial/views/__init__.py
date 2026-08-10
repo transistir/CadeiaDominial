@@ -82,7 +82,7 @@ __all__ = [
     'imoveis',
     'imovel_detail',
     'imovel_delete',
-    
+
     # Views de Imóveis
     'imovel_form',
     
@@ -105,12 +105,12 @@ __all__ = [
     'cadeia_dominial_dados',
     'cadeia_dominial_tabela',
     'cadeia_dominial_d3',
-    
+
     # Views de Documentos Digitais
     'upload_documento_digital',
     'servir_documento_digital',
     'excluir_documento_digital',
-    
+
     # Views de API/AJAX
     'buscar_cidades',
     'buscar_cartorios',
@@ -129,4 +129,4 @@ __all__ = [
     'pessoa_autocomplete',
     'cartorio_autocomplete',
     'cartorio_imoveis_autocomplete',
-] 
+]

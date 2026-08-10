@@ -28,7 +28,7 @@ class HierarquiaArvoreService:
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         Lógica corrigida: filho -> pai (esquerda -> direita)
-        
+
         Args:
             imovel: Objeto Imovel
             criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
