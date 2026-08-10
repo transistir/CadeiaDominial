@@ -70,6 +70,16 @@ RELACOES_MERGE = (
     (Alteracoes, 'cartorio_origem'),
 )
 
+# FKs fora do escopo do merge. Documentadas para auditabilidade — o command
+# NÃO as reatribui, conforme issue #110 (que delimita escopo a "SOMENTE CRI").
+# cartorio_transmissao e cartorio_transacao referem-se a cartórios de
+# TRANSMISSÃO (tabelionato, notas), não de REGISTRO DE IMÓVEIS. Fundi-los
+# em um CRI seria semanticamente incorreto. Ver issue #113.
+RELACOES_FORA_ESCOPO = (
+    (Lancamento, 'cartorio_transmissao'),
+    (Lancamento, 'cartorio_transacao'),
+)
+
 # Advisory lock 0xCA21 (cartórios issue 110). Constante de 32 bits.
 ADVISORY_LOCK_KEY = 0xCA21
 ADVISORY_LOCK_CLASS = 1  # 'merge' namespace
@@ -85,20 +95,32 @@ CSV_FIELDS = (
 
 
 def _normalizar_decisao_csv(linha):
-    """Converte a linha do CSV para os tipos internos."""
-    return {
-        'decisao': linha['decisao'].strip().upper(),
-        'linha': linha['linha'].strip(),
-        'ghost_id': int(linha['ghost_id']),
-        'cns_ghost': linha['cns_ghost'].strip(),
-        'nome_ghost': linha['nome_ghost'].strip().strip('"'),
-        'fk_count': int(linha.get('fk_count') or 0),
-        'target_id': int(linha['target_id']) if linha.get('target_id', '').strip() else None,
-        'cns_target': (linha.get('cns_target') or '').strip(),
-        'nome_target': (linha.get('nome_target') or '').strip().strip('"'),
-        'tipo': linha.get('tipo', 'CRI').strip().upper(),
-        'justificativa': linha.get('justificativa', '').strip(),
-    }
+    """Converte a linha do CSV para os tipos internos.
+
+    Levanta CommandError (não ValueError) com a linha do CSV caso o
+    cast de tipos falhe — assim o usuário vê uma mensagem clara em vez
+    de um stacktrace.
+    """
+    num = linha.get('linha', '?')
+    try:
+        return {
+            'decisao': linha['decisao'].strip().upper(),
+            'linha': linha['linha'].strip(),
+            'ghost_id': int(linha['ghost_id']),
+            'cns_ghost': linha['cns_ghost'].strip(),
+            'nome_ghost': linha['nome_ghost'].strip().strip('"'),
+            'fk_count': int(linha.get('fk_count') or 0),
+            'target_id': int(linha['target_id']) if linha.get('target_id', '').strip() else None,
+            'cns_target': (linha.get('cns_target') or '').strip(),
+            'nome_target': (linha.get('nome_target') or '').strip().strip('"'),
+            'tipo': linha.get('tipo', 'CRI').strip().upper(),
+            'justificativa': linha.get('justificativa', '').strip(),
+        }
+    except (ValueError, TypeError, KeyError) as e:
+        raise CommandError(
+            f'Linha {num} do CSV malformada: {e!r}. '
+            f'Campos: {sorted(linha.keys())}'
+        )
 
 
 def _calcular_sha256(caminho):
@@ -120,14 +142,15 @@ def _git_head():
         return ''
 
 
-def _advisory_lock_postgres(cursor, key, cls=ADVISORY_LOCK_CLASS):
-    """Tenta pg_advisory_lock(cls, key). Retorna True se conseguiu."""
-    cursor.execute('SELECT pg_try_advisory_lock(%s, %s)', [cls, key])
+def _advisory_xact_lock_postgres(cursor, key, cls=ADVISORY_LOCK_CLASS):
+    """Tenta pg_try_advisory_xact_lock(cls, key).
+
+    IMPORTANTE: precisa ser chamado DENTRO de uma transação ativa.
+    O lock é liberado automaticamente no fim da transação (commit ou
+    rollback), imune a pool-recycle e crash de processo.
+    """
+    cursor.execute('SELECT pg_try_advisory_xact_lock(%s, %s)', [cls, key])
     return cursor.fetchone()[0]
-
-
-def _advisory_unlock_postgres(cursor, key, cls=ADVISORY_LOCK_CLASS):
-    cursor.execute('SELECT pg_advisory_unlock(%s, %s)', [cls, key])
 
 
 def _hostname():
@@ -323,6 +346,12 @@ class Command(BaseCommand):
         if not options['allow_outro']:
             merges_validos = []
             for l in merges:
+                # Self-merge: ghost == target é sempre bug.
+                if l['ghost_id'] == l['target_id']:
+                    raise CommandError(
+                        f'Linha {l["linha"]}: ghost_id ({l["ghost_id"]}) == '
+                        f'target_id ({l["target_id"]}). Self-merge é proibido.'
+                    )
                 ghost = Cartorios.objects.filter(pk=l['ghost_id']).first()
                 if not ghost:
                     if options['allow_missing_ghosts']:
@@ -390,6 +419,11 @@ class Command(BaseCommand):
         self._out(f'  MERGE: {len(merges)}')
         self._out(f'  BLOCKED: {len(bloqueados)}')
         self._out(f'batch_size={options["batch_size"]}, max_fk_count={max_fk or "sem limite"}')
+        # Auditabilidade: warn explícito sobre FKs fora do escopo (issue #113).
+        self._out(
+            f'FKs fora do escopo (preservadas como estão, ver issue #113): '
+            f'{", ".join(f"{m._meta.model_name}.{c}" for m, c in RELACOES_FORA_ESCOPO)}'
+        )
         self._out(f'host={_hostname()}, git={_git_head()[:12] or "(sem git)"}')
         self._out('')
 
@@ -407,19 +441,27 @@ class Command(BaseCommand):
             self._ok('Dry-run concluído sem alterações.')
             return
 
-        # APPLY: pega advisory lock e processa linha a linha.
-        with connection.cursor() as cursor:
-            conseguiu = _advisory_lock_postgres(cursor, options['pg_advisory_lock_key'])
-            if not conseguiu:
-                raise CommandError(
-                    f'Advisory lock {options["pg_advisory_lock_key"]:#x} ocupado. '
-                    f'Outro merge em andamento?'
+        # APPLY: pega advisory lock (xact-level, auto-released) e processa
+        # linha a linha. A transação externa garante que o lock seja liberado
+        # no fim, mesmo em caso de crash ou pool-recycle.
+        sha = _calcular_sha256(decisao_path)
+        git_sha = _git_head()
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                conseguiu = _advisory_xact_lock_postgres(
+                    cursor, options['pg_advisory_lock_key']
                 )
-            try:
-                self._out(f'✓ pg_advisory_lock({ADVISORY_LOCK_CLASS}, '
-                          f'{options["pg_advisory_lock_key"]:#x}) adquirido')
-                sha = _calcular_sha256(decisao_path)
-                git_sha = _git_head()
+                if not conseguiu:
+                    raise CommandError(
+                        f'Advisory lock {options["pg_advisory_lock_key"]:#x} ocupado. '
+                        f'Outro merge em andamento?'
+                    )
+                self._out(
+                    f'✓ pg_try_advisory_xact_lock({ADVISORY_LOCK_CLASS}, '
+                    f'{options["pg_advisory_lock_key"]:#x}) adquirido '
+                    f'(auto-released no fim da transação)'
+                )
+
                 for l in merges:
                     self._apply_linha(l, sha, git_sha, options)
                 for l in bloqueados:
@@ -427,9 +469,8 @@ class Command(BaseCommand):
                         f'  [linha {l["linha"]}] BLOCKED ghost={l["ghost_id"]} — pulado, '
                         f'sem destino definido'
                     )
-            finally:
-                _advisory_unlock_postgres(cursor, options['pg_advisory_lock_key'])
-                self._out(f'✓ Advisory lock liberado')
+                # Lock liberado automaticamente no commit (fim do with).
+                self._out(f'✓ Transação externa commitada (lock liberado)')
 
         self._out('')
         self._ok(f'Apply concluído. {len(merges)} merge(s), {len(bloqueados)} bloqueado(s).')
@@ -474,6 +515,27 @@ class Command(BaseCommand):
         target_label = (
             f'#{l["target_id"]} "{l["nome_target"][:50]}"' if target else '?'
         )
+
+        # Idempotência: se o ghost já está soft-deletado (re-run do command),
+        # pula em vez de sobrescrever deleted_at com timestamp novo.
+        if ghost and ghost.deleted_at is not None:
+            self._warn(
+                f'  [linha {l["linha"]}] MERGE ghost={ghost_label} já está soft-deletado '
+                f'(deleted_at={ghost.deleted_at.isoformat()}) — pulando. '
+                f'Log: SKIPPED_ALREADY_MERGED'
+            )
+            CartorioMergeLog.objects.create(
+                ghost_id=l['ghost_id'],
+                target_id=l.get('target_id') or 0,
+                fase=self._fase_da_linha(l),
+                fk_breakdown_json={},
+                decisao_csv_sha256=decisao_sha,
+                applied_by=getpass.getuser() or 'unknown',
+                git_commit=git_sha,
+                status='SKIPPED_ALREADY_MERGED',
+                detalhes_json={'motivo': 'ghost já soft-deletado', 'linha': l['linha']},
+            )
+            return
 
         if not ghost or not target:
             self._err(
@@ -584,14 +646,28 @@ class Command(BaseCommand):
                             continue
                         model_name, campo = chave.split('.')
                         coluna = f'{campo}_id'
-                        # Reverte os N mais recentes do target de volta para ghost.
-                        # Limitamos a `count` para não reatribuir mais que o original.
+                        # SAFETY: antes de reverter, valida que o número de
+                        # rows no target é EXATAMENTE o esperado. Se houver
+                        # INSERTs novos no target após o apply, o rollback
+                        # moveria dados não-mergeados. Recusar nesse caso.
                         for modelo, _ in RELACOES_MERGE:
                             if modelo._meta.model_name == model_name:
+                                count_atual = modelo.objects.filter(
+                                    **{coluna: log.target_id}
+                                ).count()
+                                if count_atual != count:
+                                    raise CommandError(
+                                        f'log id={log.id} {chave}: count atual no '
+                                        f'target ({count_atual}) != count aplicado '
+                                        f'({count}). Houve INSERTs novos no target '
+                                        f'— rollback abortado para não corromper '
+                                        f'dados. Use --force-rollback se realmente '
+                                        f'precisar reverter.'
+                                    )
+                                # Reverte os N rows (todos, na ordem PK).
                                 ids = list(
                                     modelo.objects.filter(**{coluna: log.target_id})
-                                    .order_by('-pk')
-                                    .values_list('pk', flat=True)[:count]
+                                    .values_list('pk', flat=True)
                                 )
                                 modelo.objects.filter(pk__in=ids).update(
                                     **{coluna: log.ghost_id}

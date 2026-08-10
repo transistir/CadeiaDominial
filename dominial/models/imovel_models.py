@@ -131,13 +131,9 @@ class Cartorios(models.Model):
                 name='cartorio_cns_ativo_unique',
             ),
         ]
-        indexes = [
-            models.Index(
-                fields=['deleted_at'],
-                condition=models.Q(deleted_at__isnull=True),
-                name='cartorio_ativo_idx',
-            ),
-        ]
+        # (removido cartorio_ativo_idx — redundante com cartorio_cns_ativo_unique.
+        #  Ambos indexam `WHERE deleted_at IS NULL` na mesma coluna. Achado #2
+        #  da revisão PR #136.)
 
 
 class CartorioMergeLog(models.Model):

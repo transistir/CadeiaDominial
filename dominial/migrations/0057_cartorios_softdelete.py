@@ -32,14 +32,15 @@ class Migration(migrations.Migration):
                 verbose_name='Soft-delete',
             ),
         ),
-        # 2. Índice parcial — só cartórios ativos (perf admin/autocomplete)
-        migrations.AddIndex(
+        # 2. (removido) Índice parcial cartorio_ativo_idx.
+        #    Era redundante com cartorio_cns_ativo_unique — ambos
+        #    indexam `WHERE deleted_at IS NULL` na mesma coluna. O
+        #    UNIQUE parcial já cria índice implícito. Removido em
+        #    revisão PR #136 (achado #2). Como o índice foi criado
+        #    em homolog, esta migration faz o DROP correspondente.
+        migrations.RemoveIndex(
             model_name='cartorios',
-            index=models.Index(
-                fields=['deleted_at'],
-                condition=Q(deleted_at__isnull=True),
-                name='cartorio_ativo_idx',
-            ),
+            name='cartorio_ativo_idx',
         ),
         # 3. UNIQUE em cns vira PARCIAL `WHERE deleted_at IS NULL`
         #    O AlterField remove o unique=True (Django gera SQL DROP CONSTRAINT).
