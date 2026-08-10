@@ -238,6 +238,11 @@ class Command(BaseCommand):
             help='Pula o gate de BACKUP_VERIFIED (use só em homolog).',
         )
         parser.add_argument(
+            '--allow-missing-ghosts', action='store_true',
+            help='Em homolog, pula com warning cartórios do CSV que não existem '
+                 'no banco (em prod todos devem existir).',
+        )
+        parser.add_argument(
             '--rollback-fase', type=int, default=None,
             help='Restaura os soft-deletes da fase N lendo CartorioMergeLog.',
         )
@@ -290,15 +295,16 @@ class Command(BaseCommand):
                 )
             self._ok(f'✓ Assinatura SHA-256 validada: {calculado[:16]}...')
 
-        # Carrega CSV.
+        # Carrega CSV (pula linhas iniciadas com '#' — comentários / header).
         with open(decisao_path, newline='', encoding='utf-8') as f:
-            leitor = csv.DictReader(f)
-            if not leitor.fieldnames:
-                raise CommandError('CSV vazio.')
-            faltando = set(CSV_FIELDS) - set(leitor.fieldnames)
-            if faltando:
-                raise CommandError(f'CSV faltando colunas: {sorted(faltando)}')
-            linhas = [_normalizar_decisao_csv(l) for l in leitor]
+            linhas_raw = [linha for linha in f if not linha.lstrip().startswith('#')]
+        leitor = csv.DictReader(linhas_raw)
+        if not leitor.fieldnames:
+            raise CommandError('CSV vazio.')
+        faltando = set(CSV_FIELDS) - set(leitor.fieldnames)
+        if faltando:
+            raise CommandError(f'CSV faltando colunas: {sorted(faltando)}')
+        linhas = [_normalizar_decisao_csv(l) for l in leitor]
 
         if not linhas:
             raise CommandError('CSV sem linhas de decisão.')
@@ -315,14 +321,28 @@ class Command(BaseCommand):
 
         # Validação OUTRO (gate padrão é só CRI).
         if not options['allow_outro']:
+            merges_validos = []
             for l in merges:
                 ghost = Cartorios.objects.filter(pk=l['ghost_id']).first()
                 if not ghost:
+                    if options['allow_missing_ghosts']:
+                        self._warn(
+                            f'⚠ Ghost id={l["ghost_id"]} (linha {l["linha"]}) '
+                            f'não existe no banco — pulando.'
+                        )
+                        continue
                     raise CommandError(
-                        f'Ghost id={l["ghost_id"]} (linha {l["linha"]}) não existe no banco.'
+                        f'Ghost id={l["ghost_id"]} (linha {l["linha"]}) não existe no banco. '
+                        f'Use --allow-missing-ghosts para pular (homolog).'
                     )
                 target = Cartorios.objects.filter(pk=l['target_id']).first()
                 if not target:
+                    if options['allow_missing_ghosts']:
+                        self._warn(
+                            f'⚠ Target id={l["target_id"]} (linha {l["linha"]}) '
+                            f'não existe no banco — pulando.'
+                        )
+                        continue
                     raise CommandError(
                         f'Target id={l["target_id"]} (linha {l["linha"]}) não existe no banco.'
                     )
@@ -336,6 +356,8 @@ class Command(BaseCommand):
                         f'Target {l["target_id"]} é tipo {target.tipo!r} (não-CRI). '
                         f'Validação CRI→CRI falhou. (linha {l["linha"]})'
                     )
+                merges_validos.append(l)
+            merges = merges_validos
 
         # Validação de magnitude.
         max_fk = options['max_fk_count']
