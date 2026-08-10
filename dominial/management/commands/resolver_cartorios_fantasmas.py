@@ -39,7 +39,7 @@ import socket
 import subprocess
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -132,7 +132,21 @@ def _calcular_sha256(caminho):
 
 
 def _git_head():
-    """SHA curto do HEAD; '' se não for repo ou git não disponível."""
+    """SHA do commit correspondente ao código rodando.
+
+    Ordem de resolução:
+    1. env `GIT_COMMIT` (injetado pelo docker-compose em prod: permite
+       audit log fiel ao commit deployado, sem depender de .git no
+       container). Em homolog com code sincronizado via `docker cp`, o
+       deploy no host é o mesmo, então o git_commit do host é o
+       correto. Em prod, o env var é obrigatório.
+    2. `git rev-parse HEAD` local (dev local, CI).
+    3. '' se nenhum dos dois (audit log não quebrado; SHA do CSV
+       continua sendo a âncora de reprocessamento).
+    """
+    env_sha = os.environ.get('GIT_COMMIT', '').strip()
+    if env_sha:
+        return env_sha
     try:
         return subprocess.check_output(
             ['git', 'rev-parse', 'HEAD'],
@@ -159,7 +173,7 @@ def _hostname():
 
 def _na_janela_prod_utc():
     """True se agora (UTC) está entre 05:00 e 08:00 de sábado."""
-    agora = datetime.utcnow()
+    agora = datetime.now(timezone.utc)
     # weekday(): segunda=0, ..., sábado=5
     if agora.weekday() != 5:
         return False
@@ -261,6 +275,14 @@ class Command(BaseCommand):
             help='Pula o gate de BACKUP_VERIFIED (use só em homolog).',
         )
         parser.add_argument(
+            '--strict-confirm', action='store_true',
+            help=(
+                'Aborta se alguma linha do CSV tiver marcador de revisão '
+                'humana ("confirmar antes", "reverificar", "revise") na '
+                'justificativa. Sem essa flag, o command só avisa.'
+            ),
+        )
+        parser.add_argument(
             '--allow-missing-ghosts', action='store_true',
             help='Em homolog, pula com warning cartórios do CSV que não existem '
                  'no banco (em prod todos devem existir).',
@@ -341,6 +363,28 @@ class Command(BaseCommand):
                 f'⚠ {len(outros)} linha(s) com decisao desconhecida — ignoradas: '
                 f'{[l["linha"] for l in outros]}'
             )
+
+        # Gate: linha com marcador de revisão humana. O command aceita
+        # linhas cuja justificativa contém 'confirmar antes de prod' (ou
+        # similar), mas avisa explicitamente para que o operador revise
+        # ANTES do apply. Se --strict-confirm, aborta.
+        marcadores_revisao = ('confirmar antes', 'reverificar', 'revise')
+        linhas_pendentes = [
+            l for l in linhas
+            if any(m in l['justificativa'].lower() for m in marcadores_revisao)
+        ]
+        if linhas_pendentes:
+            for l in linhas_pendentes:
+                self._warn(
+                    f'⚠ [linha {l["linha"]}] MARCADOR DE REVISÃO HUMANA: '
+                    f'"{l["justificativa"]}" — ghost={l["ghost_id"]} '
+                    f'target={l["target_id"]} (fk_count={l["fk_count"]})'
+                )
+            if options.get('strict_confirm'):
+                raise CommandError(
+                    f'{len(linhas_pendentes)} linha(s) com marcador de revisão. '
+                    f'Remova o marcador ou tire --strict-confirm para prosseguir.'
+                )
 
         # Validação OUTRO (gate padrão é só CRI).
         if not options['allow_outro']:
