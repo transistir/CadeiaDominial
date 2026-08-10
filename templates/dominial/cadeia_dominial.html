@@ -60,7 +60,11 @@
                         <div class="documento-node">
                             <div class="documento-header">
                                 📄 {{ documento.tipo.get_tipo_display }}: {{ documento.numero }}
-                                <span>({{ documento.data|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
+                                {% if forloop.first %}
+                                <span>(Análise iniciada em: {{ documento.data_exibicao|date:'d/m/Y' }} - {{ documento.cartorio.nome }})</span>
+                                {% else %}
+                                <span>({{ documento.cartorio.nome }})</span>
+                                {% endif %}
                             </div>
                             
                             {% if documento.origem %}
@@ -142,7 +146,7 @@
                                                 </td>
                                             {% else %}
                                                 <td>{{ lancamento.forma|default_if_none:"-" }}</td>
-                                                <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
+                                                <td>{{ lancamento.titulo|limpar_none }}</td>
                                                 <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
                                                 <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
                                                 <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>

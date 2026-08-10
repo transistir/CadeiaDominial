@@ -337,43 +337,33 @@ class LancamentoCriacaoService:
     @staticmethod
     def _aplicar_campos_documento(lancamento, dados_lancamento):
         """
-        Aplica os campos livro e folha do documento baseado nos dados do formulário
-        HERANÇA: Se os campos livro_origem e folha_origem estiverem preenchidos,
-        eles são convertidos em livro e folha do documento
-        
+        Aplica os campos livro e folha do documento ATUAL baseado nos dados do
+        formulário.
+
+        IMPORTANTE (#118): o documento atual só recebe livro/folha explícitos do
+        formulário (``livro_documento``/``folha_documento``). Os campos
+        ``livro_origem``/``folha_origem`` pertencem ao documento de ORIGEM e são
+        tratados em ``lancamento_origem_service`` (``_obter_livro_folha_origem``
+        → ``_criar_documento_automatico_com_cartorio``); nunca devem chegar ao
+        documento atual.
+
         Args:
             lancamento: Objeto Lancamento
             dados_lancamento: Dict com dados do formulário
-            
+
         Returns:
             bool: True se foi aplicado, False se não foi possível
         """
         documento = lancamento.documento
-        
-        # Obter livro e folha do documento dos dados do formulário
+
+        # Obter livro e folha do documento ATUAL dos dados do formulário.
+        # IMPORTANTE (#118): não herdar de livro_origem/folha_origem — esses
+        # campos pertencem ao documento de origem, não ao documento atual.
         livro_documento = dados_lancamento.get('livro_documento')
         folha_documento = dados_lancamento.get('folha_documento')
-        
-        # HERANÇA: Se os campos de origem estiverem preenchidos, usar eles
-        livro_origem = dados_lancamento.get('livro_origem')
-        folha_origem = dados_lancamento.get('folha_origem')
-        
-        # Priorizar campos do formulário, depois campos de origem
-        livro_final = None
-        folha_final = None
-        
-        # Se os campos do documento foram fornecidos no formulário, usar eles
-        if livro_documento and livro_documento.strip():
-            livro_final = livro_documento.strip()
-        elif livro_origem and livro_origem.strip():
-            # Herdar do campo de origem
-            livro_final = livro_origem.strip()
-        
-        if folha_documento and folha_documento.strip():
-            folha_final = folha_documento.strip()
-        elif folha_origem and folha_origem.strip():
-            # Herdar do campo de origem
-            folha_final = folha_origem.strip()
+
+        livro_final = livro_documento.strip() if livro_documento and livro_documento.strip() else None
+        folha_final = folha_documento.strip() if folha_documento and folha_documento.strip() else None
         
         # Atualizar documento se algum campo foi definido
         documento_atualizado = False

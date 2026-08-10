@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.core.management import call_command
 from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from ..utils import normalizar_texto_opcional
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -189,7 +190,7 @@ def pessoas(request):
 
 @login_required
 def alteracoes(request):
-    documentos = Documento.objects.all().order_by('-data')
+    documentos = Documento.objects.all().order_by('-data', '-id')
     return render(request, 'dominial/alteracoes.html', {'documentos': documentos})
 
 @login_required
@@ -336,15 +337,19 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         
         # Serializar dados para JSON
         cadeia_serializada = []
-        for item in cadeia_data['cadeia']:
+        for idx, item in enumerate(cadeia_data['cadeia']):
             documento = item['documento']
-            
+
+            # Issue #120: data apenas no primeiro documento da cadeia
+            is_primeiro = idx == 0
+
             # Verificar se o documento tem todos os campos necessários
             try:
                 documento_serializado = {
                     'id': documento.id,
                     'numero': documento.numero,
-                    'data': documento.data.strftime('%d/%m/%Y') if documento.data else '',
+                    'data': documento.data_exibicao.strftime('%d/%m/%Y') if is_primeiro else None,
+                    'label_data': 'Análise iniciada em:' if is_primeiro else '',
                     'tipo_display': documento.tipo.get_tipo_display() if documento.tipo else '',
                     'cartorio_nome': documento.cartorio.nome if documento.cartorio else '',
                     'livro': documento.livro,
@@ -365,19 +370,19 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                         'tipo': lancamento.tipo.tipo if lancamento.tipo else '',
                         'tipo_tipo': lancamento.tipo.tipo if lancamento.tipo else '',  # Adicionar para compatibilidade
                         'tipo_display': lancamento.tipo.get_tipo_display() if lancamento.tipo else '',
-                        'numero_lancamento': lancamento.numero_lancamento,
+                        'numero_lancamento': normalizar_texto_opcional(lancamento.numero_lancamento),
                         'data': lancamento.data.strftime('%d/%m/%Y') if lancamento.data else '',
-                        'forma': lancamento.forma,
-                        'titulo': lancamento.titulo,
-                        'descricao': lancamento.descricao,
+                        'forma': normalizar_texto_opcional(lancamento.forma),
+                        'titulo': normalizar_texto_opcional(lancamento.titulo),
+                        'descricao': normalizar_texto_opcional(lancamento.descricao),
                         'area': lancamento.area,
-                        'origem': lancamento.origem,
-                        'observacoes': lancamento.observacoes,
+                        'origem': normalizar_texto_opcional(lancamento.origem),
+                        'observacoes': normalizar_texto_opcional(lancamento.observacoes),
                         'keyword_encontrada': getattr(lancamento, 'keyword_encontrada', None),
                         'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,
                         'cartorio_origem_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else None,
-                        'livro_transacao': lancamento.livro_transacao,
-                        'folha_transacao': lancamento.folha_transacao,
+                        'livro_transacao': normalizar_texto_opcional(lancamento.livro_transacao),
+                        'folha_transacao': normalizar_texto_opcional(lancamento.folha_transacao),
                         'data_transacao': lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else None,
                         'pessoas': []
                     }

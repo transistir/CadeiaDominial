@@ -152,7 +152,11 @@
                                     {% endif %}
                                 </button>
                             </td>
-                            <td>{{ item.documento.data|date:"d/m/Y" }}</td>
+                            {% if forloop.first %}
+                            <td>Análise iniciada em: {{ item.documento.data_exibicao|date:"d/m/Y" }}</td>
+                            {% else %}
+                            <td>—</td>
+                            {% endif %}
                             <td>{{ item.documento.cartorio.nome }}</td>
                             <td>{{ item.lancamentos.count }} lanç.</td>
                             <td>
@@ -236,7 +240,7 @@
                                                     </td>
                                                 {% else %}
                                                     <td>{{ lancamento.forma|default_if_none:"-" }}</td>
-                                                    <td>{{ lancamento.titulo|default_if_none:"-" }}</td>
+                                                    <td>{{ lancamento.titulo|limpar_none }}</td>
                                                     <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
                                                     <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
                                                     <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>

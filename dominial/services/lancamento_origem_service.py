@@ -3,10 +3,10 @@ Service para processamento de origens automáticas dos lançamentos
 """
 import re
 import uuid
-from datetime import date
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from ..models import Cartorios, Documento, DocumentoTipo, LancamentoOrigem
@@ -337,7 +337,8 @@ class LancamentoOrigemService:
             'imovel': imovel,
             'tipo': tipo_doc,
             'numero': numero_doc,
-            'data': date.today(),
+            'data': timezone.localdate(),
+            'data_presumida': True,
             'cartorio': cartorio_atual,
             'livro': '0',
             'folha': '0',
@@ -437,7 +438,7 @@ class LancamentoOrigemService:
 
     @staticmethod
     def _normalizar_metadado_origem(valor):
-        if isinstance(valor, str) and valor.strip():
+        if isinstance(valor, str) and valor.strip() and valor.strip() != "None":
             return valor.strip()
         return None
 
@@ -525,7 +526,8 @@ class LancamentoOrigemService:
                 'imovel': imovel,
                 'tipo': tipo_doc,
                 'numero': origem_info['numero'],
-                'data': date.today(),
+                'data': timezone.localdate(),
+                'data_presumida': True,
                 'cartorio': cartorio_origem,  # CARTÓRIO DA ORIGEM
                 'livro': livro_origem if livro_origem else '0',  # LIVRO HERDADO DA ORIGEM
                 'folha': folha_origem if folha_origem else '0',  # FOLHA HERDADA DA ORIGEM
@@ -608,7 +610,8 @@ class LancamentoOrigemService:
                 'imovel': imovel,
                 'tipo': tipo_doc,
                 'numero': origem_info['numero'],
-                'data': date.today(),
+                'data': timezone.localdate(),
+                'data_presumida': True,
                 'cartorio': cartorio_origem,  # CARTÓRIO ESPECÍFICO DA ORIGEM
                 'livro': livro_origem if livro_origem else '0',  # LIVRO HERDADO DA ORIGEM
                 'folha': folha_origem if folha_origem else '0',  # FOLHA HERDADA DA ORIGEM

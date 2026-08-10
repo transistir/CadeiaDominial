@@ -300,6 +300,13 @@ class LancamentoCamposService:
             folha_origem_encontrada = folhas_origem[0] if folhas_origem[0] else None
         
         # Definir livro e folha de origem no lançamento
+        # IMPORTANTE (#118): lancamento.livro_origem/folha_origem armazenam o
+        # livro/folha do documento de ORIGEM (usado por _obter_livro_folha_origem
+        # e _criar_documento_automatico_com_cartorio em lancamento_origem_service).
+        # NÃO devem ser usados como fonte para o documento atual — ver
+        # LancamentoCriacaoService._aplicar_campos_documento e
+        # RegraPetreaService._definir_livro_folha_documento, que agora só usam
+        # livro_documento/folha_documento e livro_transacao/folha_transacao.
         lancamento.livro_origem = livro_origem_encontrado
         lancamento.folha_origem = folha_origem_encontrada
         

@@ -380,12 +380,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         # CORREÇÃO: Usar o cartório do próprio documento (que foi definido quando ele foi criado)
         # O cartório do documento é o cartório que foi informado no lançamento de início de matrícula que criou este documento
         lancamento_herdado.cartorio_origem = documento_ativo.cartorio
-        
-        # Herdar livro e folha do primeiro lançamento se disponíveis
-        if dados_primeiro:
-            lancamento_herdado.livro_origem = dados_primeiro['livro_origem']
-            lancamento_herdado.folha_origem = dados_primeiro['folha_origem']
-        
+
         context['lancamento'] = lancamento_herdado
         context['modo_edicao'] = True  # Para usar os dados herdados no template
         

@@ -51,8 +51,8 @@ class LancamentoOrigemLeituraService:
                     numero=origem.numero,
                     numero_normalizado=origem.numero_normalizado,
                     cartorio=origem.cartorio,
-                    livro=origem.livro,
-                    folha=origem.folha,
+                    livro=cls._normalizar_metadado(origem.livro),
+                    folha=cls._normalizar_metadado(origem.folha),
                     fonte='estruturada',
                 )
                 for origem in estruturadas
@@ -129,4 +129,6 @@ class LancamentoOrigemLeituraService:
 
     @staticmethod
     def _normalizar_metadado(valor):
+        if valor is None or valor == "None":
+            return None
         return valor.strip() if isinstance(valor, str) and valor.strip() else None
