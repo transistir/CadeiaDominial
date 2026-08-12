@@ -214,4 +214,3 @@ document.addEventListener('DOMContentLoaded', function() {
     new ImovelForm();
     validarNomeProprietario();
 });
-

@@ -33,10 +33,10 @@ admin.site.register(LancamentoTipo)
 class EstadoVazioFilter(admin.SimpleListFilter):
     title = 'Estado vazio/nulo'
     parameter_name = 'estado_vazio'
-    
+
     def lookups(self, request, model_admin):
         return [('sim', 'Sim'), ('nao', 'Não')]
-    
+
     def queryset(self, request, queryset):
         if self.value() == 'sim':
             from django.db.models import Q
@@ -52,7 +52,7 @@ class CartoriosAdmin(admin.ModelAdmin):
     list_filter = ['estado', 'cidade', 'tipo', EstadoVazioFilter]
     search_fields = ['id', 'nome', 'cns', 'cidade', 'estado']
     list_per_page = 50
-    
+
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(documentos_count=Count('documento', distinct=True))
 

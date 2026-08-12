@@ -178,9 +178,10 @@ function renderizarCards(root, svgGroup) {
         cancelable: true
       });
       const allowed = window.dispatchEvent(customEvent);
-
+      
       // Se o evento foi cancelado (preventDefault), não navegar
       if (!allowed) return;
+      
       window.location.href = `/dominial/tis/${window.tisId}/imovel/${window.imovelId}/documento/${d.data.id}/detalhado/`;
     });
 
