@@ -40,7 +40,7 @@
             <label for="tipo">Tipo de Documento:</label>
             <select id="tipo" name="tipo" required>
                 {% for tipo in tipos_documento %}
-                <option value="{{ tipo.id }}" {% if documento.tipo.id == tipo.id %}selected{% endif %}>
+                <option value="{{ tipo.id }}" data-tipo-valor="{{ tipo.tipo }}" {% if documento.tipo.id == tipo.id %}selected{% endif %}>
                     {{ tipo.get_tipo_display }}
                 </option>
                 {% endfor %}
@@ -68,6 +68,7 @@
             <div class="form-group">
                 <label for="folha">Folha:</label>
                 <input type="text" id="folha" name="folha" value="{{ documento.folha|default:'' }}">
+                <small id="folha-hint" class="form-hint" style="display: none;">Não aplicável para matrículas</small>
             </div>
         </div>
         
@@ -95,7 +96,25 @@
 document.addEventListener('DOMContentLoaded', function() {
     const tipoSelect = document.getElementById('tipo');
     const numeroInput = document.getElementById('numero');
-    
+
+    // Desabilita o campo Folha quando o tipo de documento é Matrícula (FLS é irrelevante para M)
+    const folhaInput = document.getElementById('folha');
+    const folhaHint = document.getElementById('folha-hint');
+
+    function atualizarCampoFolha() {
+        const tipoSelecionado = tipoSelect.options[tipoSelect.selectedIndex];
+        const isMatricula = tipoSelecionado && tipoSelecionado.dataset.tipoValor === 'matricula';
+
+        folhaInput.disabled = isMatricula;
+        folhaHint.style.display = isMatricula ? 'block' : 'none';
+        if (isMatricula) {
+            folhaInput.value = '';
+        }
+    }
+
+    atualizarCampoFolha();
+    tipoSelect.addEventListener('change', atualizarCampoFolha);
+
     // Autocomplete de cartórios de imóveis
     const cartorioInput = document.getElementById('cartorio');
     const cartorioIdInput = document.getElementById('cartorio_id');

@@ -144,7 +144,10 @@ function renderizarCards(root, svgGroup) {
       const linhaData = d.data.label_data && d.data.data
         ? `${d.data.label_data} ${d.data.data}`
         : (d.data.data ? `Data: ${d.data.data}` : "");
-      return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\nLivro: ${d.data.livro}, Folha: ${d.data.folha}\n${linhaData}\n${d.data.total_lancamentos} lançamentos`;
+      const linhaLivroFolha = d.data.tipo === "matricula"
+        ? `Livro: ${d.data.livro}`
+        : `Livro: ${d.data.livro}, Folha: ${d.data.folha}`;
+      return `${d.data.tipo_display} ${d.data.numero}\n${d.data.cartorio}\n${linhaLivroFolha}\n${linhaData}\n${d.data.total_lancamentos} lançamentos`;
     })
     .on("mouseover", function () {
       d3.select(this)
