@@ -563,7 +563,8 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
                     
                     # L, Fls., Cartório, Data (do documento)
                     ws.cell(row=row, column=2, value=documento.livro or "-").border = border
-                    ws.cell(row=row, column=3, value=documento.folha or "-").border = border
+                    folha_valor = "-" if documento.tipo and documento.tipo.tipo == 'matricula' else (documento.folha or "-")
+                    ws.cell(row=row, column=3, value=folha_valor).border = border
                     ws.cell(row=row, column=4, value=documento.cartorio.nome if documento.cartorio else "-").border = border
                     ws.cell(row=row, column=5, value=lancamento.data.strftime('%d/%m/%Y') if lancamento.data else "-").border = border
                     

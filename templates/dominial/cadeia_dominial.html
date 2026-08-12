@@ -118,7 +118,7 @@
                                             <!-- Matrícula -->
                                             <td>{{ lancamento|numero_documento_criado }}</td>
                                             <td>{{ documento.livro|default_if_none:"-" }}</td>
-                                            <td>{{ documento.folha|default_if_none:"-" }}</td>
+                                            <td>{% if documento.tipo.tipo == 'matricula' %}-{% else %}{{ documento.folha|default_if_none:"-" }}{% endif %}</td>
                                             <td>{{ documento.cartorio.nome }}</td>
                                             <td>{{ lancamento.data|date:'d/m/Y' }}</td>
                                             <!-- Transmitente -->

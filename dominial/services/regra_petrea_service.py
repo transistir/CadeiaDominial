@@ -22,14 +22,19 @@ class RegraPetreaService:
             bool: True se a regra foi aplicada, False se não foi necessário
         """
         documento = lancamento.documento
-        
+
         # Verificar se é o primeiro lançamento do documento
         # Como o lançamento já foi salvo, contar todos os lançamentos do documento
         total_lancamentos = Lancamento.objects.filter(documento=documento).count()
-        
-        # Verificar se o documento já tem livro e folha definidos
-        documento_tem_livro_folha = bool(documento.livro and documento.folha)
-        
+
+        # Verificar se o documento já está completo.
+        # Matrículas (#138) não têm campo folha (FLS é irrelevante para M) —
+        # completo depende só do livro. Transcrições continuam exigindo folha.
+        if documento.tipo.tipo == 'matricula':
+            documento_tem_livro_folha = bool(documento.livro)
+        else:
+            documento_tem_livro_folha = bool(documento.livro and documento.folha)
+
         if total_lancamentos == 1 and not documento_tem_livro_folha:
             # É o primeiro lançamento e documento não tem livro/folha - aplicar regra pétrea
             return RegraPetreaService._definir_livro_folha_documento(lancamento)
@@ -50,6 +55,9 @@ class RegraPetreaService:
         """
         documento = lancamento.documento
 
+        # Matrículas não têm campo folha (#138) — FLS é irrelevante para M.
+        is_matricula = documento.tipo.tipo == 'matricula'
+
         # Obter livro e folha do lançamento
         livro_lancamento = None
         folha_lancamento = None
@@ -63,29 +71,32 @@ class RegraPetreaService:
         # Prioridade 1: campos de transação (se existirem)
         if lancamento.livro_transacao and lancamento.livro_transacao.strip():
             livro_lancamento = lancamento.livro_transacao.strip()
-        if lancamento.folha_transacao and lancamento.folha_transacao.strip():
+        if not is_matricula and lancamento.folha_transacao and lancamento.folha_transacao.strip():
             folha_lancamento = lancamento.folha_transacao.strip()
 
         # Prioridade 2: valor já aplicado ao documento pelo form service
         # (_aplicar_campos_documento escreve livro_documento/folha_documento).
         if not livro_lancamento and documento.livro:
             livro_lancamento = documento.livro
-        if not folha_lancamento and documento.folha:
+        if not is_matricula and not folha_lancamento and documento.folha:
             folha_lancamento = documento.folha
 
         # NOTA: NUNCA usar lancamento.livro_origem/folha_origem aqui — esses
         # campos pertencem ao documento de origem, não ao documento atual.
-        
-        # Atualizar documento se encontrou livro e folha
+
+        # Atualizar documento se encontrou livro (matrícula) ou livro/folha (transcrição)
         if livro_lancamento or folha_lancamento:
             if livro_lancamento:
                 documento.livro = livro_lancamento
-            if folha_lancamento:
+            if is_matricula:
+                # Campo folha não existe para matrículas — mantém vazio (coluna NOT NULL).
+                documento.folha = ''
+            elif folha_lancamento:
                 documento.folha = folha_lancamento
-            
+
             documento.save()
             return True
-        
+
         return False
     
     @staticmethod
@@ -99,6 +110,9 @@ class RegraPetreaService:
         Returns:
             bool: True se a regra já foi aplicada (documento tem livro e folha)
         """
+        # Matrículas (#138) não têm campo folha — completo depende só do livro.
+        if documento.tipo.tipo == 'matricula':
+            return bool(documento.livro)
         return bool(documento.livro and documento.folha)
     
     @staticmethod

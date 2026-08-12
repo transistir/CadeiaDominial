@@ -356,6 +356,13 @@ class LancamentoCriacaoService:
         """
         documento = lancamento.documento
 
+        # REGRA PÉTREA (#138): o livro do documento é definido pelo primeiro
+        # lançamento e não muda depois. Se já existia algum outro lançamento
+        # neste documento antes deste, não sobrescrever livro/folha.
+        total_lancamentos_anteriores = documento.lancamentos.exclude(id=lancamento.id).count()
+        if total_lancamentos_anteriores > 0:
+            return False
+
         # Obter livro e folha do documento ATUAL dos dados do formulário.
         # IMPORTANTE (#118): não herdar de livro_origem/folha_origem — esses
         # campos pertencem ao documento de origem, não ao documento atual.
@@ -364,23 +371,26 @@ class LancamentoCriacaoService:
 
         livro_final = livro_documento.strip() if livro_documento and livro_documento.strip() else None
         folha_final = folha_documento.strip() if folha_documento and folha_documento.strip() else None
-        
+
+        # Matrículas não têm campo folha (#138) — FLS é irrelevante para M.
+        is_matricula = documento.tipo.tipo == 'matricula'
+
         # Atualizar documento se algum campo foi definido
         documento_atualizado = False
-        
+
         if livro_final:
             documento.livro = livro_final
             documento_atualizado = True
-        
-        if folha_final:
+
+        if folha_final and not is_matricula:
             documento.folha = folha_final
             documento_atualizado = True
-        
+
         if documento_atualizado:
             documento.save()
-            print(f"DEBUG: Campos do documento aplicados - Livro: {livro_final}, Folha: {folha_final}")
+            print(f"DEBUG: Campos do documento aplicados - Livro: {livro_final}, Folha: {folha_final if not is_matricula else None}")
             return True
-        
+
         return False
     
     @staticmethod
