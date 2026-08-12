@@ -104,7 +104,7 @@ class HierarquiaArvoreService:
             'lancamentos__tipo',
             'lancamentos__origens_fim_cadeia'
         ).get(id=documento_principal.id)
-        
+
         # Usar busca em largura para construir a árvore
         documentos_processados = set()
         conexoes_processadas = set()

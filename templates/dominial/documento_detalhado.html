@@ -246,6 +246,7 @@
     {% endif %}
 
     <!-- Documentos Digitais -->
+    {% if not is_importado %}
     <div class="field-group" style="margin-top: 1.5rem;">
         <h4>
             <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -300,6 +301,9 @@
         <p style="color: #666; font-style: italic;">Nenhum arquivo digital anexado.</p>
         {% endif %}
     </div>
+    {% else %}
+    <p class="text-muted small">Documentos digitais gerenciados no imóvel de origem.</p>
+    {% endif %}
 
     <!-- Botão para adicionar novo lançamento -->
     <div class="actions">

@@ -40,12 +40,12 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-tabela/excel/', exportar_cadeia_dominial_excel, name='exportar_cadeia_dominial_excel'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/arvore-cadeia-dominial/', obter_arvore_cadeia_dominial, name='obter_arvore_cadeia_dominial'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/detalhado/', documento_detalhado, name='documento_detalhado'),
-    
+
     # Documentos digitais
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/upload-digital/', upload_documento_digital, name='upload_documento_digital'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/arquivo/<int:arquivo_id>/', servir_documento_digital, name='servir_documento_digital'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/arquivo/<int:arquivo_id>/excluir/', excluir_documento_digital, name='excluir_documento_digital'),
-    
+
     path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial-d3/', views.cadeia_dominial_d3, name='cadeia_dominial_d3'),
     
