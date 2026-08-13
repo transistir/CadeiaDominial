@@ -27,6 +27,7 @@ class AuthenticationMiddleware:
 
 
 import json
+import re
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.template.loader import render_to_string
@@ -45,6 +46,12 @@ class MaintenanceMiddleware:
         '/static/',
         '/media/',
     )
+
+    # GETs que produzem escrita no banco (write-on-read)
+    WRITE_ON_READ_PATTERNS = [
+        re.compile(r'^/tis/\d+/imovel/\d+/arquivar/$'),
+        re.compile(r'^/tis/\d+/imovel/\d+/criar-documento/'),
+    ]
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -66,6 +73,12 @@ class MaintenanceMiddleware:
 
         # Bloquear métodos de escrita
         if request.method in self.WRITE_METHODS:
+            return self._maintenance_response(request, config)
+
+        # Bloquear GETs que produzem escrita (write-on-read)
+        if request.method == 'GET' and any(
+            pattern.match(request.path) for pattern in self.WRITE_ON_READ_PATTERNS
+        ):
             return self._maintenance_response(request, config)
 
         # GET passa normalmente

@@ -6,6 +6,8 @@ Uso:
     python manage.py manutencao --off
 """
 import json
+import os
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -58,10 +60,25 @@ class Command(BaseCommand):
                 'inicio': inicio.isoformat(),
                 'fim_estimado': fim.strftime('%H:%M'),
             }
-            file_path.write_text(
-                json.dumps(config, indent=2, ensure_ascii=False),
-                encoding='utf-8'
+            content = json.dumps(config, indent=2, ensure_ascii=False)
+
+            # Escrita atômica: temp file + os.replace, evita JSON parcial durante a escrita
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(file_path.parent),
+                suffix='.tmp',
+                prefix='.maintenance_'
             )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, str(file_path))
+            except BaseException:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                raise
             self.stdout.write(self.style.SUCCESS(
                 f'✓ Modo de manutenção ATIVADO.\n'
                 f'  Mensagem: {config["mensagem"]}\n'

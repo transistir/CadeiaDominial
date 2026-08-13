@@ -168,4 +168,4 @@ DUPLICATA_VERIFICACAO_ENABLED = True
 
 # ─── Modo de Manutenção ───────────────────────────────────────────
 # Arquivo de flag para o modo de manutenção (deve estar em volume persistente)
-MANUTENCAO_FILE_PATH = os.path.join(BASE_DIR, '.maintenance.json')
+MANUTENCAO_FILE_PATH = os.environ.get('MANUTENCAO_FILE_PATH', os.path.join(BASE_DIR, 'maintenance', '.maintenance.json'))
