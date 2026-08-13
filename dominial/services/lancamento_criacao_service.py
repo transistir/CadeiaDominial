@@ -355,6 +355,7 @@ class LancamentoCriacaoService:
             bool: True se foi aplicado, False se não foi possível
         """
         documento = lancamento.documento
+        is_matricula = documento.tipo.tipo == 'matricula'
 
         # Obter livro e folha do documento ATUAL dos dados do formulário.
         # IMPORTANTE (#118): não herdar de livro_origem/folha_origem — esses
@@ -364,23 +365,24 @@ class LancamentoCriacaoService:
 
         livro_final = livro_documento.strip() if livro_documento and livro_documento.strip() else None
         folha_final = folha_documento.strip() if folha_documento and folha_documento.strip() else None
-        
-        # Atualizar documento se algum campo foi definido
+
+        # REGRA PÉTREA (#138): livro e folha são definidos uma vez.
+        # Só preencher se o campo no documento estiver vazio — depois de
+        # definido, nenhum lançamento sobrescreve.
         documento_atualizado = False
-        
-        if livro_final:
+
+        if livro_final and (not documento.livro or documento.livro == '0'):
             documento.livro = livro_final
             documento_atualizado = True
-        
-        if folha_final:
+
+        if folha_final and not is_matricula and (not documento.folha or documento.folha == '0'):
             documento.folha = folha_final
             documento_atualizado = True
-        
+
         if documento_atualizado:
             documento.save()
-            print(f"DEBUG: Campos do documento aplicados - Livro: {livro_final}, Folha: {folha_final}")
             return True
-        
+
         return False
     
     @staticmethod

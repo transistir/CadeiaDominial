@@ -350,6 +350,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                     'numero': documento.numero,
                     'data': documento.data_exibicao.strftime('%d/%m/%Y') if is_primeiro else None,
                     'label_data': 'Análise iniciada em:' if is_primeiro else '',
+                    'tipo': documento.tipo.tipo if documento.tipo else '',
                     'tipo_display': documento.tipo.get_tipo_display() if documento.tipo else '',
                     'cartorio_nome': documento.cartorio.nome if documento.cartorio else '',
                     'livro': documento.livro,

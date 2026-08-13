@@ -30,19 +30,23 @@
         <div class="form-group">
             <label for="livro_documento">Livro do Documento *</label>
             <input type="text" name="livro_documento" id="livro_documento" required
+                   {% if modo_edicao and lancamento.documento.livro and lancamento.documento.livro != '0' %}readonly{% endif %}
                    value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
-            <small class="form-text text-muted">Livro do documento atual (herdado da origem)</small>
+            <small class="form-text text-muted">Livro do documento atual (não muda após o primeiro lançamento)</small>
         </div>
-        
+
         <div class="form-group">
-            <label for="folha_documento">Folha do Documento *</label>
-            <input type="text" name="folha_documento" id="folha_documento" required
+            <label for="folha_documento">Folha do Documento{% if documento.tipo.tipo != 'matricula' %} *{% endif %}</label>
+            <input type="text" name="folha_documento" id="folha_documento"
+                   {% if documento.tipo.tipo == 'matricula' %}disabled
+                   {% elif modo_edicao and lancamento.documento.folha and lancamento.documento.folha != '0' %}readonly
+                   {% else %}required{% endif %}
                    value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
-            <small class="form-text text-muted">Folha do documento atual (herdada da origem)</small>
+            <small class="form-text text-muted">{% if documento.tipo.tipo == 'matricula' %}Não aplicável para matrículas{% else %}Folha do documento atual (herdada da origem){% endif %}</small>
         </div>
-        
+
         <div class="form-group">
             <label for="sigla_documento">Sigla do Documento</label>
             <input type="text" name="sigla_documento" id="sigla_documento" readonly
