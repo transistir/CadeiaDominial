@@ -49,8 +49,8 @@ class MaintenanceMiddleware:
 
     # GETs que produzem escrita no banco (write-on-read)
     WRITE_ON_READ_PATTERNS = [
-        re.compile(r'^/tis/\d+/imovel/\d+/arquivar/$'),
-        re.compile(r'^/tis/\d+/imovel/\d+/criar-documento/'),
+        re.compile(r'^/dominial/tis/\d+/imovel/\d+/arquivar/$'),
+        re.compile(r'^/dominial/tis/\d+/imovel/\d+/criar-documento/'),
     ]
 
     def __init__(self, get_response):
