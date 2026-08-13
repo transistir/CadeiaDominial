@@ -76,9 +76,9 @@ class RegraPetreaService:
 
         # Prioridade 2: valor já aplicado ao documento pelo form service
         # (_aplicar_campos_documento escreve livro_documento/folha_documento).
-        if not livro_lancamento and documento.livro:
+        if not livro_lancamento and documento.livro and documento.livro != '0':
             livro_lancamento = documento.livro
-        if not is_matricula and not folha_lancamento and documento.folha:
+        if not is_matricula and not folha_lancamento and documento.folha and documento.folha != '0':
             folha_lancamento = documento.folha
 
         # NOTA: NUNCA usar lancamento.livro_origem/folha_origem aqui — esses
@@ -110,10 +110,13 @@ class RegraPetreaService:
         Returns:
             bool: True se a regra já foi aplicada (documento tem livro e folha)
         """
+        def _tem_valor(valor):
+            return bool(valor and valor.strip() and valor.strip() != '0')
+
         # Matrículas (#138) não têm campo folha — completo depende só do livro.
         if documento.tipo.tipo == 'matricula':
-            return bool(documento.livro)
-        return bool(documento.livro and documento.folha)
+            return _tem_valor(documento.livro)
+        return _tem_valor(documento.livro) and _tem_valor(documento.folha)
     
     @staticmethod
     def obter_livro_folha_primeiro_lancamento(documento):

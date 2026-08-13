@@ -371,11 +371,11 @@ class LancamentoCriacaoService:
         # definido, nenhum lançamento sobrescreve.
         documento_atualizado = False
 
-        if livro_final and not documento.livro:
+        if livro_final and (not documento.livro or documento.livro == '0'):
             documento.livro = livro_final
             documento_atualizado = True
 
-        if folha_final and not is_matricula and not documento.folha:
+        if folha_final and not is_matricula and (not documento.folha or documento.folha == '0'):
             documento.folha = folha_final
             documento_atualizado = True
 
