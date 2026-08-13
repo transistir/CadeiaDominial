@@ -42,7 +42,7 @@ class MaintenanceMiddleware:
     EXEMPT_PREFIXES = (
         '/accounts/login/',
         '/accounts/logout/',
-        '/admin/',
+        '/admin/login/',
         '/static/',
         '/media/',
     )
