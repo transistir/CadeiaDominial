@@ -68,9 +68,11 @@
                 <div class="detail-item">
                     <strong>Livro:</strong> {{ documento.livro }}
                 </div>
+                {% if documento.tipo.tipo != 'matricula' %}
                 <div class="detail-item">
                     <strong>Folha:</strong> {{ documento.folha }}
                 </div>
+                {% endif %}
                 {% if documento.origem %}
                 <div class="detail-item">
                     <strong>Origem:</strong> {{ documento.origem|truncatechars:50 }}

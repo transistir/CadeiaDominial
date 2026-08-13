@@ -41,7 +41,7 @@
           {{ documento.livro|default:"-" }}
         </div>
         <div class="resumo-planilha-cell" role="cell">
-          {{ documento.folha|default:"-" }}
+          {% if documento.tipo.tipo == 'matricula' %}-{% else %}{{ documento.folha|default:"-" }}{% endif %}
         </div>
         <div class="resumo-planilha-cell" role="cell">
           {{ documento.cartorio.nome|default:"-" }}

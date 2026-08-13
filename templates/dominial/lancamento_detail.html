@@ -98,8 +98,8 @@
                                 <span class="info-value">{{ lancamento.documento.cartorio.nome }}</span>
                             </div>
                             <div class="info-item">
-                                <span class="info-label">Livro/Folha</span>
-                                <span class="info-value">{{ lancamento.documento.livro }}/{{ lancamento.documento.folha }}</span>
+                                <span class="info-label">{% if lancamento.documento.tipo.tipo == 'matricula' %}Livro{% else %}Livro/Folha{% endif %}</span>
+                                <span class="info-value">{% if lancamento.documento.tipo.tipo == 'matricula' %}{{ lancamento.documento.livro }}{% else %}{{ lancamento.documento.livro }}/{{ lancamento.documento.folha }}{% endif %}</span>
                             </div>
                             <div class="info-item">
                                 <span class="info-label">Data de Cadastro</span>

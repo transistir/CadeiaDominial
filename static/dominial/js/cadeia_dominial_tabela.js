@@ -437,7 +437,7 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
             <!-- Matrícula -->
             <td>${lancamento.numero_lancamento || '-'}</td>
             <td>${documento.livro || '-'}</td>
-            <td>${documento.folha || '-'}</td>
+            <td>${documento.tipo === 'matricula' ? '-' : (documento.folha || '-')}</td>
             <td>${documento.cartorio_nome || '-'}</td>
             <td>${lancamento.data || '-'}</td>
             <!-- Transmitente -->
