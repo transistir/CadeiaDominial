@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -64,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'dominial.middleware.MaintenanceMiddleware',
 ]
 
 ROOT_URLCONF = 'cadeia_dominial.urls'
@@ -79,6 +81,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'dominial.context_processors.maintenance_status',
             ],
         },
     },
@@ -162,3 +165,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024   # 25MB (form + file)
 
 # Feature Flags
 DUPLICATA_VERIFICACAO_ENABLED = True
+
+# ─── Modo de Manutenção ───────────────────────────────────────────
+# Arquivo de flag para o modo de manutenção (deve estar em volume persistente)
+MANUTENCAO_FILE_PATH = os.path.join(BASE_DIR, '.maintenance.json')

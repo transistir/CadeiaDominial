@@ -11,6 +11,14 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    {% if manutencao_ativa %}
+    <div style="background: #fff3cd; border-bottom: 3px solid #ffc107; padding: 0.75rem 1rem; text-align: center; font-weight: 600; color: #856404;">
+        🔧 <strong>Sistema em manutenção.</strong>
+        {{ manutencao_mensagem }}
+        {% if manutencao_fim %}Voltamos às {{ manutencao_fim }}.{% endif %}
+        <br><small style="font-weight: normal;">Você pode visualizar dados, mas não pode criar, editar ou excluir registros.</small>
+    </div>
+    {% endif %}
     <header class="header">
         <div class="header-content">
             <div>
