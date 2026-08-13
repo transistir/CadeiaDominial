@@ -9,6 +9,10 @@ chown -R appuser:appuser /app/media
 mkdir -p /app/staticfiles
 chown -R appuser:appuser /app/staticfiles
 
+# maintenance dir (criado em runtime se nao existir, garante ownership)
+mkdir -p /app/maintenance
+chown -R appuser:appuser /app/maintenance
+
 echo "🔓 [entrypoint] Dropping privileges para appuser..."
 # Usa su para rodar init.sh como appuser (nao root)
 exec su -s /bin/bash appuser -c "/app/init.sh"

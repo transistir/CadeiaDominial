@@ -50,8 +50,8 @@ COPY scripts/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/init.sh /app/entrypoint.sh
 
 # Criar diretório staticfiles e media (perms garantidas no entrypoint root)
-RUN mkdir -p /app/staticfiles /app/media \
-    && chown -R appuser:appuser /app/staticfiles /app/media
+RUN mkdir -p /app/staticfiles /app/media /app/maintenance \
+    && chown -R appuser:appuser /app/staticfiles /app/media /app/maintenance
 
 # Coletar arquivos estáticos como ROOT (entrypoint dropa privilegios depois)
 RUN python manage.py collectstatic --noinput
