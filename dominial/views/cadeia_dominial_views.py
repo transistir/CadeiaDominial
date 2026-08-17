@@ -17,6 +17,9 @@ import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _buscar_keyword_prioritaria(lancamentos):
@@ -419,6 +422,10 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
     except Exception as e:
+        logger.exception(
+            "Erro ao gerar PDF da cadeia completa (tis_id=%s, imovel_id=%s)",
+            tis_id, imovel_id
+        )
         error_html = f"""
         <html>
         <head><title>Erro na Geração do PDF</title></head>
@@ -646,6 +653,10 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         
     except Exception as e:
         # Em caso de erro, retornar uma resposta de erro
+        logger.exception(
+            "Erro ao gerar Excel da cadeia dominial (tis_id=%s, imovel_id=%s)",
+            tis_id, imovel_id
+        )
         error_response = HttpResponse(
             f"Erro ao gerar Excel: {str(e)}",
             content_type='text/plain'
