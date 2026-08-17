@@ -81,6 +81,13 @@ class CadeiaCompletaService:
         # 3. Extrair todos os documentos da árvore
         todos_documentos = []
         for doc_node in arvore['documentos']:
+            # Nós sintéticos de "fim de cadeia" (issue #85) são dicts com id
+            # string (ex.: "fim_cadeia_123_456_789") criados apenas para
+            # exibição na árvore, sem Documento real correspondente no
+            # banco. Pular para evitar ValueError no Documento.objects.get
+            # (issue #146).
+            if doc_node.get('is_fim_cadeia'):
+                continue
             documento = Documento.objects.get(id=doc_node['id'])
             todos_documentos.append(documento)
         
