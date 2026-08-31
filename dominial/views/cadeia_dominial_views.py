@@ -323,7 +323,15 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     for lanc in lancamentos_list:
         lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
     lancamentos = lancamentos_list
-    
+
+    # Avisar na exclusão de lançamento quando o documento é compartilhado: seja
+    # porque estamos vendo-o por um imóvel importador (is_importado), seja porque
+    # outras cadeias o importaram e a exclusão vaza para elas (issue #152).
+    from ..models import DocumentoImportado
+    documento_compartilhado = is_importado or DocumentoImportado.objects.filter(
+        documento=documento
+    ).exists()
+
     context = {
         'tis': tis,
         'imovel': imovel,
@@ -335,6 +343,7 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
         'cadeias_dominiais': cadeias_dominiais,
         'total_cadeias': len(cadeias_dominiais),
         'arquivos_digitais': documento.arquivos_digitais.all(),
+        'documento_compartilhado': documento_compartilhado,
     }
     
     return render(request, 'dominial/documento_detalhado.html', context) 

@@ -56,6 +56,76 @@ def _build_documento_lancamentos(documento, current_lancamento_id=None):
     ]
 
 
+class LancamentoForaDaCadeiaError(Exception):
+    """O lançamento existe, mas o documento dele não é referenciado — direta
+       nem indiretamente — na cadeia dominial deste imóvel."""
+    def __init__(self, lancamento):
+        self.lancamento = lancamento
+        super().__init__(f'Lançamento {lancamento.id} fora da cadeia do imóvel')
+
+
+def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id):
+    """Resolve um lançamento visto pela URL de `imovel`, aceitando documentos
+       compartilhados (importados) — o mesmo cenário que o `documento_detalhado`
+       já suporta (issue #152).
+
+       Retorna (lancamento, is_lancamento_do_imovel).
+       Levanta Http404 se o lançamento não existe.
+       Levanta LancamentoForaDaCadeiaError se existe mas o documento dele não é
+       referenciado nesta cadeia (protege contra exclusão/edição de homônimo em
+       outra cadeia — ver test_divida_edicao_lancamento_homonimo.py)."""
+    try:
+        return Lancamento.objects.get(id=lancamento_id, documento__imovel=imovel), True
+    except Lancamento.DoesNotExist:
+        pass
+
+    try:
+        lancamento = Lancamento.objects.get(id=lancamento_id)
+    except Lancamento.DoesNotExist:
+        raise Http404("Lançamento não encontrado")
+
+    # imports locais: preservar como estão hoje para não alterar o grafo de
+    # imports do módulo
+    from ..models import Lancamento as LancamentoModel
+    from ..services.hierarquia_arvore_service import HierarquiaArvoreService
+    from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+
+    # Verificar referência direta pela identidade completa (tipo +
+    # número normalizado + cartório), nunca por número isolado: um
+    # texto de origem que apenas contenha o mesmo número não prova
+    # que é o mesmo documento - pode ser um homônimo em outro
+    # cartório que não pertence à cadeia deste imóvel.
+    documento_referenciado = lancamento.documento
+    lancamentos_referenciando_direta = False
+    for lanc_do_imovel in LancamentoModel.objects.filter(documento__imovel=imovel):
+        for origem_info in LancamentoOrigemLeituraService.obter_origens(lanc_do_imovel):
+            if (
+                origem_info.tipo_documento == documento_referenciado.tipo.tipo
+                and origem_info.numero_normalizado == documento_referenciado.numero_normalizado
+                and origem_info.cartorio_id == documento_referenciado.cartorio_id
+            ):
+                lancamentos_referenciando_direta = True
+                break
+        if lancamentos_referenciando_direta:
+            break
+
+    # Verificar referência indireta (através da cadeia dominial)
+    lancamentos_referenciando_indireta = False
+    if not lancamentos_referenciando_direta:
+        # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        documento_na_arvore = any(
+            doc['id'] == lancamento.documento.id and doc['is_compartilhado']
+            for doc in arvore['documentos']
+        )
+        lancamentos_referenciando_indireta = documento_na_arvore
+
+    if not lancamentos_referenciando_direta and not lancamentos_referenciando_indireta:
+        raise LancamentoForaDaCadeiaError(lancamento)
+
+    return lancamento, False
+
+
 @login_required
 def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     """
@@ -398,60 +468,19 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
-    # Permitir edição de lançamentos de documentos compartilhados
-    # Primeiro, tentar buscar o lançamento no imóvel atual
+    # Permitir edição de lançamentos de documentos compartilhados (issue #152)
     try:
-        lancamento = Lancamento.objects.get(id=lancamento_id, documento__imovel=imovel)
-        is_lancamento_do_imovel = True
-    except Lancamento.DoesNotExist:
-        # Se não encontrou, verificar se é um lançamento de documento compartilhado
-        try:
-            lancamento = Lancamento.objects.get(id=lancamento_id)
-            is_lancamento_do_imovel = False
-            
-            # Verificar se o documento do lançamento é compartilhado (referenciado como origem)
-            from ..models import Lancamento as LancamentoModel
-            from ..services.hierarquia_arvore_service import HierarquiaArvoreService
-            from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+        lancamento, is_lancamento_do_imovel = _resolver_lancamento_no_contexto_do_imovel(
+            imovel, lancamento_id
+        )
+    except LancamentoForaDaCadeiaError as erro:
+        messages.error(
+            request,
+            f'Lançamento {erro.lancamento.numero_lancamento} não pode ser editado '
+            f'pois não é referenciado como origem neste imóvel.'
+        )
+        return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
 
-            # Verificar referência direta pela identidade completa (tipo +
-            # número normalizado + cartório), nunca por número isolado: um
-            # texto de origem que apenas contenha o mesmo número não prova
-            # que é o mesmo documento - pode ser um homônimo em outro
-            # cartório que não pertence à cadeia deste imóvel.
-            documento_referenciado = lancamento.documento
-            lancamentos_referenciando_direta = False
-            for lanc_do_imovel in LancamentoModel.objects.filter(documento__imovel=imovel):
-                for origem_info in LancamentoOrigemLeituraService.obter_origens(lanc_do_imovel):
-                    if (
-                        origem_info.tipo_documento == documento_referenciado.tipo.tipo
-                        and origem_info.numero_normalizado == documento_referenciado.numero_normalizado
-                        and origem_info.cartorio_id == documento_referenciado.cartorio_id
-                    ):
-                        lancamentos_referenciando_direta = True
-                        break
-                if lancamentos_referenciando_direta:
-                    break
-            
-            # Verificar referência indireta (através da cadeia dominial)
-            lancamentos_referenciando_indireta = False
-            if not lancamentos_referenciando_direta:
-                # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
-                arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
-                documento_na_arvore = any(
-                    doc['id'] == lancamento.documento.id and doc['is_compartilhado'] 
-                    for doc in arvore['documentos']
-                )
-                lancamentos_referenciando_indireta = documento_na_arvore
-            
-            if not lancamentos_referenciando_direta and not lancamentos_referenciando_indireta:
-                # Se não é referenciado (direta ou indiretamente), não permitir edição
-                messages.error(request, f'Lançamento {lancamento.numero_lancamento} não pode ser editado pois não é referenciado como origem neste imóvel.')
-                return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-                
-        except Lancamento.DoesNotExist:
-            raise Http404("Lançamento não encontrado")
-    
     # Obter dados para o formulário
     pessoas = Pessoas.objects.all().order_by('nome')
     cartorios = Cartorios.objects.all().order_by('nome')
@@ -715,8 +744,20 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
     """View para excluir um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
-    
+
+    # Permitir exclusão de lançamentos de documentos compartilhados (issue #152)
+    try:
+        lancamento, is_lancamento_do_imovel = _resolver_lancamento_no_contexto_do_imovel(
+            imovel, lancamento_id
+        )
+    except LancamentoForaDaCadeiaError as erro:
+        messages.error(
+            request,
+            f'Lançamento {erro.lancamento.numero_lancamento} não pode ser excluído '
+            f'pois não é referenciado como origem neste imóvel.'
+        )
+        return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
+
     if request.method == 'POST':
         try:
             documento_id = lancamento.documento.id
@@ -726,12 +767,21 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
             return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
         except Exception as e:
             messages.error(request, f'Erro ao excluir lançamento: {str(e)}')
-    
+
+    # Alinha com documento_detalhado: o aviso também vale quando o imóvel é o
+    # DONO de um documento que outras cadeias importaram (issue #152, AC#3).
+    from ..models import DocumentoImportado
+    documento_compartilhado = (not is_lancamento_do_imovel) or DocumentoImportado.objects.filter(
+        documento=lancamento.documento
+    ).exists()
+
     return render(request, 'dominial/lancamento_confirm_delete.html', {
         'tis': tis,
         'imovel': imovel,
         'lancamento': lancamento,
-        'documento': lancamento.documento
+        'documento': lancamento.documento,
+        'is_lancamento_do_imovel': is_lancamento_do_imovel,
+        'documento_compartilhado': documento_compartilhado,
     })
 
 @login_required
