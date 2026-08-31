@@ -332,7 +332,14 @@
     
     function excluirLancamento(lancamentoId, numeroLancamento) {
         // Confirmar exclusão
-        if (!confirm(`Tem certeza que deseja excluir o lançamento "${numeroLancamento}"?\n\nEsta ação não pode ser desfeita.`)) {
+        const compartilhado = {{ documento_compartilhado|yesno:"true,false" }};
+        let aviso = `Tem certeza que deseja excluir o lançamento "${numeroLancamento}"?\n\nEsta ação não pode ser desfeita.`;
+        if (compartilhado) {
+            aviso += `\n\n⚠️ ATENÇÃO: este documento é compartilhado entre várias cadeias dominiais.`
+                   + `\nA exclusão remove o lançamento de TODAS as cadeias que usam este documento,`
+                   + "\nnão apenas da cadeia do imóvel {{ imovel.matricula|escapejs }}.";
+        }
+        if (!confirm(aviso)) {
             return;
         }
         
