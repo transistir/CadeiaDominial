@@ -139,23 +139,12 @@ def _form_data_do_post(request):
         'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
         'data': request.POST.get('data'),
         'observacoes': request.POST.get('observacoes'),
-        'livro': request.POST.get('livro'),
-        'folha': request.POST.get('folha'),
-        'cartorio': request.POST.get('cartorio'),
-        'cartorio_nome': request.POST.get('cartorio_nome'),
         'transmitente_ids': request.POST.getlist('transmitente[]'),
         'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
         'adquirente_ids': request.POST.getlist('adquirente[]'),
         'adquirente_nomes': request.POST.getlist('adquirente_nome[]'),
         'area': request.POST.get('area'),
-        'origem': request.POST.get('origem_completa') or request.POST.get('origem'),
-        'forma': request.POST.get('forma'),
         'descricao': request.POST.get('descricao'),
-        'titulo': request.POST.get('titulo'),
-        'cartorio_origem': request.POST.get('cartorio_origem'),
-        'livro_origem': request.POST.get('livro_origem'),
-        'folha_origem': request.POST.get('folha_origem'),
-        'data_origem': request.POST.get('data_origem'),
         # Campos específicos por tipo
         'forma_averbacao': request.POST.get('forma_averbacao'),
         # Bloco Transmissão (issue #157) — `registro`/`inicio_matricula` também
@@ -169,6 +158,87 @@ def _form_data_do_post(request):
         'folha_transacao': request.POST.get('folha_transacao'),
         'data_transacao': request.POST.get('data_transacao'),
     }
+
+
+def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoas,
+                                   cartorios, tipos_lancamento, emitir_avisos=True):
+    """Contexto base do formulário de novo lançamento — fonte única de verdade.
+
+       Reúne os metadados do documento e a lógica de herança de cartório
+       (`is_primeiro_lancamento` / `lancamento` herdado / `cartorio_matricula`).
+
+       Tanto o branch GET quanto o re-render de erro
+       (`_render_erro_novo_lancamento`) chamam esta função. Antes, o caminho de
+       erro caía no fluxo GET e essa metadata de cartório/herança se perdia
+       (issue #157).
+
+       `emitir_avisos=False` no re-render de erro para não duplicar o aviso de
+       cartório indefinido."""
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento_ativo,
+        'pessoas': pessoas,
+        'cartorios': cartorios,
+        'tipos_lancamento': tipos_lancamento,
+        'transmitentes': [],
+        'adquirentes': [],
+        'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
+        'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
+        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
+        'is_novo_lancamento': True,
+        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+    }
+
+    # Verificar se é o primeiro lançamento do documento
+    total_lancamentos = Lancamento.objects.filter(documento=documento_ativo).count()
+    is_primeiro_lancamento = total_lancamentos == 0
+
+    # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
+    is_primeiro_documento_cadeia = (documento_ativo.tipo.tipo == 'matricula' and
+                                    documento_ativo.numero == imovel.matricula)
+
+    if is_primeiro_lancamento:
+        # Para o primeiro lançamento, verificar se deve usar cartório da matrícula ou do documento
+        if is_primeiro_documento_cadeia:
+            # É o primeiro documento da cadeia (matrícula atual) - usar cartório da matrícula
+            context['is_primeiro_lancamento'] = True
+            context['cartorio_matricula'] = imovel.cartorio
+            context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
+
+            # Se não há cartório definido, mostrar aviso
+            if not imovel.cartorio and emitir_avisos:
+                messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
+        else:
+            # É um documento criado automaticamente a partir de uma origem - usar cartório do documento
+            context['is_primeiro_lancamento'] = False
+            context['modo_edicao'] = True
+
+            # Criar um lançamento temporário com o cartório do documento
+            lancamento_herdado = Lancamento()
+            lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+            context['lancamento'] = lancamento_herdado
+    else:
+        # Para lançamentos subsequentes, herdar dados do primeiro lançamento
+        context['is_primeiro_lancamento'] = False
+
+        # Obter dados do primeiro lançamento para herança
+        dados_primeiro = LancamentoHerancaService.obter_dados_primeiro_lancamento(documento_ativo)
+
+        # Para lançamentos subsequentes, usar o cartório do próprio documento
+        lancamento_herdado = Lancamento()
+
+        # CORREÇÃO: Usar o cartório do próprio documento (que foi definido quando ele foi criado)
+        # O cartório do documento é o cartório que foi informado no lançamento de início de matrícula que criou este documento
+        lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+
+        context['lancamento'] = lancamento_herdado
+        context['modo_edicao'] = True  # Para usar os dados herdados no template
+
+        # CORREÇÃO: Adicionar cartorio_origem_correto para o template usar
+        context['cartorio_origem_correto'] = documento_ativo.cartorio
+
+    return context
 
 
 def _render_erro_novo_lancamento(request, tis, imovel, documento_ativo, pessoas,
@@ -217,25 +287,28 @@ def _render_erro_novo_lancamento(request, tis, imovel, documento_ativo, pessoas,
             'adquirentes': adquirentes,
         })
 
-    context = {
-        'tis': tis,
-        'imovel': imovel,
-        'documento': documento_ativo,
-        'pessoas': pessoas,
-        'cartorios': cartorios,
-        'tipos_lancamento': tipos_lancamento,
+    # Partir do contexto base (mesma fonte do branch GET): herança de cartório,
+    # is_primeiro_lancamento, cartorio_matricula, fim_cadeia_opcoes, etc.
+    context = _build_novo_lancamento_context(
+        request, tis, imovel, documento_ativo, pessoas, cartorios, tipos_lancamento,
+        emitir_avisos=False,
+    )
+
+    # No re-render de erro o `form_data` do POST tem prioridade sobre os valores
+    # herdados. O template dá precedência a `{% if modo_edicao and lancamento.X %}`
+    # sobre `form_data.X` (lancamento_form.html:124-160); se o builder marcou
+    # `modo_edicao=True` (caso de herança), o re-render mostraria os valores
+    # herdados no lugar do que o usuário postou — reintroduzindo a issue #157.
+    # `lancamento_herdado` continua no contexto para as outras seções do template.
+    context['modo_edicao'] = False
+
+    context.update({
         'form_data': _form_data_do_post(request),
         'numero_lancamento_error': numero_lancamento_error,
         'lancamentos_com_pessoas': lancamentos_com_pessoas,
-        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
-        'is_novo_lancamento': True,
-        # Sem isso o select de destacamento volta vazio ao re-renderizar
-        # o formulário depois de um erro (issue #104)
-        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
-    }
-
-    context['transmitentes'] = transmitentes_data
-    context['adquirentes'] = adquirentes_data
+        'transmitentes': transmitentes_data,
+        'adquirentes': adquirentes_data,
+    })
 
     return render(request, 'dominial/lancamento_form.html', context)
 
@@ -441,74 +514,14 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             'adquirentes': adquirentes,
         })
 
-    context = {
-        'tis': tis,
-        'imovel': imovel,
-        'documento': documento_ativo,
-        'pessoas': pessoas,
-        'cartorios': cartorios,
-        'duplicata_cancelada': duplicata_cancelada,
-        'duplicata_origem': duplicata_origem,
-        'duplicata_cartorio': duplicata_cartorio,
-        'tipos_lancamento': tipos_lancamento,
-        'transmitentes': [],
-        'adquirentes': [],
-        'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
-        'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
-        'lancamentos_com_pessoas': lancamentos_com_pessoas,
-        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
-        'is_novo_lancamento': True,
-        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
-    }
-    
-    # Verificar se é o primeiro lançamento do documento
-    total_lancamentos = Lancamento.objects.filter(documento=documento_ativo).count()
-    is_primeiro_lancamento = total_lancamentos == 0
-    
-    # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
-    is_primeiro_documento_cadeia = (documento_ativo.tipo.tipo == 'matricula' and 
-                                   documento_ativo.numero == imovel.matricula)
-    
-    if is_primeiro_lancamento:
-        # Para o primeiro lançamento, verificar se deve usar cartório da matrícula ou do documento
-        if is_primeiro_documento_cadeia:
-            # É o primeiro documento da cadeia (matrícula atual) - usar cartório da matrícula
-            context['is_primeiro_lancamento'] = True
-            context['cartorio_matricula'] = imovel.cartorio
-            context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
-            
-            # Se não há cartório definido, mostrar aviso
-            if not imovel.cartorio:
-                messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
-        else:
-            # É um documento criado automaticamente a partir de uma origem - usar cartório do documento
-            context['is_primeiro_lancamento'] = False
-            context['modo_edicao'] = True
-            
-            # Criar um lançamento temporário com o cartório do documento
-            lancamento_herdado = Lancamento()
-            lancamento_herdado.cartorio_origem = documento_ativo.cartorio
-            context['lancamento'] = lancamento_herdado
-    else:
-        # Para lançamentos subsequentes, herdar dados do primeiro lançamento
-        context['is_primeiro_lancamento'] = False
-        
-        # Obter dados do primeiro lançamento para herança
-        dados_primeiro = LancamentoHerancaService.obter_dados_primeiro_lancamento(documento_ativo)
-        
-        # Para lançamentos subsequentes, usar o cartório do próprio documento
-        lancamento_herdado = Lancamento()
-        
-        # CORREÇÃO: Usar o cartório do próprio documento (que foi definido quando ele foi criado)
-        # O cartório do documento é o cartório que foi informado no lançamento de início de matrícula que criou este documento
-        lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+    context = _build_novo_lancamento_context(
+        request, tis, imovel, documento_ativo, pessoas, cartorios, tipos_lancamento
+    )
+    context['duplicata_cancelada'] = duplicata_cancelada
+    context['duplicata_origem'] = duplicata_origem
+    context['duplicata_cartorio'] = duplicata_cartorio
+    context['lancamentos_com_pessoas'] = lancamentos_com_pessoas
 
-        context['lancamento'] = lancamento_herdado
-        context['modo_edicao'] = True  # Para usar os dados herdados no template
-        
-        # CORREÇÃO: Adicionar cartorio_origem_correto para o template usar
-        context['cartorio_origem_correto'] = documento_ativo.cartorio
-    
     return render(request, 'dominial/lancamento_form.html', context)
 
 @login_required

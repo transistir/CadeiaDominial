@@ -93,6 +93,47 @@ class TransmissaoPersistenciaTest(TestCase):
         # e o HTML repõe os values:
         self.assertContains(response, 'value="Compra e Venda"')
 
+    def test_erro_validacao_preserva_contexto_heranca(self):
+        """O re-render de erro deve carregar a MESMA metadata de cartório/herança
+        que um GET fresco — antes o caminho de erro caía no fluxo GET e depois
+        passou a montar um contexto pobre, perdendo `is_primeiro_lancamento`,
+        `cartorio_origem_correto`, `cartorio_matricula`, etc. (issue #157)."""
+        url = reverse("novo_lancamento", args=[self.tis.id, self.imovel.id])
+
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 200)
+
+        post_response = self.client.post(
+            url,
+            {
+                "tipo_lancamento": str(self.tipo_registro.id),
+                "numero_lancamento": "1",  # duplicado → else: de falha
+                "numero_lancamento_simples": "1",
+                "forma_transacao": "Compra e Venda",
+            },
+        )
+        self.assertEqual(post_response.status_code, 200)
+
+        # regressão original: o form_data do POST sobrevive
+        self.assertEqual(
+            post_response.context["form_data"]["forma_transacao"], "Compra e Venda"
+        )
+
+        # a metadata de cartório/herança sobrevive igual ao GET
+        self.assertEqual(
+            post_response.context["is_primeiro_lancamento"],
+            get_response.context["is_primeiro_lancamento"],
+        )
+        self.assertIn("cartorio_origem_correto", post_response.context)
+        self.assertEqual(
+            post_response.context["cartorio_origem_correto"],
+            get_response.context["cartorio_origem_correto"],
+        )
+
+        # e o form_data ainda vence a herança no template (modo_edicao desligado
+        # no caminho de erro), senão reintroduziria a #157
+        self.assertContains(post_response, 'value="Compra e Venda"')
+
     def test_fluxo_duplicata_preserva_campos_transacao(self):
         # Documento em OUTRO imóvel que será detectado como duplicata da origem.
         outro_imovel = Imovel.objects.create(
@@ -132,6 +173,8 @@ class TransmissaoPersistenciaTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "dominial/duplicata_importacao.html")
+        # nenhum campo preservado deve renderizar o literal "None" (issue #157)
+        self.assertNotContains(response, 'value="None"')
         form_data = response.context["form_data"]
         self.assertEqual(form_data["forma_transacao"], "Compra e Venda")
         self.assertEqual(form_data["titulo_transacao"], "Escritura Pública")
