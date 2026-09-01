@@ -31,7 +31,7 @@
             <label for="livro_documento">Livro do Documento *</label>
             <input type="text" name="livro_documento" id="livro_documento" required
                    {% if modo_edicao and lancamento.documento.livro and lancamento.documento.livro != '0' %}readonly{% endif %}
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento }}{% endif %}"
+                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento|default_if_none:'' }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">Livro do documento atual (não muda após o primeiro lançamento)</small>
         </div>
@@ -42,7 +42,7 @@
                    {% if documento.tipo.tipo == 'matricula' %}disabled
                    {% elif modo_edicao and lancamento.documento.folha and lancamento.documento.folha != '0' %}readonly
                    {% else %}required{% endif %}
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento }}{% endif %}"
+                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento|default_if_none:'' }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">{% if documento.tipo.tipo == 'matricula' %}Não aplicável para matrículas{% else %}Folha do documento atual (herdada da origem){% endif %}</small>
         </div>

@@ -127,9 +127,18 @@ class LancamentoCamposService:
         Processa campos do bloco de transação (Transmissão).
 
         `preservar_forma`/`preservar_titulo` (issue #157): quando o bloco vem
-        de uma averbação em transcrição, `forma`/`titulo` já foram gravados
-        por `_processar_campos_averbacao`; um bloco Transmissão vazio NÃO pode
-        sobrescrevê-los com `None`. Só um valor preenchido no bloco vence.
+        de uma averbação em transcrição, um bloco Transmissão vazio NÃO pode
+        sobrescrever `forma`/`titulo` com `None`. Só um valor preenchido no
+        bloco vence.
+
+        - `forma` É gravada pela averbação (`_processar_campos_averbacao`);
+          `preservar_forma` impede que o bloco vazio apague esse valor.
+        - `titulo` NÃO é gravado pela averbação (ela grava
+          forma/descricao/area/origem/cartorio_origem, nunca titulo);
+          `preservar_titulo` é uma via de mão única que mantém o valor
+          já existente no banco quando o bloco Transmissão vem vazio
+          (decisão de design, com issue de follow-up pendente).
+
         O comportamento padrão (edição de registro/transação limpando o campo
         → `None`) é mantido com os defaults `False`.
         """

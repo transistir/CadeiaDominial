@@ -121,6 +121,7 @@ class TransmissaoPersistenciaTest(TestCase):
                 "forma_transacao": "Compra e Venda",
                 "livro_documento": "3-L",
                 "folha_documento": "7-F",
+                "area": "150.5",
             },
         )
         self.assertEqual(post_response.status_code, 200)
@@ -200,6 +201,36 @@ class TransmissaoPersistenciaTest(TestCase):
             html,
             r'name="folha_documento"[^>]*value="7-F"',
             "folha_documento digitado deve sobreviver ao re-render de erro",
+        )
+
+        # área digitada no bloco Transmissão sobrevive ao re-render de erro —
+        # antes, com `modo_edicao=True` (herança) e o `Lancamento()` herdado
+        # vazio (`area is None`), o guard BARE `{% if modo_edicao %}` de
+        # _area_form.html renderizava `value="0"` e nunca alcançava o
+        # `form_data`; um resubmit gravaria área=0 silenciosamente
+        # (issue #157, revisão Opus 5).
+        area_field = re.search(
+            r'<input[^>]*id="area_transmissao"[^>]*>', html
+        )
+        self.assertIsNotNone(
+            area_field, "campo área do bloco Transmissão deve estar no HTML"
+        )
+        self.assertIn(
+            'value="150.5"', area_field.group(0),
+            "área digitada deve sobreviver ao re-render de erro",
+        )
+        self.assertNotIn(
+            'value="0"', area_field.group(0),
+            "área não pode ser resetada para 0 no re-render de erro",
+        )
+
+        # finding 2 (Opus 5): livro_documento/folha_documento não podem
+        # renderizar o literal `value="None"` quando a chave existe no
+        # form_data mas o campo não foi submetido pelo browser.
+        self.assertNotRegex(
+            html,
+            r'(name="livro_documento"|name="folha_documento")[^>]*value="None"',
+            "livro/folha do documento não podem renderizar o literal 'None'",
         )
 
     def test_fluxo_duplicata_preserva_campos_transacao(self):
