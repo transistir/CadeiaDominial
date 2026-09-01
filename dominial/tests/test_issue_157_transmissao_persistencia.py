@@ -11,6 +11,8 @@ Cobre os 4 caminhos de perda:
 Tasks 1-3 cobrem o caminho 1; Tasks 4-5 o caminho 2; Tasks 6-7 o caminho 3.
 """
 
+import re
+
 from django.contrib.auth.models import User
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
@@ -130,9 +132,26 @@ class TransmissaoPersistenciaTest(TestCase):
             get_response.context["cartorio_origem_correto"],
         )
 
-        # e o form_data ainda vence a herança no template (modo_edicao desligado
-        # no caminho de erro), senão reintroduziria a #157
+        # e o form_data ainda vence a herança no template (a herança de cartório
+        # continua marcada, mas `lancamento` herdado é um Lancamento() vazio, então
+        # todos os guards `modo_edicao and lancamento.X` do bloco Transmissão são
+        # False e o form_data vence), senão reintroduziria a #157
         self.assertContains(post_response, 'value="Compra e Venda"')
+
+        # os hidden `cartorio`/`cartorio_nome` (herdados do documento) precisam
+        # renderizar preenchidos igual ao GET — antes o caminho de erro forçava
+        # `modo_edicao=False` e o template deixava `value=""` (issue #157).
+        cartorio_hidden = r'name="cartorio"[^>]*value="[^"]+"'
+        self.assertRegex(
+            get_response.content.decode(), cartorio_hidden,
+            "pré-condição: o GET deveria preencher o hidden cartorio",
+        )
+        self.assertContains(post_response, '<input type="hidden" name="cartorio"')
+        self.assertRegex(post_response.content.decode(), cartorio_hidden)
+        # o valor postado deve bater com o do GET (id do cartório herdado)
+        get_val = re.search(cartorio_hidden, get_response.content.decode()).group(0)
+        post_val = re.search(cartorio_hidden, post_response.content.decode()).group(0)
+        self.assertEqual(get_val, post_val)
 
     def test_fluxo_duplicata_preserva_campos_transacao(self):
         # Documento em OUTRO imóvel que será detectado como duplicata da origem.

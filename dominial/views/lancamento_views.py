@@ -294,13 +294,14 @@ def _render_erro_novo_lancamento(request, tis, imovel, documento_ativo, pessoas,
         emitir_avisos=False,
     )
 
-    # No re-render de erro o `form_data` do POST tem prioridade sobre os valores
-    # herdados. O template dá precedência a `{% if modo_edicao and lancamento.X %}`
-    # sobre `form_data.X` (lancamento_form.html:124-160); se o builder marcou
-    # `modo_edicao=True` (caso de herança), o re-render mostraria os valores
-    # herdados no lugar do que o usuário postou — reintroduzindo a issue #157.
-    # `lancamento_herdado` continua no contexto para as outras seções do template.
-    context['modo_edicao'] = False
+    # O `modo_edicao` fica exatamente como o builder o definiu — igual ao branch
+    # GET (herança → True + `lancamento` herdado; primeiro lançamento da cadeia →
+    # `is_primeiro_lancamento`). Não forçamos `modo_edicao=False`: o `lancamento`
+    # herdado é um `Lancamento()` vazio (só `cartorio_origem`), então todo guard
+    # `modo_edicao and lancamento.X` do bloco Transmissão
+    # (lancamento_form.html:124-160) já é False e o `form_data` do POST vence.
+    # Forçar False zerava os hidden `cartorio`/`cartorio_nome` que o GET preenche
+    # (issue #157, revisão Codex round-2).
 
     context.update({
         'form_data': _form_data_do_post(request),
