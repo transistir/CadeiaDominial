@@ -102,6 +102,13 @@ class TransmissaoPersistenciaTest(TestCase):
         `cartorio_origem_correto`, `cartorio_matricula`, etc. (issue #157)."""
         url = reverse("novo_lancamento", args=[self.tis.id, self.imovel.id])
 
+        # Cenário: o documento herdado NÃO tem livro/folha gravados, então o
+        # `elif documento.livro` do template não vence e o fallback `form_data`
+        # do POST precisa repor o que o usuário digitou (issue #157, Greptile P1b).
+        self.documento.livro = ""
+        self.documento.folha = ""
+        self.documento.save()
+
         get_response = self.client.get(url)
         self.assertEqual(get_response.status_code, 200)
 
@@ -112,6 +119,8 @@ class TransmissaoPersistenciaTest(TestCase):
                 "numero_lancamento": "1",  # duplicado → else: de falha
                 "numero_lancamento_simples": "2",
                 "forma_transacao": "Compra e Venda",
+                "livro_documento": "3-L",
+                "folha_documento": "7-F",
             },
         )
         self.assertEqual(post_response.status_code, 200)
@@ -177,6 +186,21 @@ class TransmissaoPersistenciaTest(TestCase):
         get_val = re.search(cartorio_hidden, get_response.content.decode()).group(0)
         post_val = re.search(cartorio_hidden, post_response.content.decode()).group(0)
         self.assertEqual(get_val, post_val)
+
+        # livro_documento / folha_documento digitados sobrevivem ao re-render de
+        # erro — antes `_form_data_do_post` não capturava essas chaves e o
+        # fallback `{% elif form_data %}{{ form_data.livro_documento }}` do
+        # _lancamento_basico_form.html renderizava vazio (issue #157, Greptile P1b).
+        self.assertRegex(
+            html,
+            r'name="livro_documento"[^>]*value="3-L"',
+            "livro_documento digitado deve sobreviver ao re-render de erro",
+        )
+        self.assertRegex(
+            html,
+            r'name="folha_documento"[^>]*value="7-F"',
+            "folha_documento digitado deve sobreviver ao re-render de erro",
+        )
 
     def test_fluxo_duplicata_preserva_campos_transacao(self):
         # Documento em OUTRO imóvel que será detectado como duplicata da origem.

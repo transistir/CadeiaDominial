@@ -139,6 +139,8 @@ def _form_data_do_post(request):
         'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
         'data': request.POST.get('data'),
         'observacoes': request.POST.get('observacoes'),
+        'livro_documento': request.POST.get('livro_documento'),
+        'folha_documento': request.POST.get('folha_documento'),
         'transmitente_ids': request.POST.getlist('transmitente[]'),
         'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
         'adquirente_ids': request.POST.getlist('adquirente[]'),
