@@ -21,9 +21,14 @@ class LancamentoCamposService:
         
         if lancamento.tipo.tipo == 'averbacao':
             LancamentoCamposService._processar_campos_averbacao(request, lancamento)
-            # Para transcrições, sempre processar campos de transação
+            # Para transcrições, sempre processar campos de transação.
+            # `preservar_forma`/`preservar_titulo`: o bloco Transmissão vazio
+            # NÃO pode apagar o que a averbação já gravou via `forma_averbacao`
+            # (issue #157). Transação preenchida ainda vence a averbação.
             if is_transcricao:
-                LancamentoCamposService._processar_campos_transacao(request, lancamento)
+                LancamentoCamposService._processar_campos_transacao(
+                    request, lancamento, preservar_forma=True, preservar_titulo=True
+                )
         elif lancamento.tipo.tipo == 'registro':
             LancamentoCamposService._processar_campos_registro(request, lancamento)
             # Para registro, também processar campos de transação
@@ -116,16 +121,30 @@ class LancamentoCamposService:
                 lancamento.cartorio_origem = cartorio
 
     @staticmethod
-    def _processar_campos_transacao(request, lancamento):
+    def _processar_campos_transacao(request, lancamento, preservar_forma=False,
+                                    preservar_titulo=False):
         """
-        Processa campos do bloco de transação (Transmissão)
+        Processa campos do bloco de transação (Transmissão).
+
+        `preservar_forma`/`preservar_titulo` (issue #157): quando o bloco vem
+        de uma averbação em transcrição, `forma`/`titulo` já foram gravados
+        por `_processar_campos_averbacao`; um bloco Transmissão vazio NÃO pode
+        sobrescrevê-los com `None`. Só um valor preenchido no bloco vence.
+        O comportamento padrão (edição de registro/transação limpando o campo
+        → `None`) é mantido com os defaults `False`.
         """
         # Campos de transação
         forma_value = request.POST.get('forma_transacao', '').strip()
-        lancamento.forma = forma_value if forma_value else None
-        
+        if not preservar_forma:
+            lancamento.forma = forma_value if forma_value else None
+        elif forma_value:
+            lancamento.forma = forma_value  # transação preenchida vence averbação
+
         titulo_value = request.POST.get('titulo_transacao', '').strip()
-        lancamento.titulo = titulo_value if titulo_value else None
+        if not preservar_titulo:
+            lancamento.titulo = titulo_value if titulo_value else None
+        elif titulo_value:
+            lancamento.titulo = titulo_value
         
         # Cartório de transmissão (usar campo específico)
         cartorio_transmissao_id = request.POST.get('cartorio_transmissao')

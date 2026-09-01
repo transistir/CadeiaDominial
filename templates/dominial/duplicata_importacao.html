@@ -182,9 +182,16 @@
                 <input type="hidden" name="cartorio" value="{{ form_data.cartorio }}">
                 <input type="hidden" name="cartorio_nome" value="{{ form_data.cartorio_nome }}">
                 <input type="hidden" name="area" value="{{ form_data.area }}">
-                <input type="hidden" name="forma" value="{{ form_data.forma }}">
                 <input type="hidden" name="descricao" value="{{ form_data.descricao }}">
-                <input type="hidden" name="titulo" value="{{ form_data.titulo }}">
+
+                <!-- Bloco Transmissão (issue #157) -->
+                <input type="hidden" name="forma_transacao" value="{{ form_data.forma_transacao|default_if_none:'' }}">
+                <input type="hidden" name="titulo_transacao" value="{{ form_data.titulo_transacao|default_if_none:'' }}">
+                <input type="hidden" name="cartorio_transmissao" value="{{ form_data.cartorio_transmissao|default_if_none:'' }}">
+                <input type="hidden" name="cartorio_transmissao_nome" value="{{ form_data.cartorio_transmissao_nome|default_if_none:'' }}">
+                <input type="hidden" name="livro_transacao" value="{{ form_data.livro_transacao|default_if_none:'' }}">
+                <input type="hidden" name="folha_transacao" value="{{ form_data.folha_transacao|default_if_none:'' }}">
+                <input type="hidden" name="data_transacao" value="{{ form_data.data_transacao|default_if_none:'' }}">
                 
                 <!-- Preservar origens -->
                 {% for origem in form_data.origem_completa %}

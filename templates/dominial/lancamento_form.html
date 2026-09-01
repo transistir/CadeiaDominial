@@ -106,17 +106,28 @@
                 {% endif %}
             </h4>
             
+            <datalist id="formas-transacao">
+                <option value="Compra e Venda"></option>
+                <option value="Doação"></option>
+                <option value="Permuta"></option>
+                <option value="Cessão"></option>
+                <option value="Inventário"></option>
+                <option value="Arrematação"></option>
+                <option value="Adjudicação"></option>
+            </datalist>
+
             <div class="grid-3">
                 <div class="form-group">
                     <label for="forma_transacao">Forma</label>
                     <input type="text" name="forma_transacao" id="forma_transacao" placeholder="Ex: Compra e Venda, Doação, etc."
-                           value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma %}{{ form_data.forma }}{% else %}{% endif %}">
+                           list="formas-transacao" autocomplete="off"
+                           value="{% if modo_edicao and lancamento.forma %}{{ lancamento.forma }}{% elif form_data and form_data.forma_transacao %}{{ form_data.forma_transacao }}{% else %}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="titulo_transacao">Título</label>
                     {% with titulo_limpo=lancamento.titulo|limpar_none:"" %}
-                    <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro"
-                           value="{% if modo_edicao and titulo_limpo %}{{ titulo_limpo }}{% elif form_data and form_data.titulo %}{{ form_data.titulo }}{% endif %}">
+                    <input type="text" name="titulo_transacao" id="titulo_transacao" placeholder="Título do registro" autocomplete="off"
+                           value="{% if modo_edicao and titulo_limpo %}{{ titulo_limpo }}{% elif form_data and form_data.titulo_transacao %}{{ form_data.titulo_transacao }}{% endif %}">
                     {% endwith %}
                 </div>
                 <div class="form-group">
@@ -135,12 +146,12 @@
             <div class="grid-3">
                 <div class="form-group">
                     <label for="livro_transacao">Livro</label>
-                    <input type="text" name="livro_transacao" id="livro_transacao" 
+                    <input type="text" name="livro_transacao" id="livro_transacao" autocomplete="off"
                            value="{% if modo_edicao and lancamento.livro_transacao %}{{ lancamento.livro_transacao }}{% elif form_data and form_data.livro_transacao %}{{ form_data.livro_transacao }}{% endif %}">
                 </div>
                 <div class="form-group">
                     <label for="folha_transacao">Folha</label>
-                    <input type="text" name="folha_transacao" id="folha_transacao" 
+                    <input type="text" name="folha_transacao" id="folha_transacao" autocomplete="off"
                            value="{% if modo_edicao and lancamento.folha_transacao %}{{ lancamento.folha_transacao }}{% elif form_data and form_data.folha_transacao %}{{ form_data.folha_transacao }}{% endif %}">
                 </div>
                 <div class="form-group">
