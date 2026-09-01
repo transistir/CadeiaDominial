@@ -110,7 +110,7 @@ class TransmissaoPersistenciaTest(TestCase):
             {
                 "tipo_lancamento": str(self.tipo_registro.id),
                 "numero_lancamento": "1",  # duplicado → else: de falha
-                "numero_lancamento_simples": "1",
+                "numero_lancamento_simples": "2",
                 "forma_transacao": "Compra e Venda",
             },
         )
@@ -137,6 +137,31 @@ class TransmissaoPersistenciaTest(TestCase):
         # todos os guards `modo_edicao and lancamento.X` do bloco Transmissão são
         # False e o form_data vence), senão reintroduziria a #157
         self.assertContains(post_response, 'value="Compra e Venda"')
+
+        # bloco Número do Lançamento: com `modo_edicao=True` (herança) e o
+        # `Lancamento()` herdado vazio, os guards de _lancamento_basico_form.html
+        # precisam cair no `form_data` do POST — antes o `{% if modo_edicao %}`
+        # BARE da linha 88 renderizava o `numero_lancamento` herdado (que num
+        # `Lancamento()` vazio é `None` → literal `value="None"`) e a herança
+        # vazia bloqueava o `form_data` do POST (issue #157, revisão Codex r3).
+        html = post_response.content.decode()
+        self.assertRegex(
+            html,
+            r'name="numero_lancamento_simples"[^>]*value="2"',
+            "numero_lancamento_simples digitado deve sobreviver ao re-render de erro",
+        )
+        self.assertNotRegex(
+            html,
+            r'name="numero_lancamento"\s+id="numero_lancamento"[^>]*value="None"',
+            "numero_lancamento não pode renderizar o literal 'None' do "
+            "Lancamento() herdado vazio",
+        )
+        self.assertRegex(
+            html,
+            r'name="numero_lancamento"\s+id="numero_lancamento"[^>]*value="1"',
+            "numero_lancamento (form_data do POST) deve vencer a herança vazia "
+            "mesmo com modo_edicao=True",
+        )
 
         # os hidden `cartorio`/`cartorio_nome` (herdados do documento) precisam
         # renderizar preenchidos igual ao GET — antes o caminho de erro forçava

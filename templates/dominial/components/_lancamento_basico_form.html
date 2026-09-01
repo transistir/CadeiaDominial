@@ -85,7 +85,7 @@
             <div>
                 <input type="text" name="numero_lancamento" id="numero_lancamento" readonly
                        style="width: 100%; background-color: #f8f9fa;"
-                       value="{% if modo_edicao %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
+                       value="{% if modo_edicao and lancamento.numero_lancamento %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
                        placeholder="Sigla será gerada automaticamente">
                 <small>Sigla completa gerada</small>
             </div>
