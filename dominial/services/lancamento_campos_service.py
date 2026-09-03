@@ -120,6 +120,25 @@ class LancamentoCamposService:
                 )
                 lancamento.cartorio_origem = cartorio
 
+    # Campos que compõem o bloco Transmissão no formulário de lançamento.
+    # `area` entra aqui porque a averbação em transcrição grava a área via
+    # `_processar_campos_averbacao` (POST `area`): uma averbação com SÓ a área
+    # preenchida não pode ser tratada como bloco vazio e limpar o `titulo`.
+    _CAMPOS_BLOCO_TRANSMISSAO = (
+        'forma_transacao', 'titulo_transacao', 'cartorio_transmissao',
+        'cartorio_transmissao_nome', 'livro_transacao', 'folha_transacao',
+        'data_transacao', 'area',
+    )
+
+    @staticmethod
+    def _bloco_transmissao_vazio(request):
+        """True quando nenhum campo do bloco Transmissão foi preenchido no POST
+        (issue #160)."""
+        return not any(
+            request.POST.get(campo, '').strip()
+            for campo in LancamentoCamposService._CAMPOS_BLOCO_TRANSMISSAO
+        )
+
     @staticmethod
     def _processar_campos_transacao(request, lancamento, preservar_forma=False,
                                     preservar_titulo=False):
@@ -135,9 +154,9 @@ class LancamentoCamposService:
           `preservar_forma` impede que o bloco vazio apague esse valor.
         - `titulo` NÃO é gravado pela averbação (ela grava
           forma/descricao/area/origem/cartorio_origem, nunca titulo);
-          `preservar_titulo` é uma via de mão única que mantém o valor
-          já existente no banco quando o bloco Transmissão vem vazio
-          (decisão de design, com issue de follow-up pendente).
+          `preservar_titulo` mantém o valor já existente no banco quando o
+          bloco Transmissão vem PARCIALMENTE preenchido. Se o bloco inteiro
+          vier vazio, `titulo` é limpo (issue #160), simétrico ao `forma`.
 
         O comportamento padrão (edição de registro/transação limpando o campo
         → `None`) é mantido com os defaults `False`.
@@ -154,6 +173,12 @@ class LancamentoCamposService:
             lancamento.titulo = titulo_value if titulo_value else None
         elif titulo_value:
             lancamento.titulo = titulo_value
+        elif LancamentoCamposService._bloco_transmissao_vazio(request):
+            # issue #160: `preservar_titulo` deixou de ser via de mão única.
+            # Bloco Transmissão INTEIRO vazio → limpar `titulo` (simétrico ao
+            # `forma`, que a averbação já zera). Bloco parcialmente preenchido
+            # ainda preserva o valor antigo do banco.
+            lancamento.titulo = None
         
         # Cartório de transmissão (usar campo específico)
         cartorio_transmissao_id = request.POST.get('cartorio_transmissao')

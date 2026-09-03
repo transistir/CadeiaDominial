@@ -681,6 +681,13 @@ function removeOrigem(button) {
     if (fimCadeiaContainer) {
         fimCadeiaContainer.remove();
     }
+
+    // Realinhar os checkboxes `fim_cadeia[]` com a nova ordem das origens, para
+    // o array do POST não ficar com índices furados no re-render de erro
+    // (issue #162 rodada 2).
+    if (typeof renumerarCheckboxesFimCadeia === 'function') {
+        renumerarCheckboxesFimCadeia();
+    }
 }
 
 // Função para adicionar origem
@@ -784,6 +791,13 @@ function adicionarOrigem() {
     // Configurar select de tipo para a nova origem
     const newTipoSelect = fimCadeiaContainer.querySelector(`#tipo_fim_cadeia_${newIndex}`);
     setupTipoFimCadeiaSelectPorOrigem(newTipoSelect);
+
+    // Realinhar os `value` dos checkboxes `fim_cadeia[]` com a posição atual de
+    // cada linha — igual ao remover — para o POST não sair com índices furados
+    // ou duplicados depois de remover+adicionar (issue #162 rodada 3).
+    if (typeof renumerarCheckboxesFimCadeia === 'function') {
+        renumerarCheckboxesFimCadeia();
+    }
 }
 
 // Função para configurar autocomplete geral de origens
