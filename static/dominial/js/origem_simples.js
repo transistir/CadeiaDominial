@@ -340,7 +340,15 @@ function adicionarOrigemSimples() {
         
         // Configurar nova origem
         configurarOrigem(proximoIndex);
-        
+
+        // Realinhar os `value` dos checkboxes `fim_cadeia[]` com a posição atual
+        // de cada linha. `proximoIndex` é um índice de ID (busca gap em
+        // `tipo_origem_N`) e pode colidir com o `value` de uma linha
+        // sobrevivente depois de um remover+adicionar — sem renumerar, o POST
+        // sai com `fim_cadeia[]` duplicado e o servidor marca a linha errada
+        // (issue #162 rodada 3).
+        renumerarCheckboxesFimCadeia();
+
         // Focar no select da nova origem
         const tipoSelect = document.getElementById(`tipo_origem_${proximoIndex}`);
         if (tipoSelect) {
@@ -455,6 +463,32 @@ function atualizarIdsOrigem(elemento, novoIndex) {
         const forAttr = label.getAttribute('for');
         if (forAttr) {
             label.setAttribute('for', forAttr.replace(/_0$/, `_${novoIndex}`));
+        }
+    });
+
+    // O checkbox `fim_cadeia[]` identifica a linha pelo `value` (o servidor
+    // compara com a posição da origem). O clone mantinha `value="0"` em todas
+    // as linhas, quebrando o re-render de erro (issue #162 rodada 2).
+    const fimCadeiaCheckbox = elemento.querySelector('.fim-cadeia-toggle');
+    if (fimCadeiaCheckbox) {
+        fimCadeiaCheckbox.value = String(novoIndex);
+    }
+}
+
+/**
+ * Renumera o `value` dos checkboxes `fim_cadeia[]` para a posição atual da
+ * linha depois de remover uma origem, mantendo o array do POST alinhado com a
+ * ordem das origens (issue #162 rodada 2). Mexe só no `value` — ids, names e
+ * listeners continuam intactos.
+ */
+function renumerarCheckboxesFimCadeia() {
+    const container = document.getElementById('origens-container');
+    if (!container) return;
+
+    container.querySelectorAll('.origem-item').forEach((origem, posicao) => {
+        const checkbox = origem.querySelector('.fim-cadeia-toggle');
+        if (checkbox) {
+            checkbox.value = String(posicao);
         }
     });
 }
@@ -648,21 +682,25 @@ function controlarCamposFimCadeia(index) {
     
     if (fimCadeiaToggle && cartorioField && livroField && folhaField) {
         if (fimCadeiaToggle.checked) {
-            // Fim de cadeia: desabilitar campos de número e cartório
+            // Fim de cadeia: bloquear número e cartório/livro/folha.
+            // Usar `readonly` (não `disabled`) nos campos de texto: campo
+            // desabilitado NÃO vai no POST e os arrays `*_origem[]` são
+            // posicionais — a linha some e desalinha as seguintes no
+            // re-render de erro (issue #159 rodada 2).
             if (numeroField) {
                 numeroField.disabled = true;
                 numeroField.classList.remove('campo-obrigatorio');
                 numeroField.value = '';
             }
-            cartorioField.disabled = true;
-            livroField.disabled = true;
-            folhaField.disabled = true;
-            
+            cartorioField.readOnly = true;
+            livroField.readOnly = true;
+            folhaField.readOnly = true;
+
             // Remover validação obrigatória
             cartorioField.classList.remove('campo-obrigatorio');
             livroField.classList.remove('campo-obrigatorio');
             folhaField.classList.remove('campo-obrigatorio');
-            
+
             // Limpar valores
             cartorioField.value = '';
             livroField.value = '';
@@ -672,9 +710,9 @@ function controlarCamposFimCadeia(index) {
             if (numeroField) {
                 numeroField.disabled = false;
             }
-            cartorioField.disabled = false;
-            livroField.disabled = false;
-            folhaField.disabled = false;
+            cartorioField.readOnly = false;
+            livroField.readOnly = false;
+            folhaField.readOnly = false;
             
             // Aplicar validação obrigatória se for início de matrícula
             const tipoLancamento = document.querySelector('input[name="tipo"]:checked')?.value;
@@ -722,6 +760,7 @@ function criarCampoSiglaPatrimonio(index) {
 
 // Exportar funções para uso global
 window.adicionarOrigemSimples = adicionarOrigemSimples;
+window.renumerarCheckboxesFimCadeia = renumerarCheckboxesFimCadeia;
 window.montarBlocoDestacamento = montarBlocoDestacamento;
 window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
 window.controlarCamposFimCadeia = controlarCamposFimCadeia;

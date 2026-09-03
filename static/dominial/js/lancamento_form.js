@@ -681,6 +681,13 @@ function removeOrigem(button) {
     if (fimCadeiaContainer) {
         fimCadeiaContainer.remove();
     }
+
+    // Realinhar os checkboxes `fim_cadeia[]` com a nova ordem das origens, para
+    // o array do POST não ficar com índices furados no re-render de erro
+    // (issue #162 rodada 2).
+    if (typeof renumerarCheckboxesFimCadeia === 'function') {
+        renumerarCheckboxesFimCadeia();
+    }
 }
 
 // Função para adicionar origem
@@ -690,9 +697,18 @@ function adicionarOrigem() {
         return;
     }
     
-    // Contar quantas origens já existem para gerar IDs únicos
-    const existingOrigins = container.querySelectorAll('.origem-item');
-    const newIndex = existingOrigins.length;
+    // Encontrar o próximo índice de ID realmente livre. Não dá para usar a
+    // contagem de linhas: remover uma linha do meio deixa um buraco nos IDs
+    // (removeOrigem não renumera os elementos), e a contagem reaproveitaria um
+    // índice ainda em uso, duplicando IDs no DOM. Gap-scan igual ao
+    // adicionarOrigemSimples de origem_simples.js (issue #162).
+    let newIndex = 0;
+    while (
+        document.getElementById(`origem_completa_${newIndex}`) ||
+        document.getElementById(`fim-cadeia-origem-container_${newIndex}`)
+    ) {
+        newIndex++;
+    }
     
     const origemDiv = document.createElement('div');
     origemDiv.className = 'origem-item';
@@ -784,6 +800,13 @@ function adicionarOrigem() {
     // Configurar select de tipo para a nova origem
     const newTipoSelect = fimCadeiaContainer.querySelector(`#tipo_fim_cadeia_${newIndex}`);
     setupTipoFimCadeiaSelectPorOrigem(newTipoSelect);
+
+    // Realinhar os `value` dos checkboxes `fim_cadeia[]` com a posição atual de
+    // cada linha — igual ao remover — para o POST não sair com índices furados
+    // ou duplicados depois de remover+adicionar (issue #162 rodada 3).
+    if (typeof renumerarCheckboxesFimCadeia === 'function') {
+        renumerarCheckboxesFimCadeia();
+    }
 }
 
 // Função para configurar autocomplete geral de origens

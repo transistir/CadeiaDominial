@@ -370,7 +370,10 @@ class ProcessarCamposTransacaoPreservaTest(TestCase):
         LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
         self.assertIsNone(lancamento.forma)
 
-    def test_averbacao_transcricao_preserva_titulo_existente(self):
+    def test_averbacao_transcricao_bloco_vazio_limpa_titulo(self):
+        """issue #160: `preservar_titulo` deixou de ser via de mão única — com
+        o bloco Transmissão INTEIRO vazio, `titulo` é limpo (simétrico ao
+        `forma`, que a averbação já zera)."""
         lancamento = Lancamento.objects.create(
             documento=self.doc_transcricao,
             tipo=self.tipo_averbacao,
@@ -380,6 +383,27 @@ class ProcessarCamposTransacaoPreservaTest(TestCase):
         )
         request = self.factory.post(
             "/", {"forma_averbacao": "Averbação de Construção", "titulo_transacao": ""}
+        )
+        LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+        self.assertIsNone(lancamento.titulo)
+
+    def test_averbacao_transcricao_bloco_parcial_preserva_titulo(self):
+        """issue #160: bloco Transmissão PARCIALMENTE preenchido preserva o
+        `titulo` antigo — não há campo no bloco que o reescreva."""
+        lancamento = Lancamento.objects.create(
+            documento=self.doc_transcricao,
+            tipo=self.tipo_averbacao,
+            numero_lancamento="AV4",
+            data="2020-02-02",
+            titulo="Escritura Pública",
+        )
+        request = self.factory.post(
+            "/",
+            {
+                "forma_averbacao": "Averbação de Construção",
+                "titulo_transacao": "",
+                "livro_transacao": "5",
+            },
         )
         LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
         self.assertEqual(lancamento.titulo, "Escritura Pública")

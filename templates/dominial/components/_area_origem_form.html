@@ -12,8 +12,9 @@
     <h5>Origem</h5>
     
     <div id="{{ container_id|default:'origens-container' }}">
-        {% if modo_edicao %}
-            {% if origens_separadas %}
+        {# origens_separadas: populado pela view de edição e pelo re-render de   #}
+        {# erro de novo lançamento (issue #161). Fora disso, cai nos brancos.    #}
+        {% if origens_separadas %}
                 {% for origem in origens_separadas %}
             <div class="origem-item" data-origem-index="{{ origem.index }}">
                 <div class="form-group origem-field">
@@ -102,7 +103,7 @@
                     </div>
                 </div>
                 {% endfor %}
-            {% else %}
+            {% elif modo_edicao %}
             <div class="origem-item" data-origem-index="0">
                 <div class="form-group origem-field">
                     <label class="field-label">Tipo{% if origem_obrigatorio %} *{% endif %}</label>
@@ -185,7 +186,6 @@
                                   placeholder="Detalhe a especificação..."></textarea>
                     </div>
                 </div>
-            {% endif %}
         {% else %}
             <div class="origem-item" data-origem-index="0">
                 <div class="form-group origem-field">
