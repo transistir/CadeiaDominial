@@ -697,9 +697,18 @@ function adicionarOrigem() {
         return;
     }
     
-    // Contar quantas origens já existem para gerar IDs únicos
-    const existingOrigins = container.querySelectorAll('.origem-item');
-    const newIndex = existingOrigins.length;
+    // Encontrar o próximo índice de ID realmente livre. Não dá para usar a
+    // contagem de linhas: remover uma linha do meio deixa um buraco nos IDs
+    // (removeOrigem não renumera os elementos), e a contagem reaproveitaria um
+    // índice ainda em uso, duplicando IDs no DOM. Gap-scan igual ao
+    // adicionarOrigemSimples de origem_simples.js (issue #162).
+    let newIndex = 0;
+    while (
+        document.getElementById(`origem_completa_${newIndex}`) ||
+        document.getElementById(`fim-cadeia-origem-container_${newIndex}`)
+    ) {
+        newIndex++;
+    }
     
     const origemDiv = document.createElement('div');
     origemDiv.className = 'origem-item';
