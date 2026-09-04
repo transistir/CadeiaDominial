@@ -174,6 +174,135 @@ function configurarOrigem(index) {
     
     // Migrar dados existentes se houver
     migrarDadosExistentes(index);
+
+    // M anterior vinculada (issue #167)
+    configurarMAnterior(index);
+}
+
+/* ------------------------------------------------------------------ *
+ * M anterior vinculada (issue #167)
+ * Ao informar uma origem do tipo Matrícula (M) + CRI, consulta o acervo pela
+ * matrícula anterior que essa origem referencia — é aí que costuma acontecer a
+ * quebra da cadeia sucessória.
+ * ------------------------------------------------------------------ */
+/* Issue #167 (Codex review P2): manter o controle de requests em voo
+ * por linha de origem. Debounce só evita iniciar novas chamadas; sem
+ * cancelar a anterior, a resposta mais lenta pode chegar depois de uma
+ * nova digitação e renderizar um badge com dados da busca antiga.
+ */
+const _mAnteriorAbort = {};
+const _mAnteriorDebounce = {};
+
+function garantirDivMAnterior(index) {
+    let div = document.getElementById(`m-anterior-info-${index}`);
+    if (div) return div;
+
+    const origemItem = document.querySelector(`[data-origem-index="${index}"]`);
+    if (!origemItem) return null;
+
+    // Origens adicionadas dinamicamente não trazem a div do template.
+    div = document.createElement('div');
+    div.className = 'm-anterior-info';
+    div.id = `m-anterior-info-${index}`;
+    const modelo = document.querySelector('.m-anterior-info[data-tis-id]');
+    div.dataset.tisId = modelo ? (modelo.dataset.tisId || '') : '';
+    div.style.display = 'none';
+    origemItem.parentNode.insertBefore(div, origemItem.nextSibling);
+    return div;
+}
+
+function renderMAnterior(div, dados) {
+    if (dados.encontrado && dados.mesma_ti) {
+        div.className = 'm-anterior-info m-anterior-match';
+        div.textContent = `M anterior: ${dados.matricula} (Imóvel: ${dados.imovel_nome})`;
+    } else if (dados.encontrado && dados.outra_ti) {
+        div.className = 'm-anterior-info m-anterior-other-ti';
+        div.textContent = `⚠ M anterior ${dados.matricula} está em outra TI (Imóvel: ${dados.imovel_nome})`;
+    } else {
+        div.className = 'm-anterior-info m-anterior-missing';
+        div.textContent = 'M anterior: (não consta no acervo — pode indicar quebra de cadeia)';
+    }
+    div.style.display = 'block';
+}
+
+function atualizarMAnterior(index) {
+    const div = garantirDivMAnterior(index);
+    if (!div) return;
+
+    const tipoSelect = document.getElementById(`tipo_origem_${index}`);
+    const numeroInput = document.getElementById(`numero_origem_${index}`);
+    const cartorioHidden = document.getElementById(`cartorio_origem_${index}`);
+
+    const tipo = tipoSelect ? tipoSelect.value : '';
+    const numero = numeroInput ? numeroInput.value.trim() : '';
+    const cartorioId = cartorioHidden ? cartorioHidden.value.trim() : '';
+
+    // Só faz sentido para origem do tipo Matrícula (M) já identificada por CRI.
+    if (tipo !== 'M' || !numero || !cartorioId) {
+        // P2 do Greptile no #185: abortar fetch em voo antes de esconder o
+        // badge. Caso contrário, a resposta atrasada resolve depois do
+        // operador limpar/alterar o número/cartório/tipo e o renderMAnterior
+        // dentro do .then repopula o badge stale.
+        if (_mAnteriorAbort[index]) {
+            _mAnteriorAbort[index].abort();
+            _mAnteriorAbort[index] = null;
+        }
+        div.textContent = '';
+        div.style.display = 'none';
+        return;
+    }
+
+    // Cancelar request anterior em voo, se houver — Code rev P2.
+    if (_mAnteriorAbort[index]) {
+        _mAnteriorAbort[index].abort();
+    }
+    const controller = new AbortController();
+    _mAnteriorAbort[index] = controller;
+
+    const params = new URLSearchParams({ numero: numero, cartorio_id: cartorioId });
+    if (div.dataset.tisId) params.set('tis_id', div.dataset.tisId);
+
+    fetch(`/dominial/buscar-m-anterior/?${params.toString()}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: controller.signal,
+    })
+        .then(resposta => (resposta.ok ? resposta.json() : null))
+        .then(dados => {
+            if (dados) renderMAnterior(div, dados);
+        })
+        .catch(err => {
+            // Ignore os aborts intencionais; outros erros ficam silenciosos
+            // (o badge é apenas auxiliar ao operador).
+            if (err && err.name !== 'AbortError') {
+                /* noop */
+            }
+        })
+        .finally(() => {
+            if (_mAnteriorAbort[index] === controller) {
+                _mAnteriorAbort[index] = null;
+            }
+        });
+}
+
+function agendarMAnterior(index) {
+    clearTimeout(_mAnteriorDebounce[index]);
+    _mAnteriorDebounce[index] = setTimeout(() => atualizarMAnterior(index), 300);
+}
+
+function configurarMAnterior(index) {
+    const tipoSelect = document.getElementById(`tipo_origem_${index}`);
+    const numeroInput = document.getElementById(`numero_origem_${index}`);
+    const cartorioNome = document.getElementById(`cartorio_origem_nome_${index}`);
+
+    if (tipoSelect) tipoSelect.addEventListener('change', () => agendarMAnterior(index));
+    if (numeroInput) numeroInput.addEventListener('keyup', () => agendarMAnterior(index));
+    if (cartorioNome) {
+        cartorioNome.addEventListener('keyup', () => agendarMAnterior(index));
+        cartorioNome.addEventListener('blur', () => agendarMAnterior(index));
+    }
+
+    // Estado inicial (edição / re-render de erro já trazem número + CRI).
+    atualizarMAnterior(index);
 }
 
 function processarTodasOrigensExistentes() {
@@ -765,3 +894,4 @@ window.montarBlocoDestacamento = montarBlocoDestacamento;
 window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
 window.controlarCamposFimCadeia = controlarCamposFimCadeia;
 window.criarCampoSiglaPatrimonio = criarCampoSiglaPatrimonio;
+window.atualizarMAnterior = atualizarMAnterior;

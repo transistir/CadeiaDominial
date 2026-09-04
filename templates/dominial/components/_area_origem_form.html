@@ -65,7 +65,14 @@
                     
                     <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
                 </div>
-                
+
+                <!-- M anterior vinculada (issue #167): preenchida por JS ao digitar a origem -->
+                <div class="m-anterior-info" id="m-anterior-info-{{ origem.index }}"
+                     data-numero="{{ origem.numero_origem }}"
+                     data-cartorio="{{ origem.cartorio_id }}"
+                     data-tis-id="{{ tis.id }}"
+                     style="display: none;"></div>
+
                 <!-- Campos de fim de cadeia para esta origem específica -->
                 <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_{{ origem.index }}" 
                      style="display: {% if origem.fim_cadeia %}block{% else %}none{% endif %};">
@@ -147,11 +154,16 @@
                         </label>
                     </div>
                 </div>
-                
-                
+
+
                 <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
             </div>
-                
+
+                <!-- M anterior vinculada (issue #167): preenchida por JS ao digitar a origem -->
+                <div class="m-anterior-info" id="m-anterior-info-0"
+                     data-numero="" data-cartorio="" data-tis-id="{{ tis.id }}"
+                     style="display: none;"></div>
+
                 <!-- Campos de fim de cadeia para a primeira origem -->
                 <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
                     <div class="grid-2">
@@ -227,7 +239,12 @@
                 </div>
                 <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
             </div>
-            
+
+            <!-- M anterior vinculada (issue #167): preenchida por JS ao digitar a origem -->
+            <div class="m-anterior-info" id="m-anterior-info-0"
+                 data-numero="" data-cartorio="" data-tis-id="{{ tis.id }}"
+                 style="display: none;"></div>
+
             <!-- Campos de fim de cadeia para a primeira origem -->
             <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
                 <div class="grid-2">

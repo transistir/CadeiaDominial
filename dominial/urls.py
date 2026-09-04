@@ -7,7 +7,7 @@ from dal import autocomplete
 from .views.tis_views import home, tis_form, tis_detail, tis_delete, imoveis, imovel_detail, imovel_delete, arquivar_imovel
 from .views.imovel_views import imovel_form
 from .views.documento_views import novo_documento, documento_lancamentos, selecionar_documento_lancamento, editar_documento, criar_documento_automatico, ajustar_nivel_documento
-from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail, lancamento_resumo_partial
+from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail, lancamento_resumo_partial, buscar_m_anterior
 from .views.duplicata_views import verificar_duplicata_ajax, importar_duplicata, cancelar_importacao_duplicata
 from .views.cadeia_dominial_views import cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela, cadeia_dominial_d3, documento_detalhado, exportar_cadeia_completa_pdf, exportar_cadeia_dominial_pdf, exportar_cadeia_dominial_excel, obter_arvore_cadeia_dominial
 from .views.documento_digital_views import upload_documento_digital, servir_documento_digital, excluir_documento_digital
@@ -57,6 +57,7 @@ urlpatterns = [
     path('documento/<int:documento_id>/editar/<int:tis_id>/<int:imovel_id>/', editar_documento, name='editar_documento'),
     path('documento/<int:documento_id>/ajustar-nivel/', ajustar_nivel_documento, name='ajustar_nivel_documento'),
     path('selecionar-documento-lancamento/<int:tis_id>/<int:imovel_id>/', selecionar_documento_lancamento, name='selecionar_documento_lancamento'),
+    path('buscar-m-anterior/', buscar_m_anterior, name='buscar_m_anterior'),
     
     # Edição e exclusão de lançamentos
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/lancamento/<int:lancamento_id>/editar/', editar_lancamento, name='editar_lancamento'),

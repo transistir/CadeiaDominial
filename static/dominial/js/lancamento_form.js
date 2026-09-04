@@ -672,14 +672,22 @@ function setupPessoaAutocomplete() {
 function removeOrigem(button) {
     const origemItem = button.closest('.origem-item');
     const origemIndex = origemItem.getAttribute('data-origem-index');
-    const fimCadeiaContainer = document.getElementById(`fim-cadeia-origem-container_${origemIndex}`);
-    
+
     // Remover o item de origem
     origemItem.remove();
-    
+
     // Remover o container de fim de cadeia se existir
+    const fimCadeiaContainer = document.getElementById(`fim-cadeia-origem-container_${origemIndex}`);
     if (fimCadeiaContainer) {
         fimCadeiaContainer.remove();
+    }
+
+    // Issue #167 (Codex review P2): remover também o badge "M anterior
+    // vinculada" órfão. Sem isso, deletar uma linha deixa o badge visível
+    // e a futura reutilização do mesmo `index` atualiza o badge antigo.
+    const mAnteriorBadge = document.getElementById(`m-anterior-info-${origemIndex}`);
+    if (mAnteriorBadge) {
+        mAnteriorBadge.remove();
     }
 
     // Realinhar os checkboxes `fim_cadeia[]` com a nova ordem das origens, para

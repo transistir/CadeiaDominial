@@ -1,10 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_http_methods, require_POST, require_GET
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa, FimCadeia
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
@@ -971,6 +971,90 @@ def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
         'adquirentes': adquirentes,
         'tis': tis,
         'imovel': imovel,
+    })
+
+
+@login_required
+@require_GET
+def buscar_m_anterior(request):
+    """GET /dominial/buscar-m-anterior/?numero=...&cartorio_id=...&tis_id=...
+
+    Dado o par (número da origem, cartório da origem) digitado numa linha de
+    origem do tipo Matrícula, devolve a matrícula anterior (o documento que
+    aquela origem referencia) já cadastrada no acervo — é aí que costuma
+    acontecer a quebra da cadeia sucessória (issue #167).
+
+    Resposta JSON:
+      {
+        "encontrado": bool,
+        "doc_id": int | None,
+        "matricula": str | None,
+        "imovel_nome": str | None,
+        "outra_ti": bool,   # documento existe mas pertence a outra TI
+        "mesma_ti": bool,   # documento existe e pertence à TI em contexto
+      }
+
+    `tis_id` é opcional: sem ele (nem `tis_id` na sessão) a comparação de TI
+    não é feita e a resposta é apenas informativa (`mesma_ti=True`).
+    """
+    numero = (request.GET.get('numero') or '').strip()
+    cartorio_id = (request.GET.get('cartorio_id') or '').strip()
+    if not numero or not cartorio_id:
+        return JsonResponse(
+            {'erro': 'Parâmetros obrigatórios: numero e cartorio_id.'}, status=400
+        )
+    try:
+        cartorio_id = int(cartorio_id)
+    except (TypeError, ValueError):
+        return JsonResponse({'erro': 'cartorio_id inválido.'}, status=400)
+
+    # Normalização conservadora, espelhando o GeneratedField
+    # `Documento.numero_normalizado`: só remove espaços externos e o prefixo
+    # de apresentação M/T. Zeros à esquerda e pontuação são preservados.
+    numero_normalizado = numero.upper()
+    if numero_normalizado[:1] in ('M', 'T'):
+        numero_normalizado = numero_normalizado[1:].strip()
+
+    # Issue #167 (Codex review P1): restringir o lookup estritamente a
+    # matrículas (M). Sem `tipo`, um cartório que tivesse T e M com mesmo
+    # `numero_normalizado` poderia retornar a T e reportar imóvel/TI errada
+    # como "M anterior vinculada".
+    documento = (
+        Documento.objects
+        .filter(
+            numero_normalizado=numero_normalizado,
+            cartorio_id=cartorio_id,
+            tipo_id__tipo='matricula',
+        )
+        .select_related('imovel', 'imovel__terra_indigena_id', 'tipo')
+        .first()
+    )
+
+    if documento is None:
+        return JsonResponse({
+            'encontrado': False,
+            'doc_id': None,
+            'matricula': None,
+            'imovel_nome': None,
+            'outra_ti': False,
+            'mesma_ti': False,
+        })
+
+    tis_id_contexto = request.GET.get('tis_id') or request.session.get('tis_id')
+    documento_tis_id = documento.imovel.terra_indigena_id_id
+    try:
+        mesma_ti = int(tis_id_contexto) == documento_tis_id
+    except (TypeError, ValueError):
+        # Sem contexto de TI: resposta apenas informativa.
+        mesma_ti = True
+
+    return JsonResponse({
+        'encontrado': True,
+        'doc_id': documento.id,
+        'matricula': documento.numero,
+        'imovel_nome': documento.imovel.nome,
+        'outra_ti': not mesma_ti,
+        'mesma_ti': mesma_ti,
     })
 
 
