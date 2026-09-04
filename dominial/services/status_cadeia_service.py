@@ -8,9 +8,18 @@ _PRIORIDADE = {
     'origem_lidima': 1,
 }
 
-# Classificação ausente é tratada como "sem_origem" (mesmo fallback usado na
-# árvore da cadeia dominial).
-_CLASSIFICACAO_PADRAO = 'sem_origem'
+
+def _rank(classificacao):
+    """Prioridade da classificação; ``0`` para ausente/nula/desconhecida.
+
+    Dados criados antes da validação em ``Lancamento.clean()`` podem ter
+    ``classificacao_fim_cadeia`` nula ou com valor fora do domínio esperado.
+    Nesses casos tratamos como desconhecida (rank 0) em vez de derrubar a
+    página.
+    """
+    if not classificacao:
+        return 0
+    return _PRIORIDADE.get(classificacao, 0)
 
 
 class StatusCadeiaService:
@@ -21,7 +30,9 @@ class StatusCadeiaService:
         status = 'origem_lidima' | 'sem_origem' | 'inconclusa'
 
         Imóveis sem nenhuma origem ``fim_cadeia=True`` ficam ausentes do dict
-        (equivalente a status ``None`` / cadeia em andamento).
+        (equivalente a status ``None`` / cadeia em andamento). O mesmo vale para
+        imóveis cujas origens só têm classificação desconhecida/nula: melhor
+        exibir "em andamento" do que confiar num dado não reconhecido.
         """
         linhas = (
             OrigemFimCadeia.objects
@@ -37,8 +48,10 @@ class StatusCadeiaService:
 
         status_map = {}
         for imovel_id, classificacao in linhas:
-            classificacao = classificacao or _CLASSIFICACAO_PADRAO
+            rank = _rank(classificacao)
+            if rank == 0:
+                continue
             atual = status_map.get(imovel_id)
-            if atual is None or _PRIORIDADE[classificacao] > _PRIORIDADE[atual]:
+            if atual is None or rank > _rank(atual):
                 status_map[imovel_id] = classificacao
         return status_map

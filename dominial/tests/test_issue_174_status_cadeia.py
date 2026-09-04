@@ -113,6 +113,40 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
         status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
         self.assertEqual(status_map.get(imovel.id), "sem_origem")
 
+    def test_inconclusa_reconhecida(self):
+        imovel = self._criar_imovel("M5")
+        self._fim_cadeia(self._criar_lancamento(imovel), "inconclusa")
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        self.assertEqual(status_map.get(imovel.id), "inconclusa")
+
+    def test_classificacao_desconheca_nao_derruba_e_retorna_none(self):
+        imovel = self._criar_imovel("M6")
+        lancamento = self._criar_lancamento(imovel)
+        OrigemFimCadeia.objects.create(
+            lancamento=lancamento,
+            indice_origem=0,
+            fim_cadeia=True,
+            tipo_fim_cadeia="destacamento_publico",
+            classificacao_fim_cadeia="foo_bar_baz",
+        )
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        self.assertNotIn(imovel.id, status_map)
+        self.assertIsNone(status_map.get(imovel.id))
+
+    def test_classificacao_nula_tratada_como_desconhecida(self):
+        imovel = self._criar_imovel("M7")
+        lancamento = self._criar_lancamento(imovel)
+        OrigemFimCadeia.objects.create(
+            lancamento=lancamento,
+            indice_origem=0,
+            fim_cadeia=True,
+            tipo_fim_cadeia="destacamento_publico",
+            classificacao_fim_cadeia=None,
+        )
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        self.assertNotIn(imovel.id, status_map)
+        self.assertIsNone(status_map.get(imovel.id))
+
     def test_nao_vaza_imoveis_de_outra_ti(self):
         outra_tis = TIs.objects.create(nome="Outra TI", etnia="X", codigo="OUT174")
         imovel_outra = Imovel.objects.create(
