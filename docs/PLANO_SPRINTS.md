@@ -1,5 +1,10 @@
 # CadeiaDominial — Plano Geral de Desenvolvimento (Sprints)
 
+> ⚠️ **HISTÓRICO — não planejar por este arquivo.** A fila ativa é o
+> **`docs/produto-3/ROADMAP.md`** (R1–R9, reordenada 04/09 por sequência
+> lógica de desenvolvimento). Este plano fica como registro do
+> levantamento original de 02/09 e das reavaliações.
+
 **Data:** 02/09/2026 · **Base:** 42 issues abertas · **Escopo:** Django/develop (v2 #61–#72 fora do plano)
 **Cadência:** Sprints de 2 semanas · **Processo por issue:** implement → review 3 modelos (Opus 5 + Codex GPT-5.6 + GLM/Fable) → aprovação luandro → merge em develop
 
