@@ -5,7 +5,7 @@
 {% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}?v=9">
+<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}?v=10">
 {% endblock %}
 
 {% block content %}
@@ -397,6 +397,7 @@
                 <p>Selecione a sequência de documentos para exportação do PDF. A ordem será exatamente como você organizar abaixo.</p>
             </div>
             
+            <div class="modal-sequencia-layout">
             <div class="sequencia-container">
                 <div class="sequencia-header">
                     <h3>Sequência de Documentos</h3>
@@ -437,8 +438,24 @@
                     </div>
                 </div>
             </div>
+
+            <div class="arvore-panel" id="modalArvorePanel"
+                 data-arvore-url="{% url 'cadeia_dominial_arvore' tis_id=tis.id imovel_id=imovel.id %}">
+                <div class="arvore-panel-header">
+                    <h3>Árvore da cadeia</h3>
+                    <a href="{% url 'cadeia_dominial_d3' tis_id=tis.id imovel_id=imovel.id %}"
+                       target="_blank" rel="noopener" class="arvore-panel-link">
+                        Abrir em tela cheia
+                    </a>
+                </div>
+                <div class="arvore-panel-viewport">
+                    <svg id="modal-arvore-svg"></svg>
+                    <div class="arvore-panel-status" id="modalArvoreStatus">Carregando árvore...</div>
+                </div>
+            </div>
+            </div>
         </div>
-        
+
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="fecharModalSelecaoSequencia()">Cancelar</button>
             <button class="btn btn-primary" onclick="exportarComSequenciaSelecionada()">
@@ -458,5 +475,21 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'dominial/js/vendor/d3.v7.min.js' %}"></script>
+<script>
+    // Globais consumidos pelos módulos D3 reutilizados (links dos cards etc.)
+    window.tisId = {{ tis.id }};
+    window.imovelId = {{ imovel.id }};
+</script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/data.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/layout_spacing.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/layout.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/edges.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/cards.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/card_overlays.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/render.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/viewport_fit.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/zoom_controls.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/fim_cadeia_drawer.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_tabela.js' %}"></script>
 {% endblock %}

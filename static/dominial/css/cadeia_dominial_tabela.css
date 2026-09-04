@@ -724,6 +724,96 @@
     border-radius: 0 0 8px 8px;
 }
 
+/* Árvore da cadeia dentro do modal de sequência (issue #171) */
+#modalSelecaoSequencia .modal-content {
+    max-width: 1400px;
+}
+
+#modalSelecaoSequencia .modal-sequencia-layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.15fr);
+    gap: 20px;
+    align-items: start;
+}
+
+#modalArvorePanel {
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#modalArvorePanel .arvore-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    border-radius: 6px 6px 0 0;
+}
+
+#modalArvorePanel .arvore-panel-header h3 {
+    margin: 0;
+    color: #2c5aa0;
+    font-size: 1.2rem;
+}
+
+#modalArvorePanel .arvore-panel-link {
+    font-size: 0.875rem;
+    color: #2c5aa0;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+#modalArvorePanel .arvore-panel-link:hover {
+    text-decoration: underline;
+}
+
+#modalArvorePanel .arvore-panel-viewport {
+    position: relative;
+    height: 460px;
+    overflow: hidden;
+    border-radius: 0 0 6px 6px;
+    background-color: #fff;
+}
+
+#modalArvorePanel #modal-arvore-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+}
+
+#modalArvorePanel #modal-arvore-svg:active {
+    cursor: grabbing;
+}
+
+#modalArvorePanel .arvore-panel-status {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 0.85rem;
+    color: #6c757d;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+/* Sem o CSS da página D3, os botões flutuantes dos cards não têm contexto
+   de navegação útil aqui — a navegação sai pelo link "Abrir em tela cheia". */
+#modalArvorePanel .card-buttons {
+    display: none;
+}
+
+@media (max-width: 992px) {
+    #modalSelecaoSequencia .modal-sequencia-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Responsividade */
 @media (max-width: 768px) {
     .modal-content {
