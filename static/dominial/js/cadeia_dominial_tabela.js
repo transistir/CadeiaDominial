@@ -960,7 +960,75 @@ function abrirModalSelecaoSequencia() {
     
     document.getElementById('modalSelecaoSequencia').style.display = 'block';
     carregarDocumentosArvore();
+    carregarArvoreModal();
 }
+
+// ---- Árvore da cadeia dentro do modal (issue #171) ----
+// Reaproveita os módulos D3 da visualização em tela cheia para renderizar
+// uma prévia navegável ao lado da lista de sequência.
+let arvoreModalCarregada = false;
+
+function carregarArvoreModal() {
+    // Renderiza uma única vez por página; reabrir o modal reaproveita o SVG.
+    if (arvoreModalCarregada) return;
+
+    const svgEl = document.getElementById('modal-arvore-svg');
+    const statusEl = document.getElementById('modalArvoreStatus');
+    if (!svgEl || typeof d3 === 'undefined' ||
+        typeof converterParaArvoreD3 !== 'function' ||
+        typeof renderArvoreD3 !== 'function') {
+        if (statusEl) statusEl.textContent = 'Árvore indisponível.';
+        return;
+    }
+
+    // Módulos D3 leem os ids de window.*
+    window.tisId = tisId;
+    window.imovelId = imovelId;
+
+    if (statusEl) {
+        statusEl.style.display = '';
+        statusEl.textContent = 'Carregando árvore...';
+    }
+
+    const svg = d3.select('#modal-arvore-svg');
+    const rect = svgEl.getBoundingClientRect();
+    const width = Math.max(rect.width || 600, 2000);
+    const height = Math.max(rect.height || 460, 460);
+    svg.attr('width', width).attr('height', height);
+    svg.selectAll('*').remove();
+
+    const zoomGroup = svg.append('g').attr('id', 'modal-arvore-zoom-group');
+    configurarZoom(svg, zoomGroup);
+
+    fetch(`/dominial/cadeia-dominial/${tisId}/${imovelId}/arvore/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+            const arvore = converterParaArvoreD3(data);
+            renderArvoreD3(arvore, zoomGroup, width, height);
+            arvoreModalCarregada = true;
+            if (statusEl) statusEl.style.display = 'none';
+            requestAnimationFrame(() => {
+                if (typeof fitTreeToViewport === 'function') fitTreeToViewport();
+            });
+        })
+        .catch(error => {
+            if (statusEl) {
+                statusEl.style.display = '';
+                statusEl.textContent = 'Erro ao carregar a árvore: ' + error.message;
+            }
+        });
+}
+
+// Com o modal de sequência aberto, clicar num card da árvore não deve
+// navegar para fora da página — o objetivo é apenas consultar a árvore
+// para montar a sequência.
+window.addEventListener('d3:node-click', function (event) {
+    const modal = document.getElementById('modalSelecaoSequencia');
+    if (modal && modal.style.display === 'block') {
+        event.preventDefault();
+    }
+});
 
 // Fechar modal
 function fecharModalSelecaoSequencia() {
