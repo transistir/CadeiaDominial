@@ -2,7 +2,10 @@ from django import template
 import re
 import unicodedata
 
-from dominial.utils.formatacao_utils import normalizar_texto_opcional
+from dominial.utils.formatacao_utils import (
+    normalizar_texto_opcional,
+    abreviar_cartorio as _abreviar_cartorio,
+)
 
 register = template.Library()
 
@@ -28,6 +31,11 @@ def _classificacao_fim_cadeia_display(classificacao):
 def limpar_none(valor, padrao="-"):
     """Exibe o padrão para None, string 'None' ou texto vazio."""
     return normalizar_texto_opcional(valor, padrao)
+
+@register.filter
+def abreviar_cartorio(valor):
+    """Troca o prefixo 'Cartório de Registro de Imóveis' pela sigla 'CRI' (só exportações)."""
+    return _abreviar_cartorio(valor)
 
 @register.filter
 def get_item(dictionary, key):

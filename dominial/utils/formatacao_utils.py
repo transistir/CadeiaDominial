@@ -2,6 +2,52 @@
 Utilitários para formatação de dados
 """
 
+import unicodedata
+
+
+_PREFIXO_CRI = "cartorio de registro de imoveis"
+
+
+def _remover_acentos_preservando_posicao(texto):
+    """
+    Remove acentos mantendo o mapeamento de posição: cada caractere do texto
+    original vira exatamente um caractere no resultado. Assim o índice de fim
+    de um prefixo casado no texto sem acento vale também no texto original
+    (que tem acentos e, portanto, teria comprimento diferente numa
+    normalização NFKD ingênua).
+    """
+    resultado = []
+    for caractere in texto:
+        base = ''.join(
+            c
+            for c in unicodedata.normalize("NFKD", caractere)
+            if not unicodedata.combining(c)
+        )
+        resultado.append(base if len(base) == 1 else caractere)
+    return ''.join(resultado)
+
+
+def abreviar_cartorio(nome):
+    """
+    Substitui o prefixo "Cartório de Registro de Imóveis" pela sigla "CRI".
+
+    Usado APENAS nas exportações (Excel e PDF completo) — a UI de cadastro
+    mantém o nome por extenso (issue #50).
+
+    - Falsy (None, "") retorna inalterado.
+    - Só o prefixo exato casa (variantes como "do Registro" não são tocadas).
+    - A caixa e os acentos do restante do nome são preservados.
+    """
+    if not nome:
+        return nome
+
+    normalizado = _remover_acentos_preservando_posicao(nome).lower()
+    if not normalizado.startswith(_PREFIXO_CRI):
+        return nome
+
+    resto = nome[len(_PREFIXO_CRI):].lstrip()
+    return f"CRI {resto}".rstrip()
+
 
 def formatar_cpf(cpf):
     """

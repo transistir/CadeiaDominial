@@ -13,7 +13,8 @@ from .formatacao_utils import (
     formatar_telefone,
     formatar_valor_monetario,
     formatar_area,
-    normalizar_texto_opcional
+    normalizar_texto_opcional,
+    abreviar_cartorio
 )
 from .documento_identidade_utils import DocumentoIdentidade, normalizar_numero_documento
 
@@ -31,6 +32,7 @@ __all__ = [
     'formatar_valor_monetario',
     'formatar_area',
     'normalizar_texto_opcional',
+    'abreviar_cartorio',
     'DocumentoIdentidade',
     'normalizar_numero_documento',
 ]
