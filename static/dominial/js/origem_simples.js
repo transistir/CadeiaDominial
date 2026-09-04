@@ -182,8 +182,9 @@ function configurarOrigem(index) {
 /* ------------------------------------------------------------------ *
  * M anterior vinculada (issue #167)
  * Ao informar uma origem do tipo Matrícula (M) + CRI, consulta o acervo pela
- * matrícula anterior que essa origem referencia — é aí que costuma acontecer a
- * quebra da cadeia sucessória.
+ * matrícula anterior que essa origem referencia. Não encontrar a M anterior
+ * é o caso comum (documento novo, ainda não cadastrado) — não é indício de
+ * quebra de cadeia, então o badge correspondente fica neutro.
  * ------------------------------------------------------------------ */
 /* Issue #167 (Codex review P2): manter o controle de requests em voo
  * por linha de origem. Debounce só evita iniciar novas chamadas; sem
@@ -211,7 +212,7 @@ function garantirDivMAnterior(index) {
     return div;
 }
 
-function renderMAnterior(div, dados) {
+function renderMAnterior(div, dados, numeroDigitado) {
     if (dados.encontrado && dados.mesma_ti) {
         div.className = 'm-anterior-info m-anterior-match';
         div.textContent = `M anterior: ${dados.matricula} (Imóvel: ${dados.imovel_nome})`;
@@ -220,7 +221,9 @@ function renderMAnterior(div, dados) {
         div.textContent = `⚠ M anterior ${dados.matricula} está em outra TI (Imóvel: ${dados.imovel_nome})`;
     } else {
         div.className = 'm-anterior-info m-anterior-missing';
-        div.textContent = 'M anterior: (não consta no acervo — pode indicar quebra de cadeia)';
+        div.textContent = numeroDigitado
+            ? `M ${numeroDigitado} ainda não consta no acervo (documento novo)`
+            : 'M anterior ainda não consta no acervo (documento novo)';
     }
     div.style.display = 'block';
 }
@@ -268,7 +271,7 @@ function atualizarMAnterior(index) {
     })
         .then(resposta => (resposta.ok ? resposta.json() : null))
         .then(dados => {
-            if (dados) renderMAnterior(div, dados);
+            if (dados) renderMAnterior(div, dados, numero);
         })
         .catch(err => {
             // Ignore os aborts intencionais; outros erros ficam silenciosos
