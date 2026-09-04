@@ -11,10 +11,15 @@ _PREFIXO_CRI = "cartorio de registro de imoveis"
 def _remover_acentos_preservando_posicao(texto):
     """
     Remove acentos mantendo o mapeamento de posição: cada caractere do texto
-    original vira exatamente um caractere no resultado. Assim o índice de fim
-    de um prefixo casado no texto sem acento vale também no texto original
-    (que tem acentos e, portanto, teria comprimento diferente numa
-    normalização NFKD ingênua).
+    de entrada vira exatamente um caractere no resultado. Assim o índice de
+    fim de um prefixo casado no texto sem acento vale também no texto de
+    entrada (evitando o descasamento de comprimento de uma normalização NFKD
+    ingênua).
+
+    Espera receber texto já em NFC — ver `abreviar_cartorio`. Sequências
+    combinantes (base + marca) que sobrarem são tratadas como uma unidade:
+    a marca combinante isolada é mantida na saída (preservando a posição),
+    mas o `.startswith` do prefixo já terá casado pelo caractere base.
     """
     resultado = []
     for caractere in texto:
@@ -36,16 +41,26 @@ def abreviar_cartorio(nome):
 
     - Falsy (None, "") retorna inalterado.
     - Só o prefixo exato casa (variantes como "do Registro" não são tocadas).
+    - NFC e NFD do mesmo texto produzem o mesmo resultado (o texto é
+      normalizado para NFC antes de comparar).
+    - Exige fronteira de palavra após "Imóveis" (fim da string ou caractere
+      não-alfabético): "...ImóveisXYZ" NÃO é abreviado.
     - A caixa e os acentos do restante do nome são preservados.
     """
     if not nome:
         return nome
 
-    normalizado = _remover_acentos_preservando_posicao(nome).lower()
+    nome_nfc = unicodedata.normalize("NFC", nome)
+    normalizado = _remover_acentos_preservando_posicao(nome_nfc).lower()
     if not normalizado.startswith(_PREFIXO_CRI):
         return nome
 
-    resto = nome[len(_PREFIXO_CRI):].lstrip()
+    fim = len(_PREFIXO_CRI)
+    if fim < len(normalizado) and normalizado[fim].isalpha():
+        # Sem fronteira de palavra depois de "Imóveis" — não abrevia.
+        return nome
+
+    resto = nome_nfc[fim:].lstrip()
     return f"CRI {resto}".rstrip()
 
 
