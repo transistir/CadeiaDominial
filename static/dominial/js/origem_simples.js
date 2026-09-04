@@ -239,6 +239,14 @@ function atualizarMAnterior(index) {
 
     // Só faz sentido para origem do tipo Matrícula (M) já identificada por CRI.
     if (tipo !== 'M' || !numero || !cartorioId) {
+        // P2 do Greptile no #185: abortar fetch em voo antes de esconder o
+        // badge. Caso contrário, a resposta atrasada resolve depois do
+        // operador limpar/alterar o número/cartório/tipo e o renderMAnterior
+        // dentro do .then repopula o badge stale.
+        if (_mAnteriorAbort[index]) {
+            _mAnteriorAbort[index].abort();
+            _mAnteriorAbort[index] = null;
+        }
         div.textContent = '';
         div.style.display = 'none';
         return;

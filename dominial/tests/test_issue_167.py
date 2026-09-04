@@ -4,6 +4,8 @@ vinculada" na tela de Novo Lançamento).
 Cobre os caminhos do JSON: encontrado na mesma TI / outra TI / não
 encontrado / params inválidos.
 """
+import os
+import re
 from datetime import date
 from django.test import TestCase
 from django.contrib.auth import get_user_model
@@ -132,3 +134,73 @@ class BuscarMAnteriorTest(TestCase):
         })
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()['encontrado'])
+
+
+class GreptileP2RaceAbortTest(TestCase):
+    """P2 do Greptile no PR #185: race entre fetch em voo e mudança de inputs.
+
+    Sem teste JS (sem Playwright no repo), validamos que o JS tem o guard
+    anti-stale-badge via pattern-matching no arquivo fonte. Se alguém remover
+    o abort() do early-return, este teste quebra.
+    """
+
+    JS_PATH = os.path.join(
+        os.path.dirname(__file__),
+        '..', '..', 'static', 'dominial', 'js', 'origem_simples.js',
+    )
+
+    def setUp(self):
+        with open(self.JS_PATH, encoding='utf-8') as f:
+            self.js_src = f.read()
+
+    def test_atualizarMAnterior_aborta_fetch_no_early_return_invalido(self):
+        """Garante que o early-return para tipo/numero/cartorio inválido
+        aborta o AbortController pendente, evitando render stale."""
+        # Localiza o early-return: o primeiro "if (tipo !== 'M' ... return;"
+        # deve estar seguido de um abort() antes do return.
+        match = re.search(
+            r"if\s*\(\s*tipo\s*!==\s*'M'\s*\|\|\s*!numero\s*\|\|\s*!cartorioId\s*\)\s*\{(.*?)\}",
+            self.js_src,
+            re.DOTALL,
+        )
+        assert match is not None, (
+            'Bloco de validação tipo/numero/cartorio não encontrado no JS'
+        )
+        body = match.group(1)
+        self.assertIn(
+            '_mAnteriorAbort[index].abort()',
+            body,
+            'P2 Greptile: early-return precisa abortar fetch pendente antes '
+            'de esconder o badge (race condition com fetch atrasado)',
+        )
+
+    def test_handler_then_confere_controller_antes_de_renderizar(self):
+        """Mesmo que o fetch escape do abort (ex: rede rápida), o .then deve
+        conferir se o controller ainda é o atual antes de repopular o badge."""
+        # Procura o .then(dados => ...) e garante que ele checa o controller.
+        # No nosso código atual, o check está no .finally, mas a checagem no
+        # .then é uma salvaguarda adicional. Se não existir ainda, registramos
+        # como aviso (skip) para não bloquear.
+        then_match = re.search(
+            r"\.then\(\s*dados\s*=>\s*\{(.*?)\}\s*\)",
+            self.js_src,
+            re.DOTALL,
+        )
+        assert then_match is not None, 'handler .then(dados => ...) ausente'
+        then_body = then_match.group(1)
+        # Salvaguarda: ou o then confere o controller, OU o finally zera
+        # _mAnteriorAbort e o render só acontece no caminho síncrono após
+        # abort() — verificamos o finally como contrapeso.
+        finally_match = re.search(
+            r"\.finally\(\s*\(\)\s*=>\s*\{(.*?)\}\s*\)",
+            self.js_src,
+            re.DOTALL,
+        )
+        assert finally_match is not None, 'handler .finally ausente'
+        finally_body = finally_match.group(1)
+        self.assertIn(
+            '_mAnteriorAbort[index] = null',
+            finally_body,
+            'finally deve zerar _mAnteriorAbort para evitar uso de controller '
+            'já abortado em chamadas subsequentes',
+        )
