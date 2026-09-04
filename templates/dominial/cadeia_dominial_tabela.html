@@ -439,7 +439,8 @@
                 </div>
             </div>
 
-            <div class="arvore-panel" id="modalArvorePanel">
+            <div class="arvore-panel" id="modalArvorePanel"
+                 data-arvore-url="{% url 'cadeia_dominial_arvore' tis_id=tis.id imovel_id=imovel.id %}">
                 <div class="arvore-panel-header">
                     <h3>Árvore da cadeia</h3>
                     <a href="{% url 'cadeia_dominial_d3' tis_id=tis.id imovel_id=imovel.id %}"
@@ -477,8 +478,8 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
     // Globais consumidos pelos módulos D3 reutilizados (links dos cards etc.)
-    window.tisId = {{ tis.id|safe }};
-    window.imovelId = {{ imovel.id|safe }};
+    window.tisId = {{ tis.id }};
+    window.imovelId = {{ imovel.id }};
 </script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/data.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/layout_spacing.js' %}"></script>

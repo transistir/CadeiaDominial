@@ -1000,8 +1000,13 @@ function carregarArvoreModal() {
     const zoomGroup = svg.append('g').attr('id', 'modal-arvore-zoom-group');
     configurarZoom(svg, zoomGroup);
 
-    fetch(`/dominial/cadeia-dominial/${tisId}/${imovelId}/arvore/`)
-        .then(response => response.json())
+    const arvoreUrl = document.getElementById('modalArvorePanel')?.dataset.arvoreUrl
+        || `/dominial/cadeia-dominial/${tisId}/${imovelId}/arvore/`;
+    fetch(arvoreUrl)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })
         .then(data => {
             if (data.error) throw new Error(data.error);
             const arvore = converterParaArvoreD3(data);

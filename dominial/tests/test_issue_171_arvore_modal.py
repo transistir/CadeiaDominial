@@ -99,6 +99,14 @@ class Issue171ArvoreModalTest(TestCase):
         )
         self.assertContains(response, 'href="%s"' % link)
 
+    def test_tabela_expoe_data_arvore_url_no_painel(self):
+        response = self.client.get(self._tabela_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, 'data-arvore-url="%s"' % self._arvore_url()
+        )
+
     def test_tabela_mantem_lista_de_documentos_do_modal(self):
         """Regressão: a lista arrastável de documentos segue no modal."""
         response = self.client.get(self._tabela_url())
