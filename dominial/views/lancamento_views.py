@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST, require_GET
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa, FimCadeia
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
@@ -1015,10 +1015,18 @@ def buscar_m_anterior(request):
     if numero_normalizado[:1] in ('M', 'T'):
         numero_normalizado = numero_normalizado[1:].strip()
 
+    # Issue #167 (Codex review P1): restringir o lookup estritamente a
+    # matrículas (M). Sem `tipo`, um cartório que tivesse T e M com mesmo
+    # `numero_normalizado` poderia retornar a T e reportar imóvel/TI errada
+    # como "M anterior vinculada".
     documento = (
         Documento.objects
-        .filter(numero_normalizado=numero_normalizado, cartorio_id=cartorio_id)
-        .select_related('imovel', 'imovel__terra_indigena_id')
+        .filter(
+            numero_normalizado=numero_normalizado,
+            cartorio_id=cartorio_id,
+            tipo_id__tipo='matricula',
+        )
+        .select_related('imovel', 'imovel__terra_indigena_id', 'tipo')
         .first()
     )
 

@@ -22,7 +22,8 @@ class BuscarMAnteriorTest(TestCase):
         self.pessoa = Pessoas.objects.create(nome='P')
         self.cart_a = Cartorios.objects.create(nome='CRI A', cidade='C', cns='CNS-A')
         self.cart_b = Cartorios.objects.create(nome='CRI B', cidade='C', cns='CNS-B')
-        self.tipo_m = DocumentoTipo.objects.create(tipo='M')
+        self.tipo_m = DocumentoTipo.objects.get_or_create(tipo='matricula')[0]
+        self.tipo_t = DocumentoTipo.objects.get_or_create(tipo='transcricao')[0]
 
         self.ti1 = TIs.objects.create(nome='TI 1', codigo='TI-001')
         self.ti2 = TIs.objects.create(nome='TI 2', codigo='TI-002')
@@ -101,6 +102,28 @@ class BuscarMAnteriorTest(TestCase):
         self.client.force_login(self.user)
         r = self.client.get(self.url, {'numero': 'M 1234'})  # sem cartorio_id
         self.assertEqual(r.status_code, 400)
+
+    def test_nao_confundir_transcricao_com_matricula_mesmo_numero(self):
+        """Codex review P1 do PR #167: quando o cartório tem M e T com mesmo
+        número normalizado, o endpoint deve retornar a matrícula — não a
+        transcrição — para não reportar imóvel/TI errado como 'M anterior'.
+        """
+        # Transcrição 1234 no cart A, do imóvel da TI1.
+        Documento.objects.create(
+            tipo=self.tipo_t, numero='1234', cartorio=self.cart_a,
+            imovel=self.imovel_ti1,
+            data=date(2020, 1, 1), livro='1', folha='1',
+        )
+        r = self._login_e_get({
+            'numero': 'M 1234', 'cartorio_id': self.cart_a.id,
+            'tis_id': self.ti1.id,
+        })
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data['encontrado'])
+        # Deve ser a matrícula M 1234 (doc_ti1_a), nunca a transcrição.
+        self.assertEqual(data['doc_id'], self.doc_ti1_a.id)
+        self.assertEqual(data['matricula'], '1234')
 
     def test_normaliza_numero_com_prefixo_e_espaco(self):
         r = self._login_e_get({

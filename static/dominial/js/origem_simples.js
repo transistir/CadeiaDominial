@@ -185,6 +185,12 @@ function configurarOrigem(index) {
  * matrícula anterior que essa origem referencia — é aí que costuma acontecer a
  * quebra da cadeia sucessória.
  * ------------------------------------------------------------------ */
+/* Issue #167 (Codex review P2): manter o controle de requests em voo
+ * por linha de origem. Debounce só evita iniciar novas chamadas; sem
+ * cancelar a anterior, a resposta mais lenta pode chegar depois de uma
+ * nova digitação e renderizar um badge com dados da busca antiga.
+ */
+const _mAnteriorAbort = {};
 const _mAnteriorDebounce = {};
 
 function garantirDivMAnterior(index) {
@@ -238,17 +244,36 @@ function atualizarMAnterior(index) {
         return;
     }
 
+    // Cancelar request anterior em voo, se houver — Code rev P2.
+    if (_mAnteriorAbort[index]) {
+        _mAnteriorAbort[index].abort();
+    }
+    const controller = new AbortController();
+    _mAnteriorAbort[index] = controller;
+
     const params = new URLSearchParams({ numero: numero, cartorio_id: cartorioId });
     if (div.dataset.tisId) params.set('tis_id', div.dataset.tisId);
 
     fetch(`/dominial/buscar-m-anterior/?${params.toString()}`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: controller.signal,
     })
         .then(resposta => (resposta.ok ? resposta.json() : null))
         .then(dados => {
             if (dados) renderMAnterior(div, dados);
         })
-        .catch(() => { /* silencioso: o badge é apenas auxiliar */ });
+        .catch(err => {
+            // Ignore os aborts intencionais; outros erros ficam silenciosos
+            // (o badge é apenas auxiliar ao operador).
+            if (err && err.name !== 'AbortError') {
+                /* noop */
+            }
+        })
+        .finally(() => {
+            if (_mAnteriorAbort[index] === controller) {
+                _mAnteriorAbort[index] = null;
+            }
+        });
 }
 
 function agendarMAnterior(index) {
