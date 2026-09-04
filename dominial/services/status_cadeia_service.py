@@ -122,10 +122,15 @@ class StatusCadeiaService:
             return {}
 
         classif_por_doc: Dict[int, list] = {d: [] for d in todos_docs}
+        # P2 do Greptile (PR #184 round-3): select_related('lancamento')
+        # evita N+1 — antes, cada OrigemFimCadeia disparava um SELECT extra
+        # em Lancamento quando o código acessava ofc.lancamento.documento_id.
         for ofc in OrigemFimCadeia.objects.filter(
             lancamento__documento_id__in=todos_docs,
             fim_cadeia=True,
-        ).only('lancamento__documento_id', 'classificacao_fim_cadeia'):
+        ).select_related('lancamento').only(
+            'lancamento__documento_id', 'classificacao_fim_cadeia',
+        ):
             cls = _normalizar_classificacao(ofc.classificacao_fim_cadeia)
             if cls is not None:
                 classif_por_doc[ofc.lancamento.documento_id].append(cls)
