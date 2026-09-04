@@ -173,6 +173,8 @@
    O JS troca div.className entre m-anterior-match / m-anterior-other-ti /
    m-anterior-missing. Sem estas regras o badge fica invisível
    (div textContent aparece mas sem cor/fundo/padding).
+   m-anterior-missing é neutro (cinza) — documento novo é o caso comum,
+   não indício de quebra de cadeia.
 */
 .m-anterior-info {
     display: block;
@@ -200,7 +202,7 @@
 }
 
 .m-anterior-info.m-anterior-missing {
-    background-color: #fdecea;
-    border-color: #c62828;
-    color: #7a1f17;
+    background-color: #f0f0f0;
+    border-color: #9e9e9e;
+    color: #424242;
 }
