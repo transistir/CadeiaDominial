@@ -475,7 +475,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{% static 'dominial/js/vendor/d3.v7.min.js' %}"></script>
 <script>
     // Globais consumidos pelos módulos D3 reutilizados (links dos cards etc.)
     window.tisId = {{ tis.id }};
