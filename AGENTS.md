@@ -21,15 +21,16 @@ with one concrete next step. Full rules in the SKILL.md.
 **`docs/produto-3/ROADMAP.md` is the single source of truth for what to work on.**
 
 - At the START of every new session (any harness), read that file first and
-  follow the R1–R9 queue **in order**. Do not pick issues by recency or
-  preference; do not jump ahead past an unfinished release block.
+  follow the R1–R9 queue in the order and with the gate exceptions defined
+  there. Do not pick issues by recency or preference.
 - `docs/PLANO_SPRINTS.md` is HISTORICAL — never plan from it.
 - Reordering the queue requires explicit user approval, recorded in the
   roadmap file itself.
-- Gates (GATE-CLIENTE, GATE-LUANDRO, GATE-PRODUTO) must be respected — they
-  block their release blocks, not just individual issues.
-- When a release block finishes, mark it done in the roadmap before starting
-  the next one.
+- Gates must be respected with their roadmap-defined scope: GATE-CLIENTE
+  blocks R7, GATE-LUANDRO blocks only the production release/tag in R1, and
+  GATE-PRODUTO blocks R9.
+- Except for an explicit gate exception in the roadmap, mark each release
+  block done before starting the next one.
 
 ## Stack
 

@@ -10,9 +10,10 @@
 
 > **↻ Reavaliação 04/09/2026 (status por sprint abaixo).** A fila real seguiu o
 > `docs/produto-3/ROADMAP.md` (feedback Umbelino 01/09 + Maurício 03–04/09):
-> **Sprint 5 concluído por inteiro + Sprint 1 concluído**, com Sprints 2–4
-> ainda não executados. Item que ficou para trás: **#13** (S5) e todo o **Sprint 6
-> do ROADMAP produto-3: #179 (XLS consolidado por TI no formato do PDF) — nunca iniciado**.
+> **Sprint 5 quase concluído (faltou #13) + Sprint 1 concluído**, com Sprints 2–4
+> ainda não executados. Itens que ficaram para trás: **#13** (S5) e **#179
+> (XLS consolidado por TI no formato do PDF), ambos agora no R2 do ROADMAP
+> produto-3 — nunca iniciados**.
 
 ---
 
@@ -83,7 +84,7 @@
 1. **#171** ✅ Ver a árvore na tela 'Selecionar Sequência de Exportação' (PR #183, 04/09)
 2. **#174** ✅ Marcação de cadeia finalizada na relação de imóveis da TI (PR #184, 04/09)
 3. **#167** ✅ Visualizar a M anterior na sequência do lançamento (quebra sucessória) (PRs #185, #186, #188, 04/09)
-4. **#13** ⏳ **PENDENTE** Área em ha perde formato brasileiro (0,0000) nas tabelas → movido p/ Sprint 6 do produto-3 (junto com #179, mesma área de exportação)
+4. **#13** ⏳ **PENDENTE** Área em ha perde formato brasileiro (0,0000) nas tabelas → movido p/ R2 do produto-3 (junto com #179, mesma área de exportação)
 
 ## Sprint 6 — Débitos técnicos + certificação fundiária (semanas 11–12)
 **Objetivo:** limpar débitos que atrapalham manutenção; primeira feature grande de cadastro.
