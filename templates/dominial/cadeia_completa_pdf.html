@@ -138,7 +138,7 @@
                                     <!-- Colunas da Transmissão -->
                                     <th>Forma</th>
                                     <th>Título</th>
-                                    <th>Cartório</th>
+                                    <th>CRI</th>
                                     <th>L</th>
                                     <th>Fls.</th>
                                     <th>Data</th>
@@ -161,7 +161,7 @@
                                     {% else %}
                                     <td>{{ item.documento.folha|default_if_none:"-" }}</td>
                                     {% endif %}
-                                    <td>{{ item.documento.cartorio.nome }}</td>
+                                    <td>{{ item.documento.cartorio.nome|abreviar_cartorio }}</td>
                                     <td>{{ lancamento.data|date:'d/m/Y' }}</td>
                                     
                                     {# ===================================================== #}
@@ -191,7 +191,7 @@
                                         {# Para transcrições, mostra dados detalhados #}
                                         <td>{{ lancamento.forma|default_if_none:"-" }}</td>
                                         <td>{{ lancamento.titulo|limpar_none }}</td>
-                                        <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
+                                        <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome|abreviar_cartorio }}{% else %}-{% endif %}</td>
                                         <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
                                         <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
                                         <td>

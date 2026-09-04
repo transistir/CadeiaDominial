@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
-from ..utils import normalizar_texto_opcional
+from ..utils import normalizar_texto_opcional, abreviar_cartorio
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -556,9 +556,9 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
             
                 # Segunda linha de cabeçalho (colunas específicas)
                 headers_detalhados = [
-                    'Nº', 'L', 'Fls.', 'Cartório', 'Data',  # Matrícula
+                    'Nº', 'L', 'Fls.', 'CRI', 'Data',  # Matrícula
                     'Transmitente', 'Adquirente',  # Pessoas
-                    'Forma', 'Título', 'Cartório', 'L', 'Fls.', 'Data',  # Transmissão
+                    'Forma', 'Título', 'CRI', 'L', 'Fls.', 'Data',  # Transmissão
                     'Área (ha)', 'Origem', 'Observações'
                 ]
                 
@@ -581,7 +581,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
                     ws.cell(row=row, column=2, value=documento.livro or "-").border = border
                     folha_valor = "-" if documento.tipo and documento.tipo.tipo == 'matricula' else (documento.folha or "-")
                     ws.cell(row=row, column=3, value=folha_valor).border = border
-                    ws.cell(row=row, column=4, value=documento.cartorio.nome if documento.cartorio else "-").border = border
+                    ws.cell(row=row, column=4, value=abreviar_cartorio(documento.cartorio.nome) if documento.cartorio else "-").border = border
                     ws.cell(row=row, column=5, value=lancamento.data.strftime('%d/%m/%Y') if lancamento.data else "-").border = border
                     
                     # Transmitente
@@ -601,7 +601,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
                         # Para outros tipos, mostrar campos específicos
                         ws.cell(row=row, column=8, value=lancamento.forma or "-").border = border
                         ws.cell(row=row, column=9, value=normalizar_texto_opcional(lancamento.titulo, "-")).border = border
-                        ws.cell(row=row, column=10, value=lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else "-").border = border
+                        ws.cell(row=row, column=10, value=abreviar_cartorio(lancamento.cartorio_transmissao_compat.nome) if lancamento.cartorio_transmissao_compat else "-").border = border
                         ws.cell(row=row, column=11, value=lancamento.livro_transacao or "-").border = border
                         ws.cell(row=row, column=12, value=lancamento.folha_transacao or "-").border = border
                         ws.cell(row=row, column=13, value=lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else "-").border = border
