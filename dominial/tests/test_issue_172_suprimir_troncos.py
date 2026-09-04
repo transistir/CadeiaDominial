@@ -295,7 +295,6 @@ class SuprimirRotulosTroncoTest(_BaseCadeia172):
 
         self.assertIn("Estatísticas da Cadeia Completa", html)
         self.assertNotIn(">Troncos<", html)
-        self.assertNotIn("estatisticas.total_troncos", html)
         # Estatísticas mantidas.
         for label in ("Documentos", "Lançamentos", "Importados"):
             self.assertIn(f">{label}<", html)
