@@ -29,6 +29,7 @@ from dominial.models import (
     DocumentoTipo,
     Imovel,
     Lancamento,
+    LancamentoPessoa,
     LancamentoTipo,
     Pessoas,
     TIs,
@@ -120,10 +121,78 @@ class _BaseCadeia172(TestCase):
             ),
         ])
 
+        # --- Tronco secundário REAL -------------------------------------
+        # Um imóvel distinto ("importado" na perspectiva de self.imovel)
+        # com seu próprio documento e um lançamento com transmitente
+        # rastreável. É um segundo tronco de documentos reais, sem mock.
+        #
+        # O fluxo público get_cadeia_completa NÃO alcança este documento:
+        # CadeiaCompletaService._obter_troncos_secundarios_completos ainda
+        # é um stub que retorna [] (troncos secundários não são expandidos
+        # na exportação). Por isso o teste de tronco secundário monta o
+        # contexto pelo método real _organizar_cadeia_hierarquica, que é
+        # quem gera a seção .tronco-section e o título
+        # "🌿 TRONCO SECUNDÁRIO 1" que o template precisa suprimir.
+        self.imovel_secundario = Imovel.objects.create(
+            terra_indigena_id=self.tis,
+            nome="Fazenda Secundaria 172",
+            proprietario=self.proprietario,
+            matricula="M900",
+            cartorio=self.cartorio,
+        )
+        self.doc_secundario = Documento.objects.create(
+            imovel=self.imovel_secundario,
+            tipo=self.tipo_transcricao,
+            numero="T77",
+            data=timezone.now().date(),
+            cartorio=self.cartorio,
+            livro="7",
+            folha="7",
+        )
+        lanc_secundario = Lancamento.objects.bulk_create([
+            Lancamento(
+                documento=self.doc_secundario,
+                tipo=self.tipo_inicio,
+                numero_lancamento="T77",
+                data=timezone.now().date(),
+                cartorio_origem=self.cartorio,
+                origem="",
+            ),
+        ])[0]
+        self.pessoa_secundaria = Pessoas.objects.create(
+            nome="TRANSMITENTE_TRONCO_SEC_172", cpf="55566677788"
+        )
+        LancamentoPessoa.objects.create(
+            lancamento=lanc_secundario,
+            pessoa=self.pessoa_secundaria,
+            tipo="transmitente",
+        )
+
     def _contexto(self):
         return CadeiaCompletaService().get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
+
+    def _contexto_com_tronco_secundario(self):
+        """
+        Contexto montado pelo método REAL `_organizar_cadeia_hierarquica`
+        com DOIS troncos de documentos reais (principal: M172 + T50;
+        secundário: T77). Reproduz a estrutura que o template recebe
+        quando há troncos secundários, exercitando a supressão do rótulo
+        "🌿 TRONCO SECUNDÁRIO 1" que o service coloca em `tronco.titulo`.
+        """
+        service = CadeiaCompletaService()
+        service.imovel_atual = self.imovel
+        cadeia = service._organizar_cadeia_hierarquica(
+            [self.matricula, self.transcricao],
+            [[self.doc_secundario]],
+        )
+        return {
+            "tis": self.tis,
+            "imovel": self.imovel,
+            "cadeia_completa": cadeia,
+            "estatisticas": service._calcular_estatisticas_completas(cadeia),
+        }
 
     def _contexto_sequencia_personalizada(self):
         return CadeiaCompletaService().get_cadeia_completa_com_sequencia_personalizada(
@@ -147,6 +216,32 @@ class SuprimirRotulosTroncoTest(_BaseCadeia172):
                 token, texto_pdf, f"'{token}' não deveria aparecer no PDF"
             )
 
+    def test_pdf_nao_exibe_rotulos_com_tronco_secundario(self):
+        """
+        Mesmo com uma seção de tronco SECUNDÁRIO real na estrutura — cujo
+        `titulo` vem do service como "🌿 TRONCO SECUNDÁRIO 1" — nenhum
+        rótulo de tronco aparece no HTML nem no PDF binário.
+        """
+        context = self._contexto_com_tronco_secundario()
+
+        # A fixture realmente produz o rótulo interno que deve ser suprimido.
+        self.assertEqual(
+            context["cadeia_completa"][1]["tipo"], "tronco_secundario"
+        )
+        self.assertIn(
+            "TRONCO SECUNDÁRIO 1", context["cadeia_completa"][1]["titulo"]
+        )
+
+        html, pdf_bytes = _gerar_pdf(context)
+        texto_pdf = _texto_pdf(pdf_bytes)
+
+        self.assertEqual(pdf_bytes[:4], b"%PDF")
+        for token in ("TRONCO PRINCIPAL", "TRONCO SECUNDÁRIO", "TRONCO SECUNDARIO"):
+            self.assertNotIn(token, html, f"'{token}' não deveria aparecer no HTML")
+            self.assertNotIn(
+                token, texto_pdf, f"'{token}' não deveria aparecer no PDF"
+            )
+
     def test_pdf_nao_exibe_rotulos_em_sequencia_personalizada(self):
         """Mesma supressão no caminho de sequência personalizada."""
         context = self._contexto_sequencia_personalizada()
@@ -158,20 +253,44 @@ class SuprimirRotulosTroncoTest(_BaseCadeia172):
             self.assertNotIn(token, html)
             self.assertNotIn(token, texto_pdf)
 
-    def test_pdf_documentos_permanecem(self):
-        """Os documentos de todos os troncos continuam listados."""
-        context = self._contexto()
+    def test_pdf_documentos_de_todos_os_troncos_permanecem(self):
+        """
+        Os documentos de TODOS os troncos continuam listados: os do tronco
+        principal (M172, T50) e os do tronco secundário real (T77), com o
+        conteúdo dos lançamentos do secundário (transmitente rastreável).
+        """
+        context = self._contexto_com_tronco_secundario()
+
+        cadeia = context["cadeia_completa"]
+        self.assertEqual(cadeia[0]["tipo"], "tronco_principal")
+        self.assertEqual(cadeia[1]["tipo"], "tronco_secundario")
+        # O secundário carrega mesmo o documento T77 (documento real).
+        self.assertEqual(
+            cadeia[1]["documentos"][0]["documento"].numero, "T77"
+        )
+
         html, pdf_bytes = _gerar_pdf(context)
         texto_pdf = _texto_pdf(pdf_bytes)
+        self.assertEqual(pdf_bytes[:4], b"%PDF")
 
-        # Ambos os documentos da cadeia devem aparecer no HTML e no PDF.
-        for numero in ("M172", "T50"):
+        # Documentos dos dois troncos aparecem no HTML e no PDF binário.
+        for numero in ("M172", "T50", "T77"):
             self.assertIn(numero, html, f"Documento {numero} sumiu do HTML")
             self.assertIn(numero, texto_pdf, f"Documento {numero} sumiu do PDF")
 
+        # O lançamento do tronco secundário é renderizado (seu transmitente
+        # aparece na tabela de lançamentos do documento T77).
+        self.assertIn(
+            "TRANSMITENTE_TRONCO_SEC_172",
+            html,
+            "O lançamento do tronco secundário não foi renderizado no HTML",
+        )
+
     def test_estatisticas_sem_troncos(self):
         """O card 'Troncos' sai das estatísticas; os demais permanecem."""
-        context = self._contexto()
+        context = self._contexto_com_tronco_secundario()
+        # Estrutura com 2 troncos reais — o service ainda conta total_troncos.
+        self.assertEqual(context["estatisticas"]["total_troncos"], 2)
         html, _ = _gerar_pdf(context)
 
         self.assertIn("Estatísticas da Cadeia Completa", html)
