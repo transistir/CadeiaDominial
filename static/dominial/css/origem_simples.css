@@ -168,3 +168,39 @@
         min-width: auto !important;
     }
 }
+
+/* Issue #167 — badge de M anterior vinculada.
+   O JS troca div.className entre m-anterior-match / m-anterior-other-ti /
+   m-anterior-missing. Sem estas regras o badge fica invisível
+   (div textContent aparece mas sem cor/fundo/padding).
+*/
+.m-anterior-info {
+    display: block;
+    margin-top: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    border: 1px solid transparent;
+    /* Garante que mesmo quando display:block acima é setado via JS,
+       o conteúdo não quebre layout do formulário. */
+    word-break: break-word;
+}
+
+.m-anterior-info.m-anterior-match {
+    background-color: #e7f5ec;
+    border-color: #2e7d32;
+    color: #1b4d20;
+}
+
+.m-anterior-info.m-anterior-other-ti {
+    background-color: #fff7e0;
+    border-color: #d49a00;
+    color: #6b4a00;
+}
+
+.m-anterior-info.m-anterior-missing {
+    background-color: #fdecea;
+    border-color: #c62828;
+    color: #7a1f17;
+}
