@@ -184,7 +184,7 @@
                                     {# COLUNAS DA TRANSMISSÃO                              #}
                                     {# ===================================================== #}
                                     {# Lógica especial para averbações vs transcrições #}
-                                    {% if lancamento.tipo.tipo == 'averbacao' and item.documento.tipo.tipo != 'transcricao' %}
+                                    {% if lancamento.tipo.tipo == 'averbacao' %}
                                         {# Para averbações, mostra descrição em todas as colunas #}
                                         <td colspan="6">{{ lancamento.descricao|default_if_none:"-" }}</td>
                                     {% else %}
