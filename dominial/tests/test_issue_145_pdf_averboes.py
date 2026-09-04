@@ -1,31 +1,33 @@
 """
-Issue #145 — Reprodução (RED): a exportação completa em PDF omite os textos
-das averbações.
+Issue #145 — Regressão: a exportação completa em PDF omitia os textos das
+averbações registradas em documentos tipo transcrição.
 
 Contexto do bug (produção): imóvel 499 / TI 67 (Fazenda Monte Alto,
 matrícula M29718), 7 lançamentos `averbacao` com `descricao` preenchida.
-Na tela os textos aparecem; no PDF as células saem vazias / com "-".
+Na tela os textos apareciam; no PDF as células saíam vazias / com "-".
 
-Este arquivo NÃO aplica correção. Ele monta fixtures reais no banco, gera o
-contexto pelo serviço real (`CadeiaCompletaService.get_cadeia_completa` — sem
-contexto fake), renderiza `dominial/cadeia_completa_pdf.html` com
-`render_to_string` e também gera o PDF real via WeasyPrint, extraindo o texto
-do binário com `pypdf`.
+Estes testes montam fixtures reais no banco, geram o contexto pelo serviço
+real (`CadeiaCompletaService.get_cadeia_completa` — sem contexto fake),
+renderizam `dominial/cadeia_completa_pdf.html` com `render_to_string` e
+também geram o PDF real via WeasyPrint, extraindo o texto do binário com
+`pypdf`. Servem de guarda de regressão: o token da descrição precisa estar
+presente tanto no HTML quanto no PDF binário.
 
-Resultado do diagnóstico (ver docstrings de cada teste):
+Diagnóstico (ver docstrings de cada teste):
 
-* Averbação em documento tipo **matrícula**: o texto aparece no HTML e no
-  PDF binário. Bug NÃO reproduzido — a hipótese de regressão de
-  WeasyPrint/pydyf não se sustenta para matrículas.
-* Averbação em documento tipo **transcrição**: o texto some já no HTML
+* Averbação em documento tipo **matrícula**: o texto sempre apareceu no HTML
+  e no PDF binário. O bug nunca ocorreu aqui — a hipótese de regressão de
+  WeasyPrint/pydyf não se sustentava para matrículas.
+* Averbação em documento tipo **transcrição**: o texto sumia já no HTML
   gerado por `render_to_string`, antes de o WeasyPrint entrar em cena. A
-  causa é a condição do template
-  `templates/dominial/cadeia_completa_pdf.html:187`
+  causa era a condição do template
+  `templates/dominial/cadeia_completa_pdf.html`
   (`... and item.documento.tipo.tipo != 'transcricao'`), que para
-  transcrições troca a coluna da descrição pelas colunas de transmissão
+  transcrições trocava a coluna da descrição pelas colunas de transmissão
   (forma/título/cartório/...), todas vazias numa averbação. O template da
-  tela (`cadeia_dominial_tabela.html:235`) não tem essa restrição, por isso
-  a tela mostra o texto e o PDF não.
+  tela (`cadeia_dominial_tabela.html`) não tinha essa restrição, por isso a
+  tela mostrava o texto e o PDF não. O fix alinhou a condição do PDF à da
+  tela: averbação sempre renderiza a descrição.
 """
 
 import re
@@ -126,10 +128,9 @@ class _BaseCadeia145(TestCase):
 
 class AverbacaoEmMatriculaTest(_BaseCadeia145):
     """
-    SANIDADE (passa hoje): averbação numa MATRÍCULA aparece tanto no HTML
-    quanto no PDF binário — inclusive com a lib atual (weasyprint 69 /
-    pydyf 0.12.1). Prova que a hipótese "regressão da lib omite averbação"
-    não se sustenta para matrículas.
+    SANIDADE: averbação numa MATRÍCULA aparece tanto no HTML quanto no PDF
+    binário. Comprova que a hipótese "regressão da lib omite averbação" não
+    se sustentava para matrículas — o problema estava restrito a transcrições.
     """
 
     TOKEN = "TOKEN_AVERBACAO_145_MATRICULA"
@@ -167,14 +168,6 @@ class AverbacaoEmMatriculaTest(_BaseCadeia145):
         html, pdf_bytes = _gerar_pdf(context)
         texto_pdf = _texto_pdf(pdf_bytes)
 
-        print("\n===== #145 / averbação em MATRÍCULA =====")
-        print("  descrições no contexto:", self._descricoes_no_contexto(context))
-        print("  token no HTML?", self.TOKEN in html)
-        print("  token no PDF binário?", self.TOKEN in texto_pdf,
-              "(extração: pypdf)")
-        print("  CONCLUSÃO: matrícula OK em ambos -> causa não é a lib.")
-        print("========================================\n")
-
         self.assertEqual(pdf_bytes[:4], b"%PDF")
         self.assertIn(self.TOKEN, html)
         self.assertIn(self.TOKEN, texto_pdf)
@@ -182,20 +175,22 @@ class AverbacaoEmMatriculaTest(_BaseCadeia145):
 
 class AverbacaoEmTranscricaoTest(_BaseCadeia145):
     """
-    RED (falha hoje): cadeia real matrícula -> transcrição de origem, com a
+    REGRESSÃO #145: cadeia real matrícula -> transcrição de origem, com a
     averbação de descrição longa registrada NA TRANSCRIÇÃO.
 
     O texto:
-      * ESTÁ no contexto do serviço (`item['lancamentos']`);
-      * SOME já no HTML de `render_to_string('dominial/cadeia_completa_pdf.html')`,
-        antes do WeasyPrint;
-    logo a causa é a condição do template
-    `templates/dominial/cadeia_completa_pdf.html:187`:
+      * ESTAVA no contexto do serviço (`item['lancamentos']`);
+      * SUMIA já no HTML de `render_to_string('dominial/cadeia_completa_pdf.html')`,
+        antes do WeasyPrint.
+    A causa era a condição do template
+    `templates/dominial/cadeia_completa_pdf.html`:
         {% if lancamento.tipo.tipo == 'averbacao'
               and item.documento.tipo.tipo != 'transcricao' %}
-    Para transcrição o `else` renderiza as colunas de transmissão
+    Para transcrição o `else` renderizava as colunas de transmissão
     (forma/título/cartório/livro/folha/data) — todas vazias numa averbação —
-    e nunca imprime `lancamento.descricao`.
+    e nunca imprimia `lancamento.descricao`. O fix removeu a restrição a
+    transcrições, alinhando a condição à do template da tela; este teste
+    garante que o token da descrição aparece no HTML e no PDF binário.
     """
 
     TOKEN = "TOKEN_AVERBACAO_145_TRANSCRICAO"
@@ -259,27 +254,7 @@ class AverbacaoEmTranscricaoTest(_BaseCadeia145):
         )
 
         html, pdf_bytes = _gerar_pdf(context)
-        token_no_html = self.TOKEN in html
-
         texto_pdf = _texto_pdf(pdf_bytes)
-        token_no_pdf = self.TOKEN in texto_pdf
-
-        # Recorte da linha da averbação no HTML do PDF, para o relatório.
-        idx = html.find("AV1")
-        trecho = re.sub(r"\s+", " ", html[idx - 120:idx + 700]) if idx >= 0 else ""
-
-        print("\n===== #145 / averbação em TRANSCRIÇÃO =====")
-        print("  descrições no contexto:", descricoes)
-        print("  token no contexto do serviço?", token_no_contexto)
-        print("  token no HTML (render_to_string)?", token_no_html)
-        print("  token no PDF binário?", token_no_pdf, "(extração: pypdf)")
-        print("  linha da averbação no HTML do PDF:\n   ", trecho)
-        if token_no_contexto and not token_no_html:
-            print("  CONCLUSÃO: texto some no HTML, antes do WeasyPrint ->")
-            print("             causa no TEMPLATE cadeia_completa_pdf.html:187")
-            print("             (condição `and item.documento.tipo.tipo != "
-                  "'transcricao'`).")
-        print("==========================================\n")
 
         self.assertEqual(pdf_bytes[:4], b"%PDF")
 
@@ -289,13 +264,13 @@ class AverbacaoEmTranscricaoTest(_BaseCadeia145):
             "A averbação com descrição não chegou ao contexto do serviço.",
         )
 
-        # ASSERÇÃO RED: hoje FALHA. O texto deveria aparecer no HTML do PDF
-        # (como aparece na tela), mas a condição do template o descarta para
-        # documentos tipo transcrição.
+        # Guarda de regressão: a descrição da averbação em transcrição deve
+        # aparecer no HTML do PDF (como aparece na tela). Antes do fix a
+        # condição do template a descartava para documentos tipo transcrição.
         self.assertIn(
             self.TOKEN,
             html,
-            "REGRESSÃO #145: a descrição da averbação em transcrição não é "
-            "renderizada em cadeia_completa_pdf.html (condição da linha 187).",
+            "REGRESSÃO #145: a descrição da averbação em transcrição não foi "
+            "renderizada em cadeia_completa_pdf.html.",
         )
         self.assertIn(self.TOKEN, texto_pdf)
