@@ -85,8 +85,11 @@
             {# SEÇÃO DE TRONCO (PRINCIPAL OU SECUNDÁRIO)          #}
             {# ===================================================== #}
             <div class="tronco-section">
-                <h2>{{ tronco.titulo }}</h2>
-                
+                {% comment %}
+                Issue #172: rótulos de tronco (principal/secundário) são conceitos
+                internos do código, sem significado na cadeia dominial — suprimidos
+                da exportação. Os documentos de todos os troncos permanecem listados.
+                {% endcomment %}
                 {# ===================================================== #}
                 {# LOOP DOS DOCUMENTOS DO TRONCO                      #}
                 {# ===================================================== #}
@@ -258,10 +261,7 @@
                     <div class="estatisticas-valor">{{ estatisticas.total_lancamentos }}</div>
                     <div class="estatisticas-label">Lançamentos</div>
                 </div>
-                <div class="estatisticas-item">
-                    <div class="estatisticas-valor">{{ estatisticas.total_troncos }}</div>
-                    <div class="estatisticas-label">Troncos</div>
-                </div>
+                {# Issue #172: card "Troncos" removido — conceito interno sem significado na cadeia dominial exportada. #}
                 <div class="estatisticas-item">
                     <div class="estatisticas-valor">{{ estatisticas.documentos_importados }}</div>
                     <div class="estatisticas-label">Importados</div>
