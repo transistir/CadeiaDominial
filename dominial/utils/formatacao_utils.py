@@ -3,6 +3,7 @@ Utilitários para formatação de dados
 """
 
 import unicodedata
+from decimal import Decimal, InvalidOperation
 
 
 _PREFIXO_CRI = "cartorio de registro de imoveis"
@@ -125,6 +126,33 @@ def formatar_area(area):
         return f"{area:,.2f} ha".replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
         return "0,00 ha"
+
+
+def formatar_area_ha(area, padrao="-"):
+    """
+    Formata o campo `Lancamento.area` no padrão brasileiro, com 4 casas
+    decimais, vírgula como separador decimal e ponto como separador de
+    milhar (ex.: "1.234,5678"). NÃO adiciona sufixo " ha" — usada na coluna
+    "Área (ha)" das tabelas HTML da Cadeia Dominial Geral e do Documento
+    Detalhado (issue #13), cujo cabeçalho já indica a unidade. É só
+    formatação de exibição: o valor persistido no banco não é alterado.
+
+    - `None` ou string vazia retornam `padrao` (default "-").
+    - Valor não convertível para número (ex.: texto não numérico) também
+      retorna `padrao`, sem levantar exceção.
+    - A conversão usa `Decimal(str(valor))` para evitar ruído binário de
+      `float` (mesma técnica de `formatar_area`/`formatar_valor_monetario`,
+      acima).
+    """
+    if area is None or area == "":
+        return padrao
+
+    try:
+        valor = Decimal(str(area))
+    except (InvalidOperation, TypeError, ValueError):
+        return padrao
+
+    return f"{valor:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def normalizar_texto_opcional(valor, padrao=None):

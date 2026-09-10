@@ -5,6 +5,7 @@ import unicodedata
 from dominial.utils.formatacao_utils import (
     normalizar_texto_opcional,
     abreviar_cartorio as _abreviar_cartorio,
+    formatar_area_ha as _formatar_area_ha,
 )
 
 register = template.Library()
@@ -36,6 +37,11 @@ def limpar_none(valor, padrao="-"):
 def abreviar_cartorio(valor):
     """Troca o prefixo 'Cartório de Registro de Imóveis' pela sigla 'CRI' (só exportações)."""
     return _abreviar_cartorio(valor)
+
+@register.filter
+def area_ha(valor, padrao="-"):
+    """Formata a área (ha) no padrão brasileiro: vírgula e 4 casas decimais."""
+    return _formatar_area_ha(valor, padrao)
 
 @register.filter
 def get_item(dictionary, key):
