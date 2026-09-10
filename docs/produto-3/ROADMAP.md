@@ -41,11 +41,14 @@
 
 > Gate de tudo: sem isso a fila cresce e se perde de novo.
 
-1. **Validação no test server** dos PRs #177–#188 (imóvel 499 p/ #145,
-   doc 3168/imóvel 491 p/ #152, planilha p/ #166) → **fechar as 11 issues**
-   da lista acima.
-2. **Release develop → main + tag v1.0.9** — *exige autorização explícita
-   do luandro*.
+1. **Validação no test server** dos PRs #177–#188 ✅ **FEITO 10/09/2026**
+   (imóvel 265/Guyraroká usado no lugar do 499 — test server tem outra
+   numeração; PDF 23 págs + XLS inspecionados, suites 18/18 e 42/42 OK)
+   → **11 issues fechadas: #145 #159 #160 #161 #162 #166 #167 #171 #172 #174**
+   (+ #152 já fechada antes).
+2. **Release develop → main + tag v1.0.9** — PR **#190** aberto 10/09/2026,
+   checks verdes (deploy-testes pass). *Aguarda merge + tag — autorização
+   explícita do luandro pendente (GATE-LUANDRO).*
 3. **#187** limpar `cartorio_hidden` stale quando operador edita nome do
    cartório (P2 do review do PR #186 — código quente, mesma área do #167).
 4. GitHub: criar milestone "Produto 3" e mover a fila (decisão luandro/Hiure).
