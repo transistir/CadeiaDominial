@@ -148,7 +148,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{% static 'dominial/js/vendor/d3.v7.min.js' %}"></script>
 <script>
     // Fallback para navegadores sem suporte a :has()
     document.documentElement.classList.add('d3-active');

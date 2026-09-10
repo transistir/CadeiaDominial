@@ -61,6 +61,9 @@ def tis_detail(request, tis_id):
     # Ordenar imóveis pela atividade mais recente na cadeia dominial
     from django.db import connection
     from ..models import Documento, Lancamento
+    from ..services.status_cadeia_service import StatusCadeiaService
+
+    status_cadeia_map = StatusCadeiaService.status_por_imovel(tis_id)
     
     # Usar SQL raw para evitar problemas com campos do modelo
     with connection.cursor() as cursor:
@@ -105,6 +108,7 @@ def tis_detail(request, tis_id):
             imovel.arquivado = row[8]
             imovel.ultimo_documento = row[9]
             imovel.ultimo_lancamento = row[10]
+            imovel.status_cadeia = status_cadeia_map.get(row[0])
             imoveis_ordenados.append(imovel)
     
     return render(request, 'dominial/tis_detail.html', {

@@ -174,6 +174,138 @@ function configurarOrigem(index) {
     
     // Migrar dados existentes se houver
     migrarDadosExistentes(index);
+
+    // M anterior vinculada (issue #167)
+    configurarMAnterior(index);
+}
+
+/* ------------------------------------------------------------------ *
+ * M anterior vinculada (issue #167)
+ * Ao informar uma origem do tipo Matrícula (M) + CRI, consulta o acervo pela
+ * matrícula anterior que essa origem referencia. Não encontrar a M anterior
+ * é o caso comum (documento novo, ainda não cadastrado) — não é indício de
+ * quebra de cadeia, então o badge correspondente fica neutro.
+ * ------------------------------------------------------------------ */
+/* Issue #167 (Codex review P2): manter o controle de requests em voo
+ * por linha de origem. Debounce só evita iniciar novas chamadas; sem
+ * cancelar a anterior, a resposta mais lenta pode chegar depois de uma
+ * nova digitação e renderizar um badge com dados da busca antiga.
+ */
+const _mAnteriorAbort = {};
+const _mAnteriorDebounce = {};
+
+function garantirDivMAnterior(index) {
+    let div = document.getElementById(`m-anterior-info-${index}`);
+    if (div) return div;
+
+    const origemItem = document.querySelector(`[data-origem-index="${index}"]`);
+    if (!origemItem) return null;
+
+    // Origens adicionadas dinamicamente não trazem a div do template.
+    div = document.createElement('div');
+    div.className = 'm-anterior-info';
+    div.id = `m-anterior-info-${index}`;
+    const modelo = document.querySelector('.m-anterior-info[data-tis-id]');
+    div.dataset.tisId = modelo ? (modelo.dataset.tisId || '') : '';
+    div.style.display = 'none';
+    origemItem.parentNode.insertBefore(div, origemItem.nextSibling);
+    return div;
+}
+
+function renderMAnterior(div, dados, numeroDigitado) {
+    if (dados.encontrado && dados.mesma_ti) {
+        div.className = 'm-anterior-info m-anterior-match';
+        div.textContent = `M anterior: ${dados.matricula} (Imóvel: ${dados.imovel_nome})`;
+    } else if (dados.encontrado && dados.outra_ti) {
+        div.className = 'm-anterior-info m-anterior-other-ti';
+        div.textContent = `⚠ M anterior ${dados.matricula} está em outra TI (Imóvel: ${dados.imovel_nome})`;
+    } else {
+        div.className = 'm-anterior-info m-anterior-missing';
+        div.textContent = numeroDigitado
+            ? `M ${numeroDigitado} ainda não consta no acervo (documento novo)`
+            : 'M anterior ainda não consta no acervo (documento novo)';
+    }
+    div.style.display = 'block';
+}
+
+function atualizarMAnterior(index) {
+    const div = garantirDivMAnterior(index);
+    if (!div) return;
+
+    const tipoSelect = document.getElementById(`tipo_origem_${index}`);
+    const numeroInput = document.getElementById(`numero_origem_${index}`);
+    const cartorioHidden = document.getElementById(`cartorio_origem_${index}`);
+
+    const tipo = tipoSelect ? tipoSelect.value : '';
+    const numero = numeroInput ? numeroInput.value.trim() : '';
+    const cartorioId = cartorioHidden ? cartorioHidden.value.trim() : '';
+
+    // Só faz sentido para origem do tipo Matrícula (M) já identificada por CRI.
+    if (tipo !== 'M' || !numero || !cartorioId) {
+        // P2 do Greptile no #185: abortar fetch em voo antes de esconder o
+        // badge. Caso contrário, a resposta atrasada resolve depois do
+        // operador limpar/alterar o número/cartório/tipo e o renderMAnterior
+        // dentro do .then repopula o badge stale.
+        if (_mAnteriorAbort[index]) {
+            _mAnteriorAbort[index].abort();
+            _mAnteriorAbort[index] = null;
+        }
+        div.textContent = '';
+        div.style.display = 'none';
+        return;
+    }
+
+    // Cancelar request anterior em voo, se houver — Code rev P2.
+    if (_mAnteriorAbort[index]) {
+        _mAnteriorAbort[index].abort();
+    }
+    const controller = new AbortController();
+    _mAnteriorAbort[index] = controller;
+
+    const params = new URLSearchParams({ numero: numero, cartorio_id: cartorioId });
+    if (div.dataset.tisId) params.set('tis_id', div.dataset.tisId);
+
+    fetch(`/dominial/buscar-m-anterior/?${params.toString()}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: controller.signal,
+    })
+        .then(resposta => (resposta.ok ? resposta.json() : null))
+        .then(dados => {
+            if (dados) renderMAnterior(div, dados, numero);
+        })
+        .catch(err => {
+            // Ignore os aborts intencionais; outros erros ficam silenciosos
+            // (o badge é apenas auxiliar ao operador).
+            if (err && err.name !== 'AbortError') {
+                /* noop */
+            }
+        })
+        .finally(() => {
+            if (_mAnteriorAbort[index] === controller) {
+                _mAnteriorAbort[index] = null;
+            }
+        });
+}
+
+function agendarMAnterior(index) {
+    clearTimeout(_mAnteriorDebounce[index]);
+    _mAnteriorDebounce[index] = setTimeout(() => atualizarMAnterior(index), 300);
+}
+
+function configurarMAnterior(index) {
+    const tipoSelect = document.getElementById(`tipo_origem_${index}`);
+    const numeroInput = document.getElementById(`numero_origem_${index}`);
+    const cartorioNome = document.getElementById(`cartorio_origem_nome_${index}`);
+
+    if (tipoSelect) tipoSelect.addEventListener('change', () => agendarMAnterior(index));
+    if (numeroInput) numeroInput.addEventListener('keyup', () => agendarMAnterior(index));
+    if (cartorioNome) {
+        cartorioNome.addEventListener('keyup', () => agendarMAnterior(index));
+        cartorioNome.addEventListener('blur', () => agendarMAnterior(index));
+    }
+
+    // Estado inicial (edição / re-render de erro já trazem número + CRI).
+    atualizarMAnterior(index);
 }
 
 function processarTodasOrigensExistentes() {
@@ -340,7 +472,15 @@ function adicionarOrigemSimples() {
         
         // Configurar nova origem
         configurarOrigem(proximoIndex);
-        
+
+        // Realinhar os `value` dos checkboxes `fim_cadeia[]` com a posição atual
+        // de cada linha. `proximoIndex` é um índice de ID (busca gap em
+        // `tipo_origem_N`) e pode colidir com o `value` de uma linha
+        // sobrevivente depois de um remover+adicionar — sem renumerar, o POST
+        // sai com `fim_cadeia[]` duplicado e o servidor marca a linha errada
+        // (issue #162 rodada 3).
+        renumerarCheckboxesFimCadeia();
+
         // Focar no select da nova origem
         const tipoSelect = document.getElementById(`tipo_origem_${proximoIndex}`);
         if (tipoSelect) {
@@ -455,6 +595,32 @@ function atualizarIdsOrigem(elemento, novoIndex) {
         const forAttr = label.getAttribute('for');
         if (forAttr) {
             label.setAttribute('for', forAttr.replace(/_0$/, `_${novoIndex}`));
+        }
+    });
+
+    // O checkbox `fim_cadeia[]` identifica a linha pelo `value` (o servidor
+    // compara com a posição da origem). O clone mantinha `value="0"` em todas
+    // as linhas, quebrando o re-render de erro (issue #162 rodada 2).
+    const fimCadeiaCheckbox = elemento.querySelector('.fim-cadeia-toggle');
+    if (fimCadeiaCheckbox) {
+        fimCadeiaCheckbox.value = String(novoIndex);
+    }
+}
+
+/**
+ * Renumera o `value` dos checkboxes `fim_cadeia[]` para a posição atual da
+ * linha depois de remover uma origem, mantendo o array do POST alinhado com a
+ * ordem das origens (issue #162 rodada 2). Mexe só no `value` — ids, names e
+ * listeners continuam intactos.
+ */
+function renumerarCheckboxesFimCadeia() {
+    const container = document.getElementById('origens-container');
+    if (!container) return;
+
+    container.querySelectorAll('.origem-item').forEach((origem, posicao) => {
+        const checkbox = origem.querySelector('.fim-cadeia-toggle');
+        if (checkbox) {
+            checkbox.value = String(posicao);
         }
     });
 }
@@ -648,21 +814,25 @@ function controlarCamposFimCadeia(index) {
     
     if (fimCadeiaToggle && cartorioField && livroField && folhaField) {
         if (fimCadeiaToggle.checked) {
-            // Fim de cadeia: desabilitar campos de número e cartório
+            // Fim de cadeia: bloquear número e cartório/livro/folha.
+            // Usar `readonly` (não `disabled`) nos campos de texto: campo
+            // desabilitado NÃO vai no POST e os arrays `*_origem[]` são
+            // posicionais — a linha some e desalinha as seguintes no
+            // re-render de erro (issue #159 rodada 2).
             if (numeroField) {
                 numeroField.disabled = true;
                 numeroField.classList.remove('campo-obrigatorio');
                 numeroField.value = '';
             }
-            cartorioField.disabled = true;
-            livroField.disabled = true;
-            folhaField.disabled = true;
-            
+            cartorioField.readOnly = true;
+            livroField.readOnly = true;
+            folhaField.readOnly = true;
+
             // Remover validação obrigatória
             cartorioField.classList.remove('campo-obrigatorio');
             livroField.classList.remove('campo-obrigatorio');
             folhaField.classList.remove('campo-obrigatorio');
-            
+
             // Limpar valores
             cartorioField.value = '';
             livroField.value = '';
@@ -672,9 +842,9 @@ function controlarCamposFimCadeia(index) {
             if (numeroField) {
                 numeroField.disabled = false;
             }
-            cartorioField.disabled = false;
-            livroField.disabled = false;
-            folhaField.disabled = false;
+            cartorioField.readOnly = false;
+            livroField.readOnly = false;
+            folhaField.readOnly = false;
             
             // Aplicar validação obrigatória se for início de matrícula
             const tipoLancamento = document.querySelector('input[name="tipo"]:checked')?.value;
@@ -722,7 +892,9 @@ function criarCampoSiglaPatrimonio(index) {
 
 // Exportar funções para uso global
 window.adicionarOrigemSimples = adicionarOrigemSimples;
+window.renumerarCheckboxesFimCadeia = renumerarCheckboxesFimCadeia;
 window.montarBlocoDestacamento = montarBlocoDestacamento;
 window.controlarExibicaoCamposFimCadeia = controlarExibicaoCamposFimCadeia;
 window.controlarCamposFimCadeia = controlarCamposFimCadeia;
 window.criarCampoSiglaPatrimonio = criarCampoSiglaPatrimonio;
+window.atualizarMAnterior = atualizarMAnterior;

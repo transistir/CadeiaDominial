@@ -85,8 +85,11 @@
             {# SEÇÃO DE TRONCO (PRINCIPAL OU SECUNDÁRIO)          #}
             {# ===================================================== #}
             <div class="tronco-section">
-                <h2>{{ tronco.titulo }}</h2>
-                
+                {% comment %}
+                Issue #172: rótulos de tronco (principal/secundário) são conceitos
+                internos do código, sem significado na cadeia dominial — suprimidos
+                da exportação. Os documentos de todos os troncos permanecem listados.
+                {% endcomment %}
                 {# ===================================================== #}
                 {# LOOP DOS DOCUMENTOS DO TRONCO                      #}
                 {# ===================================================== #}
@@ -138,7 +141,7 @@
                                     <!-- Colunas da Transmissão -->
                                     <th>Forma</th>
                                     <th>Título</th>
-                                    <th>Cartório</th>
+                                    <th>CRI</th>
                                     <th>L</th>
                                     <th>Fls.</th>
                                     <th>Data</th>
@@ -161,7 +164,7 @@
                                     {% else %}
                                     <td>{{ item.documento.folha|default_if_none:"-" }}</td>
                                     {% endif %}
-                                    <td>{{ item.documento.cartorio.nome }}</td>
+                                    <td>{{ item.documento.cartorio.nome|abreviar_cartorio }}</td>
                                     <td>{{ lancamento.data|date:'d/m/Y' }}</td>
                                     
                                     {# ===================================================== #}
@@ -184,14 +187,14 @@
                                     {# COLUNAS DA TRANSMISSÃO                              #}
                                     {# ===================================================== #}
                                     {# Lógica especial para averbações vs transcrições #}
-                                    {% if lancamento.tipo.tipo == 'averbacao' and item.documento.tipo.tipo != 'transcricao' %}
+                                    {% if lancamento.tipo.tipo == 'averbacao' %}
                                         {# Para averbações, mostra descrição em todas as colunas #}
                                         <td colspan="6">{{ lancamento.descricao|default_if_none:"-" }}</td>
                                     {% else %}
                                         {# Para transcrições, mostra dados detalhados #}
                                         <td>{{ lancamento.forma|default_if_none:"-" }}</td>
                                         <td>{{ lancamento.titulo|limpar_none }}</td>
-                                        <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% else %}-{% endif %}</td>
+                                        <td>{% if lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome|abreviar_cartorio }}{% else %}-{% endif %}</td>
                                         <td>{{ lancamento.livro_transacao|default_if_none:"-" }}</td>
                                         <td>{{ lancamento.folha_transacao|default_if_none:"-" }}</td>
                                         <td>
@@ -258,10 +261,7 @@
                     <div class="estatisticas-valor">{{ estatisticas.total_lancamentos }}</div>
                     <div class="estatisticas-label">Lançamentos</div>
                 </div>
-                <div class="estatisticas-item">
-                    <div class="estatisticas-valor">{{ estatisticas.total_troncos }}</div>
-                    <div class="estatisticas-label">Troncos</div>
-                </div>
+                {# Issue #172: card "Troncos" removido — conceito interno sem significado na cadeia dominial exportada. #}
                 <div class="estatisticas-item">
                     <div class="estatisticas-valor">{{ estatisticas.documentos_importados }}</div>
                     <div class="estatisticas-label">Importados</div>

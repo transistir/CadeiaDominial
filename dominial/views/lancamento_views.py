@@ -1,19 +1,24 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_http_methods, require_POST, require_GET
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa, FimCadeia
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
 from ..services.lancamento_service import LancamentoService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
+import logging
+import re
 import unicodedata
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 from ..services.documento_service import DocumentoService
 from ..services.lancamento_consulta_service import LancamentoConsultaService
+
+
+logger = logging.getLogger(__name__)
 
 
 def _build_fim_cadeia_opcoes():
@@ -160,6 +165,90 @@ def _form_data_do_post(request):
         'folha_transacao': request.POST.get('folha_transacao'),
         'data_transacao': request.POST.get('data_transacao'),
     }
+
+
+def _origens_separadas_do_post(request):
+    """Reconstrói `origens_separadas` a partir do POST para re-renderizar o
+    bloco Origem (e os campos de fim de cadeia) após um erro de validação no
+    fluxo de NOVO lançamento (issue #161).
+
+    O template `_area_origem_form.html` só renderiza origens digitadas via
+    `origens_separadas`, contexto que antes era populado apenas pela view de
+    edição. Sem isto, o re-render de erro perdia tudo que o usuário digitou
+    nos blocos de origem e fim de cadeia (diferente dos demais campos, que
+    ganharam fallback `form_data` no PR #158)."""
+    origens_completas = request.POST.getlist('origem_completa[]')
+    cartorios_id = request.POST.getlist('cartorio_origem[]')
+    cartorios_nome = request.POST.getlist('cartorio_origem_nome[]')
+    livros = request.POST.getlist('livro_origem[]')
+    folhas = request.POST.getlist('folha_origem[]')
+    fim_cadeia_indices = request.POST.getlist('fim_cadeia[]')
+    tipos_fc = request.POST.getlist('tipo_fim_cadeia[]')
+    classificacoes_fc = request.POST.getlist('classificacao_fim_cadeia[]')
+    especificacoes_fc = request.POST.getlist('especificacao_fim_cadeia[]')
+    siglas_pp = request.POST.getlist('sigla_patrimonio_publico[]')
+    infos_fc = request.POST.getlist('info_adicional_fim_cadeia[]')
+
+    def _pos(arr, i):
+        """Valor da linha `i` num array paralelo (vazio se faltar)."""
+        return arr[i] if i < len(arr) else ''
+
+    tem_conteudo = (
+        any((t or '').strip() for t in origens_completas)
+        or any((c or '').strip() for c in cartorios_nome)
+        or any((c or '').strip() for c in cartorios_id)
+        or any((v or '').strip() for v in livros)
+        or any((v or '').strip() for v in folhas)
+        or bool(fim_cadeia_indices)
+    )
+    if not tem_conteudo:
+        return []
+
+    origens_separadas = []
+    for i, texto in enumerate(origens_completas):
+        # Todos os arrays paralelos abaixo são DENSOS: template e JS emitem um
+        # valor por linha de origem renderizada, na ordem das linhas
+        # (`origem_completa[]` é a âncora da contagem/ordem). Os controles de
+        # cartório/livro/folha ficam `readonly` — não `disabled` — nas linhas de
+        # fim de cadeia justamente para não sumirem do POST e desalinharem tudo
+        # (issue #159 rodada 2).
+        tipo_fc = _pos(tipos_fc, i)
+        classificacao_fc = _pos(classificacoes_fc, i)
+        especificacao_fc = _pos(especificacoes_fc, i)
+        sigla_pp = _pos(siglas_pp, i)
+        info_fc = _pos(infos_fc, i)
+
+        # O checkbox `fim_cadeia[]` só carrega as linhas MARCADAS e seu `value`
+        # pode não bater com a posição `i` (linhas removidas sem renumerar). Por
+        # isso o fim de cadeia é inferido também pelos arrays densos acima, que
+        # sempre têm a linha certa na posição certa (issue #162 rodada 2).
+        is_fim_cadeia = (
+            str(i) in fim_cadeia_indices
+            or any((v or '').strip() for v in
+                   (tipo_fc, classificacao_fc, especificacao_fc, sigla_pp, info_fc))
+        )
+        if not is_fim_cadeia:
+            tipo_fc = classificacao_fc = especificacao_fc = sigla_pp = info_fc = ''
+
+        match = re.match(r'^([MT])(\d+)', (texto or '').strip())
+        origens_separadas.append({
+            'texto': texto,
+            'index': i,
+            'tipo_origem': match.group(1) if match else '',
+            'numero_origem': match.group(2) if match else '',
+            'cartorio_nome': _pos(cartorios_nome, i),
+            'cartorio_id': _pos(cartorios_id, i),
+            'livro': _pos(livros, i),
+            'folha': _pos(folhas, i),
+            'fim_cadeia': is_fim_cadeia,
+            'tipo_fim_cadeia': tipo_fc,
+            'classificacao_fim_cadeia': classificacao_fc,
+            'especificacao_fim_cadeia': especificacao_fc,
+            'sigla_patrimonio_publico': sigla_pp,
+            'info_adicional_fim_cadeia': info_fc,
+            'is_destacamento_publico': tipo_fc == 'destacamento_publico',
+        })
+    return origens_separadas
 
 
 def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoas,
@@ -311,6 +400,8 @@ def _render_erro_novo_lancamento(request, tis, imovel, documento_ativo, pessoas,
         'lancamentos_com_pessoas': lancamentos_com_pessoas,
         'transmitentes': transmitentes_data,
         'adquirentes': adquirentes_data,
+        # issue #161: preservar origens e fim de cadeia digitados no POST
+        'origens_separadas': _origens_separadas_do_post(request),
     })
 
     return render(request, 'dominial/lancamento_form.html', context)
@@ -472,11 +563,12 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                 )
 
         except Exception as e:
-            # Capturar exceções para debug
-            import traceback
-            error_msg = f'Erro inesperado: {str(e)}\n{traceback.format_exc()}'
-            messages.error(request, f'❌ {error_msg}')
-            print(f"ERRO NA CRIAÇÃO DE LANÇAMENTO: {error_msg}")
+            # Traceback completo só no log do servidor (issue #162): antes ia
+            # inteiro para `messages.error`, expondo paths/estrutura interna ao
+            # usuário.
+            logger.exception('Erro inesperado ao criar lançamento (imovel=%s, documento=%s)',
+                             getattr(imovel, 'id', None), getattr(documento_ativo, 'id', None))
+            messages.error(request, '❌ Erro interno ao salvar o lançamento. Tente novamente.')
 
             # Verificar se é erro de número duplicado para destacar o campo
             numero_lancamento_error = 'Já existe um lançamento com o número' in str(e)
@@ -833,8 +925,15 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
             lancamento.delete()
             messages.success(request, f'Lançamento "{numero_lancamento}" excluído com sucesso!')
             return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir lançamento: {str(e)}')
+        except Exception:
+            # Detalhe do erro só no log do servidor (issue #162): antes
+            # `str(e)` ia para `messages.error`, expondo estrutura interna ao
+            # usuário.
+            logger.exception(
+                'Erro inesperado ao excluir lançamento (imovel=%s, lancamento=%s)',
+                getattr(imovel, 'id', None), lancamento_id,
+            )
+            messages.error(request, '❌ Erro interno ao excluir o lançamento. Tente novamente.')
 
     # Alinha com documento_detalhado: o aviso também vale quando o imóvel é o
     # DONO de um documento que outras cadeias importaram (issue #152, AC#3).
@@ -872,6 +971,90 @@ def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
         'adquirentes': adquirentes,
         'tis': tis,
         'imovel': imovel,
+    })
+
+
+@login_required
+@require_GET
+def buscar_m_anterior(request):
+    """GET /dominial/buscar-m-anterior/?numero=...&cartorio_id=...&tis_id=...
+
+    Dado o par (número da origem, cartório da origem) digitado numa linha de
+    origem do tipo Matrícula, devolve a matrícula anterior (o documento que
+    aquela origem referencia) já cadastrada no acervo — é aí que costuma
+    acontecer a quebra da cadeia sucessória (issue #167).
+
+    Resposta JSON:
+      {
+        "encontrado": bool,
+        "doc_id": int | None,
+        "matricula": str | None,
+        "imovel_nome": str | None,
+        "outra_ti": bool,   # documento existe mas pertence a outra TI
+        "mesma_ti": bool,   # documento existe e pertence à TI em contexto
+      }
+
+    `tis_id` é opcional: sem ele (nem `tis_id` na sessão) a comparação de TI
+    não é feita e a resposta é apenas informativa (`mesma_ti=True`).
+    """
+    numero = (request.GET.get('numero') or '').strip()
+    cartorio_id = (request.GET.get('cartorio_id') or '').strip()
+    if not numero or not cartorio_id:
+        return JsonResponse(
+            {'erro': 'Parâmetros obrigatórios: numero e cartorio_id.'}, status=400
+        )
+    try:
+        cartorio_id = int(cartorio_id)
+    except (TypeError, ValueError):
+        return JsonResponse({'erro': 'cartorio_id inválido.'}, status=400)
+
+    # Normalização conservadora, espelhando o GeneratedField
+    # `Documento.numero_normalizado`: só remove espaços externos e o prefixo
+    # de apresentação M/T. Zeros à esquerda e pontuação são preservados.
+    numero_normalizado = numero.upper()
+    if numero_normalizado[:1] in ('M', 'T'):
+        numero_normalizado = numero_normalizado[1:].strip()
+
+    # Issue #167 (Codex review P1): restringir o lookup estritamente a
+    # matrículas (M). Sem `tipo`, um cartório que tivesse T e M com mesmo
+    # `numero_normalizado` poderia retornar a T e reportar imóvel/TI errada
+    # como "M anterior vinculada".
+    documento = (
+        Documento.objects
+        .filter(
+            numero_normalizado=numero_normalizado,
+            cartorio_id=cartorio_id,
+            tipo_id__tipo='matricula',
+        )
+        .select_related('imovel', 'imovel__terra_indigena_id', 'tipo')
+        .first()
+    )
+
+    if documento is None:
+        return JsonResponse({
+            'encontrado': False,
+            'doc_id': None,
+            'matricula': None,
+            'imovel_nome': None,
+            'outra_ti': False,
+            'mesma_ti': False,
+        })
+
+    tis_id_contexto = request.GET.get('tis_id') or request.session.get('tis_id')
+    documento_tis_id = documento.imovel.terra_indigena_id_id
+    try:
+        mesma_ti = int(tis_id_contexto) == documento_tis_id
+    except (TypeError, ValueError):
+        # Sem contexto de TI: resposta apenas informativa.
+        mesma_ti = True
+
+    return JsonResponse({
+        'encontrado': True,
+        'doc_id': documento.id,
+        'matricula': documento.numero,
+        'imovel_nome': documento.imovel.nome,
+        'outra_ti': not mesma_ti,
+        'mesma_ti': mesma_ti,
     })
 
 

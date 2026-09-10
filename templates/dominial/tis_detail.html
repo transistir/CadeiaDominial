@@ -64,6 +64,7 @@
                 <tr>
                     <th class="th-matricula">{% trans 'Matrícula' %}</th>
                     <th class="th-nome">{% trans 'Nome da Propriedade' %}</th>
+                    <th class="th-cadeia">{% trans 'Cadeia' %}</th>
                     <th class="th-acoes">{% trans 'Ações' %}</th>
                 </tr>
             </thead>
@@ -75,6 +76,17 @@
                     </td>
                     <td class="td-nome">
                         <span class="nome-value">{{ imovel.nome }}</span>
+                    </td>
+                    <td class="td-cadeia">
+                        {% if imovel.status_cadeia == 'origem_lidima' %}
+                        <span class="cadeia-badge cadeia-badge-lidima">{% trans 'Origem Lídima' %}</span>
+                        {% elif imovel.status_cadeia == 'sem_origem' %}
+                        <span class="cadeia-badge cadeia-badge-sem-origem">{% trans 'Sem Origem' %}</span>
+                        {% elif imovel.status_cadeia == 'inconclusa' %}
+                        <span class="cadeia-badge cadeia-badge-inconclusa">{% trans 'Inconclusa' %}</span>
+                        {% else %}
+                        <span class="cadeia-badge-vazio">—</span>
+                        {% endif %}
                     </td>
                     <td class="td-acoes" onclick="event.stopPropagation();">
                         <div class="imovel-actions">
