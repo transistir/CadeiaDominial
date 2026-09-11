@@ -96,7 +96,9 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
     if escolhas_origem is None:
         escolhas_origem = {}
     
-    documentos = Documento.objects.filter(imovel=imovel).order_by('data')
+    documentos = Documento.objects.filter(imovel=imovel).select_related(
+        'tipo', 'cartorio', 'imovel'
+    ).order_by('data')
     
     # Buscar documentos importados que são referenciados pelos lançamentos deste imóvel
     documentos_importados = identificar_documentos_importados(imovel)
