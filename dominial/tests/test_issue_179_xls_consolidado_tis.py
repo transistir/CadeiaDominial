@@ -321,6 +321,13 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         # com folga pequena, mas não admite as 2 consultas adicionais por
         # lançamento que `.transmitentes/.adquirentes.filter()` causavam.
         self.assertLessEqual(len(queries), 100)
+        counts_de_imoveis = [
+            query["sql"]
+            for query in queries.captured_queries
+            if "COUNT(" in query["sql"].upper()
+            and "dominial_imovel" in query["sql"]
+        ]
+        self.assertEqual(counts_de_imoveis, [])
         ws = load_workbook(BytesIO(response.content)).active
         valores = [cell.value for row in ws.iter_rows() for cell in row]
         self.assertIn("Transmitente 179", valores)
@@ -373,11 +380,34 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertIn("-", valores_coluna_14)
         self.assertNotIn("0,0000", valores_coluna_14)
 
+    def test_area_nao_zerada_exibe_texto_pt_br_com_quatro_casas(self):
+        Lancamento.objects.filter(
+            documento__imovel=self.imovel_m100
+        ).update(area=Decimal("1234.5678"))
+
+        response = self._exportar(self.tis)
+        ws = load_workbook(BytesIO(response.content)).active
+
+        valores_coluna_14 = [cell.value for cell in ws["N"]]
+        self.assertIn("1.234,5678", valores_coluna_14)
+
     # 10 ------------------------------------------------------------------
 
     def test_rota_resolve_por_nome(self):
         url = reverse("exportar_cadeia_tis_excel", kwargs={"tis_id": self.tis.id})
         self.assertEqual(url, f"/dominial/tis/{self.tis.id}/imoveis/excel/")
+
+    def test_rota_redireciona_usuario_anonimo_para_login(self):
+        url = reverse("exportar_cadeia_tis_excel", kwargs={"tis_id": self.tis.id})
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            f"{settings.LOGIN_URL}?next={url}",
+            fetch_redirect_response=False,
+        )
 
     # 11 ------------------------------------------------------------------
 

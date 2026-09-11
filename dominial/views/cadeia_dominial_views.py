@@ -550,7 +550,8 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        filename = f"cadeia_dominial_geral_{imovel.matricula}_{date.today().strftime('%Y%m%d')}.xlsx"
+        slug = slugify(imovel.matricula) or imovel.id
+        filename = f"cadeia_dominial_geral_{slug}_{date.today().strftime('%Y%m%d')}.xlsx"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
         # Salvar workbook
@@ -590,9 +591,11 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         # `.order_by('matricula')`) e o MESMO universo: sem filtrar
         # `arquivado`, portanto inclui imóveis arquivados, assim como a
         # listagem também os inclui.
-        imoveis = Imovel.objects.filter(terra_indigena_id=tis).select_related(
-            'cartorio', 'proprietario'
-        ).order_by('matricula')
+        imoveis = list(
+            Imovel.objects.filter(terra_indigena_id=tis).select_related(
+                'cartorio', 'proprietario'
+            ).order_by('matricula')
+        )
 
         wb = Workbook()
         ws = wb.active
@@ -612,7 +615,7 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         ws['B3'] = tis.nome
         ws['A4'] = "Total de imóveis:"
         ws['A4'].font = Font(bold=True)
-        ws['B4'] = imoveis.count()
+        ws['B4'] = len(imoveis)
         ws['A5'] = "Data de Exportação:"
         ws['A5'].font = Font(bold=True)
         ws['B5'] = date.today().strftime('%d/%m/%Y')

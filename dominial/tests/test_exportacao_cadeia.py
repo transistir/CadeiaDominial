@@ -191,6 +191,7 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
     def test_excel_usa_mesmo_servico_e_preserva_ordem_dos_documentos(
         self, get_object_mock, service_class_mock
     ):
+        self.imovel.matricula = "M 100/Á"
         get_object_mock.side_effect = [self.tis, self.imovel]
         service = service_class_mock.return_value
         service.get_cadeia_completa.return_value = self.contexto_completo
@@ -209,6 +210,11 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             response["Content-Type"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        self.assertRegex(
+            response["Content-Disposition"],
+            r'^attachment; filename="cadeia_dominial_geral_m-100a_\d{8}\.xlsx"$',
+        )
+        self.assertNotIn("M 100/Á", response["Content-Disposition"])
 
     @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
     @patch.object(cadeia_dominial_views, "get_object_or_404")
