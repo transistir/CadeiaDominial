@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
-from ..utils import normalizar_texto_opcional, abreviar_cartorio
+from ..utils import normalizar_texto_opcional
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -13,8 +13,9 @@ from ..services.exportacao_excel_service import (
     ULTIMA_COLUNA,
     ajustar_larguras_colunas,
     criar_estilos,
+    criar_nome_aba_imovel,
     escrever_celula_segura,
-    escrever_secao_documentos,
+    renderizar_planilha_imovel,
 )
 from datetime import date
 import json
@@ -479,55 +480,9 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         ws = wb.active
         ws.title = "Cadeia Dominial Geral"
 
-        # Estilos (compartilhados com o export consolidado por TI — issue #179)
-        estilos = criar_estilos()
-        center_alignment = estilos['center_alignment']
-
-        # Cabeçalho principal
-        ws.merge_cells('A1:P1')
-        escrever_celula_segura(
-            ws, 1, 1, f"CADEIA DOMINIAL GERAL - {imovel.nome}"
+        renderizar_planilha_imovel(
+            ws, tis, imovel, context['cadeia_completa']
         )
-        ws['A1'].font = estilos['title_font']
-        ws['A1'].alignment = center_alignment
-        ws.row_dimensions[1].height = estilos['title_row_height']
-
-        # Informações do imóvel
-        escrever_celula_segura(ws, 3, 1, "TIS:").font = estilos['label_font']
-        escrever_celula_segura(ws, 3, 2, tis.nome)
-        escrever_celula_segura(ws, 4, 1, "Matrícula:").font = estilos['label_font']
-        escrever_celula_segura(ws, 4, 2, imovel.matricula)
-        escrever_celula_segura(ws, 5, 1, "Nome:").font = estilos['label_font']
-        escrever_celula_segura(ws, 5, 2, imovel.nome)
-        escrever_celula_segura(ws, 6, 1, "Proprietário:").font = estilos['label_font']
-        escrever_celula_segura(
-            ws, 6, 2, imovel.proprietario.nome if imovel.proprietario else ""
-        )
-        escrever_celula_segura(ws, 7, 1, "Cartório:").font = estilos['label_font']
-        escrever_celula_segura(
-            ws, 7, 2, imovel.cartorio.nome if imovel.cartorio else ""
-        )
-        escrever_celula_segura(
-            ws, 8, 1, "Data de Exportação:"
-        ).font = estilos['label_font']
-        escrever_celula_segura(ws, 8, 2, date.today().strftime('%d/%m/%Y'))
-
-        for linha in range(3, 9):
-            ws.cell(row=linha, column=1).fill = estilos['header_fill']
-            for coluna in (1, 2):
-                ws.cell(row=linha, column=coluna).border = estilos['border']
-                ws.cell(row=linha, column=coluna).alignment = estilos[
-                    'data_alignment'
-                ]
-            ws.row_dimensions[linha].height = estilos['body_row_height']
-
-        # Processar a cadeia completa (mesma estrutura do PDF) usando o
-        # renderer compartilhado com o export consolidado por TI (issue #179).
-        cadeia_completa = context['cadeia_completa']
-        escrever_secao_documentos(ws, cadeia_completa, 11, estilos)
-
-        # Ajustar largura das colunas (16 colunas)
-        ajustar_larguras_colunas(ws)
 
         # Configurar resposta HTTP
         response = HttpResponse(
@@ -558,10 +513,9 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
 def exportar_cadeia_dominial_excel_tis(request, tis_id):
     """
     Issue #179: exporta em um ÚNICO arquivo Excel a cadeia dominial completa
-    de TODOS os imóveis de uma Terra Indígena, uma seção por imóvel, no
-    mesmo layout do export por imóvel (issue #50) — reaproveitado via
-    `escrever_secao_documentos`/`ajustar_larguras_colunas`
-    (`exportacao_excel_service`) para os dois exports não divergirem.
+    de TODOS os imóveis de uma Terra Indígena. A primeira aba traz o resumo;
+    cada aba seguinte contém um imóvel no mesmo layout do export individual,
+    reaproveitado via `renderizar_planilha_imovel` para não haver divergência.
     """
     # Import local, igual ao da view por imóvel: `CadeiaCompletaService`
     # guarda `imovel_atual` como estado de instância, por isso cada imóvel
@@ -570,145 +524,96 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
     try:
         tis = get_object_or_404(TIs, id=tis_id)
 
-        # Mesma ordenação da listagem de imóveis da TI (tis_views.imoveis:
-        # `.order_by('matricula')`) e o MESMO universo: sem filtrar
-        # `arquivado`, portanto inclui imóveis arquivados, assim como a
-        # listagem também os inclui.
+        # Mesma ordenação por matrícula da listagem de imóveis da TI, com `id`
+        # apenas como desempate determinístico para matrículas repetidas, e o
+        # MESMO universo: sem filtrar `arquivado`, portanto inclui imóveis
+        # arquivados, assim como a listagem também os inclui.
         imoveis = list(
             Imovel.objects.filter(terra_indigena_id=tis).select_related(
                 'cartorio', 'proprietario'
-            ).order_by('matricula')
+            ).order_by('matricula', 'id')
         )
 
         wb = Workbook()
-        ws = wb.active
-        ws.title = "Cadeia Dominial Consolidada"
-
+        resumo = wb.active
+        resumo.title = "Resumo"
         estilos = criar_estilos()
-        center_alignment = estilos['center_alignment']
 
-        # Cabeçalho geral
-        ws.merge_cells(f'A1:{ULTIMA_COLUNA}1')
-        escrever_celula_segura(
-            ws, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
-        )
-        ws['A1'].font = estilos['title_font']
-        ws['A1'].alignment = center_alignment
-        ws.row_dimensions[1].height = estilos['title_row_height']
-
-        escrever_celula_segura(ws, 3, 1, "TI:")
-        ws['A3'].font = estilos['label_font']
-        escrever_celula_segura(ws, 3, 2, tis.nome)
-        escrever_celula_segura(ws, 4, 1, "Total de imóveis:")
-        ws['A4'].font = estilos['label_font']
-        escrever_celula_segura(ws, 4, 2, len(imoveis))
-        escrever_celula_segura(ws, 5, 1, "Data de Exportação:")
-        ws['A5'].font = estilos['label_font']
-        escrever_celula_segura(ws, 5, 2, date.today().strftime('%d/%m/%Y'))
-
-        for linha_resumo in range(3, 6):
-            ws.cell(row=linha_resumo, column=1).fill = estilos['header_fill']
-            for coluna in (1, 2):
-                ws.cell(row=linha_resumo, column=coluna).border = estilos['border']
-                ws.cell(row=linha_resumo, column=coluna).alignment = estilos[
-                    'data_alignment'
-                ]
-            ws.row_dimensions[linha_resumo].height = estilos['body_row_height']
-
-        linha = 7
-
+        nomes_usados = {resumo.title}
+        abas_imoveis = []
         for imovel in imoveis:
-            # 1. Linha de seção do imóvel, no mesmo azul-claro dos cabeçalhos
-            # de documento do PDF.
-            ws.merge_cells(f'A{linha}:{ULTIMA_COLUNA}{linha}')
-            celula_secao = escrever_celula_segura(
-                ws, linha, 1, f"IMÓVEL: {imovel.matricula} — {imovel.nome}"
-            )
-            celula_secao.font = estilos['document_font']
-            celula_secao.fill = estilos['group_fill']
-            celula_secao.alignment = estilos['data_alignment']
-            ws.row_dimensions[linha].height = estilos['document_row_height']
-            linha += 1
+            nome_aba = criar_nome_aba_imovel(imovel.matricula, nomes_usados)
+            nomes_usados.add(nome_aba)
+            abas_imoveis.append((imovel, nome_aba))
 
-            # 2. Informações do imóvel. "CRI:" no rótulo e sigla no valor
-            # (issue #166) — mesmo padrão do export por imóvel, que já usa a
-            # sigla nas colunas de cartório da tabela de lançamentos.
-            escrever_celula_segura(
-                ws, linha, 1, "Matrícula:"
-            ).font = estilos['label_font']
-            escrever_celula_segura(ws, linha, 2, imovel.matricula)
-            ws.row_dimensions[linha].height = estilos['body_row_height']
-            linha += 1
-            escrever_celula_segura(
-                ws, linha, 1, "Nome:"
-            ).font = estilos['label_font']
-            escrever_celula_segura(ws, linha, 2, imovel.nome)
-            ws.row_dimensions[linha].height = estilos['body_row_height']
-            linha += 1
-            escrever_celula_segura(
-                ws, linha, 1, "Proprietário:"
-            ).font = estilos['label_font']
-            escrever_celula_segura(
-                ws,
-                linha,
-                2,
-                imovel.proprietario.nome if imovel.proprietario else "",
-            )
-            ws.row_dimensions[linha].height = estilos['body_row_height']
-            linha += 1
-            escrever_celula_segura(
-                ws, linha, 1, "CRI:"
-            ).font = estilos['label_font']
-            escrever_celula_segura(
-                ws,
-                linha,
-                2,
-                abreviar_cartorio(imovel.cartorio.nome) if imovel.cartorio else "",
-            )
-            ws.row_dimensions[linha].height = estilos['body_row_height']
-            linha += 1
+        resumo.merge_cells(f'A1:{ULTIMA_COLUNA}1')
+        titulo = escrever_celula_segura(
+            resumo, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
+        )
+        titulo.font = estilos['title_font']
+        titulo.alignment = estilos['center_alignment']
+        resumo.row_dimensions[1].height = estilos['title_row_height']
 
-            # 3-5. Cadeia completa deste imóvel, isolada num try/except: com
-            # centenas de imóveis numa TI, um registro com dado inconsistente
-            # (ex. hierarquia quebrada) não pode derrubar o relatório
-            # inteiro — loga o erro, marca a seção e segue para o próximo
-            # imóvel.
+        informacoes_resumo = (
+            ("TI:", tis.nome),
+            ("Total de imóveis:", len(imoveis)),
+            ("Data de Exportação:", date.today().strftime('%d/%m/%Y')),
+        )
+        for linha, (rotulo, valor) in enumerate(informacoes_resumo, start=3):
+            celula_rotulo = escrever_celula_segura(resumo, linha, 1, rotulo)
+            celula_rotulo.font = estilos['label_font']
+            celula_rotulo.fill = estilos['header_fill']
+            celula_valor = escrever_celula_segura(resumo, linha, 2, valor)
+            for celula in (celula_rotulo, celula_valor):
+                celula.border = estilos['border']
+                celula.alignment = estilos['data_alignment']
+            resumo.row_dimensions[linha].height = estilos['body_row_height']
+
+        cabecalho_matriculas = escrever_celula_segura(
+            resumo, 7, 1, "Matrículas:"
+        )
+        cabecalho_matriculas.font = estilos['label_font']
+        cabecalho_matriculas.fill = estilos['header_fill']
+        cabecalho_matriculas.border = estilos['border']
+        cabecalho_matriculas.alignment = estilos['data_alignment']
+        resumo.row_dimensions[7].height = estilos['body_row_height']
+
+        for linha, (imovel, _) in enumerate(abas_imoveis, start=8):
+            celula = escrever_celula_segura(
+                resumo, linha, 1, imovel.matricula
+            )
+            celula.border = estilos['border']
+            celula.alignment = estilos['data_alignment']
+            resumo.row_dimensions[linha].height = estilos['body_row_height']
+
+        ajustar_larguras_colunas(resumo)
+        resumo.column_dimensions['A'].width = 30
+
+        for imovel, nome_aba in abas_imoveis:
+            ws_imovel = wb.create_sheet(title=nome_aba)
             try:
-                # Instância NOVA por imóvel: CadeiaCompletaService guarda
-                # `imovel_atual` como estado de instância (usado para marcar
-                # documentos importados); reaproveitar a instância entre
-                # imóveis vazaria o estado de um para o outro.
                 contexto = CadeiaCompletaService().get_cadeia_completa(tis.id, imovel.id)
-                if not contexto['cadeia_completa']:
-                    escrever_celula_segura(
-                        ws, linha, 1, "Sem documentos cadastrados."
-                    )
-                    linha += 1
-                else:
-                    # NÃO escrever títulos de tronco principal/secundário
-                    # (issue #172): `escrever_secao_documentos` já omite isso,
-                    # escrevendo apenas os documentos.
-                    linha = escrever_secao_documentos(ws, contexto['cadeia_completa'], linha, estilos)
+                renderizar_planilha_imovel(
+                    ws_imovel,
+                    tis,
+                    imovel,
+                    contexto['cadeia_completa'],
+                    estilos,
+                )
             except Exception:
                 logger.exception(
-                    "Erro ao montar a seção do imóvel %s no XLS consolidado da TI %s",
+                    "Erro ao montar a aba do imóvel %s no XLS consolidado da TI %s",
                     imovel.id, tis_id
                 )
-                # O renderer pode ter escrito parte do bloco antes de falhar.
-                # Como `linha` é um inteiro, o avanço interno não volta ao
-                # chamador quando há exceção; retomar de `ws.max_row + 1`
-                # impede que o aviso e o próximo imóvel sobrescrevam as linhas
-                # parciais já presentes na planilha.
-                linha = max(linha, ws.max_row + 1)
-                escrever_celula_segura(
-                    ws, linha, 1, "Erro ao exportar este imóvel."
+                linha_erro = max(ws_imovel.max_row + 1, 11)
+                erro = escrever_celula_segura(
+                    ws_imovel, linha_erro, 1, "Erro ao exportar este imóvel."
                 )
-                linha += 1
-
-            # 6. Linha em branco entre imóveis
-            linha += 1
-
-        ajustar_larguras_colunas(ws)
+                erro.alignment = estilos['data_alignment']
+                ws_imovel.row_dimensions[linha_erro].height = estilos[
+                    'body_row_height'
+                ]
+                ajustar_larguras_colunas(ws_imovel)
 
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

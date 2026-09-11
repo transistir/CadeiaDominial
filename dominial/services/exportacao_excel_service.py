@@ -16,6 +16,10 @@ divirjam ao longo do tempo: qualquer ajuste de coluna, cor ou formatação
 deve ser feito aqui, uma única vez, e passa a valer para os dois.
 """
 
+import re
+from datetime import date
+
+from django.utils.text import slugify
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -41,6 +45,8 @@ CABECALHOS_DETALHADOS = [
 LARGURAS_COLUNAS = [12, 8, 8, 20, 12, 20, 20, 15, 15, 20, 8, 8, 12, 12, 20, 30]
 
 PREFIXOS_FORMULA_EXCEL = ('=', '+', '-', '@', '\t', '\r')
+CARACTERES_INVALIDOS_ABA = re.compile(r'[:\\/?*\[\]]')
+LIMITE_NOME_ABA = 31
 
 # Tokens visuais copiados dos CSS dos PDFs (`cadeia_dominial_pdf.css` e
 # `cadeia_completa_pdf.css`). Manter os valores sincronizados com a fonte de
@@ -140,6 +146,29 @@ def ajustar_larguras_colunas(ws):
         ws.column_dimensions[get_column_letter(i)].width = width
 
 
+def criar_nome_aba_imovel(matricula, nomes_usados):
+    """
+    Gera um nome de aba válido e único a partir da matrícula.
+
+    O Excel limita títulos a 31 caracteres, proíbe ``: \\ / ? * [ ]`` e
+    compara títulos sem distinguir maiúsculas de minúsculas. O sufixo de
+    colisão é incluído dentro do limite (``-2``, ``-3``, ...).
+    """
+    nome_base = slugify(str(matricula or ""))
+    nome_base = CARACTERES_INVALIDOS_ABA.sub("", nome_base) or "imovel"
+    nome_base = nome_base[:LIMITE_NOME_ABA]
+    nomes_normalizados = {nome.casefold() for nome in nomes_usados}
+
+    candidato = nome_base
+    indice = 2
+    while candidato.casefold() in nomes_normalizados:
+        sufixo = f"-{indice}"
+        candidato = f"{nome_base[:LIMITE_NOME_ABA - len(sufixo)]}{sufixo}"
+        indice += 1
+
+    return candidato
+
+
 def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
     """
     Escreve, a partir de `linha_inicial`, a sequência de documentos e
@@ -153,10 +182,7 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
     `linha_inicial` é a primeira linha efetivamente escrita (o título do
     primeiro documento) — quem chama decide onde a seção começa.
 
-    Retorna a próxima linha livre: a linha em branco deixada após o último
-    documento. Quem chama decide o que fazer com ela (o export por imóvel
-    soma +1 antes do bloco de estatísticas; o export consolidado por TI soma
-    +1 para separar o próximo imóvel).
+    Retorna a próxima linha livre após a separação do último documento.
 
     ATENÇÃO: os acessos a `documento.livro`/`documento.folha`/
     `documento.cartorio` ficam DENTRO do loop `for lancamento in
@@ -374,3 +400,54 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
             row += 1
 
     return row
+
+
+def renderizar_planilha_imovel(ws, tis, imovel, cadeia_completa, estilos=None):
+    """
+    Renderiza uma planilha completa de um imóvel.
+
+    É a única implementação do layout usado tanto pelo XLS individual quanto
+    por cada aba de imóvel do XLS consolidado da TI.
+    """
+    if estilos is None:
+        estilos = criar_estilos()
+
+    ws.merge_cells(f'A1:{ULTIMA_COLUNA}1')
+    titulo = escrever_celula_segura(
+        ws, 1, 1, f"CADEIA DOMINIAL GERAL - {imovel.nome}"
+    )
+    titulo.font = estilos['title_font']
+    titulo.alignment = estilos['center_alignment']
+    ws.row_dimensions[1].height = estilos['title_row_height']
+
+    informacoes = (
+        ("TIS:", tis.nome),
+        ("Matrícula:", imovel.matricula),
+        ("Nome:", imovel.nome),
+        (
+            "Proprietário:",
+            imovel.proprietario.nome if imovel.proprietario else "",
+        ),
+        ("Cartório:", imovel.cartorio.nome if imovel.cartorio else ""),
+        ("Data de Exportação:", date.today().strftime('%d/%m/%Y')),
+    )
+    for linha, (rotulo, valor) in enumerate(informacoes, start=3):
+        celula_rotulo = escrever_celula_segura(ws, linha, 1, rotulo)
+        celula_rotulo.font = estilos['label_font']
+        celula_rotulo.fill = estilos['header_fill']
+        celula_valor = escrever_celula_segura(ws, linha, 2, valor)
+        for celula in (celula_rotulo, celula_valor):
+            celula.border = estilos['border']
+            celula.alignment = estilos['data_alignment']
+        ws.row_dimensions[linha].height = estilos['body_row_height']
+
+    if cadeia_completa:
+        escrever_secao_documentos(ws, cadeia_completa, 11, estilos)
+    else:
+        celula_vazia = escrever_celula_segura(
+            ws, 11, 1, "Sem documentos cadastrados."
+        )
+        celula_vazia.alignment = estilos['data_alignment']
+        ws.row_dimensions[11].height = estilos['body_row_height']
+
+    ajustar_larguras_colunas(ws)
