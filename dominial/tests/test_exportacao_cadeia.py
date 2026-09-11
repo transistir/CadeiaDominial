@@ -470,3 +470,25 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
                 for valor in valores_coluna_a
             )
         )
+
+    def test_excel_export_neutraliza_formula_na_observacao(self):
+        formula = "=SUM(1+1)"
+        self.lancamento_transcricao.observacoes = formula
+        self.lancamento_transcricao.save(update_fields=["observacoes"])
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        self.assertEqual(response.status_code, 200)
+
+        ws = load_workbook(BytesIO(response.content)).active
+        celulas = [
+            cell
+            for row in ws.iter_rows()
+            for cell in row
+            if cell.value == formula
+        ]
+
+        self.assertEqual(len(celulas), 1)
+        self.assertEqual(celulas[0].value, formula)
+        self.assertEqual(celulas[0].data_type, "s")

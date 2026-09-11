@@ -13,6 +13,7 @@ from ..services.exportacao_excel_service import (
     ULTIMA_COLUNA,
     ajustar_larguras_colunas,
     criar_estilos,
+    escrever_celula_segura,
     escrever_secao_documentos,
 )
 from datetime import date
@@ -488,23 +489,29 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
 
         # Cabeçalho principal
         ws.merge_cells('A1:P1')
-        ws['A1'] = f"CADEIA DOMINIAL GERAL - {imovel.nome}"
+        escrever_celula_segura(
+            ws, 1, 1, f"CADEIA DOMINIAL GERAL - {imovel.nome}"
+        )
         ws['A1'].font = Font(bold=True, size=16)
         ws['A1'].alignment = center_alignment
 
         # Informações do imóvel
-        ws['A3'] = "TIS:"
-        ws['B3'] = tis.nome
-        ws['A4'] = "Matrícula:"
-        ws['B4'] = imovel.matricula
-        ws['A5'] = "Nome:"
-        ws['B5'] = imovel.nome
-        ws['A6'] = "Proprietário:"
-        ws['B6'] = imovel.proprietario.nome if imovel.proprietario else ""
-        ws['A7'] = "Cartório:"
-        ws['B7'] = imovel.cartorio.nome if imovel.cartorio else ""
-        ws['A8'] = "Data de Exportação:"
-        ws['B8'] = date.today().strftime('%d/%m/%Y')
+        escrever_celula_segura(ws, 3, 1, "TIS:")
+        escrever_celula_segura(ws, 3, 2, tis.nome)
+        escrever_celula_segura(ws, 4, 1, "Matrícula:")
+        escrever_celula_segura(ws, 4, 2, imovel.matricula)
+        escrever_celula_segura(ws, 5, 1, "Nome:")
+        escrever_celula_segura(ws, 5, 2, imovel.nome)
+        escrever_celula_segura(ws, 6, 1, "Proprietário:")
+        escrever_celula_segura(
+            ws, 6, 2, imovel.proprietario.nome if imovel.proprietario else ""
+        )
+        escrever_celula_segura(ws, 7, 1, "Cartório:")
+        escrever_celula_segura(
+            ws, 7, 2, imovel.cartorio.nome if imovel.cartorio else ""
+        )
+        escrever_celula_segura(ws, 8, 1, "Data de Exportação:")
+        escrever_celula_segura(ws, 8, 2, date.today().strftime('%d/%m/%Y'))
 
         # Inicializar linha atual
         row = 10
@@ -522,25 +529,39 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
 
             # Título das estatísticas
             ws.merge_cells(f'A{row}:P{row}')
-            ws.cell(row=row, column=1, value="📊 ESTATÍSTICAS").font = Font(bold=True, size=14, color="FFFFFF")
+            escrever_celula_segura(ws, row, 1, "📊 ESTATÍSTICAS").font = Font(
+                bold=True, size=14, color="FFFFFF"
+            )
             ws.cell(row=row, column=1).fill = PatternFill(start_color="28a745", end_color="28a745", fill_type="solid")
             ws.cell(row=row, column=1).alignment = center_alignment
             row += 1
 
             # Estatísticas
             if 'total_documentos' in estatisticas:
-                ws.cell(row=row, column=1, value="Total de Documentos:").font = Font(bold=True)
-                ws.cell(row=row, column=2, value=estatisticas['total_documentos']).border = border
+                escrever_celula_segura(
+                    ws, row, 1, "Total de Documentos:"
+                ).font = Font(bold=True)
+                escrever_celula_segura(
+                    ws, row, 2, estatisticas['total_documentos']
+                ).border = border
                 row += 1
 
             if 'total_lancamentos' in estatisticas:
-                ws.cell(row=row, column=1, value="Total de Lançamentos:").font = Font(bold=True)
-                ws.cell(row=row, column=2, value=estatisticas['total_lancamentos']).border = border
+                escrever_celula_segura(
+                    ws, row, 1, "Total de Lançamentos:"
+                ).font = Font(bold=True)
+                escrever_celula_segura(
+                    ws, row, 2, estatisticas['total_lancamentos']
+                ).border = border
                 row += 1
 
             if 'documentos_compartilhados' in estatisticas:
-                ws.cell(row=row, column=1, value="Documentos Compartilhados:").font = Font(bold=True)
-                ws.cell(row=row, column=2, value=estatisticas['documentos_compartilhados']).border = border
+                escrever_celula_segura(
+                    ws, row, 1, "Documentos Compartilhados:"
+                ).font = Font(bold=True)
+                escrever_celula_segura(
+                    ws, row, 2, estatisticas['documentos_compartilhados']
+                ).border = border
                 row += 1
 
         # Ajustar largura das colunas (16 colunas)
@@ -606,19 +627,21 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
 
         # Cabeçalho geral
         ws.merge_cells(f'A1:{ULTIMA_COLUNA}1')
-        ws['A1'] = f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
+        escrever_celula_segura(
+            ws, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
+        )
         ws['A1'].font = Font(bold=True, size=16)
         ws['A1'].alignment = center_alignment
 
-        ws['A3'] = "TI:"
+        escrever_celula_segura(ws, 3, 1, "TI:")
         ws['A3'].font = Font(bold=True)
-        ws['B3'] = tis.nome
-        ws['A4'] = "Total de imóveis:"
+        escrever_celula_segura(ws, 3, 2, tis.nome)
+        escrever_celula_segura(ws, 4, 1, "Total de imóveis:")
         ws['A4'].font = Font(bold=True)
-        ws['B4'] = len(imoveis)
-        ws['A5'] = "Data de Exportação:"
+        escrever_celula_segura(ws, 4, 2, len(imoveis))
+        escrever_celula_segura(ws, 5, 1, "Data de Exportação:")
         ws['A5'].font = Font(bold=True)
-        ws['B5'] = date.today().strftime('%d/%m/%Y')
+        escrever_celula_segura(ws, 5, 2, date.today().strftime('%d/%m/%Y'))
 
         linha = 7
 
@@ -628,9 +651,8 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
             # para o cliente distinguir visualmente cada imóvel ao rolar a
             # planilha.
             ws.merge_cells(f'A{linha}:{ULTIMA_COLUNA}{linha}')
-            celula_secao = ws.cell(
-                row=linha, column=1,
-                value=f"IMÓVEL: {imovel.matricula} — {imovel.nome}"
+            celula_secao = escrever_celula_segura(
+                ws, linha, 1, f"IMÓVEL: {imovel.matricula} — {imovel.nome}"
             )
             celula_secao.font = Font(bold=True, size=14, color="FFFFFF")
             celula_secao.fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
@@ -640,17 +662,31 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
             # 2. Informações do imóvel. "CRI:" no rótulo e sigla no valor
             # (issue #166) — mesmo padrão do export por imóvel, que já usa a
             # sigla nas colunas de cartório da tabela de lançamentos.
-            ws.cell(row=linha, column=1, value="Matrícula:").font = Font(bold=True)
-            ws.cell(row=linha, column=2, value=imovel.matricula)
+            escrever_celula_segura(ws, linha, 1, "Matrícula:").font = Font(
+                bold=True
+            )
+            escrever_celula_segura(ws, linha, 2, imovel.matricula)
             linha += 1
-            ws.cell(row=linha, column=1, value="Nome:").font = Font(bold=True)
-            ws.cell(row=linha, column=2, value=imovel.nome)
+            escrever_celula_segura(ws, linha, 1, "Nome:").font = Font(bold=True)
+            escrever_celula_segura(ws, linha, 2, imovel.nome)
             linha += 1
-            ws.cell(row=linha, column=1, value="Proprietário:").font = Font(bold=True)
-            ws.cell(row=linha, column=2, value=imovel.proprietario.nome if imovel.proprietario else "")
+            escrever_celula_segura(ws, linha, 1, "Proprietário:").font = Font(
+                bold=True
+            )
+            escrever_celula_segura(
+                ws,
+                linha,
+                2,
+                imovel.proprietario.nome if imovel.proprietario else "",
+            )
             linha += 1
-            ws.cell(row=linha, column=1, value="CRI:").font = Font(bold=True)
-            ws.cell(row=linha, column=2, value=abreviar_cartorio(imovel.cartorio.nome) if imovel.cartorio else "")
+            escrever_celula_segura(ws, linha, 1, "CRI:").font = Font(bold=True)
+            escrever_celula_segura(
+                ws,
+                linha,
+                2,
+                abreviar_cartorio(imovel.cartorio.nome) if imovel.cartorio else "",
+            )
             linha += 1
 
             # 3-5. Cadeia completa deste imóvel, isolada num try/except: com
@@ -665,7 +701,9 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                 # imóveis vazaria o estado de um para o outro.
                 contexto = CadeiaCompletaService().get_cadeia_completa(tis.id, imovel.id)
                 if not contexto['cadeia_completa']:
-                    ws.cell(row=linha, column=1, value="Sem documentos cadastrados.")
+                    escrever_celula_segura(
+                        ws, linha, 1, "Sem documentos cadastrados."
+                    )
                     linha += 1
                 else:
                     # NÃO escrever títulos de tronco principal/secundário
@@ -683,9 +721,8 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                 # impede que o aviso e o próximo imóvel sobrescrevam as linhas
                 # parciais já presentes na planilha.
                 linha = max(linha, ws.max_row + 1)
-                ws.cell(
-                    row=linha, column=1,
-                    value="Erro ao exportar este imóvel."
+                escrever_celula_segura(
+                    ws, linha, 1, "Erro ao exportar este imóvel."
                 )
                 linha += 1
 

@@ -25,6 +25,7 @@ Decisões de fixture:
   compartilhado entre métodos de teste no mesmo processo.
 """
 
+from datetime import date
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -34,11 +35,11 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from dominial.models import (
     Cartorios,
@@ -51,8 +52,40 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
-from dominial.services.exportacao_excel_service import CABECALHOS_DETALHADOS
+from dominial.services.exportacao_excel_service import (
+    CABECALHOS_DETALHADOS,
+    escrever_celula_segura,
+)
 from dominial.views import cadeia_dominial_views
+
+
+class EscreverCelulaSeguraTest(SimpleTestCase):
+    def test_forca_prefixos_perigosos_como_texto(self):
+        ws = Workbook().active
+
+        for row, valor in enumerate(
+            ("=SUM(1+1)", "+foo", "-foo", "@foo", "\tfoo", "\rfoo"),
+            start=1,
+        ):
+            with self.subTest(valor=valor):
+                cell = escrever_celula_segura(ws, row, 1, valor)
+                self.assertEqual(cell.value, valor)
+                self.assertEqual(cell.data_type, "s")
+
+    def test_preserva_inferencia_de_valores_nao_textuais(self):
+        ws = Workbook().active
+        casos = (
+            (1234, "n"),
+            (Decimal("1234.5678"), "n"),
+            (date(2026, 9, 11), "d"),
+            (None, "n"),
+        )
+
+        for row, (valor, data_type) in enumerate(casos, start=1):
+            with self.subTest(valor=valor):
+                cell = escrever_celula_segura(ws, row, 1, valor)
+                self.assertEqual(cell.value, valor)
+                self.assertEqual(cell.data_type, data_type)
 
 
 class ExportacaoTisXlsConsolidadoTest(TestCase):
@@ -390,6 +423,45 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
 
         valores_coluna_14 = [cell.value for cell in ws["N"]]
         self.assertIn("1.234,5678", valores_coluna_14)
+
+    def test_neutraliza_prefixos_de_formula_nos_dados_do_lancamento(self):
+        valores_perigosos = {
+            "observacoes": "=SUM(1+1)",
+            "forma": "+foo",
+            "titulo": "-foo",
+            "livro_transacao": "@foo",
+        }
+        Lancamento.objects.filter(
+            documento__imovel=self.imovel_m100
+        ).update(**valores_perigosos)
+
+        response = self._exportar(self.tis)
+        ws = load_workbook(BytesIO(response.content)).active
+        celulas_por_valor = {
+            cell.value: cell
+            for row in ws.iter_rows()
+            for cell in row
+            if cell.value in valores_perigosos.values()
+        }
+
+        for valor in valores_perigosos.values():
+            with self.subTest(valor=valor):
+                self.assertIn(valor, celulas_por_valor)
+                self.assertEqual(celulas_por_valor[valor].value, valor)
+                self.assertEqual(celulas_por_valor[valor].data_type, "s")
+
+    def test_neutraliza_formula_nos_metadados_e_preserva_total_numerico(self):
+        formula = "=SUM(1+1)"
+        self.tis.nome = formula
+        self.tis.save(update_fields=["nome"])
+
+        response = self._exportar(self.tis)
+        ws = load_workbook(BytesIO(response.content)).active
+
+        self.assertEqual(ws["B3"].value, formula)
+        self.assertEqual(ws["B3"].data_type, "s")
+        self.assertEqual(ws["B4"].value, 3)
+        self.assertEqual(ws["B4"].data_type, "n")
 
     # 10 ------------------------------------------------------------------
 

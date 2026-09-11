@@ -40,6 +40,25 @@ CABECALHOS_DETALHADOS = [
 # Larguras das 16 colunas, na mesma ordem de `CABECALHOS_DETALHADOS`.
 LARGURAS_COLUNAS = [12, 8, 8, 20, 12, 20, 20, 15, 15, 20, 8, 8, 12, 12, 20, 30]
 
+PREFIXOS_FORMULA_EXCEL = ('=', '+', '-', '@', '\t', '\r')
+
+
+def escrever_celula_segura(ws, row, column, value):
+    """
+    Escreve um valor sem permitir que texto digitado pelo usuário vire
+    fórmula no XLSX.
+
+    O openpyxl infere strings iniciadas por ``=`` como fórmula. Os demais
+    prefixos também são vetores conhecidos de formula injection em leitores
+    de planilha, então todos são marcados explicitamente como texto. Valores
+    não textuais mantêm a inferência original do openpyxl.
+    """
+    cell = ws.cell(row=row, column=column)
+    cell.value = value
+    if isinstance(value, str) and value.startswith(PREFIXOS_FORMULA_EXCEL):
+        cell.data_type = 's'
+    return cell
+
 
 def criar_estilos():
     """
@@ -112,7 +131,12 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
             row += 1
             prefixo_importado = "📥 " if is_importado else ""
             ws.merge_cells(f'A{row}:{ULTIMA_COLUNA}{row}')
-            ws.cell(row=row, column=1, value=f"{prefixo_importado}{documento.tipo.get_tipo_display()}: {documento.numero}").font = Font(bold=True, size=12)
+            escrever_celula_segura(
+                ws,
+                row,
+                1,
+                f"{prefixo_importado}{documento.tipo.get_tipo_display()}: {documento.numero}",
+            ).font = Font(bold=True, size=12)
             ws.cell(row=row, column=1).fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
             ws.cell(row=row, column=1).alignment = center_alignment
             row += 1
@@ -120,34 +144,34 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
             # Cabeçalho da tabela de lançamentos (igual ao template)
             # Primeira linha de cabeçalho (agrupamentos)
             ws.merge_cells(f'A{row}:E{row}')
-            ws.cell(row=row, column=1, value="MATRÍCULA").font = header_font
+            escrever_celula_segura(ws, row, 1, "MATRÍCULA").font = header_font
             ws.cell(row=row, column=1).fill = header_fill
             ws.cell(row=row, column=1).alignment = center_alignment
 
             ws.merge_cells(f'F{row}:G{row}')
-            ws.cell(row=row, column=6, value="").fill = header_fill
+            escrever_celula_segura(ws, row, 6, "").fill = header_fill
 
             ws.merge_cells(f'H{row}:M{row}')
-            ws.cell(row=row, column=8, value="TRANSMISSÃO").font = header_font
+            escrever_celula_segura(ws, row, 8, "TRANSMISSÃO").font = header_font
             ws.cell(row=row, column=8).fill = header_fill
             ws.cell(row=row, column=8).alignment = center_alignment
 
-            ws.cell(row=row, column=14, value="Área (ha)").font = header_font
+            escrever_celula_segura(ws, row, 14, "Área (ha)").font = header_font
             ws.cell(row=row, column=14).fill = header_fill
             ws.cell(row=row, column=14).alignment = center_alignment
 
-            ws.cell(row=row, column=15, value="Origem").font = header_font
+            escrever_celula_segura(ws, row, 15, "Origem").font = header_font
             ws.cell(row=row, column=15).fill = header_fill
             ws.cell(row=row, column=15).alignment = center_alignment
 
-            ws.cell(row=row, column=16, value="Observações").font = header_font
+            escrever_celula_segura(ws, row, 16, "Observações").font = header_font
             ws.cell(row=row, column=16).fill = header_fill
             ws.cell(row=row, column=16).alignment = center_alignment
             row += 1
 
             # Segunda linha de cabeçalho (colunas específicas)
             for col, header in enumerate(CABECALHOS_DETALHADOS, 1):
-                cell = ws.cell(row=row, column=col, value=header)
+                cell = escrever_celula_segura(ws, row, col, header)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.border = border
@@ -159,14 +183,28 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 # Nº (usando o filtro numero_documento_criado)
                 from ..templatetags.dominial_extras import numero_documento_criado
                 numero_formatado = numero_documento_criado(lancamento)
-                ws.cell(row=row, column=1, value=numero_formatado).border = border
+                escrever_celula_segura(ws, row, 1, numero_formatado).border = border
 
                 # L, Fls., Cartório, Data (do documento)
-                ws.cell(row=row, column=2, value=documento.livro or "-").border = border
+                escrever_celula_segura(
+                    ws, row, 2, documento.livro or "-"
+                ).border = border
                 folha_valor = "-" if documento.tipo and documento.tipo.tipo == 'matricula' else (documento.folha or "-")
-                ws.cell(row=row, column=3, value=folha_valor).border = border
-                ws.cell(row=row, column=4, value=abreviar_cartorio(documento.cartorio.nome) if documento.cartorio else "-").border = border
-                ws.cell(row=row, column=5, value=lancamento.data.strftime('%d/%m/%Y') if lancamento.data else "-").border = border
+                escrever_celula_segura(ws, row, 3, folha_valor).border = border
+                escrever_celula_segura(
+                    ws,
+                    row,
+                    4,
+                    abreviar_cartorio(documento.cartorio.nome)
+                    if documento.cartorio else "-",
+                ).border = border
+                escrever_celula_segura(
+                    ws,
+                    row,
+                    5,
+                    lancamento.data.strftime('%d/%m/%Y')
+                    if lancamento.data else "-",
+                ).border = border
 
                 # `transmitentes`/`adquirentes` são properties que chamam
                 # `.filter()` e, por isso, ignoram o cache montado por
@@ -180,7 +218,12 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                     for vinculo in pessoas_lancamento
                     if vinculo.tipo == 'transmitente'
                 ]
-                ws.cell(row=row, column=6, value=", ".join(transmitentes) if transmitentes else "-").border = border
+                escrever_celula_segura(
+                    ws,
+                    row,
+                    6,
+                    ", ".join(transmitentes) if transmitentes else "-",
+                ).border = border
 
                 # Adquirente
                 adquirentes = [
@@ -188,21 +231,52 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                     for vinculo in pessoas_lancamento
                     if vinculo.tipo == 'adquirente'
                 ]
-                ws.cell(row=row, column=7, value=", ".join(adquirentes) if adquirentes else "-").border = border
+                escrever_celula_segura(
+                    ws,
+                    row,
+                    7,
+                    ", ".join(adquirentes) if adquirentes else "-",
+                ).border = border
 
                 # Transmissão
                 if lancamento.tipo.tipo == 'averbacao':
                     # Para averbação, mesclar colunas e mostrar descrição
                     ws.merge_cells(f'H{row}:M{row}')
-                    ws.cell(row=row, column=8, value=lancamento.descricao or "-").border = border
+                    escrever_celula_segura(
+                        ws, row, 8, lancamento.descricao or "-"
+                    ).border = border
                 else:
                     # Para outros tipos, mostrar campos específicos
-                    ws.cell(row=row, column=8, value=lancamento.forma or "-").border = border
-                    ws.cell(row=row, column=9, value=normalizar_texto_opcional(lancamento.titulo, "-")).border = border
-                    ws.cell(row=row, column=10, value=abreviar_cartorio(lancamento.cartorio_transmissao_compat.nome) if lancamento.cartorio_transmissao_compat else "-").border = border
-                    ws.cell(row=row, column=11, value=lancamento.livro_transacao or "-").border = border
-                    ws.cell(row=row, column=12, value=lancamento.folha_transacao or "-").border = border
-                    ws.cell(row=row, column=13, value=lancamento.data_transacao.strftime('%d/%m/%Y') if lancamento.data_transacao else "-").border = border
+                    escrever_celula_segura(
+                        ws, row, 8, lancamento.forma or "-"
+                    ).border = border
+                    escrever_celula_segura(
+                        ws,
+                        row,
+                        9,
+                        normalizar_texto_opcional(lancamento.titulo, "-"),
+                    ).border = border
+                    escrever_celula_segura(
+                        ws,
+                        row,
+                        10,
+                        abreviar_cartorio(
+                            lancamento.cartorio_transmissao_compat.nome
+                        ) if lancamento.cartorio_transmissao_compat else "-",
+                    ).border = border
+                    escrever_celula_segura(
+                        ws, row, 11, lancamento.livro_transacao or "-"
+                    ).border = border
+                    escrever_celula_segura(
+                        ws, row, 12, lancamento.folha_transacao or "-"
+                    ).border = border
+                    escrever_celula_segura(
+                        ws,
+                        row,
+                        13,
+                        lancamento.data_transacao.strftime('%d/%m/%Y')
+                        if lancamento.data_transacao else "-",
+                    ).border = border
 
                 # Área, Origem, Observações
                 # Issue #13: a área usa `formatar_area_ha`, que formata no
@@ -211,9 +285,15 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 # else "-"` de antes não é mais necessário aqui. O export
                 # por imóvel herda esta mesma formatação por compartilhar
                 # este renderer.
-                ws.cell(row=row, column=14, value=formatar_area_ha(lancamento.area)).border = border
-                ws.cell(row=row, column=15, value=lancamento.origem or "-").border = border
-                ws.cell(row=row, column=16, value=lancamento.observacoes or "-").border = border
+                escrever_celula_segura(
+                    ws, row, 14, formatar_area_ha(lancamento.area)
+                ).border = border
+                escrever_celula_segura(
+                    ws, row, 15, lancamento.origem or "-"
+                ).border = border
+                escrever_celula_segura(
+                    ws, row, 16, lancamento.observacoes or "-"
+                ).border = border
 
                 row += 1
 
