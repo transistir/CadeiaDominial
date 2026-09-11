@@ -210,7 +210,7 @@
                                     {# COLUNAS ADICIONAIS                                  #}
                                     {# ===================================================== #}
                                     <!-- Área do imóvel -->
-                                    <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                                    <td>{{ lancamento.area|area_ha }}</td>
                                     <!-- Origem - pode ter múltiplas origens separadas por ';' -->
                                     <!-- <td>
                                       {% if lancamento.origem %}

@@ -131,8 +131,8 @@ def formatar_area(area):
 def formatar_area_ha(area, padrao="-"):
     """
     Formata o campo `Lancamento.area` no padrão brasileiro, com 4 casas
-    decimais, vírgula como separador decimal e ponto como separador de
-    milhar (ex.: "1.234,5678"). NÃO adiciona sufixo " ha" — usada na coluna
+    decimais, vírgula como separador decimal e sem separador de milhar
+    (ex.: "1234,5678"). NÃO adiciona sufixo " ha" — usada na coluna
     "Área (ha)" das tabelas HTML da Cadeia Dominial Geral e do Documento
     Detalhado (issue #13), cujo cabeçalho já indica a unidade. É só
     formatação de exibição: o valor persistido no banco não é alterado.
@@ -156,10 +156,10 @@ def formatar_area_ha(area, padrao="-"):
     except (InvalidOperation, TypeError, ValueError):
         return padrao
 
-    if valor == 0:
+    if not valor.is_finite() or valor == 0:
         return padrao
 
-    return f"{valor:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{valor:.4f}".replace(".", ",")
 
 
 def normalizar_texto_opcional(valor, padrao=None):

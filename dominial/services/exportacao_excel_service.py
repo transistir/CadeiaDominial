@@ -277,7 +277,7 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
 
                 # Área, Origem, Observações
                 # Issue #13: a área usa `formatar_area_ha`, que formata no
-                # padrão pt-BR (4 casas decimais, ex. "1.234,5678") e já
+                # padrão pt-BR (4 casas decimais, ex. "1234,5678") e já
                 # devolve "-" para None — por isso o `if ... is not None
                 # else "-"` de antes não é mais necessário aqui. O export
                 # por imóvel herda esta mesma formatação por compartilhar

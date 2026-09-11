@@ -422,7 +422,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         ws = load_workbook(BytesIO(response.content)).active
 
         valores_coluna_14 = [cell.value for cell in ws["N"]]
-        self.assertIn("1.234,5678", valores_coluna_14)
+        self.assertIn("1234,5678", valores_coluna_14)
 
     def test_neutraliza_prefixos_de_formula_nos_dados_do_lancamento(self):
         valores_perigosos = {

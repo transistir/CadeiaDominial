@@ -158,7 +158,7 @@
                                 </td>
                             {% endif %}
                             <!-- Restante -->
-                            <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                            <td>{{ lancamento.area|area_ha }}</td>
                             <!-- <td>
                               {% if lancamento.origem %}
                                 {% if ';' in lancamento.origem %}

@@ -19,6 +19,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.template import Context, Template
+from django.template.loader import render_to_string
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -32,6 +33,10 @@ from dominial.models import (
     LancamentoTipo,
     Pessoas,
     TIs,
+)
+from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.cadeia_dominial_tabela_service import (
+    CadeiaDominialTabelaService,
 )
 from dominial.utils.formatacao_utils import formatar_area_ha
 
@@ -60,14 +65,14 @@ class FormatarAreaHaTest(SimpleTestCase):
     def test_zero_com_padrao_customizado(self):
         self.assertEqual(formatar_area_ha(Decimal("0"), padrao="N/A"), "N/A")
 
-    def test_valor_com_separador_de_milhar(self):
-        self.assertEqual(formatar_area_ha(Decimal("1234.5")), "1.234,5000")
+    def test_valor_sem_separador_de_milhar(self):
+        self.assertEqual(formatar_area_ha(Decimal("1234.5")), "1234,5000")
 
-    def test_valor_com_milhar_e_quatro_decimais(self):
-        self.assertEqual(formatar_area_ha(Decimal("12345.6789")), "12.345,6789")
+    def test_valor_grande_sem_milhar_e_com_quatro_decimais(self):
+        self.assertEqual(formatar_area_ha(Decimal("12345.6789")), "12345,6789")
 
     def test_string_numerica_e_convertida(self):
-        self.assertEqual(formatar_area_ha("1234.5"), "1.234,5000")
+        self.assertEqual(formatar_area_ha("1234.5"), "1234,5000")
 
     def test_int_e_convertido(self):
         self.assertEqual(formatar_area_ha(10), "10,0000")
@@ -96,6 +101,11 @@ class FormatarAreaHaTest(SimpleTestCase):
     def test_valor_invalido_com_padrao_customizado(self):
         self.assertEqual(formatar_area_ha("abc", padrao="N/A"), "N/A")
 
+    def test_valores_nao_finitos_retornam_padrao(self):
+        for valor in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(valor=valor):
+                self.assertEqual(formatar_area_ha(valor), "-")
+
     def test_nao_altera_formatar_area_existente(self):
         """`formatar_area` (com sufixo " ha" e 2 casas) continua intacta."""
         from dominial.utils.formatacao_utils import formatar_area
@@ -120,8 +130,8 @@ class AreaHaTemplatetagTest(SimpleTestCase):
     def test_filtro_area_zerada_exibe_traco(self):
         self.assertEqual(self._render(Decimal("0.0000")), "-")
 
-    def test_filtro_formata_valor_com_milhar(self):
-        self.assertEqual(self._render(Decimal("12345.6789")), "12.345,6789")
+    def test_filtro_formata_valor_sem_milhar(self):
+        self.assertEqual(self._render(Decimal("12345.6789")), "12345,6789")
 
     def test_filtro_none_retorna_traco(self):
         self.assertEqual(self._render(None), "-")
@@ -183,7 +193,7 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         # bulk_create para não disparar o signal de processamento de
         # origens (mesmo padrão de test_issue_166_cri_export.py e
         # test_issue_172_suprimir_troncos.py). Um lançamento com area=0 e
-        # outro com area=None, no mesmo documento.
+        # outro com area=None e um terceiro não-zero, no mesmo documento.
         Lancamento.objects.bulk_create([
             Lancamento(
                 documento=self.documento,
@@ -202,6 +212,14 @@ class AreaHaTabelasIntegracaoTest(TestCase):
                 origem="",
                 area=None,
             ),
+            Lancamento(
+                documento=self.documento,
+                tipo=self.tipo_averbacao,
+                numero_lancamento="AV2M13",
+                data=timezone.now().date(),
+                origem="",
+                area=Decimal("1234.5678"),
+            ),
         ])
 
     def test_cadeia_dominial_geral_exibe_area_no_padrao_brasileiro(self):
@@ -217,8 +235,10 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         # formato "cru" do Decimal ("0.0000") e o "0,0000" antigo não
         # aparecem mais.
         self.assertIn("<td>-</td>", html)
+        self.assertIn("<td>1234,5678</td>", html)
         self.assertNotIn("0.0000", html)
         self.assertNotIn("0,0000", html)
+        self.assertNotIn("1.234,5678", html)
 
     def test_documento_detalhado_exibe_area_no_padrao_brasileiro(self):
         url = reverse(
@@ -234,5 +254,30 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         html = response.content.decode("utf-8")
 
         self.assertIn("<td>-</td>", html)
+        self.assertIn("<td>1234,5678</td>", html)
         self.assertNotIn("0.0000", html)
         self.assertNotIn("0,0000", html)
+        self.assertNotIn("1.234,5678", html)
+
+    def test_templates_pdf_usam_o_filtro_de_area(self):
+        contextos = (
+            (
+                "dominial/cadeia_dominial_pdf.html",
+                CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+                    self.tis.id, self.imovel.id, session={}
+                ),
+            ),
+            (
+                "dominial/cadeia_completa_pdf.html",
+                CadeiaCompletaService().get_cadeia_completa(
+                    self.tis.id, self.imovel.id
+                ),
+            ),
+        )
+
+        for template, contexto in contextos:
+            with self.subTest(template=template):
+                html = render_to_string(template, contexto)
+                self.assertIn("<td>1234,5678</td>", html)
+                self.assertNotIn("<td>1234.5678</td>", html)
+                self.assertNotIn("<td>1.234,5678</td>", html)
