@@ -10,7 +10,7 @@
 </head>
 <body>
     <div class="disclaimer" style="background: #fff3cd; border-left: 4px solid #856404; padding: 8px 12px; margin: 10px 0; font-size: 9pt; color: #856404;">
-        <strong>⚠️ Atenção:</strong> Visualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.
+        <strong>Atenção:</strong> Visualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.
     </div>
 
     <div class="header">
@@ -57,7 +57,7 @@
             <p>Esta cadeia dominial possui documentos mas não possui lançamentos registrados.</p>
         </div>
     {% else %}
-        <h2>📊 Cronologia de Lançamentos</h2>
+        <h2>Cronologia de Lançamentos</h2>
         
         {% for item in cadeia %}
             {% if item.is_importado and item.is_primeiro_grupo %}
@@ -71,7 +71,7 @@
             
             <div class="documento-section {% if item.is_importado %}documento-importado{% endif %}">
                 <div class="documento-header">
-                    📄 {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
+                    {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
                     {% if item.is_importado %}
                         <span style="background-color: #ffc107; color: #856404; padding: 2px 6px; border-radius: 3px; font-size: 8pt; margin-left: 10px;">
                              Importado
@@ -190,7 +190,7 @@
         
         {% if estatisticas %}
         <div class="estatisticas">
-            <h3>📈 Estatísticas da Cadeia Dominial</h3>
+            <h3>Estatísticas da Cadeia Dominial</h3>
             <div class="estatisticas-grid">
                 <div class="estatisticas-item">
                     <div class="estatisticas-valor">{{ estatisticas.total_documentos }}</div>

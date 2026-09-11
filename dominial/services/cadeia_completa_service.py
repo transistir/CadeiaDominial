@@ -203,7 +203,7 @@ class CadeiaCompletaService:
         if tronco_principal:
             cadeia_organizada.append({
                 'tipo': 'tronco_principal',
-                'titulo': '🌳 TRONCO PRINCIPAL',
+                'titulo': 'TRONCO PRINCIPAL',
                 'documentos': self._processar_documentos_para_template(tronco_principal)
             })
         
@@ -212,7 +212,7 @@ class CadeiaCompletaService:
             if tronco:
                 cadeia_organizada.append({
                     'tipo': 'tronco_secundario',
-                    'titulo': f'🌿 TRONCO SECUNDÁRIO {i}',
+                    'titulo': f'TRONCO SECUNDÁRIO {i}',
                     'documentos': self._processar_documentos_para_template(tronco)
                 })
         
@@ -430,7 +430,7 @@ class CadeiaCompletaService:
             cadeia_completa = [
                 {
                     'tipo': 'tronco_principal',
-                    'titulo': '🌳 TRONCO PRINCIPAL',
+                    'titulo': 'TRONCO PRINCIPAL',
                     'documentos': documentos_processados
                 }
             ]

@@ -125,17 +125,14 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
         for item in tronco['documentos']:
             documento = item['documento']
             lancamentos = item['lancamentos']
-            is_importado = item.get('is_importado', False)
-
             # Título do documento
             row += 1
-            prefixo_importado = "📥 " if is_importado else ""
             ws.merge_cells(f'A{row}:{ULTIMA_COLUNA}{row}')
             escrever_celula_segura(
                 ws,
                 row,
                 1,
-                f"{prefixo_importado}{documento.tipo.get_tipo_display()}: {documento.numero}",
+                f"{documento.tipo.get_tipo_display()}: {documento.numero}",
             ).font = Font(bold=True, size=12)
             ws.cell(row=row, column=1).fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
             ws.cell(row=row, column=1).alignment = center_alignment

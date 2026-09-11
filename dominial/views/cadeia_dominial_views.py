@@ -447,13 +447,13 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         <head><title>Erro na Geração do PDF</title></head>
         <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8f9fa;">
             <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <h1 style="color: #dc3545; margin-bottom: 20px;">❌ Erro na Geração do PDF</h1>
+                <h1 style="color: #dc3545; margin-bottom: 20px;">Erro na Geração do PDF</h1>
                 <p style="color: #6c757d; margin-bottom: 15px;">Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
                 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; border-left: 4px solid #dc3545;">
                     <strong>Erro:</strong> {str(e)}
                 </div>
                 <div style="margin-top: 20px;">
-                    <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">← Voltar</a>
+                    <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Voltar</a>
                 </div>
             </div>
         </body>
@@ -529,7 +529,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
 
             # Título das estatísticas
             ws.merge_cells(f'A{row}:P{row}')
-            escrever_celula_segura(ws, row, 1, "📊 ESTATÍSTICAS").font = Font(
+            escrever_celula_segura(ws, row, 1, "ESTATÍSTICAS").font = Font(
                 bold=True, size=14, color="FFFFFF"
             )
             ws.cell(row=row, column=1).fill = PatternFill(start_color="28a745", end_color="28a745", fill_type="solid")
