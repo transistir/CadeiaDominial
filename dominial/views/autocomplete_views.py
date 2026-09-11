@@ -101,7 +101,8 @@ def cartorio_imoveis_autocomplete(request):
         results.append({
             'id': cartorio.id,
             'nome': cartorio.nome,
-            'cidade': cartorio.cidade if cartorio.cidade else None
+            'cidade': cartorio.cidade if cartorio.cidade else None,
+            'estado': cartorio.estado if cartorio.estado else None
         })
     
     return JsonResponse(results, safe=False)
@@ -138,4 +139,4 @@ def imovel_autocomplete(request):
             'proprietario': imovel['proprietario__nome'] or 'Não informado'
         })
     
-    return JsonResponse(results, safe=False) 
+    return JsonResponse(results, safe=False)
