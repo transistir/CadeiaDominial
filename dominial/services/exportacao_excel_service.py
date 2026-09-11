@@ -168,12 +168,26 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 ws.cell(row=row, column=4, value=abreviar_cartorio(documento.cartorio.nome) if documento.cartorio else "-").border = border
                 ws.cell(row=row, column=5, value=lancamento.data.strftime('%d/%m/%Y') if lancamento.data else "-").border = border
 
+                # `transmitentes`/`adquirentes` são properties que chamam
+                # `.filter()` e, por isso, ignoram o cache montado por
+                # `prefetch_related('pessoas__pessoa')`. Particionar a relação
+                # já prefetched evita duas queries extras por lançamento.
+                pessoas_lancamento = list(lancamento.pessoas.all())
+
                 # Transmitente
-                transmitentes = [p.pessoa.nome for p in lancamento.transmitentes.all()]
+                transmitentes = [
+                    vinculo.pessoa.nome
+                    for vinculo in pessoas_lancamento
+                    if vinculo.tipo == 'transmitente'
+                ]
                 ws.cell(row=row, column=6, value=", ".join(transmitentes) if transmitentes else "-").border = border
 
                 # Adquirente
-                adquirentes = [p.pessoa.nome for p in lancamento.adquirentes.all()]
+                adquirentes = [
+                    vinculo.pessoa.nome
+                    for vinculo in pessoas_lancamento
+                    if vinculo.tipo == 'adquirente'
+                ]
                 ws.cell(row=row, column=7, value=", ".join(adquirentes) if adquirentes else "-").border = border
 
                 # Transmissão

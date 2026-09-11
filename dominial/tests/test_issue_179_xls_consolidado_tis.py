@@ -33,7 +33,9 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import connection
 from django.test import RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -44,6 +46,7 @@ from dominial.models import (
     DocumentoTipo,
     Imovel,
     Lancamento,
+    LancamentoPessoa,
     LancamentoTipo,
     Pessoas,
     TIs,
@@ -247,6 +250,81 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
             self._matriculas_das_secoes(ws), ["M100", "M200", "M300"]
         )
         self.assertIn("Matrícula: M300", linhas_por_valor)
+
+    def test_queries_ficam_sob_teto_com_tres_imoveis_e_dois_documentos(self):
+        tipo_transcricao = DocumentoTipo.objects.create(tipo="transcricao")
+        pessoa_transmitente = Pessoas.objects.create(
+            nome="Transmitente 179", cpf="11122233344"
+        )
+        pessoa_adquirente = Pessoas.objects.create(
+            nome="Adquirente 179", cpf="55566677788"
+        )
+
+        for indice, imovel in enumerate(
+            (self.imovel_m100, self.imovel_m200, self.imovel_m300), start=1
+        ):
+            numero_origem = f"T{indice}79"
+            documento_origem = Documento.objects.create(
+                imovel=imovel,
+                tipo=tipo_transcricao,
+                numero=numero_origem,
+                data=timezone.now().date(),
+                cartorio=self.cartorio,
+                livro="2",
+                folha="2",
+            )
+            lancamento_origem = Lancamento.objects.create(
+                documento=documento_origem,
+                tipo=self.tipo_inicio,
+                data=timezone.now().date(),
+                cartorio_origem=self.cartorio,
+                origem="",
+            )
+            lancamento_principal = Lancamento.objects.get(
+                documento__imovel=imovel,
+                documento__tipo=self.tipo_matricula,
+            )
+            lancamento_principal.origem = numero_origem
+            lancamento_principal.save(update_fields=["origem"])
+
+            LancamentoPessoa.objects.bulk_create(
+                [
+                    LancamentoPessoa(
+                        lancamento=lancamento_principal,
+                        pessoa=pessoa_transmitente,
+                        tipo="transmitente",
+                    ),
+                    LancamentoPessoa(
+                        lancamento=lancamento_principal,
+                        pessoa=pessoa_adquirente,
+                        tipo="adquirente",
+                    ),
+                    LancamentoPessoa(
+                        lancamento=lancamento_origem,
+                        pessoa=pessoa_transmitente,
+                        tipo="transmitente",
+                    ),
+                    LancamentoPessoa(
+                        lancamento=lancamento_origem,
+                        pessoa=pessoa_adquirente,
+                        tipo="adquirente",
+                    ),
+                ]
+            )
+
+        cache.clear()
+        with CaptureQueriesContext(connection) as queries:
+            response = self._exportar(self.tis)
+
+        # A recursão histórica do serviço de cadeia ainda custa consultas por
+        # nó (fora do escopo da #179). O teto cobre 3 imóveis x 2 documentos
+        # com folga pequena, mas não admite as 2 consultas adicionais por
+        # lançamento que `.transmitentes/.adquirentes.filter()` causavam.
+        self.assertLessEqual(len(queries), 100)
+        ws = load_workbook(BytesIO(response.content)).active
+        valores = [cell.value for row in ws.iter_rows() for cell in row]
+        self.assertIn("Transmitente 179", valores)
+        self.assertIn("Adquirente 179", valores)
 
     # 6 -------------------------------------------------------------------
 
