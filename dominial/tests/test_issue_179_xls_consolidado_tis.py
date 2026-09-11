@@ -29,6 +29,7 @@ from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
@@ -194,6 +195,58 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertEqual(
             self._matriculas_das_secoes(ws), ["M100", "M200", "M300"]
         )
+
+    def test_erro_parcial_no_imovel_intermediario_nao_sobrepoe_o_seguinte(self):
+        renderer_real = cadeia_dominial_views.escrever_secao_documentos
+        chamadas = 0
+
+        def renderer_com_falha_parcial(
+            ws, cadeia_completa, linha_inicial, estilos
+        ):
+            nonlocal chamadas
+            chamadas += 1
+            if chamadas == 2:
+                # Simula uma exceção depois de o renderer já ter avançado e
+                # escrito parte da seção do segundo imóvel.
+                ws.cell(
+                    row=linha_inicial + 3,
+                    column=1,
+                    value="LINHA PARCIAL DO IMÓVEL M200",
+                )
+                raise ValueError("falha de fixture no renderer")
+            return renderer_real(
+                ws, cadeia_completa, linha_inicial, estilos
+            )
+
+        with (
+            patch.object(
+                cadeia_dominial_views,
+                "escrever_secao_documentos",
+                side_effect=renderer_com_falha_parcial,
+            ),
+            patch.object(cadeia_dominial_views.logger, "exception"),
+        ):
+            response = self._exportar(self.tis)
+
+        ws = load_workbook(BytesIO(response.content)).active
+        linhas_por_valor = {
+            cell.value: cell.row
+            for cell in ws["A"]
+            if isinstance(cell.value, str)
+        }
+
+        self.assertLess(
+            linhas_por_valor["LINHA PARCIAL DO IMÓVEL M200"],
+            linhas_por_valor["Erro ao exportar este imóvel."],
+        )
+        self.assertLess(
+            linhas_por_valor["Erro ao exportar este imóvel."],
+            linhas_por_valor["IMÓVEL: M300 — Imóvel M300"],
+        )
+        self.assertEqual(
+            self._matriculas_das_secoes(ws), ["M100", "M200", "M300"]
+        )
+        self.assertIn("Matrícula: M300", linhas_por_valor)
 
     # 6 -------------------------------------------------------------------
 

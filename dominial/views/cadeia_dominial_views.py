@@ -674,9 +674,15 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                     "Erro ao montar a seção do imóvel %s no XLS consolidado da TI %s",
                     imovel.id, tis_id
                 )
+                # O renderer pode ter escrito parte do bloco antes de falhar.
+                # Como `linha` é um inteiro, o avanço interno não volta ao
+                # chamador quando há exceção; retomar de `ws.max_row + 1`
+                # impede que o aviso e o próximo imóvel sobrescrevam as linhas
+                # parciais já presentes na planilha.
+                linha = max(linha, ws.max_row + 1)
                 ws.cell(
                     row=linha, column=1,
-                    value="Erro ao gerar esta seção — verifique a cadeia deste imóvel."
+                    value="Erro ao exportar este imóvel."
                 )
                 linha += 1
 
