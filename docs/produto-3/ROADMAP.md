@@ -111,9 +111,10 @@ PRs #191/#192/#194 (R2) em develop **ainda sem tag** → próxima release v1.0.1
 
 0. **#193** UF nas sugestões digitadas de CRI *(P — decidido Hiure 11/09:
    entra no R4, mesma área de formulário; bug de homônimos Guairá/PR×SP.
-   Diagnóstico pronto: backend já retorna `estado`; corrigir render no
-   `lancamento_form.js` `carregarCartorios` para o mesmo padrão
-   `nome (cidade/UF)` do `cri_search.js`)*
+   Diagnóstico confirmado 11/09: endpoint `cartorio_imoveis_autocomplete`
+   não retorna `estado` e o renderer `buscarCartoriosOrigem`
+   (`lancamento_form.js` L941) mostra só nome+cidade — espelhar o padrão
+   `nome (cidade/UF)` de `carregarSugestoesRecentes` L1005 do mesmo arquivo)*
 1. **#168** TAB não parar no campo sigla *(P)*
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
