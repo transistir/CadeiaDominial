@@ -570,8 +570,10 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
             celula_valor = escrever_celula_segura(resumo, linha, 2, valor)
             for celula in (celula_rotulo, celula_valor):
                 celula.border = estilos['border']
-                celula.alignment = estilos['data_alignment']
-            resumo.row_dimensions[linha].height = estilos['body_row_height']
+                # Mesmo comportamento do bloco informativo nas abas dos
+                # imóveis: sem wrap nem altura fixa, permitindo que nomes
+                # longos transbordem pelas células vazias seguintes.
+                celula.alignment = estilos['body_alignment']
 
         for coluna, cabecalho in enumerate(
             ("Matrícula", "Aba", "Nome do imóvel"), start=1

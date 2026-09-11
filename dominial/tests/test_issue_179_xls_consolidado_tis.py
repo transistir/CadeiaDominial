@@ -678,6 +678,21 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertNotIn("Total de Lançamentos:", valores)
         self.assertNotIn("Documentos Compartilhados:", valores)
 
+    def test_resumo_nao_clipa_nome_longo_da_ti(self):
+        self.tis.nome = (
+            "Terra Indígena com nome longo que precisa permanecer visível "
+            "na aba Resumo"
+        )
+        self.tis.save(update_fields=["nome"])
+
+        ws = self._abrir(self._exportar(self.tis))["Resumo"]
+        celula = ws["B3"]
+
+        self.assertEqual(celula.value, self.tis.nome)
+        self.assertFalse(celula.alignment.wrap_text)
+        self.assertIsNone(ws.row_dimensions[celula.row].height)
+        self.assertFalse(ws.row_dimensions[celula.row].customHeight)
+
     # 8 -------------------------------------------------------------------
 
     def test_area_zerada_exibe_traco_na_coluna_14(self):
