@@ -424,6 +424,11 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
             linhas_m200["LINHA PARCIAL DO IMÓVEL M200"],
             linhas_m200["Erro ao exportar este imóvel."],
         )
+        linha_erro = linhas_m200["Erro ao exportar este imóvel."]
+        self.assertIn(
+            f"A{linha_erro}:P{linha_erro}",
+            {str(intervalo) for intervalo in workbook["M200"].merged_cells.ranges},
+        )
         self.assertEqual(workbook["M300"]["B4"].value, "M300")
         self.assertIn(
             "Matrícula: M300", [cell.value for cell in workbook["M300"]["A"]]
@@ -692,6 +697,34 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertFalse(celula.alignment.wrap_text)
         self.assertIsNone(ws.row_dimensions[celula.row].height)
         self.assertFalse(ws.row_dimensions[celula.row].customHeight)
+
+    def test_titulos_longos_ficam_integros_sem_wrap_e_com_altura_24(self):
+        self.tis.nome = "T" * 255
+        self.tis.save(update_fields=["nome"])
+        self.imovel_m100.nome = "I" * 100
+        self.imovel_m100.save(update_fields=["nome"])
+
+        workbook = self._abrir(self._exportar(self.tis))
+        titulos = (
+            (
+                workbook["Resumo"],
+                f"CADEIA DOMINIAL CONSOLIDADA - {self.tis.nome}",
+            ),
+            (
+                workbook["M100"],
+                f"CADEIA DOMINIAL GERAL - {self.imovel_m100.nome}",
+            ),
+        )
+
+        for ws, texto_esperado in titulos:
+            with self.subTest(planilha=ws.title):
+                self.assertGreater(len(texto_esperado), 100)
+                self.assertEqual(ws["A1"].value, texto_esperado)
+                self.assertFalse(ws["A1"].alignment.wrap_text)
+                self.assertEqual(ws.row_dimensions[1].height, 24)
+                self.assertIn(
+                    "A1:P1", {str(intervalo) for intervalo in ws.merged_cells.ranges}
+                )
 
     # 8 -------------------------------------------------------------------
 

@@ -125,6 +125,9 @@ def criar_estilos():
             top=borda,
             bottom=borda,
         ),
+        'title_alignment': Alignment(
+            horizontal='center', vertical='center', wrap_text=False
+        ),
         'center_alignment': Alignment(
             horizontal='center', vertical='center', wrap_text=True
         ),
@@ -449,7 +452,9 @@ def renderizar_planilha_imovel(
         ws, 1, 1, f"CADEIA DOMINIAL GERAL - {imovel.nome}"
     )
     titulo.font = estilos['title_font']
-    titulo.alignment = estilos['center_alignment']
+    # O título ocupa A:P e deve permanecer em uma única linha. Wrap junto
+    # da altura fixa de 24 pontos ocultava nomes longos de imóveis.
+    titulo.alignment = estilos['title_alignment']
     ws.row_dimensions[1].height = estilos['title_row_height']
 
     nome_cartorio = imovel.cartorio.nome if imovel.cartorio else ""

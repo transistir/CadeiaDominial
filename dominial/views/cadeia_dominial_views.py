@@ -555,7 +555,9 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
             resumo, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
         )
         titulo.font = estilos['title_font']
-        titulo.alignment = estilos['center_alignment']
+        # O título ocupa A:P e deve permanecer em uma única linha. Wrap junto
+        # da altura fixa de 24 pontos ocultava nomes longos de TIs.
+        titulo.alignment = estilos['title_alignment']
         resumo.row_dimensions[1].height = estilos['title_row_height']
 
         informacoes_resumo = (
@@ -618,6 +620,9 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                     imovel.id, tis_id
                 )
                 linha_erro = max(ws_imovel.max_row + 1, 11)
+                ws_imovel.merge_cells(
+                    f'A{linha_erro}:{ULTIMA_COLUNA}{linha_erro}'
+                )
                 erro = escrever_celula_segura(
                     ws_imovel, linha_erro, 1, "Erro ao exportar este imóvel."
                 )
