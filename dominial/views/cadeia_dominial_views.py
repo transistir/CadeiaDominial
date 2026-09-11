@@ -482,9 +482,6 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
 
         # Estilos (compartilhados com o export consolidado por TI — issue #179)
         estilos = criar_estilos()
-        header_font = estilos['header_font']
-        header_fill = estilos['header_fill']
-        border = estilos['border']
         center_alignment = estilos['center_alignment']
 
         # Cabeçalho principal
@@ -513,56 +510,10 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         escrever_celula_segura(ws, 8, 1, "Data de Exportação:")
         escrever_celula_segura(ws, 8, 2, date.today().strftime('%d/%m/%Y'))
 
-        # Inicializar linha atual
-        row = 10
-
         # Processar a cadeia completa (mesma estrutura do PDF) usando o
         # renderer compartilhado com o export consolidado por TI (issue #179).
-        # `row + 1` = 11: primeira linha livre após o bloco de informações.
         cadeia_completa = context['cadeia_completa']
-        row = escrever_secao_documentos(ws, cadeia_completa, row + 1, estilos)
-
-        # Adicionar estatísticas (se disponíveis)
-        if 'estatisticas' in context:
-            row += 1
-            estatisticas = context['estatisticas']
-
-            # Título das estatísticas
-            ws.merge_cells(f'A{row}:P{row}')
-            escrever_celula_segura(ws, row, 1, "ESTATÍSTICAS").font = Font(
-                bold=True, size=14, color="FFFFFF"
-            )
-            ws.cell(row=row, column=1).fill = PatternFill(start_color="28a745", end_color="28a745", fill_type="solid")
-            ws.cell(row=row, column=1).alignment = center_alignment
-            row += 1
-
-            # Estatísticas
-            if 'total_documentos' in estatisticas:
-                escrever_celula_segura(
-                    ws, row, 1, "Total de Documentos:"
-                ).font = Font(bold=True)
-                escrever_celula_segura(
-                    ws, row, 2, estatisticas['total_documentos']
-                ).border = border
-                row += 1
-
-            if 'total_lancamentos' in estatisticas:
-                escrever_celula_segura(
-                    ws, row, 1, "Total de Lançamentos:"
-                ).font = Font(bold=True)
-                escrever_celula_segura(
-                    ws, row, 2, estatisticas['total_lancamentos']
-                ).border = border
-                row += 1
-
-            if 'documentos_compartilhados' in estatisticas:
-                escrever_celula_segura(
-                    ws, row, 1, "Documentos Compartilhados:"
-                ).font = Font(bold=True)
-                escrever_celula_segura(
-                    ws, row, 2, estatisticas['documentos_compartilhados']
-                ).border = border
-                row += 1
+        escrever_secao_documentos(ws, cadeia_completa, 11, estilos)
 
         # Ajustar largura das colunas (16 colunas)
         ajustar_larguras_colunas(ws)

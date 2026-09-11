@@ -211,6 +211,10 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
         titulos_esperados = ["Matrícula: M100", "Transcrição: T90"]
         titulos_documentos = [valor for valor in valores_coluna_a if valor in titulos_esperados]
         self.assertEqual(titulos_documentos, titulos_esperados)
+        self.assertNotIn("ESTATÍSTICAS", valores_coluna_a)
+        self.assertNotIn("Total de Documentos:", valores_coluna_a)
+        self.assertNotIn("Total de Lançamentos:", valores_coluna_a)
+        self.assertNotIn("Documentos Compartilhados:", valores_coluna_a)
         self.assertEqual(
             response["Content-Type"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

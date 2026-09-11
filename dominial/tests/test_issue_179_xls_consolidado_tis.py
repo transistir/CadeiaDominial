@@ -398,6 +398,20 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
                     self.assertNotIn("TRONCO PRINCIPAL", celula.value)
                     self.assertNotIn("TRONCO SECUNDÁRIO", celula.value)
 
+    def test_mantem_so_resumo_geral_sem_bloco_de_estatisticas(self):
+        response = self._exportar(self.tis)
+        ws = load_workbook(BytesIO(response.content)).active
+
+        self.assertEqual(ws["A3"].value, "TI:")
+        self.assertEqual(ws["A4"].value, "Total de imóveis:")
+        self.assertEqual(ws["A5"].value, "Data de Exportação:")
+
+        valores = [cell.value for row in ws.iter_rows() for cell in row]
+        self.assertNotIn("ESTATÍSTICAS", valores)
+        self.assertNotIn("Total de Documentos:", valores)
+        self.assertNotIn("Total de Lançamentos:", valores)
+        self.assertNotIn("Documentos Compartilhados:", valores)
+
     # 8 -------------------------------------------------------------------
 
     def test_area_zerada_exibe_traco_na_coluna_14(self):
