@@ -407,12 +407,21 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
     return row
 
 
-def renderizar_planilha_imovel(ws, tis, imovel, cadeia_completa, estilos=None):
+def renderizar_planilha_imovel(
+    ws,
+    tis,
+    imovel,
+    cadeia_completa,
+    estilos=None,
+    usar_cri_abreviado=False,
+):
     """
     Renderiza uma planilha completa de um imóvel.
 
     É a única implementação do layout usado tanto pelo XLS individual quanto
-    por cada aba de imóvel do XLS consolidado da TI.
+    por cada aba de imóvel do XLS consolidado da TI. O bloco narrativo mantém
+    ``Cartório:`` e o nome por extenso no individual (#50); no consolidado,
+    ``usar_cri_abreviado`` aplica ``CRI:`` e a sigla definida pela #166.
     """
     if estilos is None:
         estilos = criar_estilos()
@@ -425,6 +434,12 @@ def renderizar_planilha_imovel(ws, tis, imovel, cadeia_completa, estilos=None):
     titulo.alignment = estilos['center_alignment']
     ws.row_dimensions[1].height = estilos['title_row_height']
 
+    nome_cartorio = imovel.cartorio.nome if imovel.cartorio else ""
+    rotulo_cartorio = "Cartório:"
+    if usar_cri_abreviado:
+        rotulo_cartorio = "CRI:"
+        nome_cartorio = abreviar_cartorio(nome_cartorio)
+
     informacoes = (
         ("TIS:", tis.nome),
         ("Matrícula:", imovel.matricula),
@@ -433,7 +448,7 @@ def renderizar_planilha_imovel(ws, tis, imovel, cadeia_completa, estilos=None):
             "Proprietário:",
             imovel.proprietario.nome if imovel.proprietario else "",
         ),
-        ("Cartório:", imovel.cartorio.nome if imovel.cartorio else ""),
+        (rotulo_cartorio, nome_cartorio),
         ("Data de Exportação:", date.today().strftime('%d/%m/%Y')),
     )
     for linha, (rotulo, valor) in enumerate(informacoes, start=3):

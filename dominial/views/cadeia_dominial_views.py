@@ -599,6 +599,7 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                     imovel,
                     contexto['cadeia_completa'],
                     estilos,
+                    usar_cri_abreviado=True,
                 )
             except Exception:
                 logger.exception(

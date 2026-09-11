@@ -230,6 +230,13 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
             for outra in {"M100", "M200", "M300"} - {matricula}:
                 self.assertNotIn(outra, valores)
 
+    def test_bloco_do_imovel_consolidado_usa_rotulo_e_sigla_cri(self):
+        ws = self._abrir(self._exportar(self.tis))["m100"]
+
+        self.assertEqual(ws["A7"].value, "CRI:")
+        self.assertEqual(ws["B7"].value, "CRI Teste 179")
+        self.assertNotIn("Cartório de Registro de Imóveis", ws["B7"].value)
+
     # 4 -------------------------------------------------------------------
 
     def test_nao_vaza_imovel_de_outra_ti(self):
@@ -471,7 +478,16 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
             ]
 
         self.assertEqual(ws_consolidado.dimensions, ws_individual.dimensions)
-        self.assertEqual(valores(ws_consolidado), valores(ws_individual))
+        valores_consolidado = valores(ws_consolidado)
+        valores_individual = valores(ws_individual)
+        self.assertEqual(valores_consolidado[6][0:2], ["CRI:", "CRI Teste 179"])
+        self.assertEqual(
+            valores_individual[6][0:2],
+            ["Cartório:", self.cartorio.nome],
+        )
+        for matriz in (valores_consolidado, valores_individual):
+            matriz[6][0:2] = [None, None]
+        self.assertEqual(valores_consolidado, valores_individual)
         self.assertEqual(
             {str(intervalo) for intervalo in ws_consolidado.merged_cells.ranges},
             {str(intervalo) for intervalo in ws_individual.merged_cells.ranges},
