@@ -238,6 +238,34 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
     @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
     @patch.object(cadeia_dominial_views, "get_object_or_404")
+    def test_excel_individual_nao_clipa_nomes_longos_do_imovel_e_cartorio(
+        self, get_object_mock, service_class_mock
+    ):
+        self.imovel.nome = "Imóvel com nome longo que precisa permanecer visível"
+        self.imovel.cartorio.nome = (
+            "Cartório de Registro de Imóveis da Comarca com Nome Muito Longo"
+        )
+        get_object_mock.side_effect = [self.tis, self.imovel]
+        service_class_mock.return_value.get_cadeia_completa.return_value = (
+            self.contexto_completo
+        )
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        ws = load_workbook(BytesIO(response.content)).active
+
+        self.assertEqual(ws["B5"].value, self.imovel.nome)
+        self.assertEqual(ws["B7"].value, self.imovel.cartorio.nome)
+        for coordenada in ("B5", "B7"):
+            with self.subTest(coordenada=coordenada):
+                celula = ws[coordenada]
+                self.assertFalse(celula.alignment.wrap_text)
+                self.assertIsNone(ws.row_dimensions[celula.row].height)
+                self.assertFalse(ws.row_dimensions[celula.row].customHeight)
+
+    @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
+    @patch.object(cadeia_dominial_views, "get_object_or_404")
     def test_excel_nao_contem_pictogramas(
         self, get_object_mock, service_class_mock
     ):

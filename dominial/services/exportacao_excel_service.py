@@ -131,6 +131,9 @@ def criar_estilos():
         'data_alignment': Alignment(
             horizontal='left', vertical='top', wrap_text=True
         ),
+        'body_alignment': Alignment(
+            horizontal='left', vertical='top', wrap_text=False
+        ),
         'title_row_height': 24,
         'body_row_height': 12,
         'document_row_height': 18,
@@ -440,8 +443,10 @@ def renderizar_planilha_imovel(ws, tis, imovel, cadeia_completa, estilos=None):
         celula_valor = escrever_celula_segura(ws, linha, 2, valor)
         for celula in (celula_rotulo, celula_valor):
             celula.border = estilos['border']
-            celula.alignment = estilos['data_alignment']
-        ws.row_dimensions[linha].height = estilos['body_row_height']
+            # O valor ocupa B e transborda pelas células vazias seguintes,
+            # como no layout histórico do export individual (#50). Wrap com
+            # altura fixa confinava nomes longos à largura reduzida de B.
+            celula.alignment = estilos['body_alignment']
 
     if cadeia_completa:
         escrever_secao_documentos(ws, cadeia_completa, 11, estilos)
@@ -449,7 +454,7 @@ def renderizar_planilha_imovel(ws, tis, imovel, cadeia_completa, estilos=None):
         celula_vazia = escrever_celula_segura(
             ws, 11, 1, "Sem documentos cadastrados."
         )
-        celula_vazia.alignment = estilos['data_alignment']
+        celula_vazia.alignment = estilos['body_alignment']
         ws.row_dimensions[11].height = estilos['body_row_height']
 
     ajustar_larguras_colunas(ws)
