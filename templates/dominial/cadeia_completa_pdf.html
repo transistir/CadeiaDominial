@@ -21,7 +21,7 @@
 </head>
 <body>
     <div class="disclaimer" style="background: #fff3cd; border-left: 4px solid #856404; padding: 8px 12px; margin: 10px 0; font-size: 9pt; color: #856404;">
-        <strong>⚠️ Atenção:</strong> Visualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.
+        <strong>Atenção:</strong> Visualização organizada exclusivamente a partir dos dados cadastrados. Não constitui parecer jurídico nem validação registral.
     </div>
 
     {# ===================================================== #}
@@ -99,10 +99,10 @@
                     {# ===================================================== #}
                     <div class="documento-section {% if item.is_importado %}documento-importado{% endif %}">
                         <div class="documento-header">
-                            📄 {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
+                            {{ item.documento.tipo.get_tipo_display }}: {{ item.documento.numero }}
 <!--                             {# Badge especial para documentos importados #}
                             {% if item.is_importado %}
-                                <span class="badge-importado">📥 Importado</span>
+                                <span class="badge-importado">Importado</span>
                             {% endif %} -->
                             <br>
                             <small>
@@ -210,7 +210,7 @@
                                     {# COLUNAS ADICIONAIS                                  #}
                                     {# ===================================================== #}
                                     <!-- Área do imóvel -->
-                                    <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                                    <td>{{ lancamento.area|area_ha }}</td>
                                     <!-- Origem - pode ter múltiplas origens separadas por ';' -->
                                     <!-- <td>
                                       {% if lancamento.origem %}
@@ -251,7 +251,7 @@
         {# ===================================================== #}
         {% if estatisticas %}
         <div class="estatisticas">
-            <h3>📈 Estatísticas da Cadeia Completa</h3>
+            <h3>Estatísticas da Cadeia Completa</h3>
             <div class="estatisticas-grid">
                 <div class="estatisticas-item">
                     <div class="estatisticas-valor">{{ estatisticas.total_documentos }}</div>

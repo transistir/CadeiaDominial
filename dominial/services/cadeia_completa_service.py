@@ -203,7 +203,7 @@ class CadeiaCompletaService:
         if tronco_principal:
             cadeia_organizada.append({
                 'tipo': 'tronco_principal',
-                'titulo': '🌳 TRONCO PRINCIPAL',
+                'titulo': 'TRONCO PRINCIPAL',
                 'documentos': self._processar_documentos_para_template(tronco_principal)
             })
         
@@ -212,7 +212,7 @@ class CadeiaCompletaService:
             if tronco:
                 cadeia_organizada.append({
                     'tipo': 'tronco_secundario',
-                    'titulo': f'🌿 TRONCO SECUNDÁRIO {i}',
+                    'titulo': f'TRONCO SECUNDÁRIO {i}',
                     'documentos': self._processar_documentos_para_template(tronco)
                 })
         
@@ -282,7 +282,10 @@ class CadeiaCompletaService:
         if not documentos:
             return
         lancamentos = Lancamento.objects.select_related(
-            'tipo', 'cartorio_transmissao', 'cartorio_transacao'
+            'tipo',
+            'cartorio_origem',
+            'cartorio_transmissao',
+            'cartorio_transacao',
         ).prefetch_related('pessoas__pessoa').order_by('id')
         prefetch_related_objects(
             documentos,
@@ -430,7 +433,7 @@ class CadeiaCompletaService:
             cadeia_completa = [
                 {
                     'tipo': 'tronco_principal',
-                    'titulo': '🌳 TRONCO PRINCIPAL',
+                    'titulo': 'TRONCO PRINCIPAL',
                     'documentos': documentos_processados
                 }
             ]

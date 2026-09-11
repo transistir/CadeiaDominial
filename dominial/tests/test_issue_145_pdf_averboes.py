@@ -31,6 +31,7 @@ Diagnóstico (ver docstrings de cada teste):
 """
 
 import re
+from decimal import Decimal
 from io import BytesIO
 
 from django.conf import settings
@@ -161,6 +162,7 @@ class AverbacaoEmMatriculaTest(_BaseCadeia145):
             numero_lancamento="AV1M29718",
             data=timezone.now().date(),
             descricao=_texto_longo(self.TOKEN),
+            area=Decimal("1234.5678"),
         )
 
     def test_averbacao_em_matricula_aparece_no_html_e_no_pdf(self):
@@ -171,6 +173,9 @@ class AverbacaoEmMatriculaTest(_BaseCadeia145):
         self.assertEqual(pdf_bytes[:4], b"%PDF")
         self.assertIn(self.TOKEN, html)
         self.assertIn(self.TOKEN, texto_pdf)
+        self.assertIn("1234,5678", html)
+        self.assertIn("1234,5678", texto_pdf)
+        self.assertNotIn("1.234,5678", html)
 
 
 class AverbacaoEmTranscricaoTest(_BaseCadeia145):

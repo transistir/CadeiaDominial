@@ -1,10 +1,12 @@
 from io import BytesIO
 from pathlib import Path
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
+from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -24,6 +26,11 @@ from dominial.models import (
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.views import cadeia_dominial_views
+
+
+PICTOGRAMAS_EXPORT = re.compile(
+    r"[\u2000-\u218F\u20E3\uFE0F\u2190-\u2BFF\U0001F000-\U0001FAFF]"
+)
 
 
 class TipoDocumentoFake:
@@ -91,6 +98,11 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
         request = self.factory.get(path, data=query or {})
         request.user = SimpleNamespace(is_authenticated=True)
         return request
+
+    def test_detector_cobre_pictogramas_variation_selector_e_keycap(self):
+        for pictograma in ("‼", "™", "ℹ", "\uFE0F", "\u20E3"):
+            with self.subTest(pictograma=pictograma):
+                self.assertIsNotNone(PICTOGRAMAS_EXPORT.search(pictograma))
 
     def test_botao_pdf_padrao_aponta_para_exportacao_completa(self):
         template = (
@@ -202,10 +214,29 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
         service.get_cadeia_completa.assert_called_once_with(self.tis.id, self.imovel.id)
         workbook = load_workbook(BytesIO(response.content))
-        valores_coluna_a = [cell.value for cell in workbook.active["A"]]
-        titulos_esperados = ["Matrícula: M100", "📥 Transcrição: T90"]
+        ws = workbook.active
+        valores_coluna_a = [cell.value for cell in ws["A"]]
+        titulos_esperados = [
+            "Matrícula: M100",
+            "[Importado] Transcrição: T90",
+        ]
         titulos_documentos = [valor for valor in valores_coluna_a if valor in titulos_esperados]
         self.assertEqual(titulos_documentos, titulos_esperados)
+        self.assertNotIn("[Importado] Matrícula: M100", valores_coluna_a)
+        self.assertNotIn("ESTATÍSTICAS", valores_coluna_a)
+        self.assertNotIn("Total de Documentos:", valores_coluna_a)
+        self.assertNotIn("Total de Lançamentos:", valores_coluna_a)
+        self.assertNotIn("Documentos Compartilhados:", valores_coluna_a)
+        self.assertEqual(ws["A1"].font.name, "Arial")
+        self.assertEqual(ws["A1"].font.sz, 18)
+        self.assertEqual(ws["A1"].font.color.rgb[-6:], "2C5AA0")
+        self.assertEqual(ws["A3"].font.name, "Arial")
+        self.assertEqual(ws["A3"].font.sz, 8)
+        self.assertTrue(ws["A3"].font.bold)
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is not None:
+                    self.assertEqual(cell.font.name, "Arial")
         self.assertEqual(
             response["Content-Type"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -215,6 +246,80 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             r'^attachment; filename="cadeia_dominial_geral_m-100a_\d{8}\.xlsx"$',
         )
         self.assertNotIn("M 100/Á", response["Content-Disposition"])
+
+    @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
+    @patch.object(cadeia_dominial_views, "get_object_or_404")
+    def test_excel_individual_nao_clipa_nomes_longos_do_imovel_e_cartorio(
+        self, get_object_mock, service_class_mock
+    ):
+        self.imovel.nome = "Imóvel com nome longo que precisa permanecer visível"
+        self.imovel.cartorio.nome = (
+            "Cartório de Registro de Imóveis da Comarca com Nome Muito Longo"
+        )
+        get_object_mock.side_effect = [self.tis, self.imovel]
+        service_class_mock.return_value.get_cadeia_completa.return_value = (
+            self.contexto_completo
+        )
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        ws = load_workbook(BytesIO(response.content)).active
+
+        self.assertEqual(ws["B5"].value, self.imovel.nome)
+        self.assertEqual(ws["B7"].value, self.imovel.cartorio.nome)
+        for coordenada in ("B5", "B7"):
+            with self.subTest(coordenada=coordenada):
+                celula = ws[coordenada]
+                self.assertFalse(celula.alignment.wrap_text)
+                self.assertIsNone(ws.row_dimensions[celula.row].height)
+                self.assertFalse(ws.row_dimensions[celula.row].customHeight)
+
+    @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
+    @patch.object(cadeia_dominial_views, "get_object_or_404")
+    def test_excel_nao_contem_pictogramas(
+        self, get_object_mock, service_class_mock
+    ):
+        get_object_mock.side_effect = [self.tis, self.imovel]
+        service_class_mock.return_value.get_cadeia_completa.return_value = (
+            self.contexto_completo
+        )
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        workbook = load_workbook(BytesIO(response.content))
+
+        for row in workbook.active.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str):
+                    self.assertIsNone(
+                        PICTOGRAMAS_EXPORT.search(cell.value),
+                        f"Pictograma encontrado em {cell.coordinate}: {cell.value!r}",
+                    )
+
+    def test_templates_pdf_nao_contem_pictogramas(self):
+        contextos = (
+            ("dominial/cadeia_completa_pdf.html", self.contexto_completo),
+            (
+                "dominial/cadeia_dominial_pdf.html",
+                {
+                    **self.contexto_completo,
+                    "cadeia": self.contexto_completo["cadeia_completa"][0][
+                        "documentos"
+                    ],
+                    "tem_lancamentos": True,
+                },
+            ),
+        )
+
+        for template, contexto in contextos:
+            with self.subTest(template=template):
+                html = render_to_string(template, contexto)
+                self.assertIsNone(
+                    PICTOGRAMAS_EXPORT.search(html),
+                    f"Pictograma encontrado na saída de {template}",
+                )
 
     @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
     @patch.object(cadeia_dominial_views, "get_object_or_404")

@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
-from ..utils import normalizar_texto_opcional, abreviar_cartorio
+from ..utils import normalizar_texto_opcional
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -13,8 +13,9 @@ from ..services.exportacao_excel_service import (
     ULTIMA_COLUNA,
     ajustar_larguras_colunas,
     criar_estilos,
+    criar_nome_aba_imovel,
     escrever_celula_segura,
-    escrever_secao_documentos,
+    renderizar_planilha_imovel,
 )
 from datetime import date
 import json
@@ -23,7 +24,6 @@ from django.template.loader import render_to_string
 from django.conf import settings
 import os
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
 import logging
 
 logger = logging.getLogger(__name__)
@@ -447,13 +447,13 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         <head><title>Erro na Geração do PDF</title></head>
         <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8f9fa;">
             <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <h1 style="color: #dc3545; margin-bottom: 20px;">❌ Erro na Geração do PDF</h1>
+                <h1 style="color: #dc3545; margin-bottom: 20px;">Erro na Geração do PDF</h1>
                 <p style="color: #6c757d; margin-bottom: 15px;">Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
                 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; border-left: 4px solid #dc3545;">
                     <strong>Erro:</strong> {str(e)}
                 </div>
                 <div style="margin-top: 20px;">
-                    <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">← Voltar</a>
+                    <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Voltar</a>
                 </div>
             </div>
         </body>
@@ -480,92 +480,9 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         ws = wb.active
         ws.title = "Cadeia Dominial Geral"
 
-        # Estilos (compartilhados com o export consolidado por TI — issue #179)
-        estilos = criar_estilos()
-        header_font = estilos['header_font']
-        header_fill = estilos['header_fill']
-        border = estilos['border']
-        center_alignment = estilos['center_alignment']
-
-        # Cabeçalho principal
-        ws.merge_cells('A1:P1')
-        escrever_celula_segura(
-            ws, 1, 1, f"CADEIA DOMINIAL GERAL - {imovel.nome}"
+        renderizar_planilha_imovel(
+            ws, tis, imovel, context['cadeia_completa']
         )
-        ws['A1'].font = Font(bold=True, size=16)
-        ws['A1'].alignment = center_alignment
-
-        # Informações do imóvel
-        escrever_celula_segura(ws, 3, 1, "TIS:")
-        escrever_celula_segura(ws, 3, 2, tis.nome)
-        escrever_celula_segura(ws, 4, 1, "Matrícula:")
-        escrever_celula_segura(ws, 4, 2, imovel.matricula)
-        escrever_celula_segura(ws, 5, 1, "Nome:")
-        escrever_celula_segura(ws, 5, 2, imovel.nome)
-        escrever_celula_segura(ws, 6, 1, "Proprietário:")
-        escrever_celula_segura(
-            ws, 6, 2, imovel.proprietario.nome if imovel.proprietario else ""
-        )
-        escrever_celula_segura(ws, 7, 1, "Cartório:")
-        escrever_celula_segura(
-            ws, 7, 2, imovel.cartorio.nome if imovel.cartorio else ""
-        )
-        escrever_celula_segura(ws, 8, 1, "Data de Exportação:")
-        escrever_celula_segura(ws, 8, 2, date.today().strftime('%d/%m/%Y'))
-
-        # Inicializar linha atual
-        row = 10
-
-        # Processar a cadeia completa (mesma estrutura do PDF) usando o
-        # renderer compartilhado com o export consolidado por TI (issue #179).
-        # `row + 1` = 11: primeira linha livre após o bloco de informações.
-        cadeia_completa = context['cadeia_completa']
-        row = escrever_secao_documentos(ws, cadeia_completa, row + 1, estilos)
-
-        # Adicionar estatísticas (se disponíveis)
-        if 'estatisticas' in context:
-            row += 1
-            estatisticas = context['estatisticas']
-
-            # Título das estatísticas
-            ws.merge_cells(f'A{row}:P{row}')
-            escrever_celula_segura(ws, row, 1, "📊 ESTATÍSTICAS").font = Font(
-                bold=True, size=14, color="FFFFFF"
-            )
-            ws.cell(row=row, column=1).fill = PatternFill(start_color="28a745", end_color="28a745", fill_type="solid")
-            ws.cell(row=row, column=1).alignment = center_alignment
-            row += 1
-
-            # Estatísticas
-            if 'total_documentos' in estatisticas:
-                escrever_celula_segura(
-                    ws, row, 1, "Total de Documentos:"
-                ).font = Font(bold=True)
-                escrever_celula_segura(
-                    ws, row, 2, estatisticas['total_documentos']
-                ).border = border
-                row += 1
-
-            if 'total_lancamentos' in estatisticas:
-                escrever_celula_segura(
-                    ws, row, 1, "Total de Lançamentos:"
-                ).font = Font(bold=True)
-                escrever_celula_segura(
-                    ws, row, 2, estatisticas['total_lancamentos']
-                ).border = border
-                row += 1
-
-            if 'documentos_compartilhados' in estatisticas:
-                escrever_celula_segura(
-                    ws, row, 1, "Documentos Compartilhados:"
-                ).font = Font(bold=True)
-                escrever_celula_segura(
-                    ws, row, 2, estatisticas['documentos_compartilhados']
-                ).border = border
-                row += 1
-
-        # Ajustar largura das colunas (16 colunas)
-        ajustar_larguras_colunas(ws)
 
         # Configurar resposta HTTP
         response = HttpResponse(
@@ -596,10 +513,9 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
 def exportar_cadeia_dominial_excel_tis(request, tis_id):
     """
     Issue #179: exporta em um ÚNICO arquivo Excel a cadeia dominial completa
-    de TODOS os imóveis de uma Terra Indígena, uma seção por imóvel, no
-    mesmo layout do export por imóvel (issue #50) — reaproveitado via
-    `escrever_secao_documentos`/`ajustar_larguras_colunas`
-    (`exportacao_excel_service`) para os dois exports não divergirem.
+    de TODOS os imóveis de uma Terra Indígena. A primeira aba traz o resumo;
+    cada aba seguinte contém um imóvel no mesmo layout do export individual,
+    reaproveitado via `renderizar_planilha_imovel` para não haver divergência.
     """
     # Import local, igual ao da view por imóvel: `CadeiaCompletaService`
     # guarda `imovel_atual` como estado de instância, por isso cada imóvel
@@ -608,128 +524,113 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
     try:
         tis = get_object_or_404(TIs, id=tis_id)
 
-        # Mesma ordenação da listagem de imóveis da TI (tis_views.imoveis:
-        # `.order_by('matricula')`) e o MESMO universo: sem filtrar
-        # `arquivado`, portanto inclui imóveis arquivados, assim como a
-        # listagem também os inclui.
+        # Mesma ordenação por matrícula da listagem de imóveis da TI, com `id`
+        # apenas como desempate determinístico para matrículas repetidas, e o
+        # MESMO universo: sem filtrar `arquivado`, portanto inclui imóveis
+        # arquivados, assim como a listagem também os inclui.
         imoveis = list(
             Imovel.objects.filter(terra_indigena_id=tis).select_related(
                 'cartorio', 'proprietario'
-            ).order_by('matricula')
+            ).order_by('matricula', 'id')
         )
 
         wb = Workbook()
-        ws = wb.active
-        ws.title = "Cadeia Dominial Consolidada"
-
+        resumo = wb.active
+        resumo.title = "Resumo"
         estilos = criar_estilos()
-        center_alignment = estilos['center_alignment']
 
-        # Cabeçalho geral
-        ws.merge_cells(f'A1:{ULTIMA_COLUNA}1')
-        escrever_celula_segura(
-            ws, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
+        nomes_usados = {resumo.title}
+        abas_imoveis = []
+        for indice_imovel, imovel in enumerate(imoveis, start=1):
+            nome_aba = criar_nome_aba_imovel(
+                imovel.matricula,
+                nomes_usados,
+                indice_imovel=indice_imovel,
+            )
+            nomes_usados.add(nome_aba)
+            abas_imoveis.append((imovel, nome_aba))
+
+        resumo.merge_cells(f'A1:{ULTIMA_COLUNA}1')
+        titulo = escrever_celula_segura(
+            resumo, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
         )
-        ws['A1'].font = Font(bold=True, size=16)
-        ws['A1'].alignment = center_alignment
+        titulo.font = estilos['title_font']
+        # O título ocupa A:P e deve permanecer em uma única linha. Wrap junto
+        # da altura fixa de 24 pontos ocultava nomes longos de TIs.
+        titulo.alignment = estilos['title_alignment']
+        resumo.row_dimensions[1].height = estilos['title_row_height']
 
-        escrever_celula_segura(ws, 3, 1, "TI:")
-        ws['A3'].font = Font(bold=True)
-        escrever_celula_segura(ws, 3, 2, tis.nome)
-        escrever_celula_segura(ws, 4, 1, "Total de imóveis:")
-        ws['A4'].font = Font(bold=True)
-        escrever_celula_segura(ws, 4, 2, len(imoveis))
-        escrever_celula_segura(ws, 5, 1, "Data de Exportação:")
-        ws['A5'].font = Font(bold=True)
-        escrever_celula_segura(ws, 5, 2, date.today().strftime('%d/%m/%Y'))
+        informacoes_resumo = (
+            ("TI:", tis.nome),
+            ("Total de imóveis:", len(imoveis)),
+            ("Data de Exportação:", date.today().strftime('%d/%m/%Y')),
+        )
+        for linha, (rotulo, valor) in enumerate(informacoes_resumo, start=3):
+            celula_rotulo = escrever_celula_segura(resumo, linha, 1, rotulo)
+            celula_rotulo.font = estilos['label_font']
+            celula_rotulo.fill = estilos['header_fill']
+            celula_valor = escrever_celula_segura(resumo, linha, 2, valor)
+            for celula in (celula_rotulo, celula_valor):
+                celula.border = estilos['border']
+                # Mesmo comportamento do bloco informativo nas abas dos
+                # imóveis: sem wrap nem altura fixa, permitindo que nomes
+                # longos transbordem pelas células vazias seguintes.
+                celula.alignment = estilos['body_alignment']
 
-        linha = 7
+        for coluna, cabecalho in enumerate(
+            ("Matrícula", "Aba", "Nome do imóvel"), start=1
+        ):
+            celula_cabecalho = escrever_celula_segura(
+                resumo, 7, coluna, cabecalho
+            )
+            celula_cabecalho.font = estilos['label_font']
+            celula_cabecalho.fill = estilos['header_fill']
+            celula_cabecalho.border = estilos['border']
+            celula_cabecalho.alignment = estilos['body_alignment']
+        resumo.row_dimensions[7].height = estilos['body_row_height']
 
-        for imovel in imoveis:
-            # 1. Linha de seção do imóvel. Fill mais escuro (1F4E79) que o
-            # título de documento (e3f2fd, dentro de escrever_secao_documentos)
-            # para o cliente distinguir visualmente cada imóvel ao rolar a
-            # planilha.
-            ws.merge_cells(f'A{linha}:{ULTIMA_COLUNA}{linha}')
-            celula_secao = escrever_celula_segura(
-                ws, linha, 1, f"IMÓVEL: {imovel.matricula} — {imovel.nome}"
-            )
-            celula_secao.font = Font(bold=True, size=14, color="FFFFFF")
-            celula_secao.fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
-            celula_secao.alignment = center_alignment
-            linha += 1
+        for linha, (imovel, nome_aba) in enumerate(abas_imoveis, start=8):
+            for coluna, valor in enumerate(
+                (imovel.matricula, nome_aba, imovel.nome), start=1
+            ):
+                celula = escrever_celula_segura(resumo, linha, coluna, valor)
+                celula.border = estilos['border']
+                celula.alignment = estilos['data_alignment']
 
-            # 2. Informações do imóvel. "CRI:" no rótulo e sigla no valor
-            # (issue #166) — mesmo padrão do export por imóvel, que já usa a
-            # sigla nas colunas de cartório da tabela de lançamentos.
-            escrever_celula_segura(ws, linha, 1, "Matrícula:").font = Font(
-                bold=True
-            )
-            escrever_celula_segura(ws, linha, 2, imovel.matricula)
-            linha += 1
-            escrever_celula_segura(ws, linha, 1, "Nome:").font = Font(bold=True)
-            escrever_celula_segura(ws, linha, 2, imovel.nome)
-            linha += 1
-            escrever_celula_segura(ws, linha, 1, "Proprietário:").font = Font(
-                bold=True
-            )
-            escrever_celula_segura(
-                ws,
-                linha,
-                2,
-                imovel.proprietario.nome if imovel.proprietario else "",
-            )
-            linha += 1
-            escrever_celula_segura(ws, linha, 1, "CRI:").font = Font(bold=True)
-            escrever_celula_segura(
-                ws,
-                linha,
-                2,
-                abreviar_cartorio(imovel.cartorio.nome) if imovel.cartorio else "",
-            )
-            linha += 1
+        ajustar_larguras_colunas(resumo)
+        resumo.column_dimensions['A'].width = 30
+        resumo.column_dimensions['B'].width = 31
+        resumo.column_dimensions['C'].width = 40
 
-            # 3-5. Cadeia completa deste imóvel, isolada num try/except: com
-            # centenas de imóveis numa TI, um registro com dado inconsistente
-            # (ex. hierarquia quebrada) não pode derrubar o relatório
-            # inteiro — loga o erro, marca a seção e segue para o próximo
-            # imóvel.
+        for imovel, nome_aba in abas_imoveis:
+            ws_imovel = wb.create_sheet(title=nome_aba)
             try:
-                # Instância NOVA por imóvel: CadeiaCompletaService guarda
-                # `imovel_atual` como estado de instância (usado para marcar
-                # documentos importados); reaproveitar a instância entre
-                # imóveis vazaria o estado de um para o outro.
                 contexto = CadeiaCompletaService().get_cadeia_completa(tis.id, imovel.id)
-                if not contexto['cadeia_completa']:
-                    escrever_celula_segura(
-                        ws, linha, 1, "Sem documentos cadastrados."
-                    )
-                    linha += 1
-                else:
-                    # NÃO escrever títulos de tronco principal/secundário
-                    # (issue #172): `escrever_secao_documentos` já omite isso,
-                    # escrevendo apenas os documentos.
-                    linha = escrever_secao_documentos(ws, contexto['cadeia_completa'], linha, estilos)
+                renderizar_planilha_imovel(
+                    ws_imovel,
+                    tis,
+                    imovel,
+                    contexto['cadeia_completa'],
+                    estilos,
+                    usar_cri_abreviado=True,
+                )
             except Exception:
                 logger.exception(
-                    "Erro ao montar a seção do imóvel %s no XLS consolidado da TI %s",
+                    "Erro ao montar a aba do imóvel %s no XLS consolidado da TI %s",
                     imovel.id, tis_id
                 )
-                # O renderer pode ter escrito parte do bloco antes de falhar.
-                # Como `linha` é um inteiro, o avanço interno não volta ao
-                # chamador quando há exceção; retomar de `ws.max_row + 1`
-                # impede que o aviso e o próximo imóvel sobrescrevam as linhas
-                # parciais já presentes na planilha.
-                linha = max(linha, ws.max_row + 1)
-                escrever_celula_segura(
-                    ws, linha, 1, "Erro ao exportar este imóvel."
+                linha_erro = max(ws_imovel.max_row + 1, 11)
+                ws_imovel.merge_cells(
+                    f'A{linha_erro}:{ULTIMA_COLUNA}{linha_erro}'
                 )
-                linha += 1
-
-            # 6. Linha em branco entre imóveis
-            linha += 1
-
-        ajustar_larguras_colunas(ws)
+                erro = escrever_celula_segura(
+                    ws_imovel, linha_erro, 1, "Erro ao exportar este imóvel."
+                )
+                erro.alignment = estilos['data_alignment']
+                ws_imovel.row_dimensions[linha_erro].height = estilos[
+                    'body_row_height'
+                ]
+                ajustar_larguras_colunas(ws_imovel)
 
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
