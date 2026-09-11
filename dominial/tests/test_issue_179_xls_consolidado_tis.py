@@ -229,14 +229,18 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
 
     # 8 -------------------------------------------------------------------
 
-    def test_area_em_pt_br_na_coluna_14(self):
+    def test_area_zerada_exibe_traco_na_coluna_14(self):
+        # Os lançamentos das fixtures têm area=Decimal("0"); por decisão
+        # de produto (Hiure, 10/09/2026) área zerada é exibida como "-",
+        # nunca como "0,0000".
         response = self._exportar(self.tis)
         ws = load_workbook(BytesIO(response.content)).active
 
         valores_coluna_14 = [
             ws.cell(row=linha[0].row, column=14).value for linha in ws.iter_rows()
         ]
-        self.assertIn("0,0000", valores_coluna_14)
+        self.assertIn("-", valores_coluna_14)
+        self.assertNotIn("0,0000", valores_coluna_14)
 
     # 10 ------------------------------------------------------------------
 

@@ -39,11 +39,26 @@ from dominial.utils.formatacao_utils import formatar_area_ha
 class FormatarAreaHaTest(SimpleTestCase):
     """Testes unitários da função utilitária `formatar_area_ha`."""
 
-    def test_zero_com_quatro_casas_decimais(self):
-        self.assertEqual(formatar_area_ha(Decimal("0.0000")), "0,0000")
+    def test_zero_decimal_exibe_traco(self):
+        # Decisão Hiure (10/09/2026): área zerada é exibida como "-",
+        # não como "0,0000".
+        self.assertEqual(formatar_area_ha(Decimal("0.0000")), "-")
 
-    def test_zero_inteiro(self):
-        self.assertEqual(formatar_area_ha(Decimal("0")), "0,0000")
+    def test_zero_inteiro_exibe_traco(self):
+        self.assertEqual(formatar_area_ha(Decimal("0")), "-")
+
+    def test_zero_int_python_exibe_traco(self):
+        self.assertEqual(formatar_area_ha(0), "-")
+
+    def test_zero_float_exibe_traco(self):
+        self.assertEqual(formatar_area_ha(0.0), "-")
+
+    def test_zero_string_exibe_traco(self):
+        self.assertEqual(formatar_area_ha("0"), "-")
+        self.assertEqual(formatar_area_ha("0.0000"), "-")
+
+    def test_zero_com_padrao_customizado(self):
+        self.assertEqual(formatar_area_ha(Decimal("0"), padrao="N/A"), "N/A")
 
     def test_valor_com_separador_de_milhar(self):
         self.assertEqual(formatar_area_ha(Decimal("1234.5")), "1.234,5000")
@@ -102,8 +117,8 @@ class AreaHaTemplatetagTest(SimpleTestCase):
         )
         return template.render(Context({"valor": valor, "padrao": padrao}))
 
-    def test_filtro_formata_zero_no_padrao_brasileiro(self):
-        self.assertEqual(self._render(Decimal("0.0000")), "0,0000")
+    def test_filtro_area_zerada_exibe_traco(self):
+        self.assertEqual(self._render(Decimal("0.0000")), "-")
 
     def test_filtro_formata_valor_com_milhar(self):
         self.assertEqual(self._render(Decimal("12345.6789")), "12.345,6789")
@@ -119,9 +134,10 @@ class AreaHaTabelasIntegracaoTest(TestCase):
     """
     Integração: monta fixtures reais no banco e renderiza as DUAS telas
     afetadas — Cadeia Dominial Geral (`cadeia_dominial_tabela.html`) e
-    Documento Detalhado (`documento_detalhado.html`) — confirmando que a
-    coluna "Área (ha)" sai no padrão brasileiro ("0,0000") e que o formato
-    "cru" do Decimal (bug original, "0.0000") não aparece mais.
+    Documento Detalhado (`documento_detalhado.html`) — confirmando que o
+    formato "cru" do Decimal (bug original, "0.0000") não aparece mais e
+    que área zerada sai como "-" (decisão Hiure, 10/09/2026), nunca como
+    "0,0000".
     """
 
     def setUp(self):
@@ -197,11 +213,12 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
 
-        # Casa a CÉLULA exata da coluna "Área (ha)" — um `assertIn("0,0000")`
-        # solto passaria mesmo se a linha do lançamento não renderizasse e o
-        # texto viesse de outro ponto da página.
-        self.assertIn("<td>0,0000</td>", html)
+        # Área zerada sai como "-" na célula da coluna "Área (ha)"; o
+        # formato "cru" do Decimal ("0.0000") e o "0,0000" antigo não
+        # aparecem mais.
+        self.assertIn("<td>-</td>", html)
         self.assertNotIn("0.0000", html)
+        self.assertNotIn("0,0000", html)
 
     def test_documento_detalhado_exibe_area_no_padrao_brasileiro(self):
         url = reverse(
@@ -216,5 +233,6 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
 
-        self.assertIn("<td>0,0000</td>", html)
+        self.assertIn("<td>-</td>", html)
         self.assertNotIn("0.0000", html)
+        self.assertNotIn("0,0000", html)

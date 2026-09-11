@@ -138,6 +138,10 @@ def formatar_area_ha(area, padrao="-"):
     formatação de exibição: o valor persistido no banco não é alterado.
 
     - `None` ou string vazia retornam `padrao` (default "-").
+    - Valor que, convertido, é igual a zero (ex.: `Decimal("0")`,
+      `Decimal("0.0000")`, `0`, `0.0`, `"0"`) também retorna `padrao`:
+      por decisão de produto (Hiure, 10/09/2026) área zerada é exibida
+      como "-", e não como "0,0000" (issue #13).
     - Valor não convertível para número (ex.: texto não numérico) também
       retorna `padrao`, sem levantar exceção.
     - A conversão usa `Decimal(str(valor))` para evitar ruído binário de
@@ -150,6 +154,9 @@ def formatar_area_ha(area, padrao="-"):
     try:
         valor = Decimal(str(area))
     except (InvalidOperation, TypeError, ValueError):
+        return padrao
+
+    if valor == 0:
         return padrao
 
     return f"{valor:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
