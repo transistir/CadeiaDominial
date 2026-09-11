@@ -59,6 +59,7 @@ from dominial.services.exportacao_excel_service import (
     escrever_celula_segura,
 )
 from dominial.templatetags.dominial_extras import origem_formatada_completa
+from dominial.utils.formatacao_utils import formatar_origem_completa
 from dominial.views import cadeia_dominial_views
 
 
@@ -89,6 +90,27 @@ class EscreverCelulaSeguraTest(SimpleTestCase):
                 cell = escrever_celula_segura(ws, row, 1, valor)
                 self.assertEqual(cell.value, valor)
                 self.assertEqual(cell.data_type, data_type)
+
+
+class FormatarOrigemCompletaSegurancaTest(SimpleTestCase):
+    def test_escapa_origem_e_cartorio_no_html_sem_alterar_texto_do_xls(self):
+        lancamento = SimpleNamespace(
+            origem='M<script>alert("origem")</script>',
+            cartorio_origem=SimpleNamespace(
+                nome='<script>alert("cartorio")</script>'
+            ),
+        )
+
+        texto_html = origem_formatada_completa(lancamento)
+        texto_xls = formatar_origem_completa(lancamento)
+
+        self.assertNotIn("<script>", texto_html)
+        self.assertIn("&lt;script&gt;", texto_html)
+        self.assertEqual(
+            texto_xls,
+            'M<script>alert("origem")</script> '
+            '(<script>alert("cartorio")</script>)',
+        )
 
 
 class NomeAbaImovelTest(SimpleTestCase):

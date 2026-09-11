@@ -28,7 +28,9 @@ from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.views import cadeia_dominial_views
 
 
-PICTOGRAMAS_EXPORT = re.compile(r"[\u2190-\u2BFF\U0001F000-\U0001FAFF]")
+PICTOGRAMAS_EXPORT = re.compile(
+    r"[\u2000-\u218F\u20E3\uFE0F\u2190-\u2BFF\U0001F000-\U0001FAFF]"
+)
 
 
 class TipoDocumentoFake:
@@ -96,6 +98,11 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
         request = self.factory.get(path, data=query or {})
         request.user = SimpleNamespace(is_authenticated=True)
         return request
+
+    def test_detector_cobre_pictogramas_variation_selector_e_keycap(self):
+        for pictograma in ("‼", "™", "ℹ", "\uFE0F", "\u20E3"):
+            with self.subTest(pictograma=pictograma):
+                self.assertIsNotNone(PICTOGRAMAS_EXPORT.search(pictograma))
 
     def test_botao_pdf_padrao_aponta_para_exportacao_completa(self):
         template = (

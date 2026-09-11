@@ -138,7 +138,9 @@ def origem_formatada_completa(lancamento):
     """
     Template filter para formatar origem completa: M123(Cartório); Destacamento Público:INCRA:Origem Lídima
     """
-    return formatar_origem_completa(lancamento, separador='<br>')
+    return formatar_origem_completa(
+        lancamento, separador='<br>', escapar_html=True
+    )
 
 @register.filter
 def numero_documento_criado(lancamento):

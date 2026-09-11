@@ -5,6 +5,9 @@ Utilitários para formatação de dados
 import unicodedata
 from decimal import Decimal, InvalidOperation
 
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
+
 
 _PREFIXO_CRI = "cartorio de registro de imoveis"
 
@@ -26,13 +29,17 @@ def _classificacao_fim_cadeia_display(classificacao):
     return labels.get(chave, classificacao)
 
 
-def formatar_origem_completa(lancamento, separador='\n'):
+def formatar_origem_completa(
+    lancamento, separador='\n', escapar_html=False
+):
     """
     Formata a origem de um lançamento para exibição em exportações.
 
     A regra é compartilhada pelo PDF/HTML e pelo Excel. O chamador informa
-    somente o separador adequado ao meio: ``<br>`` no filtro de template e
-    quebra de linha real (o padrão) no XLSX.
+    o separador adequado ao meio: ``<br>`` no filtro de template e quebra de
+    linha real (o padrão) no XLSX. Com ``escapar_html=True``, cada texto
+    montado é escapado antes que somente o resultado final seja marcado como
+    seguro; o separador é tratado como markup interno confiável.
     """
     if not lancamento.origem:
         return '-'
@@ -107,6 +114,10 @@ def formatar_origem_completa(lancamento, separador='\n'):
             else:
                 origem_formatada = origem
             origens_formatadas.append(origem_formatada)
+
+    if escapar_html:
+        partes_escapadas = [str(escape(origem)) for origem in origens_formatadas]
+        return mark_safe(separador.join(partes_escapadas))
 
     return separador.join(origens_formatadas)
 
