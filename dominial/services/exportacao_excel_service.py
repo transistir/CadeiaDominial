@@ -24,7 +24,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from ..utils import abreviar_cartorio, normalizar_texto_opcional
-from ..utils.formatacao_utils import formatar_area_ha
+from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
 
 # 16 colunas (A até P). `ULTIMA_COLUNA` é derivada de `TOTAL_COLUNAS` para
 # nunca ficarem dessincronizadas.
@@ -374,7 +374,7 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                     ws, row, 14, formatar_area_ha(lancamento.area)
                 ).border = border
                 escrever_celula_segura(
-                    ws, row, 15, lancamento.origem or "-"
+                    ws, row, 15, formatar_origem_completa(lancamento)
                 ).border = border
                 escrever_celula_segura(
                     ws, row, 16, lancamento.observacoes or "-"

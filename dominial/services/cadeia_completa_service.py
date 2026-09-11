@@ -282,7 +282,10 @@ class CadeiaCompletaService:
         if not documentos:
             return
         lancamentos = Lancamento.objects.select_related(
-            'tipo', 'cartorio_transmissao', 'cartorio_transacao'
+            'tipo',
+            'cartorio_origem',
+            'cartorio_transmissao',
+            'cartorio_transacao',
         ).prefetch_related('pessoas__pessoa').order_by('id')
         prefetch_related_objects(
             documentos,

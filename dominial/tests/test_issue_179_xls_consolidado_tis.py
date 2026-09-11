@@ -58,6 +58,7 @@ from dominial.services.exportacao_excel_service import (
     criar_nome_aba_imovel,
     escrever_celula_segura,
 )
+from dominial.templatetags.dominial_extras import origem_formatada_completa
 from dominial.views import cadeia_dominial_views
 
 
@@ -606,12 +607,71 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         valores_coluna_14 = [cell.value for cell in ws["N"]]
         self.assertIn("1234,5678", valores_coluna_14)
 
+    def test_origem_fim_cadeia_usa_mesma_frase_tratada_do_pdf(self):
+        origem_bruta = "Destacamento Público:INCRA:origem_lidima"
+        Lancamento.objects.filter(
+            documento__imovel=self.imovel_m100
+        ).update(origem=origem_bruta)
+        lancamento = Lancamento.objects.select_related("cartorio_origem").get(
+            documento__imovel=self.imovel_m100
+        )
+        texto_pdf = origem_formatada_completa(lancamento)
+
+        ws = self._abrir(self._exportar(self.tis))["m100"]
+        valores_origem = [cell.value for cell in ws["O"]]
+
+        self.assertEqual(
+            texto_pdf,
+            "Destacamento Público : INCRA (Origem Lídima)",
+        )
+        self.assertIn(texto_pdf, valores_origem)
+        self.assertNotIn(origem_bruta, valores_origem)
+
+    def test_origem_matricula_anterior_usa_mesmo_texto_do_pdf(self):
+        origem_bruta = "M99"
+        Lancamento.objects.filter(
+            documento__imovel=self.imovel_m100
+        ).update(origem=origem_bruta)
+        lancamento = Lancamento.objects.select_related("cartorio_origem").get(
+            documento__imovel=self.imovel_m100
+        )
+        texto_pdf = origem_formatada_completa(lancamento)
+
+        ws = self._abrir(self._exportar(self.tis))["m100"]
+        valores_origem = [cell.value for cell in ws["O"]]
+
+        self.assertEqual(
+            texto_pdf,
+            f"M99 ({self.cartorio.nome})",
+        )
+        self.assertIn(texto_pdf, valores_origem)
+        self.assertNotIn(origem_bruta, valores_origem)
+
+    def test_multiplas_origens_usam_quebra_de_linha_e_wrap_text(self):
+        Lancamento.objects.filter(
+            documento__imovel=self.imovel_m100
+        ).update(origem="M99; Sem Origem::sem_origem")
+        lancamento = Lancamento.objects.select_related("cartorio_origem").get(
+            documento__imovel=self.imovel_m100
+        )
+        texto_pdf = origem_formatada_completa(lancamento)
+        texto_xls = texto_pdf.replace("<br>", "\n")
+
+        ws = self._abrir(self._exportar(self.tis))["m100"]
+        celula_origem = next(cell for cell in ws["O"] if cell.value == texto_xls)
+
+        self.assertEqual(texto_xls.count("\n"), 1)
+        self.assertNotIn("<br>", celula_origem.value)
+        self.assertTrue(celula_origem.alignment.wrap_text)
+
     def test_neutraliza_prefixos_de_formula_nos_dados_do_lancamento(self):
+        origem_perigosa = "=HYPERLINK(\"https://example.invalid\")"
         valores_perigosos = {
             "observacoes": "=SUM(1+1)",
             "forma": "+foo",
             "titulo": "-foo",
             "livro_transacao": "@foo",
+            "origem": origem_perigosa,
         }
         Lancamento.objects.filter(
             documento__imovel=self.imovel_m100
@@ -625,12 +685,24 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
             for cell in row
             if cell.value in valores_perigosos.values()
         }
+        celula_origem = next(
+            cell
+            for cell in ws["O"]
+            if isinstance(cell.value, str)
+            and cell.value.startswith(origem_perigosa)
+        )
 
-        for valor in valores_perigosos.values():
+        for valor in (
+            valores_perigosos["observacoes"],
+            valores_perigosos["forma"],
+            valores_perigosos["titulo"],
+            valores_perigosos["livro_transacao"],
+        ):
             with self.subTest(valor=valor):
                 self.assertIn(valor, celulas_por_valor)
                 self.assertEqual(celulas_por_valor[valor].value, valor)
                 self.assertEqual(celulas_por_valor[valor].data_type, "s")
+        self.assertEqual(celula_origem.data_type, "s")
 
     def test_neutraliza_formula_nos_metadados_e_preserva_total_numerico(self):
         formula = "=SUM(1+1)"
