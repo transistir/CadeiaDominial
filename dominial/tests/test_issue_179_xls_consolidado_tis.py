@@ -92,11 +92,57 @@ class EscreverCelulaSeguraTest(SimpleTestCase):
 
 
 class NomeAbaImovelTest(SimpleTestCase):
-    def test_sanitiza_acentos_barras_e_espacos(self):
+    def test_remove_so_caracteres_invalidos_e_preserva_grafia(self):
         nome = criar_nome_aba_imovel("M 100/Á", {"Resumo"})
 
-        self.assertEqual(nome, "m-100a")
+        self.assertEqual(nome, "M 100Á")
         self.assertFalse(set(nome) & set(':\\/?*[]'))
+
+    def test_hifen_e_espaco_geram_abas_distintas(self):
+        primeiro = criar_nome_aba_imovel("M-100", {"Resumo"})
+        segundo = criar_nome_aba_imovel("M 100", {"Resumo", primeiro})
+
+        self.assertEqual(primeiro, "M-100")
+        self.assertEqual(segundo, "M 100")
+
+    def test_matriculas_vazias_usam_fallback_estavel_por_indice(self):
+        nomes_usados = {"Resumo"}
+        nomes = []
+        for indice, matricula in enumerate((None, "", "///"), start=1):
+            nome = criar_nome_aba_imovel(
+                matricula, nomes_usados, indice_imovel=indice
+            )
+            nomes.append(nome)
+            nomes_usados.add(nome)
+
+        self.assertEqual(nomes, ["imovel-1", "imovel-2", "imovel-3"])
+
+    def test_colisao_com_resumo_e_nome_history_sao_desambiguados(self):
+        nome_resumo = criar_nome_aba_imovel("Resumo", {"Resumo"})
+        nome_history = criar_nome_aba_imovel("History", {"Resumo", nome_resumo})
+
+        self.assertEqual(nome_resumo, "Resumo~2")
+        self.assertEqual(nome_history, "History~2")
+
+    def test_tres_duplicatas_recebem_sufixos_progressivos(self):
+        nomes_usados = {"Resumo"}
+        nomes = []
+        for _ in range(3):
+            nome = criar_nome_aba_imovel("M100", nomes_usados)
+            nomes.append(nome)
+            nomes_usados.add(nome)
+
+        self.assertEqual(nomes, ["M100", "M100~2", "M100~3"])
+
+    def test_sufixo_nao_colide_com_matricula_real_terminada_em_hifen_2(self):
+        primeiro = criar_nome_aba_imovel("M100", {"Resumo"})
+        duplicado = criar_nome_aba_imovel("M100", {"Resumo", primeiro})
+        matricula_real = criar_nome_aba_imovel(
+            "M100-2", {"Resumo", primeiro, duplicado}
+        )
+
+        self.assertEqual(duplicado, "M100~2")
+        self.assertEqual(matricula_real, "M100-2")
 
     def test_trunca_e_mantem_sufixo_de_duplicata_no_limite(self):
         matricula = "Matrícula muito longa para o limite do Excel 179"
@@ -105,7 +151,7 @@ class NomeAbaImovelTest(SimpleTestCase):
 
         self.assertEqual(len(primeiro), 31)
         self.assertLessEqual(len(segundo), 31)
-        self.assertTrue(segundo.endswith("-2"))
+        self.assertTrue(segundo.endswith("~2"))
 
 
 class ExportacaoTisXlsConsolidadoTest(TestCase):
@@ -212,7 +258,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         # Não deve levantar exceção ao abrir.
         workbook = self._abrir(response)
         self.assertEqual(
-            workbook.sheetnames, ["Resumo", "m100", "m200", "m300"]
+            workbook.sheetnames, ["Resumo", "M100", "M200", "M300"]
         )
 
     # 3 -------------------------------------------------------------------
@@ -222,7 +268,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         workbook = self._abrir(response)
 
         for matricula in ("M100", "M200", "M300"):
-            ws = workbook[matricula.lower()]
+            ws = workbook[matricula]
             self.assertEqual(ws["A4"].value, "Matrícula:")
             self.assertEqual(ws["B4"].value, matricula)
             valores = [cell.value for row in ws.iter_rows() for cell in row]
@@ -231,7 +277,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
                 self.assertNotIn(outra, valores)
 
     def test_bloco_do_imovel_consolidado_usa_rotulo_e_sigla_cri(self):
-        ws = self._abrir(self._exportar(self.tis))["m100"]
+        ws = self._abrir(self._exportar(self.tis))["M100"]
 
         self.assertEqual(ws["A7"].value, "CRI:")
         self.assertEqual(ws["B7"].value, "CRI Teste 179")
@@ -255,14 +301,26 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
     def test_ordem_das_abas_e_lista_do_resumo_seguem_a_matricula(self):
         response = self._exportar(self.tis)
         workbook = self._abrir(response)
+        resumo = workbook["Resumo"]
 
         self.assertEqual(
-            workbook.sheetnames, ["Resumo", "m100", "m200", "m300"]
+            workbook.sheetnames, ["Resumo", "M100", "M200", "M300"]
         )
         self.assertEqual(
-            [workbook["Resumo"].cell(row=linha, column=1).value
-             for linha in range(8, 11)],
+            [resumo.cell(row=linha, column=1).value for linha in range(8, 11)],
             ["M100", "M200", "M300"],
+        )
+        self.assertEqual(
+            [resumo.cell(row=linha, column=2).value for linha in range(8, 11)],
+            ["M100", "M200", "M300"],
+        )
+        self.assertEqual(
+            [resumo.cell(row=linha, column=3).value for linha in range(8, 11)],
+            ["Imóvel M100", "Imóvel M200", "Imóvel M300"],
+        )
+        self.assertEqual(
+            [resumo.cell(row=7, column=coluna).value for coluna in range(1, 4)],
+            ["Matrícula", "Aba", "Nome do imóvel"],
         )
 
     def test_matricula_com_barra_e_acento_vira_nome_de_aba_valido(self):
@@ -272,10 +330,10 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
 
         workbook = self._abrir(self._exportar(self.tis))
 
-        self.assertIn("m-100a", workbook.sheetnames)
-        self.assertEqual(workbook["m-100a"]["B4"].value, "M 100/Á")
-        self.assertLessEqual(len("m-100a"), 31)
-        self.assertFalse(set("m-100a") & set(':\\/?*[]'))
+        self.assertIn("M 100Á", workbook.sheetnames)
+        self.assertEqual(workbook["M 100Á"]["B4"].value, "M 100/Á")
+        self.assertLessEqual(len("M 100Á"), 31)
+        self.assertFalse(set("M 100Á") & set(':\\/?*[]'))
 
     def test_matriculas_duplicadas_recebem_sufixo_sem_colidir(self):
         outro_cartorio = Cartorios.objects.create(
@@ -293,11 +351,11 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
 
         workbook = self._abrir(self._exportar(self.tis))
 
-        self.assertIn("m100", workbook.sheetnames)
-        self.assertIn("m100-2", workbook.sheetnames)
-        self.assertEqual(workbook["m100"]["B5"].value, "Imóvel M100")
+        self.assertIn("M100", workbook.sheetnames)
+        self.assertIn("M100~2", workbook.sheetnames)
+        self.assertEqual(workbook["M100"]["B5"].value, "Imóvel M100")
         self.assertEqual(
-            workbook["m100-2"]["B5"].value, "Imóvel duplicado M100"
+            workbook["M100~2"]["B5"].value, "Imóvel duplicado M100"
         )
 
     def test_erro_parcial_fica_na_aba_do_imovel_e_nao_afeta_a_seguinte(self):
@@ -336,7 +394,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         workbook = self._abrir(response)
         linhas_m200 = {
             cell.value: cell.row
-            for cell in workbook["m200"]["A"]
+            for cell in workbook["M200"]["A"]
             if isinstance(cell.value, str)
         }
 
@@ -344,9 +402,9 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
             linhas_m200["LINHA PARCIAL DO IMÓVEL M200"],
             linhas_m200["Erro ao exportar este imóvel."],
         )
-        self.assertEqual(workbook["m300"]["B4"].value, "M300")
+        self.assertEqual(workbook["M300"]["B4"].value, "M300")
         self.assertIn(
-            "Matrícula: M300", [cell.value for cell in workbook["m300"]["A"]]
+            "Matrícula: M300", [cell.value for cell in workbook["M300"]["A"]]
         )
 
     def test_queries_ficam_sob_teto_com_tres_imoveis_e_dois_documentos(self):
@@ -440,7 +498,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
 
     def test_estrutura_de_colunas_igual_ao_export_por_imovel(self):
         response = self._exportar(self.tis)
-        ws = self._abrir(response)["m100"]
+        ws = self._abrir(response)["M100"]
 
         header = None
         for linha in ws.iter_rows():
@@ -457,7 +515,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertEqual(valores[9], "CRI")
 
     def test_aba_do_consolidado_tem_o_mesmo_layout_do_xls_individual(self):
-        ws_consolidado = self._abrir(self._exportar(self.tis))["m100"]
+        ws_consolidado = self._abrir(self._exportar(self.tis))["M100"]
         response_individual = (
             cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
                 self._request("/excel/"), self.tis.id, self.imovel_m100.id
@@ -513,7 +571,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         ])
 
         response = self._exportar(self.tis)
-        ws = self._abrir(response)["m100"]
+        ws = self._abrir(response)["M100"]
 
         def rgb(cor):
             return cor.rgb[-6:]
@@ -605,7 +663,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         # de produto (Hiure, 10/09/2026) área zerada é exibida como "-",
         # nunca como "0,0000".
         response = self._exportar(self.tis)
-        ws = self._abrir(response)["m100"]
+        ws = self._abrir(response)["M100"]
 
         valores_coluna_14 = [
             ws.cell(row=linha[0].row, column=14).value for linha in ws.iter_rows()
@@ -619,7 +677,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         ).update(area=Decimal("1234.5678"))
 
         response = self._exportar(self.tis)
-        ws = self._abrir(response)["m100"]
+        ws = self._abrir(response)["M100"]
 
         valores_coluna_14 = [cell.value for cell in ws["N"]]
         self.assertIn("1234,5678", valores_coluna_14)
@@ -634,7 +692,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         )
         texto_pdf = origem_formatada_completa(lancamento)
 
-        ws = self._abrir(self._exportar(self.tis))["m100"]
+        ws = self._abrir(self._exportar(self.tis))["M100"]
         valores_origem = [cell.value for cell in ws["O"]]
 
         self.assertEqual(
@@ -654,7 +712,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         )
         texto_pdf = origem_formatada_completa(lancamento)
 
-        ws = self._abrir(self._exportar(self.tis))["m100"]
+        ws = self._abrir(self._exportar(self.tis))["M100"]
         valores_origem = [cell.value for cell in ws["O"]]
 
         self.assertEqual(
@@ -674,7 +732,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         texto_pdf = origem_formatada_completa(lancamento)
         texto_xls = texto_pdf.replace("<br>", "\n")
 
-        ws = self._abrir(self._exportar(self.tis))["m100"]
+        ws = self._abrir(self._exportar(self.tis))["M100"]
         celula_origem = next(cell for cell in ws["O"] if cell.value == texto_xls)
 
         self.assertEqual(texto_xls.count("\n"), 1)
@@ -701,7 +759,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         ).update(**valores_perigosos)
 
         response = self._exportar(self.tis)
-        ws = self._abrir(response)["m100"]
+        ws = self._abrir(response)["M100"]
         celulas_por_valor = {
             cell.value: cell
             for row in ws.iter_rows()
@@ -834,10 +892,10 @@ class ExportacaoTisXlsImovelSemDocumentosTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
         workbook = load_workbook(BytesIO(response.content))
-        ws = workbook["m400"]
+        ws = workbook["M400"]
         valores_coluna_a = [cell.value for cell in ws["A"]]
 
-        self.assertEqual(workbook.sheetnames, ["Resumo", "m400"])
+        self.assertEqual(workbook.sheetnames, ["Resumo", "M400"])
         self.assertEqual(ws["B4"].value, "M400")
         self.assertEqual(ws["B5"].value, "Imóvel Sem Documentos")
         self.assertIn("Sem documentos cadastrados.", valores_coluna_a)

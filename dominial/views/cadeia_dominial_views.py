@@ -541,8 +541,12 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
 
         nomes_usados = {resumo.title}
         abas_imoveis = []
-        for imovel in imoveis:
-            nome_aba = criar_nome_aba_imovel(imovel.matricula, nomes_usados)
+        for indice_imovel, imovel in enumerate(imoveis, start=1):
+            nome_aba = criar_nome_aba_imovel(
+                imovel.matricula,
+                nomes_usados,
+                indice_imovel=indice_imovel,
+            )
             nomes_usados.add(nome_aba)
             abas_imoveis.append((imovel, nome_aba))
 
@@ -569,25 +573,30 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                 celula.alignment = estilos['data_alignment']
             resumo.row_dimensions[linha].height = estilos['body_row_height']
 
-        cabecalho_matriculas = escrever_celula_segura(
-            resumo, 7, 1, "Matrículas:"
-        )
-        cabecalho_matriculas.font = estilos['label_font']
-        cabecalho_matriculas.fill = estilos['header_fill']
-        cabecalho_matriculas.border = estilos['border']
-        cabecalho_matriculas.alignment = estilos['data_alignment']
+        for coluna, cabecalho in enumerate(
+            ("Matrícula", "Aba", "Nome do imóvel"), start=1
+        ):
+            celula_cabecalho = escrever_celula_segura(
+                resumo, 7, coluna, cabecalho
+            )
+            celula_cabecalho.font = estilos['label_font']
+            celula_cabecalho.fill = estilos['header_fill']
+            celula_cabecalho.border = estilos['border']
+            celula_cabecalho.alignment = estilos['body_alignment']
         resumo.row_dimensions[7].height = estilos['body_row_height']
 
-        for linha, (imovel, _) in enumerate(abas_imoveis, start=8):
-            celula = escrever_celula_segura(
-                resumo, linha, 1, imovel.matricula
-            )
-            celula.border = estilos['border']
-            celula.alignment = estilos['data_alignment']
-            resumo.row_dimensions[linha].height = estilos['body_row_height']
+        for linha, (imovel, nome_aba) in enumerate(abas_imoveis, start=8):
+            for coluna, valor in enumerate(
+                (imovel.matricula, nome_aba, imovel.nome), start=1
+            ):
+                celula = escrever_celula_segura(resumo, linha, coluna, valor)
+                celula.border = estilos['border']
+                celula.alignment = estilos['data_alignment']
 
         ajustar_larguras_colunas(resumo)
         resumo.column_dimensions['A'].width = 30
+        resumo.column_dimensions['B'].width = 31
+        resumo.column_dimensions['C'].width = 40
 
         for imovel, nome_aba in abas_imoveis:
             ws_imovel = wb.create_sheet(title=nome_aba)

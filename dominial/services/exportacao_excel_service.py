@@ -19,7 +19,6 @@ deve ser feito aqui, uma única vez, e passa a valer para os dois.
 import re
 from datetime import date
 
-from django.utils.text import slugify
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -45,8 +44,9 @@ CABECALHOS_DETALHADOS = [
 LARGURAS_COLUNAS = [12, 8, 8, 20, 12, 20, 20, 15, 15, 20, 8, 8, 12, 12, 20, 30]
 
 PREFIXOS_FORMULA_EXCEL = ('=', '+', '-', '@', '\t', '\r')
-CARACTERES_INVALIDOS_ABA = re.compile(r'[:\\/?*\[\]]')
+CARACTERES_INVALIDOS_ABA = re.compile(r'[:\\/?*\[\]\x00-\x1f]')
 LIMITE_NOME_ABA = 31
+NOMES_RESERVADOS_ABA = {'history'}
 
 # Tokens visuais copiados dos CSS dos PDFs (`cadeia_dominial_pdf.css` e
 # `cadeia_completa_pdf.css`). Manter os valores sincronizados com a fonte de
@@ -148,23 +148,37 @@ def ajustar_larguras_colunas(ws):
         ws.column_dimensions[get_column_letter(i)].width = width
 
 
-def criar_nome_aba_imovel(matricula, nomes_usados):
+def criar_nome_aba_imovel(matricula, nomes_usados, indice_imovel=None):
     """
     Gera um nome de aba válido e único a partir da matrícula.
 
     O Excel limita títulos a 31 caracteres, proíbe ``: \\ / ? * [ ]`` e
-    compara títulos sem distinguir maiúsculas de minúsculas. O sufixo de
-    colisão é incluído dentro do limite (``-2``, ``-3``, ...).
+    compara títulos sem distinguir maiúsculas de minúsculas. Preservamos a
+    grafia legível da matrícula (caixa, espaços, hífens e acentos), removendo
+    somente caracteres inválidos. ``History`` é reservado pelo Excel.
+
+    O sufixo ``~N`` fica dentro do limite e evita confundir uma duplicata com
+    uma matrícula real terminada em ``-2``. Matrículas vazias recebem um nome
+    estável baseado na posição do imóvel no arquivo.
     """
-    nome_base = slugify(str(matricula or ""))
-    nome_base = CARACTERES_INVALIDOS_ABA.sub("", nome_base) or "imovel"
-    nome_base = nome_base[:LIMITE_NOME_ABA]
-    nomes_normalizados = {nome.casefold() for nome in nomes_usados}
+    nome_base = CARACTERES_INVALIDOS_ABA.sub(
+        "", str(matricula) if matricula is not None else ""
+    ).strip().strip("'")
+    if not nome_base:
+        nome_base = (
+            f"imovel-{indice_imovel}"
+            if indice_imovel is not None
+            else "imovel"
+        )
+    nome_base = nome_base[:LIMITE_NOME_ABA].rstrip("'")
+    nomes_normalizados = {
+        nome.casefold() for nome in nomes_usados
+    } | NOMES_RESERVADOS_ABA
 
     candidato = nome_base
     indice = 2
     while candidato.casefold() in nomes_normalizados:
-        sufixo = f"-{indice}"
+        sufixo = f"~{indice}"
         candidato = f"{nome_base[:LIMITE_NOME_ABA - len(sufixo)]}{sufixo}"
         indice += 1
 
@@ -209,6 +223,9 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
         for item in tronco['documentos']:
             documento = item['documento']
             lancamentos = item['lancamentos']
+            prefixo_importado = (
+                "[Importado] " if item.get('is_importado', False) else ""
+            )
             # Título do documento
             row += 1
             ws.merge_cells(f'A{row}:{ULTIMA_COLUNA}{row}')
@@ -216,6 +233,7 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 ws,
                 row,
                 1,
+                f"{prefixo_importado}"
                 f"{documento.tipo.get_tipo_display()}: {documento.numero}",
             ).font = estilos['document_font']
             ws.cell(row=row, column=1).fill = group_fill
