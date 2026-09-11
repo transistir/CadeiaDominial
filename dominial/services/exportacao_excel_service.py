@@ -42,6 +42,18 @@ LARGURAS_COLUNAS = [12, 8, 8, 20, 12, 20, 20, 15, 15, 20, 8, 8, 12, 12, 20, 30]
 
 PREFIXOS_FORMULA_EXCEL = ('=', '+', '-', '@', '\t', '\r')
 
+# Tokens visuais copiados dos CSS dos PDFs (`cadeia_dominial_pdf.css` e
+# `cadeia_completa_pdf.css`). Manter os valores sincronizados com a fonte de
+# referência aprovada pelo cliente.
+COR_TEXTO = "333333"
+COR_AZUL_TEXTO = "2C5AA0"
+COR_CABECALHO = "F8F9FA"
+COR_AGRUPAMENTO = "E1EDF7"
+COR_BRANCO = "FFFFFF"
+COR_BORDA = "DDDDDD"
+
+FONTE_CORPO = Font(name="Arial", size=8, color=COR_TEXTO)
+
 
 def escrever_celula_segura(ws, row, column, value):
     """
@@ -55,6 +67,7 @@ def escrever_celula_segura(ws, row, column, value):
     """
     cell = ws.cell(row=row, column=column)
     cell.value = value
+    cell.font = FONTE_CORPO
     if isinstance(value, str) and value.startswith(PREFIXOS_FORMULA_EXCEL):
         cell.data_type = 's'
     return cell
@@ -62,21 +75,62 @@ def escrever_celula_segura(ws, row, column, value):
 
 def criar_estilos():
     """
-    Cria o conjunto de estilos usados na tabela de lançamentos de cada
-    documento (cabeçalhos de agrupamento/detalhados, bordas e alinhamento).
-    Centralizado aqui para que o export por imóvel e o consolidado por TI
-    usem exatamente as mesmas cores e bordas.
+    Cria os estilos equivalentes ao PDF para título, informações do imóvel,
+    cabeçalhos, dados e zebra. Centralizado aqui para que todos os exports
+    XLS usem exatamente a mesma tipografia, cores, bordas e alturas.
     """
+    borda = Side(style='thin', color=COR_BORDA)
     return {
-        'header_font': Font(bold=True, color="FFFFFF"),
-        'header_fill': PatternFill(start_color="366092", end_color="366092", fill_type="solid"),
-        'border': Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+        'title_font': Font(
+            name="Arial", bold=True, size=18, color=COR_AZUL_TEXTO
         ),
-        'center_alignment': Alignment(horizontal='center', vertical='center'),
+        'body_font': FONTE_CORPO,
+        'label_font': Font(name="Arial", bold=True, size=8, color=COR_TEXTO),
+        'document_font': Font(
+            name="Arial", bold=True, size=8, color=COR_AZUL_TEXTO
+        ),
+        'header_font': Font(
+            name="Arial", bold=True, size=6, color=COR_TEXTO
+        ),
+        'data_font': Font(name="Arial", size=6, color=COR_TEXTO),
+        'header_fill': PatternFill(
+            start_color=COR_CABECALHO,
+            end_color=COR_CABECALHO,
+            fill_type="solid",
+        ),
+        'group_fill': PatternFill(
+            start_color=COR_AGRUPAMENTO,
+            end_color=COR_AGRUPAMENTO,
+            fill_type="solid",
+        ),
+        'zebra_even_fill': PatternFill(
+            start_color=COR_CABECALHO,
+            end_color=COR_CABECALHO,
+            fill_type="solid",
+        ),
+        'zebra_odd_fill': PatternFill(
+            start_color=COR_BRANCO,
+            end_color=COR_BRANCO,
+            fill_type="solid",
+        ),
+        'border': Border(
+            left=borda,
+            right=borda,
+            top=borda,
+            bottom=borda,
+        ),
+        'center_alignment': Alignment(
+            horizontal='center', vertical='center', wrap_text=True
+        ),
+        'data_alignment': Alignment(
+            horizontal='left', vertical='top', wrap_text=True
+        ),
+        'title_row_height': 24,
+        'body_row_height': 12,
+        'document_row_height': 18,
+        'header_row_height': 12,
+        'data_row_height': 11,
+        'spacer_row_height': 6,
     }
 
 
@@ -115,8 +169,10 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
         estilos = criar_estilos()
     header_font = estilos['header_font']
     header_fill = estilos['header_fill']
+    group_fill = estilos['group_fill']
     border = estilos['border']
     center_alignment = estilos['center_alignment']
+    data_alignment = estilos['data_alignment']
 
     row = linha_inicial - 1
 
@@ -133,24 +189,25 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 row,
                 1,
                 f"{documento.tipo.get_tipo_display()}: {documento.numero}",
-            ).font = Font(bold=True, size=12)
-            ws.cell(row=row, column=1).fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
-            ws.cell(row=row, column=1).alignment = center_alignment
+            ).font = estilos['document_font']
+            ws.cell(row=row, column=1).fill = group_fill
+            ws.cell(row=row, column=1).alignment = data_alignment
+            ws.row_dimensions[row].height = estilos['document_row_height']
             row += 1
 
             # Cabeçalho da tabela de lançamentos (igual ao template)
             # Primeira linha de cabeçalho (agrupamentos)
             ws.merge_cells(f'A{row}:E{row}')
             escrever_celula_segura(ws, row, 1, "MATRÍCULA").font = header_font
-            ws.cell(row=row, column=1).fill = header_fill
+            ws.cell(row=row, column=1).fill = group_fill
             ws.cell(row=row, column=1).alignment = center_alignment
 
             ws.merge_cells(f'F{row}:G{row}')
-            escrever_celula_segura(ws, row, 6, "").fill = header_fill
+            escrever_celula_segura(ws, row, 6, "").fill = group_fill
 
             ws.merge_cells(f'H{row}:M{row}')
             escrever_celula_segura(ws, row, 8, "TRANSMISSÃO").font = header_font
-            ws.cell(row=row, column=8).fill = header_fill
+            ws.cell(row=row, column=8).fill = group_fill
             ws.cell(row=row, column=8).alignment = center_alignment
 
             escrever_celula_segura(ws, row, 14, "Área (ha)").font = header_font
@@ -164,6 +221,10 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
             escrever_celula_segura(ws, row, 16, "Observações").font = header_font
             ws.cell(row=row, column=16).fill = header_fill
             ws.cell(row=row, column=16).alignment = center_alignment
+
+            for col in range(1, TOTAL_COLUNAS + 1):
+                ws.cell(row=row, column=col).border = border
+            ws.row_dimensions[row].height = estilos['header_row_height']
             row += 1
 
             # Segunda linha de cabeçalho (colunas específicas)
@@ -173,10 +234,11 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 cell.fill = header_fill
                 cell.border = border
                 cell.alignment = center_alignment
+            ws.row_dimensions[row].height = estilos['header_row_height']
             row += 1
 
             # Adicionar lançamentos
-            for lancamento in lancamentos:
+            for indice_lancamento, lancamento in enumerate(lancamentos):
                 # Nº (usando o filtro numero_documento_criado)
                 from ..templatetags.dominial_extras import numero_documento_criado
                 numero_formatado = numero_documento_criado(lancamento)
@@ -292,9 +354,23 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                     ws, row, 16, lancamento.observacoes or "-"
                 ).border = border
 
+                zebra_fill = (
+                    estilos['zebra_even_fill']
+                    if indice_lancamento % 2 == 0
+                    else estilos['zebra_odd_fill']
+                )
+                for col in range(1, TOTAL_COLUNAS + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.font = estilos['data_font']
+                    cell.fill = zebra_fill
+                    cell.border = border
+                    cell.alignment = data_alignment
+                ws.row_dimensions[row].height = estilos['data_row_height']
+
                 row += 1
 
             # Adicionar linha em branco entre documentos
+            ws.row_dimensions[row].height = estilos['spacer_row_height']
             row += 1
 
     return row

@@ -386,6 +386,71 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertEqual(valores[3], "CRI")
         self.assertEqual(valores[9], "CRI")
 
+    def test_tipografia_cores_zebra_bordas_e_alturas_espelham_pdf(self):
+        documento = Documento.objects.get(imovel=self.imovel_m100)
+        Lancamento.objects.bulk_create([
+            Lancamento(
+                documento=documento,
+                tipo=self.tipo_inicio,
+                numero_lancamento="R2-M100",
+                data=timezone.now().date(),
+                cartorio_origem=self.cartorio,
+                origem="",
+            ),
+        ])
+
+        response = self._exportar(self.tis)
+        ws = load_workbook(BytesIO(response.content)).active
+
+        def rgb(cor):
+            return cor.rgb[-6:]
+
+        linha_agrupamento = next(
+            cell.row for cell in ws["A"] if cell.value == "MATRÍCULA"
+        )
+        linha_cabecalho = next(cell.row for cell in ws["A"] if cell.value == "Nº")
+        primeira_linha_dados = linha_cabecalho + 1
+        segunda_linha_dados = linha_cabecalho + 2
+
+        self.assertEqual(ws["A1"].font.name, "Arial")
+        self.assertEqual(ws["A1"].font.sz, 18)
+        self.assertEqual(rgb(ws["A1"].font.color), "2C5AA0")
+
+        agrupamento = ws.cell(linha_agrupamento, 1)
+        self.assertEqual(agrupamento.font.name, "Arial")
+        self.assertEqual(agrupamento.font.sz, 6)
+        self.assertEqual(rgb(agrupamento.font.color), "333333")
+        self.assertEqual(rgb(agrupamento.fill.fgColor), "E1EDF7")
+        self.assertEqual(
+            rgb(ws.cell(linha_agrupamento, 14).fill.fgColor), "F8F9FA"
+        )
+
+        cabecalho = ws.cell(linha_cabecalho, 1)
+        self.assertEqual(cabecalho.font.name, "Arial")
+        self.assertEqual(cabecalho.font.sz, 6)
+        self.assertTrue(cabecalho.font.bold)
+        self.assertEqual(rgb(cabecalho.fill.fgColor), "F8F9FA")
+
+        for lado in (cabecalho.border.left, cabecalho.border.right,
+                     cabecalho.border.top, cabecalho.border.bottom):
+            self.assertEqual(lado.style, "thin")
+            self.assertEqual(rgb(lado.color), "DDDDDD")
+
+        dado_par = ws.cell(primeira_linha_dados, 1)
+        dado_impar = ws.cell(segunda_linha_dados, 1)
+        self.assertEqual(dado_par.font.name, "Arial")
+        self.assertEqual(dado_par.font.sz, 6)
+        self.assertEqual(rgb(dado_par.fill.fgColor), "F8F9FA")
+        self.assertEqual(rgb(dado_impar.fill.fgColor), "FFFFFF")
+        self.assertEqual(ws.row_dimensions[linha_agrupamento].height, 12)
+        self.assertEqual(ws.row_dimensions[linha_cabecalho].height, 12)
+        self.assertEqual(ws.row_dimensions[primeira_linha_dados].height, 11)
+
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is not None:
+                    self.assertEqual(cell.font.name, "Arial")
+
     # 7 -------------------------------------------------------------------
 
     def test_nao_menciona_tronco_principal_ou_secundario(self):

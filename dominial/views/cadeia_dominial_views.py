@@ -23,7 +23,6 @@ from django.template.loader import render_to_string
 from django.conf import settings
 import os
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
 import logging
 
 logger = logging.getLogger(__name__)
@@ -489,26 +488,38 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
         escrever_celula_segura(
             ws, 1, 1, f"CADEIA DOMINIAL GERAL - {imovel.nome}"
         )
-        ws['A1'].font = Font(bold=True, size=16)
+        ws['A1'].font = estilos['title_font']
         ws['A1'].alignment = center_alignment
+        ws.row_dimensions[1].height = estilos['title_row_height']
 
         # Informações do imóvel
-        escrever_celula_segura(ws, 3, 1, "TIS:")
+        escrever_celula_segura(ws, 3, 1, "TIS:").font = estilos['label_font']
         escrever_celula_segura(ws, 3, 2, tis.nome)
-        escrever_celula_segura(ws, 4, 1, "Matrícula:")
+        escrever_celula_segura(ws, 4, 1, "Matrícula:").font = estilos['label_font']
         escrever_celula_segura(ws, 4, 2, imovel.matricula)
-        escrever_celula_segura(ws, 5, 1, "Nome:")
+        escrever_celula_segura(ws, 5, 1, "Nome:").font = estilos['label_font']
         escrever_celula_segura(ws, 5, 2, imovel.nome)
-        escrever_celula_segura(ws, 6, 1, "Proprietário:")
+        escrever_celula_segura(ws, 6, 1, "Proprietário:").font = estilos['label_font']
         escrever_celula_segura(
             ws, 6, 2, imovel.proprietario.nome if imovel.proprietario else ""
         )
-        escrever_celula_segura(ws, 7, 1, "Cartório:")
+        escrever_celula_segura(ws, 7, 1, "Cartório:").font = estilos['label_font']
         escrever_celula_segura(
             ws, 7, 2, imovel.cartorio.nome if imovel.cartorio else ""
         )
-        escrever_celula_segura(ws, 8, 1, "Data de Exportação:")
+        escrever_celula_segura(
+            ws, 8, 1, "Data de Exportação:"
+        ).font = estilos['label_font']
         escrever_celula_segura(ws, 8, 2, date.today().strftime('%d/%m/%Y'))
+
+        for linha in range(3, 9):
+            ws.cell(row=linha, column=1).fill = estilos['header_fill']
+            for coluna in (1, 2):
+                ws.cell(row=linha, column=coluna).border = estilos['border']
+                ws.cell(row=linha, column=coluna).alignment = estilos[
+                    'data_alignment'
+                ]
+            ws.row_dimensions[linha].height = estilos['body_row_height']
 
         # Processar a cadeia completa (mesma estrutura do PDF) usando o
         # renderer compartilhado com o export consolidado por TI (issue #179).
@@ -581,63 +592,80 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         escrever_celula_segura(
             ws, 1, 1, f"CADEIA DOMINIAL CONSOLIDADA - {tis.nome}"
         )
-        ws['A1'].font = Font(bold=True, size=16)
+        ws['A1'].font = estilos['title_font']
         ws['A1'].alignment = center_alignment
+        ws.row_dimensions[1].height = estilos['title_row_height']
 
         escrever_celula_segura(ws, 3, 1, "TI:")
-        ws['A3'].font = Font(bold=True)
+        ws['A3'].font = estilos['label_font']
         escrever_celula_segura(ws, 3, 2, tis.nome)
         escrever_celula_segura(ws, 4, 1, "Total de imóveis:")
-        ws['A4'].font = Font(bold=True)
+        ws['A4'].font = estilos['label_font']
         escrever_celula_segura(ws, 4, 2, len(imoveis))
         escrever_celula_segura(ws, 5, 1, "Data de Exportação:")
-        ws['A5'].font = Font(bold=True)
+        ws['A5'].font = estilos['label_font']
         escrever_celula_segura(ws, 5, 2, date.today().strftime('%d/%m/%Y'))
+
+        for linha_resumo in range(3, 6):
+            ws.cell(row=linha_resumo, column=1).fill = estilos['header_fill']
+            for coluna in (1, 2):
+                ws.cell(row=linha_resumo, column=coluna).border = estilos['border']
+                ws.cell(row=linha_resumo, column=coluna).alignment = estilos[
+                    'data_alignment'
+                ]
+            ws.row_dimensions[linha_resumo].height = estilos['body_row_height']
 
         linha = 7
 
         for imovel in imoveis:
-            # 1. Linha de seção do imóvel. Fill mais escuro (1F4E79) que o
-            # título de documento (e3f2fd, dentro de escrever_secao_documentos)
-            # para o cliente distinguir visualmente cada imóvel ao rolar a
-            # planilha.
+            # 1. Linha de seção do imóvel, no mesmo azul-claro dos cabeçalhos
+            # de documento do PDF.
             ws.merge_cells(f'A{linha}:{ULTIMA_COLUNA}{linha}')
             celula_secao = escrever_celula_segura(
                 ws, linha, 1, f"IMÓVEL: {imovel.matricula} — {imovel.nome}"
             )
-            celula_secao.font = Font(bold=True, size=14, color="FFFFFF")
-            celula_secao.fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
-            celula_secao.alignment = center_alignment
+            celula_secao.font = estilos['document_font']
+            celula_secao.fill = estilos['group_fill']
+            celula_secao.alignment = estilos['data_alignment']
+            ws.row_dimensions[linha].height = estilos['document_row_height']
             linha += 1
 
             # 2. Informações do imóvel. "CRI:" no rótulo e sigla no valor
             # (issue #166) — mesmo padrão do export por imóvel, que já usa a
             # sigla nas colunas de cartório da tabela de lançamentos.
-            escrever_celula_segura(ws, linha, 1, "Matrícula:").font = Font(
-                bold=True
-            )
+            escrever_celula_segura(
+                ws, linha, 1, "Matrícula:"
+            ).font = estilos['label_font']
             escrever_celula_segura(ws, linha, 2, imovel.matricula)
+            ws.row_dimensions[linha].height = estilos['body_row_height']
             linha += 1
-            escrever_celula_segura(ws, linha, 1, "Nome:").font = Font(bold=True)
+            escrever_celula_segura(
+                ws, linha, 1, "Nome:"
+            ).font = estilos['label_font']
             escrever_celula_segura(ws, linha, 2, imovel.nome)
+            ws.row_dimensions[linha].height = estilos['body_row_height']
             linha += 1
-            escrever_celula_segura(ws, linha, 1, "Proprietário:").font = Font(
-                bold=True
-            )
+            escrever_celula_segura(
+                ws, linha, 1, "Proprietário:"
+            ).font = estilos['label_font']
             escrever_celula_segura(
                 ws,
                 linha,
                 2,
                 imovel.proprietario.nome if imovel.proprietario else "",
             )
+            ws.row_dimensions[linha].height = estilos['body_row_height']
             linha += 1
-            escrever_celula_segura(ws, linha, 1, "CRI:").font = Font(bold=True)
+            escrever_celula_segura(
+                ws, linha, 1, "CRI:"
+            ).font = estilos['label_font']
             escrever_celula_segura(
                 ws,
                 linha,
                 2,
                 abreviar_cartorio(imovel.cartorio.nome) if imovel.cartorio else "",
             )
+            ws.row_dimensions[linha].height = estilos['body_row_height']
             linha += 1
 
             # 3-5. Cadeia completa deste imóvel, isolada num try/except: com

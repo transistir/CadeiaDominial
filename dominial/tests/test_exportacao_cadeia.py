@@ -207,7 +207,8 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
         service.get_cadeia_completa.assert_called_once_with(self.tis.id, self.imovel.id)
         workbook = load_workbook(BytesIO(response.content))
-        valores_coluna_a = [cell.value for cell in workbook.active["A"]]
+        ws = workbook.active
+        valores_coluna_a = [cell.value for cell in ws["A"]]
         titulos_esperados = ["Matrícula: M100", "Transcrição: T90"]
         titulos_documentos = [valor for valor in valores_coluna_a if valor in titulos_esperados]
         self.assertEqual(titulos_documentos, titulos_esperados)
@@ -215,6 +216,16 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
         self.assertNotIn("Total de Documentos:", valores_coluna_a)
         self.assertNotIn("Total de Lançamentos:", valores_coluna_a)
         self.assertNotIn("Documentos Compartilhados:", valores_coluna_a)
+        self.assertEqual(ws["A1"].font.name, "Arial")
+        self.assertEqual(ws["A1"].font.sz, 18)
+        self.assertEqual(ws["A1"].font.color.rgb[-6:], "2C5AA0")
+        self.assertEqual(ws["A3"].font.name, "Arial")
+        self.assertEqual(ws["A3"].font.sz, 8)
+        self.assertTrue(ws["A3"].font.bold)
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is not None:
+                    self.assertEqual(cell.font.name, "Arial")
         self.assertEqual(
             response["Content-Type"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
