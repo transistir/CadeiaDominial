@@ -37,32 +37,41 @@
 
 ---
 
-## R1 — Fechar o ciclo do Sprint 5 — 🟡 TOPO DA FILA (0,5–1 dia)
+## R1 — Fechar o ciclo do Sprint 5 — 🟢 quase fechado (restam #187 + milestone)
 
 > Gate de tudo: sem isso a fila cresce e se perde de novo.
+> **R2 antecipado 10/09/2026 por demanda urgente do Hiure** (formatação do
+> XLS = layout do PDF, #179, nunca desenvolvida). #187 e o milestone ficam
+> pendentes e entram na sequência do #179.
 
 1. **Validação no test server** dos PRs #177–#188 ✅ **FEITO 10/09/2026**
    (imóvel 265/Guyraroká usado no lugar do 499 — test server tem outra
    numeração; PDF 23 págs + XLS inspecionados, suites 18/18 e 42/42 OK)
    → **11 issues fechadas: #145 #159 #160 #161 #162 #166 #167 #171 #172 #174**
    (+ #152 já fechada antes).
-2. **Release develop → main + tag v1.0.9** — PR **#190** aberto 10/09/2026,
-   checks verdes (deploy-testes pass). *Aguarda merge + tag — autorização
-   explícita do luandro pendente (GATE-LUANDRO).*
+2. **Release develop → main + tag v1.0.9** ✅ **FEITO 10/09/2026**
+   (PR #190 mergeado + tag v1.0.9 — GATE-LUANDRO autorizado).
 3. **#187** limpar `cartorio_hidden` stale quando operador edita nome do
    cartório (P2 do review do PR #186 — código quente, mesma área do #167).
 4. GitHub: criar milestone "Produto 3" e mover a fila (decisão luandro/Hiure).
 
-## R2 — Exportação consolidada (semana seguinte a R1, ~1 semana)
+## R2 — Exportação consolidada — ✅ ENTREGUE 11/09/2026 (PR #191 mergeado)
 
 > Demanda nº1 do cliente (03–04/09): "centenas de imóveis numa planilha só,
 > a formatação do PDF é ideal".
+> **Antecipado em 10/09/2026 (autorização do Hiure na sessão) — em curso.**
+> Revisão 3 rounds: Opus 5 REJEITA → Codex GPT-5.6 ×2 APROVA + Greptile pass.
+> P1 Security extra corrigido: injeção de fórmula neutralizada.
 
-1. **#13** área em ha perde formato 0,0000 nas tabelas (0,5–1 dia) —
-   *fazer antes como warmup da área de export*.
-2. **#179** relatório consolidado XLS por TI, formato = layout do PDF
-   (3–5 dias) — botão "Exportar XLS da TI" na listagem; reaproveita o
-   serviço de cadeia; risco: volume → openpyxl `write_only` se pesar.
+1. **#13** área em ha perde formato 0,0000 nas tabelas ✅ mergeado — aguarda
+   validação p/ fechar
+2. **#179** relatório consolidado XLS por TI, formato = layout do PDF ✅
+   mergeado — aguarda validação p/ fechar
+3. **Follow-ups do review (não bloqueantes):** bound de trabalho do
+   consolidado p/ TIs gigantes; aviso em relatório parcial; performance do
+   `CadeiaCompletaService` recursivo (medir com base real do Maurício);
+   bug vizinho `documentos_compartilhados` (chave morta em
+   `exportar_cadeia_dominial_excel`) — candidatos a issue.
 
 ## R3 — Integridade de documentos/cartórios I (semana 3, ~1–1,5 semana)
 
