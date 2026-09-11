@@ -90,7 +90,6 @@ def criar_estilos():
         'title_font': Font(
             name="Arial", bold=True, size=18, color=COR_AZUL_TEXTO
         ),
-        'body_font': FONTE_CORPO,
         'label_font': Font(name="Arial", bold=True, size=8, color=COR_TEXTO),
         'document_font': Font(
             name="Arial", bold=True, size=8, color=COR_AZUL_TEXTO
