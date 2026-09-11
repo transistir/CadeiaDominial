@@ -135,7 +135,6 @@ def criar_estilos():
         'body_row_height': 12,
         'document_row_height': 18,
         'header_row_height': 12,
-        'data_row_height': 11,
         'spacer_row_height': 6,
     }
 
@@ -391,7 +390,10 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                     cell.fill = zebra_fill
                     cell.border = border
                     cell.alignment = data_alignment
-                ws.row_dimensions[row].height = estilos['data_row_height']
+                # Não definir altura nas linhas de dados: Origem pode conter
+                # várias linhas e Observações pode quebrar pela largura da
+                # coluna. Uma altura explícita gera ``customHeight="1"`` no
+                # XLSX e impede o auto-fit do Excel, ocultando parte do texto.
 
                 row += 1
 

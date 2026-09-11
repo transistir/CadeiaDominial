@@ -541,7 +541,8 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         self.assertEqual(rgb(dado_impar.fill.fgColor), "FFFFFF")
         self.assertEqual(ws.row_dimensions[linha_agrupamento].height, 12)
         self.assertEqual(ws.row_dimensions[linha_cabecalho].height, 12)
-        self.assertEqual(ws.row_dimensions[primeira_linha_dados].height, 11)
+        self.assertIsNone(ws.row_dimensions[primeira_linha_dados].height)
+        self.assertFalse(ws.row_dimensions[primeira_linha_dados].customHeight)
 
         for row in ws.iter_rows():
             for cell in row:
@@ -661,8 +662,14 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         celula_origem = next(cell for cell in ws["O"] if cell.value == texto_xls)
 
         self.assertEqual(texto_xls.count("\n"), 1)
+        primeira_origem, segunda_origem = texto_xls.split("\n")
+        self.assertIn("M99", primeira_origem)
+        self.assertIn("Sem Origem", segunda_origem)
         self.assertNotIn("<br>", celula_origem.value)
         self.assertTrue(celula_origem.alignment.wrap_text)
+        dimensao_linha = ws.row_dimensions[celula_origem.row]
+        self.assertIsNone(dimensao_linha.height)
+        self.assertFalse(dimensao_linha.customHeight)
 
     def test_neutraliza_prefixos_de_formula_nos_dados_do_lancamento(self):
         origem_perigosa = "=HYPERLINK(\"https://example.invalid\")"
