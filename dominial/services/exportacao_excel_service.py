@@ -30,7 +30,9 @@ from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
 TOTAL_COLUNAS = 16
 ULTIMA_COLUNA = get_column_letter(TOTAL_COLUNAS)
 
-# Cabeçalho detalhado da tabela de lançamentos de cada documento. "CRI" nas
+# Cabeçalhos das 16 colunas da tabela de lançamentos de cada documento. Os
+# 13 primeiros aparecem na segunda linha; Área, Origem e Observações ficam na
+# primeira linha com merge vertical, como o ``rowspan="2"`` do PDF. "CRI" nas
 # posições 4 e 10 (cartório da matrícula e cartório da transmissão) é a
 # sigla adotada nas exportações pela issue #166 — não alterar para "Cartório".
 CABECALHOS_DETALHADOS = [
@@ -258,17 +260,21 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
             ws.cell(row=row, column=8).fill = group_fill
             ws.cell(row=row, column=8).alignment = center_alignment
 
-            escrever_celula_segura(ws, row, 14, "Área (ha)").font = header_font
-            ws.cell(row=row, column=14).fill = header_fill
-            ws.cell(row=row, column=14).alignment = center_alignment
-
-            escrever_celula_segura(ws, row, 15, "Origem").font = header_font
-            ws.cell(row=row, column=15).fill = header_fill
-            ws.cell(row=row, column=15).alignment = center_alignment
-
-            escrever_celula_segura(ws, row, 16, "Observações").font = header_font
-            ws.cell(row=row, column=16).fill = header_fill
-            ws.cell(row=row, column=16).alignment = center_alignment
+            # Área, Origem e Observações equivalem ao ``rowspan="2"`` do
+            # cabeçalho do PDF. A borda é aplicada à âncora antes do merge
+            # para o openpyxl propagá-la por todo o contorno vertical.
+            for col, header in enumerate(CABECALHOS_DETALHADOS[13:], 14):
+                cell = escrever_celula_segura(ws, row, col, header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = border
+                cell.alignment = center_alignment
+                ws.merge_cells(
+                    start_row=row,
+                    start_column=col,
+                    end_row=row + 1,
+                    end_column=col,
+                )
 
             for col in range(1, TOTAL_COLUNAS + 1):
                 ws.cell(row=row, column=col).border = border
@@ -276,7 +282,7 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
             row += 1
 
             # Segunda linha de cabeçalho (colunas específicas)
-            for col, header in enumerate(CABECALHOS_DETALHADOS, 1):
+            for col, header in enumerate(CABECALHOS_DETALHADOS[:13], 1):
                 cell = escrever_celula_segura(ws, row, col, header)
                 cell.font = header_font
                 cell.fill = header_fill

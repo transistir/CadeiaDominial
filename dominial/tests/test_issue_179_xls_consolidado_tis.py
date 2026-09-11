@@ -537,9 +537,62 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         )
 
         valores = [cell.value for cell in header]
-        self.assertEqual(valores, CABECALHOS_DETALHADOS)
+        self.assertEqual(
+            valores,
+            CABECALHOS_DETALHADOS[:13] + [None, None, None],
+        )
         self.assertEqual(valores[3], "CRI")
         self.assertEqual(valores[9], "CRI")
+
+    def test_area_origem_observacoes_usam_merge_vertical_sem_duplicacao(self):
+        workbook_consolidado = self._abrir(self._exportar(self.tis))
+        response_individual = (
+            cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+                self._request("/excel/"), self.tis.id, self.imovel_m100.id
+            )
+        )
+        self.assertEqual(response_individual.status_code, 200)
+        ws_individual = load_workbook(
+            BytesIO(response_individual.content)
+        ).active
+        planilhas = [
+            (f"consolidado/{nome}", workbook_consolidado[nome])
+            for nome in ("M100", "M200", "M300")
+        ] + [("individual/M100", ws_individual)]
+
+        for nome, ws in planilhas:
+            linhas_agrupamento = [
+                cell.row for cell in ws["A"] if cell.value == "MATRÍCULA"
+            ]
+            self.assertTrue(linhas_agrupamento)
+            merges = {str(intervalo) for intervalo in ws.merged_cells.ranges}
+
+            for linha in linhas_agrupamento:
+                valores_cabecalho = [
+                    ws.cell(row=linha_cabecalho, column=coluna).value
+                    for linha_cabecalho in (linha, linha + 1)
+                    for coluna in range(1, 17)
+                ]
+                for coluna, titulo in zip(
+                    "NOP", ("Área (ha)", "Origem", "Observações")
+                ):
+                    with self.subTest(
+                        planilha=nome, linha=linha, titulo=titulo
+                    ):
+                        self.assertEqual(valores_cabecalho.count(titulo), 1)
+                        self.assertEqual(ws[f"{coluna}{linha}"].value, titulo)
+                        self.assertIsNone(ws[f"{coluna}{linha + 1}"].value)
+                        self.assertIn(
+                            f"{coluna}{linha}:{coluna}{linha + 1}", merges
+                        )
+                        self.assertEqual(
+                            ws[f"{coluna}{linha}"].alignment.vertical,
+                            "center",
+                        )
+                        self.assertEqual(
+                            ws[f"{coluna}{linha + 1}"].border.bottom.style,
+                            "thin",
+                        )
 
     def test_aba_do_consolidado_tem_o_mesmo_layout_do_xls_individual(self):
         ws_consolidado = self._abrir(self._exportar(self.tis))["M100"]
