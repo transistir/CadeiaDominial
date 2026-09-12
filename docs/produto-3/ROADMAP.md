@@ -24,17 +24,17 @@
 6. **Features grandes por último** — #123 (certificação) e #132
    (multi-usuário) só depois do solo estabilizado.
 
-## Status geral (snapshot 11/09/2026)
+## Status geral (snapshot 12/09/2026)
 
-**✅ Entregue (mergeado em develop, PRs #177–#194):**
+**✅ Entregue (mergeado em develop, PRs #177–#195):**
 #108 CI · #159–#162 form bugs · #166 CRI · #145 PDF averbações · #172 troncos ·
 #171 árvore no modal · #174 badge cadeia · #167 M anterior ·
-**#13 área pt-BR · #179 XLS consolidado por TI (R2 completo)**
+**#13 área pt-BR · #179 XLS consolidado por TI (R2 completo) · #193 UF sugestões CRI**
 
 **Releases:** v1.0.8 (01/09) · **v1.0.9 (10/09, PR #190 — PRs #177–#188)** ·
-PRs #191/#192/#194 (R2) em develop **ainda sem tag** → próxima release v1.0.10.
+PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima release v1.0.10.
 
-**Fila Django: 25 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
+**Fila Django: 24 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
 
 ---
 
@@ -109,12 +109,16 @@ PRs #191/#192/#194 (R2) em develop **ainda sem tag** → próxima release v1.0.1
 > **No início desta sprint: disparar o gate de decisão do cliente**
 > (perguntas #150 e #151) — ver "Gates" abaixo.
 
-0. **#193** UF nas sugestões digitadas de CRI ✅ **MERGEADO 11/09** (PR #195,
-   commit `2677d9b7`; Codex 7/7 + Greptile 5/5) — endpoint retorna `estado`,
-   helper `formatarLocalizacaoCartorio` unifica `(cidade/UF)` nos dois
-   renderers. **Aguarda validação no test server p/ fechar a issue.**
-   Débito apontado na revisão (preexistente): XSS em innerHTML dos
-   autocomplete — candidato a issue separada.
+0. **#193** UF nas sugestões digitadas de CRI ✅ **FECHADA 12/09** (PR #195,
+   commit `2677d9b7`; Codex 7/7 + Greptile 5/5; validada no test server —
+   Guairá/PR×SP distinguíveis). Débito apontado na revisão (preexistente):
+   XSS em innerHTML dos autocomplete — candidato a issue separada.
+   **Incidente de deploy 12/09:** disco do test server 100% (221 imagens
+   Docker, 52 GB) matou 2 deploys silenciosamente; resolvido com
+   `docker image prune` + re-run. Débitos de infra candidatos a issue:
+   (a) monitoramento/prune periódico de disco no test server,
+   (b) `immutable` 30d em estáticos sem hash de versão (ManifestStaticFiles),
+   (c) alerta quando deploy do CI falha.
 1. **#168** TAB não parar no campo sigla *(P)*
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
@@ -186,7 +190,8 @@ PRs #191/#192/#194 (R2) em develop **ainda sem tag** → próxima release v1.0.1
 
 ```
 Sem 07/09–11/09  R1 fechar ciclo ✅ + R2 #13/#179 XLS consolidado ✅
-Sem 14/09–18/09  #193 (rapid win) + R3 integridade/cartórios (⚠️ revalidar
+                 (+ #193 rapid win adiantado e fechado 12/09 ✅)
+Sem 14/09–18/09  R3 integridade/cartórios (⚠️ revalidar
                  contra o código atual; #144 primeiro) + release v1.0.10
 Sem 21/09–25/09  R3 (cont.) ou R4 UX Umbelino (+ disparar GATE-CLIENTE)
 Sem 28/09–02/10  R4 (cont.) / R5 #113 + #135
@@ -205,6 +210,6 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 11/09/2026 — R1+R2 fechados (#13/#179 validadas,
-v1.0.9 no ar); #193 enfileirada no R4; R3 exige revalidação contra o
-código atual; cronograma adiantado ~1 semana.*
+*Última atualização: 12/09/2026 — #193 fechada (PR #195 validado no test
+server); incidente de disco no test server resolvido (prune 51 GB);
+R3 exige revalidação contra o código atual; cronograma adiantado ~1 semana.*
