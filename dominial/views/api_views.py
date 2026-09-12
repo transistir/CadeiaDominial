@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..utils import normalizar_texto_opcional
+from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -377,7 +378,14 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                         'titulo': normalizar_texto_opcional(lancamento.titulo),
                         'descricao': normalizar_texto_opcional(lancamento.descricao),
                         'area': lancamento.area,
+                        # Issue #201: mesma formatação usada pelo template server-side
+                        # (filtros `area_ha`/`origem_formatada_completa`), para o
+                        # re-render via AJAX não divergir do render inicial da página.
+                        'area_formatada': formatar_area_ha(lancamento.area),
                         'origem': normalizar_texto_opcional(lancamento.origem),
+                        'origem_formatada': formatar_origem_completa(
+                            lancamento, separador='<br>', escapar_html=True
+                        ),
                         'observacoes': normalizar_texto_opcional(lancamento.observacoes),
                         'keyword_encontrada': getattr(lancamento, 'keyword_encontrada', None),
                         'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,

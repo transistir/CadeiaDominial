@@ -856,11 +856,6 @@
     }
 }
 
-/* Documentos ocultos baseados na escolha de origem */
-.documento-oculto {
-    display: none !important;
-}
-
 /* #53 - Alertas por palavra-chave */
 .alerta-badge {
     display: inline-block;
