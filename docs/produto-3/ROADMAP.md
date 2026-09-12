@@ -31,10 +31,14 @@
 #171 árvore no modal · #174 badge cadeia · #167 M anterior ·
 **#13 área pt-BR · #179 XLS consolidado por TI (R2 completo) · #193 UF sugestões CRI**
 
-**Releases:** v1.0.8 (01/09) · **v1.0.9 (10/09, PR #190 — PRs #177–#188)** ·
-PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima release v1.0.10.
+**Releases:** v1.0.8 (01/09) · v1.0.9 (10/09, PR #190) ·
+**v1.0.10 (12/09, PR #200 — #13/#179/#193, validada em produção)** ·
+próxima: **v1.0.11 (hotfix #201)**.
 
-**Fila Django: 28 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
+**🔥 Bug de produção ativo (12/09):** #201/#202 — cadeia esconde documentos
+importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
+
+**Fila Django: 43 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
 
 ---
 
@@ -86,6 +90,35 @@ PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima re
    `N:N+1/O:O+1/P:P+1` = rowspan do PDF; cobre os DOIS exports (consolidado
    + cadeia única, renderer compartilhado) → item 4 acima já atendido
    automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
+
+## R3.5 — 🔥 URGENTE: fluxo de origens na cadeia (#201/#202) — INICIADO 12/09/2026
+
+> **Bug de produção ativo** reportado pelo Maurício (12/09): ao escolher a origem
+> de uma **transcrição compartilhada** com origem dupla (caso real: imóvel 384,
+> TI 201, T10786 → `T3280; T3281`), os documentos importados abaixo dela **somem
+> da tabela** — "não tá dando pra visualizar nada do que é importado".
+> Quebra a funcionalidade mais importante do produto: ver a cadeia na íntegra.
+> **Antecipado na frente do R3** (bug de produção > débito planejado).
+>
+> Auditoria completa 12/09 com evidência coletada **no servidor de produção**
+> (read-only). Plano: `docs/produto-3/PLANO_ORIGENS_ESCOLHAS.md`.
+> Diagnóstico: backend correto (com escolha retorna 17 docs; XLS já OK na
+> v1.0.10) — quebra é **100% frontend** + default da página. 7 defeitos (D1–D7).
+> **NÃO é regressão da v1.0.10** (exceto D3, formatação no re-render AJAX):
+> o filtro `deveExibir` é hack de 09/2025 hardcoded para outro imóvel.
+
+1. **#201 Fase 0 — hotfix (v1.0.11)** 🔄 **EM DESENVOLVIMENTO 12/09**
+   (worktree `fix/origens-cadeia-tabela`, pipeline Claude Opus 5 + Sonnet 5).
+   Remove o filtro client-side `deveExibir`; API devolve campos já formatados
+   (`area_formatada`/`origem_formatada`) matando a duplicação em JS; testes
+   Django de regressão (hoje o fluxo tem ZERO cobertura).
+2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
+   - F1: trilha única no service (cadeia sempre expandida), corrigir cache
+     (`sort()` in-place corrompe valor cacheado), sessão com escopo por imóvel
+   - F2: testes anti-regressão — service, contrato JSON das APIs, golden test
+     do imóvel 384, infra de teste JS (vitest)
+   - F3: modularizar o JS (1373 linhas), remover ~40 `console.log`, sanitizar
+     `innerHTML` (casa com #196)
 
 ## R3 — Integridade de documentos/cartórios I (~1–1,5 semana)
 
