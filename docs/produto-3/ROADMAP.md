@@ -34,7 +34,7 @@
 **Releases:** v1.0.8 (01/09) · **v1.0.9 (10/09, PR #190 — PRs #177–#188)** ·
 PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima release v1.0.10.
 
-**Fila Django: 24 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
+**Fila Django: 28 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
 
 ---
 
@@ -157,6 +157,15 @@ PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima re
 3. **#139** renomear 'transação' → 'transmissão' em todo o sistema
 4. **#123** campos de certificação fundiária (SNCR, CCIR, CNIR, CIB, SIGEF,
    SNCI, CAR)
+5. **#196** XSS: autocompletes montam innerHTML sem escape *(novo 12/09,
+   apontado na revisão do #195; pré-existente)*
+6. **#197** monitoramento de disco + prune Docker no test server *(novo
+   12/09, incidente real — deploys falharam silenciosamente)*
+7. **#198** ManifestStaticFilesStorage: cache immutable sem hash obriga
+   hard refresh a cada deploy *(novo 12/09)*
+8. **#199** notificação Telegram de deploy falhado *(novo 12/09; #197+#199
+   juntos fecham o ciclo do incidente de 12/09 — candidatos a fast-track
+   se o time quiser)*
 
 ## R9 — Segregação por usuário (a maior feature, ~2 semanas)
 
