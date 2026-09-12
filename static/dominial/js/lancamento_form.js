@@ -923,6 +923,12 @@ function obterImovelIdDaUrl() {
     return match ? match[1] : null;
 }
 
+function formatarLocalizacaoCartorio(cartorio) {
+    const cidade = cartorio.cidade || '-';
+    const estado = cartorio.estado || '-';
+    return `(${cidade}/${estado})`;
+}
+
 // Função para buscar cartórios da origem (busca normal)
 function buscarCartoriosOrigem(input, hidden, suggestions, query) {
     console.log('Fazendo busca por cartórios de imóveis:', query);
@@ -945,7 +951,7 @@ function buscarCartoriosOrigem(input, hidden, suggestions, query) {
                     div.className = 'autocomplete-suggestion';
                     div.innerHTML = `
                         <span class="cartorio-nome">${cartorio.nome}</span>
-                        <span class="cartorio-info">${cartorio.cidade || ''}</span>
+                        <span class="cartorio-info">${formatarLocalizacaoCartorio(cartorio)}</span>
                     `;
                     div.addEventListener('click', function() {
                         input.value = cartorio.nome;
@@ -1003,7 +1009,7 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
                     div.className = 'autocomplete-suggestion sugestao';
                     div.innerHTML = `
                         <span class="cartorio-nome">${cartorio.nome}</span>
-                        <span class="cartorio-info">${cartorio.cidade || ''} ${cartorio.estado || ''}</span>
+                        <span class="cartorio-info">${formatarLocalizacaoCartorio(cartorio)}</span>
                     `;
                     div.addEventListener('click', function() {
                         input.value = cartorio.nome;
