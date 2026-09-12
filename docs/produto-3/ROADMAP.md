@@ -109,12 +109,12 @@ PRs #191/#192/#194 (R2) em develop **ainda sem tag** → próxima release v1.0.1
 > **No início desta sprint: disparar o gate de decisão do cliente**
 > (perguntas #150 e #151) — ver "Gates" abaixo.
 
-0. **#193** UF nas sugestões digitadas de CRI *(P — decidido Hiure 11/09:
-   entra no R4, mesma área de formulário; bug de homônimos Guairá/PR×SP.
-   Diagnóstico confirmado 11/09: endpoint `cartorio_imoveis_autocomplete`
-   não retorna `estado` e o renderer `buscarCartoriosOrigem`
-   (`lancamento_form.js` L941) mostra só nome+cidade — espelhar o padrão
-   `nome (cidade/UF)` de `carregarSugestoesRecentes` L1005 do mesmo arquivo)*
+0. **#193** UF nas sugestões digitadas de CRI ✅ **MERGEADO 11/09** (PR #195,
+   commit `2677d9b7`; Codex 7/7 + Greptile 5/5) — endpoint retorna `estado`,
+   helper `formatarLocalizacaoCartorio` unifica `(cidade/UF)` nos dois
+   renderers. **Aguarda validação no test server p/ fechar a issue.**
+   Débito apontado na revisão (preexistente): XSS em innerHTML dos
+   autocomplete — candidato a issue separada.
 1. **#168** TAB não parar no campo sigla *(P)*
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
