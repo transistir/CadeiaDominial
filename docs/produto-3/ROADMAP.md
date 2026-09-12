@@ -24,48 +24,75 @@
 6. **Features grandes por último** — #123 (certificação) e #132
    (multi-usuário) só depois do solo estabilizado.
 
-## Status geral (snapshot 04/09/2026)
+## Status geral (snapshot 12/09/2026)
 
-**✅ Entregue (mergeado em develop, PRs #177–#188):**
+**✅ Entregue (mergeado em develop, PRs #177–#195):**
 #108 CI · #159–#162 form bugs · #166 CRI · #145 PDF averbações · #172 troncos ·
-#171 árvore no modal · #174 badge cadeia · #167 M anterior
+#171 árvore no modal · #174 badge cadeia · #167 M anterior ·
+**#13 área pt-BR · #179 XLS consolidado por TI (R2 completo) · #193 UF sugestões CRI**
 
-**Issues abertas só aguardando validação p/ fechar:**
-#145 #152 #159–#162 #166 #167 #171 #172 #174
+**Releases:** v1.0.8 (01/09) · **v1.0.9 (10/09, PR #190 — PRs #177–#188)** ·
+PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima release v1.0.10.
 
-**Última release:** v1.0.8 (01/09) — PRs #177–#188 ainda sem tag.
+**Fila Django: 28 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
 
 ---
 
-## R1 — Fechar o ciclo do Sprint 5 — 🟡 TOPO DA FILA (0,5–1 dia)
+## R1 — Fechar o ciclo do Sprint 5 — 🟢 quase fechado (restam #187 + milestone)
 
 > Gate de tudo: sem isso a fila cresce e se perde de novo.
+> **R2 antecipado 10/09/2026 por demanda urgente do Hiure** (formatação do
+> XLS = layout do PDF, #179, nunca desenvolvida). #187 e o milestone ficam
+> pendentes e entram na sequência do #179.
 
 1. **Validação no test server** dos PRs #177–#188 ✅ **FEITO 10/09/2026**
    (imóvel 265/Guyraroká usado no lugar do 499 — test server tem outra
    numeração; PDF 23 págs + XLS inspecionados, suites 18/18 e 42/42 OK)
    → **11 issues fechadas: #145 #159 #160 #161 #162 #166 #167 #171 #172 #174**
    (+ #152 já fechada antes).
-2. **Release develop → main + tag v1.0.9** — PR **#190** aberto 10/09/2026,
-   checks verdes (deploy-testes pass). *Aguarda merge + tag — autorização
-   explícita do luandro pendente (GATE-LUANDRO).*
+2. **Release develop → main + tag v1.0.9** ✅ **FEITO 10/09/2026**
+   (PR #190 mergeado + tag v1.0.9 — GATE-LUANDRO autorizado).
 3. **#187** limpar `cartorio_hidden` stale quando operador edita nome do
    cartório (P2 do review do PR #186 — código quente, mesma área do #167).
 4. GitHub: criar milestone "Produto 3" e mover a fila (decisão luandro/Hiure).
 
-## R2 — Exportação consolidada (semana seguinte a R1, ~1 semana)
+## R2 — Exportação consolidada — ✅ FECHADO 11/09/2026 (PRs #191/#192/#194)
 
 > Demanda nº1 do cliente (03–04/09): "centenas de imóveis numa planilha só,
 > a formatação do PDF é ideal".
+> **Antecipado em 10/09/2026 (autorização do Hiure na sessão).**
+> Ciclo de revisão: Opus 5 ×3 rounds + Codex GPT-5.6 gate ×2 + Greptile 5/5.
+> P1 Security corrigido: injeção de fórmula + XSS neutralizados.
 
-1. **#13** área em ha perde formato 0,0000 nas tabelas (0,5–1 dia) —
-   *fazer antes como warmup da área de export*.
-2. **#179** relatório consolidado XLS por TI, formato = layout do PDF
-   (3–5 dias) — botão "Exportar XLS da TI" na listagem; reaproveita o
-   serviço de cadeia; risco: volume → openpyxl `write_only` se pesar.
+1. **#13** área em ha perde formato 0,0000 nas tabelas ✅ **FECHADA 11/09**
+2. **#179** relatório consolidado XLS por TI, formato = layout do PDF ✅
+   **FECHADA 11/09** (sem emojis, aba por imóvel + Resumo, origem tratada,
+   cabeçalho sem duplicatas — validado no test server pelo Hiure)
+3. **Follow-ups do review (não bloqueantes):** bound de trabalho do
+   consolidado p/ TIs gigantes; aviso em relatório parcial; performance do
+   `CadeiaCompletaService` recursivo (medir com base real do Maurício);
+   bug vizinho `documentos_compartilhados` (chave morta em
+   `exportar_cadeia_dominial_excel`) — candidatos a issue.
+4. **NA FILA (pedido Hiure 11/09):** export XLS de cadeia única (botão na
+   tela "Cadeia Dominial Geral") deve usar o MESMO padrão novo do
+   consolidado (cabeçalho sem duplicatas, tipografia/cores do PDF, área
+   pt-BR, origem tratada, sem emojis). Deve ser simples: trocar a view por
+   imóvel para chamar `renderizar_planilha_imovel` (renderer já
+   compartilhado) com os mesmos estilos — conferir se algo do layout antigo
+   ainda diverge.
+5. **Correções pós-teste do cliente (11/09):** cabeçalho duplicado
+   Área/Origem/Observações no XLS (bug visual reportado com screenshot) —
+   ✅ corrigido e mergeado (PR #194, commit `cfa25fb`): merge vertical
+   `N:N+1/O:O+1/P:P+1` = rowspan do PDF; cobre os DOIS exports (consolidado
+   + cadeia única, renderer compartilhado) → item 4 acima já atendido
+   automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
 
-## R3 — Integridade de documentos/cartórios I (semana 3, ~1–1,5 semana)
+## R3 — Integridade de documentos/cartórios I (~1–1,5 semana)
 
+> ⚠️ **REVALIDAR CONTRA O CÓDIGO ATUAL ANTES DE INICIAR** (pedido Hiure
+> 11/09): export/cartórios mudaram muito no R2 (#166/#172/#179, renderer
+> compartilhado, helper de origem) — conferir se cada bug ainda reproduz e
+> se as causas raízes anotadas nas issues continuam válidas.
 > Bug de produção + brechas de duplicidade. #144 é o mais antigo aberto
 > com dados reais envolvidos (desde 13/08).
 
@@ -77,11 +104,21 @@
 5. **#110** levantar cartórios fantasmas + plano de merge (data quality —
    alimenta #113 do R5).
 
-## R4 — UX Umbelino: rapid wins + CRI (semana 4, ~1 semana)
+## R4 — UX Umbelino: rapid wins + CRI (~1 semana)
 
 > **No início desta sprint: disparar o gate de decisão do cliente**
 > (perguntas #150 e #151) — ver "Gates" abaixo.
 
+0. **#193** UF nas sugestões digitadas de CRI ✅ **FECHADA 12/09** (PR #195,
+   commit `2677d9b7`; Codex 7/7 + Greptile 5/5; validada no test server —
+   Guairá/PR×SP distinguíveis). Débito apontado na revisão (preexistente):
+   XSS em innerHTML dos autocomplete — candidato a issue separada.
+   **Incidente de deploy 12/09:** disco do test server 100% (221 imagens
+   Docker, 52 GB) matou 2 deploys silenciosamente; resolvido com
+   `docker image prune` + re-run. Débitos de infra candidatos a issue:
+   (a) monitoramento/prune periódico de disco no test server,
+   (b) `immutable` 30d em estáticos sem hash de versão (ManifestStaticFiles),
+   (c) alerta quando deploy do CI falha.
 1. **#168** TAB não parar no campo sigla *(P)*
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
@@ -120,6 +157,15 @@
 3. **#139** renomear 'transação' → 'transmissão' em todo o sistema
 4. **#123** campos de certificação fundiária (SNCR, CCIR, CNIR, CIB, SIGEF,
    SNCI, CAR)
+5. **#196** XSS: autocompletes montam innerHTML sem escape *(novo 12/09,
+   apontado na revisão do #195; pré-existente)*
+6. **#197** monitoramento de disco + prune Docker no test server *(novo
+   12/09, incidente real — deploys falharam silenciosamente)*
+7. **#198** ManifestStaticFilesStorage: cache immutable sem hash obriga
+   hard refresh a cada deploy *(novo 12/09)*
+8. **#199** notificação Telegram de deploy falhado *(novo 12/09; #197+#199
+   juntos fecham o ciclo do incidente de 12/09 — candidatos a fast-track
+   se o time quiser)*
 
 ## R9 — Segregação por usuário (a maior feature, ~2 semanas)
 
@@ -148,16 +194,21 @@
 
 ## Cronograma (sprints ~1 semana; replanejar ao fim de cada uma)
 
+> **Atualizado 11/09: R1+R2 entregues na semana 07–11/09 (1 semana de
+> ganho). Fila adiantada em ~1 semana.**
+
 ```
-Sem 07/09–11/09  R1 fechar ciclo (+ iniciar #13)
-Sem 14/09–18/09  R2 #179 XLS consolidado
-Sem 21/09–25/09  R3 integridade/cartórios (#144 primeiro)
-Sem 28/09–02/10  R4 UX Umbelino (+ disparar GATE-CLIENTE)
-Sem 05/10–09/10  R5 #113 + #135
-Sem 12/10–16/10  R6 multi-cadeia/navegação
-Sem 19/10–23/10  R7 (se gate respondido) — senão R8
-Sem 26/10–30/10  R8 débitos + certificação
-Sem 02/11–06/11  R9 kickoff #132
+Sem 07/09–11/09  R1 fechar ciclo ✅ + R2 #13/#179 XLS consolidado ✅
+                 (+ #193 rapid win adiantado e fechado 12/09 ✅)
+Sem 14/09–18/09  R3 integridade/cartórios (⚠️ revalidar
+                 contra o código atual; #144 primeiro) + release v1.0.10
+Sem 21/09–25/09  R3 (cont.) ou R4 UX Umbelino (+ disparar GATE-CLIENTE)
+Sem 28/09–02/10  R4 (cont.) / R5 #113 + #135
+Sem 05/10–09/10  R5/R6 multi-cadeia/navegação
+Sem 12/10–16/10  R6/R7 (se gate respondido) — senão R8
+Sem 19/10–23/10  R7/R8 débitos + certificação
+Sem 26/10–30/10  R8/R9 kickoff #132
+Sem 02/11–06/11  R9 (reserva)
 ```
 
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
@@ -168,5 +219,6 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 04/09/2026 — fila R1–R9 criada por sequência lógica
-(substitui a numeração de sprints do plano geral).*
+*Última atualização: 12/09/2026 — #193 fechada (PR #195 validado no test
+server); incidente de disco no test server resolvido (prune 51 GB);
+R3 exige revalidação contra o código atual; cronograma adiantado ~1 semana.*

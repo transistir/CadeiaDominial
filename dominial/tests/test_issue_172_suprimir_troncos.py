@@ -132,7 +132,7 @@ class _BaseCadeia172(TestCase):
         # na exportação). Por isso o teste de tronco secundário monta o
         # contexto pelo método real _organizar_cadeia_hierarquica, que é
         # quem gera a seção .tronco-section e o título
-        # "🌿 TRONCO SECUNDÁRIO 1" que o template precisa suprimir.
+        # "TRONCO SECUNDÁRIO 1" que o template precisa suprimir.
         self.imovel_secundario = Imovel.objects.create(
             terra_indigena_id=self.tis,
             nome="Fazenda Secundaria 172",
@@ -179,7 +179,7 @@ class _BaseCadeia172(TestCase):
         com DOIS troncos de documentos reais (principal: M172 + T50;
         secundário: T77). Reproduz a estrutura que o template recebe
         quando há troncos secundários, exercitando a supressão do rótulo
-        "🌿 TRONCO SECUNDÁRIO 1" que o service coloca em `tronco.titulo`.
+        "TRONCO SECUNDÁRIO 1" que o service coloca em `tronco.titulo`.
         """
         service = CadeiaCompletaService()
         service.imovel_atual = self.imovel
@@ -219,17 +219,20 @@ class SuprimirRotulosTroncoTest(_BaseCadeia172):
     def test_pdf_nao_exibe_rotulos_com_tronco_secundario(self):
         """
         Mesmo com uma seção de tronco SECUNDÁRIO real na estrutura — cujo
-        `titulo` vem do service como "🌿 TRONCO SECUNDÁRIO 1" — nenhum
+        `titulo` vem do service como "TRONCO SECUNDÁRIO 1" — nenhum
         rótulo de tronco aparece no HTML nem no PDF binário.
         """
         context = self._contexto_com_tronco_secundario()
 
         # A fixture realmente produz o rótulo interno que deve ser suprimido.
         self.assertEqual(
+            context["cadeia_completa"][0]["titulo"], "TRONCO PRINCIPAL"
+        )
+        self.assertEqual(
             context["cadeia_completa"][1]["tipo"], "tronco_secundario"
         )
-        self.assertIn(
-            "TRONCO SECUNDÁRIO 1", context["cadeia_completa"][1]["titulo"]
+        self.assertEqual(
+            context["cadeia_completa"][1]["titulo"], "TRONCO SECUNDÁRIO 1"
         )
 
         html, pdf_bytes = _gerar_pdf(context)

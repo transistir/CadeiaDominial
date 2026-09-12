@@ -140,8 +140,11 @@ def imoveis(request, tis_id=None):
         tis = get_object_or_404(TIs, id=tis_id)
         imoveis = Imovel.objects.filter(terra_indigena_id=tis).order_by('matricula')
     else:
+        # Listagem geral (sem TI): não há TI para o botão de export
+        # consolidado (issue #179) apontar, por isso `tis` fica None.
+        tis = None
         imoveis = Imovel.objects.all().order_by('matricula')
-    return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
+    return render(request, 'dominial/imoveis.html', {'imoveis': imoveis, 'tis': tis})
 
 @login_required
 def imovel_detail(request, tis_id, imovel_id):

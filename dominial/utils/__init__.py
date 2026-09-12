@@ -13,6 +13,7 @@ from .formatacao_utils import (
     formatar_telefone,
     formatar_valor_monetario,
     formatar_area,
+    formatar_area_ha,
     normalizar_texto_opcional,
     abreviar_cartorio
 )
@@ -31,6 +32,7 @@ __all__ = [
     'formatar_telefone',
     'formatar_valor_monetario',
     'formatar_area',
+    'formatar_area_ha',
     'normalizar_texto_opcional',
     'abreviar_cartorio',
     'DocumentoIdentidade',

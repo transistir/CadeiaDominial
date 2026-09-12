@@ -46,7 +46,9 @@
 
     <h2 class="section-title">{% trans 'Imóveis' %}</h2>
     <p class="section-description">{% trans 'Imóveis ordenados pela atividade mais recente na cadeia dominial (documentos, lançamentos ou importações)' %}</p>
-    
+
+    <a href="{% url 'exportar_cadeia_tis_excel' tis_id=tis.id %}" class="btn btn-info" target="_blank">{% trans 'Exportar XLS da TI' %}</a>
+
     <!-- Abas de navegação -->
     <div class="abas-container">
         <a href="{% url 'tis_detail' tis_id=tis.id %}" class="aba {% if status == 'ativos' %}ativa{% endif %}">
