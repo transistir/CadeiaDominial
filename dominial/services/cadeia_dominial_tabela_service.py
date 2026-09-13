@@ -10,6 +10,7 @@ from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..services.keyword_alerta_service import buscar_keyword
 from ..utils.documento_identidade_utils import DocumentoIdentidade
+from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem, ordenar_cadeia
 
 
 class CadeiaDominialTabelaService:
@@ -99,9 +100,10 @@ class CadeiaDominialTabelaService:
         # Garantir que todos os documentos referenciados como origem sejam incluídos
         # tronco_expandido = self._garantir_todos_documentos_incluidos(imovel, tronco_expandido)
         
-        # Processar cada documento (manter ordem hierárquica)
+        # Processar cada documento na ordem canônica da cadeia (a mesma da trilha
+        # sem escolha): a expansão define quais documentos entram, não a ordem
         cadeia_processada = []
-        documentos_ordenados = tronco_expandido
+        documentos_ordenados = ordenar_cadeia(tronco_expandido, imovel)
         for documento in documentos_ordenados:
             # Carregar lançamentos e ordenar por número simples (decrescente)
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
@@ -125,15 +127,15 @@ class CadeiaDominialTabelaService:
             # Verificar escolha atual das escolhas de origem
             escolha_atual = escolhas_origem.get(str(documento.id)) if escolhas_origem else None
             
-            # Se não há escolha na sessão E há origens disponíveis, usar a origem de número maior como padrão
+            # Se não há escolha na sessão E há origens disponíveis, o padrão é a
+            # primeira da lista (ordem canônica), a mesma origem que a cadeia segue
             if not escolha_atual and origens_disponiveis:
-                # A lista já está ordenada do maior para o menor, então pegamos o primeiro
                 escolha_atual = origens_disponiveis[0]
             
-            # Formatar origens para o template (ordenadas do maior para o menor)
+            # Formatar origens para o template (na ordem canônica)
             origens_formatadas = []
             for i, origem in enumerate(origens_disponiveis):
-                # Sempre usar a primeira origem (maior número) como padrão se não há escolha na sessão
+                # Sem escolha na sessão, a primeira origem é a escolhida
                 is_escolhida = (origem == escolha_atual) if escolha_atual else (i == 0)
                 origens_formatadas.append({
                     'numero': origem,
@@ -164,27 +166,18 @@ class CadeiaDominialTabelaService:
     
     def _obter_origens_documento(self, documento, lancamentos):
         """
-        Obtém as origens disponíveis para um documento (apenas origens válidas para navegação)
+        Obtém as origens disponíveis para um documento (apenas origens válidas
+        para navegação), na ordem canônica da cadeia
         """
-        origens = set()
-        
-        for lancamento in lancamentos:
-            if lancamento.tipo.tipo == 'inicio_matricula':
-                origens.update(
-                    origem.codigo
-                    for origem in LancamentoOrigemLeituraService.obter_origens(lancamento)
-                )
-        
-        # Ordenar do maior para o menor número
-        origens_list = list(origens)
-        if origens_list:
-            # Ordenar numericamente removendo M/T e convertendo para int
-            try:
-                return sorted(origens_list, key=lambda x: int(str(x).replace('M', '').replace('T', '')), reverse=True)
-            except (ValueError, AttributeError):
-                # Se falhar, ordenar alfabeticamente reverso
-                return sorted(origens_list, reverse=True)
-        return []
+        # dict.fromkeys deduplica mantendo a ordem de leitura: com um set,
+        # códigos de chave idêntica ficariam na ordem arbitrária do hash
+        codigos = dict.fromkeys(
+            origem.codigo
+            for lancamento in lancamentos
+            if lancamento.tipo.tipo == 'inicio_matricula'
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento)
+        )
+        return sorted(codigos, key=chave_ordem_origem)
     
     def _extrair_origens(self, origem_string):
         """
@@ -250,10 +243,12 @@ class CadeiaDominialTabelaService:
         
         # Usar o HierarquiaService para obter apenas o TRONCO PRINCIPAL
         from .hierarquia_service import HierarquiaService
-        todos_documentos = HierarquiaService.obter_tronco_principal(imovel, escolhas_origem)
-        
-        # Ordenar documentos por data para manter a ordem cronológica
-        todos_documentos.sort(key=lambda x: x.data)
+        tronco_principal = HierarquiaService.obter_tronco_principal(imovel, escolhas_origem)
+
+        # Ordem canônica da cadeia, nunca por data. `ordenar_cadeia` devolve uma
+        # nova lista: a recebida vem do cache do tronco principal, em ordem
+        # hierárquica, e não pode ser reordenada no lugar (D5 da issue #201)
+        todos_documentos = ordenar_cadeia(tronco_principal, imovel)
         
         cadeia_completa = []
         for documento in todos_documentos:
@@ -291,7 +286,7 @@ class CadeiaDominialTabelaService:
             # Verificar escolha atual
             escolha_atual = escolhas_origem.get(str(documento.id))
             
-            # Se não há escolha e há origens disponíveis, usar a primeira (maior número)
+            # Se não há escolha e há origens disponíveis, usar a primeira (ordem canônica)
             if not escolha_atual and origens_disponiveis:
                 escolha_atual = origens_disponiveis[0]['numero']
             
@@ -331,11 +326,7 @@ class CadeiaDominialTabelaService:
                     'documento': documento,
                     'escolhida': False,
                 })
-        return sorted(
-            origens,
-            key=lambda item: item['numero'],
-            reverse=True,
-        )
+        return sorted(origens, key=lambda item: chave_ordem_origem(item['numero']))
     
     @staticmethod
     def extrair_origens_disponiveis(origem_texto, imovel, cartorio_origem=None):
@@ -375,14 +366,8 @@ class CadeiaDominialTabelaService:
                         'escolhida': False  # Será definida pelo contexto
                     })
 
-        # Ordenar do maior para o menor número
-        if origens:
-            try:
-                return sorted(origens, key=lambda x: int(str(x['numero']).replace('M', '').replace('T', '')), reverse=True)
-            except (ValueError, AttributeError):
-                return sorted(origens, key=lambda x: x['numero'], reverse=True)
-
-        return origens
+        # Ordem canônica da cadeia
+        return sorted(origens, key=lambda x: chave_ordem_origem(x['numero']))
     
     def _expandir_tronco_com_importados(self, imovel, tronco_principal, escolhas_origem=None):
         """
@@ -472,7 +457,8 @@ class CadeiaDominialTabelaService:
 
     def _obter_documento_origem_mais_alto(self, documento):
         """
-        Obtém o documento de origem de nível mais alto (maior número) de um documento
+        Obtém a origem padrão de um documento: a primeira na ordem canônica da
+        cadeia, a mesma destacada como padrão nos botões de origem
         """
         # Buscar lançamentos com origens
         lancamentos = documento.lancamentos.all()
@@ -489,14 +475,9 @@ class CadeiaDominialTabelaService:
                 if doc_origem:
                     origens_encontradas.append(doc_origem)
 
-        # Retornar o documento com maior número (nível mais alto)
+        # A primeira na ordem canônica (a mesma destacada nos botões de origem)
         if origens_encontradas:
-            try:
-                return max(origens_encontradas, key=lambda x: int(str(x.numero).replace('M', '').replace('T', '')))
-            except (ValueError, AttributeError) as e:
-                print(f"⚠️ Erro ao ordenar documentos por número: {str(e)}")
-                # Em caso de erro, retornar o primeiro documento encontrado
-                return origens_encontradas[0] if origens_encontradas else None
+            return ordenar_cadeia(origens_encontradas)[0]
 
         return None
     
@@ -523,26 +504,6 @@ class CadeiaDominialTabelaService:
                 origem_para_contexto.setdefault(origem.codigo, origem)
         origens = list(origem_para_contexto.keys())
 
-        # Função de ordenação: matrículas maiores primeiro, depois transcrições maiores
-        def origem_sort_key(origem):
-            try:
-                if origem.startswith('M'):
-                    numero_part = origem.replace('M', '')
-                    if numero_part.isdigit():
-                        return (0, -int(numero_part))
-                    else:
-                        return (2, origem)  # Não é um número válido
-                if origem.startswith('T'):
-                    numero_part = origem.replace('T', '')
-                    if numero_part.isdigit():
-                        return (1, -int(numero_part))
-                    else:
-                        return (2, origem)  # Não é um número válido
-                return (2, origem)
-            except (ValueError, AttributeError):
-                # Se houver qualquer erro na conversão, tratar como string normal
-                return (2, origem)
-        
         # Filtrar origens válidas antes de ordenar
         origens_validas = []
         for origem in origens:
@@ -558,7 +519,8 @@ class CadeiaDominialTabelaService:
             except Exception as e:
                 print(f"⚠️ Origem ignorada (erro): '{origem}' - {str(e)}")
         
-        origens_validas.sort(key=origem_sort_key)
+        # Ordem canônica: matrículas maiores primeiro, depois transcrições maiores
+        origens_validas.sort(key=chave_ordem_origem)
         origens = origens_validas
 
         # Determinar origem escolhida
@@ -609,11 +571,8 @@ class CadeiaDominialTabelaService:
         
         # Adicionar documentos encontrados
         if documentos_para_adicionar:
-            # Ordenar por tipo e número
-            documentos_para_adicionar.sort(key=lambda x: (
-                x.tipo.tipo if x.tipo else '',
-                -int(str(x.numero).replace('M', '').replace('T', '')) if str(x.numero).replace('M', '').replace('T', '').isdigit() else 0
-            ))
+            # Ordem canônica da cadeia
+            documentos_para_adicionar.sort(key=chave_ordem_cadeia)
             documentos_atuais.extend(documentos_para_adicionar)
         
         return documentos_atuais

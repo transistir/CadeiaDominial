@@ -5,6 +5,7 @@ Utilitários para cálculos de hierarquia de documentos e cadeia dominial
 import re
 from ..models import Documento, DocumentoTipo
 from .documento_identidade_utils import DocumentoIdentidade
+from .ordenacao_cadeia import eh_documento_do_imovel, ordenar_cadeia
 
 
 def _obter_origens_lancamento(lancamento):
@@ -114,14 +115,7 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
     # A busca inclui tipo, número canônico e cartório, sem depender da forma do
     # prefixo nem da ordem da lista de documentos importados.
     documento_atual = next(
-        (
-            doc
-            for doc in documentos
-            if doc.imovel_id == imovel.id
-            and doc.tipo.tipo == imovel.tipo_documento_principal
-            and doc.numero_normalizado == imovel.matricula_normalizada
-            and doc.cartorio_id == imovel.cartorio_id
-        ),
+        (doc for doc in documentos if eh_documento_do_imovel(doc, imovel)),
         None,
     )
     
@@ -180,13 +174,10 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
             )
         
         if not proximo_documento:
-            # Se não há escolha ou escolha não encontrada, usar a origem com maior número
-            if origens_identificadas:
-                # Ordenar por número (maior primeiro) e pegar a primeira
-                origens_ordenadas = sorted(origens_identificadas, 
-                    key=lambda x: int(x.numero_normalizado),
-                    reverse=True)
-                proximo_documento = origens_ordenadas[0]
+            # Se não há escolha ou escolha não encontrada, seguir a primeira origem
+            # na ordem canônica da cadeia: a mesma destacada como padrão nos
+            # botões de origem da tabela
+            proximo_documento = ordenar_cadeia(origens_identificadas)[0]
         
         if not proximo_documento or proximo_documento in tronco_principal:
             break
