@@ -125,11 +125,11 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 > exportação é **regra decidida pelo produto, ainda não implementada**; a
 > correção será feita no F1 da #202, em PR próprio.
 > Um documento alcançado por vários galhos sai **uma única vez** na exportação,
-> no **primeiro** galho que o alcança — nunca repetido (ex.: no imóvel 384 a
-> `T2391` é alcançada por 19 caminhos; repeti-la em cada um daria 58
-> documentos em vez de 30). A ordem alvo acima foi **aprovada com dados reais**
-> dos imóveis 114 (17 docs) e 384 (30 docs), e a implementação está **em
-> andamento no F1 do #202**.
+> no **primeiro** galho que o alcança — nunca repetido (ex.: a `T2391`, no
+> imóvel 384). A regra e a ordem-alvo acima foram definidas pelo dono do
+> produto (luandro, 13/09), medidas com dados reais dos imóveis 114
+> (17 docs, test) e 384 (30 docs, test); a implementação está **em andamento
+> no F1 da #202**.
 
 1. **#201 Fase 0 — hotfix (v1.0.11)** ✅ **MERGEADA 13/09** (PR #203,
    squash `50ae2179` em develop). Pipeline Claude Opus 5 + Sonnet 5;
