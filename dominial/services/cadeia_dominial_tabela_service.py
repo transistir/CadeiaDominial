@@ -11,12 +11,28 @@ from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeitura
 from ..services.keyword_alerta_service import buscar_keyword
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 from ..utils.hierarquia_utils import obter_origens_resolvidas
-from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem, ordenar_cadeia
+from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem
 
 
 class CadeiaDominialTabelaService:
     """
     Service para gerenciar a visualização de tabela da cadeia dominial
+
+    Linhas da tabela (regra do dono do produto, issue #201), iguais nas duas
+    trilhas, `obter_cadeia_tabela` (sem escolha) e `get_cadeia_dominial_tabela`
+    (com escolha):
+
+    1. As linhas são o tronco principal, na ordem da caminhada
+       (`HierarquiaService.obter_tronco_principal`): a ordem das linhas é a
+       hierarquia, e quem é citado como origem aparece depois de quem o citou.
+       Só entra o galho seguido; as origens não seguidas de cada documento são
+       botões de origem, não linhas.
+    2. Matrícula antes de transcrição e número maior antes de menor valem só
+       entre irmãos, as origens de um mesmo documento
+       (`obter_origens_resolvidas`): decidem a origem seguida sem escolha e a
+       ordem dos botões.
+    3. As linhas nunca são reordenadas globalmente por tipo ou número
+       (`ordenar_cadeia`): isso tiraria documentos de baixo de quem os citou.
     """
     
     def __init__(self):
@@ -95,17 +111,11 @@ class CadeiaDominialTabelaService:
         # Obter tronco principal considerando escolhas
         tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel, escolhas_origem)
         
-        # Expandir tronco principal com documentos importados referenciados
-        tronco_expandido = self._expandir_tronco_com_importados(imovel, tronco_principal, escolhas_origem)
-        
-        # Garantir que todos os documentos referenciados como origem sejam incluídos
-        # tronco_expandido = self._garantir_todos_documentos_incluidos(imovel, tronco_expandido)
-        
-        # Processar cada documento na ordem canônica da cadeia (a mesma da trilha
-        # sem escolha): a expansão define quais documentos entram, não a ordem
+        # Linhas: só o tronco do galho escolhido, na ordem da caminhada (regra na
+        # docstring da classe). Sem expandir as origens não seguidas
+        # (`_expandir_tronco_com_importados`) e sem reordenar (`ordenar_cadeia`)
         cadeia_processada = []
-        documentos_ordenados = ordenar_cadeia(tronco_expandido, imovel)
-        for documento in documentos_ordenados:
+        for documento in tronco_principal:
             # Carregar lançamentos e ordenar por número simples (decrescente)
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
                 'pessoas__pessoa'
@@ -257,13 +267,11 @@ class CadeiaDominialTabelaService:
         from .hierarquia_service import HierarquiaService
         tronco_principal = HierarquiaService.obter_tronco_principal(imovel, escolhas_origem)
 
-        # Ordem canônica da cadeia, nunca por data. `ordenar_cadeia` devolve uma
-        # nova lista: a recebida vem do cache do tronco principal, em ordem
-        # hierárquica, e não pode ser reordenada no lugar (D5 da issue #201)
-        todos_documentos = ordenar_cadeia(tronco_principal, imovel)
-        
+        # Linhas: o tronco principal, na ordem da caminhada (regra na docstring
+        # da classe), nunca reordenado. A lista pode ser o valor em cache do
+        # tronco e não pode ser alterada no lugar (D5 da issue #201)
         cadeia_completa = []
-        for documento in todos_documentos:
+        for documento in tronco_principal:
             # Carregar lançamentos com pessoas
             lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
                 'pessoas__pessoa'
@@ -345,6 +353,10 @@ class CadeiaDominialTabelaService:
     def _expandir_tronco_com_importados(self, imovel, tronco_principal, escolhas_origem=None):
         """
         Expande o tronco principal incluindo documentos importados na posição correta
+
+        Não é usada pela tabela da cadeia dominial (issue #201): acrescenta as
+        origens não seguidas de cada documento do tronco, e a tabela mostra só
+        o galho escolhido (ver a docstring da classe).
         """
         tronco_expandido = []
         documentos_processados = set()

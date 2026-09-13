@@ -90,9 +90,10 @@ def obter_origens_resolvidas(documento, lancamentos=None):
     que não resolve (inexistente, ambígua ou sem cartório) fica de fora. Um
     documento citado mais de uma vez entra uma só vez.
 
-    É o único conjunto de origens de um documento: a caminhada do tronco e a
-    expansão das origens importadas seguem a primeira por padrão, e a tabela
-    oferece exatamente estas origens como botões, com a primeira destacada.
+    É o único conjunto de origens de um documento: a caminhada do tronco segue
+    a primeira por padrão, e a tabela oferece exatamente estas origens como
+    botões, com a primeira destacada. A ordem canônica vale só entre estas
+    origens irmãs; as linhas da tabela ficam na ordem da caminhada.
 
     Args:
         documento: Documento cujas origens serão lidas
@@ -143,6 +144,12 @@ def calcular_niveis_hierarquicos_otimizada(documentos, conexoes):
 def identificar_tronco_principal(imovel, escolhas_origem=None):
     """
     Identifica o tronco principal da cadeia dominial de um imóvel.
+
+    A lista devolvida está na ordem da caminhada — cada documento seguido da
+    origem que ele cita — e é a ordem das linhas da tabela da cadeia dominial
+    (issue #201): não deve ser reordenada por tipo nem por número. A cada
+    passo, segue a origem escolhida pelo usuário ou, sem escolha, a primeira
+    na ordem canônica entre as origens do documento (`obter_origens_resolvidas`).
     """
     if escolhas_origem is None:
         escolhas_origem = {}

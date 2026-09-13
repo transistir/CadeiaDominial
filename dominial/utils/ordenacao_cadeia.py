@@ -1,37 +1,40 @@
 """
-Ordem canônica da cadeia dominial na tela (issue #201).
+Ordem canônica entre as origens de um mesmo documento (issue #201).
 
-Regra jurídica definida pelo dono do produto, nesta precedência:
+Regra definida pelo dono do produto:
 
-1. o documento do imóvel (a sua identidade registral) vem sempre primeiro;
-2. matrícula antes de transcrição — prioridade absoluta, não desempate:
-   qualquer matrícula vem antes de qualquer transcrição, seja qual for o número;
-3. número maior antes de menor, comparado como inteiro (nunca como texto).
+1. A ordem das LINHAS da cadeia é a HIERARQUIA: quem é citado como origem
+   aparece depois de quem o citou. Ela é a caminhada do tronco principal
+   (`identificar_tronco_principal`), e esta chave NUNCA reordena as linhas.
+2. Entre IRMÃOS — as várias origens de UM MESMO documento — vale a chave
+   canônica, nesta precedência:
+   a. matrícula antes de transcrição — prioridade absoluta, não desempate:
+      qualquer matrícula vem antes de qualquer transcrição, seja qual for o
+      número;
+   b. número maior antes de menor, comparado como inteiro (nunca como texto).
+   Com `imovel`, `chave_ordem_cadeia` ainda põe o documento do imóvel (a sua
+   identidade registral) antes de todos; uma origem nunca recebe esse rank.
 
 A data do documento não entra na regra: neste banco ela é quase sempre
 fictícia ou presumida.
 
-Este módulo é a única implementação dessa ordem. Por decisão do dono do produto
-(13/09/2026), ela vale para todas as superfícies da cadeia: é requisito jurídico
-de consistência que o que a tela mostra seja o que o documento exporta.
-Consomem a chave:
+Este módulo é a única implementação dessa ordem. Consomem a chave:
 
-- as linhas da tabela da cadeia dominial, nas duas trilhas
-  (`obter_cadeia_tabela` e `get_cadeia_dominial_tabela`, que também alimenta a
-  exportação PDF da tabela);
-- os botões de origem e a origem destacada por padrão, sempre a primeira da
-  lista (`obter_origens_resolvidas`, em `hierarquia_utils`);
-- a caminhada do tronco principal (`identificar_tronco_principal`): o documento
-  inicial, quando falta o documento do imóvel, e a origem seguida a cada passo
-  quando o usuário não escolheu nenhuma, a mesma destacada nos botões, para que
-  a origem destacada seja a cadeia exibida;
-- a expansão das origens importadas, na trilha com escolha;
+- a origem que a caminhada do tronco segue a cada passo quando o usuário não
+  escolheu nenhuma, e os botões de origem da tabela, com essa mesma origem
+  destacada por padrão, sempre a primeira da lista
+  (`obter_origens_resolvidas`, em `hierarquia_utils`);
+- o documento inicial do tronco, quando falta o documento do imóvel
+  (`identificar_tronco_principal`);
 - a ordem dos documentos fora do tronco no modal de sequência
   (`organizar_documentos_hierarquicamente`).
 
-Por consequência, seguem o mesmo tronco principal as superfícies que consomem
-`HierarquiaService.obter_tronco_principal`: a exportação PDF/XLS da cadeia
-completa, a página da árvore e o modal de sequência. A exportação
+Seguem o mesmo tronco principal, na ordem da caminhada, as superfícies que
+consomem `HierarquiaService.obter_tronco_principal`: as linhas da tabela da
+cadeia dominial, nas duas trilhas (`obter_cadeia_tabela` e
+`get_cadeia_dominial_tabela`, que também alimenta a exportação PDF da tabela),
+a exportação PDF/XLS da cadeia completa, a página da árvore e o modal de
+sequência. A exportação
 (`CadeiaCompletaService`) continua agrupada por troncos; esta chave decide qual
 origem o tronco segue por padrão e, com isso, a sequência de documentos dentro
 dele. Medido no test server: a caminhada muda em 14 de 406 imóveis, e o
