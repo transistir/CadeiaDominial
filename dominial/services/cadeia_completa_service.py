@@ -10,6 +10,7 @@ from ..services.hierarquia_service import HierarquiaService
 from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
+from ..utils.hierarquia_utils import obter_origens_resolvidas
 
 
 class CadeiaCompletaService:
@@ -69,63 +70,38 @@ class CadeiaCompletaService:
     
     def _obter_tronco_principal_completo(self, imovel):
         """
-        Obtém o tronco principal expandindo TODAS as origens
-        Usa a mesma lógica da página ver-cadeia-dominial para garantir a sequência correta
+        Obtém a cadeia completa em ordem de travessia em pré-ordem, agrupada
+        por galho (issue #202): a partir da ponta (o primeiro documento do
+        tronco principal), cada documento é emitido e, em seguida, percorre-se
+        cada uma de suas origens (`obter_origens_resolvidas`, já na ordem
+        canônica entre irmãs). Um documento alcançado por mais de um caminho é
+        emitido uma única vez, na primeira vez.
+
+        Pilha explícita em vez de recursão: o pior caso real (281 documentos)
+        já se aproxima do limite de recursão do Python, e uma cadeia mais
+        funda no banco de produção estouraria. Os documentos-filho de cada nó
+        são empilhados em ordem reversa para que o topo da pilha seja sempre o
+        primeiro na ordem canônica — produz exatamente a mesma sequência que a
+        recursão (visita, marca, desce no primeiro filho até o fim antes de
+        voltar para o segundo).
         """
-        # 1. Obter o tronco principal na sequência correta (como na página ver-cadeia-dominial)
         tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel)
-        
-        # 2. Usar HierarquiaArvoreService para obter TODOS os documentos da cadeia
-        from .hierarquia_arvore_service import HierarquiaArvoreService
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
-        
-        # 3. Extrair todos os documentos da árvore
-        ids_documentos = [
-            doc_node['id']
-            for doc_node in arvore['documentos']
-            if not doc_node.get('is_fim_cadeia')
-        ]
-        documentos_por_id = {
-            documento.id: documento
-            for documento in Documento.objects.filter(
-                id__in=ids_documentos
-            ).select_related('tipo', 'cartorio', 'imovel')
-        }
-        todos_documentos = []
-        for doc_node in arvore['documentos']:
-            # Nós sintéticos de "fim de cadeia" (issue #85) são dicts com id
-            # string (ex.: "fim_cadeia_123_456_789") criados apenas para
-            # exibição na árvore, sem Documento real correspondente no
-            # banco. Pular para evitar ValueError no Documento.objects.get
-            # (issue #146).
-            if doc_node.get('is_fim_cadeia'):
-                continue
-            documento = documentos_por_id[doc_node['id']]
-            todos_documentos.append(documento)
-        
-        # 4. Organizar: tronco principal primeiro, depois todos os outros documentos
+        if not tronco_principal:
+            return []
+
         documentos_organizados = []
-        documentos_processados = set()
-        
-        # Primeiro, adicionar o tronco principal na ordem correta
-        for documento in tronco_principal:
-            if documento.id not in documentos_processados:
-                documentos_organizados.append(documento)
-                documentos_processados.add(documento.id)
-        
-        # Depois, adicionar todos os outros documentos que não estão no tronco principal
-        # Ordenar por tipo e número para manter hierarquia
-        outros_documentos = []
-        for documento in todos_documentos:
-            if documento.id not in documentos_processados:
-                outros_documentos.append(documento)
-        
-        # Ordenar outros documentos hierarquicamente
-        outros_documentos_ordenados = self._ordenar_documentos_hierarquicamente(outros_documentos)
-        
-        for documento in outros_documentos_ordenados:
+        ids_visitados = set()
+        pilha = [tronco_principal[0]]
+
+        while pilha:
+            documento = pilha.pop()
+            if documento.id in ids_visitados:
+                continue
+            ids_visitados.add(documento.id)
             documentos_organizados.append(documento)
-        
+            for origem in reversed(obter_origens_resolvidas(documento)):
+                pilha.append(origem.documento)
+
         return documentos_organizados
     
     def _obter_troncos_secundarios_completos(self, imovel):
@@ -452,38 +428,4 @@ class CadeiaCompletaService:
         except Exception as e:
             # Em caso de erro, usar sequência padrão
             return self.get_cadeia_completa(tis_id, imovel_id)
-    
-    def _ordenar_documentos_hierarquicamente(self, documentos):
-        """
-        Ordena documentos hierarquicamente:
-        1. Matrículas (maior número primeiro)
-        2. Transcrições (maior número primeiro)
-        3. Outros tipos (ordem alfabética)
-        """
-        def extrair_numero_documento(documento):
-            """Extrai o número numérico do documento para ordenação"""
-            try:
-                # Remove M ou T e converte para int
-                numero_limpo = str(documento.numero).replace('M', '').replace('T', '')
-                return int(numero_limpo)
-            except (ValueError, AttributeError):
-                return 0
-        
-        def tipo_prioridade(documento):
-            """Define prioridade do tipo de documento"""
-            tipo = documento.tipo.tipo if documento.tipo else ''
-            if tipo == 'matricula':
-                return 1  # Maior prioridade
-            elif tipo == 'transcricao':
-                return 2  # Segunda prioridade
-            else:
-                return 3  # Menor prioridade
-        
-        # Ordenar por tipo (matrícula -> transcrição -> outros) e depois por número (maior primeiro)
-        documentos_ordenados = sorted(
-            documentos,
-            key=lambda x: (tipo_prioridade(x), -extrair_numero_documento(x))
-        )
-        
-        return documentos_ordenados
-    
+
