@@ -13,6 +13,7 @@ from ..services.keyword_alerta_service import buscar_keyword
 from ..services.exportacao_excel_service import (
     ULTIMA_COLUNA,
     ajustar_larguras_colunas,
+    configurar_impressao,
     criar_estilos,
     criar_nome_aba_imovel,
     escrever_celula_segura,
@@ -617,6 +618,7 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         resumo.column_dimensions['A'].width = 30
         resumo.column_dimensions['B'].width = 31
         resumo.column_dimensions['C'].width = 40
+        configurar_impressao(resumo)
 
         for imovel, nome_aba in abas_imoveis:
             ws_imovel = wb.create_sheet(title=nome_aba)
@@ -647,6 +649,7 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
                     'body_row_height'
                 ]
                 ajustar_larguras_colunas(ws_imovel)
+                configurar_impressao(ws_imovel)
 
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
