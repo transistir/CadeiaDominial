@@ -120,6 +120,33 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    no test + release v1.0.11 (GATE-LUANDRO).
    ⚠️ Limitação conhecida: carga inicial ainda só mostra o tronco (D4) —
    Fase 1.
+1b. **#201 Fase 0b — ordenação canônica da cadeia** 🔨 **IMPLEMENTADO,
+   aguardando push/PR** (branch `fix/201-ordem-cadeia`, commit `ecc87540`).
+   - **Regra jurídica definida pelo Hiure (13/09):** (1) documento do imóvel
+     sempre 1º; (2) **matrícula antes de transcrição — absoluta**, não
+     desempate (M6861 vem antes de T21820); (3) número maior→menor,
+     comparado como inteiro. **Data não participa** (no banco ela é quase
+     toda fictícia/presumida — era a causa real da desordem).
+   - Corrige **4 ordenações divergentes** que conviviam (linhas por data,
+     expansão sem ordem, opções por `int` desc, opções por **string** desc)
+     e o bug em que o **botão destacado ≠ cadeia exibida** (caso real M6726:
+     destacava M717 mas caminhava por M1612).
+   - Chave única em `dominial/utils/ordenacao_cadeia.py`, consumida por
+     linhas da tabela (2 trilhas), botões de origem e default da caminhada
+     do tronco. 24 testes novos (39/39 OK com os 15 da Fase 0); suíte
+     completa no baseline.
+   - **DECISÃO DE ESCOPO (Hiure, 13/09): aplicar em TUDO.** A caminhada do
+     tronco é compartilhada com exportação PDF/XLS (`CadeiaCompletaService`),
+     página da árvore e modal de sequência — todos seguem a mesma regra, por
+     consistência jurídica (o que a tela mostra = o que o documento exporta).
+     A exportação continua **agrupada por troncos**; muda qual origem o
+     tronco segue por default. Medido no test server: **14 de 406 imóveis**
+     mudam a caminhada (só os com origens M e T misturadas); **conjunto de
+     documentos exportados inalterado**.
+   - Validado contra o caso real 384: sem escolha
+     `M8272, M7775, M2623, M2072, T13367, T10786, T3281, T2391` (exatamente
+     o esperado pelo Hiure); com escolha T3281 → 17 docs com T3280/T3281
+     visíveis.
 2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
    - F1: trilha única no service (cadeia sempre expandida), corrigir cache
      (`sort()` in-place corrompe valor cacheado), sessão com escopo por imóvel
