@@ -142,16 +142,16 @@ def tronco_principal(request, tis_id, imovel_id):
         except json.JSONDecodeError:
             escolhas_origem = {}
     
-    # Obter cadeia em formato de tabela
+    # Obter cadeia em formato de tabela. O método completo combina as escolhas
+    # persistidas na sessão com o override opcional recebido pela URL.
     service = CadeiaDominialTabelaService()
-    
-    # Se há escolhas de origem, usar o método completo
-    if escolhas_origem:
-        result = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session, escolhas_origem)
-        cadeia = result.get('cadeia', [])
-    else:
-        # Se não há escolhas, usar o método simples (tronco principal)
-        cadeia = service.obter_cadeia_tabela(imovel, escolhas_origem)
+    result = service.get_cadeia_dominial_tabela(
+        tis_id,
+        imovel_id,
+        request.session,
+        escolhas_origem,
+    )
+    cadeia = result.get('cadeia', [])
     
     # Verificar se há lançamentos
     tem_lancamentos = False

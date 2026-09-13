@@ -18,6 +18,7 @@ o mesmo conjunto de origens que resolvem para documentos reais
 ordenar documentos irmãos fora do tronco.
 """
 
+import json
 import re
 from datetime import date
 from types import SimpleNamespace
@@ -403,6 +404,57 @@ class Forma384ComEscolhaTest(_Forma384, TestCase):
             self.ORDEM_COM_ESCOLHA,
         )
 
+    def test_reload_da_view_sem_query_preserva_escolha_da_sessao(self):
+        self._logar()
+        session = self.client.session
+        session[f'origem_documento_{self.docs["M7775"].id}'] = 'M2622'
+        session.save()
+        url = reverse(
+            'tronco_principal',
+            kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id},
+        )
+
+        # Simula o reload da página principal: nenhuma escolha vai na URL.
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        numero_por_id = {
+            str(documento.id): numero for numero, documento in self.docs.items()
+        }
+        ids = re.findall(
+            r'class="documento-row[^"]*" data-documento-id="(\d+)"',
+            response.content.decode(),
+        )
+        self.assertEqual(
+            [numero_por_id[doc_id] for doc_id in ids],
+            ['M8272', 'M7775', 'M2622', 'T9231', 'T13963', 'T9001'],
+        )
+
+    def test_escolhas_da_query_substituem_a_escolha_da_sessao(self):
+        self._logar()
+        session = self.client.session
+        session[f'origem_documento_{self.docs["M7775"].id}'] = 'M2622'
+        session.save()
+        url = reverse(
+            'tronco_principal',
+            kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id},
+        )
+
+        response = self.client.get(url, {
+            'escolhas': json.dumps({str(self.docs['M7775'].id): 'M2623'}),
+        })
+        self.assertEqual(response.status_code, 200)
+        numero_por_id = {
+            str(documento.id): numero for numero, documento in self.docs.items()
+        }
+        ids = re.findall(
+            r'class="documento-row[^"]*" data-documento-id="(\d+)"',
+            response.content.decode(),
+        )
+        self.assertEqual(
+            [numero_por_id[doc_id] for doc_id in ids],
+            ['M8272', 'M7775', 'M2623', 'M2072', 'T13367', 'T10786', 'T3281', 'T2391'],
+        )
+
     def test_chave_canonica_nao_reordena_as_linhas_da_tabela(self):
         documentos = [item['documento'] for item in self._cadeia_com_escolha()]
         # Garante que a tabela mantém T9231 antes de T13963 por hierarquia.
@@ -693,6 +745,36 @@ class InicioDoTroncoSemMatriculaTest(_FormaSemDocumentoDoImovel, TestCase):
         self.assertEqual(
             [documento.numero for documento in identificar_tronco_principal(self.imovel)],
             ['T900', 'T8'],
+        )
+
+
+class InicioDoTroncoComDescendenteMatriculaMaiorTest(
+    _FormaSemDocumentoDoImovel,
+    TestCase,
+):
+    """O fallback compara somente raízes, nunca uma matrícula descendente."""
+
+    ORIGENS_IMOVEL = {'M100': 'M900', 'M900': 'T7'}
+
+    def test_tronco_comeca_pela_raiz_e_nao_pelo_descendente_maior(self):
+        self.assertEqual(
+            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            ['M100', 'M900', 'T7'],
+        )
+
+
+class InicioDoTroncoComDescendenteTranscricaoMaiorTest(
+    _FormaSemDocumentoDoImovel,
+    TestCase,
+):
+    """Sem matrículas, o fallback também compara somente transcrições raízes."""
+
+    ORIGENS_IMOVEL = {'T100': 'T900', 'T900': 'T7'}
+
+    def test_tronco_comeca_pela_raiz_e_nao_pelo_descendente_maior(self):
+        self.assertEqual(
+            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            ['T100', 'T900', 'T7'],
         )
 
 

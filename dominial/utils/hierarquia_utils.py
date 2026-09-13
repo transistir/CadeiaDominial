@@ -178,19 +178,40 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         None,
     )
     
-    # Se não encontrou o documento da matrícula atual, procurar por matrículas
+    # Se não encontrou o documento da matrícula atual, limitar o fallback aos
+    # documentos raiz: aqueles que nenhum outro documento do conjunto cita
+    # como origem. Assim, um descendente de número maior nunca toma o lugar da
+    # raiz que conduz até ele.
     if not documento_atual:
-        matriculas = [doc for doc in documentos if doc.tipo.tipo == 'matricula']
-        if matriculas:
+        ids_documentos = {doc.pk for doc in documentos}
+        ids_citados_como_origem = {
+            origem.documento.pk
+            for documento in documentos
+            for origem in obter_origens_resolvidas(documento)
+            if origem.documento.pk in ids_documentos
+            and origem.documento.pk != documento.pk
+        }
+        documentos_raiz = [
+            doc for doc in documentos if doc.pk not in ids_citados_como_origem
+        ]
+
+        matriculas_raiz = [
+            doc for doc in documentos_raiz if doc.tipo.tipo == 'matricula'
+        ]
+        if matriculas_raiz:
             # Sem o documento de identidade registral do imóvel, começar pela
-            # primeira matrícula na ordem canônica (a de maior número), nunca
-            # pela data, que neste banco é quase sempre fictícia ou presumida
-            documento_atual = ordenar_cadeia(matriculas, imovel)[0]
+            # primeira raiz matrícula na ordem canônica (a de maior número),
+            # nunca pela data, que neste banco é quase sempre fictícia ou
+            # presumida
+            documento_atual = ordenar_cadeia(matriculas_raiz, imovel)[0]
         else:
-            # Se não há matrículas, procurar por transcrições, na mesma ordem
-            transcricoes = [doc for doc in documentos if doc.tipo.tipo == 'transcricao']
-            if transcricoes:
-                documento_atual = ordenar_cadeia(transcricoes, imovel)[0]
+            # Se não há raízes matrículas, procurar por raízes transcrições,
+            # também na ordem canônica (maior número), nunca pela data
+            transcricoes_raiz = [
+                doc for doc in documentos_raiz if doc.tipo.tipo == 'transcricao'
+            ]
+            if transcricoes_raiz:
+                documento_atual = ordenar_cadeia(transcricoes_raiz, imovel)[0]
             else:
                 return []
 
