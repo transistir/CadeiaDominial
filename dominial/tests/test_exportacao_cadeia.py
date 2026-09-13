@@ -216,13 +216,13 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
         workbook = load_workbook(BytesIO(response.content))
         ws = workbook.active
         valores_coluna_a = [cell.value for cell in ws["A"]]
+        # Issue #204: T90 (`is_importado=True`) sai sem prefixo, como M100.
         titulos_esperados = [
             "Matrícula: M100",
-            "[Importado] Transcrição: T90",
+            "Transcrição: T90",
         ]
         titulos_documentos = [valor for valor in valores_coluna_a if valor in titulos_esperados]
         self.assertEqual(titulos_documentos, titulos_esperados)
-        self.assertNotIn("[Importado] Matrícula: M100", valores_coluna_a)
         self.assertNotIn("ESTATÍSTICAS", valores_coluna_a)
         self.assertNotIn("Total de Documentos:", valores_coluna_a)
         self.assertNotIn("Total de Lançamentos:", valores_coluna_a)

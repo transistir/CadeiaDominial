@@ -21,6 +21,8 @@ from datetime import date
 
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.page import PageMargins
+from openpyxl.worksheet.properties import PageSetupProperties
 
 from ..utils import abreviar_cartorio, normalizar_texto_opcional
 from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
@@ -61,6 +63,10 @@ COR_BRANCO = "FFFFFF"
 COR_BORDA = "DDDDDD"
 
 FONTE_CORPO = Font(name="Arial", size=8, color=COR_TEXTO)
+
+# Margem do ``@page`` de `cadeia_dominial_pdf.css` (1,5 cm) convertida para
+# polegadas, a unidade de `PageMargins` no openpyxl (issue #204).
+MARGEM_IMPRESSAO = round(1.5 / 2.54, 4)
 
 
 def escrever_celula_segura(ws, row, column, value):
@@ -152,6 +158,32 @@ def ajustar_larguras_colunas(ws):
         ws.column_dimensions[get_column_letter(i)].width = width
 
 
+def configurar_impressao(ws):
+    """
+    Configura a impressão da planilha como a do PDF (issue #204): A4
+    paisagem com margens de 1,5 cm, o ``@page`` de `cadeia_dominial_pdf.css`.
+
+    A largura (colunas A..P) cabe em uma única página e a altura fica livre
+    (``fitToHeight = 0``): cadeias longas seguem por várias páginas legíveis
+    em vez de encolhidas numa só. O 0 precisa ir explícito — omitido, o
+    Excel assume 1. ``fitToWidth``/``fitToHeight`` só valem com
+    ``fitToPage`` ligado.
+    """
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_margins = PageMargins(
+        left=MARGEM_IMPRESSAO,
+        right=MARGEM_IMPRESSAO,
+        top=MARGEM_IMPRESSAO,
+        bottom=MARGEM_IMPRESSAO,
+        header=0.3,
+        footer=0.3,
+    )
+
+
 def criar_nome_aba_imovel(matricula, nomes_usados, indice_imovel=None):
     """
     Gera um nome de aba válido e único a partir da matrícula.
@@ -227,17 +259,16 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
         for item in tronco['documentos']:
             documento = item['documento']
             lancamentos = item['lancamentos']
-            prefixo_importado = (
-                "[Importado] " if item.get('is_importado', False) else ""
-            )
-            # Título do documento
+            # Título do documento, sem marcador de origem (issue #204):
+            # juridicamente não existe "documento importado" — documentos de
+            # outra cadeia são compartilhados entre cadeias. `is_importado` é
+            # sinal interno do fluxo e não aparece no XLS, assim como na tela.
             row += 1
             ws.merge_cells(f'A{row}:{ULTIMA_COLUNA}{row}')
             escrever_celula_segura(
                 ws,
                 row,
                 1,
-                f"{prefixo_importado}"
                 f"{documento.tipo.get_tipo_display()}: {documento.numero}",
             ).font = estilos['document_font']
             ws.cell(row=row, column=1).fill = group_fill
@@ -501,3 +532,4 @@ def renderizar_planilha_imovel(
         ws.row_dimensions[11].height = estilos['body_row_height']
 
     ajustar_larguras_colunas(ws)
+    configurar_impressao(ws)
