@@ -118,10 +118,13 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    origens): sem escolha 3 docs → com escolha M528 **12 docs, zero
    perdidos**. Deploy develop OK. **Pendente:** validação visual do Hiure
    no test + release v1.0.11 (GATE-LUANDRO).
-   ⚠️ Limitação conhecida: carga inicial ainda só mostra o tronco (D4) —
-   Fase 1.
-1b. **#201 Fase 0b — ordenação canônica da cadeia** 🔨 **IMPLEMENTADO,
-   aguardando push/PR** (branch `fix/201-ordem-cadeia`, commit `ecc87540`).
+   **Regra confirmada pelo produto (Hiure, 13/09):** a tela mostra exatamente
+   **uma linha por nível hierárquico**, seguindo só a origem escolhida — por
+   padrão, a de maior número entre os irmãos do mesmo documento. Os irmãos não
+   seguidos são os botões de escolha, que trocam o galho exibido. A cadeia
+   inteira, com todos os troncos e ramos, sai no XLS/PDF.
+1b. **#201 Fase 0b — ordenação canônica da cadeia** 🔨 **PR #205 ABERTO**
+   (branch `fix/201-ordem-cadeia`, HEAD `0bd47868`, 6 commits).
    - **Regra jurídica definida pelo Hiure (13/09):** (1) documento do imóvel
      sempre 1º; (2) **matrícula antes de transcrição — absoluta**, não
      desempate (M6861 vem antes de T21820); (3) número maior→menor,
@@ -133,23 +136,31 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
      destacava M717 mas caminhava por M1612).
    - Chave única em `dominial/utils/ordenacao_cadeia.py`, consumida por
      linhas da tabela (2 trilhas), botões de origem e default da caminhada
-     do tronco. 24 testes novos (39/39 OK com os 15 da Fase 0); suíte
-     completa no baseline.
-   - **DECISÃO DE ESCOPO (Hiure, 13/09): aplicar em TUDO.** A caminhada do
-     tronco é compartilhada com exportação PDF/XLS (`CadeiaCompletaService`),
-     página da árvore e modal de sequência — todos seguem a mesma regra, por
-     consistência jurídica (o que a tela mostra = o que o documento exporta).
-     A exportação continua **agrupada por troncos**; muda qual origem o
-     tronco segue por default. Medido no test server: **14 de 406 imóveis**
-     mudam a caminhada (só os com origens M e T misturadas); **conjunto de
-     documentos exportados inalterado**.
-   - Validado contra o caso real 384: sem escolha
-     `M8272, M7775, M2623, M2072, T13367, T10786, T3281, T2391` (exatamente
-     o esperado pelo Hiure); com escolha T3281 → 17 docs com T3280/T3281
-     visíveis.
+     do tronco.
+   - Rodadas 1–3 do review apontaram M-1..M-5; **todos foram corrigidos** e
+     os **59/59 testes estão verdes**. Baseline da implementação: **24 testes
+     novos (39/39 OK com os 15 da Fase 0); suíte completa no baseline.**
+   - **DECISÃO DE ESCOPO (Hiure, 13/09): aplicar a ordenação em TUDO.** A
+     regra canônica de ordenação é compartilhada pela tabela, exportação
+     PDF/XLS (`CadeiaCompletaService`), página da árvore e modal de sequência.
+     O **conjunto de linhas difere por superfície**: a tela mostra uma linha
+     por nível, seguindo só o galho escolhido; XLS/PDF levam a árvore inteira,
+     com todos os troncos e todos os ramos. A exportação continua **agrupada
+     por troncos**, com o conjunto de documentos inalterado. Medido no test
+     server: **14 de 406 imóveis** mudam a caminhada (só os com origens M e T
+     misturadas).
+   - Evidência no banco de teste — tabela do imóvel 114 (TI 126): **2 linhas**,
+     `M18692, M16433`; M16433 é a origem de maior número de M18692 e fim de
+     cadeia `origem_lidima`. Tabela do imóvel 384 (TI 201): **8 linhas**,
+     `M8272, M7775, M2623, M2072, T13367, T10786, T3281, T2391`.
+   - Evidência das exportações — XLS do imóvel 114: **17 documentos**; XLS do
+     imóvel 384: **30 documentos**. PDF de cadeia completa do imóvel 114: os
+     mesmos **17 documentos** do XLS, nenhum faltando.
 2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
-   - F1: trilha única no service (cadeia sempre expandida), corrigir cache
-     (`sort()` in-place corrompe valor cacheado), sessão com escopo por imóvel
+   - F1: trilha única no service para a **exportação** (cadeia completa sempre
+     expandida no XLS/PDF), mantendo a **tela com uma linha por nível**;
+     corrigir cache (`sort()` in-place corrompe valor cacheado), sessão com
+     escopo por imóvel
    - F2: testes anti-regressão — service, contrato JSON das APIs, golden test
      do imóvel 384, infra de teste JS (vitest)
    - F3: modularizar o JS (1373 linhas), remover ~40 `console.log`, sanitizar
