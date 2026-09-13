@@ -10,7 +10,11 @@ from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..services.keyword_alerta_service import buscar_keyword
 from ..utils.documento_identidade_utils import DocumentoIdentidade
-from ..utils.hierarquia_utils import obter_origens_resolvidas
+from ..utils.hierarquia_utils import (
+    _selecionar_origem_contextual,
+    obter_origens_resolvidas,
+    serializar_identidade_origem,
+)
 from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem
 
 
@@ -180,24 +184,37 @@ class CadeiaDominialTabelaService:
         """
         Botões de origem de um documento, iguais nas duas trilhas da tabela.
 
-        Com escolha na sessão, ela é a destacada; sem escolha, a primeira
-        origem, a mesma que a cadeia segue por padrão. O destaque padrão é pela
-        posição, e não pelo código: homônimos de cartórios diferentes têm o
-        mesmo código.
+        A escolha canônica é ``documento:<id>``; códigos legados continuam
+        válidos quando não são ambíguos. O destaque sempre compara a identidade
+        do documento resolvido, nunca o código: homônimos de cartórios
+        diferentes podem ter o mesmo código.
 
         Returns:
             tuple: (origens formatadas para o template, escolha atual)
         """
-        codigos = self._obter_origens_documento(documento, lancamentos)
-        escolha_atual = escolha_sessao or (codigos[0] if codigos else None)
+        origens = obter_origens_resolvidas(documento, lancamentos)
+        if not origens:
+            return [], None
+
+        documento_escolhido = _selecionar_origem_contextual(
+            [origem.documento for origem in origens],
+            escolha_sessao,
+        )
+        if documento_escolhido is None:
+            documento_escolhido = origens[0].documento
+
+        escolha_atual = next(
+            origem.codigo
+            for origem in origens
+            if origem.documento.pk == documento_escolhido.pk
+        )
         origens_formatadas = [
             {
-                'numero': codigo,
-                'escolhida': (
-                    codigo == escolha_sessao if escolha_sessao else indice == 0
-                ),
+                'numero': origem.codigo,
+                'identidade': serializar_identidade_origem(origem.documento),
+                'escolhida': origem.documento.pk == documento_escolhido.pk,
             }
-            for indice, codigo in enumerate(codigos)
+            for origem in origens
         ]
         return origens_formatadas, escolha_atual
     

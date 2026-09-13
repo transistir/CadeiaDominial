@@ -10,6 +10,14 @@ from .documento_identidade_utils import DocumentoIdentidade
 from .ordenacao_cadeia import eh_documento_do_imovel, ordenar_cadeia
 
 
+PREFIXO_IDENTIDADE_ORIGEM = 'documento:'
+
+
+def serializar_identidade_origem(documento):
+    """Identidade estável usada em URL, API e sessão: ``documento:<id>``."""
+    return f'{PREFIXO_IDENTIDADE_ORIGEM}{documento.pk}'
+
+
 def _obter_origens_lancamento(lancamento):
     # Import tardio evita o ciclo models -> utils -> services -> utils durante
     # a inicialização do Django.
@@ -53,9 +61,32 @@ def _resolver_documento_por_codigo(codigo, cartorio):
     return resultado.documento if resultado.status == 'encontrado' else None
 
 
-def _selecionar_origem_contextual(origens, codigo_escolhido):
-    """Aceita a escolha textual apenas entre origens já resolvidas no contexto."""
-    tipo = _tipo_do_codigo(codigo_escolhido)
+def _selecionar_origem_contextual(origens, escolha_origem):
+    """Resolve uma escolha apenas entre as origens disponíveis no contexto.
+
+    O formato canônico é ``documento:<id>`` e distingue documentos homônimos.
+    O código legado (por exemplo, ``M123``) continua aceito somente quando
+    identifica exatamente uma origem contextual; se houver homônimos, ele é
+    ambíguo e não seleciona nenhum deles.
+    """
+    if not isinstance(escolha_origem, str):
+        return None
+
+    escolha_origem = escolha_origem.strip()
+    if escolha_origem.startswith(PREFIXO_IDENTIDADE_ORIGEM):
+        documento_id = escolha_origem.removeprefix(PREFIXO_IDENTIDADE_ORIGEM)
+        if not documento_id.isdecimal():
+            return None
+        return next(
+            (
+                documento
+                for documento in origens
+                if documento.pk == int(documento_id)
+            ),
+            None,
+        )
+
+    tipo = _tipo_do_codigo(escolha_origem)
     if not tipo:
         return None
 
@@ -64,7 +95,7 @@ def _selecionar_origem_contextual(origens, codigo_escolhido):
         if documento.tipo.tipo != tipo:
             continue
         try:
-            escolha = DocumentoIdentidade(tipo, codigo_escolhido, documento.cartorio_id)
+            escolha = DocumentoIdentidade(tipo, escolha_origem, documento.cartorio_id)
         except (TypeError, ValueError):
             return None
         if documento.numero_normalizado == escolha.numero_normalizado:
@@ -150,6 +181,11 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
     (issue #201): não deve ser reordenada por tipo nem por número. A cada
     passo, segue a origem escolhida pelo usuário ou, sem escolha, a primeira
     na ordem canônica entre as origens do documento (`obter_origens_resolvidas`).
+
+    ``escolhas_origem`` mapeia o id textual do documento para
+    ``documento:<id-da-origem>``. URLs legadas com o código (``M123``) seguem
+    aceitas quando esse código identifica uma única origem no contexto; para
+    homônimos, somente a identidade canônica é aplicável.
     """
     if escolhas_origem is None:
         escolhas_origem = {}
@@ -242,9 +278,8 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         proximo_documento = None
         
         if escolha_atual:
-            # O valor legado da sessão ainda é textual. Ele só é aceito quando
-            # identifica exatamente uma das origens já resolvidas com o
-            # cartório de seu lançamento.
+            # A identidade canônica ou o código legado não ambíguo só são
+            # aceitos quando apontam para uma origem já resolvida no contexto.
             proximo_documento = _selecionar_origem_contextual(
                 origens_identificadas,
                 escolha_atual,

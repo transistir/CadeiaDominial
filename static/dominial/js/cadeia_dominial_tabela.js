@@ -49,7 +49,8 @@ function initializeCadeiaTabela() {
             
             const documentoId = this.dataset.documentoId;
             const origemNumero = this.dataset.origemNumero;
-            escolherOrigem(documentoId, origemNumero);
+            const origemIdentidade = this.dataset.origemIdentidade;
+            escolherOrigem(documentoId, origemIdentidade, origemNumero);
         });
     });
 }
@@ -95,7 +96,7 @@ function toggleLancamentos(documentoId) {
     }
 }
 
-function escolherOrigem(documentoId, origemNumero) {
+function escolherOrigem(documentoId, origemIdentidade, origemNumero) {
     if (isLoading) {
         return;
     }
@@ -127,6 +128,7 @@ function escolherOrigem(documentoId, origemNumero) {
         },
         body: JSON.stringify({
             documento_id: documentoId,
+            origem_identidade: origemIdentidade,
             origem_numero: origemNumero,
             tis_id: tisId,
             imovel_id: imovelId
@@ -141,7 +143,7 @@ function escolherOrigem(documentoId, origemNumero) {
             origemButtons.forEach(btn => {
                 btn.classList.remove('ativo', 'loading');
                 btn.disabled = false;
-                if (btn.dataset.origemNumero === origemNumero) {
+                if (btn.dataset.origemIdentidade === origemIdentidade) {
                     btn.classList.add('ativo');
                 }
             });
@@ -336,6 +338,7 @@ function criarConteudoLancamentos(item) {
                 <button class="origem-btn ${ativoClass}" 
                         data-documento-id="${item.documento.id}"
                         data-origem-numero="${origem.numero}"
+                        data-origem-identidade="${origem.identidade}"
                         title="Escolher origem ${origem.numero}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>

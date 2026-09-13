@@ -256,8 +256,16 @@ class OrigensDisponiveisTest(_Issue201Fixture, TestCase):
         self.assertEqual(
             item_t10786['origens_disponiveis'],
             [
-                {'numero': 'T3281', 'escolhida': False},
-                {'numero': 'T3280', 'escolhida': True},
+                {
+                    'numero': 'T3281',
+                    'identidade': f'documento:{self.doc_t3281.id}',
+                    'escolhida': False,
+                },
+                {
+                    'numero': 'T3280',
+                    'identidade': f'documento:{self.doc_t3280.id}',
+                    'escolhida': True,
+                },
             ],
         )
         self.assertEqual(item_t10786['escolha_atual'], 'T3280')

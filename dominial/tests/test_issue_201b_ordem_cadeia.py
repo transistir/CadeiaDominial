@@ -479,6 +479,36 @@ class Forma384ComEscolhaTest(_Forma384, TestCase):
             ['M8272', 'M7775', 'M2623', 'M2072', 'T13367', 'T10786', 'T3281', 'T2391'],
         )
 
+    def test_escolhas_da_query_nao_objeto_viram_override_vazio(self):
+        self._logar()
+        session = self.client.session
+        session[f'origem_documento_{self.docs["M7775"].id}'] = 'M2622'
+        session.save()
+        url = reverse(
+            'tronco_principal',
+            kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id},
+        )
+
+        for escolhas in ('[]', '"x"', 'null', '{"documento": 123}'):
+            with self.subTest(escolhas=escolhas):
+                response = self.client.get(url, {'escolhas': escolhas})
+                self.assertEqual(response.status_code, 200)
+                ids = re.findall(
+                    r'class="documento-row[^"]*" data-documento-id="(\d+)"',
+                    response.content.decode(),
+                )
+                numero_por_id = {
+                    str(documento.id): numero
+                    for numero, documento in self.docs.items()
+                }
+                self.assertEqual(
+                    [numero_por_id[doc_id] for doc_id in ids],
+                    [
+                        'M8272', 'M7775', 'M2623', 'M2072',
+                        'T13367', 'T10786', 'T3281', 'T2391',
+                    ],
+                )
+
     def test_chave_canonica_nao_reordena_as_linhas_da_tabela(self):
         documentos = [item['documento'] for item in self._cadeia_com_escolha()]
         # Garante que a tabela mantém T9231 antes de T13963 por hierarquia.
@@ -1044,6 +1074,108 @@ class OrigensHomonimasDeCartoriosDiferentesTest(_OrdemCadeiaFixture, TestCase):
         )
         self.assertNotIn(self.docs['M123'], documentos)
         self.assertNotIn(self.docs['T50'], documentos)
+
+    def test_selecionar_segundo_homonimo_segue_seu_galho_e_marca_so_seu_botao(self):
+        t10 = Documento.objects.create(
+            imovel=self.outro_imovel, tipo=self.tipos_documento['T'], numero='T10',
+            data=DATA_PRESUMIDA, cartorio=self.cartorio, livro='1', folha='1',
+        )
+        t20 = Documento.objects.create(
+            imovel=self.outro_imovel, tipo=self.tipos_documento['T'], numero='T20',
+            data=DATA_PRESUMIDA, cartorio=self.outro_cartorio, livro='1', folha='1',
+        )
+        self.docs['M123'].lancamentos.update(origem='T10')
+        Lancamento.objects.bulk_create([
+            Lancamento(
+                documento=self.m123_outro_cartorio,
+                tipo=self.tipo_inicio,
+                data=DATA_PRESUMIDA,
+                cartorio_origem=self.outro_cartorio,
+                origem='T20',
+            ),
+        ])
+
+        self._logar()
+        identidade_segundo = f'documento:{self.docs["M123"].id}'
+        url_tabela = reverse(
+            'tronco_principal',
+            kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id},
+        )
+
+        pagina = self.client.get(url_tabela, {
+            'escolhas': json.dumps({str(self.docs['M100'].id): identidade_segundo}),
+        })
+        self.assertEqual(pagina.status_code, 200)
+        self.assertContains(
+            pagina,
+            f'data-origem-identidade="{identidade_segundo}"',
+            count=1,
+        )
+        self.assertEqual(
+            [item['documento'] for item in pagina.context['cadeia']],
+            [self.docs['M100'], self.docs['M123'], t10],
+        )
+
+        resposta_post = self.client.post(
+            reverse('escolher_origem_documento'),
+            data=json.dumps({
+                'documento_id': self.docs['M100'].id,
+                'origem_identidade': identidade_segundo,
+                'tis_id': self.tis.id,
+                'imovel_id': self.imovel.id,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(resposta_post.status_code, 200)
+        self.assertTrue(resposta_post.json()['success'])
+        self.assertEqual(
+            self.client.session[f'origem_documento_{self.docs["M100"].id}'],
+            identidade_segundo,
+        )
+
+        payload = self.client.get(reverse(
+            'get_cadeia_dominial_atualizada',
+            kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id},
+        )).json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(
+            [item['documento']['numero'] for item in payload['cadeia']],
+            ['M100', 'M123', 'T10'],
+        )
+        item_m100 = payload['cadeia'][0]
+        self.assertEqual(
+            [origem['identidade'] for origem in item_m100['origens_disponiveis']],
+            [
+                f'documento:{self.m123_outro_cartorio.id}',
+                identidade_segundo,
+                f'documento:{self.docs["T50"].id}',
+            ],
+        )
+        self.assertEqual(
+            [origem['escolhida'] for origem in item_m100['origens_disponiveis']],
+            [False, True, False],
+        )
+        self.assertNotIn(t20.id, [item['documento']['id'] for item in payload['cadeia']])
+
+    def test_api_rejeita_identidade_que_nao_e_origem_direta(self):
+        self._logar()
+        resposta = self.client.post(
+            reverse('escolher_origem_documento'),
+            data=json.dumps({
+                'documento_id': self.docs['M100'].id,
+                'origem_identidade': f'documento:{self.docs["M100"].id}',
+                'tis_id': self.tis.id,
+                'imovel_id': self.imovel.id,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(resposta.json()['success'])
+        self.assertNotIn(
+            f'origem_documento_{self.docs["M100"].id}',
+            self.client.session,
+        )
 
 
 class ModalDeSequenciaTest(_OrdemCadeiaFixture, TestCase):

@@ -8,6 +8,11 @@ from django.db.models import Q
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..utils import normalizar_texto_opcional
 from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
+from ..utils.hierarquia_utils import (
+    _selecionar_origem_contextual,
+    obter_origens_resolvidas,
+    serializar_identidade_origem,
+)
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -227,29 +232,58 @@ def lancamentos(request):
 @require_http_methods(["POST"])
 def escolher_origem_documento(request):
     """
-    API para escolher origem no nível do documento
+    API para escolher origem no nível do documento.
+
+    Recebe ``origem_identidade="documento:<id>"``. ``origem_numero`` é
+    mantido para clientes antigos, mas só é aceito quando o código resolve uma
+    única origem do documento.
     """
     try:
         data = json.loads(request.body)
         documento_id = data.get('documento_id')
+        origem_identidade = data.get('origem_identidade')
         origem_numero = data.get('origem_numero')
+        escolha_origem = origem_identidade or origem_numero
         tis_id = data.get('tis_id')
         imovel_id = data.get('imovel_id')
         
-        if not all([documento_id, origem_numero, tis_id, imovel_id]):
+        if not all([documento_id, escolha_origem, tis_id, imovel_id]):
             return JsonResponse({
                 'success': False,
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
+
+        documento = Documento.objects.filter(pk=documento_id).first()
+        if documento is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Documento não encontrado',
+            }, status=400)
+
+        origens_resolvidas = obter_origens_resolvidas(documento)
+        documento_origem = _selecionar_origem_contextual(
+            [origem.documento for origem in origens_resolvidas],
+            escolha_origem,
+        )
+        if documento_origem is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Origem não pertence às origens resolvidas do documento',
+            }, status=400)
+
+        escolha_canonica = serializar_identidade_origem(documento_origem)
         
         # Salvar escolha na sessão
         session_key = f'origem_documento_{documento_id}'
-        request.session[session_key] = origem_numero
+        request.session[session_key] = escolha_canonica
         
         # Não retornar cadeia_data para evitar erro de serialização
         return JsonResponse({
             'success': True,
-            'message': f'Origem {origem_numero} escolhida para documento {documento_id}'
+            'message': (
+                f'Origem {documento_origem.numero} escolhida para documento '
+                f'{documento_id}'
+            ),
         })
         
     except json.JSONDecodeError:

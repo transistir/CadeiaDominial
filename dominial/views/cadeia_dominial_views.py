@@ -129,7 +129,12 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
 
 @login_required
 def tronco_principal(request, tis_id, imovel_id):
-    """Exibe o tronco principal da cadeia dominial em formato de tabela"""
+    """Exibe o tronco principal da cadeia dominial em formato de tabela.
+
+    ``?escolhas={"<documento>":"documento:<origem>"}`` distingue homônimos.
+    O valor legado ``"M123"`` continua válido quando houver uma única origem
+    contextual com esse código.
+    """
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
@@ -138,7 +143,17 @@ def tronco_principal(request, tis_id, imovel_id):
     escolhas_param = request.GET.get('escolhas')
     if escolhas_param is not None:
         try:
-            escolhas_origem = json.loads(escolhas_param)
+            escolhas_decodificadas = json.loads(escolhas_param)
+            if (
+                isinstance(escolhas_decodificadas, dict)
+                and all(
+                    isinstance(chave, str) and isinstance(valor, str)
+                    for chave, valor in escolhas_decodificadas.items()
+                )
+            ):
+                escolhas_origem = escolhas_decodificadas
+            else:
+                escolhas_origem = {}
         except json.JSONDecodeError:
             escolhas_origem = {}
     
