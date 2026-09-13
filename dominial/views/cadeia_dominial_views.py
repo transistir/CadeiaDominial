@@ -4,6 +4,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils import normalizar_texto_opcional
+from ..utils.ordenacao_cadeia import chave_ordem_serializada
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -128,29 +129,44 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
 
 @login_required
 def tronco_principal(request, tis_id, imovel_id):
-    """Exibe o tronco principal da cadeia dominial em formato de tabela"""
+    """Exibe o tronco principal da cadeia dominial em formato de tabela.
+
+    ``?escolhas={"<documento>":"documento:<origem>"}`` distingue homônimos.
+    O valor legado ``"M123"`` continua válido quando houver uma única origem
+    contextual com esse código.
+    """
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
     # Obter escolhas de origem da URL (se houver)
-    escolhas_origem = {}
+    escolhas_origem = None
     escolhas_param = request.GET.get('escolhas')
-    if escolhas_param:
+    if escolhas_param is not None:
         try:
-            escolhas_origem = json.loads(escolhas_param)
+            escolhas_decodificadas = json.loads(escolhas_param)
+            if (
+                isinstance(escolhas_decodificadas, dict)
+                and all(
+                    isinstance(chave, str) and isinstance(valor, str)
+                    for chave, valor in escolhas_decodificadas.items()
+                )
+            ):
+                escolhas_origem = escolhas_decodificadas
+            else:
+                escolhas_origem = {}
         except json.JSONDecodeError:
             escolhas_origem = {}
     
-    # Obter cadeia em formato de tabela
+    # Obter cadeia em formato de tabela. O método completo combina as escolhas
+    # persistidas na sessão com o override opcional recebido pela URL.
     service = CadeiaDominialTabelaService()
-    
-    # Se há escolhas de origem, usar o método completo
-    if escolhas_origem:
-        result = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session, escolhas_origem)
-        cadeia = result.get('cadeia', [])
-    else:
-        # Se não há escolhas, usar o método simples (tronco principal)
-        cadeia = service.obter_cadeia_tabela(imovel, escolhas_origem)
+    result = service.get_cadeia_dominial_tabela(
+        tis_id,
+        imovel_id,
+        request.session,
+        escolhas_origem,
+    )
+    cadeia = result.get('cadeia', [])
     
     # Verificar se há lançamentos
     tem_lancamentos = False
@@ -750,8 +766,9 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
 def organizar_documentos_hierarquicamente(documentos, arvore):
     """
     Organiza documentos seguindo lógica hierárquica:
-    1. Maior número do menor nível
-    2. Expandir origens do documento (maior número primeiro)
+    1. Primeiro documento do menor nível na ordem canônica da cadeia
+       (matrícula antes de transcrição, número maior antes de menor)
+    2. Expandir origens do documento, na mesma ordem
     3. Repetir até incluir todos os documentos
     """
     if not documentos:
@@ -776,11 +793,10 @@ def organizar_documentos_hierarquicamente(documentos, arvore):
             docs_por_nivel[nivel] = []
         docs_por_nivel[nivel].append(doc)
     
-    # Ordenar documentos em cada nível por número (maior primeiro)
+    # Ordenar documentos em cada nível na ordem canônica da cadeia, a mesma da
+    # tabela (matrícula antes de transcrição, número maior antes de menor)
     for nivel in docs_por_nivel:
-        docs_por_nivel[nivel].sort(key=lambda x: 
-            -int(x['numero'].replace('M', '').replace('T', '')) if x['numero'].replace('M', '').replace('T', '').isdigit() else 0
-        )
+        docs_por_nivel[nivel].sort(key=chave_ordem_serializada)
     
     # Algoritmo de organização hierárquica
     documentos_organizados = []
@@ -814,10 +830,8 @@ def expandir_origens_hierarquicamente(documento, conexoes, docs_por_id, document
     origens_ids = conexoes[documento['id']]
     origens = [docs_por_id[origem_id] for origem_id in origens_ids if origem_id in docs_por_id]
     
-    # Ordenar origens por número (maior primeiro)
-    origens.sort(key=lambda x: 
-        -int(x['numero'].replace('M', '').replace('T', '')) if x['numero'].replace('M', '').replace('T', '').isdigit() else 0
-    )
+    # Ordenar origens na ordem canônica da cadeia
+    origens.sort(key=chave_ordem_serializada)
     
     # Adicionar origens na ordem
     for origem in origens:
