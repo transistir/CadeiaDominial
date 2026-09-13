@@ -10,6 +10,7 @@ from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..services.keyword_alerta_service import buscar_keyword
 from ..utils.documento_identidade_utils import DocumentoIdentidade
+from ..utils.hierarquia_utils import obter_origens_resolvidas
 from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem, ordenar_cadeia
 
 
@@ -120,27 +121,15 @@ class CadeiaDominialTabelaService:
                 lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
             lancamentos = lancamentos_list
             
-            # Verificar se tem múltiplas origens
-            origens_disponiveis = self._obter_origens_documento(documento, lancamentos)
-            tem_multiplas_origens = len(origens_disponiveis) > 1
-            
-            # Verificar escolha atual das escolhas de origem
-            escolha_atual = escolhas_origem.get(str(documento.id)) if escolhas_origem else None
-            
-            # Se não há escolha na sessão E há origens disponíveis, o padrão é a
-            # primeira da lista (ordem canônica), a mesma origem que a cadeia segue
-            if not escolha_atual and origens_disponiveis:
-                escolha_atual = origens_disponiveis[0]
-            
-            # Formatar origens para o template (na ordem canônica)
-            origens_formatadas = []
-            for i, origem in enumerate(origens_disponiveis):
-                # Sem escolha na sessão, a primeira origem é a escolhida
-                is_escolhida = (origem == escolha_atual) if escolha_atual else (i == 0)
-                origens_formatadas.append({
-                    'numero': origem,
-                    'escolhida': is_escolhida
-                })
+            # Botões de origem: só as origens que resolvem para um documento
+            # real, na ordem canônica; sem escolha na sessão, a destacada é a
+            # primeira, a mesma origem que a cadeia segue
+            origens_formatadas, escolha_atual = self._botoes_de_origem(
+                documento,
+                lancamentos,
+                escolhas_origem.get(str(documento.id)) if escolhas_origem else None,
+            )
+            tem_multiplas_origens = len(origens_formatadas) > 1
             
             # Verificar se documento é compartilhado (pertence a outro imóvel)
             is_compartilhado = documento.imovel != imovel
@@ -166,18 +155,41 @@ class CadeiaDominialTabelaService:
     
     def _obter_origens_documento(self, documento, lancamentos):
         """
-        Obtém as origens disponíveis para um documento (apenas origens válidas
-        para navegação), na ordem canônica da cadeia
+        Códigos das origens de um documento que resolvem para um documento real,
+        na ordem canônica da cadeia: o mesmo conjunto, na mesma ordem, que a
+        caminhada do tronco percorre (`obter_origens_resolvidas`). Uma origem
+        inexistente não vira botão, e homônimos de cartórios diferentes são
+        opções distintas.
         """
-        # dict.fromkeys deduplica mantendo a ordem de leitura: com um set,
-        # códigos de chave idêntica ficariam na ordem arbitrária do hash
-        codigos = dict.fromkeys(
+        return [
             origem.codigo
-            for lancamento in lancamentos
-            if lancamento.tipo.tipo == 'inicio_matricula'
-            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento)
-        )
-        return sorted(codigos, key=chave_ordem_origem)
+            for origem in obter_origens_resolvidas(documento, lancamentos)
+        ]
+
+    def _botoes_de_origem(self, documento, lancamentos, escolha_sessao=None):
+        """
+        Botões de origem de um documento, iguais nas duas trilhas da tabela.
+
+        Com escolha na sessão, ela é a destacada; sem escolha, a primeira
+        origem, a mesma que a cadeia segue por padrão. O destaque padrão é pela
+        posição, e não pelo código: homônimos de cartórios diferentes têm o
+        mesmo código.
+
+        Returns:
+            tuple: (origens formatadas para o template, escolha atual)
+        """
+        codigos = self._obter_origens_documento(documento, lancamentos)
+        escolha_atual = escolha_sessao or (codigos[0] if codigos else None)
+        origens_formatadas = [
+            {
+                'numero': codigo,
+                'escolhida': (
+                    codigo == escolha_sessao if escolha_sessao else indice == 0
+                ),
+            }
+            for indice, codigo in enumerate(codigos)
+        ]
+        return origens_formatadas, escolha_atual
     
     def _extrair_origens(self, origem_string):
         """
@@ -267,37 +279,13 @@ class CadeiaDominialTabelaService:
                 lanc.keyword_encontrada = buscar_keyword(lanc.observacoes)
             lancamentos = lancamentos_list
             
-            # Verificar se tem múltiplas origens
-            tem_multiplas_origens = False
-            origens_disponiveis = []
-            
-            for lancamento in lancamentos:
-                if lancamento.tipo.tipo == 'inicio_matricula':
-                    origens_lancamento = LancamentoOrigemLeituraService.obter_origens(
-                        lancamento
-                    )
-                    if len(origens_lancamento) > 1:
-                        tem_multiplas_origens = True
-                        origens_disponiveis = self._origens_disponiveis_lancamento(
-                            lancamento
-                        )
-                        break
-            
-            # Verificar escolha atual
-            escolha_atual = escolhas_origem.get(str(documento.id))
-            
-            # Se não há escolha e há origens disponíveis, usar a primeira (ordem canônica)
-            if not escolha_atual and origens_disponiveis:
-                escolha_atual = origens_disponiveis[0]['numero']
-            
-            # Formatar origens para o template
-            origens_formatadas = []
-            for i, origem in enumerate(origens_disponiveis):
-                is_escolhida = (origem['numero'] == escolha_atual) if escolha_atual else (i == 0)
-                origens_formatadas.append({
-                    'numero': origem['numero'],
-                    'escolhida': is_escolhida
-                })
+            # Botões de origem: os mesmos da trilha com escolha (origens de todos
+            # os lançamentos que resolvem para um documento real, na ordem
+            # canônica), e a destacada é a origem que o tronco segue
+            origens_formatadas, escolha_atual = self._botoes_de_origem(
+                documento, lancamentos, escolhas_origem.get(str(documento.id))
+            )
+            tem_multiplas_origens = len(origens_formatadas) > 1
             
             # Verificar se documento é compartilhado (pertence a outro imóvel)
             is_compartilhado = documento.imovel != imovel
@@ -313,21 +301,6 @@ class CadeiaDominialTabelaService:
         
         return cadeia_completa
 
-    @staticmethod
-    def _origens_disponiveis_lancamento(lancamento):
-        origens = []
-        for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
-            documento = CadeiaDominialTabelaService._resolver_documento_por_codigo(
-                origem.codigo, origem.cartorio
-            )
-            if documento:
-                origens.append({
-                    'numero': origem.codigo,
-                    'documento': documento,
-                    'escolhida': False,
-                })
-        return sorted(origens, key=lambda item: chave_ordem_origem(item['numero']))
-    
     @staticmethod
     def extrair_origens_disponiveis(origem_texto, imovel, cartorio_origem=None):
         """
@@ -457,34 +430,19 @@ class CadeiaDominialTabelaService:
 
     def _obter_documento_origem_mais_alto(self, documento):
         """
-        Obtém a origem padrão de um documento: a primeira na ordem canônica da
-        cadeia, a mesma destacada como padrão nos botões de origem
+        Obtém a origem padrão de um documento: a primeira na ordem canônica
+        entre as origens que resolvem para um documento real, a mesma destacada
+        como padrão nos botões de origem
         """
-        # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.all()
-
-        origens_encontradas = []
-
-        for lancamento in lancamentos:
-            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
-                # Resolver documento de origem pela identidade completa
-                doc_origem = self._resolver_documento_por_codigo(
-                    origem.codigo, origem.cartorio
-                )
-
-                if doc_origem:
-                    origens_encontradas.append(doc_origem)
-
-        # A primeira na ordem canônica (a mesma destacada nos botões de origem)
-        if origens_encontradas:
-            return ordenar_cadeia(origens_encontradas)[0]
-
-        return None
+        origens = obter_origens_resolvidas(documento)
+        return origens[0].documento if origens else None
     
     def _expandir_cadeia_recursiva(self, documento, documentos_processados, escolhas_origem=None, profundidade=0):
         """
-        Expande recursivamente apenas a subcadeia da origem escolhida (ou padrão) de um documento,
-        seguindo a ordem: matrículas maiores, depois transcrições maiores, ambos do maior para o menor.
+        Expande recursivamente apenas a subcadeia da origem escolhida (ou padrão) de um documento.
+        As candidatas são as origens que resolvem para um documento real, na ordem
+        canônica; a padrão é a primeira (maior matrícula, depois maior transcrição),
+        a mesma destacada nos botões de origem.
         """
         # Proteção contra recursão infinita
         if profundidade > 50:  # Limite máximo de profundidade
@@ -493,58 +451,36 @@ class CadeiaDominialTabelaService:
             
         cadeia_expandida = []
 
-        # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.all()
-
-        # Coletar todas as origens possíveis, associadas ao lançamento que as
-        # informou (cada uma tem seu próprio cartório de origem)
-        origem_para_contexto = {}
-        for lancamento in lancamentos:
-            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
-                origem_para_contexto.setdefault(origem.codigo, origem)
-        origens = list(origem_para_contexto.keys())
-
-        # Filtrar origens válidas antes de ordenar
-        origens_validas = []
-        for origem in origens:
-            try:
-                if origem.startswith(('M', 'T')):
-                    numero_part = origem[1:]  # Remove M ou T
-                    if numero_part.isdigit():
-                        origens_validas.append(origem)
-                    else:
-                        print(f"⚠️ Origem ignorada (não é número válido): '{origem}'")
-                else:
-                    origens_validas.append(origem)
-            except Exception as e:
-                print(f"⚠️ Origem ignorada (erro): '{origem}' - {str(e)}")
+        # Origens que resolvem para um documento real, cada uma com o cartório
+        # do seu lançamento (homônimos de cartórios diferentes são origens
+        # distintas), na ordem canônica: uma origem inexistente nunca é a
+        # seguida, e a padrão é a destacada nos botões de origem
+        origens = obter_origens_resolvidas(documento)
         
-        # Ordem canônica: matrículas maiores primeiro, depois transcrições maiores
-        origens_validas.sort(key=chave_ordem_origem)
-        origens = origens_validas
+        if not origens:
+            return cadeia_expandida
 
-        # Determinar origem escolhida
+        # Determinar origem escolhida: a da sessão, se for uma dessas origens;
+        # senão a padrão, a primeira (maior matrícula, depois maior transcrição)
         escolha_especifica = None
         if escolhas_origem:
             escolha_especifica = escolhas_origem.get(str(documento.id))
-        if escolha_especifica and escolha_especifica in origens:
-            origem_escolhida = escolha_especifica
-        elif origens:
-            origem_escolhida = origens[0]  # padrão: maior matrícula, depois maior transcrição
-        else:
-            origem_escolhida = None
+        doc_origem = next(
+            (
+                origem.documento
+                for origem in origens
+                if origem.codigo == escolha_especifica
+            ),
+            origens[0].documento,
+        )
 
         # Só expandir a subcadeia da origem escolhida
-        if origem_escolhida:
-            contexto_origem = origem_para_contexto.get(origem_escolhida)
-            cartorio_origem = contexto_origem.cartorio if contexto_origem else None
-            doc_origem = self._resolver_documento_por_codigo(origem_escolhida, cartorio_origem)
-            if doc_origem and doc_origem.id not in documentos_processados:
-                cadeia_expandida.append(doc_origem)
-                documentos_processados.add(doc_origem.id)
-                # Recursão: expandir apenas a subcadeia da origem escolhida
-                sub_cadeia = self._expandir_cadeia_recursiva(doc_origem, documentos_processados, escolhas_origem, profundidade + 1)
-                cadeia_expandida.extend(sub_cadeia)
+        if doc_origem.id not in documentos_processados:
+            cadeia_expandida.append(doc_origem)
+            documentos_processados.add(doc_origem.id)
+            # Recursão: expandir apenas a subcadeia da origem escolhida
+            sub_cadeia = self._expandir_cadeia_recursiva(doc_origem, documentos_processados, escolhas_origem, profundidade + 1)
+            cadeia_expandida.extend(sub_cadeia)
         return cadeia_expandida
     
     def _garantir_todos_documentos_incluidos(self, imovel, documentos_atuais):

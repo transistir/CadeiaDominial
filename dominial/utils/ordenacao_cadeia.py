@@ -11,11 +11,31 @@ Regra jurídica definida pelo dono do produto, nesta precedência:
 A data do documento não entra na regra: neste banco ela é quase sempre
 fictícia ou presumida.
 
-Este módulo é a única implementação dessa ordem. Ela decide as linhas da
-tabela da cadeia dominial, a ordem dos botões de origem e a origem seguida por
-padrão quando o usuário não escolheu nenhuma (sempre a primeira da lista), para
-que a origem destacada seja a origem exibida. A exportação PDF/XLS
-(`CadeiaCompletaService`) é agrupada por troncos e não usa esta ordem.
+Este módulo é a única implementação dessa ordem. Por decisão do dono do produto
+(13/09/2026), ela vale para todas as superfícies da cadeia: é requisito jurídico
+de consistência que o que a tela mostra seja o que o documento exporta.
+Consomem a chave:
+
+- as linhas da tabela da cadeia dominial, nas duas trilhas
+  (`obter_cadeia_tabela` e `get_cadeia_dominial_tabela`, que também alimenta a
+  exportação PDF da tabela);
+- os botões de origem e a origem destacada por padrão, sempre a primeira da
+  lista (`obter_origens_resolvidas`, em `hierarquia_utils`);
+- a caminhada do tronco principal (`identificar_tronco_principal`): o documento
+  inicial, quando falta o documento do imóvel, e a origem seguida a cada passo
+  quando o usuário não escolheu nenhuma, a mesma destacada nos botões, para que
+  a origem destacada seja a cadeia exibida;
+- a expansão das origens importadas, na trilha com escolha;
+- a ordem dos documentos fora do tronco no modal de sequência
+  (`organizar_documentos_hierarquicamente`).
+
+Por consequência, seguem o mesmo tronco principal as superfícies que consomem
+`HierarquiaService.obter_tronco_principal`: a exportação PDF/XLS da cadeia
+completa, a página da árvore e o modal de sequência. A exportação
+(`CadeiaCompletaService`) continua agrupada por troncos; esta chave decide qual
+origem o tronco segue por padrão e, com isso, a sequência de documentos dentro
+dele. Medido no test server: a caminhada muda em 14 de 406 imóveis, e o
+conjunto de documentos exportados não muda.
 
 As funções não consultam o banco nem importam models, para poderem ser usadas
 por `hierarquia_utils` sem ciclo de importação.
@@ -82,6 +102,22 @@ def chave_ordem_origem(codigo):
     `chave_ordem_cadeia(documento)`."""
     tipo = _TIPO_POR_PREFIXO.get(str(codigo).strip()[:1].upper())
     return _chave(False, tipo, codigo)
+
+
+def chave_ordem_serializada(documento):
+    """A mesma chave para um documento já serializado em dict, com 'numero' e,
+    se houver, 'tipo' (como os nós da árvore usados pelo modal de sequência).
+
+    Sem 'tipo', o tipo vem do prefixo M/T do número, como em
+    `chave_ordem_origem`; um tipo que não é matrícula nem transcrição (o nó de
+    fim de cadeia) vai depois das transcrições. Um documento serializado nunca
+    recebe o rank de documento do imóvel. Para o dict de um documento, coincide
+    com `chave_ordem_cadeia(documento)`.
+    """
+    tipo = documento.get('tipo')
+    if not tipo:
+        return chave_ordem_origem(documento['numero'])
+    return _chave(False, tipo, documento['numero'])
 
 
 def ordenar_cadeia(documentos, imovel=None):

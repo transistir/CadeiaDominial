@@ -4,6 +4,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils import normalizar_texto_opcional
+from ..utils.ordenacao_cadeia import chave_ordem_serializada
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
 from ..services.cache_service import CacheService
@@ -750,8 +751,9 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
 def organizar_documentos_hierarquicamente(documentos, arvore):
     """
     Organiza documentos seguindo lógica hierárquica:
-    1. Maior número do menor nível
-    2. Expandir origens do documento (maior número primeiro)
+    1. Primeiro documento do menor nível na ordem canônica da cadeia
+       (matrícula antes de transcrição, número maior antes de menor)
+    2. Expandir origens do documento, na mesma ordem
     3. Repetir até incluir todos os documentos
     """
     if not documentos:
@@ -776,11 +778,10 @@ def organizar_documentos_hierarquicamente(documentos, arvore):
             docs_por_nivel[nivel] = []
         docs_por_nivel[nivel].append(doc)
     
-    # Ordenar documentos em cada nível por número (maior primeiro)
+    # Ordenar documentos em cada nível na ordem canônica da cadeia, a mesma da
+    # tabela (matrícula antes de transcrição, número maior antes de menor)
     for nivel in docs_por_nivel:
-        docs_por_nivel[nivel].sort(key=lambda x: 
-            -int(x['numero'].replace('M', '').replace('T', '')) if x['numero'].replace('M', '').replace('T', '').isdigit() else 0
-        )
+        docs_por_nivel[nivel].sort(key=chave_ordem_serializada)
     
     # Algoritmo de organização hierárquica
     documentos_organizados = []
@@ -814,10 +815,8 @@ def expandir_origens_hierarquicamente(documento, conexoes, docs_por_id, document
     origens_ids = conexoes[documento['id']]
     origens = [docs_por_id[origem_id] for origem_id in origens_ids if origem_id in docs_por_id]
     
-    # Ordenar origens por número (maior primeiro)
-    origens.sort(key=lambda x: 
-        -int(x['numero'].replace('M', '').replace('T', '')) if x['numero'].replace('M', '').replace('T', '').isdigit() else 0
-    )
+    # Ordenar origens na ordem canônica da cadeia
+    origens.sort(key=chave_ordem_serializada)
     
     # Adicionar origens na ordem
     for origem in origens:
