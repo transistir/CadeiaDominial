@@ -156,6 +156,25 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    - Evidência das exportações — XLS do imóvel 114: **17 documentos**; XLS do
      imóvel 384: **30 documentos**. PDF de cadeia completa do imóvel 114: os
      mesmos **17 documentos** do XLS, nenhum faltando.
+   - **Ordem da exportação (XLS/PDF), confirmada pelo produto:** agrupada por
+     galho/tronco, **seguindo sempre o galho pelo maior número primeiro** e
+     varrendo tudo até que **todos** os documentos apareçam. É diferente da
+     tela, que mostra uma linha por nível e somente o galho escolhido.
+   - Evidência real medida pelo orquestrador na `1c0db87c`, no serviço de teste
+     via HTTP:
+     - XLS do imóvel 114 (TI 126) = **17 documentos**, na ordem
+       `M18692 > M16433 > M13826 > M13320 > M13133 > M13132 > M10509 > M7843 > M7842 > M7697`,
+       depois
+       `T10104 > T10102 > T8591 > T8390 > T8389 > T7890 > T7670` —
+       **decrescente em cada grupo**.
+     - XLS do imóvel 384 (TI 201) = **30 documentos**: os 8 da trilha principal
+       e depois `M2622 > M002621`, `T13963 > T13366 > T9231 > T9001`, e
+       `T6903 > T6873 > T5184 > T4591 > T4590 > T4589 > T4559 > T4558 > T3446 > T3445 > T3444 > T3443 > T3280 > T3151 > T3059 > T341`
+       — **decrescente**.
+     - PDF do imóvel 114 = os mesmos **17 documentos** do XLS, na mesma ordem
+       (9 páginas).
+   - **Conclusão:** a ordem da exportação já está conforme a regra; não há
+     mudança de código pendente por causa dela.
 2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
    - F1: trilha única no service para a **exportação** (cadeia completa sempre
      expandida no XLS/PDF), mantendo a **tela com uma linha por nível**;
