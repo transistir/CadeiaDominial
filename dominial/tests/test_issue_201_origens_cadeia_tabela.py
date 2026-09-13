@@ -16,10 +16,10 @@ A correção remove o filtro do JS e faz `get_cadeia_dominial_atualizada`
 calculados pelas mesmas funções de `dominial/utils/formatacao_utils.py` usadas
 pelo template (sem duplicar a regra no JS).
 
-Estes testes fixam o comportamento do servidor, já validado em produção e que
-não deve mudar nesta correção: sem escolha, o serviço segue apenas o tronco
-linear (origem de maior número); com escolha, o tronco é expandido com TODAS
-as origens importadas e suas subcadeias abaixo da origem escolhida.
+Estes testes fixam o comportamento do servidor definido na continuação da
+issue #201: com ou sem escolha, a tabela mostra apenas um tronco, na ordem da
+caminhada hierárquica. Entre as origens irmãs de um documento, a chave
+canônica decide a origem padrão; os demais galhos não viram linhas.
 
 Fixture (espelha os imóveis de produção 384/358): um imóvel A analisado
 (matrícula M100, tronco linear) cuja matrícula tem uma única origem
@@ -32,6 +32,7 @@ longa (T9001 -> T4558, fim de cadeia implícito por origem vazia).
 import json
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -183,12 +184,12 @@ class _Issue201Fixture:
     # -- Helpers ----------------------------------------------------------
 
     def _numeros_service(self, cadeia):
-        """Conjunto de números de documento a partir do retorno do service."""
-        return {item['documento'].numero for item in cadeia}
+        """Números de documento, na ordem devolvida pelo service."""
+        return [item['documento'].numero for item in cadeia]
 
     def _numeros_api(self, cadeia_json):
-        """Conjunto de números de documento a partir do JSON da API."""
-        return {item['documento']['numero'] for item in cadeia_json}
+        """Números de documento, na ordem devolvida pela API."""
+        return [item['documento']['numero'] for item in cadeia_json]
 
 
 class ServicoSemEscolhaTest(_Issue201Fixture, TestCase):
@@ -196,49 +197,47 @@ class ServicoSemEscolhaTest(_Issue201Fixture, TestCase):
 
     def test_tronco_sem_escolha_segue_a_origem_de_maior_numero(self):
         cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel_a)
+        # Garante a caminhada hierárquica pela origem padrão entre as irmãs.
         self.assertEqual(
             self._numeros_service(cadeia),
-            {'M100', 'T10786', 'T3281', 'T9001', 'T4558'},
+            ['M100', 'T10786', 'T3281', 'T9001', 'T4558'],
         )
 
 
 class ServicoComEscolhaTest(_Issue201Fixture, TestCase):
-    """Comportamento 2: com escolha, o tronco é expandido com a subcadeia
-    completa abaixo da origem escolhida (e as demais origens importadas)."""
+    """Comportamento 2: com escolha, só o tronco da origem escolhida aparece."""
 
-    def test_escolha_t3280_expande_tronco_incluindo_t2391(self):
+    def test_escolha_t3280_segue_apenas_o_tronco_ate_t2391(self):
         service = CadeiaDominialTabelaService()
         resultado = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel_a.id,
             escolhas_origem_param={str(self.doc_t10786.id): 'T3280'},
         )
         numeros = self._numeros_service(resultado['cadeia'])
+        # Garante hierarquia e ausência do galho irmão iniciado por T3281.
         self.assertEqual(
             numeros,
-            {'M100', 'T10786', 'T3280', 'T2391', 'T3281', 'T9001', 'T4558'},
+            ['M100', 'T10786', 'T3280', 'T2391'],
         )
-        # A subcadeia ABAIXO da origem escolhida entra, não só T3280.
-        self.assertIn('T2391', numeros)
 
-    def test_escolha_t3281_expande_tronco_incluindo_t9001_e_t4558(self):
+    def test_escolha_t3281_segue_apenas_o_tronco_ate_t4558(self):
         service = CadeiaDominialTabelaService()
         resultado = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel_a.id,
             escolhas_origem_param={str(self.doc_t10786.id): 'T3281'},
         )
         numeros = self._numeros_service(resultado['cadeia'])
+        # Garante hierarquia e ausência do galho irmão iniciado por T3280.
         self.assertEqual(
             numeros,
-            {'M100', 'T10786', 'T3280', 'T2391', 'T3281', 'T9001', 'T4558'},
+            ['M100', 'T10786', 'T3281', 'T9001', 'T4558'],
         )
-        self.assertIn('T9001', numeros)
-        self.assertIn('T4558', numeros)
 
 
 class OrigensDisponiveisTest(_Issue201Fixture, TestCase):
     """Comportamento 3: metadados de múltiplas origens/escolha atual."""
 
-    def test_com_escolha_t3280_marca_origem_escolhida_no_documento_t10786(self):
+    def test_com_escolha_t3280_marca_origem_e_remove_galho_t3281(self):
         service = CadeiaDominialTabelaService()
         resultado = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel_a.id,
@@ -247,6 +246,10 @@ class OrigensDisponiveisTest(_Issue201Fixture, TestCase):
         por_numero = {
             item['documento'].numero: item for item in resultado['cadeia']
         }
+
+        # Garante que o irmão não escolhido T3281 não aparece na tabela.
+        self.assertEqual(list(por_numero), ['M100', 'T10786', 'T3280', 'T2391'])
+        self.assertNotIn('T3281', por_numero)
 
         item_t10786 = por_numero['T10786']
         self.assertTrue(item_t10786['tem_multiplas_origens'])
@@ -259,7 +262,7 @@ class OrigensDisponiveisTest(_Issue201Fixture, TestCase):
         )
         self.assertEqual(item_t10786['escolha_atual'], 'T3280')
 
-        for numero in ('M100', 'T3280', 'T2391', 'T3281', 'T9001', 'T4558'):
+        for numero in ('M100', 'T3280', 'T2391'):
             self.assertFalse(
                 por_numero[numero]['tem_multiplas_origens'],
                 f'{numero} não deveria ter múltiplas origens',
@@ -293,12 +296,13 @@ class EndpointEscolhaOrigemTest(_Issue201Fixture, TestCase):
         )
         self.url_escolher = reverse('escolher_origem_documento')
 
-    def test_escolher_origem_via_post_expande_cadeia_no_get_seguinte(self):
+    def test_escolher_origem_via_post_substitui_o_tronco_no_get_seguinte(self):
         payload_inicial = self.client.get(self.url_api).json()
         self.assertTrue(payload_inicial['success'])
+        # Garante a ordem literal do tronco padrão antes da escolha via POST.
         self.assertEqual(
             self._numeros_api(payload_inicial['cadeia']),
-            {'M100', 'T10786', 'T3281', 'T9001', 'T4558'},
+            ['M100', 'T10786', 'T3281', 'T9001', 'T4558'],
         )
 
         resposta_post = self.client.post(
@@ -317,7 +321,7 @@ class EndpointEscolhaOrigemTest(_Issue201Fixture, TestCase):
         self.assertTrue(payload_final['success'])
         self.assertEqual(
             self._numeros_api(payload_final['cadeia']),
-            {'M100', 'T10786', 'T3280', 'T2391', 'T3281', 'T9001', 'T4558'},
+            ['M100', 'T10786', 'T3280', 'T2391'],
         )
 
         item_t10786 = next(
@@ -344,7 +348,7 @@ class ApiCamposFormatadosTest(_Issue201Fixture, TestCase):
             'get_cadeia_dominial_atualizada',
             kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel_a.id},
         )
-        # Escolher T3280 para que os 7 documentos apareçam na cadeia.
+        # Escolher T3280 para verificar os campos nas quatro linhas desse tronco.
         session = self.client.session
         session[f'origem_documento_{self.doc_t10786.id}'] = 'T3280'
         session.save()
@@ -353,7 +357,7 @@ class ApiCamposFormatadosTest(_Issue201Fixture, TestCase):
         self.assertTrue(payload['success'])
         self.assertEqual(
             self._numeros_api(payload['cadeia']),
-            {'M100', 'T10786', 'T3280', 'T2391', 'T3281', 'T9001', 'T4558'},
+            ['M100', 'T10786', 'T3280', 'T2391'],
         )
         # Cada documento da fixture tem exatamente um lançamento.
         self.lancamento_por_doc = {
@@ -362,6 +366,7 @@ class ApiCamposFormatadosTest(_Issue201Fixture, TestCase):
         }
 
     def test_todos_os_lancamentos_tem_campos_formatados_e_brutos(self):
+        # Garante o contrato formatado e bruto em todo o tronco escolhido.
         for numero, lancamento in self.lancamento_por_doc.items():
             self.assertIn('area_formatada', lancamento, numero)
             self.assertIn('origem_formatada', lancamento, numero)
@@ -370,11 +375,13 @@ class ApiCamposFormatadosTest(_Issue201Fixture, TestCase):
             self.assertIn('origem', lancamento, numero)
 
     def test_m100_area_formatada_em_padrao_brasileiro(self):
+        # Garante que a raiz do tronco mantém a área no padrão brasileiro.
         self.assertEqual(
             self.lancamento_por_doc['M100']['area_formatada'], '1234,5678'
         )
 
     def test_t10786_area_e_origem_formatadas_com_dupla_origem(self):
+        # Garante que os botões irmãos não alteram a origem formatada da linha.
         lancamento = self.lancamento_por_doc['T10786']
         self.assertEqual(lancamento['area_formatada'], '-')
         esperado = (
@@ -384,11 +391,13 @@ class ApiCamposFormatadosTest(_Issue201Fixture, TestCase):
         self.assertEqual(lancamento['origem_formatada'], esperado)
 
     def test_t3280_area_zero_formatada_como_traco(self):
+        # Garante que a origem escolhida mantém área zero representada por traço.
         self.assertEqual(
             self.lancamento_por_doc['T3280']['area_formatada'], '-'
         )
 
     def test_t2391_origem_de_fim_de_cadeia_formatada(self):
+        # Garante a formatação do fim do tronco escolhido.
         self.assertEqual(
             self.lancamento_por_doc['T2391']['origem_formatada'],
             'Destacamento Público : INCRA (Origem Lídima)',
@@ -400,6 +409,7 @@ class ParidadeTemplateTest(_Issue201Fixture, TestCase):
     os filtros de template usados na renderização server-side."""
 
     def test_campos_formatados_da_api_batem_com_os_filtros_do_template(self):
+        # Garante paridade de formatação nas quatro linhas do galho escolhido.
         self.client.force_login(self.user)
         url_api = reverse(
             'get_cadeia_dominial_atualizada',
@@ -437,8 +447,8 @@ class ParidadeTemplateTest(_Issue201Fixture, TestCase):
                 )
                 total_verificado += 1
 
-        # Os 7 lançamentos da cadeia expandida, um por documento.
-        self.assertEqual(total_verificado, 7)
+        # Os quatro lançamentos do tronco escolhido, um por documento.
+        self.assertEqual(total_verificado, 4)
 
 
 class ParidadePaginaTest(_Issue201Fixture, TestCase):
@@ -482,7 +492,7 @@ class TabelaJsRenderizaOQueOServidorEnviaTest(SimpleTestCase):
     impede que o filtro e o formatador duplicado voltem.
     """
 
-    DIRETORIO_STATIC = settings.STATICFILES_DIRS[0] / 'dominial'
+    DIRETORIO_STATIC = Path(settings.STATICFILES_DIRS[0]) / 'dominial'
 
     def test_js_nao_filtra_documentos_nem_duplica_formatadores(self):
         codigo = (

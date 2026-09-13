@@ -1,34 +1,23 @@
 """
-Issue #201 (follow-up) — ordem canônica da tabela da cadeia dominial.
+Issue #201 (follow-up) — hierarquia das linhas da cadeia dominial.
 
-Regra jurídica definida pelo dono do produto, nesta precedência:
+Regra definida pelo dono do produto:
 
-1. documento do imóvel (identidade registral) sempre primeiro;
-2. matrícula antes de transcrição — absoluto, não é desempate;
-3. número maior antes de menor, comparado como inteiro (nunca como texto).
+1. as linhas seguem a caminhada hierárquica: o documento aparece antes da
+   origem que ele cita;
+2. cada nível segue somente uma origem; galhos irmãos não escolhidos não são
+   expandidos na tabela;
+3. somente entre as origens irmãs de um mesmo documento, matrícula precede
+   transcrição e o maior número precede o menor;
+4. a chave canônica escolhe a origem padrão e ordena os botões, mas nunca
+   reordena globalmente as linhas da tabela.
 
-A mesma chave ordena as linhas da tabela (rota `ver-cadeia-dominial`, nas duas
-trilhas da view `tronco_principal`), os botões de origem e a origem seguida por
-padrão — sempre a primeira da lista, para que o botão destacado seja a cadeia
-exibida —, o documento inicial do tronco quando falta o documento do imóvel e
-os documentos do modal de sequência. Ela vive num único lugar:
-`dominial/utils/ordenacao_cadeia.py`. Botões e caminhada partem do mesmo
-conjunto de origens: as que resolvem para um documento real
-(`obter_origens_resolvidas`).
-
-Antes desta correção conviviam ordenações divergentes: linhas por data
-(`obter_cadeia_tabela`), linhas na ordem de expansão
-(`get_cadeia_dominial_tabela`), botões por número ignorando o tipo ou por texto
-(`'M717' > 'M1612'`) e a caminhada do tronco por número ignorando o tipo
-(`identificar_tronco_principal`). No imóvel 4, a tabela destacava M717 e
-exibia a cadeia de M1612.
-
-A exportação PDF/XLS (`CadeiaCompletaService`) continua agrupada por troncos,
-mas herda da chave a caminhada padrão do tronco principal (decisão do dono do
-produto, 13/09/2026: a regra vale para todas as superfícies).
+A chave vive em `dominial/utils/ordenacao_cadeia.py`; botões e caminhada usam
+o mesmo conjunto de origens que resolvem para documentos reais
+(`obter_origens_resolvidas`). O modal de sequência ainda usa a chave para
+ordenar documentos irmãos fora do tronco.
 """
 
-import random
 import re
 from datetime import date
 from types import SimpleNamespace
@@ -280,10 +269,9 @@ class _Forma384(_OrdemCadeiaFixture):
     """Forma do imóvel 384 (TI 201, test server), com os mesmos números.
 
     Tronco principal (sem escolha): M8272 -> M7775 -> M2623 -> M2072 ->
-    T13367 -> T10786 -> T3281 -> T2391. T10786 tem origem dupla (T3280 e
-    T3281), o ponto de escolha do caso real. Os demais documentos são origens
-    que o tronco não segue, com as subcadeias abaixo delas: só entram na
-    trilha com escolha, que tem 17 documentos.
+    T13367 -> T10786 -> T3281 -> T2391. A escolha real de M2622 em M7775 muda
+    o tronco para M8272 -> M7775 -> M2622 -> T9231 -> T13963 -> T9001. Os
+    demais documentos pertencem a galhos não escolhidos e não viram linhas.
 
     As datas imitam as do banco (fictícias, várias idênticas). Ordenada por
     data, como fazia `obter_cadeia_tabela`, a tabela saía
@@ -300,13 +288,13 @@ class _Forma384(_OrdemCadeiaFixture):
         'T3281': 'T2391',
         'T3280': 'T2391',
         'T2391': 'Destacamento Público:INCRA:origem_lidima',
-        'M2622': 'M002621',
+        'M2622': 'T9231',
         'M002621': 'T13963',
-        'T13963': '',
+        'T13963': 'T9001',
         'T13366': 'T3446',
         'T3446': '',
-        'T9231': 'T9001',
-        'T9001': 'T4558',
+        'T9231': 'T13963',
+        'T9001': '',
         'T4558': '',
     }
     DATAS = {
@@ -320,26 +308,26 @@ class _Forma384(_OrdemCadeiaFixture):
         'M8272', 'M7775', 'M2623', 'M2072', 'T13367', 'T10786', 'T3281', 'T2391',
     ]
     ORDEM_COM_ESCOLHA = [
-        'M8272', 'M7775', 'M2623', 'M2622', 'M002621', 'M2072',
-        'T13963', 'T13367', 'T13366', 'T10786', 'T9231', 'T9001', 'T4558',
-        'T3446', 'T3281', 'T3280', 'T2391',
+        'M8272', 'M7775', 'M2622', 'T9231', 'T13963', 'T9001',
     ]
 
     def _cadeia_com_escolha(self):
         return CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
-            escolhas_origem_param={str(self.docs['T10786'].id): 'T3281'},
+            escolhas_origem_param={str(self.docs['M7775'].id): 'M2622'},
         )['cadeia']
 
 
 class Forma384SemEscolhaTest(_Forma384, TestCase):
     """Trilha sem escolha (`obter_cadeia_tabela`): o tronco principal."""
 
-    def test_linhas_na_ordem_canonica(self):
+    def test_linhas_na_ordem_hierarquica(self):
         cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        # Garante a verdade de campo sem escolha, em ordem hierárquica literal.
         self.assertEqual(_numeros(cadeia), self.ORDEM_SEM_ESCOLHA)
 
-    def test_pagina_renderiza_as_linhas_na_ordem_canonica(self):
+    def test_pagina_renderiza_as_linhas_na_ordem_hierarquica(self):
+        # Garante que o HTML preserva a ordem hierárquica entregue pelo serviço.
         self._logar()
         response = self.client.get(reverse(
             'tronco_principal',
@@ -365,23 +353,32 @@ class Forma384SemEscolhaTest(_Forma384, TestCase):
 
 
 class Forma384ComEscolhaTest(_Forma384, TestCase):
-    """Trilha com escolha (`get_cadeia_dominial_tabela`): o tronco expandido.
-    A expansão define quais documentos entram; a ordem é a canônica."""
+    """Trilha com escolha: somente o tronco hierárquico da origem escolhida."""
 
-    def test_linhas_na_ordem_canonica(self):
+    def test_linhas_na_ordem_hierarquica_do_galho_escolhido(self):
+        # Garante a verdade de campo com escolha de M2622: seis linhas, sem galhos.
         self.assertEqual(_numeros(self._cadeia_com_escolha()), self.ORDEM_COM_ESCOLHA)
 
-    def test_trilhas_sem_e_com_escolha_tem_a_mesma_ordem_relativa(self):
+    def test_escolha_preserva_prefixo_e_substitui_o_restante_do_tronco(self):
         sem_escolha = _numeros(CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel))
         com_escolha = _numeros(self._cadeia_com_escolha())
 
+        # Garante o prefixo comum e os dois galhos mutuamente exclusivos completos.
+        self.assertEqual(sem_escolha, self.ORDEM_SEM_ESCOLHA)
+        self.assertEqual(com_escolha, self.ORDEM_COM_ESCOLHA)
+        self.assertEqual(sem_escolha[:2], ['M8272', 'M7775'])
+        self.assertEqual(com_escolha[:2], ['M8272', 'M7775'])
         self.assertEqual(
-            [numero for numero in com_escolha if numero in sem_escolha],
-            sem_escolha,
+            sem_escolha[2:],
+            ['M2623', 'M2072', 'T13367', 'T10786', 'T3281', 'T2391'],
+        )
+        self.assertEqual(
+            com_escolha[2:],
+            ['M2622', 'T9231', 'T13963', 'T9001'],
         )
 
-    def test_api_devolve_as_linhas_na_ordem_canonica(self):
-        # O JS re-renderiza a tabela exatamente na ordem do JSON da API.
+    def test_api_devolve_as_linhas_na_ordem_hierarquica(self):
+        # Garante as duas ordens literais que o JS recebe e renderiza.
         self._logar()
         url = reverse(
             'get_cadeia_dominial_atualizada',
@@ -396,7 +393,7 @@ class Forma384ComEscolhaTest(_Forma384, TestCase):
         )
 
         session = self.client.session
-        session[f'origem_documento_{self.docs["T10786"].id}'] = 'T3281'
+        session[f'origem_documento_{self.docs["M7775"].id}'] = 'M2622'
         session.save()
 
         payload = self.client.get(url).json()
@@ -406,16 +403,14 @@ class Forma384ComEscolhaTest(_Forma384, TestCase):
             self.ORDEM_COM_ESCOLHA,
         )
 
-    def test_ordem_nao_depende_da_ordem_de_entrada(self):
+    def test_chave_canonica_nao_reordena_as_linhas_da_tabela(self):
         documentos = [item['documento'] for item in self._cadeia_com_escolha()]
-        embaralhados = list(documentos)
-        random.Random(201).shuffle(embaralhados)
-
-        for entrada in (list(reversed(documentos)), embaralhados):
-            self.assertEqual(
-                [documento.numero for documento in ordenar_cadeia(entrada, self.imovel)],
-                self.ORDEM_COM_ESCOLHA,
-            )
+        # Garante que a tabela mantém T9231 antes de T13963 por hierarquia.
+        self.assertEqual(_numeros(self._cadeia_com_escolha()), self.ORDEM_COM_ESCOLHA)
+        self.assertEqual(
+            [documento.numero for documento in ordenar_cadeia(documentos, self.imovel)],
+            ['M8272', 'M7775', 'M2622', 'T13963', 'T9231', 'T9001'],
+        )
 
     def test_chamadas_repetidas_dao_a_mesma_ordem(self):
         self.assertEqual(
@@ -429,7 +424,7 @@ class _FormaTipoAbsoluto(_OrdemCadeiaFixture):
     `M6861; T17675; T21820; T3987`: M6861 é a menor delas em número.
 
     M6861, por sua vez, tem origens de tipos mistos (`T30000; M500`), para
-    verificar a origem padrão de um documento importado na trilha com escolha.
+    verificar a origem padrão quando esse galho é seguido.
     """
 
     ORIGENS_IMOVEL = {'M7618': 'M6861; T17675; T21820; T3987'}
@@ -466,27 +461,24 @@ class PrioridadeAbsolutaDeTipoTest(_FormaTipoAbsoluto, TestCase):
         )
         self.assertEqual(_numeros(cadeia), ['M7618', 'M6861', 'M500'])
 
-    def test_com_escolha_linhas_poem_matricula_antes_de_transcricao_maior(self):
+    def test_com_escolha_t3987_exibe_apenas_o_galho_escolhido(self):
         cadeia = self._cadeia_com_escolha_t3987()
         item_m7618 = _por_numero(cadeia)['M7618']
 
+        # Garante que a escolha explícita vence a origem padrão entre as irmãs.
         self.assertEqual(
             _numeros(cadeia),
-            ['M7618', 'M6861', 'M500', 'T21820', 'T17675', 'T3987'],
+            ['M7618', 'T3987'],
         )
         self.assertEqual(_opcoes(item_m7618), ['M6861', 'T21820', 'T17675', 'T3987'])
         self.assertEqual(item_m7618['escolha_atual'], 'T3987')
 
-    def test_com_escolha_origem_padrao_de_documento_importado_e_a_exibida(self):
+    def test_com_escolha_remove_m6861_do_galho_nao_escolhido(self):
         cadeia = self._cadeia_com_escolha_t3987()
-        # M6861 entra como origem importada de M7618, sem escolha própria.
-        item_m6861 = _por_numero(cadeia)['M6861']
-
-        self.assertEqual(_opcoes(item_m6861), ['M500', 'T30000'])
-        self.assertEqual(item_m6861['escolha_atual'], 'M500')
-        # A subcadeia expandida é a da origem destacada, não a de maior número.
-        self.assertIn('M500', _numeros(cadeia))
-        self.assertNotIn('T30000', _numeros(cadeia))
+        numeros = _numeros(cadeia)
+        # Garante explicitamente que M6861, irmão não escolhido, não vira linha.
+        self.assertEqual(numeros, ['M7618', 'T3987'])
+        self.assertNotIn('M6861', numeros)
 
 
 class _FormaNumeroInteiro(_OrdemCadeiaFixture):
@@ -540,7 +532,7 @@ class OrigemPadraoEhAPrimeiraDaListaTest(_FormaNumeroInteiro, TestCase):
 
 
 class _FormaCaminhadaForaDaOrdem(_OrdemCadeiaFixture):
-    """Tronco cuja caminhada não segue a ordem canônica (numerações de
+    """Tronco cuja caminhada diverge da ordenação canônica global (numerações de
     cartórios diferentes): M100 (documento do imóvel) -> M5000 -> T300 -> T9000.
     As datas também divergem das duas ordens."""
 
@@ -549,12 +541,11 @@ class _FormaCaminhadaForaDaOrdem(_OrdemCadeiaFixture):
     DATAS = {'M100': date(2024, 1, 1), 'T9000': date(1950, 1, 1)}
 
     ORDEM_HIERARQUICA = ['M100', 'M5000', 'T300', 'T9000']
-    ORDEM_CANONICA = ['M100', 'M5000', 'T9000', 'T300']
 
 
 class DocumentoDoImovelPrimeiroTest(_FormaCaminhadaForaDaOrdem, TestCase):
 
-    def test_documento_do_imovel_em_primeiro_mesmo_com_matricula_maior(self):
+    def test_documento_do_imovel_inicia_a_caminhada_hierarquica(self):
         service = CadeiaDominialTabelaService()
         sem_escolha = service.obter_cadeia_tabela(self.imovel)
         com_escolha = service.get_cadeia_dominial_tabela(
@@ -562,13 +553,29 @@ class DocumentoDoImovelPrimeiroTest(_FormaCaminhadaForaDaOrdem, TestCase):
             escolhas_origem_param={str(self.docs['M100'].id): 'M5000'},
         )['cadeia']
 
-        self.assertEqual(_numeros(sem_escolha), self.ORDEM_CANONICA)
-        self.assertEqual(_numeros(com_escolha), self.ORDEM_CANONICA)
+        # Garante a mesma ordem hierárquica nas duas trilhas da tabela.
+        self.assertEqual(_numeros(sem_escolha), self.ORDEM_HIERARQUICA)
+        self.assertEqual(_numeros(com_escolha), self.ORDEM_HIERARQUICA)
+
+
+class CompartilhamentoNaoOrdenaLinhasTest(_FormaCaminhadaForaDaOrdem, TestCase):
+
+    def test_status_compartilhado_nao_altera_a_ordem_hierarquica(self):
+        self.docs['T300'].imovel = self.imovel
+        self.docs['T300'].save(update_fields=['imovel'])
+
+        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+
+        # Garante que linhas próprias e compartilhadas intercalam-se pela hierarquia.
+        self.assertEqual(_numeros(cadeia), ['M100', 'M5000', 'T300', 'T9000'])
+        self.assertEqual(
+            [item['is_compartilhado'] for item in cadeia],
+            [False, True, False, True],
+        )
 
 
 class CacheDoTroncoPrincipalTest(_FormaCaminhadaForaDaOrdem, TestCase):
-    """D5: `obter_cadeia_tabela` reordenava no lugar a lista entregue pelo
-    cache do tronco principal."""
+    """A tabela e o cache preservam a caminhada do tronco principal."""
 
     def test_obter_cadeia_tabela_nao_reordena_o_tronco_do_cache(self):
         tronco = identificar_tronco_principal(self.imovel)
@@ -588,7 +595,8 @@ class CacheDoTroncoPrincipalTest(_FormaCaminhadaForaDaOrdem, TestCase):
         ):
             cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
 
-        self.assertEqual(_numeros(cadeia), self.ORDEM_CANONICA)
+        # Garante que nem a tabela nem o cache sofrem ordenação canônica global.
+        self.assertEqual(_numeros(cadeia), self.ORDEM_HIERARQUICA)
         # A lista que o cache entregou continua em ordem hierárquica...
         self.assertEqual(len(entregues), 1)
         self.assertEqual(
@@ -709,9 +717,8 @@ class InicioDoTroncoComChaveIdenticaTest(_FormaSemDocumentoDoImovel, TestCase):
 class _FormaOrigensInexistentes(_OrdemCadeiaFixture):
     """Em cada nível, a origem de maior precedência não existe no banco
     (M9000, M8000, M7000, M6000): dados legados citam documentos nunca
-    cadastrados. Sem escolha, o tronco é M100 -> M500 -> M40. T800 é origem de
-    M100 fora do tronco: na trilha com escolha, entra com a subcadeia da sua
-    origem padrão, M30 -> M10."""
+    cadastrados. Com ou sem escolha explícita, o tronco padrão é
+    M100 -> M500 -> M40; T800 e os demais irmãos ficam fora da tabela."""
 
     ORIGENS_IMOVEL = {'M100': 'M9000; M500; T800'}
     ORIGENS_OUTRO_IMOVEL = {
@@ -752,12 +759,13 @@ class OrigemInexistenteNaoEhBotaoTest(_FormaOrigensInexistentes, TestCase):
         )['cadeia']
         por_numero = _por_numero(cadeia)
 
-        # M10 só é exibida porque a origem seguida a partir de M30 é a
-        # destacada; antes, os botões destacavam M6000 e a expansão parava nela.
+        # Garante um único tronco e exclui T800, irmão não escolhido de M500.
         self.assertEqual(
-            _numeros(cadeia), ['M100', 'M500', 'M40', 'M30', 'M10', 'T800', 'T60'],
+            _numeros(cadeia), ['M100', 'M500', 'M40'],
         )
-        for numero, botoes in self.BOTOES.items():
+        self.assertNotIn('T800', por_numero)
+        for numero in ('M100', 'M500'):
+            botoes = self.BOTOES[numero]
             with self.subTest(documento=numero):
                 self.assertEqual(_opcoes(por_numero[numero]), botoes)
                 self.assertEqual(por_numero[numero]['escolha_atual'], botoes[0])
@@ -768,12 +776,16 @@ class OrigemPadraoEstaNosBotoesEEhASeguidaTest(_FormaOrigensInexistentes, TestCa
     origem padrão (`escolha_atual`) é uma das opções, é a única destacada e é
     a origem que a cadeia exibida segue."""
 
-    def _verificar(self, cadeia, seguidas):
+    def _verificar(self, cadeia, seguidas, ordem_esperada):
         exibidos = _numeros(cadeia)
         linhas_com_origens = [item for item in cadeia if item['origens_disponiveis']]
         self.assertEqual(
-            sorted(item['documento'].numero for item in linhas_com_origens),
-            sorted(seguidas),
+            exibidos,
+            ordem_esperada,
+        )
+        self.assertEqual(
+            [item['documento'].numero for item in linhas_com_origens],
+            list(seguidas),
         )
         for item in linhas_com_origens:
             numero = item['documento'].numero
@@ -788,9 +800,13 @@ class OrigemPadraoEstaNosBotoesEEhASeguidaTest(_FormaOrigensInexistentes, TestCa
                     [item['escolha_atual']],
                 )
                 self.assertEqual(item['escolha_atual'], seguidas[numero])
-                self.assertIn(seguidas[numero], exibidos)
+                self.assertEqual(
+                    exibidos[exibidos.index(numero) + 1],
+                    seguidas[numero],
+                )
 
     def test_sem_escolha_padrao_e_o_proximo_documento_do_tronco(self):
+        # Garante que cada botão padrão aponta para a linha hierárquica seguinte.
         tronco = identificar_tronco_principal(self.imovel)
         seguidas = {
             atual.numero: proximo.numero for atual, proximo in zip(tronco, tronco[1:])
@@ -798,20 +814,23 @@ class OrigemPadraoEstaNosBotoesEEhASeguidaTest(_FormaOrigensInexistentes, TestCa
         self.assertEqual(seguidas, {'M100': 'M500', 'M500': 'M40'})
 
         self._verificar(
-            CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel), seguidas
+            CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel),
+            seguidas,
+            ['M100', 'M500', 'M40'],
         )
 
-    def test_com_escolha_padrao_e_a_subcadeia_expandida(self):
+    def test_trilha_com_escolha_vazia_mantem_apenas_o_tronco_padrao(self):
         cadeia = CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
         )['cadeia']
 
+        # Garante que a trilha não expande irmãos quando nenhuma escolha muda o padrão.
         self._verificar(
-            cadeia, {'M100': 'M500', 'M500': 'M40', 'T800': 'M30', 'M30': 'M10'}
+            cadeia,
+            {'M100': 'M500', 'M500': 'M40'},
+            ['M100', 'M500', 'M40'],
         )
-        # As origens não seguidas de documentos fora do tronco não são expandidas.
-        self.assertNotIn('T20', _numeros(cadeia))
-        self.assertNotIn('T5', _numeros(cadeia))
+        self.assertNotIn('T800', _numeros(cadeia))
 
 
 class OrigensHomonimasDeCartoriosDiferentesTest(_OrdemCadeiaFixture, TestCase):
@@ -882,19 +901,22 @@ class OrigensHomonimasDeCartoriosDiferentesTest(_OrdemCadeiaFixture, TestCase):
                 )
                 self.assertEqual(item['escolha_atual'], 'M123')
 
-    def test_com_escolha_os_dois_homonimos_sao_exibidos(self):
+    def test_com_escolha_vazia_exibe_so_o_homonimo_padrao(self):
         cadeia = CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
         )['cadeia']
+        documentos = [item['documento'] for item in cadeia]
+        # Garante que só o primeiro homônimo irmão compõe o tronco exibido.
+        self.assertEqual(_numeros(cadeia), ['M100', 'M123'])
         self.assertEqual(
-            [item['documento'] for item in cadeia],
+            documentos,
             [
                 self.docs['M100'],
                 self.m123_outro_cartorio,
-                self.docs['M123'],
-                self.docs['T50'],
             ],
         )
+        self.assertNotIn(self.docs['M123'], documentos)
+        self.assertNotIn(self.docs['T50'], documentos)
 
 
 class ModalDeSequenciaTest(_OrdemCadeiaFixture, TestCase):
