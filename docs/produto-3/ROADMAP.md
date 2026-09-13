@@ -124,6 +124,12 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 > precedência, até incluir todos os documentos, troncos e ramos. Essa parte da
 > exportação é **regra decidida pelo produto, ainda não implementada**; a
 > correção será feita no F1 da #202, em PR próprio.
+> Um documento alcançado por vários galhos sai **uma única vez** na exportação,
+> no **primeiro** galho que o alcança — nunca repetido (ex.: no imóvel 384 a
+> `T2391` é alcançada por 19 caminhos; repeti-la em cada um daria 58
+> documentos em vez de 30). A ordem alvo acima foi **aprovada com dados reais**
+> dos imóveis 114 (17 docs) e 384 (30 docs), e a implementação está **em
+> andamento no F1 do #202**.
 
 1. **#201 Fase 0 — hotfix (v1.0.11)** ✅ **MERGEADA 13/09** (PR #203,
    squash `50ae2179` em develop). Pipeline Claude Opus 5 + Sonnet 5;
@@ -158,8 +164,7 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
      regra do cabeçalho deve governar tabela, exportação PDF/XLS
      (`CadeiaCompletaService`), página da árvore e modal de sequência. O PR
      aplica a chave à caminhada compartilhada, mas isso **não** torna a
-     exportação uma varredura por galhos. Medido no test server: **14 de 406
-     imóveis** mudam a caminhada (só os com origens M e T misturadas).
+     exportação uma varredura por galhos.
    - Evidência no banco de teste — tabela do imóvel 114 (TI 126): **2 linhas**,
      `M18692, M16433`; M16433 é a origem de maior número de M18692 e fim de
      cadeia `origem_lidima`. Tabela do imóvel 384 (TI 201): **8 linhas**,
@@ -188,8 +193,8 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
      XLS com **17 documentos (10 M + 7 T)**, na lista plana
      `M18692 > M16433 > M13826 > M13320 > M13133 > M13132 > M10509 > M7843 > M7842 > M7697 > T10104 > T10102 > T8591 > T8390 > T8389 > T7890 > T7670`;
      o PDF tem os mesmos **17**, na mesma ordem (9 páginas). Imóvel 384 (TI
-     201): XLS com **30 documentos (8 + 2 + 4 + 16)** — os 8 da trilha
-     principal, seguidos pela cauda plana
+     201): XLS com **30 documentos (test) (8 + 22 = 2 M + 20 T)** — os 8 da
+     trilha principal, seguidos pela cauda plana
      `M2622 > M002621 > T13963 > T13366 > T9231 > T9001 > T6903 > T6873 > T5184 > T4591 > T4590 > T4589 > T4559 > T4558 > T3446 > T3445 > T3444 > T3443 > T3280 > T3151 > T3059 > T341`.
      Há números zero-padded nos dados (`M002621`). Essa sequência é evidência
      do sort plano, não de grupos: a topologia exige

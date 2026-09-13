@@ -8,8 +8,11 @@
 ## Evidência coletada (produção, imóvel 384)
 
 - Banco íntegro: T3280/T3281 (docs 1943/1944, imóvel 358) existem e resolvem
-- Backend OK: com escolha, `get_cadeia_dominial_tabela` retorna 17 docs
-  (T3280, T3281, T2391, T9001, T4558 — importados todos presentes)
+- Backend OK: com escolha, `get_cadeia_dominial_tabela` retorna 17 docs (prod)
+  (T3280, T3281, T2391, T9001, T4558 — importados todos presentes). Não
+  confundir com os 30 docs (test) do mesmo imóvel 384 medidos no banco de
+  teste (`docs/produto-3/ROADMAP.md`, R3.5) — bancos diferentes, contagens
+  diferentes.
 - Sem escolha: `obter_cadeia_tabela` retorna só 8 docs (tronco principal)
 - XLS individual e consolidado (v1.0.10): conjunto completo
   (T3280/T3281/T4591 presentes); esta medição não prova ordem por galho
