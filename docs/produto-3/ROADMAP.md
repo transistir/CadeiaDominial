@@ -91,7 +91,7 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    + cadeia única, renderer compartilhado) → item 4 acima já atendido
    automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
 
-## R3.5 — 🔥 URGENTE: fluxo de origens na cadeia (#201/#202) — INICIADO 12/09/2026
+## R3.5 — 🔥 URGENTE: fluxo de origens na cadeia (#201/#202) — Fase 0 ✅ mergeada 13/09
 
 > **Bug de produção ativo** reportado pelo Maurício (12/09): ao escolher a origem
 > de uma **transcrição compartilhada** com origem dupla (caso real: imóvel 384,
@@ -107,11 +107,19 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 > **NÃO é regressão da v1.0.10** (exceto D3, formatação no re-render AJAX):
 > o filtro `deveExibir` é hack de 09/2025 hardcoded para outro imóvel.
 
-1. **#201 Fase 0 — hotfix (v1.0.11)** 🔄 **EM DESENVOLVIMENTO 12/09**
-   (worktree `fix/origens-cadeia-tabela`, pipeline Claude Opus 5 + Sonnet 5).
-   Remove o filtro client-side `deveExibir`; API devolve campos já formatados
-   (`area_formatada`/`origem_formatada`) matando a duplicação em JS; testes
-   Django de regressão (hoje o fluxo tem ZERO cobertura).
+1. **#201 Fase 0 — hotfix (v1.0.11)** ✅ **MERGEADA 13/09** (PR #203,
+   squash `50ae2179` em develop). Pipeline Claude Opus 5 + Sonnet 5;
+   reviews: Codex APPROVE (0 blocking) + Greptile 4/5. +521/−158 em 4
+   arquivos: filtro client-side `deveExibir` removido; API devolve
+   `area_formatada`/`origem_formatada` (mesmas funções Python dos filtros
+   do template — paridade por construção); formatador duplicado em JS
+   morto; 15 testes Django novos (508 linhas, fluxo tinha ZERO cobertura).
+   Validado no test server com caso real (imóvel 4/TI 614, M6726 com 6
+   origens): sem escolha 3 docs → com escolha M528 **12 docs, zero
+   perdidos**. Deploy develop OK. **Pendente:** validação visual do Hiure
+   no test + release v1.0.11 (GATE-LUANDRO).
+   ⚠️ Limitação conhecida: carga inicial ainda só mostra o tronco (D4) —
+   Fase 1.
 2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
    - F1: trilha única no service (cadeia sempre expandida), corrigir cache
      (`sort()` in-place corrompe valor cacheado), sessão com escopo por imóvel
