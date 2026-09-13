@@ -11,10 +11,11 @@
 - Backend OK: com escolha, `get_cadeia_dominial_tabela` retorna 17 docs
   (T3280, T3281, T2391, T9001, T4558 — importados todos presentes)
 - Sem escolha: `obter_cadeia_tabela` retorna só 8 docs (tronco principal)
-- XLS individual e consolidado (v1.0.10): completos ✅ (T3280/T3281/T4591 presentes)
+- XLS individual e consolidado (v1.0.10): conjunto completo
+  (T3280/T3281/T4591 presentes); esta medição não prova ordem por galho
 - **Frontend quebra**: após clicar numa origem, o JS esconde os importados
 
-## Defeitos encontrados (7)
+## Achados encontrados (7 na auditoria original; D4 superado)
 
 **D1 (P0, causa do report) — filtro client-side `deveExibir`**
 `cadeia_dominial_tabela.js` L204-244 (`atualizarTabelaCadeia`): após o
@@ -37,11 +38,12 @@ antigo. Mesma divergência em `formatarOrigemCompleta` (L1297-1373):
 reimplementação JS do filtro Django — já dessincronizada da versão Python
 refatorada no #179 (que agora vive em `formatacao_utils`).
 
-**D4 (P1) — duas trilhas de servidor para a mesma página**
-View `tronco_principal`: sem escolhas → `obter_cadeia_tabela` (8 docs,
-só tronco); com escolhas → `get_cadeia_dominial_tabela` (17 docs, expandida).
-A página muda de comportamento radicalmente após o primeiro clique. O default
-"esconde" T3280 mesmo SEM o hack JS (server-render inicial já vem sem ela).
+**D4 — SUPERADO pela regra decidida pelo produto**
+A tabela curta deixou de ser defeito: a tela deve ter **uma linha por nível** e
+seguir somente o galho escolhido; a árvore inteira pertence à exportação. As
+duas trilhas de servidor ainda devem ser unificadas como dívida técnica, mas
+sem expandir a página. Regra vigente: R3.5 do
+`docs/produto-3/ROADMAP.md`.
 
 **D5 (P2) — mutação do cache**
 `obter_cadeia_tabela` faz `todos_documentos.sort(key=...)` IN-PLACE na lista
@@ -72,9 +74,11 @@ Serialização do JSON da API sem contrato documentado/testado.
    inclui importados + serialização da API tem `area_formatada`
 
 ### Fase 1 — Consolidação server-side (2-3 dias)
-5. Unificar D4: UMA trilha no service — cadeia sempre expandida
-   (`_expandir_tronco_com_importados`), escolha default = maior número
-   (comportamento atual), sem/mais-escolhas = mesmos docs, só destaque muda
+5. Unificar as duas trilhas no service sem ressuscitar o D4 superado: a tela
+   mantém uma linha por nível e segue o galho escolhido; a escolha padrão segue
+   a regra completa do R3.5 no ROADMAP (somente irmãos do mesmo documento e
+   nível, matrícula antes de transcrição e número inteiro decrescente no mesmo
+   tipo). A árvore inteira fica restrita à exportação
 6. Corrigir D5: `sorted()` em vez de `.sort()` in-place
 7. D6: escopo de sessão por imóvel (`origem_documento_{imovel_id}_{doc_id}`)
    + `limpar_escolhas` com escopo do imóvel atual
@@ -86,9 +90,10 @@ Serialização do JSON da API sem contrato documentado/testado.
    (fixture reproduzindo o caso 384: doc com origem dupla T→T compartilhada)
 10. API: teste de contrato do JSON de `cadeia-dominial-atualizada`
     (campos, tipos, campos formatados)
-11. View: teste com sessão (escolher → re-GET → cadeia expandida persiste)
-12. **Golden test**: para fixture padrão, conjunto de docs da cadeia ANTES e
-    DEPOIS de cada escolha — snapshot aprovado vira baseline
+11. View: teste com sessão (escolher → re-GET → galho escolhido persiste)
+12. **Golden test**: para fixture padrão, sequência de uma linha por nível ANTES
+    e DEPOIS de cada escolha, mais o conjunto completo da exportação — snapshots
+    aprovados viram baseline
 13. Infra JS (decisão): vitest para funções puras extraídas do JS
     (sem DOM) — mínimo viável; OU manter só testes Django de contrato +
     checklist manual. Recomendação: vitest (barato, node já existe no repo)
@@ -102,16 +107,19 @@ Serialização do JSON da API sem contrato documentado/testado.
 17. Sem mudança de comportamento — coberta pelos testes da Fase 2
 
 ## Critérios de aceite gerais
-- Imóvel 384 prod: clicar T3280 OU T3281 → tabela mostra os 17 docs
-  (todos os importados visíveis), área em pt-BR, origem formatada igual
-  ao server-render inicial
-- Nenhum documento "some" após qualquer combinação de escolhas/limpar
+- Imóvel 384 prod: clicar T3280 OU T3281 → tabela mantém uma linha por nível e
+  segue integralmente o galho escolhido, com área em pt-BR e origem formatada
+  igual ao server-render inicial
+- Nenhum documento do galho escolhido "some" após qualquer combinação de
+  escolhas/limpar; os irmãos não seguidos permanecem disponíveis como botões
 - Suite Django verde + novos testes do fluxo
-- XLS/PDF seguem completos (não regressar #179)
+- XLS/PDF preservam o conjunto completo (não regressar #179); a ordem por
+  galhos permanece pendente no F1 registrado no R3.5 do ROADMAP
 
 ## Riscos
-- Fase 1 item 5 muda o default da página (8→17 docs sem clique) — validar
-  com Hiure/Maurício se é o desejado ("cadeia na íntegra" sugere que sim)
+- A consolidação das trilhas não pode reintroduzir a proposta superada de
+  expandir a tela (8→17 docs); tela e exportação têm conjuntos deliberadamente
+  diferentes conforme a regra do R3.5 no ROADMAP
 - Escopo de sessão (D6) muda chaves existentes — escolhas antigas dos
   usuários se perdem uma vez (aceitável)
 - Refatoração JS sem cobertura prévia — por isso Fase 2 ANTES da Fase 3

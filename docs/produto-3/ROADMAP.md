@@ -102,10 +102,28 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 >
 > Auditoria completa 12/09 com evidência coletada **no servidor de produção**
 > (read-only). Plano: `docs/produto-3/PLANO_ORIGENS_ESCOLHAS.md`.
-> Diagnóstico: backend correto (com escolha retorna 17 docs; XLS já OK na
-> v1.0.10) — quebra é **100% frontend** + default da página. 7 defeitos (D1–D7).
+> Diagnóstico histórico da Fase 0: naquele estado, o backend retornava 17 docs
+> com escolha e o XLS já continha o conjunto completo na v1.0.10, sem provar a
+> ordem por galhos. A quebra era **100% frontend** + default da página. Foram 7
+> achados originais (D1–D7); o D4 foi depois superado pela regra abaixo.
 > **NÃO é regressão da v1.0.10** (exceto D3, formatação no re-render AJAX):
 > o filtro `deveExibir` é hack de 09/2025 hardcoded para outro imóvel.
+>
+> **Regra decidida pelo produto (Hiure, 13/09; governa a Fase 0b e o F1):**
+> a tela mostra exatamente **uma linha por nível hierárquico**, seguindo apenas
+> a origem escolhida; os irmãos não seguidos ficam como botões que trocam o
+> galho exibido. A origem padrão é escolhida **somente entre irmãos do mesmo
+> documento e do mesmo nível**: matrícula antes de transcrição, com precedência
+> absoluta, e, dentro do mesmo tipo, número inteiro decrescente. Documentos de
+> níveis diferentes **nunca** são comparados para essa escolha. Portanto,
+> `T21820` **não** pode vencer `M6861`, mesmo tendo número maior; a formulação
+> anterior, baseada apenas no maior número, faria `T21820` vencer e contradizia
+> o item 1b. Para XLS/PDF,
+> a regra é percorrer a árvore inteira, agrupada por galho/tronco, mantendo em
+> cada galho a ordem da cadeia e escolhendo o próximo irmão pela mesma
+> precedência, até incluir todos os documentos, troncos e ramos. Essa parte da
+> exportação é **regra decidida pelo produto, ainda não implementada**; a
+> correção será feita no F1 da #202, em PR próprio.
 
 1. **#201 Fase 0 — hotfix (v1.0.11)** ✅ **MERGEADA 13/09** (PR #203,
    squash `50ae2179` em develop). Pipeline Claude Opus 5 + Sonnet 5;
@@ -118,18 +136,14 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    origens): sem escolha 3 docs → com escolha M528 **12 docs, zero
    perdidos**. Deploy develop OK. **Pendente:** validação visual do Hiure
    no test + release v1.0.11 (GATE-LUANDRO).
-   **Regra confirmada pelo produto (Hiure, 13/09):** a tela mostra exatamente
-   **uma linha por nível hierárquico**, seguindo só a origem escolhida — por
-   padrão, a de maior número entre os irmãos do mesmo documento. Os irmãos não
-   seguidos são os botões de escolha, que trocam o galho exibido. A cadeia
-   inteira, com todos os troncos e ramos, sai no XLS/PDF.
+   O comportamento-alvo da tela é a **regra decidida pelo produto** registrada
+   no cabeçalho deste R3.5.
 1b. **#201 Fase 0b — ordenação canônica da cadeia** 🔨 **PR #205 ABERTO**
-   (branch `fix/201-ordem-cadeia`, HEAD `0bd47868`, 6 commits).
-   - **Regra jurídica definida pelo Hiure (13/09):** (1) documento do imóvel
-     sempre 1º; (2) **matrícula antes de transcrição — absoluta**, não
-     desempate (M6861 vem antes de T21820); (3) número maior→menor,
-     comparado como inteiro. **Data não participa** (no banco ela é quase
-     toda fictícia/presumida — era a causa real da desordem).
+   (branch `fix/201-ordem-cadeia`, HEAD `2877a510`, 8 commits).
+   - Implementa, para a caminhada e a escolha entre irmãos, a regra do
+     cabeçalho deste R3.5. O documento do imóvel permanece sempre em primeiro;
+     **data não participa** (no banco ela é quase toda fictícia/presumida — era
+     a causa real da desordem).
    - Corrige **4 ordenações divergentes** que conviviam (linhas por data,
      expansão sem ordem, opções por `int` desc, opções por **string** desc)
      e o bug em que o **botão destacado ≠ cadeia exibida** (caso real M6726:
@@ -137,48 +151,60 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    - Chave única em `dominial/utils/ordenacao_cadeia.py`, consumida por
      linhas da tabela (2 trilhas), botões de origem e default da caminhada
      do tronco.
-   - Rodadas 1–3 do review apontaram M-1..M-5; **todos foram corrigidos** e
-     os **59/59 testes estão verdes**. Baseline da implementação: **24 testes
-     novos (39/39 OK com os 15 da Fase 0); suíte completa no baseline.**
+   - Achados **M-1..M-6 + N-1 + M-7 corrigidos**; **62 testes focados passam**.
+     Revisões finais no HEAD citado: **Codex `APROVA` (7 PASS / 0 MUST-FIX)**
+     e **Opus 5 `APROVA` (8 PASS / 0 MUST-FIX / 1 NICE)**.
    - **DECISÃO DE ESCOPO (Hiure, 13/09): aplicar a ordenação em TUDO.** A
-     regra canônica de ordenação é compartilhada pela tabela, exportação
-     PDF/XLS (`CadeiaCompletaService`), página da árvore e modal de sequência.
-     O **conjunto de linhas difere por superfície**: a tela mostra uma linha
-     por nível, seguindo só o galho escolhido; XLS/PDF levam a árvore inteira,
-     com todos os troncos e todos os ramos. A exportação continua **agrupada
-     por troncos**, com o conjunto de documentos inalterado. Medido no test
-     server: **14 de 406 imóveis** mudam a caminhada (só os com origens M e T
-     misturadas).
+     regra do cabeçalho deve governar tabela, exportação PDF/XLS
+     (`CadeiaCompletaService`), página da árvore e modal de sequência. O PR
+     aplica a chave à caminhada compartilhada, mas isso **não** torna a
+     exportação uma varredura por galhos. Medido no test server: **14 de 406
+     imóveis** mudam a caminhada (só os com origens M e T misturadas).
    - Evidência no banco de teste — tabela do imóvel 114 (TI 126): **2 linhas**,
      `M18692, M16433`; M16433 é a origem de maior número de M18692 e fim de
      cadeia `origem_lidima`. Tabela do imóvel 384 (TI 201): **8 linhas**,
      `M8272, M7775, M2623, M2072, T13367, T10786, T3281, T2391`.
-   - Evidência das exportações — XLS do imóvel 114: **17 documentos**; XLS do
-     imóvel 384: **30 documentos**. PDF de cadeia completa do imóvel 114: os
-     mesmos **17 documentos** do XLS, nenhum faltando.
-   - **Ordem da exportação (XLS/PDF), confirmada pelo produto:** agrupada por
-     galho/tronco, **seguindo sempre o galho pelo maior número primeiro** e
-     varrendo tudo até que **todos** os documentos apareçam. É diferente da
-     tela, que mostra uma linha por nível e somente o galho escolhido.
-   - Evidência real medida pelo orquestrador na `1c0db87c`, no serviço de teste
-     via HTTP:
-     - XLS do imóvel 114 (TI 126) = **17 documentos**, na ordem
-       `M18692 > M16433 > M13826 > M13320 > M13133 > M13132 > M10509 > M7843 > M7842 > M7697`,
-       depois
-       `T10104 > T10102 > T8591 > T8390 > T8389 > T7890 > T7670` —
-       **decrescente em cada grupo**.
-     - XLS do imóvel 384 (TI 201) = **30 documentos**: os 8 da trilha principal
-       e depois `M2622 > M002621`, `T13963 > T13366 > T9231 > T9001`, e
-       `T6903 > T6873 > T5184 > T4591 > T4590 > T4589 > T4559 > T4558 > T3446 > T3445 > T3444 > T3443 > T3280 > T3151 > T3059 > T341`
-       — **decrescente**.
-     - PDF do imóvel 114 = os mesmos **17 documentos** do XLS, na mesma ordem
-       (9 páginas).
-   - **Conclusão:** a ordem da exportação já está conforme a regra; não há
-     mudança de código pendente por causa dela.
+   - **Exportação — (a) regra decidida pelo produto:** conforme o cabeçalho,
+     XLS/PDF devem ser agrupados por galho/tronco; os documentos de cada galho
+     ficam em ordem de cadeia, seguindo primeiro o irmão de maior precedência
+     (matrícula antes de transcrição; no mesmo tipo, maior número inteiro) e
+     varrendo a árvore até todos os documentos aparecerem. Isso é diferente da
+     tela, que mostra uma linha por nível e apenas o galho escolhido. Essa regra
+     está **ainda não implementada** e será corrigida no F1 da #202, em PR
+     próprio.
+   - **Exportação — (b) estado atual medido:**
+     `dominial/services/cadeia_completa_service.py`, em
+     `CadeiaCompletaService._obter_tronco_principal_completo()`, emite primeiro
+     o tronco principal e depois todos os demais documentos numa única lista
+     plana, ordenada globalmente por
+     `_ordenar_documentos_hierarquicamente()` (matrícula antes de transcrição e
+     número decrescente). Essa etapa não segue as conexões da árvore nem agrupa
+     os documentos por galho e, portanto, **não implementa (a)**.
+   - **Evidência única das exportações**, medida pelo orquestrador na
+     `1c0db87c`: reproduzir via HTTP autenticado no serviço de teste, abrindo
+     `GET /dominial/tis/{tis_id}/imovel/{imovel_id}/ver-cadeia-dominial/` e os
+     links dessa página para `cadeia-tabela/excel/` e `cadeia-completa/pdf/`, e
+     então comparar a sequência dos documentos gerados. Imóvel 114 (TI 126):
+     XLS com **17 documentos (10 M + 7 T)**, na lista plana
+     `M18692 > M16433 > M13826 > M13320 > M13133 > M13132 > M10509 > M7843 > M7842 > M7697 > T10104 > T10102 > T8591 > T8390 > T8389 > T7890 > T7670`;
+     o PDF tem os mesmos **17**, na mesma ordem (9 páginas). Imóvel 384 (TI
+     201): XLS com **30 documentos (8 + 2 + 4 + 16)** — os 8 da trilha
+     principal, seguidos pela cauda plana
+     `M2622 > M002621 > T13963 > T13366 > T9231 > T9001 > T6903 > T6873 > T5184 > T4591 > T4590 > T4589 > T4559 > T4558 > T3446 > T3445 > T3444 > T3443 > T3280 > T3151 > T3059 > T341`.
+     Há números zero-padded nos dados (`M002621`). Essa sequência é evidência
+     do sort plano, não de grupos: a topologia exige
+     `M2622 → T9231 → T13963 → T9001`, mas a saída atual coloca `T13963` antes
+     de `T9231`.
 2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
-   - F1: trilha única no service para a **exportação** (cadeia completa sempre
-     expandida no XLS/PDF), mantendo a **tela com uma linha por nível**;
-     corrigir cache (`sort()` in-place corrompe valor cacheado), sessão com
+   - F1: trilha única no service para a **exportação**, implementando a regra
+     decidida no cabeçalho: cadeia completa agrupada por galho/tronco no
+     XLS/PDF, na ordem da cadeia e varrida até todos os documentos aparecerem;
+     manter a **tela com uma linha por nível**. Incluir explicitamente todos os
+     troncos: hoje
+     `CadeiaCompletaService._obter_troncos_secundarios_completos()` retorna
+     `[]`, portanto “todos os troncos” é regra desejada e **ainda não
+     implementada**; a correção será feita neste F1, em PR próprio. Corrigir
+     também cache (`sort()` in-place corrompe valor cacheado) e sessão com
      escopo por imóvel
    - F2: testes anti-regressão — service, contrato JSON das APIs, golden test
      do imóvel 384, infra de teste JS (vitest)
