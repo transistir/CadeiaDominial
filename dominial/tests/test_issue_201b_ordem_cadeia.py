@@ -429,6 +429,30 @@ class Forma384ComEscolhaTest(_Forma384, TestCase):
             ['M8272', 'M7775', 'M2622', 'T9231', 'T13963', 'T9001'],
         )
 
+    def test_escolhas_vazias_da_query_descartam_a_escolha_da_sessao(self):
+        self._logar()
+        session = self.client.session
+        session[f'origem_documento_{self.docs["M7775"].id}'] = 'M2622'
+        session.save()
+        url = reverse(
+            'tronco_principal',
+            kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id},
+        )
+
+        response = self.client.get(url, {'escolhas': '{}'})
+        self.assertEqual(response.status_code, 200)
+        numero_por_id = {
+            str(documento.id): numero for numero, documento in self.docs.items()
+        }
+        ids = re.findall(
+            r'class="documento-row[^"]*" data-documento-id="(\d+)"',
+            response.content.decode(),
+        )
+        self.assertEqual(
+            [numero_por_id[doc_id] for doc_id in ids],
+            self.ORDEM_SEM_ESCOLHA,
+        )
+
     def test_escolhas_da_query_substituem_a_escolha_da_sessao(self):
         self._logar()
         session = self.client.session
@@ -775,6 +799,27 @@ class InicioDoTroncoComDescendenteTranscricaoMaiorTest(
         self.assertEqual(
             [documento.numero for documento in identificar_tronco_principal(self.imovel)],
             ['T100', 'T900', 'T7'],
+        )
+
+
+class InicioDoTroncoComCicloTest(_FormaSemDocumentoDoImovel, TestCase):
+    """Sem raiz identificável, o fallback começa pelo candidato canônico e
+    a guarda de repetição encerra a caminhada ao reencontrá-lo."""
+
+    ORIGENS_IMOVEL = {'M100': 'M200', 'M200': 'M100'}
+
+    def test_ciclo_sem_documento_do_imovel_devolve_tabela_nao_vazia(self):
+        self.assertFalse(any(
+            eh_documento_do_imovel(documento, self.imovel)
+            for documento in self.docs.values()
+        ))
+        self.assertEqual(
+            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            ['M200', 'M100'],
+        )
+        self.assertEqual(
+            _numeros(CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)),
+            ['M200', 'M100'],
         )
 
 

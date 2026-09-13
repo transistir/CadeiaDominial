@@ -105,7 +105,7 @@ class CadeiaDominialTabelaService:
                     escolhas_origem[documento_id] = value
         
         # Se escolhas foram passadas como parâmetro, usar elas em vez da sessão
-        if escolhas_origem_param:
+        if escolhas_origem_param is not None:
             escolhas_origem = escolhas_origem_param
         
         # Obter tronco principal considerando escolhas

@@ -194,9 +194,14 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         documentos_raiz = [
             doc for doc in documentos if doc.pk not in ids_citados_como_origem
         ]
+        # Um ciclo pode fazer todos os documentos serem citados e, portanto,
+        # eliminar todas as raízes. Nesse caso, escolher o início entre todo o
+        # conjunto pela mesma ordem canônica; a guarda da caminhada abaixo
+        # impede que o ciclo seja percorrido indefinidamente.
+        documentos_candidatos = documentos_raiz or documentos
 
         matriculas_raiz = [
-            doc for doc in documentos_raiz if doc.tipo.tipo == 'matricula'
+            doc for doc in documentos_candidatos if doc.tipo.tipo == 'matricula'
         ]
         if matriculas_raiz:
             # Sem o documento de identidade registral do imóvel, começar pela
@@ -208,7 +213,7 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
             # Se não há raízes matrículas, procurar por raízes transcrições,
             # também na ordem canônica (maior número), nunca pela data
             transcricoes_raiz = [
-                doc for doc in documentos_raiz if doc.tipo.tipo == 'transcricao'
+                doc for doc in documentos_candidatos if doc.tipo.tipo == 'transcricao'
             ]
             if transcricoes_raiz:
                 documento_atual = ordenar_cadeia(transcricoes_raiz, imovel)[0]

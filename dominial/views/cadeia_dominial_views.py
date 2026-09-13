@@ -134,9 +134,9 @@ def tronco_principal(request, tis_id, imovel_id):
     imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
     
     # Obter escolhas de origem da URL (se houver)
-    escolhas_origem = {}
+    escolhas_origem = None
     escolhas_param = request.GET.get('escolhas')
-    if escolhas_param:
+    if escolhas_param is not None:
         try:
             escolhas_origem = json.loads(escolhas_param)
         except json.JSONDecodeError:
