@@ -488,6 +488,10 @@ class ParidadePaginaTest(_Issue201Fixture, TestCase):
 
         self.assertIn(f'<td>{area_m100}</td>', html)
         self.assertIn(origem_t10786, html)
+        self.assertIn(
+            '<script src="/static/dominial/js/cadeia_dominial_tabela.js?v=11"></script>',
+            html,
+        )
 
 
 class TabelaJsRenderizaOQueOServidorEnviaTest(SimpleTestCase):
