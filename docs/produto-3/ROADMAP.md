@@ -122,14 +122,15 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 > a regra é percorrer a árvore inteira, agrupada por galho/tronco, mantendo em
 > cada galho a ordem da cadeia e escolhendo o próximo irmão pela mesma
 > precedência, até incluir todos os documentos, troncos e ramos. Essa parte da
-> exportação é **regra decidida pelo produto, ainda não implementada**; a
-> correção será feita no F1 da #202, em PR próprio.
+> exportação é **regra decidida pelo produto**. Não implementada em develop;
+> implementação em andamento no F1 da #202 (sem PR aberto).
 > Um documento alcançado por vários galhos sai **uma única vez** na exportação,
-> no **primeiro** galho que o alcança — nunca repetido (ex.: a `T2391`, no
-> imóvel 384). A regra e a ordem-alvo acima foram definidas pelo dono do
-> produto (luandro, 13/09), medidas com dados reais dos imóveis 114
-> (17 docs, test) e 384 (30 docs, test); a implementação está **em andamento
-> no F1 da #202**.
+> no **primeiro** galho que o alcança — nunca repetido (ex.: no imóvel 384 a
+> `T2391` é citada por vários documentos, entre eles `T3281` e `T3280`). A
+> regra e a ordem-alvo acima foram definidas pelo dono do produto (Hiure,
+> 13/09). O estado atual (ordem plana) foi medido com dados reais dos imóveis
+> 114 (17 docs, test) e 384 (30 docs, test). Não implementada em develop;
+> implementação em andamento no F1 da #202 (sem PR aberto).
 
 1. **#201 Fase 0 — hotfix (v1.0.11)** ✅ **MERGEADA 13/09** (PR #203,
    squash `50ae2179` em develop). Pipeline Claude Opus 5 + Sonnet 5;
@@ -157,9 +158,13 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    - Chave única em `dominial/utils/ordenacao_cadeia.py`, consumida por
      linhas da tabela (2 trilhas), botões de origem e default da caminhada
      do tronco.
-   - Achados **M-1..M-6 + N-1 + M-7 corrigidos**; **62 testes focados passam**.
-     Revisões finais no HEAD citado: **Codex `APROVA` (7 PASS / 0 MUST-FIX)**
-     e **Opus 5 `APROVA` (8 PASS / 0 MUST-FIX / 1 NICE)**.
+   - Achados **M-1..M-6 + N-1 + M-7 corrigidos** nos commits `273d9571..2877a510`
+     (8 commits — https://github.com/transistir/CadeiaDominial/compare/273d9571...2877a510);
+     **62 testes focados passam** (`test_issue_201_origens_cadeia_tabela.py` +
+     `test_issue_201b_ordem_cadeia.py`, checkout do HEAD citado). Revisão Codex
+     round 1 no PR #205 (comentário de 13/09 19:20:45Z) apontou 3 MUST-FIX
+     (M-1, M-2, M-3), corrigidos nos commits seguintes; não há registro público
+     de rodadas posteriores de review no PR.
    - **DECISÃO DE ESCOPO (Hiure, 13/09): aplicar a ordenação em TUDO.** A
      regra do cabeçalho deve governar tabela, exportação PDF/XLS
      (`CadeiaCompletaService`), página da árvore e modal de sequência. O PR
@@ -174,9 +179,9 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
      ficam em ordem de cadeia, seguindo primeiro o irmão de maior precedência
      (matrícula antes de transcrição; no mesmo tipo, maior número inteiro) e
      varrendo a árvore até todos os documentos aparecerem. Isso é diferente da
-     tela, que mostra uma linha por nível e apenas o galho escolhido. Essa regra
-     está **ainda não implementada** e será corrigida no F1 da #202, em PR
-     próprio.
+     tela, que mostra uma linha por nível e apenas o galho escolhido. Não
+     implementada em develop; implementação em andamento no F1 da #202 (sem PR
+     aberto).
    - **Exportação — (b) estado atual medido:**
      `dominial/services/cadeia_completa_service.py`, em
      `CadeiaCompletaService._obter_tronco_principal_completo()`, emite primeiro
@@ -193,14 +198,14 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
      XLS com **17 documentos (10 M + 7 T)**, na lista plana
      `M18692 > M16433 > M13826 > M13320 > M13133 > M13132 > M10509 > M7843 > M7842 > M7697 > T10104 > T10102 > T8591 > T8390 > T8389 > T7890 > T7670`;
      o PDF tem os mesmos **17**, na mesma ordem (9 páginas). Imóvel 384 (TI
-     201): XLS com **30 documentos (test) (8 + 22 = 2 M + 20 T)** — os 8 da
+     201): XLS com **30 documentos (test) (8 da trilha + 22 da cauda; cauda = 2 M + 20 T)** — os 8 da
      trilha principal, seguidos pela cauda plana
      `M2622 > M002621 > T13963 > T13366 > T9231 > T9001 > T6903 > T6873 > T5184 > T4591 > T4590 > T4589 > T4559 > T4558 > T3446 > T3445 > T3444 > T3443 > T3280 > T3151 > T3059 > T341`.
      Há números zero-padded nos dados (`M002621`). Essa sequência é evidência
      do sort plano, não de grupos: a topologia exige
      `M2622 → T9231 → T13963 → T9001`, mas a saída atual coloca `T13963` antes
      de `T9231`.
-2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
+2. **#202 Fases 1–3 — saneamento estrutural** (aberta, em andamento — F1)
    - F1: trilha única no service para a **exportação**, implementando a regra
      decidida no cabeçalho: cadeia completa agrupada por galho/tronco no
      XLS/PDF, na ordem da cadeia e varrida até todos os documentos aparecerem;
