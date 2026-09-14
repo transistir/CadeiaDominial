@@ -1,5 +1,8 @@
 from django import forms
+from django.core.exceptions import ValidationError
+
 from ..models import Imovel, Cartorios
+from ..services.imovel_documento_service import ImovelDocumentoService
 from ..utils.documento_identidade_utils import normalizar_numero_documento
 
 
@@ -99,6 +102,15 @@ class ImovelForm(forms.ModelForm):
                     f'Já existe um imóvel com esta identidade (tipo, matrícula e '
                     f'cartório) no cartório "{cartorio.nome}".'
                 )
+
+        if cartorio:
+            try:
+                ImovelDocumentoService.validar_alteracao_cartorio(
+                    self.instance,
+                    cartorio,
+                )
+            except ValidationError as erro:
+                self.add_error(None, erro)
 
         return cleaned_data
 
