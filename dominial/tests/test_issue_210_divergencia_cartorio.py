@@ -2,8 +2,9 @@ from io import StringIO
 from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
@@ -196,6 +197,27 @@ class CacheInvalidationOnCommitTest(Issue210Fixture):
             [call(imovel_a.pk), call(imovel_b.pk)],
             any_order=True,
         )
+
+
+class ConcorrenciaDocumentoPrincipalTest(Issue210Fixture):
+    def test_integrity_error_concorrente_vira_erro_de_validacao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        imovel.cartorio = self.cartorio_b
+
+        with patch.object(
+            Documento,
+            'save',
+            side_effect=IntegrityError('colisão concorrente'),
+        ):
+            with self.assertRaisesMessage(
+                ValidationError,
+                'Conflito de identidade detectado no cartório destino '
+                '(outra operação criou documento concorrente). Tente novamente.',
+            ):
+                ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                    imovel
+                )
 
 
 class ImovelAdminIssue210Test(Issue210Fixture):

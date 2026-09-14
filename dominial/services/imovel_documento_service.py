@@ -1,7 +1,7 @@
 """Mantém alinhados o cartório do imóvel e o de seu documento principal."""
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from ..models import Documento, Lancamento
 from .cache_service import CacheService
@@ -78,7 +78,13 @@ class ImovelDocumentoService:
         ).values_list('documento__imovel_id', flat=True).distinct()
         if documento.cartorio_id != imovel.cartorio_id:
             documento.cartorio_id = imovel.cartorio_id
-            documento.save(update_fields=['cartorio'])
+            try:
+                documento.save(update_fields=['cartorio'])
+            except IntegrityError as erro:
+                raise ValidationError(
+                    'Conflito de identidade detectado no cartório destino '
+                    '(outra operação criou documento concorrente). Tente novamente.'
+                ) from erro
         # Best-effort: LocMemCache não propaga invalidações entre workers; um
         # backend compartilhado continua sendo dívida técnica para issue separada.
         imoveis_afetados = {imovel.pk, *imoveis_consumidores}
