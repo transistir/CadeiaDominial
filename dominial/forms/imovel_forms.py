@@ -1,5 +1,8 @@
 from django import forms
+from django.core.exceptions import ValidationError
+
 from ..models import Imovel, Cartorios
+from ..services.imovel_documento_service import ImovelDocumentoService
 from ..utils.documento_identidade_utils import normalizar_numero_documento
 
 
@@ -59,6 +62,18 @@ class ImovelForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        if (
+            self.instance.pk
+            and 'cartorio' in self.changed_data
+            and {'matricula', 'tipo_documento_principal'} & set(self.changed_data)
+        ):
+            raise forms.ValidationError(
+                'Para alterar o cartório do imóvel, faça em duas etapas '
+                'separadas: primeiro altere o cartório (o documento principal '
+                'será sincronizado), depois altere a matrícula ou o tipo. '
+                'Editar ambos ao mesmo tempo pode mover o documento errado.'
+            )
+
         nome = cleaned_data.get('proprietario_nome')
         proprietario = cleaned_data.get('proprietario')
 
@@ -99,6 +114,15 @@ class ImovelForm(forms.ModelForm):
                     f'Já existe um imóvel com esta identidade (tipo, matrícula e '
                     f'cartório) no cartório "{cartorio.nome}".'
                 )
+
+        if cartorio:
+            try:
+                ImovelDocumentoService.validar_alteracao_cartorio(
+                    self.instance,
+                    cartorio,
+                )
+            except ValidationError as erro:
+                self.add_error(None, erro)
 
         return cleaned_data
 

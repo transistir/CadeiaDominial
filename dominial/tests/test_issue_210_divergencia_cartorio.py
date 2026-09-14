@@ -1,0 +1,406 @@
+import csv
+from io import StringIO
+from pathlib import Path
+from unittest.mock import call, patch
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.db import IntegrityError, connection, transaction
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
+
+from dominial.admin import ImovelAdminForm
+from dominial.forms import ImovelForm
+from dominial.models import (
+    Cartorios,
+    Documento,
+    DocumentoTipo,
+    Imovel,
+    Lancamento,
+    LancamentoTipo,
+    Pessoas,
+    TIs,
+)
+from dominial.services.cache_service import CacheService
+from dominial.services.imovel_documento_service import ImovelDocumentoService
+
+
+class RoadmapIssue210Test(SimpleTestCase):
+    def test_roadmap_registra_reordenacao_pendente_de_aprovacao(self):
+        roadmap = (
+            Path(__file__).resolve().parents[2]
+            / 'docs'
+            / 'produto-3'
+            / 'ROADMAP.md'
+        ).read_text(encoding='utf-8')
+        aviso = (
+            '> ℹ️ #210 posicionada acima de #144 por ser P1 produção '
+            '(quebra a cadeia\n'
+            '> dominial após operação administrativa comum — imóvel '
+            '643/M14511/Guaíra →\n'
+            '> São Miguel do Iguaçu, 14/09/2026). Pendente aprovação explícita '
+            'do usuário\n'
+            '> (luandro/Hiure) para manter ou restaurar #144 como item 1. '
+            'Aguardando\n'
+            '> sign-off antes do PR ser mergeado.'
+        )
+
+        self.assertIn(aviso, roadmap)
+
+
+class Issue210Fixture(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.ti = TIs.objects.create(nome='TI #210', codigo='TI-210', etnia='Teste')
+        cls.pessoa = Pessoas.objects.create(nome='Pessoa #210', cpf='210')
+        cls.cartorio_a = Cartorios.objects.create(
+            nome='Cartório A #210',
+            cns='CNS-210-A',
+            cidade='A',
+            estado='MS',
+        )
+        cls.cartorio_b = Cartorios.objects.create(
+            nome='Cartório B #210',
+            cns='CNS-210-B',
+            cidade='B',
+            estado='MT',
+        )
+        cls.cartorio_c = Cartorios.objects.create(
+            nome='Cartório C #210',
+            cns='CNS-210-C',
+            cidade='C',
+            estado='GO',
+        )
+        cls.tipo = DocumentoTipo.objects.create(tipo='matricula')
+
+    def criar_imovel(self):
+        return Imovel.objects.create(
+            terra_indigena_id=self.ti,
+            nome='Imóvel #210',
+            proprietario=self.pessoa,
+            matricula='14511',
+            tipo_documento_principal='matricula',
+            cartorio=self.cartorio_a,
+        )
+
+    def criar_documento(self, imovel, cartorio=None):
+        return Documento.objects.create(
+            imovel=imovel,
+            tipo=self.tipo,
+            numero='M14511',
+            data='2026-09-14',
+            cartorio=cartorio or self.cartorio_a,
+            livro='1',
+            folha='1',
+        )
+
+    def dados_admin(self, imovel, cartorio):
+        return {
+            'matricula': imovel.matricula,
+            'nome': imovel.nome,
+            'tipo_documento_principal': imovel.tipo_documento_principal,
+            'terra_indigena_id': str(self.ti.pk),
+            'proprietario': str(self.pessoa.pk),
+            'cartorio': str(cartorio.pk),
+            'arquivado': '',
+            'observacoes': '',
+            '_save': 'Salvar',
+        }
+
+
+class ImovelEdicaoCombinadaBloqueadaTest(Issue210Fixture):
+    def test_formulario_bloqueia_cartorio_e_matricula_na_mesma_edicao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        form = ImovelForm(
+            data={
+                'nome': imovel.nome,
+                'matricula': '999',
+                'tipo_documento_principal': imovel.tipo_documento_principal,
+                'observacoes': '',
+                'cartorio': str(self.cartorio_b.pk),
+                'proprietario_nome': self.pessoa.nome,
+                'proprietario': str(self.pessoa.pk),
+                'estado': self.cartorio_b.estado,
+                'cidade': self.cartorio_b.cidade,
+            },
+            instance=imovel,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('duas etapas', form.non_field_errors()[0])
+
+    def test_admin_bloqueia_cartorio_e_matricula_na_mesma_edicao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        dados = self.dados_admin(imovel, self.cartorio_b)
+        dados['matricula'] = '999'
+        form = ImovelAdminForm(data=dados, instance=imovel)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('duas etapas', form.non_field_errors()[0])
+
+
+class CacheInvalidationOnCommitTest(Issue210Fixture):
+    def test_rollback_nao_invalida_cache(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        imovel.cartorio = self.cartorio_b
+
+        with patch.object(
+            CacheService,
+            'invalidate_tronco_principal',
+        ) as invalidar:
+            with self.assertRaises(RuntimeError):
+                with transaction.atomic():
+                    ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                        imovel
+                    )
+                    raise RuntimeError('forçar rollback')
+
+        invalidar.assert_not_called()
+
+    def test_commit_invalida_cache_depois_da_transacao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        imovel.cartorio = self.cartorio_b
+
+        with patch.object(
+            CacheService,
+            'invalidate_tronco_principal',
+        ) as invalidar:
+            with self.captureOnCommitCallbacks(execute=True):
+                with transaction.atomic():
+                    ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                        imovel
+                    )
+                    invalidar.assert_not_called()
+
+        invalidar.assert_called_once_with(imovel.pk)
+
+    def test_invalida_imovel_proprietario_e_consumidor_do_documento(self):
+        imovel_a = self.criar_imovel()
+        documento_a = self.criar_documento(imovel_a)
+        imovel_b = Imovel.objects.create(
+            terra_indigena_id=self.ti,
+            nome='Imóvel consumidor #210',
+            proprietario=self.pessoa,
+            matricula='222',
+            tipo_documento_principal='matricula',
+            cartorio=self.cartorio_a,
+        )
+        documento_b = Documento.objects.create(
+            imovel=imovel_b,
+            tipo=self.tipo,
+            numero='M222',
+            data='2026-09-14',
+            cartorio=self.cartorio_a,
+            livro='2',
+            folha='2',
+        )
+        tipo_lancamento = LancamentoTipo.objects.create(tipo='registro')
+        Lancamento.objects.create(
+            documento=documento_b,
+            tipo=tipo_lancamento,
+            data='2026-09-14',
+            documento_origem=documento_a,
+        )
+        imovel_a.cartorio = self.cartorio_b
+
+        with patch.object(
+            CacheService,
+            'invalidate_tronco_principal',
+        ) as invalidar:
+            with self.captureOnCommitCallbacks(execute=True):
+                ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                    imovel_a
+                )
+
+        self.assertEqual(invalidar.call_count, 2)
+        invalidar.assert_has_calls(
+            [call(imovel_a.pk), call(imovel_b.pk)],
+            any_order=True,
+        )
+
+
+class ConcorrenciaDocumentoPrincipalTest(Issue210Fixture):
+    def test_integrity_error_concorrente_vira_erro_de_validacao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        imovel.cartorio = self.cartorio_b
+
+        with patch.object(
+            Documento,
+            'save',
+            side_effect=IntegrityError('colisão concorrente'),
+        ):
+            with self.assertRaisesMessage(
+                ValidationError,
+                'Conflito de identidade detectado no cartório destino '
+                '(outra operação criou documento concorrente). Tente novamente.',
+            ):
+                ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                    imovel
+                )
+
+
+class DocumentoTipoUnicidadeTest(Issue210Fixture):
+    def test_tipo_documento_recusa_valor_duplicado(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DocumentoTipo.objects.create(tipo='matricula')
+
+    def test_constraint_de_tipo_documento_existe_no_banco(self):
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor,
+                DocumentoTipo._meta.db_table,
+            )
+
+        self.assertIn('unique_documento_tipo_tipo', constraints)
+
+
+class ImovelAdminIssue210Test(Issue210Fixture):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin = get_user_model().objects.create_superuser(
+            username='admin210',
+            email='admin210@example.com',
+            password='senha',
+        )
+
+    def setUp(self):
+        self.client.force_login(self.admin)
+
+    def test_admin_sincroniza_cartorio_do_documento_principal(self):
+        imovel = self.criar_imovel()
+        documento = self.criar_documento(imovel)
+        url = reverse('admin:dominial_imovel_change', args=[imovel.pk])
+
+        resposta = self.client.post(url, self.dados_admin(imovel, self.cartorio_b))
+
+        self.assertEqual(resposta.status_code, 302)
+        documento.refresh_from_db()
+        self.assertEqual(documento.cartorio, self.cartorio_b)
+
+    def test_admin_exibe_erro_e_nao_salva_sem_documento_principal(self):
+        imovel = self.criar_imovel()
+        url = reverse('admin:dominial_imovel_change', args=[imovel.pk])
+
+        resposta = self.client.post(url, self.dados_admin(imovel, self.cartorio_b))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'nenhum documento principal')
+        imovel.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
+
+    def test_admin_exibe_ids_e_nao_salva_documentos_ambiguos(self):
+        imovel = self.criar_imovel()
+        documento_a = self.criar_documento(imovel)
+        documento_b = self.criar_documento(imovel, self.cartorio_b)
+        url = reverse('admin:dominial_imovel_change', args=[imovel.pk])
+
+        resposta = self.client.post(url, self.dados_admin(imovel, self.cartorio_c))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(
+            resposta,
+            f'IDs: {documento_a.pk}, {documento_b.pk}',
+        )
+        imovel.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
+
+
+class AuditoriaDivergenciaCartorioCommandTest(Issue210Fixture):
+    def criar_divergencia_com_numero(self, numero):
+        imovel = Imovel.objects.create(
+            terra_indigena_id=self.ti,
+            nome='Imóvel CSV #210',
+            proprietario=self.pessoa,
+            matricula=numero,
+            tipo_documento_principal='matricula',
+            cartorio=self.cartorio_a,
+        )
+        Documento.objects.create(
+            imovel=imovel,
+            tipo=self.tipo,
+            numero=numero,
+            data='2026-09-14',
+            cartorio=self.cartorio_b,
+            livro='1',
+            folha='1',
+        )
+
+    def test_comando_lista_uma_divergencia_conhecida_sem_escrever(self):
+        imovel = self.criar_imovel()
+        documento = self.criar_documento(imovel, self.cartorio_b)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            stdout=saida,
+        )
+
+        texto = saida.getvalue()
+        self.assertIn('IMOVEL_ID', texto)
+        self.assertIn(str(imovel.pk), texto)
+        self.assertIn(str(documento.pk), texto)
+        self.assertIn(str(self.cartorio_a.pk), texto)
+        self.assertIn(str(self.cartorio_b.pk), texto)
+        self.assertIn('Total de divergências: 1', texto)
+        imovel.refresh_from_db()
+        documento.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
+        self.assertEqual(documento.cartorio, self.cartorio_b)
+
+    def test_flag_csv_emite_cabecalho_e_divergencia(self):
+        imovel = self.criar_imovel()
+        documento = self.criar_documento(imovel, self.cartorio_b)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            '--csv',
+            stdout=saida,
+        )
+
+        linhas = saida.getvalue().splitlines()
+        self.assertEqual(
+            linhas[0],
+            'imovel_id,documento_id,tipo,numero_normalizado,'
+            'cartorio_imovel_id,cartorio_documento_id',
+        )
+        self.assertIn(
+            f'{imovel.pk},{documento.pk},matricula,14511',
+            linhas[1],
+        )
+
+    def test_csv_neutraliza_formula_no_numero_normalizado(self):
+        formula = '=HYPERLINK("http://evil")'
+        self.criar_divergencia_com_numero(formula)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            '--csv',
+            stdout=saida,
+        )
+
+        linha = next(csv.DictReader(StringIO(saida.getvalue())))
+        self.assertEqual(linha['numero_normalizado'], f"'{formula}")
+
+    def test_saida_humana_preserva_numero_sem_prefixo_de_seguranca(self):
+        formula = '=HYPERLINK("http://evil")'
+        self.criar_divergencia_com_numero(formula)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            stdout=saida,
+        )
+
+        texto = saida.getvalue()
+        self.assertIn(formula, texto)
+        self.assertNotIn(f"'{formula}", texto)

@@ -355,7 +355,11 @@ class LancamentoOrigemService:
         
         # Invalidar cache do imóvel
         CacheService.invalidate_documentos_imovel(imovel.id)
-        CacheService.invalidate_tronco_principal(imovel.id)
+        transaction.on_commit(
+            lambda imovel_id=imovel.id: (
+                CacheService.invalidate_tronco_principal(imovel_id)
+            )
+        )
         
         return f'Documento de fim de cadeia criado: {documento_criado.numero} ({documento_criado.tipo.get_tipo_display()}) com classificação "{classificacao}"'
     
@@ -542,7 +546,11 @@ class LancamentoOrigemService:
 
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
+            transaction.on_commit(
+                lambda imovel_id=imovel.id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
 
             return documento_criado
 
@@ -626,7 +634,11 @@ class LancamentoOrigemService:
             
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
+            transaction.on_commit(
+                lambda imovel_id=imovel.id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
             
             return documento_criado
             

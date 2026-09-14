@@ -24,6 +24,12 @@ class DocumentoTipo(models.Model):
     class Meta:
         verbose_name = "Tipo de Documento"
         verbose_name_plural = "Tipos de Documento"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tipo'],
+                name='unique_documento_tipo_tipo',
+            ),
+        ]
 
 
 class Documento(models.Model):

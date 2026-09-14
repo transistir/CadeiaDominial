@@ -1,12 +1,14 @@
 from dataclasses import FrozenInstanceError
 from datetime import date
 
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.core.management import call_command, CommandError
 from django.core.exceptions import ValidationError
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 
 from io import StringIO
 import json
@@ -30,6 +32,8 @@ from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.services.hierarquia_origem_service import HierarquiaOrigemService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.cache_service import CacheService
+from dominial.services.imovel_documento_service import ImovelDocumentoService
 from dominial.utils.documento_identidade_utils import (
     DocumentoIdentidade,
     normalizar_numero_documento,
@@ -152,6 +156,74 @@ class IdentidadeDocumentoFixture(TestCase):
             livro="1",
             folha="1",
         )
+
+
+class ImovelDocumentoServiceTest(IdentidadeDocumentoFixture):
+    def test_documento_principal_e_o_unico_com_tipo_e_numero_do_imovel(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        principal = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        self.criar_documento(
+            imovel, self.tipo_transcricao, 'T14511', self.cartorio_a
+        )
+
+        encontrado = ImovelDocumentoService.obter_documento_principal(imovel)
+
+        self.assertEqual(encontrado, principal)
+
+    def test_sem_documento_principal_informa_imovel_tipo_e_numero(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+
+        with self.assertRaisesMessage(ValidationError, 'nenhum documento principal'):
+            ImovelDocumentoService.obter_documento_principal(imovel)
+
+    def test_documentos_principais_ambiguos_listam_ids(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        documento_a = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        documento_b = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+
+        with self.assertRaises(ValidationError) as contexto:
+            ImovelDocumentoService.obter_documento_principal(imovel)
+
+        mensagem = ' '.join(contexto.exception.messages)
+        self.assertIn(str(documento_a.pk), mensagem)
+        self.assertIn(str(documento_b.pk), mensagem)
+
+    def test_cartorio_destino_com_identidade_ocupada_lista_documento(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        principal = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        outro_imovel = self.criar_imovel('999', self.cartorio_b, nome='Outro')
+        conflito = self.criar_documento(
+            outro_imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+
+        with self.assertRaises(ValidationError) as contexto:
+            ImovelDocumentoService.validar_destino(principal, self.cartorio_b)
+
+        self.assertIn(str(conflito.pk), ' '.join(contexto.exception.messages))
+
+    def test_sincronizacao_invalida_cache_quando_documento_ja_esta_no_destino(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        documento = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+        CacheService.set_cached_tronco_principal(imovel.pk, [documento])
+        imovel.cartorio = self.cartorio_b
+        imovel.save()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                imovel
+            )
+
+        self.assertIsNone(CacheService.get_cached_tronco_principal(imovel.pk))
 
 
 class IdentidadeDocumentoModelTest(IdentidadeDocumentoFixture):
@@ -366,6 +438,104 @@ class IdentidadeImovelFormTest(IdentidadeDocumentoFixture):
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             self.criar_documento(imovel_b, self.tipo_matricula, "123", self.cartorio_a)
+
+    def test_edicao_sem_principal_e_invalida_e_mantem_cartorio(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        dados = self.dados_formulario(self.cartorio_b)
+        dados['matricula'] = '14511'
+
+        form = ImovelForm(data=dados, instance=imovel)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('nenhum documento principal', form.non_field_errors()[0])
+        imovel.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
+
+    def test_edicao_com_principais_ambiguos_e_invalida_e_lista_ids(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        documento_a = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        documento_b = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+        cartorio_c = Cartorios.objects.create(
+            nome='Cartório C', cns='CNS-C', cidade='Cidade C', estado='GO'
+        )
+        dados = self.dados_formulario(cartorio_c)
+        dados['matricula'] = '14511'
+
+        form = ImovelForm(data=dados, instance=imovel)
+
+        self.assertFalse(form.is_valid())
+        mensagem = ' '.join(form.non_field_errors())
+        self.assertIn(str(documento_a.pk), mensagem)
+        self.assertIn(str(documento_b.pk), mensagem)
+        imovel.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
+
+
+class Issue210ImovelViewTest(IdentidadeDocumentoFixture):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.usuario = get_user_model().objects.create_user(username='issue210')
+
+    def setUp(self):
+        self.client.force_login(self.usuario)
+
+    def dados_edicao(self, imovel, cartorio):
+        return {
+            'nome': imovel.nome,
+            'matricula': imovel.matricula,
+            'tipo_documento_principal': imovel.tipo_documento_principal,
+            'observacoes': imovel.observacoes or '',
+            'proprietario_nome': self.pessoa.nome,
+            'proprietario': str(self.pessoa.pk),
+            'estado': cartorio.estado,
+            'cidade': cartorio.cidade,
+            'cartorio': str(cartorio.pk),
+        }
+
+    def test_view_sincroniza_informa_e_preserva_documento_no_tronco(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        documento = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        url = reverse('imovel_editar', kwargs={
+            'tis_id': self.ti.pk,
+            'imovel_id': imovel.pk,
+        })
+
+        resposta = self.client.post(
+            url,
+            self.dados_edicao(imovel, self.cartorio_b),
+            follow=True,
+        )
+
+        self.assertRedirects(resposta, reverse('tis_detail', args=[self.ti.pk]))
+        self.assertContains(resposta, f'documento principal ID {documento.pk}')
+        documento.refresh_from_db()
+        imovel.refresh_from_db()
+        self.assertEqual(documento.cartorio, self.cartorio_b)
+        self.assertEqual(identificar_tronco_principal(imovel)[0], documento)
+
+    def test_view_exibe_erro_e_nao_salva_sem_documento_principal(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        url = reverse('imovel_editar', kwargs={
+            'tis_id': self.ti.pk,
+            'imovel_id': imovel.pk,
+        })
+
+        resposta = self.client.post(
+            url,
+            self.dados_edicao(imovel, self.cartorio_b),
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'nenhum documento principal')
+        imovel.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
 
 
 class AuditoriaIdentidadeDocumentosCommandTest(IdentidadeDocumentoFixture):

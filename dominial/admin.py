@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils import timezone
 from django.contrib import messages
 from django import forms
+from django.core.exceptions import ValidationError
 from django.urls import path
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
@@ -11,6 +12,7 @@ from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
 from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
+from .services.imovel_documento_service import ImovelDocumentoService
 from django.conf import settings
 
 # Configurações do Admin
@@ -87,11 +89,43 @@ class NumeroDocumentoFilter(admin.SimpleListFilter):
             return queryset.filter(numero=self.value())
         return queryset
 
+
+class ImovelAdminForm(forms.ModelForm):
+    class Meta:
+        model = Imovel
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if (
+            self.instance.pk
+            and 'cartorio' in self.changed_data
+            and {'matricula', 'tipo_documento_principal'} & set(self.changed_data)
+        ):
+            raise forms.ValidationError(
+                'Para alterar o cartório do imóvel, faça em duas etapas '
+                'separadas: primeiro altere o cartório (o documento principal '
+                'será sincronizado), depois altere a matrícula ou o tipo. '
+                'Editar ambos ao mesmo tempo pode mover o documento errado.'
+            )
+
+        cartorio = cleaned_data.get('cartorio')
+        try:
+            ImovelDocumentoService.validar_alteracao_cartorio(
+                self.instance,
+                cartorio,
+            )
+        except ValidationError as erro:
+            self.add_error(None, erro)
+        return cleaned_data
+
+
 @admin.register(Imovel)
 class ImovelAdmin(admin.ModelAdmin):
     """
     Admin customizado para Imóveis com funcionalidade de correção de TI.
     """
+    form = ImovelAdminForm
     list_display = ['matricula', 'nome', 'terra_indigena_id', 'proprietario', 'cartorio', 'tipo_documento_principal', 'arquivado', 'data_cadastro', 'info_documentos_lancamentos']
     list_filter = ['terra_indigena_id', 'tipo_documento_principal', 'arquivado', 'cartorio', 'data_cadastro']
     search_fields = ['matricula', 'nome', 'terra_indigena_id__nome', 'proprietario__nome', 'cartorio__nome']
@@ -112,6 +146,20 @@ class ImovelAdmin(admin.ModelAdmin):
     )
     
     readonly_fields = ['data_cadastro']
+
+    @transaction.atomic
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change and 'cartorio' in form.changed_data:
+            documento = (
+                ImovelDocumentoService
+                .sincronizar_cartorio_documento_principal(obj)
+            )
+            messages.success(
+                request,
+                'Cartório do imóvel e do documento principal '
+                f'ID {documento.pk} sincronizados.',
+            )
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(

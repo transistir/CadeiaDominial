@@ -1,8 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
+
 from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
+from ..services.imovel_documento_service import ImovelDocumentoService
 from ..services.lancamento_documento_service import LancamentoDocumentoService
 
 @login_required
@@ -64,7 +67,16 @@ def imovel_form(request, tis_id, imovel_id=None):
             
             # Salvar imóvel
             try:
-                imovel.save()
+                documento_principal = None
+                if imovel_id and 'cartorio' in form.changed_data:
+                    with transaction.atomic():
+                        imovel.save()
+                        documento_principal = (
+                            ImovelDocumentoService
+                            .sincronizar_cartorio_documento_principal(imovel)
+                        )
+                else:
+                    imovel.save()
                 
                 # Criar automaticamente o documento de matrícula para o imóvel
                 if not imovel_id:  # Apenas para novos imóveis
@@ -73,6 +85,13 @@ def imovel_form(request, tis_id, imovel_id=None):
                         messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
                     except Exception as e:
                         messages.warning(request, f'Imóvel criado, mas houve um problema ao criar o documento de matrícula: {str(e)}')
+
+                if documento_principal:
+                    messages.info(
+                        request,
+                        'Cartório do imóvel e do documento principal '
+                        f'ID {documento_principal.pk} sincronizados.',
+                    )
                 
                 messages.success(request, 'Imóvel cadastrado com sucesso!')
                 return redirect('tis_detail', tis_id=tis_id)
@@ -89,4 +108,4 @@ def imovel_form(request, tis_id, imovel_id=None):
     else:
         form = ImovelForm(instance=imovel)
     
-    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel}) 
+    return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
