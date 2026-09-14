@@ -218,7 +218,10 @@ class ImovelDocumentoServiceTest(IdentidadeDocumentoFixture):
         imovel.cartorio = self.cartorio_b
         imovel.save()
 
-        ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
+        with self.captureOnCommitCallbacks(execute=True):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                imovel
+            )
 
         self.assertIsNone(CacheService.get_cached_tronco_principal(imovel.pk))
 
