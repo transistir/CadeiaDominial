@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -12,9 +13,13 @@ from dominial.models import (
     Documento,
     DocumentoTipo,
     Imovel,
+    Lancamento,
+    LancamentoTipo,
     Pessoas,
     TIs,
 )
+from dominial.services.cache_service import CacheService
+from dominial.services.imovel_documento_service import ImovelDocumentoService
 
 
 class Issue210Fixture(TestCase):
@@ -108,6 +113,52 @@ class ImovelEdicaoCombinadaBloqueadaTest(Issue210Fixture):
 
         self.assertFalse(form.is_valid())
         self.assertIn('duas etapas', form.non_field_errors()[0])
+
+
+class CacheInvalidationOnCommitTest(Issue210Fixture):
+    def test_invalida_imovel_proprietario_e_consumidor_do_documento(self):
+        imovel_a = self.criar_imovel()
+        documento_a = self.criar_documento(imovel_a)
+        imovel_b = Imovel.objects.create(
+            terra_indigena_id=self.ti,
+            nome='Imóvel consumidor #210',
+            proprietario=self.pessoa,
+            matricula='222',
+            tipo_documento_principal='matricula',
+            cartorio=self.cartorio_a,
+        )
+        documento_b = Documento.objects.create(
+            imovel=imovel_b,
+            tipo=self.tipo,
+            numero='M222',
+            data='2026-09-14',
+            cartorio=self.cartorio_a,
+            livro='2',
+            folha='2',
+        )
+        tipo_lancamento = LancamentoTipo.objects.create(tipo='registro')
+        Lancamento.objects.create(
+            documento=documento_b,
+            tipo=tipo_lancamento,
+            data='2026-09-14',
+            documento_origem=documento_a,
+        )
+        imovel_a.cartorio = self.cartorio_b
+
+        with patch.object(
+            CacheService,
+            'invalidate_tronco_principal',
+        ) as invalidar:
+            with self.captureOnCommitCallbacks(execute=True):
+                ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                    imovel_a
+                )
+
+        self.assertEqual(invalidar.call_count, 2)
+        invalidar.assert_has_calls(
+            [call(imovel_a.pk), call(imovel_b.pk)],
+            any_order=True,
+        )
 
 
 class ImovelAdminIssue210Test(Issue210Fixture):

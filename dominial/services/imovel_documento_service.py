@@ -2,7 +2,7 @@
 
 from django.core.exceptions import ValidationError
 
-from ..models import Documento
+from ..models import Documento, Lancamento
 from .cache_service import CacheService
 
 
@@ -72,8 +72,15 @@ class ImovelDocumentoService:
     def sincronizar_cartorio_documento_principal(cls, imovel):
         documento = cls.obter_documento_principal(imovel)
         cls.validar_destino(documento, imovel.cartorio)
+        imoveis_consumidores = Lancamento.objects.filter(
+            documento_origem__imovel=imovel,
+        ).values_list('documento__imovel_id', flat=True).distinct()
         if documento.cartorio_id != imovel.cartorio_id:
             documento.cartorio_id = imovel.cartorio_id
             documento.save(update_fields=['cartorio'])
-        CacheService.invalidate_tronco_principal(imovel.pk)
+        # Best-effort: LocMemCache não propaga invalidações entre workers; um
+        # backend compartilhado continua sendo dívida técnica para issue separada.
+        imoveis_afetados = {imovel.pk, *imoveis_consumidores}
+        for imovel_id in sorted(imoveis_afetados):
+            CacheService.invalidate_tronco_principal(imovel_id)
         return documento
