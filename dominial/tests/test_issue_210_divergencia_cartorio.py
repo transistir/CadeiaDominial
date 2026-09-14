@@ -5,6 +5,8 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
+from dominial.admin import ImovelAdminForm
+from dominial.forms import ImovelForm
 from dominial.models import (
     Cartorios,
     Documento,
@@ -73,6 +75,39 @@ class Issue210Fixture(TestCase):
             'observacoes': '',
             '_save': 'Salvar',
         }
+
+
+class ImovelEdicaoCombinadaBloqueadaTest(Issue210Fixture):
+    def test_formulario_bloqueia_cartorio_e_matricula_na_mesma_edicao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        form = ImovelForm(
+            data={
+                'nome': imovel.nome,
+                'matricula': '999',
+                'tipo_documento_principal': imovel.tipo_documento_principal,
+                'observacoes': '',
+                'cartorio': str(self.cartorio_b.pk),
+                'proprietario_nome': self.pessoa.nome,
+                'proprietario': str(self.pessoa.pk),
+                'estado': self.cartorio_b.estado,
+                'cidade': self.cartorio_b.cidade,
+            },
+            instance=imovel,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('duas etapas', form.non_field_errors()[0])
+
+    def test_admin_bloqueia_cartorio_e_matricula_na_mesma_edicao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        dados = self.dados_admin(imovel, self.cartorio_b)
+        dados['matricula'] = '999'
+        form = ImovelAdminForm(data=dados, instance=imovel)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('duas etapas', form.non_field_errors()[0])
 
 
 class ImovelAdminIssue210Test(Issue210Fixture):

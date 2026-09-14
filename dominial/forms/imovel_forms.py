@@ -62,6 +62,18 @@ class ImovelForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        if (
+            self.instance.pk
+            and 'cartorio' in self.changed_data
+            and {'matricula', 'tipo_documento_principal'} & set(self.changed_data)
+        ):
+            raise forms.ValidationError(
+                'Para alterar o cartório do imóvel, faça em duas etapas '
+                'separadas: primeiro altere o cartório (o documento principal '
+                'será sincronizado), depois altere a matrícula ou o tipo. '
+                'Editar ambos ao mesmo tempo pode mover o documento errado.'
+            )
+
         nome = cleaned_data.get('proprietario_nome')
         proprietario = cleaned_data.get('proprietario')
 
