@@ -16,6 +16,13 @@ CAMPOS = (
     'cartorio_imovel_id',
     'cartorio_documento_id',
 )
+PREFIXOS_FORMULA = ('=', '+', '-', '@', '\t', '\r')
+
+
+def neutralizar_formula(valor):
+    if isinstance(valor, str) and valor.startswith(PREFIXOS_FORMULA):
+        return f"'{valor}"
+    return valor
 
 
 class Command(BaseCommand):
@@ -60,7 +67,13 @@ class Command(BaseCommand):
     def _escrever_csv(self, linhas):
         escritor = csv.DictWriter(self.stdout, fieldnames=CAMPOS)
         escritor.writeheader()
-        escritor.writerows(linhas)
+        escritor.writerows(
+            {
+                campo: neutralizar_formula(valor)
+                for campo, valor in linha.items()
+            }
+            for linha in linhas
+        )
 
     def _escrever_tabela(self, linhas):
         self.stdout.write(

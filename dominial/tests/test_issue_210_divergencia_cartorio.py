@@ -1,3 +1,4 @@
+import csv
 from io import StringIO
 from unittest.mock import call, patch
 
@@ -289,6 +290,25 @@ class ImovelAdminIssue210Test(Issue210Fixture):
 
 
 class AuditoriaDivergenciaCartorioCommandTest(Issue210Fixture):
+    def criar_divergencia_com_numero(self, numero):
+        imovel = Imovel.objects.create(
+            terra_indigena_id=self.ti,
+            nome='Imóvel CSV #210',
+            proprietario=self.pessoa,
+            matricula=numero,
+            tipo_documento_principal='matricula',
+            cartorio=self.cartorio_a,
+        )
+        Documento.objects.create(
+            imovel=imovel,
+            tipo=self.tipo,
+            numero=numero,
+            data='2026-09-14',
+            cartorio=self.cartorio_b,
+            livro='1',
+            folha='1',
+        )
+
     def test_comando_lista_uma_divergencia_conhecida_sem_escrever(self):
         imovel = self.criar_imovel()
         documento = self.criar_documento(imovel, self.cartorio_b)
@@ -332,3 +352,31 @@ class AuditoriaDivergenciaCartorioCommandTest(Issue210Fixture):
             f'{imovel.pk},{documento.pk},matricula,14511',
             linhas[1],
         )
+
+    def test_csv_neutraliza_formula_no_numero_normalizado(self):
+        formula = '=HYPERLINK("http://evil")'
+        self.criar_divergencia_com_numero(formula)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            '--csv',
+            stdout=saida,
+        )
+
+        linha = next(csv.DictReader(StringIO(saida.getvalue())))
+        self.assertEqual(linha['numero_normalizado'], f"'{formula}")
+
+    def test_saida_humana_preserva_numero_sem_prefixo_de_seguranca(self):
+        formula = '=HYPERLINK("http://evil")'
+        self.criar_divergencia_com_numero(formula)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            stdout=saida,
+        )
+
+        texto = saida.getvalue()
+        self.assertIn(formula, texto)
+        self.assertNotIn(f"'{formula}", texto)
