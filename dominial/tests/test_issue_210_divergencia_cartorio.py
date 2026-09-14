@@ -1,12 +1,13 @@
 import csv
 from io import StringIO
+from pathlib import Path
 from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError, connection, transaction
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from dominial.admin import ImovelAdminForm
@@ -23,6 +24,29 @@ from dominial.models import (
 )
 from dominial.services.cache_service import CacheService
 from dominial.services.imovel_documento_service import ImovelDocumentoService
+
+
+class RoadmapIssue210Test(SimpleTestCase):
+    def test_roadmap_registra_reordenacao_pendente_de_aprovacao(self):
+        roadmap = (
+            Path(__file__).resolve().parents[2]
+            / 'docs'
+            / 'produto-3'
+            / 'ROADMAP.md'
+        ).read_text(encoding='utf-8')
+        aviso = (
+            '> ℹ️ #210 posicionada acima de #144 por ser P1 produção '
+            '(quebra a cadeia\n'
+            '> dominial após operação administrativa comum — imóvel '
+            '643/M14511/Guaíra →\n'
+            '> São Miguel do Iguaçu, 14/09/2026). Pendente aprovação explícita '
+            'do usuário\n'
+            '> (luandro/Hiure) para manter ou restaurar #144 como item 1. '
+            'Aguardando\n'
+            '> sign-off antes do PR ser mergeado.'
+        )
+
+        self.assertIn(aviso, roadmap)
 
 
 class Issue210Fixture(TestCase):

@@ -168,6 +168,11 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    imóvel sincroniza o documento principal quando há um único candidato;
    estados ausente/ambíguo/conflitante são bloqueados; auditoria read-only
    disponível em `auditar_divergencia_cartorio_imovel_documento`.
+> ℹ️ #210 posicionada acima de #144 por ser P1 produção (quebra a cadeia
+> dominial após operação administrativa comum — imóvel 643/M14511/Guaíra →
+> São Miguel do Iguaçu, 14/09/2026). Pendente aprovação explícita do usuário
+> (luandro/Hiure) para manter ou restaurar #144 como item 1. Aguardando
+> sign-off antes do PR ser mergeado.
 2. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
    regressão v1.0.3→v1.0.5 ligada a cartórios (imóvel M955, Amambai).
 3. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
