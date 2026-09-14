@@ -3,6 +3,7 @@ from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.db import transaction
 from django.test import TestCase
 from django.urls import reverse
 
@@ -116,6 +117,42 @@ class ImovelEdicaoCombinadaBloqueadaTest(Issue210Fixture):
 
 
 class CacheInvalidationOnCommitTest(Issue210Fixture):
+    def test_rollback_nao_invalida_cache(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        imovel.cartorio = self.cartorio_b
+
+        with patch.object(
+            CacheService,
+            'invalidate_tronco_principal',
+        ) as invalidar:
+            with self.assertRaises(RuntimeError):
+                with transaction.atomic():
+                    ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                        imovel
+                    )
+                    raise RuntimeError('forçar rollback')
+
+        invalidar.assert_not_called()
+
+    def test_commit_invalida_cache_depois_da_transacao(self):
+        imovel = self.criar_imovel()
+        self.criar_documento(imovel)
+        imovel.cartorio = self.cartorio_b
+
+        with patch.object(
+            CacheService,
+            'invalidate_tronco_principal',
+        ) as invalidar:
+            with self.captureOnCommitCallbacks(execute=True):
+                with transaction.atomic():
+                    ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                        imovel
+                    )
+                    invalidar.assert_not_called()
+
+        invalidar.assert_called_once_with(imovel.pk)
+
     def test_invalida_imovel_proprietario_e_consumidor_do_documento(self):
         imovel_a = self.criar_imovel()
         documento_a = self.criar_documento(imovel_a)

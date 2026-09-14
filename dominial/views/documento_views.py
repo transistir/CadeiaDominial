@@ -2,6 +2,7 @@ import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
@@ -69,7 +70,11 @@ def novo_documento(request, tis_id, imovel_id):
             messages.success(request, f'Documento "{mensagem}" criado com sucesso!')
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
+            transaction.on_commit(
+                lambda imovel_id=imovel.id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
             return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
         else:
             messages.error(request, mensagem)
@@ -101,7 +106,11 @@ def editar_documento(request, tis_id, imovel_id, documento_id):
             messages.success(request, f'Documento "{mensagem}" atualizado com sucesso!')
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
+            transaction.on_commit(
+                lambda imovel_id=imovel.id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
             return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
         else:
             messages.error(request, mensagem)
@@ -131,7 +140,11 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
             messages.success(request, f'Documento "{numero_documento}" excluído com sucesso!')
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
+            transaction.on_commit(
+                lambda imovel_id=imovel.id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
             return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
         except Exception as e:
             messages.error(request, f'Erro ao excluir documento: {str(e)}')
@@ -366,7 +379,11 @@ def ajustar_nivel_documento(request, documento_id):
         
         # Invalidar cache do imóvel
         CacheService.invalidate_documentos_imovel(documento.imovel.id)
-        CacheService.invalidate_tronco_principal(documento.imovel.id)
+        transaction.on_commit(
+            lambda imovel_id=documento.imovel.id: (
+                CacheService.invalidate_tronco_principal(imovel_id)
+            )
+        )
         
         return JsonResponse({
             'success': True,

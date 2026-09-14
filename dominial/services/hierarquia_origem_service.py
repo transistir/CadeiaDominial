@@ -8,6 +8,7 @@ from .documento_identidade_service import DocumentoIdentidadeService
 from .cache_service import CacheService
 from .cri_service import CRIService
 from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+from django.db import transaction
 from django.utils import timezone
 
 
@@ -158,7 +159,11 @@ class HierarquiaOrigemService:
             
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
+            transaction.on_commit(
+                lambda imovel_id=imovel.id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
             
             # Retornar origem identificada criada
             return HierarquiaOrigemService._criar_origem_identificada(

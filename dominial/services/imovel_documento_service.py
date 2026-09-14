@@ -1,6 +1,7 @@
 """Mantém alinhados o cartório do imóvel e o de seu documento principal."""
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from ..models import Documento, Lancamento
 from .cache_service import CacheService
@@ -82,5 +83,9 @@ class ImovelDocumentoService:
         # backend compartilhado continua sendo dívida técnica para issue separada.
         imoveis_afetados = {imovel.pk, *imoveis_consumidores}
         for imovel_id in sorted(imoveis_afetados):
-            CacheService.invalidate_tronco_principal(imovel_id)
+            transaction.on_commit(
+                lambda imovel_id=imovel_id: (
+                    CacheService.invalidate_tronco_principal(imovel_id)
+                )
+            )
         return documento
