@@ -4,7 +4,7 @@ from unittest.mock import call, patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django.urls import reverse
 
@@ -218,6 +218,22 @@ class ConcorrenciaDocumentoPrincipalTest(Issue210Fixture):
                 ImovelDocumentoService.sincronizar_cartorio_documento_principal(
                     imovel
                 )
+
+
+class DocumentoTipoUnicidadeTest(Issue210Fixture):
+    def test_tipo_documento_recusa_valor_duplicado(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DocumentoTipo.objects.create(tipo='matricula')
+
+    def test_constraint_de_tipo_documento_existe_no_banco(self):
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor,
+                DocumentoTipo._meta.db_table,
+            )
+
+        self.assertIn('unique_documento_tipo_tipo', constraints)
 
 
 class ImovelAdminIssue210Test(Issue210Fixture):
