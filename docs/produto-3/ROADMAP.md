@@ -164,12 +164,16 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 > Bug de produção + brechas de duplicidade. #144 é o mais antigo aberto
 > com dados reais envolvidos (desde 13/08).
 
-1. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
+1. **#210** 🔨 **IMPLEMENTADA, AGUARDANDO REVISÃO** — edição do cartório do
+   imóvel sincroniza o documento principal quando há um único candidato;
+   estados ausente/ambíguo/conflitante são bloqueados; auditoria read-only
+   disponível em `auditar_divergencia_cartorio_imovel_documento`.
+2. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
    regressão v1.0.3→v1.0.5 ligada a cartórios (imóvel M955, Amambai).
-2. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
-3. **#141** 🐛 tratar IntegrityError (duplicidade canônica) em criar/editar.
-4. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
-5. **#110** levantar cartórios fantasmas + plano de merge (data quality —
+3. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
+4. **#141** 🐛 tratar IntegrityError (duplicidade canônica) em criar/editar.
+5. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
+6. **#110** levantar cartórios fantasmas + plano de merge (data quality —
    alimenta #113 do R5).
 
 ## R4 — UX Umbelino: rapid wins + CRI (~1 semana)
