@@ -30,6 +30,7 @@ from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.services.hierarquia_origem_service import HierarquiaOrigemService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.imovel_documento_service import ImovelDocumentoService
 from dominial.utils.documento_identidade_utils import (
     DocumentoIdentidade,
     normalizar_numero_documento,
@@ -152,6 +153,58 @@ class IdentidadeDocumentoFixture(TestCase):
             livro="1",
             folha="1",
         )
+
+
+class ImovelDocumentoServiceTest(IdentidadeDocumentoFixture):
+    def test_documento_principal_e_o_unico_com_tipo_e_numero_do_imovel(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        principal = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        self.criar_documento(
+            imovel, self.tipo_transcricao, 'T14511', self.cartorio_a
+        )
+
+        encontrado = ImovelDocumentoService.obter_documento_principal(imovel)
+
+        self.assertEqual(encontrado, principal)
+
+    def test_sem_documento_principal_informa_imovel_tipo_e_numero(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+
+        with self.assertRaisesMessage(ValidationError, 'nenhum documento principal'):
+            ImovelDocumentoService.obter_documento_principal(imovel)
+
+    def test_documentos_principais_ambiguos_listam_ids(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        documento_a = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        documento_b = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+
+        with self.assertRaises(ValidationError) as contexto:
+            ImovelDocumentoService.obter_documento_principal(imovel)
+
+        mensagem = ' '.join(contexto.exception.messages)
+        self.assertIn(str(documento_a.pk), mensagem)
+        self.assertIn(str(documento_b.pk), mensagem)
+
+    def test_cartorio_destino_com_identidade_ocupada_lista_documento(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        principal = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_a
+        )
+        outro_imovel = self.criar_imovel('999', self.cartorio_b, nome='Outro')
+        conflito = self.criar_documento(
+            outro_imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+
+        with self.assertRaises(ValidationError) as contexto:
+            ImovelDocumentoService.validar_destino(principal, self.cartorio_b)
+
+        self.assertIn(str(conflito.pk), ' '.join(contexto.exception.messages))
 
 
 class IdentidadeDocumentoModelTest(IdentidadeDocumentoFixture):
