@@ -1,4 +1,7 @@
+from io import StringIO
+
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
@@ -120,3 +123,49 @@ class ImovelAdminIssue210Test(Issue210Fixture):
         self.assertContains(resposta, str(documento_b.pk))
         imovel.refresh_from_db()
         self.assertEqual(imovel.cartorio, self.cartorio_a)
+
+
+class AuditoriaDivergenciaCartorioCommandTest(Issue210Fixture):
+    def test_comando_lista_uma_divergencia_conhecida_sem_escrever(self):
+        imovel = self.criar_imovel()
+        documento = self.criar_documento(imovel, self.cartorio_b)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            stdout=saida,
+        )
+
+        texto = saida.getvalue()
+        self.assertIn('IMOVEL_ID', texto)
+        self.assertIn(str(imovel.pk), texto)
+        self.assertIn(str(documento.pk), texto)
+        self.assertIn(str(self.cartorio_a.pk), texto)
+        self.assertIn(str(self.cartorio_b.pk), texto)
+        self.assertIn('Total de divergências: 1', texto)
+        imovel.refresh_from_db()
+        documento.refresh_from_db()
+        self.assertEqual(imovel.cartorio, self.cartorio_a)
+        self.assertEqual(documento.cartorio, self.cartorio_b)
+
+    def test_flag_csv_emite_cabecalho_e_divergencia(self):
+        imovel = self.criar_imovel()
+        documento = self.criar_documento(imovel, self.cartorio_b)
+        saida = StringIO()
+
+        call_command(
+            'auditar_divergencia_cartorio_imovel_documento',
+            '--csv',
+            stdout=saida,
+        )
+
+        linhas = saida.getvalue().splitlines()
+        self.assertEqual(
+            linhas[0],
+            'imovel_id,documento_id,tipo,numero_normalizado,'
+            'cartorio_imovel_id,cartorio_documento_id',
+        )
+        self.assertIn(
+            f'{imovel.pk},{documento.pk},matricula,14511',
+            linhas[1],
+        )
