@@ -32,6 +32,7 @@ from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.services.hierarquia_origem_service import HierarquiaOrigemService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.cache_service import CacheService
 from dominial.services.imovel_documento_service import ImovelDocumentoService
 from dominial.utils.documento_identidade_utils import (
     DocumentoIdentidade,
@@ -207,6 +208,19 @@ class ImovelDocumentoServiceTest(IdentidadeDocumentoFixture):
             ImovelDocumentoService.validar_destino(principal, self.cartorio_b)
 
         self.assertIn(str(conflito.pk), ' '.join(contexto.exception.messages))
+
+    def test_sincronizacao_invalida_cache_quando_documento_ja_esta_no_destino(self):
+        imovel = self.criar_imovel('14511', self.cartorio_a)
+        documento = self.criar_documento(
+            imovel, self.tipo_matricula, 'M14511', self.cartorio_b
+        )
+        CacheService.set_cached_tronco_principal(imovel.pk, [documento])
+        imovel.cartorio = self.cartorio_b
+        imovel.save()
+
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
+
+        self.assertIsNone(CacheService.get_cached_tronco_principal(imovel.pk))
 
 
 class IdentidadeDocumentoModelTest(IdentidadeDocumentoFixture):

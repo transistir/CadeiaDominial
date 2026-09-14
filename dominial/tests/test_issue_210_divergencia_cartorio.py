@@ -119,8 +119,10 @@ class ImovelAdminIssue210Test(Issue210Fixture):
         resposta = self.client.post(url, self.dados_admin(imovel, self.cartorio_c))
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, str(documento_a.pk))
-        self.assertContains(resposta, str(documento_b.pk))
+        self.assertContains(
+            resposta,
+            f'IDs: {documento_a.pk}, {documento_b.pk}',
+        )
         imovel.refresh_from_db()
         self.assertEqual(imovel.cartorio, self.cartorio_a)
 

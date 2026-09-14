@@ -75,5 +75,5 @@ class ImovelDocumentoService:
         if documento.cartorio_id != imovel.cartorio_id:
             documento.cartorio_id = imovel.cartorio_id
             documento.save(update_fields=['cartorio'])
-            CacheService.invalidate_tronco_principal(imovel.pk)
+        CacheService.invalidate_tronco_principal(imovel.pk)
         return documento
