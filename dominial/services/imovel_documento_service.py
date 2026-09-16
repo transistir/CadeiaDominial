@@ -80,9 +80,13 @@ class ImovelDocumentoService:
 
         if len(candidatos) == 1:
             documento = candidatos[0]
+            if documento.cartorio_id == novo_cartorio.id:
+                # Já alinhado ao destino: nada a validar ou migrar.
+                return candidatos
+
             colisao = (
                 Documento.objects.filter(
-                    tipo=documento.tipo,
+                    tipo__tipo=documento.tipo.tipo,
                     numero_normalizado=documento.numero_normalizado,
                     cartorio=novo_cartorio,
                 )
