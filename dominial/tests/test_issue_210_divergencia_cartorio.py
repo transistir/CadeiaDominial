@@ -12,6 +12,7 @@ principal continuam fora daqui (issue #212).
 """
 
 from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -144,6 +145,46 @@ class AdminSincronizaCartorioTest(_Issue210Fixture, TestCase):
         self.assertEqual(self.imovel.cartorio_id, self.cartorio_a.id)
         self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
 
+    def test_admin_bloqueia_colisao_por_identidade_semantica_mesmo_com_fk_diferente(self):
+        # `DocumentoTipo.tipo` não é único: um segundo registro com o mesmo
+        # texto 'matricula' mas FK diferente deve colidir do mesmo jeito,
+        # pois a cadeia resolve documentos por tipo__tipo, não pela FK.
+        tipo_matricula_outra_fk = DocumentoTipo.objects.create(tipo='matricula')
+        outro_imovel = Imovel.objects.create(
+            terra_indigena_id=self.tis, nome='Outro imóvel', proprietario=self.proprietario,
+            matricula='999999', tipo_documento_principal='matricula', cartorio=self.cartorio_b,
+        )
+        documento_conflitante = Documento.objects.create(
+            imovel=outro_imovel, tipo=tipo_matricula_outra_fk, numero='14511',
+            data='2024-01-01', cartorio=self.cartorio_b, livro='1', folha='1',
+        )
+
+        response = self.client.post(self.url, self._dados_base(cartorio=self.cartorio_b.id))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(str(documento_conflitante.id), response.content.decode())
+        self.imovel.refresh_from_db()
+        self.documento.refresh_from_db()
+        self.assertEqual(self.imovel.cartorio_id, self.cartorio_a.id)
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
+
+    def test_admin_trata_validation_error_concorrente_sem_500(self):
+        with patch.object(
+            ImovelDocumentoService,
+            'sincronizar_cartorio_documento_principal',
+            side_effect=ValidationError(
+                'Outra alteração concorrente já ocupou esta identidade no '
+                'cartório destino. Tente novamente.'
+            ),
+        ):
+            response = self.client.post(
+                self.url, self._dados_base(cartorio=self.cartorio_b.id), follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mensagens = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('concorrente' in m.lower() for m in mensagens))
+
     def test_admin_zero_candidatos_salva_com_aviso(self):
         self.documento.delete()
 
@@ -164,7 +205,10 @@ class AdminSincronizaCartorioTest(_Issue210Fixture, TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('212', response.content.decode())
+        self.assertIn(
+            'Troque o cartório separadamente da matrícula/tipo do documento',
+            response.content.decode(),
+        )
         self.imovel.refresh_from_db()
         self.documento.refresh_from_db()
         self.assertEqual(self.imovel.cartorio_id, self.cartorio_a.id)
@@ -182,6 +226,35 @@ class ImovelEditarSincronizaTest(_Issue210Fixture, TestCase):
 
     def test_imovel_editar_sincroniza_cartorio_do_documento_principal(self):
         url = reverse('imovel_editar', kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id})
+
+        response = self.client.post(url, {
+            'nome': self.imovel.nome,
+            'matricula': self.imovel.matricula,
+            'tipo_documento_principal': self.imovel.tipo_documento_principal,
+            'cartorio': self.cartorio_b.id,
+            'proprietario_nome': self.proprietario.nome,
+            'estado': self.cartorio_b.estado,
+            'cidade': self.cartorio_b.cidade,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.imovel.refresh_from_db()
+        self.documento.refresh_from_db()
+        self.assertEqual(self.imovel.cartorio_id, self.cartorio_b.id)
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)
+
+
+class ImovelDetailSincronizaTest(_Issue210Fixture, TestCase):
+    """`imovel_detail` é o segundo writer que chama `ImovelForm.save(commit=True)`
+    (além de `imovel_editar`) e também precisa sincronizar o cartório."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = User.objects.create_user(username='user210b', password='user210bpass')
+        self.client.force_login(self.user)
+
+    def test_imovel_detail_sincroniza_cartorio_do_documento_principal(self):
+        url = reverse('imovel_detail', kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id})
 
         response = self.client.post(url, {
             'nome': self.imovel.nome,
@@ -328,3 +401,25 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
 
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
+
+    def test_documento_ja_alinhado_ao_destino_nao_e_bloqueado_por_origem_legada(self):
+        # Direção real do incidente: o documento já foi corrigido manualmente
+        # para o cartório destino e o imóvel está sendo atualizado para
+        # acompanhar. Não há migração a fazer, então uma origem textual
+        # legada que referencia essa identidade (já correta) não deve
+        # bloquear o save.
+        self.documento.cartorio = self.cartorio_b
+        self.documento.save(update_fields=['cartorio'])
+
+        self._criar_lancamento_sem_signal(
+            documento=self.documento_descendente, tipo=self.tipo_inicio,
+            data='2024-01-01', origem='M14511', cartorio_origem=self.cartorio_b,
+        )
+
+        self.imovel.cartorio = self.cartorio_b
+        self.imovel.save()
+
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)
