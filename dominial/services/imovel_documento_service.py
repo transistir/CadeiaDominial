@@ -139,14 +139,19 @@ class ImovelDocumentoService:
         if documento.cartorio_id == novo_cartorio.id:
             return None
 
-        cartorio_antigo = documento.cartorio
-
         try:
             with transaction.atomic():
                 # Revalida dentro da transação (select_for_update trava as
                 # linhas em bancos que suportam, ex.: Postgres) para lidar
                 # com uma troca concorrente entre a validação e a escrita.
-                documento_atual = Documento.objects.select_for_update().get(pk=documento.pk)
+                try:
+                    documento_atual = Documento.objects.select_for_update().get(pk=documento.pk)
+                except Documento.DoesNotExist as erro:
+                    raise ValidationError(
+                        'O documento principal foi removido durante a troca de '
+                        'cartório. Tente novamente.'
+                    ) from erro
+
                 candidatos_atuais = list(
                     Documento.objects.select_for_update().filter(
                         imovel=imovel,
@@ -154,17 +159,17 @@ class ImovelDocumentoService:
                         numero_normalizado=imovel.matricula_normalizada,
                     )
                 )
-                if len(candidatos_atuais) > 1:
-                    ids = ', '.join(str(doc.id) for doc in candidatos_atuais)
+                if len(candidatos_atuais) != 1 or candidatos_atuais[0].pk != documento_atual.pk:
                     raise ValidationError(
-                        f'Documento tornou-se ambíguo durante a troca de cartório '
-                        f'(documentos IDs: {ids}). Tente novamente.'
+                        'A situação mudou, tente novamente.'
                     )
+
+                cartorio_antigo = documento_atual.cartorio
 
                 colisao_atual = (
                     Documento.objects.select_for_update()
                     .filter(
-                        tipo=documento_atual.tipo,
+                        tipo__tipo=documento_atual.tipo.tipo,
                         numero_normalizado=documento_atual.numero_normalizado,
                         cartorio=novo_cartorio,
                     )
