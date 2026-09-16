@@ -173,7 +173,19 @@ class ImovelAdmin(admin.ModelAdmin):
                 aviso = ImovelDocumentoService.sincronizar_cartorio_documento_principal(obj)
                 if aviso:
                     messages.warning(request, aviso)
-    
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        """A revalidação concorrente em `save_model` pode levantar
+        `ValidationError` (a troca de cartório deixou de ser segura entre a
+        validação do form e o `select_for_update`). Sem isto, a exceção
+        escapava do admin como um 500 em vez de reexibir o form (#210).
+        """
+        try:
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except ValidationError as erro:
+            messages.error(request, '; '.join(erro.messages))
+            return redirect(request.path)
+
     def info_documentos_lancamentos(self, obj):
         """
         Mostra informações sobre documentos e lançamentos relacionados
