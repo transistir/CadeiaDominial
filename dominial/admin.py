@@ -178,7 +178,14 @@ class ImovelAdmin(admin.ModelAdmin):
         `ValidationError` (a troca de cartório deixou de ser segura entre a
         validação do form e o `select_for_update`). Sem isto, a exceção
         escapava do admin como um 500 em vez de reexibir o form (#210).
+
+        O catch só se aplica ao POST: `save_model` (onde a exceção pode ser
+        levantada) só roda nesse método. Redirecionar um GET para
+        `request.path` em resposta a uma `ValidationError` levantada por
+        outro motivo causaria um redirect infinito.
         """
+        if request.method != 'POST':
+            return super().changeform_view(request, object_id, form_url, extra_context)
         try:
             return super().changeform_view(request, object_id, form_url, extra_context)
         except ValidationError as erro:
