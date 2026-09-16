@@ -22,7 +22,6 @@ import json
 import re
 from datetime import date
 from types import SimpleNamespace
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -40,7 +39,6 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
-from dominial.services.cache_service import CacheService
 from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 from dominial.utils.hierarquia_utils import (
     identificar_tronco_principal,
@@ -346,7 +344,7 @@ class Forma384SemEscolhaTest(_Forma384, TestCase):
     def test_chamadas_repetidas_dao_a_mesma_ordem(self):
         service = CadeiaDominialTabelaService()
         primeira = _numeros(service.obter_cadeia_tabela(self.imovel))
-        # A segunda chamada lê o tronco principal do cache.
+        # A segunda chamada recalcula o tronco principal (cache desabilitado, #210).
         segunda = _numeros(service.obter_cadeia_tabela(self.imovel))
 
         self.assertEqual(primeira, self.ORDEM_SEM_ESCOLHA)
@@ -681,41 +679,22 @@ class CompartilhamentoNaoOrdenaLinhasTest(_FormaCaminhadaForaDaOrdem, TestCase):
 
 
 class CacheDoTroncoPrincipalTest(_FormaCaminhadaForaDaOrdem, TestCase):
-    """A tabela e o cache preservam a caminhada do tronco principal."""
+    """A tabela preserva a caminhada do tronco principal.
 
-    def test_obter_cadeia_tabela_nao_reordena_o_tronco_do_cache(self):
+    O cache de `HierarquiaService.obter_tronco_principal` foi desabilitado
+    pela #210 (LocMemCache multi-worker + invalidação transitiva insolúvel
+    no hotfix), então o tronco é sempre recalculado — este teste garante que
+    o recálculo continua preservando a ordem hierárquica, sem reordenação
+    canônica global.
+    """
+
+    def test_obter_cadeia_tabela_nao_reordena_o_tronco_recalculado(self):
         tronco = identificar_tronco_principal(self.imovel)
         self.assertEqual([documento.numero for documento in tronco], self.ORDEM_HIERARQUICA)
-        CacheService.set_cached_tronco_principal(self.imovel.id, tronco)
 
-        entregues = []
-        ler_cache = CacheService.get_cached_tronco_principal
+        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
 
-        def espiar_cache(*args, **kwargs):
-            tronco_cacheado = ler_cache(*args, **kwargs)
-            entregues.append(tronco_cacheado)
-            return tronco_cacheado
-
-        with mock.patch.object(
-            CacheService, 'get_cached_tronco_principal', side_effect=espiar_cache
-        ):
-            cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
-
-        # Garante que nem a tabela nem o cache sofrem ordenação canônica global.
         self.assertEqual(_numeros(cadeia), self.ORDEM_HIERARQUICA)
-        # A lista que o cache entregou continua em ordem hierárquica...
-        self.assertEqual(len(entregues), 1)
-        self.assertEqual(
-            [documento.numero for documento in entregues[0]], self.ORDEM_HIERARQUICA
-        )
-        # ...assim como o valor armazenado.
-        self.assertEqual(
-            [
-                documento.numero
-                for documento in CacheService.get_cached_tronco_principal(self.imovel.id)
-            ],
-            self.ORDEM_HIERARQUICA,
-        )
 
 
 class OrigensDeChaveIdenticaTest(_OrdemCadeiaFixture, TestCase):
