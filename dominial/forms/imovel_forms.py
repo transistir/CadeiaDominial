@@ -125,6 +125,10 @@ class ImovelForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
+        # `save(commit=False)` seguido de um save manual do `instance` PULA
+        # a sincronização abaixo. Quem fizer isso precisa chamar
+        # `ImovelDocumentoService.sincronizar_cartorio_documento_principal`
+        # na mesma transação do save (é o que as views fazem hoje).
         instance = super().save(commit=False)
         self.sincronizacao_aviso = None
         if commit:
