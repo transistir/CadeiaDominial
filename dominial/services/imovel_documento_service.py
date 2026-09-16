@@ -32,7 +32,7 @@ class ImovelDocumentoService:
         )
 
     @staticmethod
-    def _lancamentos_legados_ambiguos(documento, cartorio_antigo):
+    def _lancamentos_legados_ambiguos(documento, cartorio_antigo, imovel):
         """Lançamentos cuja origem só existe como texto livre (sem
         `LancamentoOrigem` estruturado) e que hoje resolvem para a
         identidade antiga do documento. Não há campo estruturado para
@@ -41,6 +41,11 @@ class ImovelDocumentoService:
         candidatos = (
             Lancamento.objects.filter(origem__isnull=False)
             .exclude(origem='')
+            # Prefiltro barato: o número cru da matrícula (ex. "14511") é
+            # substring de qualquer identidade textual dela (ex. "M14511"),
+            # então filtrar por ele antes de resolver origem por origem evita
+            # varrer todos os lançamentos com origem textual do banco.
+            .filter(origem__icontains=imovel.matricula)
             .exclude(id__in=LancamentoOrigem.objects.values_list('lancamento_id', flat=True))
             .select_related('documento', 'cartorio_origem')
         )
@@ -101,7 +106,7 @@ class ImovelDocumentoService:
                 )
 
             legados = ImovelDocumentoService._lancamentos_legados_ambiguos(
-                documento, documento.cartorio,
+                documento, documento.cartorio, imovel,
             )
             if legados:
                 ids = ', '.join(str(lancamento.id) for lancamento in legados)
