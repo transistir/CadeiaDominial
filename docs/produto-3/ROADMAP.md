@@ -171,6 +171,14 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 4. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
 5. **#110** levantar cartórios fantasmas + plano de merge (data quality —
    alimenta #113 do R5).
+6. **#210** ✅ P1 produção: editar `Imovel.cartorio` deixava o documento
+   principal no cartório antigo, e a matrícula sumia da cadeia (identidade
+   resolvida por tipo+número+cartório). Corrigido com escopo reduzido:
+   `ImovelDocumentoService` sincroniza SOMENTE o cartório (admin + views
+   públicas), na mesma transação; cache do tronco principal desabilitado
+   (LocMemCache multi-worker + invalidação transitiva insolúvel no hotfix).
+   Sincronizar tipo/número do documento principal fica para **#212**
+   (issue separada, ainda aberta).
 
 ## R4 — UX Umbelino: rapid wins + CRI (~1 semana)
 
