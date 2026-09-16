@@ -402,6 +402,61 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
 
+    def test_origem_sem_prefixo_m_e_detectada_pelo_prefiltro_normalizado(self):
+        """Regressão do prefiltro (N-1): filtrar por `imovel.matricula` crua
+        ("M99887") não bate com uma origem textual sem o prefixo ("99887"),
+        deixando o lançamento ambíguo passar despercebido. O prefiltro deve
+        usar o número normalizado ("99887"), que é substring de qualquer
+        apresentação textual dessa identidade."""
+        imovel_m = Imovel.objects.create(
+            terra_indigena_id=self.tis, nome='Imóvel com prefixo M',
+            proprietario=self.proprietario, matricula='M99887',
+            tipo_documento_principal='matricula', cartorio=self.cartorio_a,
+        )
+        documento_m = Documento.objects.create(
+            imovel=imovel_m, tipo=self.tipo_matricula, numero='M99887',
+            data='2024-01-01', cartorio=self.cartorio_a, livro='1', folha='1',
+        )
+        self._criar_lancamento_sem_signal(
+            documento=self.documento_descendente, tipo=self.tipo_inicio,
+            data='2024-01-01', origem='99887', cartorio_origem=self.cartorio_a,
+        )
+
+        imovel_m.cartorio = self.cartorio_b
+        imovel_m.save()
+
+        with self.assertRaises(ValidationError):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel_m)
+
+        documento_m.refresh_from_db()
+        self.assertEqual(documento_m.cartorio_id, self.cartorio_a.id)
+
+    def test_origem_com_espaco_apos_prefixo_m_e_detectada(self):
+        """Mesma regressão, variante com espaço entre o prefixo e o número
+        ("M 99887")."""
+        imovel_m = Imovel.objects.create(
+            terra_indigena_id=self.tis, nome='Imóvel com prefixo M e espaço',
+            proprietario=self.proprietario, matricula='M99887',
+            tipo_documento_principal='matricula', cartorio=self.cartorio_a,
+        )
+        documento_m = Documento.objects.create(
+            imovel=imovel_m, tipo=self.tipo_matricula, numero='M99887',
+            data='2024-01-01', cartorio=self.cartorio_a, livro='1', folha='1',
+        )
+        self._criar_lancamento_sem_signal(
+            documento=self.documento_descendente, tipo=self.tipo_inicio,
+            data='2024-01-01', origem='M 99887', cartorio_origem=self.cartorio_a,
+        )
+
+        imovel_m.cartorio = self.cartorio_b
+        imovel_m.save()
+
+        with self.assertRaises(ValidationError):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel_m)
+
+        documento_m.refresh_from_db()
+        self.assertEqual(documento_m.cartorio_id, self.cartorio_a.id)
+
     def test_documento_ja_alinhado_ao_destino_nao_e_bloqueado_por_origem_legada(self):
         # Direção real do incidente: o documento já foi corrigido manualmente
         # para o cartório destino e o imóvel está sendo atualizado para

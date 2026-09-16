@@ -21,7 +21,7 @@ class ImovelDocumentoService:
         )
 
     @staticmethod
-    def _lancamentos_legados_ambiguos(documento, cartorio_antigo, imovel):
+    def _lancamentos_legados_ambiguos(documento, cartorio_antigo):
         """Lançamentos cuja origem só existe como texto livre (sem
         `LancamentoOrigem` estruturado) e que hoje resolvem para a
         identidade antiga do documento. Não há campo estruturado para
@@ -30,11 +30,15 @@ class ImovelDocumentoService:
         candidatos = (
             Lancamento.objects.filter(origem__isnull=False)
             .exclude(origem='')
-            # Prefiltro barato: o número cru da matrícula (ex. "14511") é
-            # substring de qualquer identidade textual dela (ex. "M14511"),
-            # então filtrar por ele antes de resolver origem por origem evita
-            # varrer todos os lançamentos com origem textual do banco.
-            .filter(origem__icontains=imovel.matricula)
+            # Prefiltro barato: o número NORMALIZADO (ex. "14511", sem
+            # prefixo M/T) é substring de qualquer apresentação textual
+            # dessa identidade ("14511", "M14511", "M 14511"), então
+            # filtrar por ele antes de resolver origem por origem evita
+            # varrer todos os lançamentos com origem textual do banco. Usar
+            # a matrícula crua do imóvel aqui deixaria passar origens sem o
+            # prefixo "M" (ex. "14511"), reabrindo a ambiguidade que este
+            # prefiltro existe para detectar.
+            .filter(origem__icontains=documento.numero_normalizado)
             .exclude(id__in=LancamentoOrigem.objects.values_list('lancamento_id', flat=True))
             .select_related('documento', 'cartorio_origem')
         )
@@ -95,7 +99,7 @@ class ImovelDocumentoService:
                 )
 
             legados = ImovelDocumentoService._lancamentos_legados_ambiguos(
-                documento, documento.cartorio, imovel,
+                documento, documento.cartorio,
             )
             if legados:
                 ids = ', '.join(str(lancamento.id) for lancamento in legados)
