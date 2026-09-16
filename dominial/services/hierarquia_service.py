@@ -4,7 +4,6 @@ Consolida funcionalidades de múltiplos services de hierarquia em um único serv
 """
 
 from ..utils.hierarquia_utils import identificar_tronco_principal, identificar_troncos_secundarios
-from .cache_service import CacheService
 from .hierarquia_arvore_service import HierarquiaArvoreService
 from .hierarquia_origem_service import HierarquiaOrigemService
 
@@ -24,21 +23,13 @@ class HierarquiaService:
         """
         if escolhas_origem is None:
             escolhas_origem = {}
-        
-        # Tentar obter do cache primeiro (apenas se não houver escolhas)
-        if not escolhas_origem:
-            cached_tronco = CacheService.get_cached_tronco_principal(imovel.id)
-            if cached_tronco:
-                return cached_tronco
-        
-        # Calcular tronco considerando escolhas de origem
-        tronco = identificar_tronco_principal(imovel, escolhas_origem)
-        
-        # Armazenar em cache apenas se não houver escolhas
-        if not escolhas_origem:
-            CacheService.set_cached_tronco_principal(imovel.id, tronco)
-        
-        return tronco
+
+        # Cache do tronco desabilitado (#210): LocMemCache multi-worker não é
+        # compartilhado entre processos, e a invalidação transitiva completa
+        # (imóveis consumidores da identidade antiga) não é viável neste
+        # hotfix. Recalcular sempre evita servir tronco desatualizado após
+        # sincronização de cartório.
+        return identificar_tronco_principal(imovel, escolhas_origem)
     
     @staticmethod
     def obter_troncos_secundarios(imovel):
