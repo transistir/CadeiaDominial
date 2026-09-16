@@ -511,7 +511,7 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)
 
     def test_lancamento_proprio_com_origem_textual_sem_cartorio_origem_bloqueia_a_troca(self):
-        """B1: lançamento do PRÓPRIO documento principal (não de um
+        """Lançamento do PRÓPRIO documento principal (não de um
         descendente) com origem textual, sem `cartorio_origem` e sem
         `LancamentoOrigem` estruturada. `_obter_fallback_textual` resolveria
         o cartório dessa origem como `documento.cartorio` — o cartório NOVO,
