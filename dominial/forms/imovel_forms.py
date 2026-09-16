@@ -115,9 +115,8 @@ class ImovelForm(forms.ModelForm):
             if cartorio_mudou and (matricula_mudou or tipo_mudou):
                 raise forms.ValidationError(
                     'Não é possível trocar o cartório e editar a matrícula ou o '
-                    'tipo do documento principal na mesma edição. Faça a troca de '
-                    'cartório separadamente (edição de matrícula/tipo é tratada '
-                    'pela issue #212).'
+                    'tipo do documento principal na mesma edição. Troque o '
+                    'cartório separadamente da matrícula/tipo do documento.'
                 )
             if cartorio_mudou:
                 self.cartorio_mudou = True
