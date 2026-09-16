@@ -57,6 +57,42 @@ class ImovelDocumentoService:
         return ambiguos
 
     @staticmethod
+    def _lancamentos_proprios_sem_cartorio_origem(documento):
+        """Lançamentos do PRÓPRIO documento com origem textual não
+        estruturada (sem `cartorio_origem` e sem `LancamentoOrigem`).
+        `LancamentoOrigemLeituraService._obter_fallback_textual` resolve o
+        cartório dessas origens como `lancamento.documento.cartorio` — o
+        cartório ATUAL do documento. Trocar esse cartório sem migrar essas
+        origens faz a leitura futura apontar para o cartório novo (onde a
+        identidade referenciada normalmente não existe), e o ancestral some
+        da cadeia silenciosamente.
+        """
+        return list(
+            Lancamento.objects.filter(documento=documento, origem__isnull=False)
+            .exclude(origem='')
+            .filter(cartorio_origem__isnull=True)
+            .exclude(id__in=LancamentoOrigem.objects.values_list('lancamento_id', flat=True))
+        )
+
+    @staticmethod
+    def _lancamentos_legados_bloqueantes(documento, cartorio_antigo):
+        """Combina os dois cenários de origem textual legada que uma troca
+        de cartório deixaria quebrados: lançamentos de OUTROS documentos que
+        referenciam esta identidade (`_lancamentos_legados_ambiguos`) e
+        lançamentos do PRÓPRIO documento sem `cartorio_origem`
+        (`_lancamentos_proprios_sem_cartorio_origem`).
+        """
+        outros = ImovelDocumentoService._lancamentos_legados_ambiguos(documento, cartorio_antigo)
+        proprios = ImovelDocumentoService._lancamentos_proprios_sem_cartorio_origem(documento)
+        vistos = set()
+        combinados = []
+        for lancamento in outros + proprios:
+            if lancamento.id not in vistos:
+                vistos.add(lancamento.id)
+                combinados.append(lancamento)
+        return combinados
+
+    @staticmethod
     def validar_troca_cartorio(imovel, novo_cartorio):
         """Validação somente-leitura (nenhuma escrita).
 
@@ -98,7 +134,7 @@ class ImovelDocumentoService:
                     'trocar o cartório do imóvel.'
                 )
 
-            legados = ImovelDocumentoService._lancamentos_legados_ambiguos(
+            legados = ImovelDocumentoService._lancamentos_legados_bloqueantes(
                 documento, documento.cartorio,
             )
             if legados:
@@ -142,6 +178,12 @@ class ImovelDocumentoService:
                 # Revalida dentro da transação (select_for_update trava as
                 # linhas em bancos que suportam, ex.: Postgres) para lidar
                 # com uma troca concorrente entre a validação e a escrita.
+                # `of=('self',)` restringe o lock às linhas de `Documento`:
+                # sem isso, o join de `tipo__tipo=` travaria também linhas de
+                # `DocumentoTipo` no Postgres. Em SQLite, select_for_update é
+                # no-op — a proteção real ali vem da UniqueConstraint
+                # (tipo, numero_normalizado, cartorio) e do catch de
+                # IntegrityError logo abaixo.
                 try:
                     documento_atual = Documento.objects.select_for_update().get(pk=documento.pk)
                 except Documento.DoesNotExist as erro:
@@ -151,7 +193,7 @@ class ImovelDocumentoService:
                     ) from erro
 
                 candidatos_atuais = list(
-                    Documento.objects.select_for_update().filter(
+                    Documento.objects.select_for_update(of=('self',)).filter(
                         imovel=imovel,
                         tipo__tipo=imovel.tipo_documento_principal,
                         numero_normalizado=imovel.matricula_normalizada,
@@ -165,7 +207,7 @@ class ImovelDocumentoService:
                 cartorio_antigo = documento_atual.cartorio
 
                 colisao_atual = (
-                    Documento.objects.select_for_update()
+                    Documento.objects.select_for_update(of=('self',))
                     .filter(
                         tipo__tipo=documento_atual.tipo.tipo,
                         numero_normalizado=documento_atual.numero_normalizado,
@@ -178,6 +220,18 @@ class ImovelDocumentoService:
                     raise ValidationError(
                         'Outra alteração concorrente já ocupou esta identidade no '
                         'cartório destino. Tente novamente.'
+                    )
+
+                # Reexecuta os scans de origem legada sob lock (funções
+                # puras de leitura, baratas): entre a validação e o lock, um
+                # lançamento com origem textual pode ter sido criado e
+                # tornaria a troca insegura.
+                legados_atuais = ImovelDocumentoService._lancamentos_legados_bloqueantes(
+                    documento_atual, cartorio_antigo,
+                )
+                if legados_atuais:
+                    raise ValidationError(
+                        'A situação mudou, tente novamente.'
                     )
 
                 documento_atual.cartorio = novo_cartorio

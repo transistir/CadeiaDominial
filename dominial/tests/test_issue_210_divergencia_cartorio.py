@@ -184,6 +184,10 @@ class AdminSincronizaCartorioTest(_Issue210Fixture, TestCase):
         self.assertEqual(response.status_code, 200)
         mensagens = [str(m) for m in response.context['messages']]
         self.assertTrue(any('concorrente' in m.lower() for m in mensagens))
+        self.imovel.refresh_from_db()
+        self.documento.refresh_from_db()
+        self.assertEqual(self.imovel.cartorio_id, self.cartorio_a.id)
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
 
     def test_admin_zero_candidatos_salva_com_aviso(self):
         self.documento.delete()
@@ -242,6 +246,33 @@ class ImovelEditarSincronizaTest(_Issue210Fixture, TestCase):
         self.documento.refresh_from_db()
         self.assertEqual(self.imovel.cartorio_id, self.cartorio_b.id)
         self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)
+
+    def test_imovel_editar_reverte_save_quando_sincronizacao_falha(self):
+        """`imovel.save()` e a sincronização rodam no mesmo `transaction.atomic()`
+        (`imovel_form`, view pública); se a sincronização levantar
+        `ValidationError`, o `imovel.save()` precisa reverter junto."""
+        url = reverse('imovel_editar', kwargs={'tis_id': self.tis.id, 'imovel_id': self.imovel.id})
+
+        with patch.object(
+            ImovelDocumentoService,
+            'sincronizar_cartorio_documento_principal',
+            side_effect=ValidationError('Outra alteração concorrente. Tente novamente.'),
+        ):
+            response = self.client.post(url, {
+                'nome': self.imovel.nome,
+                'matricula': self.imovel.matricula,
+                'tipo_documento_principal': self.imovel.tipo_documento_principal,
+                'cartorio': self.cartorio_b.id,
+                'proprietario_nome': self.proprietario.nome,
+                'estado': self.cartorio_b.estado,
+                'cidade': self.cartorio_b.cidade,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.imovel.refresh_from_db()
+        self.documento.refresh_from_db()
+        self.assertEqual(self.imovel.cartorio_id, self.cartorio_a.id)
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
 
 
 class ImovelDetailSincronizaTest(_Issue210Fixture, TestCase):
@@ -474,6 +505,43 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
 
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)
+
+    def test_lancamento_proprio_com_origem_textual_sem_cartorio_origem_bloqueia_a_troca(self):
+        """B1: lançamento do PRÓPRIO documento principal (não de um
+        descendente) com origem textual, sem `cartorio_origem` e sem
+        `LancamentoOrigem` estruturada. `_obter_fallback_textual` resolveria
+        o cartório dessa origem como `documento.cartorio` — o cartório NOVO,
+        após a troca — fazendo o ancestral referenciado ("M500") sumir da
+        cadeia silenciosamente."""
+        self._criar_lancamento_sem_signal(
+            documento=self.documento, tipo=self.tipo_inicio,
+            data='2024-01-01', origem='M500',
+        )
+
+        self.imovel.cartorio = self.cartorio_b
+        self.imovel.save()
+
+        with self.assertRaises(ValidationError):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
+
+    def test_lancamento_proprio_com_cartorio_origem_preenchido_permite_a_troca(self):
+        """Paralelo do teste acima: com `cartorio_origem` explícito, a
+        leitura da origem fica presa ao cartório correto independente de
+        qual seja o cartório atual do documento, então a troca é permitida."""
+        self._criar_lancamento_sem_signal(
+            documento=self.documento, tipo=self.tipo_inicio,
+            data='2024-01-01', origem='M500', cartorio_origem=self.cartorio_a,
+        )
+
+        self.imovel.cartorio = self.cartorio_b
+        self.imovel.save()
         ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
 
         self.documento.refresh_from_db()
