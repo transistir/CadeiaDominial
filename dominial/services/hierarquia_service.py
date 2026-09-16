@@ -19,7 +19,7 @@ class HierarquiaService:
     @staticmethod
     def obter_tronco_principal(imovel, escolhas_origem=None):
         """
-        Obtém o tronco principal da cadeia dominial com cache
+        Obtém o tronco principal da cadeia dominial (sempre recalculado; cache desabilitado, ver #210)
         """
         if escolhas_origem is None:
             escolhas_origem = {}

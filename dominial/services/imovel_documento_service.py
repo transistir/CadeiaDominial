@@ -1,15 +1,4 @@
-"""Sincronização de cartório entre Imovel e seu documento principal (#210).
-
-Bug original: editar `Imovel.cartorio` deixava o `Documento` principal
-(tipo=matrícula/transcrição, mesmo número) no cartório antigo. Como a cadeia
-dominial resolve documentos por (tipo, numero_normalizado, cartorio), a
-matrícula principal sumia da cadeia quando os dois ficavam em cartórios
-diferentes.
-
-Escopo deliberadamente reduzido (auditoria rejeitou uma versão anterior de
-3.180 linhas): sincroniza SOMENTE o cartório. Tipo/número do documento
-principal continuam fora daqui (issue #212).
-"""
+"""Sincroniza SOMENTE o cartório; tipo/número ficam fora deste módulo (issue #212)."""
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
