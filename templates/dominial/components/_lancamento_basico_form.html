@@ -49,7 +49,7 @@
 
         <div class="form-group">
             <label for="sigla_documento">Sigla do Documento</label>
-            <input type="text" name="sigla_documento" id="sigla_documento" readonly
+            <input type="text" name="sigla_documento" id="sigla_documento" readonly tabindex="-1"
                    value="{{ documento.numero }}" style="background-color: #f8f9fa;">
             <small class="form-text text-muted">Sigla do documento (herdada da origem)</small>
         </div>
@@ -83,7 +83,7 @@
                 <small>Digite apenas o número</small>
             </div>
             <div>
-                <input type="text" name="numero_lancamento" id="numero_lancamento" readonly
+                <input type="text" name="numero_lancamento" id="numero_lancamento" readonly tabindex="-1"
                        style="width: 100%; background-color: #f8f9fa;"
                        value="{% if modo_edicao and lancamento.numero_lancamento %}{{ lancamento.numero_lancamento }}{% elif form_data %}{{ form_data.numero_lancamento }}{% endif %}"
                        placeholder="Sigla será gerada automaticamente">
