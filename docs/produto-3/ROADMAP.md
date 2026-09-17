@@ -179,6 +179,13 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    (LocMemCache multi-worker + invalidação transitiva insolúvel no hotfix).
    Sincronizar tipo/número do documento principal fica para **#212**
    (issue separada, ainda aberta).
+7. **#213 fase 1** 🐛 produção (novo 16/09, relato Maurício/Umbelino — usa a
+   reserva de ~20%): salvar lançamento **sobrescreve o registro `Pessoas`
+   compartilhado** quando o operador edita o nome sugerido pelo autocomplete
+   (`lancamento_pessoa_service.py` faz `pessoa.nome = texto; pessoa.save()`),
+   corrompendo a ficha do imóvel. Fix pequeno: remover a mutação e gravar o
+   texto em `LancamentoPessoa.nome_digitado` (campo já existe). Estanca a
+   corrupção de dados sem esperar decisão estrutural. Fases 2–3 → R4.
 
 ## R4 — UX Umbelino: rapid wins + CRI (~1 semana)
 
@@ -199,8 +206,16 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
 4. **#164** quadro azul M/T em uma linha *(P)*
-5. **#173** proprietário 255→500 + migração *(P)*
-6. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
+5. **#173** proprietário 255→500 + migração *(P)* — ver #213: se a dor real for
+   "muitos proprietários" (campo único com vírgulas), aumentar para 500 só
+   alonga o nome composto; resolver #213 (modelagem multi-proprietário) pode
+   tornar #173 parcialmente desnecessária — decidir em conjunto
+6. **#213 fases 2–3** 🐛 UX + estrutural: autocomplete de adquirente/
+   transmitente sugere o bloco inteiro de nomes compostos (operador apaga os
+   excedentes a cada linha); modelagem de proprietários múltiplos no imóvel
+   (decisão de produto — `Imovel.proprietario` é FK única, `nome` é texto
+   livre). Fase 1 (stop-gap da mutação `Pessoas`) está no R3.
+7. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
    maior do bloco; desenhar considerando #150 para minimizar retrabalho)*
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
@@ -295,6 +310,11 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 12/09/2026 — #193 fechada (PR #195 validado no test
+*Última atualização: 16/09/2026 — #213 enfileirada (relato: autocomplete de
+adquirente/transmitente preenche o bloco de nomes compostos e a edição
+sobrescreve o registro `Pessoas` da ficha do imóvel) — fase 1 no R3 item 7,
+fases 2–3 no R4 item 6, decidir junto com #173.*
+
+*12/09/2026 — #193 fechada (PR #195 validado no test
 server); incidente de disco no test server resolvido (prune 51 GB);
 R3 exige revalidação contra o código atual; cronograma adiantado ~1 semana.*
