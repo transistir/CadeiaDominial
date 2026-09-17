@@ -3,7 +3,7 @@
 # Importar todos os models para manter compatibilidade
 from .tis_models import TIs, TerraIndigenaReferencia, TIs_Imovel
 from .pessoa_models import Pessoas
-from .imovel_models import Imovel, Cartorios, ImportacaoCartorios
+from .imovel_models import Imovel, Cartorios, ImportacaoCartorios, CartorioMergeLog
 from .documento_models import Documento, DocumentoTipo
 from .lancamento_models import Lancamento, LancamentoTipo, LancamentoPessoa, OrigemFimCadeia, FimCadeia, LancamentoOrigem
 from .alteracao_models import Alteracoes, AlteracoesTipo, RegistroTipo, AverbacoesTipo
@@ -14,7 +14,7 @@ from .documento_digital_models import DocumentoDigital
 __all__ = [
     'TIs', 'TerraIndigenaReferencia', 'TIs_Imovel',
     'Pessoas',
-    'Imovel', 'Cartorios', 'ImportacaoCartorios',
+    'Imovel', 'Cartorios', 'ImportacaoCartorios', 'CartorioMergeLog',
     'Documento', 'DocumentoTipo',
     'Lancamento', 'LancamentoTipo', 'LancamentoPessoa', 'OrigemFimCadeia', 'FimCadeia', 'LancamentoOrigem',
     'Alteracoes', 'AlteracoesTipo', 'RegistroTipo', 'AverbacoesTipo',
