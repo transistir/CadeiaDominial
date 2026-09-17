@@ -194,7 +194,7 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    (lancamento,pessoa,tipo)` + `get_or_create` colapsava N adquirentes com o
    mesmo `pessoa_id` em **1 linha** (sobrava só o último nome) — daí a resolução
    por nome exato, sem migração. Débitos: (a) o dado **já corrompido em produção
-   não é reparado** (levantamento + script), (b) lançamentos antigos ligados ao
+   não é reparado** (levantamento + script — issue **#215**), (b) lançamentos antigos ligados ao
    registro composto seguem exibindo o composto, (c) `lower()` não normaliza
    acento (`João` × `Joao` pode duplicar `Pessoas`). Fases 2–3 → R4.
 
@@ -228,7 +228,7 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    livre). **Fase 1 ✅ concluída no R3 (PR #214, squash `e1274862`)** — e ela
    deixou estes débitos para cá: (a) reparar o dado **já corrompido** em
    produção (nomes compostos sobrescritos por lançamentos; levantamento +
-   script de correção), (b) lançamentos antigos ligados ao registro composto
+   script de correção — issue **#215**), (b) lançamentos antigos ligados ao registro composto
    ainda exibem o nome composto no form/detalhe, (c) `lower()` não normaliza
    acento (`João` × `Joao` → `Pessoas` duplicado).
 7. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
