@@ -179,13 +179,24 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    (LocMemCache multi-worker + invalidação transitiva insolúvel no hotfix).
    Sincronizar tipo/número do documento principal fica para **#212**
    (issue separada, ainda aberta).
-7. **#213 fase 1** 🐛 produção (novo 16/09, relato Maurício/Umbelino — usa a
-   reserva de ~20%): salvar lançamento **sobrescreve o registro `Pessoas`
-   compartilhado** quando o operador edita o nome sugerido pelo autocomplete
-   (`lancamento_pessoa_service.py` faz `pessoa.nome = texto; pessoa.save()`),
-   corrompendo a ficha do imóvel. Fix pequeno: remover a mutação e gravar o
-   texto em `LancamentoPessoa.nome_digitado` (campo já existe). Estanca a
-   corrupção de dados sem esperar decisão estrutural. Fases 2–3 → R4.
+7. **#213 fase 1** ✅ **CONCLUÍDA 17/09** (PR #214, squash `e1274862`; Opus 5 ×2 +
+   DeepSeek V4 Pro + Greptile 5/5 — Codex fora por cota): salvar lançamento
+   **sobrescrevia o registro `Pessoas` compartilhado** quando o operador editava
+   o nome sugerido pelo autocomplete (`pessoa.nome = texto; pessoa.save()`),
+   corrompendo a ficha do imóvel. Corrigido: `lancamento_pessoa_service` **nunca**
+   altera `Pessoas`; texto divergente do vínculo resolve o destino por
+   `nome__iexact` (cria o registro de nome exato se não existir), o registro
+   composto fica intacto e cada nome digitado ganha sua própria linha
+   (`nome_digitado` guarda o texto). Duplicata mutante em `lancamento_service`
+   virou delegação. 10 testes novos; o módulo dá 5F+1E contra o código antigo
+   (regressão coberta de fato) e a suíte completa ficou com as mesmas falhas da
+   baseline. **Achado novo durante a fase 1:** `unique_together
+   (lancamento,pessoa,tipo)` + `get_or_create` colapsava N adquirentes com o
+   mesmo `pessoa_id` em **1 linha** (sobrava só o último nome) — daí a resolução
+   por nome exato, sem migração. Débitos: (a) o dado **já corrompido em produção
+   não é reparado** (levantamento + script), (b) lançamentos antigos ligados ao
+   registro composto seguem exibindo o composto, (c) `lower()` não normaliza
+   acento (`João` × `Joao` pode duplicar `Pessoas`). Fases 2–3 → R4.
 
 ## R4 — UX Umbelino: rapid wins + CRI (~1 semana)
 
@@ -214,7 +225,12 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    transmitente sugere o bloco inteiro de nomes compostos (operador apaga os
    excedentes a cada linha); modelagem de proprietários múltiplos no imóvel
    (decisão de produto — `Imovel.proprietario` é FK única, `nome` é texto
-   livre). Fase 1 (stop-gap da mutação `Pessoas`) está no R3.
+   livre). **Fase 1 ✅ concluída no R3 (PR #214, squash `e1274862`)** — e ela
+   deixou estes débitos para cá: (a) reparar o dado **já corrompido** em
+   produção (nomes compostos sobrescritos por lançamentos; levantamento +
+   script de correção), (b) lançamentos antigos ligados ao registro composto
+   ainda exibem o nome composto no form/detalhe, (c) `lower()` não normaliza
+   acento (`João` × `Joao` → `Pessoas` duplicado).
 7. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
    maior do bloco; desenhar considerando #150 para minimizar retrabalho)*
 
