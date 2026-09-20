@@ -33,10 +33,11 @@
 
 **Releases:** v1.0.8 (01/09) · v1.0.9 (10/09, PR #190) ·
 **v1.0.10 (12/09, PR #200 — #13/#179/#193, validada em produção)** ·
-próxima: **v1.0.11 (hotfix #201)**.
+**v1.0.11 (20/09, PR #217 — #201 Fases 0+0b, #204, #210, #213 fase 1, #168;
+GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)**.
 
-**🔥 Bug de produção ativo (12/09):** #201/#202 — cadeia esconde documentos
-importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
+**🔥 Bug de produção (12/09):** #201/#202 — hotfix Fases 0+0b **em produção
+na v1.0.11 (20/09)**; Fases 1–3 de saneamento (#202) seguem abertas. Veja **R3.5**.
 
 **Fila Django: 43 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
 
@@ -116,12 +117,12 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    morto; 15 testes Django novos (508 linhas, fluxo tinha ZERO cobertura).
    Validado no test server com caso real (imóvel 4/TI 614, M6726 com 6
    origens): sem escolha 3 docs → com escolha M528 **12 docs, zero
-   perdidos**. Deploy develop OK. **Pendente:** validação visual do Hiure
-   no test + release v1.0.11 (GATE-LUANDRO).
+   perdidos**. Deploy develop OK. ✅ **Release v1.0.11 em produção 20/09**
+   (PR #217, tag `v1.0.11`, GATE-LUANDRO autorizado pelo Hiure, deploy CI success).
    ⚠️ Limitação conhecida: carga inicial ainda só mostra o tronco (D4) —
    Fase 1.
-1b. **#201 Fase 0b — ordenação canônica da cadeia** 🔨 **IMPLEMENTADO,
-   aguardando push/PR** (branch `fix/201-ordem-cadeia`, commit `ecc87540`).
+1b. **#201 Fase 0b — ordenação canônica da cadeia** ✅ **MERGEADA 13/09**
+   (PR #205, squash `65a73aa0` em develop; em produção na v1.0.11).
    - **Regra jurídica definida pelo Hiure (13/09):** (1) documento do imóvel
      sempre 1º; (2) **matrícula antes de transcrição — absoluta**, não
      desempate (M6861 vem antes de T21820); (3) número maior→menor,
@@ -213,7 +214,8 @@ importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
    (a) monitoramento/prune periódico de disco no test server,
    (b) `immutable` 30d em estáticos sem hash de versão (ManifestStaticFiles),
    (c) alerta quando deploy do CI falha.
-1. **#168** TAB não parar no campo sigla *(P)*
+1. **#168** TAB não parar no campo sigla ✅ **MERGEADO 17/09** (PR #216,
+   squash `0de729ea`; em produção na v1.0.11)
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
 4. **#164** quadro azul M/T em uma linha *(P)*
@@ -326,7 +328,13 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 16/09/2026 — #213 enfileirada (relato: autocomplete de
+*Última atualização: 20/09/2026 — **release v1.0.11 em produção** (PR #217,
+tag `v1.0.11`, deploy CI success 18:45 UTC): #201 Fases 0+0b (PRs #203/#205),
+#204 XLS A4 paisagem (PR #207), #210 sync cartório (PR #211), #213 fase 1
+Pessoas (PR #214), #168 TAB sigla (PR #216). GATE-LUANDRO autorizado pelo
+Hiure. #202 (Fases 1–3) e #215 (reparo de dados) seguem na fila.*
+
+*16/09/2026 — #213 enfileirada (relato: autocomplete de
 adquirente/transmitente preenche o bloco de nomes compostos e a edição
 sobrescreve o registro `Pessoas` da ficha do imóvel) — fase 1 no R3 item 7,
 fases 2–3 no R4 item 6, decidir junto com #173.*
