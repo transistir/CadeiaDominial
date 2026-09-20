@@ -31,10 +31,14 @@
 #171 árvore no modal · #174 badge cadeia · #167 M anterior ·
 **#13 área pt-BR · #179 XLS consolidado por TI (R2 completo) · #193 UF sugestões CRI**
 
-**Releases:** v1.0.8 (01/09) · **v1.0.9 (10/09, PR #190 — PRs #177–#188)** ·
-PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima release v1.0.10.
+**Releases:** v1.0.8 (01/09) · v1.0.9 (10/09, PR #190) ·
+**v1.0.10 (12/09, PR #200 — #13/#179/#193, validada em produção)** ·
+próxima: **v1.0.11 (hotfix #201)**.
 
-**Fila Django: 28 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
+**🔥 Bug de produção ativo (12/09):** #201/#202 — cadeia esconde documentos
+importados ao escolher origem de transcrição compartilhada. Veja **R3.5**.
+
+**Fila Django: 43 issues abertas** (#1 guarda-chuva + #61–#72 v2 fora de escopo).
 
 ---
 
@@ -87,6 +91,70 @@ PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima re
    + cadeia única, renderer compartilhado) → item 4 acima já atendido
    automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
 
+## R3.5 — 🔥 URGENTE: fluxo de origens na cadeia (#201/#202) — Fase 0 ✅ mergeada 13/09
+
+> **Bug de produção ativo** reportado pelo Maurício (12/09): ao escolher a origem
+> de uma **transcrição compartilhada** com origem dupla (caso real: imóvel 384,
+> TI 201, T10786 → `T3280; T3281`), os documentos importados abaixo dela **somem
+> da tabela** — "não tá dando pra visualizar nada do que é importado".
+> Quebra a funcionalidade mais importante do produto: ver a cadeia na íntegra.
+> **Antecipado na frente do R3** (bug de produção > débito planejado).
+>
+> Auditoria completa 12/09 com evidência coletada **no servidor de produção**
+> (read-only). Plano: `docs/produto-3/PLANO_ORIGENS_ESCOLHAS.md`.
+> Diagnóstico: backend correto (com escolha retorna 17 docs; XLS já OK na
+> v1.0.10) — quebra é **100% frontend** + default da página. 7 defeitos (D1–D7).
+> **NÃO é regressão da v1.0.10** (exceto D3, formatação no re-render AJAX):
+> o filtro `deveExibir` é hack de 09/2025 hardcoded para outro imóvel.
+
+1. **#201 Fase 0 — hotfix (v1.0.11)** ✅ **MERGEADA 13/09** (PR #203,
+   squash `50ae2179` em develop). Pipeline Claude Opus 5 + Sonnet 5;
+   reviews: Codex APPROVE (0 blocking) + Greptile 4/5. +521/−158 em 4
+   arquivos: filtro client-side `deveExibir` removido; API devolve
+   `area_formatada`/`origem_formatada` (mesmas funções Python dos filtros
+   do template — paridade por construção); formatador duplicado em JS
+   morto; 15 testes Django novos (508 linhas, fluxo tinha ZERO cobertura).
+   Validado no test server com caso real (imóvel 4/TI 614, M6726 com 6
+   origens): sem escolha 3 docs → com escolha M528 **12 docs, zero
+   perdidos**. Deploy develop OK. **Pendente:** validação visual do Hiure
+   no test + release v1.0.11 (GATE-LUANDRO).
+   ⚠️ Limitação conhecida: carga inicial ainda só mostra o tronco (D4) —
+   Fase 1.
+1b. **#201 Fase 0b — ordenação canônica da cadeia** 🔨 **IMPLEMENTADO,
+   aguardando push/PR** (branch `fix/201-ordem-cadeia`, commit `ecc87540`).
+   - **Regra jurídica definida pelo Hiure (13/09):** (1) documento do imóvel
+     sempre 1º; (2) **matrícula antes de transcrição — absoluta**, não
+     desempate (M6861 vem antes de T21820); (3) número maior→menor,
+     comparado como inteiro. **Data não participa** (no banco ela é quase
+     toda fictícia/presumida — era a causa real da desordem).
+   - Corrige **4 ordenações divergentes** que conviviam (linhas por data,
+     expansão sem ordem, opções por `int` desc, opções por **string** desc)
+     e o bug em que o **botão destacado ≠ cadeia exibida** (caso real M6726:
+     destacava M717 mas caminhava por M1612).
+   - Chave única em `dominial/utils/ordenacao_cadeia.py`, consumida por
+     linhas da tabela (2 trilhas), botões de origem e default da caminhada
+     do tronco. 24 testes novos (39/39 OK com os 15 da Fase 0); suíte
+     completa no baseline.
+   - **DECISÃO DE ESCOPO (Hiure, 13/09): aplicar em TUDO.** A caminhada do
+     tronco é compartilhada com exportação PDF/XLS (`CadeiaCompletaService`),
+     página da árvore e modal de sequência — todos seguem a mesma regra, por
+     consistência jurídica (o que a tela mostra = o que o documento exporta).
+     A exportação continua **agrupada por troncos**; muda qual origem o
+     tronco segue por default. Medido no test server: **14 de 406 imóveis**
+     mudam a caminhada (só os com origens M e T misturadas); **conjunto de
+     documentos exportados inalterado**.
+   - Validado contra o caso real 384: sem escolha
+     `M8272, M7775, M2623, M2072, T13367, T10786, T3281, T2391` (exatamente
+     o esperado pelo Hiure); com escolha T3281 → 17 docs com T3280/T3281
+     visíveis.
+2. **#202 Fases 1–3 — saneamento estrutural** (aberta, enfileirada)
+   - F1: trilha única no service (cadeia sempre expandida), corrigir cache
+     (`sort()` in-place corrompe valor cacheado), sessão com escopo por imóvel
+   - F2: testes anti-regressão — service, contrato JSON das APIs, golden test
+     do imóvel 384, infra de teste JS (vitest)
+   - F3: modularizar o JS (1373 linhas), remover ~40 `console.log`, sanitizar
+     `innerHTML` (casa com #196)
+
 ## R3 — Integridade de documentos/cartórios I (~1–1,5 semana)
 
 > ⚠️ **REVALIDAR CONTRA O CÓDIGO ATUAL ANTES DE INICIAR** (pedido Hiure
@@ -103,6 +171,32 @@ PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima re
 4. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
 5. **#110** levantar cartórios fantasmas + plano de merge (data quality —
    alimenta #113 do R5).
+6. **#210** ✅ P1 produção: editar `Imovel.cartorio` deixava o documento
+   principal no cartório antigo, e a matrícula sumia da cadeia (identidade
+   resolvida por tipo+número+cartório). Corrigido com escopo reduzido:
+   `ImovelDocumentoService` sincroniza SOMENTE o cartório (admin + views
+   públicas), na mesma transação; cache do tronco principal desabilitado
+   (LocMemCache multi-worker + invalidação transitiva insolúvel no hotfix).
+   Sincronizar tipo/número do documento principal fica para **#212**
+   (issue separada, ainda aberta).
+7. **#213 fase 1** ✅ **CONCLUÍDA 17/09** (PR #214, squash `e1274862`; Opus 5 ×2 +
+   DeepSeek V4 Pro + Greptile 5/5 — Codex fora por cota): salvar lançamento
+   **sobrescrevia o registro `Pessoas` compartilhado** quando o operador editava
+   o nome sugerido pelo autocomplete (`pessoa.nome = texto; pessoa.save()`),
+   corrompendo a ficha do imóvel. Corrigido: `lancamento_pessoa_service` **nunca**
+   altera `Pessoas`; texto divergente do vínculo resolve o destino por
+   `nome__iexact` (cria o registro de nome exato se não existir), o registro
+   composto fica intacto e cada nome digitado ganha sua própria linha
+   (`nome_digitado` guarda o texto). Duplicata mutante em `lancamento_service`
+   virou delegação. 10 testes novos; o módulo dá 5F+1E contra o código antigo
+   (regressão coberta de fato) e a suíte completa ficou com as mesmas falhas da
+   baseline. **Achado novo durante a fase 1:** `unique_together
+   (lancamento,pessoa,tipo)` + `get_or_create` colapsava N adquirentes com o
+   mesmo `pessoa_id` em **1 linha** (sobrava só o último nome) — daí a resolução
+   por nome exato, sem migração. Débitos: (a) o dado **já corrompido em produção
+   não é reparado** (levantamento + script — issue **#215**), (b) lançamentos antigos ligados ao
+   registro composto seguem exibindo o composto, (c) `lower()` não normaliza
+   acento (`João` × `Joao` pode duplicar `Pessoas`). Fases 2–3 → R4.
 
 ## R4 — UX Umbelino: rapid wins + CRI (~1 semana)
 
@@ -123,8 +217,21 @@ PRs #191/#192/#194/#195 (R2 + #193) em develop **ainda sem tag** → próxima re
 2. **#169** janela de fim de cadeia fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
 4. **#164** quadro azul M/T em uma linha *(P)*
-5. **#173** proprietário 255→500 + migração *(P)*
-6. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
+5. **#173** proprietário 255→500 + migração *(P)* — ver #213: se a dor real for
+   "muitos proprietários" (campo único com vírgulas), aumentar para 500 só
+   alonga o nome composto; resolver #213 (modelagem multi-proprietário) pode
+   tornar #173 parcialmente desnecessária — decidir em conjunto
+6. **#213 fases 2–3** 🐛 UX + estrutural: autocomplete de adquirente/
+   transmitente sugere o bloco inteiro de nomes compostos (operador apaga os
+   excedentes a cada linha); modelagem de proprietários múltiplos no imóvel
+   (decisão de produto — `Imovel.proprietario` é FK única, `nome` é texto
+   livre). **Fase 1 ✅ concluída no R3 (PR #214, squash `e1274862`)** — e ela
+   deixou estes débitos para cá: (a) reparar o dado **já corrompido** em
+   produção (nomes compostos sobrescritos por lançamentos; levantamento +
+   script de correção — issue **#215**), (b) lançamentos antigos ligados ao registro composto
+   ainda exibem o nome composto no form/detalhe, (c) `lower()` não normaliza
+   acento (`João` × `Joao` → `Pessoas` duplicado).
+7. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
    maior do bloco; desenhar considerando #150 para minimizar retrabalho)*
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
@@ -219,6 +326,11 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 12/09/2026 — #193 fechada (PR #195 validado no test
+*Última atualização: 16/09/2026 — #213 enfileirada (relato: autocomplete de
+adquirente/transmitente preenche o bloco de nomes compostos e a edição
+sobrescreve o registro `Pessoas` da ficha do imóvel) — fase 1 no R3 item 7,
+fases 2–3 no R4 item 6, decidir junto com #173.*
+
+*12/09/2026 — #193 fechada (PR #195 validado no test
 server); incidente de disco no test server resolvido (prune 51 GB);
 R3 exige revalidação contra o código atual; cronograma adiantado ~1 semana.*

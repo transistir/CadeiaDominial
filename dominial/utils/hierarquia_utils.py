@@ -3,8 +3,19 @@ Utilitários para cálculos de hierarquia de documentos e cadeia dominial
 """
 
 import re
+from typing import NamedTuple
+
 from ..models import Documento, DocumentoTipo
 from .documento_identidade_utils import DocumentoIdentidade
+from .ordenacao_cadeia import eh_documento_do_imovel, ordenar_cadeia
+
+
+PREFIXO_IDENTIDADE_ORIGEM = 'documento:'
+
+
+def serializar_identidade_origem(documento):
+    """Identidade estável usada em URL, API e sessão: ``documento:<id>``."""
+    return f'{PREFIXO_IDENTIDADE_ORIGEM}{documento.pk}'
 
 
 def _obter_origens_lancamento(lancamento):
@@ -50,9 +61,32 @@ def _resolver_documento_por_codigo(codigo, cartorio):
     return resultado.documento if resultado.status == 'encontrado' else None
 
 
-def _selecionar_origem_contextual(origens, codigo_escolhido):
-    """Aceita a escolha textual apenas entre origens já resolvidas no contexto."""
-    tipo = _tipo_do_codigo(codigo_escolhido)
+def _selecionar_origem_contextual(origens, escolha_origem):
+    """Resolve uma escolha apenas entre as origens disponíveis no contexto.
+
+    O formato canônico é ``documento:<id>`` e distingue documentos homônimos.
+    O código legado (por exemplo, ``M123``) continua aceito somente quando
+    identifica exatamente uma origem contextual; se houver homônimos, ele é
+    ambíguo e não seleciona nenhum deles.
+    """
+    if not isinstance(escolha_origem, str):
+        return None
+
+    escolha_origem = escolha_origem.strip()
+    if escolha_origem.startswith(PREFIXO_IDENTIDADE_ORIGEM):
+        documento_id = escolha_origem.removeprefix(PREFIXO_IDENTIDADE_ORIGEM)
+        if not documento_id.isdecimal():
+            return None
+        return next(
+            (
+                documento
+                for documento in origens
+                if documento.pk == int(documento_id)
+            ),
+            None,
+        )
+
+    tipo = _tipo_do_codigo(escolha_origem)
     if not tipo:
         return None
 
@@ -61,13 +95,62 @@ def _selecionar_origem_contextual(origens, codigo_escolhido):
         if documento.tipo.tipo != tipo:
             continue
         try:
-            escolha = DocumentoIdentidade(tipo, codigo_escolhido, documento.cartorio_id)
+            escolha = DocumentoIdentidade(tipo, escolha_origem, documento.cartorio_id)
         except (TypeError, ValueError):
             return None
         if documento.numero_normalizado == escolha.numero_normalizado:
             compativeis.append(documento)
 
     return compativeis[0] if len(compativeis) == 1 else None
+
+
+class OrigemResolvida(NamedTuple):
+    """Origem de um lançamento resolvida para o documento que ela identifica."""
+
+    codigo: str
+    documento: Documento
+
+
+def obter_origens_resolvidas(documento, lancamentos=None):
+    """
+    Origens de um documento que resolvem para um documento real, na ordem
+    canônica da cadeia.
+
+    Cada origem é resolvida com o cartório do lançamento que a informou: o
+    mesmo código em cartórios diferentes são origens distintas, e uma origem
+    que não resolve (inexistente, ambígua ou sem cartório) fica de fora. Um
+    documento citado mais de uma vez entra uma só vez.
+
+    É o único conjunto de origens de um documento: a caminhada do tronco segue
+    a primeira por padrão, e a tabela oferece exatamente estas origens como
+    botões, com a primeira destacada. A ordem canônica vale só entre estas
+    origens irmãs; as linhas da tabela ficam na ordem da caminhada.
+
+    Args:
+        documento: Documento cujas origens serão lidas
+        lancamentos: Lançamentos do documento já carregados (padrão: todos)
+
+    Returns:
+        list[OrigemResolvida]
+    """
+    if lancamentos is None:
+        lancamentos = documento.lancamentos.all()
+
+    codigo_por_documento = {}
+    documentos_origem = []
+    # Leitura em ordem técnica (pk), a mesma para quem já carregou os
+    # lançamentos em outra ordem: ela só decide entre origens de chave idêntica
+    for lancamento in sorted(lancamentos, key=lambda lancamento: lancamento.pk):
+        for origem in _obter_origens_lancamento(lancamento):
+            doc_origem = _resolver_documento_por_codigo(origem.codigo, origem.cartorio)
+            if doc_origem and doc_origem.pk not in codigo_por_documento:
+                codigo_por_documento[doc_origem.pk] = origem.codigo
+                documentos_origem.append(doc_origem)
+
+    return [
+        OrigemResolvida(codigo_por_documento[doc_origem.pk], doc_origem)
+        for doc_origem in ordenar_cadeia(documentos_origem)
+    ]
 
 
 def ajustar_nivel_para_nova_conexao(documentos, from_numero, to_numero):
@@ -92,13 +175,26 @@ def calcular_niveis_hierarquicos_otimizada(documentos, conexoes):
 def identificar_tronco_principal(imovel, escolhas_origem=None):
     """
     Identifica o tronco principal da cadeia dominial de um imóvel.
+
+    A lista devolvida está na ordem da caminhada — cada documento seguido da
+    origem que ele cita — e é a ordem das linhas da tabela da cadeia dominial
+    (issue #201): não deve ser reordenada por tipo nem por número. A cada
+    passo, segue a origem escolhida pelo usuário ou, sem escolha, a primeira
+    na ordem canônica entre as origens do documento (`obter_origens_resolvidas`).
+
+    ``escolhas_origem`` mapeia o id textual do documento para
+    ``documento:<id-da-origem>``. URLs legadas com o código (``M123``) seguem
+    aceitas quando esse código identifica uma única origem no contexto; para
+    homônimos, somente a identidade canônica é aplicável.
     """
     if escolhas_origem is None:
         escolhas_origem = {}
     
+    # Ordem técnica (pk), nunca a data: ela só desempata documentos de chave
+    # canônica idêntica na escolha do documento inicial, abaixo
     documentos = Documento.objects.filter(imovel=imovel).select_related(
         'tipo', 'cartorio', 'imovel'
-    ).order_by('data')
+    ).order_by('pk')
     
     # Buscar documentos importados que são referenciados pelos lançamentos deste imóvel
     documentos_importados = identificar_documentos_importados(imovel)
@@ -114,28 +210,49 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
     # A busca inclui tipo, número canônico e cartório, sem depender da forma do
     # prefixo nem da ordem da lista de documentos importados.
     documento_atual = next(
-        (
-            doc
-            for doc in documentos
-            if doc.imovel_id == imovel.id
-            and doc.tipo.tipo == imovel.tipo_documento_principal
-            and doc.numero_normalizado == imovel.matricula_normalizada
-            and doc.cartorio_id == imovel.cartorio_id
-        ),
+        (doc for doc in documentos if eh_documento_do_imovel(doc, imovel)),
         None,
     )
     
-    # Se não encontrou o documento da matrícula atual, procurar por matrículas
+    # Se não encontrou o documento da matrícula atual, limitar o fallback aos
+    # documentos raiz: aqueles que nenhum outro documento do conjunto cita
+    # como origem. Assim, um descendente de número maior nunca toma o lugar da
+    # raiz que conduz até ele.
     if not documento_atual:
-        matriculas = [doc for doc in documentos if doc.tipo.tipo == 'matricula']
-        if matriculas:
-            # Se não há documento específico da matrícula do imóvel, usar a matrícula mais recente
-            documento_atual = max(matriculas, key=lambda x: x.data)
+        ids_documentos = {doc.pk for doc in documentos}
+        ids_citados_como_origem = {
+            origem.documento.pk
+            for documento in documentos
+            for origem in obter_origens_resolvidas(documento)
+            if origem.documento.pk in ids_documentos
+            and origem.documento.pk != documento.pk
+        }
+        documentos_raiz = [
+            doc for doc in documentos if doc.pk not in ids_citados_como_origem
+        ]
+        # Um ciclo pode fazer todos os documentos serem citados e, portanto,
+        # eliminar todas as raízes. Nesse caso, escolher o início entre todo o
+        # conjunto pela mesma ordem canônica; a guarda da caminhada abaixo
+        # impede que o ciclo seja percorrido indefinidamente.
+        documentos_candidatos = documentos_raiz or documentos
+
+        matriculas_raiz = [
+            doc for doc in documentos_candidatos if doc.tipo.tipo == 'matricula'
+        ]
+        if matriculas_raiz:
+            # Sem o documento de identidade registral do imóvel, começar pela
+            # primeira raiz matrícula na ordem canônica (a de maior número),
+            # nunca pela data, que neste banco é quase sempre fictícia ou
+            # presumida
+            documento_atual = ordenar_cadeia(matriculas_raiz, imovel)[0]
         else:
-            # Se não há matrículas, procurar por transcrições
-            transcricoes = [doc for doc in documentos if doc.tipo.tipo == 'transcricao']
-            if transcricoes:
-                documento_atual = max(transcricoes, key=lambda x: x.data)
+            # Se não há raízes matrículas, procurar por raízes transcrições,
+            # também na ordem canônica (maior número), nunca pela data
+            transcricoes_raiz = [
+                doc for doc in documentos_candidatos if doc.tipo.tipo == 'transcricao'
+            ]
+            if transcricoes_raiz:
+                documento_atual = ordenar_cadeia(transcricoes_raiz, imovel)[0]
             else:
                 return []
 
@@ -145,24 +262,14 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         # Verificar se há escolha de origem para este documento
         escolha_atual = escolhas_origem.get(str(documento_atual.id))
         
-        # Buscar lançamentos do documento atual que têm origens
-        lancamentos_com_origem = documento_atual.lancamentos.all()
-        
-        # Se não há lançamentos com origens, verificar se há uma escolha de origem
-        # Extrair códigos de origem dos lançamentos (apenas origens normais, não fim de cadeia)
-        origens_identificadas = []
-        for lancamento in lancamentos_com_origem:
-            for origem in _obter_origens_lancamento(lancamento):
-                doc_existente = _resolver_documento_por_codigo(
-                    origem.codigo,
-                    origem.cartorio,
-                )
-                if (
-                    doc_existente
-                    and doc_existente.pk
-                    not in {doc.pk for doc in origens_identificadas}
-                ):
-                    origens_identificadas.append(doc_existente)
+        # Origens do documento atual que resolvem para um documento real, cada
+        # uma com o cartório do seu lançamento, na ordem canônica da cadeia
+        # (apenas origens normais, não fim de cadeia): as mesmas oferecidas
+        # como botões de origem na tabela
+        origens_identificadas = [
+            origem.documento
+            for origem in obter_origens_resolvidas(documento_atual)
+        ]
 
         if not origens_identificadas:
             break
@@ -171,22 +278,18 @@ def identificar_tronco_principal(imovel, escolhas_origem=None):
         proximo_documento = None
         
         if escolha_atual:
-            # O valor legado da sessão ainda é textual. Ele só é aceito quando
-            # identifica exatamente uma das origens já resolvidas com o
-            # cartório de seu lançamento.
+            # A identidade canônica ou o código legado não ambíguo só são
+            # aceitos quando apontam para uma origem já resolvida no contexto.
             proximo_documento = _selecionar_origem_contextual(
                 origens_identificadas,
                 escolha_atual,
             )
         
         if not proximo_documento:
-            # Se não há escolha ou escolha não encontrada, usar a origem com maior número
-            if origens_identificadas:
-                # Ordenar por número (maior primeiro) e pegar a primeira
-                origens_ordenadas = sorted(origens_identificadas, 
-                    key=lambda x: int(x.numero_normalizado),
-                    reverse=True)
-                proximo_documento = origens_ordenadas[0]
+            # Se não há escolha ou escolha não encontrada, seguir a primeira origem
+            # na ordem canônica da cadeia: a mesma destacada como padrão nos
+            # botões de origem da tabela
+            proximo_documento = origens_identificadas[0]
         
         if not proximo_documento or proximo_documento in tronco_principal:
             break

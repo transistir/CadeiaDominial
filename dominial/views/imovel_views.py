@@ -1,8 +1,11 @@
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
+from ..services.imovel_documento_service import ImovelDocumentoService
 from ..services.lancamento_documento_service import LancamentoDocumentoService
 
 @login_required
@@ -62,10 +65,16 @@ def imovel_form(request, tis_id, imovel_id=None):
                 messages.error(request, 'Seleção de cartório é obrigatória.')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             
-            # Salvar imóvel
+            # Salvar imóvel (e sincronizar cartório do documento principal, #210)
             try:
-                imovel.save()
-                
+                aviso_sincronizacao = None
+                with transaction.atomic():
+                    imovel.save()
+                    if getattr(form, 'cartorio_mudou', False):
+                        aviso_sincronizacao = (
+                            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
+                        )
+
                 # Criar automaticamente o documento de matrícula para o imóvel
                 if not imovel_id:  # Apenas para novos imóveis
                     try:
@@ -73,9 +82,15 @@ def imovel_form(request, tis_id, imovel_id=None):
                         messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
                     except Exception as e:
                         messages.warning(request, f'Imóvel criado, mas houve um problema ao criar o documento de matrícula: {str(e)}')
-                
+
+                if aviso_sincronizacao:
+                    messages.warning(request, aviso_sincronizacao)
+
                 messages.success(request, 'Imóvel cadastrado com sucesso!')
                 return redirect('tis_detail', tis_id=tis_id)
+            except ValidationError as e:
+                messages.error(request, '; '.join(e.messages))
+                return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             except Exception as e:
                 messages.error(request, f'Erro ao salvar imóvel: {str(e)}')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})

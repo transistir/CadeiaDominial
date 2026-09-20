@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -156,8 +157,12 @@ def imovel_detail(request, tis_id, imovel_id):
         if form.is_valid():
             try:
                 form.save()
+                if getattr(form, 'sincronizacao_aviso', None):
+                    messages.warning(request, form.sincronizacao_aviso)
                 messages.success(request, 'Imóvel atualizado com sucesso!')
                 return redirect('tis_detail', tis_id=tis.id)
+            except ValidationError as e:
+                messages.error(request, '; '.join(e.messages))
             except Exception as e:
                 messages.error(request, f'Erro ao atualizar imóvel: {str(e)}')
     else:

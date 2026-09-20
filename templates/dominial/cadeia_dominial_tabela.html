@@ -287,6 +287,7 @@
                                                     <button class="origem-btn {% if origem.escolhida %}ativo{% endif %}" 
                                                             data-documento-id="{{ item.documento.id }}"
                                                             data-origem-numero="{{ origem.numero }}"
+                                                            data-origem-identidade="{{ origem.identidade }}"
                                                             title="Escolher origem {{ origem.numero }}">
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                             <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -491,5 +492,5 @@
 <script src="{% static 'dominial/js/cadeia_dominial_d3/viewport_fit.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/zoom_controls.js' %}"></script>
 <script src="{% static 'dominial/js/cadeia_dominial_d3/fim_cadeia_drawer.js' %}"></script>
-<script src="{% static 'dominial/js/cadeia_dominial_tabela.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_tabela.js' %}?v=11"></script>
 {% endblock %}

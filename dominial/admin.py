@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib import messages
 from django import forms
@@ -11,6 +12,7 @@ from django.utils.safestring import mark_safe
 from .models import TIs, Cartorios, Pessoas, Imovel, Alteracoes, ImportacaoCartorios, Documento, Lancamento, DocumentoTipo, LancamentoTipo, FimCadeia
 from .models.documento_digital_models import DocumentoDigital
 from .management.commands.importar_cartorios_estado import Command as ImportarCartoriosCommand
+from .services.imovel_documento_service import ImovelDocumentoService
 from django.conf import settings
 
 # Configurações do Admin
@@ -87,11 +89,52 @@ class NumeroDocumentoFilter(admin.SimpleListFilter):
             return queryset.filter(numero=self.value())
         return queryset
 
+class ImovelAdminForm(forms.ModelForm):
+    """Bloqueia trocas de cartório inviáveis antes de salvar (#210).
+
+    A troca em si (atualização do `Documento` principal) é feita por
+    `ImovelAdmin.save_model`, depois que o form já validou aqui que não há
+    ambiguidade/colisão — permite que o admin re-exiba o form padrão (sem
+    reconstruir internals) quando a troca não é segura.
+    """
+
+    class Meta:
+        model = Imovel
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cartorio = cleaned_data.get('cartorio')
+        matricula = cleaned_data.get('matricula')
+        tipo_documento_principal = cleaned_data.get('tipo_documento_principal')
+
+        self.cartorio_mudou = False
+        if self.instance and self.instance.pk and cartorio:
+            cartorio_mudou = cartorio.pk != self.instance.cartorio_id
+            matricula_mudou = matricula is not None and matricula != self.instance.matricula
+            tipo_mudou = (
+                tipo_documento_principal is not None
+                and tipo_documento_principal != self.instance.tipo_documento_principal
+            )
+            if cartorio_mudou and (matricula_mudou or tipo_mudou):
+                raise forms.ValidationError(
+                    'Não é possível trocar o cartório e editar a matrícula ou o '
+                    'tipo do documento principal na mesma edição. Troque o '
+                    'cartório separadamente da matrícula/tipo do documento.'
+                )
+            if cartorio_mudou:
+                self.cartorio_mudou = True
+                ImovelDocumentoService.validar_troca_cartorio(self.instance, cartorio)
+
+        return cleaned_data
+
+
 @admin.register(Imovel)
 class ImovelAdmin(admin.ModelAdmin):
     """
     Admin customizado para Imóveis com funcionalidade de correção de TI.
     """
+    form = ImovelAdminForm
     list_display = ['matricula', 'nome', 'terra_indigena_id', 'proprietario', 'cartorio', 'tipo_documento_principal', 'arquivado', 'data_cadastro', 'info_documentos_lancamentos']
     list_filter = ['terra_indigena_id', 'tipo_documento_principal', 'arquivado', 'cartorio', 'data_cadastro']
     search_fields = ['matricula', 'nome', 'terra_indigena_id__nome', 'proprietario__nome', 'cartorio__nome']
@@ -112,12 +155,43 @@ class ImovelAdmin(admin.ModelAdmin):
     )
     
     readonly_fields = ['data_cadastro']
-    
+
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
             'terra_indigena_id', 'proprietario', 'cartorio'
         ).prefetch_related('documentos', 'documentos__lancamentos')
-    
+
+    def save_model(self, request, obj, form, change):
+        """Salva o imóvel e, se o cartório mudou, sincroniza o documento
+        principal na mesma transação (#210). `ImovelAdminForm.clean()` já
+        garantiu que não há ambiguidade/colisão antes de chegar aqui.
+        """
+        with transaction.atomic():
+            super().save_model(request, obj, form, change)
+            if change and getattr(form, 'cartorio_mudou', False):
+                aviso = ImovelDocumentoService.sincronizar_cartorio_documento_principal(obj)
+                if aviso:
+                    messages.warning(request, aviso)
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        """A revalidação concorrente em `save_model` pode levantar
+        `ValidationError` (a troca de cartório deixou de ser segura entre a
+        validação do form e o `select_for_update`). Sem isto, a exceção
+        escapava do admin como um 500 em vez de reexibir o form (#210).
+
+        O catch só se aplica ao POST: `save_model` (onde a exceção pode ser
+        levantada) só roda nesse método. Redirecionar um GET para
+        `request.path` em resposta a uma `ValidationError` levantada por
+        outro motivo causaria um redirect infinito.
+        """
+        if request.method != 'POST':
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        try:
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except ValidationError as erro:
+            messages.error(request, '; '.join(erro.messages))
+            return redirect(request.path)
+
     def info_documentos_lancamentos(self, obj):
         """
         Mostra informações sobre documentos e lançamentos relacionados

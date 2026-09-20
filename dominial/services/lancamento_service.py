@@ -3,7 +3,7 @@ Service consolidado para operações de lançamento
 Consolida funcionalidades de múltiplos services menores em um único service coeso
 """
 
-from ..models import Lancamento, LancamentoTipo, Documento, Pessoas, Cartorios
+from ..models import Lancamento, LancamentoTipo, Documento, Cartorios
 from .lancamento_criacao_service import LancamentoCriacaoService
 from .lancamento_form_service import LancamentoFormService
 from .lancamento_validacao_service import LancamentoValidacaoService
@@ -12,6 +12,7 @@ from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_consulta_service import LancamentoConsultaService
 from .lancamento_campos_service import LancamentoCamposService
 from .lancamento_duplicata_service import LancamentoDuplicataService
+from .lancamento_pessoa_service import LancamentoPessoaService
 
 
 class LancamentoService:
@@ -97,38 +98,16 @@ class LancamentoService:
     @staticmethod
     def processar_pessoas_lancamento(lancamento, pessoas_data, pessoas_ids, tipo_pessoa):
         """
-        Processa pessoas do lançamento
+        Processa pessoas do lançamento.
+
+        Implementação duplicada removida na issue #213 (mutava o registro
+        global de `Pessoas` e podia colapsar múltiplos adquirentes/
+        transmitentes com o mesmo `pessoa_id` em uma única linha). Delega
+        para a implementação única em `LancamentoPessoaService`.
         """
-        for i, nome in enumerate(pessoas_data):
-            if nome and nome.strip():
-                nome_clean = nome.strip()
-                pessoa_id = pessoas_ids[i] if i < len(pessoas_ids) and pessoas_ids[i] else None
-                
-                if pessoa_id and pessoa_id.strip():
-                    # Se foi selecionada uma pessoa existente via autocomplete
-                    try:
-                        pessoa = Pessoas.objects.get(id=pessoa_id)
-                        # Atualizar nome se foi alterado
-                        if pessoa.nome != nome_clean:
-                            pessoa.nome = nome_clean
-                            pessoa.save()
-                    except Pessoas.DoesNotExist:
-                        # Se o ID não existe, procurar por nome ou criar nova
-                        pessoa = Pessoas.objects.filter(nome__iexact=nome_clean).first()
-                        if not pessoa:
-                            pessoa = Pessoas.objects.create(nome=nome_clean)
-                else:
-                    # Se não foi selecionada pessoa existente, procurar por nome ou criar nova
-                    pessoa = Pessoas.objects.filter(nome__iexact=nome_clean).first()
-                    if not pessoa:
-                        pessoa = Pessoas.objects.create(nome=nome_clean)
-                
-                # Usar lancamento.pessoas.create() em vez de lancamentopessoa_set.create()
-                lancamento.pessoas.create(
-                    pessoa=pessoa,
-                    tipo=tipo_pessoa,
-                    nome_digitado=nome_clean if not pessoa_id else None
-                )
+        return LancamentoPessoaService.processar_pessoas_lancamento(
+            lancamento, pessoas_data, pessoas_ids, tipo_pessoa
+        )
     
     # ==================== CARTÓRIOS ====================
     
