@@ -297,7 +297,9 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    estimativa fechada:** parte dos casos pode ser irrecuperável
    automaticamente — `Pessoas` não tem timestamps nem histórico, e nos
    casos antigos `LancamentoPessoa.nome_digitado == Pessoas.nome` (a
-   heurística óbvia não detecta).
+   heurística óbvia não detecta). **Exceção aprovada 23/09:** não bloqueia
+   o fechamento do R4 nem o R5 — se a validação do cliente não chegar,
+   escorrega para depois (ver "Gates de decisão").
 7. **#213 fases 2–3** 🐛 UX + estrutural: autocomplete de adquirente/
    transmitente sugere o bloco inteiro de nomes compostos (operador apaga os
    excedentes a cada linha); modelagem de proprietários múltiplos no imóvel
@@ -371,6 +373,14 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
   **não** bloqueia R3–R6 — bloqueia só o R7 (R8 entra no lugar, regra acima).
 - **GATE-LUANDRO (release):** tag de produção só com autorização explícita.
 - **GATE-PRODUTO (#132):** kickoff com luandro no início do R9.
+- **EXCEÇÃO #215 (aprovada pelo Hiure em 23/09/2026):** o reparo dos dados
+  de `Pessoas` (#215, R4 item 6) é gateado na validação do cliente, mas
+  **NÃO bloqueia o fechamento do R4 nem o avanço para o R5**. Se o gate não
+  abrir a tempo, o #215 escorrega para depois da fila sem segurar os blocos
+  seguintes (mesmo tratamento do #202, que não segura o R4). (Justificativa:
+  dados já corrompidos em produção, sem timestamps/histórico — parte pode
+  ser irrecuperável automaticamente; não faz sentido travar R5+ por uma
+  validação externa.)
 
 ## Dependências críticas
 
@@ -431,7 +441,8 @@ bugs de produção primeiro), #206 (R3.5, escopo a revalidar), #215 (R4,
 gateado na validação do cliente; inventário somente leitura antecipado no
 R1); 4 issues para fechamento administrativo no R1 (#168, #201, #204,
 #210); #202 (Fases 1–3) congelado até PRD; GATE-CLIENTE previsto para o
-início efetivo do R4 (~29/09–03/10).*
+início efetivo do R4 (~29/09–03/10). Exceção de gate aprovada: #215 não
+bloqueia R4/R5 (escorrega se a validação do cliente atrasar).*
 
 *20/09/2026 — **release v1.0.11 em produção** (PR #217,
 tag `v1.0.11`, deploy CI success 18:45 UTC): #201 Fases 0+0b (PRs #203/#205),
