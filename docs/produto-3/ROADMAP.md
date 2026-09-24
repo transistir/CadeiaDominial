@@ -65,8 +65,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 1. **Validação no test server** dos PRs #177–#188 ✅ **FEITO 10/09/2026**
    (imóvel 265/Guyraroká usado no lugar do 499 — test server tem outra
    numeração; PDF 23 págs + XLS inspecionados, suites 18/18 e 42/42 OK)
-   → **11 issues fechadas: #145 #159 #160 #161 #162 #166 #167 #171 #172 #174**
-   (+ #152 já fechada antes).
+   → **10 issues fechadas nesta validação: #145 #159 #160 #161 #162 #166
+   #167 #171 #172 #174** (+ #152 já fechada antes — 11 no total).
 2. **Release develop → main + tag v1.0.9** ✅ **FEITO 10/09/2026**
    (PR #190 mergeado + tag v1.0.9 — GATE-LUANDRO autorizado).
 3. **#187** limpar `cartorio_hidden` stale quando operador edita nome do
@@ -195,9 +195,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > **Antecipado na frente do R3** (bug de produção > débito planejado).
 >
 > Auditoria completa 12/09 com evidência coletada **no servidor de produção**
-> (read-only). Plano: `docs/produto-3/PLANO_ORIGENS_ESCOLHAS.md`.
-> Diagnóstico: backend correto (com escolha retorna 17 docs; XLS já OK na
-> v1.0.10) — quebra é **100% frontend** + default da página. 7 defeitos (D1–D7).
+> (read-only). Plano: `docs/produto-3/PLANO_ORIGENS_ESCOLHAS.md`
+> (**parcialmente superado** pela Fase 0b — o critério "17 docs com T3280/
+> T3281 visíveis" descrevia o comportamento anterior; ver item 1b e a
+> revisão Codex 24/09).
+> Diagnóstico (12/09, histórico): backend correto na época (com escolha
+> retornava 17 docs — comportamento pré-Fase 0b, ver item 1b; XLS já OK na
+> v1.0.10) — quebra era **100% frontend** + default da página. 7 defeitos (D1–D7).
 > **NÃO é regressão da v1.0.10** (exceto D3, formatação no re-render AJAX):
 > o filtro `deveExibir` é hack de 09/2025 hardcoded para outro imóvel.
 >
@@ -226,6 +230,21 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      desempate (M6861 vem antes de T21820); (3) número maior→menor,
      comparado como inteiro. **Data não participa** (no banco ela é quase
      toda fictícia/presumida — era a causa real da desordem).
+     **⚠️ Escopo da regra (revisão Codex 24/09 + connector PR #221):**
+     (2) e (3) valem **entre origens irmãs** de um mesmo documento e em
+     todos os consumidores da chave canônica (`dominial/utils/ordenacao_cadeia.py`,
+     única implementação): (a) a origem que a caminhada do tronco segue
+     sem escolha do usuário + ordem dos botões de origem
+     (`obter_origens_resolvidas`); (b) o documento inicial do tronco,
+     quando falta o documento do imóvel (`identificar_tronco_principal`);
+     (c) a ordem dos documentos fora do tronco no modal de sequência
+     (`organizar_documentos_hierarquicamente`; regressão coberta em
+     `test_issue_201b_ordem_cadeia.py`). As **linhas da tabela nunca
+     são reordenadas globalmente** por tipo ou número: elas seguem a
+     caminhada hierárquica (quem é citado aparece depois de quem o citou —
+     docstring de `dominial/services/cadeia_dominial_tabela_service.py`).
+     Reordenação global separaria um documento da sua origem (bug que a
+     Fase 0b corrigiu).
    - Corrige **4 ordenações divergentes** que conviviam (linhas por data,
      expansão sem ordem, opções por `int` desc, opções por **string** desc)
      e o bug em que o **botão destacado ≠ cadeia exibida** (caso real M6726:
@@ -244,15 +263,27 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      documentos exportados inalterado**.
    - Validado contra o caso real 384: sem escolha
      `M8272, M7775, M2623, M2072, T13367, T10786, T3281, T2391` (exatamente
-     o esperado pelo Hiure); com escolha T3281 → 17 docs com T3280/T3281
-     visíveis.
+     o esperado pelo Hiure); com escolha T3281 → só o tronco de T3281
+     (o galho irmão T3280 fica de fora). **Evidência histórica (revisão
+     Codex 24/09):** os "17 docs com T3280/T3281 visíveis" citados antes
+     aqui eram o comportamento de expansão ANTERIOR à Fase 0b; o
+     comportamento atual (garantido por `test_issue_201_origens_cadeia_tabela.py`)
+     é: com escolha, somente o tronco da origem escolhida aparece. Qualquer
+     nova expansão (ver os dois galhos juntos) continua dependente do PRD
+     do #202 (item 3).
 2. **#206** 🐛 origens homônimas — escopo **A REVALIDAR contra o código
    atual** antes de estimar. O diagnóstico original ("sessão grava só o
    número") está desatualizado: o fluxo principal já grava `documento:<id>`
    na sessão (API `escolher_origem_documento` em `api_views.py`; teste do
    segundo homônimo em `test_issue_201b_ordem_cadeia.py`). Restam caminhos
    residuais que comparam por código (ex.: expansão recursiva) — levantá-los
-   primeiro.
+   primeiro. **Critério de saída do R3.5 (revisão Codex 24/09):** o bloco
+   só fecha quando o #206 estiver (a) corrigido e validado no test server,
+   OU (b) encerrado com evidência de que seus critérios já estão atendidos
+   pelo código atual — diagnóstico sem desfecho não encerra o bloco (regra
+   do AGENTS.md: "mark each release block done before starting the next
+   one"). Se a revalidação confirmar trabalho, reestimar o início do R4
+   antes de avançar.
 3. **#202 Fases 1–3 — saneamento estrutural** — 🚦 **AGUARDANDO
    REDEFINIÇÃO**. Primeira tentativa abandonada em 14/09 (ordem por galho
    ambígua; PRs #208/#209 fechados sem merge; worktree mantido para
@@ -286,7 +317,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    (c) alerta quando deploy do CI falha.
 1. **#168** TAB não parar no campo sigla ✅ **MERGEADO 17/09** (PR #216,
    squash `0de729ea`; em produção na v1.0.11)
-2. **#169** janela de fim de cadeia fecha *(P)*
+2. **#169** corrigir janela de fim de cadeia que **não** fecha *(P)*
 3. **#170** botão Adicionar Lançamento no topo *(P)*
 4. **#164** quadro azul M/T em uma linha *(P)*
 5. **#173** proprietário 255→500 + migração *(P)* — ver #213: se a dor real for
@@ -332,9 +363,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > Só entra em execução se o gate disparado no R4 foi respondido.
 > Enquanto isso, avançar R8 no lugar.
 
-1. **#150** delimitar CRI vs cartório de transmissão no banco — *maior
+1. **#150** delimitar CRI vs cartório de transmissão no banco — *a issue é
+   de **PLANEJAMENTO**: entrega "um plano de delimitação (documento de
+   decisão + migrations), NÃO a implementação" (corpo da #150). Maior
    migração do plano, toca todas as FKs de cartório; design Opus 5 antes
-   (spike 1–2 dias no início)*
+   (spike 1–2 dias no início). A implementação da migração só é autorizada
+   após o plano aprovado (luandro/Hiure) e entra como issues filhas —
+   revisar o cronograma na ocasião (revisão Codex 24/09)*
 2. **#151** avisar/exigir arquivamento quando origem referencia imóvel ativo
 
 ## R8 — Débitos técnicos + certificação fundiária (~1–1,5 semana)
@@ -358,8 +393,14 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 ## R9 — Segregação por usuário (a maior feature, ~2 semanas)
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
+   - A issue é de **levantamento e planejamento**: entrega o "plano de
+     comportamento esperado", que deve ser **aprovado por luandro antes de
+     abrir issues filhas de implementação** (corpo da #132, checklist).
    - Semana 1: design de schema + middleware/filtros (Opus 5 no design)
-   - Semana 2: implementação gradual + testes de isolamento
+     → produzir o plano e submetê-lo a luandro.
+   - Semana 2: implementação gradual + testes de isolamento — **só inicia
+     com o plano aprovado**; sem aprovação, a implementação fica bloqueada
+     e o cronograma é revisto (revisão Codex 24/09).
    - **Kickoff com luandro** — decisões de produto obrigatórias antes.
    - **Antes do kickoff: avaliar o PR zumbi #133** (→#132, parado desde
      09/08 — reaproveitar ou fechar; ver R1 item 6).
@@ -374,7 +415,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
   desloca para o início efetivo do R4 (~29/09–03/10). Atraso de resposta
   **não** bloqueia R3–R6 — bloqueia só o R7 (R8 entra no lugar, regra acima).
 - **GATE-LUANDRO (release):** tag de produção só com autorização explícita.
-- **GATE-PRODUTO (#132):** kickoff com luandro no início do R9.
+- **GATE-PRODUTO (#132):** kickoff com luandro no início do R9. O gate tem
+  **dois eventos distintos** (revisão Codex 24/09): (1) kickoff = decisões
+  de produto para redigir o plano; (2) **aprovação do plano** = evento que
+  autoriza abrir as issues filhas e iniciar a implementação. Sem o evento
+  (2), a Semana 2 do R9 não começa (mesma lógica do #150 no R7).
 - **EXCEÇÃO #215 (aprovada pelo Hiure em 23/09/2026):** o reparo dos dados
   de `Pessoas` (#215, R4 item 6) é gateado na validação do cliente, mas
   **NÃO bloqueia o fechamento do R4 nem o avanço para o R5**. Se o gate não
@@ -382,7 +427,12 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
   seguintes (mesmo tratamento do #202, que não segura o R4). (Justificativa:
   dados já corrompidos em produção, sem timestamps/histórico — parte pode
   ser irrecuperável automaticamente; não faz sentido travar R5+ por uma
-  validação externa.)
+  validação externa.) **Operacionalização do gate (revisão Codex 24/09;
+  responsável definido pelo Hiure no PR #221):** concluído o inventário
+  somente leitura (R1 item 7), o **Hiure** envia a lista de reparos da
+  issue #215 ao cliente para validação **em até 1 sprint do término do
+  inventário** e registra a data do pedido aqui; a pendência é revisitada
+  no replanejamento de cada sprint até resposta.
 
 ## Dependências críticas
 
@@ -411,7 +461,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > desloca ~1 semana (GATE-CLIENTE: 21–25/09 → ~29/09–03/10).
 
 ```
-Sem 07/09–11/09  R1 fechar ciclo ✅ + R2 #13/#179 XLS consolidado ✅
+Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
+                 milestone seguem no housekeeping) + R2 #13/#179 XLS consolidado ✅
                  (+ #193 rapid win adiantado e fechado 12/09 ✅)
 Sem 14/09–18/09  R3.5 hotfix #201 Fases 0+0b + #204 ✅ (12–13/09) · R3 #210 ✅
                  + #213 fase 1 ✅ · #168 ✅ → release v1.0.11 em produção 20/09 ✅
@@ -419,8 +470,9 @@ Sem 21/09–25/09  R1 housekeeping (#187, milestone, #168/#201/#204/#210 ✅
                  fechadas 23/09, PR zumbi #103; inventário #215 em paralelo)
                  → R3 #218 → #144
 Sem 28/09–02/10  R3 (cont.) #219 → #212 → #114/#141/#149/#110 → R3.5 #206
-                 (revalidar + estimar) → início do R4 ~29/09–03/10
-                 (+ disparar GATE-CLIENTE)
+                 (revalidar + estimar; saída do bloco só com correção
+                 validada OU encerramento com evidência — ver R3.5 item 2)
+                 → início do R4 ~29/09–03/10 (+ disparar GATE-CLIENTE)
 Sem 05/10–09/10  R4 (cont.; #215 só com validação do cliente) / R5 #113 + #135
 Sem 12/10–16/10  R5/R6 multi-cadeia/navegação
 Sem 19/10–23/10  R6/R7 (se gate respondido) — senão R8
@@ -432,12 +484,48 @@ Sem 09/11–13/11  R9 (reserva)
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
 Maurício/Umbelino (padrão desde o plano geral).
 
+**Premissas do cronograma (revisão Codex 24/09; quantificado pelo Greptile
+no PR #221):** as estimativas de R3–R9 somam ~7–8,5 semanas, mas o
+horizonte de ~8 semanas (21/09–13/11) com a reserva de ~20%/sprint oferece
+**~6,4 semanas de capacidade efetiva** — gap de ~0,6–2,1 semanas, SEM
+contar o housekeeping restante do R1, o desfecho do #206 (R3.5), o R7
+(gateado) e o eventual reparo #215. É um cronograma **apertado e
+otimista**, não um compromisso de entrega. **O que fica de fora do
+horizonte se o gap se confirmar:** (1) a semana de reserva do R9
+(09/11–13/11) já nasce consumida; (2) o R7 (#150/#151) só entra se o
+GATE-CLIENTE responder cedo — senão R8 entra no lugar (regra da seção);
+(3) #215 e #202 já estão fora da sequência (gate/congelamento). As datas
+a partir do R4 ficam **condicionadas** às estimativas que saírem da
+revalidação do #206, das fases 2–3 do #213 e do plano do R7; replanejar
+ao fim de cada sprint (regra da seção).
+
 **Fora do escopo:** backlog v2 #61–#72 (TypeScript/Cloudflare) — só depois
 do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 24/09/2026 — correções do review do PR #220 (Codex
+*Última atualização: 24/09/2026 (rodada 2, PR #221) — P2s do Codex
+connector + Greptile incorporados: consumidores da chave canônica
+documentados no escopo da regra M>T (tronco inicial sem doc do imóvel +
+modal de sequência, `ordenacao_cadeia.py`); responsável do gate #215
+definido (**Hiure**, prazo: até 1 sprint após o inventário — decisão do
+Hiure no PR); shortfall de capacidade quantificado (7–8,5 sem estimadas
+× ~6,4 sem efetivas) com o que fica fora do horizonte explicitado.*
+
+*24/09/2026 — **revisão Codex gpt-6-astra xhigh do
+roadmap como norte de desenvolvimento** (rodada 1: 4 PASS / 4 MUST-FIX /
+4 NICE — REJEITA; todos os MUST-FIX validados contra código/issues reais
+e incorporados nesta revisão): M-1 escopo da regra M>T só entre origens
+irmãs (linhas nunca reordenadas globalmente); M-2 "17 docs" marcado como
+evidência histórica pré-Fase 0b (comportamento atual: só o tronco
+escolhido; `PLANO_ORIGENS_ESCOLHAS.md` parcialmente superado); M-3
+critério de saída do R3.5 (#206 corrigida+validada OU encerrada com
+evidência); M-4 #150/#132 distinguidos como issues de planejamento —
+implementação só após plano aprovado (GATE-PRODUTO com 2 eventos). NICEs:
+premissas de capacidade do cronograma, operacionalização do gate #215,
+título do #169 corrigido, contagem do R1 (10+1) ajustada.*
+
+*24/09/2026 (mais cedo) — correções do review do PR #220 (Codex
 connector 2× P2 + Greptile 1× P2 convergente): #168, #201, #204 e #210 ✅
 fechadas no GitHub em 23/09 (R1 item 5; snapshot recontado: 47 abertas,
 34 Django); PR #220 aberto em 23/09 (R1 item 8); bloco R3.5 movido para
