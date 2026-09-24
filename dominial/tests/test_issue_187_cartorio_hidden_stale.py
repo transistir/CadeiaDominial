@@ -30,6 +30,21 @@ Decisão de design documentada (ver testes abaixo):
 Sem infra de teste JS no repo (débito #202 F2), seguimos o precedente do
 #168/#167: testes Django que leem o arquivo fonte e afirmam o comportamento
 via pattern-matching.
+
+Rodada 5 — Greptile P1 no PR #222: no formulário de NOVO lançamento, o
+`toggleFields` de lancamento_form.js roda dentro de um `setTimeout` do
+`DOMContentLoaded`; sem tipo selecionado ele cai no `else` e chama
+`desativarSugestoesCartorioOrigem`, que substitui o campo de nome do cartório
+por um `cloneNode(true)` — descartando TODOS os listeners, incluindo os
+registrados por `configurarMAnterior` (que roda antes, no `DOMContentLoaded`
+de origem_simples.js). Ao selecionar "início de matrícula",
+`ativarSugestoesCartorioOrigem` repõe SÓ os handlers de sugestão. Resultado:
+nesse fluxo, editar o nome não limpa o hidden (bug #187 vivo) e o badge da M
+anterior não atualiza por edição (bug #167). Fix: os listeners do campo de
+nome migram para `registrarListenersCartorioNomeMAnterior(index)`, chamada por
+`configurarMAnterior` e re-anexada pelo `desativarSugestoesCartorioOrigem`
+após o `replaceChild` (o clone zera os listeners do substituto, então uma
+chamada por replaceChild não acumula).
 """
 import os
 import re
@@ -49,9 +64,16 @@ _RE_DISPARO_INPUT = re.compile(r"new\s+(?:Input|Custom)?Event\(\s*['\"`]input['\
 
 
 class LimpaHiddenStaleAoEditarNomeTest(TestCase):
-    """O bloco do cartorioNome em `configurarMAnterior` deve registrar
-    `input` que limpa o hidden antes de chamar `atualizarMAnterior`
-    (imediato); `blur` e `keyup` seguem com o debounce."""
+    """O campo de nome do cartório deve registrar `input` que limpa o hidden
+    antes de chamar `atualizarMAnterior` (imediato); `blur` e `keyup` seguem
+    com o debounce.
+
+    Rodada 5 (Greptile P1, PR #222): os listeners vivem em
+    `registrarListenersCartorioNomeMAnterior` — extraída de
+    `configurarMAnterior` para o `desativarSugestoesCartorioOrigem`
+    (lancamento_form.js) poder reanexá-los após o cloneNode que zera os
+    listeners do campo. O contrato abaixo é afirmado no corpo da função
+    extraída."""
 
     JS_PATH = os.path.join(
         os.path.dirname(__file__),
@@ -73,28 +95,53 @@ class LimpaHiddenStaleAoEditarNomeTest(TestCase):
         )
         return match.group(1)
 
-    def _bloco_cartorio_nome(self):
-        corpo = self._funcao_configurarMAnterior()
+    def _funcao_registrarListeners(self):
         match = re.search(
-            r"if \(cartorioNome\) \{(.*?)\n    \}",
-            corpo,
+            r"function registrarListenersCartorioNomeMAnterior\(index\) \{"
+            r"(.*?)\n\}",
+            self.js_src,
             re.DOTALL,
         )
         assert match is not None, (
-            'Bloco `if (cartorioNome)` não encontrado em configurarMAnterior'
+            'Função registrarListenersCartorioNomeMAnterior não encontrada '
+            'em origem_simples.js'
         )
         return match.group(1)
 
-    def test_configurarMAnterior_resolve_o_hidden_do_index(self):
+    def _bloco_cartorio_nome(self):
+        """Corpo da função que registra os listeners do campo de nome
+        (ex-extraído inline de `configurarMAnterior`)."""
+        return self._funcao_registrarListeners()
+
+    def test_registrarListeners_resolve_o_hidden_do_index(self):
         """A função precisa acessar o hidden `cartorio_origem_${index}` para
-        poder limpá-lo — não apenas o campo de nome visível."""
-        corpo = self._funcao_configurarMAnterior()
+        poder limpá-lo — não apenas o campo de nome visível.
+
+        (Ex-`test_configurarMAnterior_resolve_o_hidden_do_index`: com a
+        extração do Greptile P1, quem resolve o hidden é a função extraída.)"""
+        corpo = self._funcao_registrarListeners()
         self.assertIn(
             "getElementById(`cartorio_origem_${index}`)",
             corpo,
-            'configurarMAnterior deve resolver o hidden cartorio_origem_'
-            '{index} (o template literal `cartorio_origem_nome_${index}` do '
-            'campo visível não satisfaz esta checagem)',
+            'registrarListenersCartorioNomeMAnterior deve resolver o hidden '
+            'cartorio_origem_{index} (o template literal '
+            '`cartorio_origem_nome_${index}` do campo visível não satisfaz '
+            'esta checagem)',
+        )
+
+    def test_configurarMAnterior_delega_registro_dos_listeners(self):
+        """Greptile P1 (PR #222): `configurarMAnterior` não pode manter o
+        bloco inline — precisa delegar a `registrarListenersCartorioNome
+        MAnterior(index)`, que é a mesma função reanexada pelo
+        `desativarSugestoesCartorioOrigem` após o cloneNode."""
+        corpo = self._funcao_configurarMAnterior()
+        self.assertIn(
+            'registrarListenersCartorioNomeMAnterior(index)',
+            corpo,
+            'configurarMAnterior deve delegar os listeners do campo de nome '
+            'a registrarListenersCartorioNomeMAnterior(index) — é a mesma '
+            'função que o desativarSugestoesCartorioOrigem reanexa após o '
+            'cloneNode (Greptile P1, PR #222)',
         )
 
     def test_cartorio_nome_registra_listener_input(self):
@@ -189,6 +236,95 @@ class LimpaHiddenStaleAoEditarNomeTest(TestCase):
             bloco,
             "listener 'keyup' do cartorioNome deve permanecer para reagir à "
             "seleção de sugestão via teclado (Enter)",
+        )
+
+
+class ReanexaListenersAposCloneNodeTest(TestCase):
+    """Greptile P1 (PR #222): `desativarSugestoesCartorioOrigem` troca o campo
+    de nome por um `cloneNode(true)` para descartar os listeners de sugestão —
+    o clone descarta TAMBÉM os listeners da M anterior (#167/#187). No formulá
+    rio de NOVO lançamento, isso ocorre ANTES do operador escolher o tipo (o
+    `toggleFields` roda sem tipo no `setTimeout` do `DOMContentLoaded`), e o
+    `ativarSugestoesCartorioOrigem` subsequente só repõe os handlers de
+    sugestão — então editar o nome deixava de limpar o hidden `cartorio_origem_N`
+    e o badge da M anterior parava de atualizar por edição.
+
+    Fix: após o `replaceChild`, derivar o índice do id do input substituto e
+    reanexar via `registrarListenersCartorioNomeMAnterior(index)`. O cloneNode
+    zera os listeners do substituto, então uma chamada por replaceChild não
+    acumula. Não vale chamar `configurarMAnterior(index)` aqui: ele re-anexaria
+    change/keyup também em tipoSelect/numeroInput, que NÃO são clonados
+    (acumulação a cada toggle)."""
+
+    JS_PATH = os.path.join(
+        os.path.dirname(__file__),
+        '..', '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+    )
+
+    def setUp(self):
+        with open(self.JS_PATH, encoding='utf-8') as f:
+            self.js_src = f.read()
+
+    def _funcao_desativar(self):
+        match = re.search(
+            r"function desativarSugestoesCartorioOrigem\(\) \{(.*?)\n\}",
+            self.js_src,
+            re.DOTALL,
+        )
+        assert match is not None, (
+            'Função desativarSugestoesCartorioOrigem não encontrada em '
+            'lancamento_form.js'
+        )
+        return match.group(1)
+
+    def test_desativar_reanexa_depois_do_replaceChild(self):
+        """A re-anexação precisa ocorrer DEPOIS do `replaceChild`: antes dele,
+        o getElementById do índice ainda resolveria o input antigo (que será
+        descartado) e os listeners iriam embora com ele."""
+        corpo = self._funcao_desativar()
+        pos_replace = corpo.find('replaceChild')
+        self.assertGreaterEqual(
+            pos_replace,
+            0,
+            'desativarSugestoesCartorioOrigem deve continuar substituindo o '
+            'input pelo clone (é o que descarta os listeners de sugestão)',
+        )
+        pos_chamada = corpo.find('registrarListenersCartorioNomeMAnterior(')
+        self.assertGreaterEqual(
+            pos_chamada,
+            0,
+            'desativarSugestoesCartorioOrigem deve reanexar os listeners da '
+            'M anterior via registrarListenersCartorioNomeMAnterior — o '
+            'cloneNode os descartou junto com os de sugestão (Greptile P1, '
+            'PR #222)',
+        )
+        self.assertGreater(
+            pos_chamada,
+            pos_replace,
+            'a re-anexação deve vir DEPOIS do replaceChild: antes dele o '
+            'getElementById resolveria o input antigo, que será descartado',
+        )
+
+    def test_desativar_deriva_o_indice_do_id_do_input(self):
+        """O índice vem do próprio id do input substituto
+        (`cartorio_origem_nome_<N>`): todas as linhas de origem usam sufixo
+        numérico nos templates (_area_origem_form.html — a primeira linha é
+        `_0`) e na criação dinâmica de lancamento_form.js. Sem sufixo
+        numérico não há índice a reanexar — o campo é simplesmente pulado."""
+        corpo = self._funcao_desativar()
+        self.assertRegex(
+            corpo,
+            r"cartorio_origem_nome_\(\\d\+\)",
+            'desativarSugestoesCartorioOrigem deve derivar o índice do id do '
+            'input substituto (padrão cartorio_origem_nome_<N>) em vez de '
+            'assumir um índice fixo',
+        )
+        self.assertIn(
+            'parseInt(',
+            corpo,
+            'a derivação do índice deve converter o sufixo numérico do id '
+            'com parseInt antes de chamar registrarListenersCartorioNome'
+            'MAnterior',
         )
 
 

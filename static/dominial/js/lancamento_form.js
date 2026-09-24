@@ -913,6 +913,22 @@ function desativarSugestoesCartorioOrigem() {
         // Remover event listeners de sugestões (se existirem)
         const newInput = input.cloneNode(true);
         input.parentNode.replaceChild(newInput, input);
+
+        // Greptile P1 (PR #222): o cloneNode acima remove TODOS os listeners
+        // do campo, incluindo os da M anterior registrados por
+        // configurarMAnterior (origem_simples.js, issues #167/#187) — sem
+        // reanexar, editar o nome não limpa o hidden `cartorio_origem_N` e a
+        // busca sai com cartorio_id stale. O clone zera os listeners do
+        // substituto, então reanexar aqui não acumula. NÃO chamar
+        // configurarMAnterior(index): ele re-anexaria change/keyup também em
+        // tipoSelect/numeroInput, que NÃO são clonados (acumulação a cada
+        // toggle). O id é sempre `cartorio_origem_nome_<N>` — a primeira
+        // linha usa `_0` nos templates (_area_origem_form.html); sem sufixo
+        // numérico não há índice a reanexar.
+        const match = newInput.id.match(/cartorio_origem_nome_(\d+)$/);
+        if (match && typeof registrarListenersCartorioNomeMAnterior === 'function') {
+            registrarListenersCartorioNomeMAnterior(parseInt(match[1], 10));
+        }
     });
 }
 
