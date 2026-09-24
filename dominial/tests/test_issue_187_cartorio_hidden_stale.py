@@ -263,7 +263,7 @@ class ContratoAutocompleteSelecaoTest(TestCase):
 
 
 class SanidadeRegexContratoDisparoInputTest(TestCase):
-    """Sanidade do PRÓPRIO regex do contrato (_RE_DISPARO_INPUT) — blocker
+    r"""Sanidade do PRÓPRIO regex do contrato (_RE_DISPARO_INPUT) — blocker
     dos reviews Opus 5.5 + Codex r2.
 
     O regex anterior (`new\s+Input?Event\(`) tinha o `?` quantificando só a
