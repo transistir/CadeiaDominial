@@ -36,6 +36,17 @@ import re
 
 from django.test import TestCase
 
+# Contrato do teste restrito (test_selecao_nao_dispara_evento_input): proíbe a
+# construção de um evento sintético de tipo 'input' — `new Event('input')`,
+# `new InputEvent('input')` ou `new CustomEvent('input')` — no corpo da
+# seleção. O prefixo é opcional via grupo `(?:Input|Custom)?`: o `?` precisa
+# quantificar o GRUPO inteiro, não uma letra — a versão anterior
+# (`new\s+Input?Event\(`) exigia o prefixo literal 'Inpu' e NÃO casava
+# `new Event('input')`, exatamente o caso que o contrato devia bloquear
+# (blocker convergente dos reviews Opus 5.5 + Codex r2). A sanidade do
+# próprio regex é travada por SanidadeRegexContratoDisparoInputTest.
+_RE_DISPARO_INPUT = re.compile(r"new\s+(?:Input|Custom)?Event\(\s*['\"`]input['\"`]")
+
 
 class LimpaHiddenStaleAoEditarNomeTest(TestCase):
     """O bloco do cartorioNome em `configurarMAnterior` deve registrar
@@ -233,14 +244,69 @@ class ContratoAutocompleteSelecaoTest(TestCase):
         Escopo restrito (review Opus 5.5 PRE-MERGE): o assert anterior
         bloqueava QUALQUER `dispatchEvent`, inclusive melhorias legítimas que
         não afetam o #187 (ex.: `hidden.dispatchEvent(new Event('change'))`).
-        Agora proíbe apenas a construção de um Event/InputEvent de tipo
-        'input' (`new Event('input'` / `new InputEvent('input'`), que é o
-        único dispatch capaz de zerar o hidden recém-populado."""
+        Agora proíbe apenas a construção de um evento de tipo 'input' —
+        `new Event('input')`, `new InputEvent('input')` ou
+        `new CustomEvent('input')` — que é o único dispatch capaz de zerar o
+        hidden recém-populado. O regex (_RE_DISPARO_INPUT) é travado por
+        SanidadeRegexContratoDisparoInputTest: a versão r1 (`Input?Event`)
+        quantificava o `?` só sobre o `t` e NÃO casava `new Event('input')`
+        (blocker r2, Opus 5.5 + Codex)."""
         corpo = self._funcao_selectCartorioSuggestion()
         self.assertIsNone(
-            re.search(r"new\s+Input?Event\(\s*['\"]input['\"]", corpo),
+            _RE_DISPARO_INPUT.search(corpo),
             'selectCartorioSuggestion não pode disparar evento `input` '
             "sintético no campo (new Event('input') / new "
-            "InputEvent('input')): o dispatch faria o listener do fix #187 "
-            'zerar o hidden recém-populado',
+            "InputEvent('input') / new CustomEvent('input')): o dispatch "
+            'faria o listener do fix #187 zerar o hidden recém-populado '
+            '(regex travado por SanidadeRegexContratoDisparoInputTest)',
         )
+
+
+class SanidadeRegexContratoDisparoInputTest(TestCase):
+    """Sanidade do PRÓPRIO regex do contrato (_RE_DISPARO_INPUT) — blocker
+    dos reviews Opus 5.5 + Codex r2.
+
+    O regex anterior (`new\s+Input?Event\(`) tinha o `?` quantificando só a
+    letra `t`: casava `InputEvent` (e o inexistente `InpuEvent`), mas NÃO
+    casava `new Event('input')` — e o Codex injetou
+    `input.dispatchEvent(new Event('input'))` em memória e o teste do
+    contrato continuou passando. Estes casos travam o regex contra as formas
+    reais de disparo sintético."""
+
+    def test_casa_disparos_sinteticos_de_input(self):
+        """Toda forma de construir um evento sintético de tipo 'input' tem
+        que casar — inclusive `new Event('input')`, que a versão anterior
+        deixava passar."""
+        casos = [
+            "new Event('input')",
+            'new Event("input", {bubbles: true})',
+            "new InputEvent('input')",
+            "new CustomEvent('input')",
+            "input.dispatchEvent(new Event('input'))",
+            "input.dispatchEvent(new CustomEvent(`input`))",
+        ]
+        for caso in casos:
+            with self.subTest(caso=caso):
+                self.assertIsNotNone(
+                    _RE_DISPARO_INPUT.search(caso),
+                    f'o regex do contrato deve casar: {caso}',
+                )
+
+    def test_nao_casa_outros_tipos_de_evento(self):
+        """Eventos de outro tipo (change/blur/keyup) NÃO casam — o contrato
+        é restrito ao tipo 'input', o único capaz de zerar o hidden recém-
+        populado."""
+        casos = [
+            "new Event('change')",
+            'new Event("change", {bubbles: true})',
+            "new InputEvent('change')",
+            "new CustomEvent('blur')",
+            "new Event('keyup')",
+        ]
+        for caso in casos:
+            with self.subTest(caso=caso):
+                self.assertIsNone(
+                    _RE_DISPARO_INPUT.search(caso),
+                    f'o regex do contrato NÃO deve casar outro tipo de '
+                    f'evento: {caso}',
+                )
