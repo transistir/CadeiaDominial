@@ -230,9 +230,16 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      desempate (M6861 vem antes de T21820); (3) número maior→menor,
      comparado como inteiro. **Data não participa** (no banco ela é quase
      toda fictícia/presumida — era a causa real da desordem).
-     **⚠️ Escopo da regra (revisão Codex 24/09):** (2) e (3) valem **só
-     entre origens irmãs** de um mesmo documento — decidem qual galho é
-     seguido por default e a ordem dos botões. As **linhas da tabela nunca
+     **⚠️ Escopo da regra (revisão Codex 24/09 + connector PR #221):**
+     (2) e (3) valem **entre origens irmãs** de um mesmo documento e em
+     todos os consumidores da chave canônica (`dominial/utils/ordenacao_cadeia.py`,
+     única implementação): (a) a origem que a caminhada do tronco segue
+     sem escolha do usuário + ordem dos botões de origem
+     (`obter_origens_resolvidas`); (b) o documento inicial do tronco,
+     quando falta o documento do imóvel (`identificar_tronco_principal`);
+     (c) a ordem dos documentos fora do tronco no modal de sequência
+     (`organizar_documentos_hierarquicamente`; regressão coberta em
+     `test_issue_201b_ordem_cadeia.py`). As **linhas da tabela nunca
      são reordenadas globalmente** por tipo ou número: elas seguem a
      caminhada hierárquica (quem é citado aparece depois de quem o citou —
      docstring de `dominial/services/cadeia_dominial_tabela_service.py`).
@@ -420,11 +427,12 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
   seguintes (mesmo tratamento do #202, que não segura o R4). (Justificativa:
   dados já corrompidos em produção, sem timestamps/histórico — parte pode
   ser irrecuperável automaticamente; não faz sentido travar R5+ por uma
-  validação externa.) **Operacionalização do gate (revisão Codex 24/09):**
-  concluído o inventário somente leitura (R1 item 7), o responsável pelo
-  contato com o cliente (Hiure/luandro — confirmar quem) envia a lista de
-  reparos da issue #215 para validação e registra a data do pedido aqui;
-  a pendência é revisitada no replanejamento de cada sprint até resposta.
+  validação externa.) **Operacionalização do gate (revisão Codex 24/09;
+  responsável definido pelo Hiure no PR #221):** concluído o inventário
+  somente leitura (R1 item 7), o **Hiure** envia a lista de reparos da
+  issue #215 ao cliente para validação **em até 1 sprint do término do
+  inventário** e registra a data do pedido aqui; a pendência é revisitada
+  no replanejamento de cada sprint até resposta.
 
 ## Dependências críticas
 
@@ -476,12 +484,17 @@ Sem 09/11–13/11  R9 (reserva)
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
 Maurício/Umbelino (padrão desde o plano geral).
 
-**Premissas do cronograma (revisão Codex 24/09):** as estimativas de
-R3–R9 somam ~7–8,5 semanas para um horizonte de ~8 semanas (21/09–13/11),
-SEM contar o housekeeping restante do R1, o desfecho do #206 (R3.5), o R7
+**Premissas do cronograma (revisão Codex 24/09; quantificado pelo Greptile
+no PR #221):** as estimativas de R3–R9 somam ~7–8,5 semanas, mas o
+horizonte de ~8 semanas (21/09–13/11) com a reserva de ~20%/sprint oferece
+**~6,4 semanas de capacidade efetiva** — gap de ~0,6–2,1 semanas, SEM
+contar o housekeeping restante do R1, o desfecho do #206 (R3.5), o R7
 (gateado) e o eventual reparo #215. É um cronograma **apertado e
-otimista**, não um compromisso de entrega — a reserva de ~20% acima já
-está considerada no horizonte, não nas estimativas dos blocos. As datas
+otimista**, não um compromisso de entrega. **O que fica de fora do
+horizonte se o gap se confirmar:** (1) a semana de reserva do R9
+(09/11–13/11) já nasce consumida; (2) o R7 (#150/#151) só entra se o
+GATE-CLIENTE responder cedo — senão R8 entra no lugar (regra da seção);
+(3) #215 e #202 já estão fora da sequência (gate/congelamento). As datas
 a partir do R4 ficam **condicionadas** às estimativas que saírem da
 revalidação do #206, das fases 2–3 do #213 e do plano do R7; replanejar
 ao fim de cada sprint (regra da seção).
@@ -491,7 +504,15 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 24/09/2026 — **revisão Codex gpt-6-astra xhigh do
+*Última atualização: 24/09/2026 (rodada 2, PR #221) — P2s do Codex
+connector + Greptile incorporados: consumidores da chave canônica
+documentados no escopo da regra M>T (tronco inicial sem doc do imóvel +
+modal de sequência, `ordenacao_cadeia.py`); responsável do gate #215
+definido (**Hiure**, prazo: até 1 sprint após o inventário — decisão do
+Hiure no PR); shortfall de capacidade quantificado (7–8,5 sem estimadas
+× ~6,4 sem efetivas) com o que fica fora do horizonte explicitado.*
+
+*24/09/2026 — **revisão Codex gpt-6-astra xhigh do
 roadmap como norte de desenvolvimento** (rodada 1: 4 PASS / 4 MUST-FIX /
 4 NICE — REJEITA; todos os MUST-FIX validados contra código/issues reais
 e incorporados nesta revisão): M-1 escopo da regra M>T só entre origens
