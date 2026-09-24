@@ -42,13 +42,13 @@ GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)**.
 na v1.0.11 (20/09)**; Fases 1–3 de saneamento (#202) **aguardando redefinição
 via PRD** (tabela × exportações); #206 (origens homônimas) a revalidar. Veja **R3.5**.
 
-**Fila Django (snapshot 23/09/2026): 51 issues abertas no GitHub — 38 Django**
-(excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
+**Fila Django (snapshot 23/09/2026, pós-housekeeping): 47 issues abertas no
+GitHub — 34 Django** (excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
 - Cinco pendências de implementação que estavam fora dos blocos numerados
   foram incorporadas nesta reordenação: **#218, #219, #212** (R3), **#206**
   (R3.5), **#215** (R4).
-- Mergeadas na v1.0.11 mas ainda abertas no GitHub: **#168, #201, #204,
-  #210** — aguardam fechamento administrativo no **R1**.
+- Mergeadas na v1.0.11: **#168, #201, #204, #210** — ✅ fechadas no GitHub
+  em 23/09 (comentários apontam PR/release).
 
 **Reordenação da fila aprovada pelo Hiure em 23/09/2026** (revisão Codex
 gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
@@ -72,8 +72,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 3. **#187** limpar `cartorio_hidden` stale quando operador edita nome do
    cartório (P2 do review do PR #186 — código quente, mesma área do #167).
 4. GitHub: criar milestone "Produto 3" e mover a fila (decisão luandro/Hiure).
-5. **Fechar no GitHub as issues já mergeadas na v1.0.11** (comentário
-   apontando PR + release PR #217/tag `v1.0.11`): **#168** (PR #216),
+5. **Fechar no GitHub as issues já mergeadas na v1.0.11** ✅ **FEITO 23/09/2026**
+   (comentário apontando PR + release PR #217/tag `v1.0.11`): **#168** (PR #216),
    **#201** (PRs #203/#205 — Fases 0+0b; Fases 1–3 seguem no #202),
    **#204** (PR #207), **#210** (PR #211).
 6. **PRs zumbis — decidir destino** (reaproveitar ou fechar): **#103**
@@ -86,7 +86,9 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    cliente.
 8. **PR deste roadmap** (branch `docs/roadmap-v1.0.11-release` → `develop`)
    só abre depois de incorporar a reordenação aprovada (✅ incorporada
-   23/09; PR ainda não aberto).
+   23/09) — ✅ **PR #220 aberto em 23/09** (`docs/roadmap-v1.0.11-release`
+   → `develop`; docs-only, Greptile 4/5, Codex connector 2× P2 corrigidos
+   neste commit).
 
 ## R2 — Exportação consolidada — ✅ FECHADO 11/09/2026 (PRs #191/#192/#194)
 
@@ -118,6 +120,70 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    `N:N+1/O:O+1/P:P+1` = rowspan do PDF; cobre os DOIS exports (consolidado
    + cadeia única, renderer compartilhado) → item 4 acima já atendido
    automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
+
+## R3 — Integridade de documentos/cartórios I (~1,5–2 semanas)
+
+> ⚠️ **REVALIDAR CONTRA O CÓDIGO ATUAL ANTES DE INICIAR** (pedido Hiure
+> 11/09): export/cartórios mudaram muito no R2 (#166/#172/#179, renderer
+> compartilhado, helper de origem) — conferir se cada bug ainda reproduz e
+> se as causas raízes anotadas nas issues continuam válidas.
+> Bug de produção + brechas de duplicidade. #144 é o mais antigo aberto
+> com dados reais envolvidos (desde 13/08).
+> **Reordenado 23/09 (aprovação do Hiure): bugs de produção primeiro** —
+> #218 → #144 → #219 → #212, depois os itens já planejados. Estimativa
+> revista de ~1–1,5 para ~1,5–2 semanas.
+
+1. **#218** 🐛 P1 produção: Livro↔Folha invertidos **no banco** — não é só
+   exibição (triagem 22/09: imóvel 488, doc 3879 T2540 gravado com
+   livro=`154`/folha=`3H`; o padrão do cartório de Ponta Porã é
+   livro=`3<letra>` + folha=número). Escopo: corrigir a gravação + reparar
+   os dados invertidos já gravados (inventariar pelo padrão do cartório).
+   Sem vínculo com #105 (causa comum descartada em revisão).
+2. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
+   regressão v1.0.3→v1.0.5 ligada a cartórios (imóvel M955, Amambai; aberta
+   desde 13/08). Revalidar contra o código atual (nota acima).
+3. **#219** 🐛 validação: início de matrícula aceita a própria matrícula/
+   transcrição como origem (auto-loop). Ponto de correção:
+   `_sincronizar_origens_estruturadas` (identidade tipo + número normalizado
+   + cartório vs documento do lançamento); inclui saneamento dos registros
+   já gravados + testes. **Não** bloquear homônimos de cartório diferente
+   (#206).
+4. **#212** 🐛 P2: editar matrícula/tipo do imóvel não sincroniza
+   `Documento.numero`/`tipo` — mesma classe do #210; o padrão de correção
+   já existe no `ImovelDocumentoService`. P2: edição administrativa rara (o
+   precedente #210 era cartório, edição comum).
+5. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
+6. **#141** 🐛 tratar IntegrityError (duplicidade canônica) em criar/editar.
+7. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
+8. **#110** levantar cartórios fantasmas + plano de merge (data quality —
+   alimenta #113 do R5). **Antes de iniciar: checar o PR zumbi #136**
+   (→#110, parado desde 21/08 — ver R1 item 6).
+9. **#210** ✅ P1 produção: editar `Imovel.cartorio` deixava o documento
+   principal no cartório antigo, e a matrícula sumia da cadeia (identidade
+   resolvida por tipo+número+cartório). Corrigido com escopo reduzido:
+   `ImovelDocumentoService` sincroniza SOMENTE o cartório (admin + views
+   públicas), na mesma transação; cache do tronco principal desabilitado
+   (LocMemCache multi-worker + invalidação transitiva insolúvel no hotfix).
+   Sincronizar tipo/número do documento principal fica para **#212**
+   (issue separada, ainda aberta — item 4 acima).
+10. **#213 fase 1** ✅ **CONCLUÍDA 17/09** (PR #214, squash `e1274862`; Opus 5 ×2 +
+   DeepSeek V4 Pro + Greptile 5/5 — Codex fora por cota): salvar lançamento
+   **sobrescrevia o registro `Pessoas` compartilhado** quando o operador editava
+   o nome sugerido pelo autocomplete (`pessoa.nome = texto; pessoa.save()`),
+   corrompendo a ficha do imóvel. Corrigido: `lancamento_pessoa_service` **nunca**
+   altera `Pessoas`; texto divergente do vínculo resolve o destino por
+   `nome__iexact` (cria o registro de nome exato se não existir), o registro
+   composto fica intacto e cada nome digitado ganha sua própria linha
+   (`nome_digitado` guarda o texto). Duplicata mutante em `lancamento_service`
+   virou delegação. 10 testes novos; o módulo dá 5F+1E contra o código antigo
+   (regressão coberta de fato) e a suíte completa ficou com as mesmas falhas da
+   baseline. **Achado novo durante a fase 1:** `unique_together
+   (lancamento,pessoa,tipo)` + `get_or_create` colapsava N adquirentes com o
+   mesmo `pessoa_id` em **1 linha** (sobrava só o último nome) — daí a resolução
+   por nome exato, sem migração. Débitos: (a) o dado **já corrompido em produção
+   não é reparado** (levantamento + script — issue **#215**), (b) lançamentos antigos ligados ao
+   registro composto seguem exibindo o composto, (c) `lower()` não normaliza
+   acento (`João` × `Joao` pode duplicar `Pessoas`). Fases 2–3 → R4.
 
 ## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); restante depois do R3
 
@@ -200,70 +266,6 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      do imóvel 384, infra de teste JS (vitest)
    - F3: modularizar o JS (1373 linhas), remover ~40 `console.log`, sanitizar
      `innerHTML` (casa com #196)
-
-## R3 — Integridade de documentos/cartórios I (~1,5–2 semanas)
-
-> ⚠️ **REVALIDAR CONTRA O CÓDIGO ATUAL ANTES DE INICIAR** (pedido Hiure
-> 11/09): export/cartórios mudaram muito no R2 (#166/#172/#179, renderer
-> compartilhado, helper de origem) — conferir se cada bug ainda reproduz e
-> se as causas raízes anotadas nas issues continuam válidas.
-> Bug de produção + brechas de duplicidade. #144 é o mais antigo aberto
-> com dados reais envolvidos (desde 13/08).
-> **Reordenado 23/09 (aprovação do Hiure): bugs de produção primeiro** —
-> #218 → #144 → #219 → #212, depois os itens já planejados. Estimativa
-> revista de ~1–1,5 para ~1,5–2 semanas.
-
-1. **#218** 🐛 P1 produção: Livro↔Folha invertidos **no banco** — não é só
-   exibição (triagem 22/09: imóvel 488, doc 3879 T2540 gravado com
-   livro=`154`/folha=`3H`; o padrão do cartório de Ponta Porã é
-   livro=`3<letra>` + folha=número). Escopo: corrigir a gravação + reparar
-   os dados invertidos já gravados (inventariar pelo padrão do cartório).
-   Sem vínculo com #105 (causa comum descartada em revisão).
-2. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
-   regressão v1.0.3→v1.0.5 ligada a cartórios (imóvel M955, Amambai; aberta
-   desde 13/08). Revalidar contra o código atual (nota acima).
-3. **#219** 🐛 validação: início de matrícula aceita a própria matrícula/
-   transcrição como origem (auto-loop). Ponto de correção:
-   `_sincronizar_origens_estruturadas` (identidade tipo + número normalizado
-   + cartório vs documento do lançamento); inclui saneamento dos registros
-   já gravados + testes. **Não** bloquear homônimos de cartório diferente
-   (#206).
-4. **#212** 🐛 P2: editar matrícula/tipo do imóvel não sincroniza
-   `Documento.numero`/`tipo` — mesma classe do #210; o padrão de correção
-   já existe no `ImovelDocumentoService`. P2: edição administrativa rara (o
-   precedente #210 era cartório, edição comum).
-5. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
-6. **#141** 🐛 tratar IntegrityError (duplicidade canônica) em criar/editar.
-7. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
-8. **#110** levantar cartórios fantasmas + plano de merge (data quality —
-   alimenta #113 do R5). **Antes de iniciar: checar o PR zumbi #136**
-   (→#110, parado desde 21/08 — ver R1 item 6).
-9. **#210** ✅ P1 produção: editar `Imovel.cartorio` deixava o documento
-   principal no cartório antigo, e a matrícula sumia da cadeia (identidade
-   resolvida por tipo+número+cartório). Corrigido com escopo reduzido:
-   `ImovelDocumentoService` sincroniza SOMENTE o cartório (admin + views
-   públicas), na mesma transação; cache do tronco principal desabilitado
-   (LocMemCache multi-worker + invalidação transitiva insolúvel no hotfix).
-   Sincronizar tipo/número do documento principal fica para **#212**
-   (issue separada, ainda aberta — item 4 acima).
-10. **#213 fase 1** ✅ **CONCLUÍDA 17/09** (PR #214, squash `e1274862`; Opus 5 ×2 +
-   DeepSeek V4 Pro + Greptile 5/5 — Codex fora por cota): salvar lançamento
-   **sobrescrevia o registro `Pessoas` compartilhado** quando o operador editava
-   o nome sugerido pelo autocomplete (`pessoa.nome = texto; pessoa.save()`),
-   corrompendo a ficha do imóvel. Corrigido: `lancamento_pessoa_service` **nunca**
-   altera `Pessoas`; texto divergente do vínculo resolve o destino por
-   `nome__iexact` (cria o registro de nome exato se não existir), o registro
-   composto fica intacto e cada nome digitado ganha sua própria linha
-   (`nome_digitado` guarda o texto). Duplicata mutante em `lancamento_service`
-   virou delegação. 10 testes novos; o módulo dá 5F+1E contra o código antigo
-   (regressão coberta de fato) e a suíte completa ficou com as mesmas falhas da
-   baseline. **Achado novo durante a fase 1:** `unique_together
-   (lancamento,pessoa,tipo)` + `get_or_create` colapsava N adquirentes com o
-   mesmo `pessoa_id` em **1 linha** (sobrava só o último nome) — daí a resolução
-   por nome exato, sem migração. Débitos: (a) o dado **já corrompido em produção
-   não é reparado** (levantamento + script — issue **#215**), (b) lançamentos antigos ligados ao
-   registro composto seguem exibindo o composto, (c) `lower()` não normaliza
-   acento (`João` × `Joao` pode duplicar `Pessoas`). Fases 2–3 → R4.
 
 ## R4 — UX Umbelino: rapid wins + CRI (~1 semana; #215 sem estimativa fechada)
 
@@ -413,8 +415,9 @@ Sem 07/09–11/09  R1 fechar ciclo ✅ + R2 #13/#179 XLS consolidado ✅
                  (+ #193 rapid win adiantado e fechado 12/09 ✅)
 Sem 14/09–18/09  R3.5 hotfix #201 Fases 0+0b + #204 ✅ (12–13/09) · R3 #210 ✅
                  + #213 fase 1 ✅ · #168 ✅ → release v1.0.11 em produção 20/09 ✅
-Sem 21/09–25/09  R1 housekeeping (#187, milestone, fechar #168/#201/#204/#210,
-                 PR zumbi #103; inventário #215 em paralelo) → R3 #218 → #144
+Sem 21/09–25/09  R1 housekeeping (#187, milestone, #168/#201/#204/#210 ✅
+                 fechadas 23/09, PR zumbi #103; inventário #215 em paralelo)
+                 → R3 #218 → #144
 Sem 28/09–02/10  R3 (cont.) #219 → #212 → #114/#141/#149/#110 → R3.5 #206
                  (revalidar + estimar) → início do R4 ~29/09–03/10
                  (+ disparar GATE-CLIENTE)
@@ -434,7 +437,14 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 23/09/2026 — **reordenação da fila aprovada pelo
+*Última atualização: 24/09/2026 — correções do review do PR #220 (Codex
+connector 2× P2 + Greptile 1× P2 convergente): #168, #201, #204 e #210 ✅
+fechadas no GitHub em 23/09 (R1 item 5; snapshot recontado: 47 abertas,
+34 Django); PR #220 aberto em 23/09 (R1 item 8); bloco R3.5 movido para
+depois do R3 sem alterar o conteúdo — a ordem no arquivo passa a ser a
+ordem de execução (R3 → R3.5 #206 → R4).*
+
+*23/09/2026 — **reordenação da fila aprovada pelo
 Hiure** pós-revisão Codex gpt-6-sol (xhigh; rodada 1 REJEITA, 6 MUST-FIX
 incorporados na v2): 5 issues incorporadas à fila — #218, #219, #212 (R3,
 bugs de produção primeiro), #206 (R3.5, escopo a revalidar), #215 (R4,
