@@ -296,10 +296,26 @@ function configurarMAnterior(index) {
     const tipoSelect = document.getElementById(`tipo_origem_${index}`);
     const numeroInput = document.getElementById(`numero_origem_${index}`);
     const cartorioNome = document.getElementById(`cartorio_origem_nome_${index}`);
+    const cartorioHidden = document.getElementById(`cartorio_origem_${index}`);
 
     if (tipoSelect) tipoSelect.addEventListener('change', () => agendarMAnterior(index));
     if (numeroInput) numeroInput.addEventListener('keyup', () => agendarMAnterior(index));
     if (cartorioNome) {
+        // Issue #187 (review Codex PR #186): editando o nome sem passar pelo
+        // autocomplete, o hidden ainda guardava o ID do cartório anterior e a
+        // busca da M anterior saía com cartorio_id STALE (badge mostrava
+        // resultado do cartório antigo). 'input' cobre digitar, colar e
+        // autofill, e dispara ANTES de 'keyup' (keydown → input → keyup), então
+        // limpar aqui garante busca sem ID antigo — sem cartorio_id, o guard
+        // do P2 #185 em atualizarMAnterior aborta e esconde o badge.
+        cartorioNome.addEventListener('input', () => {
+            if (cartorioHidden) cartorioHidden.value = '';
+            agendarMAnterior(index);
+        });
+        // A seleção de sugestão NÃO dispara 'input': selectCartorioSuggestion
+        // (lancamento_form.js) seta input.value/hidden.value por atribuição
+        // direta. Mantemos 'keyup' para reagir à seleção via teclado (Enter
+        // seta o hidden no keydown) e 'blur' para a seleção via clique.
         cartorioNome.addEventListener('keyup', () => agendarMAnterior(index));
         cartorioNome.addEventListener('blur', () => agendarMAnterior(index));
     }
