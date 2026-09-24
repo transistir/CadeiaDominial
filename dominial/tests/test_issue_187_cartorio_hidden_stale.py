@@ -9,9 +9,13 @@ apagou e digitou 'Cartório Y'), a busca da M anterior disparava com o
 renderizava informação do cartório errado, enganando a decisão de
 'mesmo TI'/'outro TI'/'não consta'.
 
-Fix: registrar também `input`, que limpa o hidden ANTES de agendar a busca.
-Sem `cartorio_id`, `atualizarMAnterior` aborta e esconde o badge (guard do
-P2 #185, já coberto por test_issue_167.GreptileP2RaceAbortTest).
+Fix: registrar também `input`, que limpa o hidden ANTES de chamar
+`atualizarMAnterior` — imediata, sem o debounce de `agendarMAnterior`
+(review Opus 5.5 PRE-MERGE). Com o hidden zerado, `atualizarMAnterior`
+aborta o fetch em voo e esconde o badge NA HORA (guard do P2 #185, já
+coberto por test_issue_167.GreptileP2RaceAbortTest); com o debounce, o
+abort/ocultar só ocorreria 300ms depois — janela em que a resposta do
+cartório antigo poderia renderizar durante a digitação seguinte.
 
 Decisão de design documentada (ver testes abaixo):
 - A seleção de sugestão NÃO dispara `input` — `selectCartorioSuggestion`
@@ -35,7 +39,8 @@ from django.test import TestCase
 
 class LimpaHiddenStaleAoEditarNomeTest(TestCase):
     """O bloco do cartorioNome em `configurarMAnterior` deve registrar
-    `input` que limpa o hidden antes de agendar; `blur` e `keyup` seguem."""
+    `input` que limpa o hidden antes de chamar `atualizarMAnterior`
+    (imediato); `blur` e `keyup` seguem com o debounce."""
 
     JS_PATH = os.path.join(
         os.path.dirname(__file__),
@@ -93,14 +98,19 @@ class LimpaHiddenStaleAoEditarNomeTest(TestCase):
             "(além de keyup/blur) para reagir a qualquer edição do valor",
         )
 
-    def test_listener_input_limpa_o_hidden_antes_de_agendar(self):
-        """BUG #187 (núcleo do fix): dentro do listener `input`, o hidden
-        `cartorio_origem_` é zerado ANTES da chamada a agendarMAnterior.
+    def test_listener_input_limpa_o_hidden_e_chama_atualizar_imediato(self):
+        """BUG #187 (núcleo do fix) + review Opus 5.5 PRE-MERGE: dentro do
+        listener `input`, o hidden `cartorio_origem_` é zerado ANTES da
+        chamada a atualizarMAnterior — e a chamada é IMEDIATA, não o debounce
+        de agendarMAnterior.
 
-        A ordem importa: agendarMAnterior só agenda — a leitura do hidden
-        acontece 300ms depois, em atualizarMAnterior, mas limpar antes de
-        agendar documenta a intenção e protege contra uma futura leitura
-        síncrona."""
+        A ordem importa: com o hidden já zerado, atualizarMAnterior cai no
+        guard do P2 #185 (!cartorio_id), aborta o fetch em voo e esconde o
+        badge NA HORA. Via agendarMAnterior, o abort/ocultar só ocorreria
+        300ms depois — se a busca do cartório antigo resolvesse nesse
+        intervalo (operador seleciona X e começa a digitar Y em seguida), o
+        badge mostraria dados de X até a pausa: exatamente o estado
+        enganoso, ainda que transitório, que a issue descreve."""
         bloco = self._bloco_cartorio_nome()
         listener = re.search(
             r"addEventListener\('input',\s*\(\)\s*=>\s*\{(.*?)\}\s*\);",
@@ -120,16 +130,25 @@ class LimpaHiddenStaleAoEditarNomeTest(TestCase):
             "listener 'input' deve zerar o hidden (cartorioHidden.value "
             "= '') enquanto o operador edita o nome",
         )
-        pos_agendar = corpo.find('agendarMAnterior(index)')
+        self.assertNotIn(
+            'agendarMAnterior(index)',
+            corpo,
+            "listener 'input' não pode usar o debounce (agendarMAnterior): "
+            'o abort do fetch em voo e o ocultar do badge só ocorreriam '
+            '300ms depois, deixando janela de badge stale',
+        )
+        pos_atualizar = corpo.find('atualizarMAnterior(index)')
         self.assertGreaterEqual(
-            pos_agendar,
+            pos_atualizar,
             0,
-            "listener 'input' deve continuar agendando a busca da M anterior",
+            "listener 'input' deve chamar atualizarMAnterior(index) na hora "
+            '(sem debounce) para abortar o fetch em voo imediatamente',
         )
         self.assertLess(
             pos_limpeza,
-            pos_agendar,
-            'a limpeza do hidden deve vir ANTES do agendamento da busca',
+            pos_atualizar,
+            'a limpeza do hidden deve vir ANTES da chamada a '
+            'atualizarMAnterior',
         )
 
     def test_listener_blur_permanece_registrado(self):
@@ -207,13 +226,21 @@ class ContratoAutocompleteSelecaoTest(TestCase):
         )
 
     def test_selecao_nao_dispara_evento_input(self):
-        """Se a seleção passar a disparar `input` no campo, o listener do fix
-        #187 limparia o hidden recém-setado e quebraria o fluxo de escolha."""
+        """Se a seleção passar a disparar `input` sintético no campo nome, o
+        listener do fix #187 limparia o hidden recém-setado e quebraria o
+        fluxo de escolha.
+
+        Escopo restrito (review Opus 5.5 PRE-MERGE): o assert anterior
+        bloqueava QUALQUER `dispatchEvent`, inclusive melhorias legítimas que
+        não afetam o #187 (ex.: `hidden.dispatchEvent(new Event('change'))`).
+        Agora proíbe apenas a construção de um Event/InputEvent de tipo
+        'input' (`new Event('input'` / `new InputEvent('input'`), que é o
+        único dispatch capaz de zerar o hidden recém-populado."""
         corpo = self._funcao_selectCartorioSuggestion()
-        self.assertNotIn(
-            'dispatchEvent',
-            corpo,
-            'selectCartorioSuggestion não pode disparar eventos no campo: um '
-            "dispatch de 'input' aqui faria o listener do fix #187 zerar o "
-            'hidden recém-populado',
+        self.assertIsNone(
+            re.search(r"new\s+Input?Event\(\s*['\"]input['\"]", corpo),
+            'selectCartorioSuggestion não pode disparar evento `input` '
+            "sintético no campo (new Event('input') / new "
+            "InputEvent('input')): o dispatch faria o listener do fix #187 "
+            'zerar o hidden recém-populado',
         )

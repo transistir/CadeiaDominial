@@ -306,11 +306,18 @@ function configurarMAnterior(index) {
         // busca da M anterior saía com cartorio_id STALE (badge mostrava
         // resultado do cartório antigo). 'input' cobre digitar, colar e
         // autofill, e dispara ANTES de 'keyup' (keydown → input → keyup), então
-        // limpar aqui garante busca sem ID antigo — sem cartorio_id, o guard
-        // do P2 #185 em atualizarMAnterior aborta e esconde o badge.
+        // limpar aqui garante busca sem ID antigo.
+        // Chamada IMEDIATA a atualizarMAnterior, sem debounce (review Opus 5.5
+        // PRE-MERGE): com o hidden já zerado, o guard do P2 #185 aborta o
+        // fetch em voo e esconde o badge NA HORA. Via agendarMAnterior, o
+        // abort/ocultar só ocorreria 300ms depois — se a busca do cartório
+        // antigo (F1) resolvesse nesse intervalo (operador seleciona X e
+        // começa a digitar Y logo em seguida), o badge mostraria dados de X
+        // até a pausa. keyup/blur seguem com agendarMAnterior (debounce): são
+        // os caminhos de re-busca após a seleção de sugestão.
         cartorioNome.addEventListener('input', () => {
             if (cartorioHidden) cartorioHidden.value = '';
-            agendarMAnterior(index);
+            atualizarMAnterior(index);
         });
         // A seleção de sugestão NÃO dispara 'input': selectCartorioSuggestion
         // (lancamento_form.js) seta input.value/hidden.value por atribuição
