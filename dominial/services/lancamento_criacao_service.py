@@ -149,16 +149,7 @@ class LancamentoCriacaoService:
             documento_atualizado = LancamentoCriacaoService._aplicar_campos_documento(
                 lancamento, dados_lancamento
             )
-            if divergencias:
-                # #218: o valor divergente segue descartado (regra pétrea #138),
-                # mas o usuário precisa saber que a correção não foi gravada.
-                messages.warning(
-                    request,
-                    '⚠️ Livro/Folha do documento não foram alterados: ' +
-                    '; '.join(divergencias) +
-                    '. Para corrigir Livro/Folha do documento use "Editar Documento".',
-                    fail_silently=True,
-                )
+            LancamentoCriacaoService._avisar_divergencias(request, divergencias)
             if documento_atualizado:
                 print("DEBUG: Campos do documento aplicados com sucesso")
             else:
@@ -297,6 +288,14 @@ class LancamentoCriacaoService:
             lancamento.save()
             print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
             
+            # #218: o update nunca grava livro/folha do documento; se o POST
+            # trouxe valor divergente (aba stale), avisar em vez de descartar.
+            LancamentoCriacaoService._avisar_divergencias(
+                request,
+                LancamentoCriacaoService._divergencias_livro_folha(
+                    lancamento.documento, request.POST),
+            )
+            
             # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento
             print("DEBUG: Aplicando regra pétrea...")
             regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
@@ -349,6 +348,22 @@ class LancamentoCriacaoService:
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return False, f'Erro ao atualizar lançamento: {str(e)}'
     
+    @staticmethod
+    def _avisar_divergencias(request, divergencias):
+        """Emite o aviso de correção de livro/folha não gravada (#218).
+
+        O valor divergente segue descartado (regra pétrea #138), mas o usuário
+        precisa saber que a correção não foi gravada.
+        """
+        if divergencias:
+            messages.warning(
+                request,
+                '⚠️ Livro/Folha do documento não foram alterados: ' +
+                '; '.join(divergencias) +
+                '. Para corrigir Livro/Folha do documento use "Editar Documento".',
+                fail_silently=True,
+            )
+
     @staticmethod
     def _divergencias_livro_folha(documento, dados_lancamento):
         """Lista os campos livro/folha em que o formulário diverge do valor

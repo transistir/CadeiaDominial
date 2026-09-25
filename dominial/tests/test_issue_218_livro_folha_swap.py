@@ -316,6 +316,64 @@ class Issue218EdicaoLancamentoTest(Issue218Base):
         self.assertEqual(self.livro_folha(), ('0', '0'))
 
 
+class Issue218AvisoEdicaoLancamentoTest(Issue218Base):
+    """P1 Greptile: o update também não pode descartar divergência em silêncio."""
+
+    def post_edicao(self, lancamento, omitir=(), **campos):
+        dados = {
+            'tipo_lancamento': str(self.tipo_inicio.id), 'numero_lancamento': 'T2540',
+            'numero_lancamento_simples': '', 'data': '1951-04-11',
+            'cartorio': str(self.cri.id), 'cartorio_nome': self.cri.nome,
+            'sigla_documento': 'T2540', 'sigla_matricula': 'T2540',
+            'documento_id': str(self.doc.id),
+            'transmitente_nome[]': ['Transmitente #218'], 'transmitente[]': [''],
+            'adquirente_nome[]': ['Adquirente #218'], 'adquirente[]': [''],
+            'origem_completa[]': [''], 'cartorio_origem_nome[]': [''],
+            'cartorio_origem[]': [''], 'livro_origem[]': [''], 'folha_origem[]': [''],
+            'observacoes': 'editado', 'area': ''}
+        dados.update(campos)
+        for chave in omitir:
+            dados.pop(chave, None)
+        return self.client.post(reverse('editar_lancamento', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
+            'lancamento_id': lancamento.id}), dados)
+
+    def avisos(self, response):
+        return [str(m) for m in get_messages(response.wsgi_request)
+                if m.level == message_constants.WARNING]
+
+    def test_post_divergente_na_edicao_avisa_e_nao_altera_documento(self):
+        self.doc.livro, self.doc.folha = '3H', '154'
+        self.doc.save()
+        lancamento = self.criar_lancamento_existente()
+        response = self.post_edicao(lancamento, livro_documento='154',
+                                    folha_documento='3H')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.livro_folha(), ('3H', '154'))
+        avisos = self.avisos(response)
+        self.assertEqual(len(avisos), 1, avisos)
+        self.assertIn('Livro gravado', avisos[0])
+        self.assertIn('Folha gravada', avisos[0])
+        self.assertIn('Editar Documento', avisos[0])
+
+    def test_post_de_edicao_sem_campos_disabled_nao_avisa(self):
+        self.doc.livro, self.doc.folha = '3H', '154'
+        self.doc.save()
+        lancamento = self.criar_lancamento_existente()
+        response = self.post_edicao(lancamento)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.livro_folha(), ('3H', '154'))
+        self.assertEqual(self.avisos(response), [])
+
+    def test_post_de_edicao_com_documento_zero_nao_avisa(self):
+        lancamento = self.criar_lancamento_existente()
+        response = self.post_edicao(lancamento, livro_documento='154',
+                                    folha_documento='3H')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.livro_folha(), ('0', '0'))
+        self.assertEqual(self.avisos(response), [])
+
+
 class Issue218LinkImovelDonoTest(Issue218Base):
     """Blocker B2: o link de correção usa o imóvel DONO do documento compartilhado."""
 
