@@ -374,6 +374,66 @@ class Issue218AvisoEdicaoLancamentoTest(Issue218Base):
         self.assertEqual(self.avisos(response), [])
 
 
+class Issue218CopyPorCampoTest(Issue218Base):
+    """P2 Greptile: copy e asterisco refletem só o(s) campo(s) realmente travado(s)."""
+
+    def label(self, html, nome):
+        return re.search(r'<label for="%s">([^<]*)</label>' % nome, html).group(1)
+
+    def test_so_livro_definido_avisa_apenas_livro_e_folha_segue_obrigatoria(self):
+        self.doc.livro = '154'
+        self.doc.save()
+        html = self.client.get(self.url_novo()).content.decode()
+        self.assertIn('O Livro do documento (154) não é alterado aqui', html)
+        self.assertNotIn('Livro/Folha pertencem', html)
+        self.assertNotRegex(html, r'Folha[^<]{0,60}não é alterada')
+        tag = _tag_input(html, 'folha_documento')
+        self.assertNotIn('disabled', tag, tag)
+        self.assertIn('required', tag, tag)
+        self.assertNotIn('*', self.label(html, 'livro_documento'))
+        self.assertIn('*', self.label(html, 'folha_documento'))
+        self.assertIn('Corrigir em Editar Documento', html)
+        self.assertIn('target="_blank"', html)
+
+    def test_so_folha_definida_avisa_apenas_folha_e_livro_segue_obrigatorio(self):
+        self.doc.folha = '154'
+        self.doc.save()
+        html = self.client.get(self.url_novo()).content.decode()
+        self.assertIn('A Folha do documento (154) não é alterada aqui', html)
+        self.assertNotIn('Livro/Folha pertencem', html)
+        self.assertNotRegex(html, r'Livro[^<]{0,60}não é alterado')
+        tag = _tag_input(html, 'livro_documento')
+        self.assertNotIn('disabled', tag, tag)
+        self.assertIn('required', tag, tag)
+        self.assertIn('*', self.label(html, 'livro_documento'))
+        self.assertNotIn('*', self.label(html, 'folha_documento'))
+
+    def test_ambos_definidos_mantem_copy_conjunta_sem_asteriscos(self):
+        self.doc.livro, self.doc.folha = '3H', '154'
+        self.doc.save()
+        html = self.client.get(self.url_novo()).content.decode()
+        self.assertIn('Livro/Folha pertencem ao documento', html)
+        self.assertIn('Corrigir em Editar Documento', html)
+        self.assertNotIn('*', self.label(html, 'livro_documento'))
+        self.assertNotIn('*', self.label(html, 'folha_documento'))
+
+    def test_nenhum_definido_sem_aviso_e_com_asteriscos(self):
+        html = self.client.get(self.url_novo()).content.decode()
+        self.assertNotIn('não é alterad', html)
+        self.assertIn('*', self.label(html, 'livro_documento'))
+        self.assertIn('*', self.label(html, 'folha_documento'))
+
+    def test_edicao_com_documento_zero_usa_copy_sem_valores(self):
+        lancamento = self.criar_lancamento_existente()
+        html = self.client.get(reverse('editar_lancamento', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
+            'lancamento_id': lancamento.id})).content.decode()
+        self.assertIn('Livro/Folha não são alterados na edição do lançamento', html)
+        self.assertIn('Corrigir em Editar Documento', html)
+        self.assertNotIn('*', self.label(html, 'livro_documento'))
+        self.assertNotIn('*', self.label(html, 'folha_documento'))
+
+
 class Issue218LinkImovelDonoTest(Issue218Base):
     """Blocker B2: o link de correção usa o imóvel DONO do documento compartilhado."""
 
