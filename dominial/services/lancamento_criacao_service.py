@@ -361,15 +361,15 @@ class LancamentoCriacaoService:
             return bool(valor) and valor != '0'
 
         divergencias = []
-        campos = [('Livro', 'livro', 'livro_documento')]
+        campos = [('Livro gravado', 'livro', 'livro_documento')]
         if documento.tipo.tipo != 'matricula':
-            campos.append(('Folha', 'folha', 'folha_documento'))
+            campos.append(('Folha gravada', 'folha', 'folha_documento'))
         for rotulo, attr, chave in campos:
             atual = getattr(documento, attr)
             digitado = (dados_lancamento.get(chave) or '').strip()
-            if _definido(atual) and digitado and digitado != atual:
+            if _definido(atual) and digitado and digitado != atual.strip():
                 divergencias.append(
-                    f'{rotulo} gravado "{atual}", informado "{digitado}"')
+                    f'{rotulo} "{atual}", informado "{digitado}"')
         return divergencias
 
     @staticmethod

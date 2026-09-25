@@ -1,12 +1,12 @@
 """Issue #218 — Livro↔Folha invertidos no banco (doc 3879 / T2540, imóvel 488).
 
-Nenhum caminho do servidor inverte livro↔folha de entrada correta (guardas
-GREEN). O defeito provado: a correção digitada no Novo Lançamento é DESCARTADA
-EM SILÊNCIO quando o documento já tem livro/folha ≠ '0' — o template só aplica
-readonly via `lancamento.documento` (Lancamento() vazio no Novo Lançamento →
-campos editáveis) e `_aplicar_campos_documento` ignora o POST (regra pétrea
-#138) enquanto a view responde "✅ criado com sucesso". Print correto (Folha=154)
-e banco invertido (folha='3H') são verdade ao mesmo tempo.
+Nenhum caminho do servidor inverte livro↔folha de entrada correta (guardas).
+O defeito original: a correção digitada no Novo Lançamento era DESCARTADA EM
+SILÊNCIO quando o documento já tinha livro/folha ≠ '0' (regra pétrea #138).
+Estado pós-fix: Livro/Folha já definidos ficam readonly no formulário; um POST
+divergente segue sem sobrescrever o banco, mas emite aviso; na edição de
+lançamento os campos ficam sempre travados (o update não os persiste) e o link
+"Corrigir em Editar Documento" aponta para o imóvel DONO do documento.
 """
 import re
 from html.parser import HTMLParser
@@ -14,10 +14,12 @@ from html.parser import HTMLParser
 from django.contrib.auth.models import User
 from django.contrib.messages import constants as message_constants
 from django.contrib.messages import get_messages
-from django.test import Client, TestCase
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.views.documento_views import excluir_documento
 from dominial.models import (Cartorios, Documento, DocumentoTipo, Imovel,
                              Lancamento, LancamentoTipo, Pessoas, TIs)
 
@@ -127,6 +129,7 @@ class Issue218GuardasSemTrocaTest(Issue218Base):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.livro_folha(), ('3H', '154'))
 
+    @override_settings(DUPLICATA_VERIFICACAO_ENABLED=True)
     def test_fluxo_duplicata_reemite_e_grava_sem_troca(self):
         vizinho = Imovel.objects.create(
             terra_indigena_id=self.tis, nome='Imóvel vizinho', proprietario=self.pessoa,
@@ -183,7 +186,7 @@ class Issue218GuardasSemTrocaTest(Issue218Base):
 
 
 class Issue218ReproducaoTest(Issue218Base):
-    """RED: a correção digitada no Novo Lançamento é descartada em silêncio."""
+    """Correção divergente: regra pétrea preservada, sem descarte silencioso."""
 
     def preparar_documento_ja_invertido(self):
         # Banco ANTES do POST do print: 154/3H gravado por POST anterior.
@@ -192,7 +195,7 @@ class Issue218ReproducaoTest(Issue218Base):
         self.criar_lancamento_existente()
 
     def test_reproducao_print_correto_e_banco_invertido(self):
-        # Prova do bug. No PR do fix vira "banco inalterado + aviso" (regra pétrea).
+        # Print correto na tela; banco inalterado (regra pétrea) + aviso.
         self.preparar_documento_ja_invertido()
         form = self.client.get(self.url_novo()).content.decode()
         self.assertIn('value="154"', _tag_input(form, 'livro_documento'))
@@ -218,12 +221,23 @@ class Issue218ReproducaoTest(Issue218Base):
         self.assertEqual(self.livro_folha(), ('154', '3H'))
         avisos = [str(m) for m in get_messages(response.wsgi_request)
                   if m.level == message_constants.WARNING]
-        self.assertTrue(any('Editar' in a for a in avisos),
-                        'Divergência ignorada sem aviso; mensagens: %r' % avisos)
+        self.assertEqual(len(avisos), 1, 'mensagens: %r' % avisos)
+        self.assertIn('Livro gravado "154", informado "3H"', avisos[0])
+        self.assertIn('Folha gravada "3H", informado "154"', avisos[0])
+        self.assertIn('Editar Documento', avisos[0])
+
+    def test_divergencia_nao_acusa_falso_positivo_com_espaco_no_legado(self):
+        self.doc.livro, self.doc.folha = '3H ', '154'
+        self.doc.save()
+        self.criar_lancamento_existente()
+        response = self.post_averbacao('3H', '154')
+        avisos = [m for m in get_messages(response.wsgi_request)
+                  if m.level == message_constants.WARNING]
+        self.assertEqual(avisos, [])
 
 
 class Issue218PlaceholderZeroTest(Issue218Base):
-    """RED: '0' (não informado) não deve pré-preencher nem vencer o form_data."""
+    """'0' (não informado) não pré-preenche nem vence o form_data."""
 
     def test_placeholder_zero_nao_aparece_como_valor_no_formulario(self):
         form = self.client.get(self.url_novo()).content.decode()
@@ -235,3 +249,108 @@ class Issue218PlaceholderZeroTest(Issue218Base):
         html = self.post_lancamento(self.tipo_inicio, '3H', '154').content.decode()
         self.assertIn('value="3H"', _tag_input(html, 'livro_documento'))
         self.assertIn('value="154"', _tag_input(html, 'folha_documento'))
+
+
+class Issue218EdicaoLancamentoTest(Issue218Base):
+    """Blocker B1: edição de lançamento não pode exigir campos que o update ignora."""
+
+    def url_editar(self, lancamento):
+        return reverse('editar_lancamento', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
+            'lancamento_id': lancamento.id})
+
+    def test_edicao_com_documento_zero_nao_deixa_livro_folha_vazios_e_required(self):
+        lancamento = self.criar_lancamento_existente()
+        response = self.client.get(self.url_editar(lancamento))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        for nome in ('livro_documento', 'folha_documento'):
+            tag = _tag_input(html, nome)
+            self.assertNotIn('required', tag, tag)
+            self.assertIn('readonly', tag, tag)
+            self.assertIn('tabindex="-1"', tag, tag)
+
+    def test_edicao_exibe_link_para_editar_documento(self):
+        lancamento = self.criar_lancamento_existente()
+        html = self.client.get(self.url_editar(lancamento)).content.decode()
+        self.assertIn('Corrigir em Editar Documento', html)
+
+    def test_post_de_edicao_nao_perde_dados_e_retorna_sucesso(self):
+        lancamento = self.criar_lancamento_existente()
+        response = self.client.post(self.url_editar(lancamento), {
+            'tipo_lancamento': str(self.tipo_inicio.id), 'numero_lancamento': 'T2540',
+            'numero_lancamento_simples': '', 'data': '1951-04-11',
+            'cartorio': str(self.cri.id), 'cartorio_nome': self.cri.nome,
+            'livro_documento': '', 'folha_documento': '',
+            'sigla_documento': 'T2540', 'sigla_matricula': 'T2540',
+            'documento_id': str(self.doc.id),
+            'transmitente_nome[]': ['Transmitente #218'], 'transmitente[]': [''],
+            'adquirente_nome[]': ['Adquirente #218'], 'adquirente[]': [''],
+            'origem_completa[]': [''], 'cartorio_origem_nome[]': [''],
+            'cartorio_origem[]': [''], 'livro_origem[]': [''], 'folha_origem[]': [''],
+            'observacoes': 'editado', 'area': ''})
+        self.assertEqual(response.status_code, 302, response.content.decode()[:500])
+        lancamento.refresh_from_db()
+        self.assertEqual(str(lancamento.data), '1951-04-11')
+        self.assertEqual(lancamento.observacoes, 'editado')
+        self.assertEqual(self.livro_folha(), ('0', '0'))
+
+
+class Issue218LinkImovelDonoTest(Issue218Base):
+    """Blocker B2: o link de correção usa o imóvel DONO do documento compartilhado."""
+
+    def test_link_em_documento_compartilhado_aponta_para_imovel_dono(self):
+        self.doc.livro, self.doc.folha = '154', '3H'
+        self.doc.save()
+        lancamento_dono = self.criar_lancamento_existente()
+
+        outra_ti = TIs.objects.create(nome='Outra TI #218', codigo='TI-218B', etnia='Teste')
+        importador = Imovel.objects.create(
+            terra_indigena_id=outra_ti, nome='Importador', proprietario=self.pessoa,
+            matricula='M999', tipo_documento_principal='matricula', cartorio=self.cri)
+        doc_importador = Documento.objects.create(
+            imovel=importador, tipo=self.tipo_matricula, numero='M999',
+            data='2026-01-01', cartorio=self.cri, livro='1', folha='1')
+        # bulk_create: evita o signal criar o documento da origem automaticamente.
+        Lancamento.objects.bulk_create([Lancamento(
+            documento=doc_importador, tipo=self.tipo_inicio, data='2026-01-02',
+            origem='T2540', cartorio_origem=self.cri)])
+
+        url = reverse('editar_lancamento', kwargs={
+            'tis_id': outra_ti.id, 'imovel_id': importador.id,
+            'lancamento_id': lancamento_dono.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        esperado = reverse('editar_documento', kwargs={
+            'documento_id': self.doc.id, 'tis_id': self.tis.id, 'imovel_id': self.imovel.id})
+        self.assertIn('href="%s"' % esperado, response.content.decode())
+        self.assertEqual(self.client.get(esperado).status_code, 200)
+
+
+class Issue218RedirectsDocumentoTest(Issue218Base):
+    """Redirects pós-gravação (commit 0d53fbb5): rotas existentes."""
+
+    def test_editar_documento_redireciona_para_documento_detalhado(self):
+        url = reverse('editar_documento', kwargs={
+            'documento_id': self.doc.id, 'tis_id': self.tis.id, 'imovel_id': self.imovel.id})
+        response = self.client.post(url, {
+            'numero': self.doc.numero, 'tipo': str(self.tipo_transcricao.id),
+            'data': '2026-08-31', 'cartorio': self.cri.nome, 'cartorio_id': str(self.cri.id),
+            'livro': '3H', 'folha': '154', 'origem': self.doc.origem,
+            'observacoes': self.doc.observacoes})
+        self.assertRedirects(response, reverse('documento_detalhado', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id, 'documento_id': self.doc.id}),
+            fetch_redirect_response=False)
+
+    def test_excluir_documento_redireciona_para_cadeia_dominial(self):
+        # `excluir_documento` não tem rota em urls.py: chamada direta da view.
+        request = RequestFactory().post('/excluir-documento/')
+        request.user = self.user
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        response = excluir_documento(
+            request, tis_id=self.tis.id, imovel_id=self.imovel.id, documento_id=self.doc.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('cadeia_dominial', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id}))
+        self.assertFalse(Documento.objects.filter(id=self.doc.id).exists())

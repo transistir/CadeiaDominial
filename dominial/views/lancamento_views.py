@@ -699,6 +699,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
         'modo_edicao': True,
+        # O update não persiste livro/folha do documento (#218): travar sempre.
+        'is_edicao_lancamento': True,
         'cartorio_origem_correto': cartorio_origem_correto,
         'is_lancamento_do_imovel': is_lancamento_do_imovel,
         'is_lancamento_compartilhado': not is_lancamento_do_imovel,
