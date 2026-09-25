@@ -3,7 +3,7 @@
 Nenhum caminho do servidor inverte livro↔folha de entrada correta (guardas).
 O defeito original: a correção digitada no Novo Lançamento era DESCARTADA EM
 SILÊNCIO quando o documento já tinha livro/folha ≠ '0' (regra pétrea #138).
-Estado pós-fix: Livro/Folha já definidos ficam readonly no formulário; um POST
+Estado pós-fix: Livro/Folha já definidos ficam disabled no formulário; um POST
 divergente segue sem sobrescrever o banco, mas emite aviso; na edição de
 lançamento os campos ficam sempre travados (o update não os persiste) e o link
 "Corrigir em Editar Documento" aponta para o imóvel DONO do documento.
@@ -84,7 +84,7 @@ class Issue218Base(TestCase):
         return reverse('novo_lancamento_documento', kwargs={
             'tis_id': self.tis.id, 'imovel_id': self.imovel.id, 'documento_id': self.doc.id})
 
-    def post_lancamento(self, tipo, livro_documento, folha_documento, **extra):
+    def post_lancamento(self, tipo, livro_documento, folha_documento, omitir=(), **extra):
         """Campos que o navegador envia para transcrição; *_transacao/*_origem
         vazios, como em 12386/12387."""
         dados = {
@@ -104,11 +104,13 @@ class Issue218Base(TestCase):
             'observacoes': '', 'area': '',
         }
         dados.update(extra)
+        for chave in omitir:  # campo `disabled` não vai no POST
+            dados.pop(chave)
         return self.client.post(self.url_novo(), dados)
 
-    def post_averbacao(self, livro_documento, folha_documento):
+    def post_averbacao(self, livro_documento, folha_documento, omitir=()):
         return self.post_lancamento(
-            self.tipo_averbacao, livro_documento, folha_documento,
+            self.tipo_averbacao, livro_documento, folha_documento, omitir=omitir,
             numero_lancamento_simples='1', numero_lancamento='AV1 T2540',
             forma_averbacao='Retificação')
 
@@ -209,11 +211,27 @@ class Issue218ReproducaoTest(Issue218Base):
         # descarte deixa de ser silencioso (aviso coberto no teste de divergência).
         self.assertEqual(self.livro_folha(), ('154', '3H'))
 
-    def test_novo_lancamento_exibe_livro_folha_ja_definidos_como_readonly(self):
+    def test_novo_lancamento_exibe_livro_folha_ja_definidos_como_disabled(self):
         self.preparar_documento_ja_invertido()
         form = self.client.get(self.url_novo()).content.decode()
-        self.assertIn('readonly', _tag_input(form, 'livro_documento'))
-        self.assertIn('readonly', _tag_input(form, 'folha_documento'))
+        for nome in ('livro_documento', 'folha_documento'):
+            tag = _tag_input(form, nome)
+            self.assertIn('disabled', tag, tag)
+            self.assertIn('tabindex="-1"', tag, tag)
+            self.assertNotIn('required', tag, tag)
+
+    def test_post_sem_campos_disabled_nao_altera_documento_nem_avisa(self):
+        # Aba antiga com campos travados: o navegador não envia disabled.
+        self.doc.livro, self.doc.folha = '3H', '154'  # já corrigido em outra aba
+        self.doc.save()
+        self.criar_lancamento_existente()
+        response = self.post_averbacao(
+            '154', '3H', omitir=('livro_documento', 'folha_documento'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.livro_folha(), ('3H', '154'))
+        avisos = [m for m in get_messages(response.wsgi_request)
+                  if m.level == message_constants.WARNING]
+        self.assertEqual(avisos, [])
 
     def test_divergencia_ignorada_gera_aviso_e_preserva_regra_petrea(self):
         self.preparar_documento_ja_invertido()
@@ -267,8 +285,10 @@ class Issue218EdicaoLancamentoTest(Issue218Base):
         for nome in ('livro_documento', 'folha_documento'):
             tag = _tag_input(html, nome)
             self.assertNotIn('required', tag, tag)
-            self.assertIn('readonly', tag, tag)
+            self.assertIn('disabled', tag, tag)
             self.assertIn('tabindex="-1"', tag, tag)
+            self.assertIn('value=""', tag, tag)
+            self.assertNotIn('value="0"', tag, tag)
 
     def test_edicao_exibe_link_para_editar_documento(self):
         lancamento = self.criar_lancamento_existente()
