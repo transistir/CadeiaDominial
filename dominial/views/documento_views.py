@@ -102,7 +102,7 @@ def editar_documento(request, tis_id, imovel_id, documento_id):
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
             CacheService.invalidate_tronco_principal(imovel.id)
-            return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
+            return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento.id)
         else:
             messages.error(request, mensagem)
     
@@ -132,7 +132,7 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
             # Invalidar cache do imóvel
             CacheService.invalidate_documentos_imovel(imovel.id)
             CacheService.invalidate_tronco_principal(imovel.id)
-            return redirect('documentos', tis_id=tis.id, imovel_id=imovel.id)
+            return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
         except Exception as e:
             messages.error(request, f'Erro ao excluir documento: {str(e)}')
     
