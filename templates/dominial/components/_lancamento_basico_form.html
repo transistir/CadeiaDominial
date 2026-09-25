@@ -30,8 +30,8 @@
         <div class="form-group">
             <label for="livro_documento">Livro do Documento *</label>
             <input type="text" name="livro_documento" id="livro_documento" required
-                   {% if modo_edicao and lancamento.documento.livro and lancamento.documento.livro != '0' %}readonly{% endif %}
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento|default_if_none:'' }}{% endif %}"
+                   {% if doc_livro_definido %}readonly style="background-color: #f8f9fa;"{% endif %}
+                   value="{% if doc_livro_definido %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento|default_if_none:'' }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">Livro do documento atual (não muda após o primeiro lançamento)</small>
         </div>
@@ -40,9 +40,9 @@
             <label for="folha_documento">Folha do Documento{% if documento.tipo.tipo != 'matricula' %} *{% endif %}</label>
             <input type="text" name="folha_documento" id="folha_documento"
                    {% if documento.tipo.tipo == 'matricula' %}disabled
-                   {% elif modo_edicao and lancamento.documento.folha and lancamento.documento.folha != '0' %}readonly
+                   {% elif doc_folha_definida %}readonly style="background-color: #f8f9fa;"
                    {% else %}required{% endif %}
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento|default_if_none:'' }}{% endif %}"
+                   value="{% if doc_folha_definida %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento|default_if_none:'' }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">{% if documento.tipo.tipo == 'matricula' %}Não aplicável para matrículas{% else %}Folha do documento atual (herdada da origem){% endif %}</small>
         </div>
@@ -105,4 +105,7 @@
                value="{% if modo_edicao and lancamento.data %}{{ lancamento.data|date:'Y-m-d' }}{% elif form_data %}{{ form_data.data }}{% endif %}">
         <small class="form-text text-muted">Data do lançamento atual</small>
     </div>
+    {% if doc_livro_definido or doc_folha_definida %}
+    <small class="form-text text-muted">Livro/Folha já definidos no documento. Para corrigir, use <a href="{% url 'editar_documento' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}">Corrigir em Editar Documento</a>.</small>
+    {% endif %}
 </div> 

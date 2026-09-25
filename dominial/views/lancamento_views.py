@@ -251,6 +251,15 @@ def _origens_separadas_do_post(request):
     return origens_separadas
 
 
+def _flags_livro_folha_definidos(documento):
+    """Flags para o template travar Livro/Folha já definidos (#218).
+    Vazio e '0' contam como NÃO definido."""
+    return {
+        'doc_livro_definido': bool(documento.livro) and documento.livro != '0',
+        'doc_folha_definida': bool(documento.folha) and documento.folha != '0',
+    }
+
+
 def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoas,
                                    cartorios, tipos_lancamento, emitir_avisos=True):
     """Contexto base do formulário de novo lançamento — fonte única de verdade.
@@ -279,6 +288,7 @@ def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoa
         'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
         'is_novo_lancamento': True,
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        **_flags_livro_folha_definidos(documento_ativo),
     }
 
     # Verificar se é o primeiro lançamento do documento
@@ -694,6 +704,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'is_lancamento_compartilhado': not is_lancamento_do_imovel,
         'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        **_flags_livro_folha_definidos(lancamento.documento),
     }
     
     # Preparar dados para o template
