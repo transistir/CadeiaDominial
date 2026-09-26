@@ -51,8 +51,10 @@ class TestIssue168TabSigla(TestCase):
             numero="M168",
             data=timezone.now().date(),
             cartorio=self.cri,
-            livro="1",
-            folha="1",
+            # '0' = não definido (default de criação automática): o campo segue
+            # editável/obrigatório; livro já definido ficaria readonly (#218).
+            livro="0",
+            folha="0",
         )
 
         usuario = get_user_model().objects.create_user(
