@@ -125,6 +125,8 @@ class LancamentoOrigemService:
             dados_origem = LancamentoOrigemService._buscar_dados_origem(
                 lancamento,
                 origem_individual,
+                indice_origem=indice_origem,
+                total_origens=len(origens),
             )
             cartorio = dados_origem['cartorio']
             identidade = LancamentoOrigemService._extrair_identidade_origem(
@@ -272,6 +274,17 @@ class LancamentoOrigemService:
         )
 
         if not origens_processadas:
+            if LancamentoOrigemService._origem_ambigua(
+                origens_individuals[0], dados_origem['cartorio']
+            ):
+                logger.warning(
+                    "Origem %r do lançamento %s é ambígua no cartório %s; não vinculada",
+                    origens_individuals[0], lancamento.pk,
+                    dados_origem['cartorio'].nome,
+                )
+                return LancamentoOrigemService._montar_mensagem_origens(
+                    1, 0, 1, 'da origem identificada'
+                )
             return None
 
         documentos_criados = []
@@ -293,6 +306,20 @@ class LancamentoOrigemService:
             len(origens_processadas), len(documentos_criados), falhas,
             'das origens identificadas',
         )
+
+    @staticmethod
+    def _origem_ambigua(origem_individual, cartorio):
+        """True quando a identidade da origem casa com mais de um documento."""
+        chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
+        if not chave or not cartorio:
+            return False
+        try:
+            LancamentoOrigemService._resolver_documento_estrito(
+                chave[0], origem_individual, cartorio
+            )
+        except OrigemAmbiguaError:
+            return True
+        return False
 
     @staticmethod
     def _registrar_falha_origem(lancamento, origem_info):
@@ -424,13 +451,39 @@ class LancamentoOrigemService:
         for origem_individual in origens_individuals:
             # Buscar cartório e metadados específicos desta origem.
             dados_origem = LancamentoOrigemService._buscar_dados_origem(
-                lancamento, origem_individual
+                lancamento, origem_individual,
+                total_origens=len(origens_individuals),
             )
+            cartorio = dados_origem['cartorio']
+
+            if not cartorio:
+                # Sem cartório próprio a origem não pode ser validada nem
+                # criada: nunca cair no da primeira origem (#144).
+                logger.warning(
+                    "Origem %r do lançamento %s sem cartório próprio; não vinculada",
+                    origem_individual, lancamento.pk,
+                )
+                identificadas += 1
+                falhas += 1
+                continue
 
             # Validar com o cartório DESTA origem (#144), não o da primeira.
             origens_processadas = processar_origens_para_documentos(
-                origem_individual, imovel, lancamento, dados_origem['cartorio']
+                origem_individual, imovel, lancamento, cartorio
             )
+
+            if not origens_processadas and LancamentoOrigemService._origem_ambigua(
+                origem_individual, cartorio
+            ):
+                # A validação descarta origem ambígua em silêncio; aqui ela
+                # entra na contagem para a mensagem não omitir a rejeição.
+                logger.warning(
+                    "Origem %r do lançamento %s é ambígua no cartório %s; não vinculada",
+                    origem_individual, lancamento.pk, cartorio.nome,
+                )
+                identificadas += 1
+                falhas += 1
+                continue
 
             for origem_info in origens_processadas:
                 identificadas += 1
@@ -441,7 +494,7 @@ class LancamentoOrigemService:
                                 imovel,
                                 lancamento,
                                 origem_info,
-                                dados_origem['cartorio'],
+                                cartorio,
                                 livro_origem_informado=dados_origem['livro'],
                                 folha_origem_informada=dados_origem['folha'],
                             )
@@ -464,46 +517,114 @@ class LancamentoOrigemService:
         )
     
     @staticmethod
-    def _buscar_dados_origem(lancamento, origem_individual):
+    def _chave_identidade_texto(origem_individual):
+        """(tipo, número normalizado) inferido do texto M/T + dígitos, ou None."""
+        texto = (origem_individual or '').strip()
+        prefixo = re.match(r'^([MT])\s*\d', texto, re.IGNORECASE)
+        if prefixo:
+            tipo = 'matricula' if prefixo.group(1).upper() == 'M' else 'transcricao'
+        elif re.fullmatch(r'\d+', texto):
+            tipo = 'matricula'
+        else:
+            return None
+        try:
+            return tipo, normalizar_numero_documento(texto, tipo)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def encontrar_origem_persistida(lancamento, origem_individual, indice_origem=None):
+        """
+        Localiza a ``LancamentoOrigem`` persistida que casa com o texto da
+        origem (tipo + número normalizado). Havendo homônimos no mesmo
+        lançamento, prefere a de mesmo ``indice_origem``.
+        """
+        if not lancamento.pk:
+            return None
+        chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
+        if not chave:
+            return None
+        candidatas = [
+            origem
+            for origem in lancamento.origens_estruturadas.select_related('cartorio')
+            if (origem.tipo_documento, origem.numero_normalizado) == chave
+        ]
+        for origem in candidatas:
+            if origem.indice_origem == indice_origem:
+                return origem
+        return candidatas[0] if candidatas else None
+
+    @staticmethod
+    def _buscar_dados_origem(
+        lancamento, origem_individual, indice_origem=None, total_origens=None
+    ):
         """
         Busca cartório, livro e folha específicos para uma origem individual.
-        O cartório geral do lançamento é usado somente como fallback.
+
+        A ``LancamentoOrigem`` persistida é a fonte durável (#144); o cache do
+        formulário só otimiza o POST corrente. Ordem: cache → linha persistida
+        → (criação nova) cartório da primeira origem, único caso em que ele é
+        o cartório correto. Com linhas persistidas e nenhuma casando, devolve
+        ``cartorio=None`` para o chamador falhar de forma visível em vez de
+        regravar a origem com a identidade de outra.
         """
         from django.core.cache import cache
 
-        dados = {
-            'cartorio': (
-                lancamento.cartorio_origem or lancamento.documento.cartorio
-            ),
-            'livro': None,
-            'folha': None,
-        }
-        
-        # Tentar buscar mapeamento do cache
-        cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
-        mapeamento = cache.get(cache_key)
-        
-        if mapeamento:
-            # Buscar cartório específico para esta origem
-            for item in mapeamento:
-                if item['origem'] == origem_individual:
-                    dados['livro'] = item.get('livro')
-                    dados['folha'] = item.get('folha')
-                    # Buscar cartório pelo ID
-                    try:
-                        dados['cartorio'] = Cartorios.objects.get(
-                            id=item['cartorio_id']
-                        )
-                    except Cartorios.DoesNotExist:
-                        # Fallback: buscar por nome
-                        try:
-                            dados['cartorio'] = Cartorios.objects.get(
-                                nome__iexact=item['cartorio_nome']
-                            )
-                        except Cartorios.DoesNotExist:
-                            pass
-                    return dados
+        dados = {'cartorio': None, 'livro': None, 'folha': None}
 
+        # 1. Mapeamento do POST corrente (cache)
+        mapeamento = cache.get(f"mapeamento_origens_lancamento_{lancamento.id}")
+        for item in mapeamento or []:
+            if item['origem'] != origem_individual:
+                continue
+            dados['livro'] = item.get('livro')
+            dados['folha'] = item.get('folha')
+            cartorio = Cartorios.objects.filter(id=item['cartorio_id']).first()
+            if cartorio is None and item.get('cartorio_nome'):
+                cartorio = Cartorios.objects.filter(
+                    nome__iexact=item['cartorio_nome']
+                ).first()
+            if cartorio is not None:
+                dados['cartorio'] = cartorio
+                return dados
+            break
+
+        # 2. Linha persistida desta origem
+        persistida = LancamentoOrigemService.encontrar_origem_persistida(
+            lancamento, origem_individual, indice_origem
+        )
+        if persistida:
+            dados.update(
+                cartorio=persistida.cartorio,
+                livro=persistida.livro,
+                folha=persistida.folha,
+            )
+            return dados
+
+        if total_origens is None:
+            total_origens = len([
+                o for o in (lancamento.origem or '').split(';') if o.strip()
+            ])
+        origem_unica = total_origens <= 1
+
+        # 3. Edição: há linhas persistidas e nenhuma casa com esta origem.
+        if not origem_unica and lancamento.pk and (
+            lancamento.origens_estruturadas.exists()
+        ):
+            return dados
+
+        # 4. Criação nova. O cartório do lançamento é o da PRIMEIRA origem.
+        if not origem_unica:
+            logger.warning(
+                "Lançamento %s com múltiplas origens sem mapeamento de cartório "
+                "por origem; usando o cartório da primeira origem para %r",
+                lancamento.pk, origem_individual,
+            )
+            dados['cartorio'] = lancamento.cartorio_origem
+        else:
+            dados['cartorio'] = (
+                lancamento.cartorio_origem or lancamento.documento.cartorio
+            )
         return dados
 
     @staticmethod

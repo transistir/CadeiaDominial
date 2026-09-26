@@ -6,6 +6,7 @@ from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
 from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
 from ..services.lancamento_service import LancamentoService
+from ..services.lancamento_origem_service import LancamentoOrigemService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
 import logging
@@ -836,51 +837,55 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         })
         else:
             # Processar origens normais
-            # Tentar recuperar mapeamento de origens e cartórios do cache
-            from django.core.cache import cache
-            cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
-            mapeamento_origens = cache.get(cache_key)
-            
             if ';' in lancamento.origem:
                 origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                
-                if mapeamento_origens and len(mapeamento_origens) == len(origens_list):
-                    # Usar mapeamento do cache se disponível
-                    for i, origem in enumerate(origens_list):
-                        mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
-                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                        
-                        origens_separadas.append({
-                            'texto': origem,
-                            'index': i,
-                            'cartorio_nome': mapeamento.get('cartorio_nome', ''),
-                            'cartorio_id': mapeamento.get('cartorio_id', ''),
-                            'livro': mapeamento.get('livro', ''),
-                            'folha': mapeamento.get('folha', ''),
-                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
-                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
-                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
-                            'sigla_patrimonio_publico': '',
-                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
-                        })
-                else:
-                    # Fallback: usar cartório geral do lançamento para todas as origens
-                    for i, origem in enumerate(origens_list):
-                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                        
-                        origens_separadas.append({
-                            'texto': origem,
-                            'index': i,
-                            'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
-                            'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
-                            'livro': lancamento.livro_origem,
-                            'folha': lancamento.folha_origem,
-                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
-                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
-                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
-                            'sigla_patrimonio_publico': '',
-                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
-                        })
+
+                # A LancamentoOrigem persistida é a fonte durável do cartório
+                # de cada origem (#144); o cache do formulário só preenche
+                # lacunas (ex.: origem sem linha estruturada).
+                from django.core.cache import cache
+                mapeamento_origens = cache.get(
+                    f"mapeamento_origens_lancamento_{lancamento.id}"
+                ) or []
+                cache_por_texto = {m.get('origem'): m for m in mapeamento_origens}
+
+                for i, origem in enumerate(origens_list):
+                    origem_fim_cadeia = fim_cadeia_por_indice.get(i)
+                    persistida = LancamentoOrigemService.encontrar_origem_persistida(
+                        lancamento, origem, i
+                    )
+                    em_cache = cache_por_texto.get(origem, {})
+                    if persistida:
+                        cartorio_nome = persistida.cartorio.nome
+                        cartorio_id = persistida.cartorio_id
+                        livro, folha = persistida.livro or '', persistida.folha or ''
+                    elif em_cache:
+                        cartorio_nome = em_cache.get('cartorio_nome', '')
+                        cartorio_id = em_cache.get('cartorio_id', '')
+                        livro, folha = em_cache.get('livro', ''), em_cache.get('folha', '')
+                    elif i == 0 and lancamento.cartorio_origem:
+                        # Só a PRIMEIRA origem pode herdar o cartório do
+                        # lançamento; as demais ficam em branco em vez de
+                        # receberem (e regravarem) o cartório errado.
+                        cartorio_nome = lancamento.cartorio_origem.nome
+                        cartorio_id = lancamento.cartorio_origem.id
+                        livro, folha = lancamento.livro_origem, lancamento.folha_origem
+                    else:
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
+
+                    origens_separadas.append({
+                        'texto': origem,
+                        'index': i,
+                        'cartorio_nome': cartorio_nome,
+                        'cartorio_id': cartorio_id,
+                        'livro': livro,
+                        'folha': folha,
+                        'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
+                        'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
+                        'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
+                        'sigla_patrimonio_publico': '',
+                        'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
+                    })
             else:
                 # Uma única origem
                 origem_fim_cadeia = fim_cadeia_por_indice.get(0)

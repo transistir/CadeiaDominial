@@ -40,6 +40,53 @@ class LancamentoCamposService:
                 LancamentoCamposService._processar_campos_transacao(request, lancamento)
     
     @staticmethod
+    def _registrar_mapeamento_origens(request, lancamento):
+        """
+        Registro/averbação enviam um bloco de cartório por origem
+        (``cartorio_origem[]``), como o início de matrícula. Grava o mapeamento
+        origem→cartório/livro/folha lido por ``LancamentoOrigemService`` para
+        cada origem ser vinculada ao cartório PRÓPRIO e não ao do lançamento.
+        Só há cache quando o cartório da origem foi informado (id ou nome
+        existente); a linha persistida segue como fonte durável.
+        """
+        origens = [o.strip() for o in request.POST.getlist('origem_completa[]')]
+        if not any(origens):
+            return
+        ids = request.POST.getlist('cartorio_origem[]')
+        nomes = request.POST.getlist('cartorio_origem_nome[]')
+        livros = request.POST.getlist('livro_origem[]')
+        folhas = request.POST.getlist('folha_origem[]')
+
+        validas = []
+        mapeamento = []
+        for i, origem in enumerate(origens):
+            if not origem:
+                continue
+            validas.append(origem)
+            cartorio = None
+            if i < len(ids) and ids[i].strip():
+                cartorio = Cartorios.objects.filter(id=ids[i]).first()
+            if not cartorio and i < len(nomes) and nomes[i].strip():
+                cartorio = Cartorios.objects.filter(nome__iexact=nomes[i].strip()).first()
+            if cartorio:
+                mapeamento.append({
+                    'origem': origem,
+                    'cartorio_id': cartorio.id,
+                    'cartorio_nome': cartorio.nome,
+                    'livro': livros[i] if i < len(livros) else None,
+                    'folha': folhas[i] if i < len(folhas) else None,
+                })
+
+        lancamento.origem = '; '.join(validas)
+        if mapeamento and lancamento.id:
+            from django.core.cache import cache
+            cache.set(
+                f"mapeamento_origens_lancamento_{lancamento.id}",
+                mapeamento,
+                timeout=3600,
+            )
+
+    @staticmethod
     def _processar_campos_averbacao(request, lancamento):
         """
         Processa campos específicos para lançamentos do tipo averbação
@@ -60,6 +107,8 @@ class LancamentoCamposService:
         origem_value = request.POST.get('origem_completa', '').strip()
         if origem_value:
             lancamento.origem = origem_value
+        # Um cartório por origem (#144): o service de origens lê este mapeamento
+        LancamentoCamposService._registrar_mapeamento_origens(request, lancamento)
         
         # Processar cartório da origem (se presente)
         cartorio_origem_id = request.POST.get('cartorio_origem')
@@ -98,6 +147,8 @@ class LancamentoCamposService:
         origem_value = request.POST.get('origem_completa', '').strip()
         if origem_value:
             lancamento.origem = origem_value
+        # Um cartório por origem (#144): o service de origens lê este mapeamento
+        LancamentoCamposService._registrar_mapeamento_origens(request, lancamento)
         
         # Processar cartório da origem (se presente)
         cartorio_origem_id = request.POST.get('cartorio_origem')
