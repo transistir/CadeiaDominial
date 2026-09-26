@@ -133,12 +133,19 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > #218 → #144 → #219 → #212, depois os itens já planejados. Estimativa
 > revista de ~1–1,5 para ~1,5–2 semanas.
 
-1. **#218** 🐛 P1 produção: Livro↔Folha invertidos **no banco** — não é só
-   exibição (triagem 22/09: imóvel 488, doc 3879 T2540 gravado com
-   livro=`154`/folha=`3H`; o padrão do cartório de Ponta Porã é
-   livro=`3<letra>` + folha=número). Escopo: corrigir a gravação + reparar
-   os dados invertidos já gravados (inventariar pelo padrão do cartório).
-   Sem vínculo com #105 (causa comum descartada em revisão).
+1. **#218** ✅ P1 produção: Livro↔Folha invertidos — **CONCLUÍDO 26/09**
+   (PR #224, squash `b3e9026f` em develop; Opus 5.5 ×2 APPROVE + Greptile 5/5;
+   Codex indisponível por infra nos deltas finais — aceito pelo Hiure).
+   Formulário de lançamento não edita mais livro/folha de documento com
+   valores definidos (campos `disabled` + link Editar Documento); divergência
+   em POST gera aviso explícito (create e edição) em vez de descarte
+   silencioso; redirect 500 pré-existente de editar/excluir documento
+   corrigido. Suite 621 = baseline, zero regressão. **Dados históricos:**
+   levantamento de 13 candidatos (5 confirmados por swap-exato com gêmeo)
+   postado na issue; correção **manual pelo usuário** via Editar Documento
+   (decisão Hiure 26/09 — sem script de reparo). Issue fechada; release com
+   o fix fica para a próxima tag develop→main. Débito derivado: **#223**
+   (novo_documento 500 — assinatura incompatível).
 2. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
    regressão v1.0.3→v1.0.5 ligada a cartórios (imóvel M955, Amambai; aberta
    desde 13/08). Revalidar contra o código atual (nota acima).
