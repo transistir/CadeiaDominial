@@ -45,12 +45,15 @@ class LancamentoOrigemService:
         origens_individuals = [o.strip() for o in origem.split(';') if o.strip()]
         origens_normais = []
         origens_fim_cadeia = []
-        
-        for origem_individual in origens_individuals:
+
+        for indice_origem, origem_individual in enumerate(origens_individuals):
             if LancamentoOrigemService._is_fim_cadeia(origem_individual):
                 origens_fim_cadeia.append(origem_individual)
             else:
-                origens_normais.append(origem_individual)
+                # (índice no texto COMPLETO, texto): a posição é a chave que
+                # diferencia origens homônimas ("T366; T366") em cartórios
+                # distintos — o índice acompanha a origem até o lookup.
+                origens_normais.append((indice_origem, origem_individual))
 
         # Escrita dupla da transição: mantém Lancamento.origem intocado e
         # reconcilia somente as origens documentais que possuem identidade.
@@ -59,12 +62,11 @@ class LancamentoOrigemService:
             origens_individuals,
             imovel,
         )
-        
+
         # Processar apenas origens normais (que criam documentos)
         if origens_normais:
-            origem_normais_texto = '; '.join(origens_normais)
             return LancamentoOrigemService._processar_origens_normais(
-                lancamento, origem_normais_texto, imovel
+                lancamento, origens_normais, imovel, len(origens_individuals)
             )
         
         # Se só tem fim de cadeia, retornar mensagem informativa
@@ -197,14 +199,22 @@ class LancamentoOrigemService:
                     indice_origem=indice_temporario + deslocamento
                 )
 
-            existentes_por_identidade = {
-                (
-                    origem.tipo_documento,
-                    origem.numero_normalizado,
-                    origem.cartorio_id,
-                ): origem
-                for origem in existentes
-            }
+            # Reaproveitamento por identidade (tipo + número normalizado +
+            # cartório) com preferência pela MESMA posição (#144 rodada 3):
+            # homônimos em cartórios distintos são chaves distintas (nunca
+            # "Origem documental duplicada"), e cada chave reaproveita a linha
+            # que já ocupa a sua posição antes de qualquer outra — preserva
+            # id/livro/folha na troca de ordem das origens.
+            existentes_por_identidade = {}
+            for origem in existentes:
+                existentes_por_identidade.setdefault(
+                    (
+                        origem.tipo_documento,
+                        origem.numero_normalizado,
+                        origem.cartorio_id,
+                    ),
+                    [],
+                ).append(origem)
             ids_mantidos = []
 
             for item in desejadas:
@@ -213,7 +223,14 @@ class LancamentoOrigemService:
                     item['numero_normalizado'],
                     item['cartorio'].pk,
                 )
-                origem = existentes_por_identidade.get(chave)
+                origem = None
+                for candidata in existentes_por_identidade.get(chave, []):
+                    if candidata.indice_origem == item['indice_origem']:
+                        origem = candidata
+                        break
+                if origem is None:
+                    candidatas = existentes_por_identidade.get(chave) or []
+                    origem = candidatas[0] if candidatas else None
                 if origem is None:
                     origem = LancamentoOrigem(lancamento=lancamento)
 
@@ -251,35 +268,40 @@ class LancamentoOrigemService:
         return False
     
     @staticmethod
-    def _processar_origens_normais(lancamento, origem, imovel):
+    def _processar_origens_normais(lancamento, origens_normais, imovel, total_origens):
         """
-        Processa origens normais (que criam documentos)
-        """
-        # Extrair origens individuais do texto concatenado
-        origens_individuals = [o.strip() for o in origem.split(';') if o.strip()]
+        Processa origens normais (que criam documentos).
 
+        ``origens_normais`` carrega ``(indice_no_texto_completo, texto)`` —
+        índices do texto COMPLETO (fins de cadeia incluídos), os mesmos usados
+        pelas linhas persistidas e pelo cache do formulário (#144 rodada 3).
+        """
         # Múltiplas origens: cada uma é validada e criada com o cartório
         # específico dela (#144) - nunca pré-validar o texto todo com o
         # cartório da primeira origem.
-        if len(origens_individuals) > 1:
+        if len(origens_normais) > 1:
             return LancamentoOrigemService._processar_multiplas_origens(
-                lancamento, origens_individuals, imovel
+                lancamento, origens_normais, imovel, total_origens
             )
 
+        indice_unico, origem_unica = origens_normais[0]
         dados_origem = LancamentoOrigemService._buscar_dados_origem(
-            lancamento, origens_individuals[0]
+            lancamento,
+            origem_unica,
+            indice_origem=indice_unico,
+            total_origens=total_origens,
         )
         origens_processadas = processar_origens_para_documentos(
-            origem, imovel, lancamento, dados_origem['cartorio']
+            origem_unica, imovel, lancamento, dados_origem['cartorio']
         )
 
         if not origens_processadas:
             if LancamentoOrigemService._origem_ambigua(
-                origens_individuals[0], dados_origem['cartorio']
+                origem_unica, dados_origem['cartorio']
             ):
                 logger.warning(
                     "Origem %r do lançamento %s é ambígua no cartório %s; não vinculada",
-                    origens_individuals[0], lancamento.pk,
+                    origem_unica, lancamento.pk,
                     dados_origem['cartorio'].nome,
                 )
                 return LancamentoOrigemService._montar_mensagem_origens(
@@ -439,20 +461,26 @@ class LancamentoOrigemService:
         return f'Documento de fim de cadeia criado: {documento_criado.numero} ({documento_criado.tipo.get_tipo_display()}) com classificação "{classificacao}"'
     
     @staticmethod
-    def _processar_multiplas_origens(lancamento, origens_individuals, imovel):
+    def _processar_multiplas_origens(lancamento, origens_normais, imovel, total_origens):
         """
-        Processa múltiplas origens com seus respectivos cartórios
+        Processa múltiplas origens com seus respectivos cartórios.
+
+        ``origens_normais`` carrega ``(indice_no_texto_completo, texto)``: o
+        índice viaja com a origem para que homônimos ("T366; T366") em
+        cartórios distintos sejam diferenciados pela POSIÇÃO (#144 rodada 3).
         """
         documentos_criados = []
         identificadas = 0
         falhas = 0
 
         # Para cada origem individual, criar documento com cartório específico
-        for origem_individual in origens_individuals:
+        for indice_origem, origem_individual in origens_normais:
             # Buscar cartório e metadados específicos desta origem.
             dados_origem = LancamentoOrigemService._buscar_dados_origem(
-                lancamento, origem_individual,
-                total_origens=len(origens_individuals),
+                lancamento,
+                origem_individual,
+                indice_origem=indice_origem,
+                total_origens=total_origens,
             )
             cartorio = dados_origem['cartorio']
 
@@ -535,24 +563,46 @@ class LancamentoOrigemService:
     @staticmethod
     def encontrar_origem_persistida(lancamento, origem_individual, indice_origem=None):
         """
-        Localiza a ``LancamentoOrigem`` persistida que casa com o texto da
-        origem (tipo + número normalizado). Havendo homônimos no mesmo
-        lançamento, prefere a de mesmo ``indice_origem``.
+        Localiza a ``LancamentoOrigem`` persistida da origem na POSIÇÃO do
+        texto (#144 rodada 3).
+
+        Ordem de resolução:
+
+        1. Linha com ``indice_origem`` igual ao da origem sendo processada E
+           identidade (tipo + número normalizado) igual ao texto — o caso
+           normal de re-save, em que cada posição continua sendo a mesma
+           origem. É a única forma de diferenciar "T366; T366" em cartórios
+           distintos: o texto sozinho não distingue.
+        2. Homônimo em OUTRA posição — cobre a edição que trocou o texto da
+           posição (a linha antiga da posição não pode emprestar seu cartório
+           para a identidade nova) e o legado com índices reordenados. A
+           identidade carrega o cartório certo para a nova posição.
+        3. Nada casa → ``None``: o chamador falha de forma visível em vez de
+           regravar a origem com a identidade de outra.
         """
         if not lancamento.pk:
             return None
         chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
         if not chave:
             return None
-        candidatas = [
-            origem
-            for origem in lancamento.origens_estruturadas.select_related('cartorio')
-            if (origem.tipo_documento, origem.numero_normalizado) == chave
-        ]
-        for origem in candidatas:
-            if origem.indice_origem == indice_origem:
+        origens = list(
+            lancamento.origens_estruturadas.select_related('cartorio')
+            .order_by('indice_origem')
+        )
+        if indice_origem is not None:
+            na_posicao = next(
+                (origem for origem in origens if origem.indice_origem == indice_origem),
+                None,
+            )
+            if na_posicao and (
+                na_posicao.tipo_documento,
+                na_posicao.numero_normalizado,
+            ) == chave:
+                return na_posicao
+        for origem in origens:
+            if (origem.tipo_documento, origem.numero_normalizado) == chave:
                 return origem
-        return candidatas[0] if candidatas else None
+        return None
 
     @staticmethod
     def _buscar_dados_origem(
@@ -567,27 +617,47 @@ class LancamentoOrigemService:
         o cartório correto. Com linhas persistidas e nenhuma casando, devolve
         ``cartorio=None`` para o chamador falhar de forma visível em vez de
         regravar a origem com a identidade de outra.
+
+        A POSIÇÃO (``indice_origem``) é a chave primária do lookup em ambas
+        as fontes (#144 rodada 3): origens textualmente idênticas em cartórios
+        distintos ("T366; T366") só são diferenciadas pela posição. O match
+        por texto é o fallback para mapeamento parcial/legado.
         """
         from django.core.cache import cache
 
         dados = {'cartorio': None, 'livro': None, 'folha': None}
 
-        # 1. Mapeamento do POST corrente (cache)
+        # 1. Mapeamento do POST corrente (cache). O mapeamento gravado pelo
+        # formulário é uma lista ordenada por posição; o acesso posicional só
+        # vale quando ele cobre TODAS as origens (entradas sem cartório
+        # resolvido são omitidas) e o texto na posição bate.
         mapeamento = cache.get(f"mapeamento_origens_lancamento_{lancamento.id}")
-        for item in mapeamento or []:
-            if item['origem'] != origem_individual:
-                continue
-            dados['livro'] = item.get('livro')
-            dados['folha'] = item.get('folha')
-            cartorio = Cartorios.objects.filter(id=item['cartorio_id']).first()
+        itens_candidatos = []
+        if mapeamento:
+            if (
+                indice_origem is not None
+                and total_origens is not None
+                and len(mapeamento) == total_origens
+                and 0 <= indice_origem < len(mapeamento)
+                and mapeamento[indice_origem].get('origem') == origem_individual
+            ):
+                itens_candidatos.append(mapeamento[indice_origem])
+            itens_candidatos.extend(
+                item
+                for item in mapeamento
+                if item.get('origem') == origem_individual
+            )
+        for item in itens_candidatos:
+            cartorio = Cartorios.objects.filter(id=item.get('cartorio_id')).first()
             if cartorio is None and item.get('cartorio_nome'):
                 cartorio = Cartorios.objects.filter(
                     nome__iexact=item['cartorio_nome']
                 ).first()
             if cartorio is not None:
+                dados['livro'] = item.get('livro')
+                dados['folha'] = item.get('folha')
                 dados['cartorio'] = cartorio
                 return dados
-            break
 
         # 2. Linha persistida desta origem
         persistida = LancamentoOrigemService.encontrar_origem_persistida(

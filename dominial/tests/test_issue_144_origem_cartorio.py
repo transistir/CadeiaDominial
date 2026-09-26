@@ -23,6 +23,19 @@ cada origem; o cache do formulário é só otimização do POST corrente:
 - T9: OrigemAmbiguaError nunca escapa do signal.
 - T10: falha na origem 2 de 3 não desfaz a 1 nem impede a 3.
 - T11: registro/averbação gravam o cartório próprio de cada origem.
+
+Rodada 3 — a POSIÇÃO (indice_origem) é a chave primária do lookup; origens
+textualmente idênticas em cartórios distintos ("T366; T366") deixam de colidir:
+- T12: homônimos persistidos resolvem por posição no re-save (documento criado
+  em cada cartório).
+- T13: cache do formulário com textos idênticos também resolve por posição.
+- T14: criação com "T366; T366" e cartórios [A, B] cria DOIS documentos.
+- T15: trocar o texto de uma posição não herda o cartório da linha antiga nem
+  o de homônimo que não case; troca de ordem re-casa as linhas por identidade.
+- T16: edição cuja sync falha reverte TUDO (texto + estruturadas) e a mensagem
+  diz que nada foi salvo.
+- T17: "T366; T366" em cartórios distintos NÃO é "Origem documental duplicada"
+  (a chave de identidade inclui o cartório).
 """
 import logging
 from datetime import date
@@ -619,3 +632,207 @@ class T11RegistroAverbacaoTest(Issue144Rodada2Base):
             ("M100", self.cartorio_a.pk, "L1", "F1"),
             ("T366", self.cartorio_b.pk, "L2", "F2"),
         ])
+
+
+class Issue144Rodada3Base(Issue144Rodada2Base):
+    def criar_origens_homonimas(self, lancamento):
+        """"T366; T366": índices 0/A e 1/B, livro/folha distintos."""
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=0, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_a, livro="LA1", folha="FA1",
+        )
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=1, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_b, livro="LB2", folha="FB2",
+        )
+
+    def assert_documento_t366_no_cartorio(self, cartorio):
+        self.assertTrue(
+            Documento.objects.filter(
+                tipo=self.tipo_transcricao, numero_normalizado="366",
+                cartorio=cartorio,
+            ).exists(),
+            f"documento T366 não criado no cartório {cartorio.nome}",
+        )
+
+
+class T12LookupPosicionalPersistidoTest(Issue144Rodada3Base):
+    def test_t12_homonimos_persistidos_resolvem_por_posicao_no_resave(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        self.criar_origens_homonimas(lancamento)
+        antes = self.estado_origens(lancamento)
+        cache.clear()
+
+        # Lookup direto: a posição 1 devolve o cartório B (e seu livro/folha).
+        dados = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=1, total_origens=2
+        )
+        self.assertEqual(dados["cartorio"], self.cartorio_b)
+        self.assertEqual((dados["livro"], dados["folha"]), ("LB2", "FB2"))
+
+        # Re-save completo com cache limpo: cada posição re-processa com o
+        # cartório PRÓPRIO — documento criado em A E em B, linhas preservadas.
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento, lancamento.origem, imovel
+        )
+
+        self.assert_documento_t366_no_cartorio(self.cartorio_a)
+        self.assert_documento_t366_no_cartorio(self.cartorio_b)
+        self.assertEqual(self.estado_origens(lancamento), antes)
+
+
+class T13LookupPosicionalCacheTest(Issue144Rodada3Base):
+    def test_t13_cache_com_textos_iguais_resolve_por_posicao(self):
+        _, _, lancamento = self.criar_cenario_atual("T366; T366", self.cartorio_a)
+        _mapeamento(lancamento, [
+            ("T366", self.cartorio_a), ("T366", self.cartorio_b),
+        ])
+
+        dados_pos_0 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=0, total_origens=2
+        )
+        dados_pos_1 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=1, total_origens=2
+        )
+        self.assertEqual(dados_pos_0["cartorio"], self.cartorio_a)
+        self.assertEqual(dados_pos_1["cartorio"], self.cartorio_b)
+
+
+class T14CriacaoHomominimosTest(Issue144Rodada3Base):
+    def test_t14_criacao_com_homonimos_cria_documento_em_ambos_cartorios(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        cache.clear()
+        request = RequestFactory().post("/x/", {
+            "origem_completa[]": ["T366", "T366"],
+            "cartorio_origem[]": [str(self.cartorio_a.pk), str(self.cartorio_b.pk)],
+            "cartorio_origem_nome[]": [self.cartorio_a.nome, self.cartorio_b.nome],
+            "livro_origem[]": ["LA1", "LB2"],
+            "folha_origem[]": ["FA1", "FB2"],
+        })
+        LancamentoCamposService._processar_campos_inicio_matricula(
+            request, lancamento
+        )
+
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento, lancamento.origem, imovel
+        )
+
+        self.assert_documento_t366_no_cartorio(self.cartorio_a)
+        self.assert_documento_t366_no_cartorio(self.cartorio_b)
+        self.assertEqual(self.estado_origens(lancamento), [
+            ("T366", self.cartorio_a.pk, "LA1", "FA1"),
+            ("T366", self.cartorio_b.pk, "LB2", "FB2"),
+        ])
+
+
+class T15EdicaoTrocaOrigemTest(Issue144Rodada3Base):
+    def test_t15_texto_novo_na_posicao_nao_herda_cartorio_da_linha_antiga(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        self.criar_origens_homonimas(lancamento)
+        antes = self.estado_origens(lancamento)
+        cache.clear()
+
+        # Usuário trocou a posição 1 para M999 sem cartório mapeado: a linha
+        # antiga da posição (T366/B) não pode emprestar seu cartório.
+        dados = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "M999", indice_origem=1, total_origens=2
+        )
+        self.assertIsNone(dados["cartorio"])
+
+        with self.assertRaises(ValidationError):
+            LancamentoOrigemService._sincronizar_origens_estruturadas(
+                lancamento, ["T366", "M999"], imovel
+            )
+        self.assertEqual(self.estado_origens(lancamento), antes)
+
+    def test_t15_troca_de_ordem_recasa_linhas_por_identidade(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; M999", self.cartorio_a
+        )
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=0, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_a, livro="LA1", folha="FA1",
+        )
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=1, tipo_documento="matricula",
+            numero="M999", cartorio=self.cartorio_b, livro="LB2", folha="FB2",
+        )
+        cache.clear()
+
+        # "T366; M999" virou "M999; T366": cada identidade leva seu cartório
+        # para a nova posição.
+        LancamentoOrigemService._sincronizar_origens_estruturadas(
+            lancamento, ["M999", "T366"], imovel
+        )
+
+        self.assertEqual(self.estado_origens(lancamento), [
+            ("M999", self.cartorio_b.pk, "LB2", "FB2"),
+            ("T366", self.cartorio_a.pk, "LA1", "FA1"),
+        ])
+
+
+class T16AtomicidadeEdicaoTest(Issue144Rodada3Base):
+    def test_t16_edicao_com_origem_sem_cartorio_falha_e_nada_e_salvo(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "M100; T366", self.cartorio_a
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(numero_lancamento="1")
+        self.criar_origens_persistidas(lancamento)
+        antes_origens = self.estado_origens(lancamento)
+        cache.clear()
+        User.objects.create_user(username="t16", password="t16pass")
+        client = Client()
+        client.login(username="t16", password="t16pass")
+
+        # Usuário trocou a 2ª origem para M999 sem cartório mapeado.
+        response = client.post(reverse("editar_lancamento", kwargs={
+            "tis_id": self.ti.id, "imovel_id": imovel.id,
+            "lancamento_id": lancamento.pk,
+        }), {
+            "tipo_lancamento": str(lancamento.tipo_id),
+            "numero_lancamento": "1",
+            "data": "2026-01-02",
+            "observacoes": "",
+            "origem_completa[]": ["M100", "M999"],
+            "cartorio_origem[]": [str(self.cartorio_a.pk), ""],
+            "cartorio_origem_nome[]": [self.cartorio_a.nome, ""],
+            "livro_origem[]": ["L1", ""],
+            "folha_origem[]": ["F1", ""],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.origem, "M100; T366")
+        self.assertEqual(
+            Lancamento.objects.get(pk=lancamento.pk).numero_lancamento, "1"
+        )
+        self.assertEqual(self.estado_origens(lancamento), antes_origens)
+        mensagens = [str(m) for m in response.context["messages"]]
+        self.assertTrue(
+            any("Nenhuma alteração foi salva" in m for m in mensagens),
+            mensagens,
+        )
+
+
+class T17NaoDuplicataTest(Issue144Rodada3Base):
+    def test_t17_homonimos_em_cartorios_distintos_nao_sao_duplicados(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        self.criar_origens_homonimas(lancamento)
+        antes = self.estado_origens(lancamento)
+        cache.clear()
+
+        # A chave de identidade inclui o cartório: não é "Origem documental
+        # duplicada", e as duas linhas são reaproveitadas nas suas posições.
+        LancamentoOrigemService._sincronizar_origens_estruturadas(
+            lancamento, ["T366", "T366"], imovel
+        )
+
+        self.assertEqual(self.estado_origens(lancamento), antes)

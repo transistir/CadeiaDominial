@@ -842,19 +842,33 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
 
                 # A LancamentoOrigem persistida é a fonte durável do cartório
                 # de cada origem (#144); o cache do formulário só preenche
-                # lacunas (ex.: origem sem linha estruturada).
+                # lacunas (ex.: origem sem linha estruturada). A posição é a
+                # chave primária também aqui (#144 rodada 3): textos
+                # idênticos em cartórios distintos não podem colapsar no
+                # primeiro casamento por texto.
                 from django.core.cache import cache
                 mapeamento_origens = cache.get(
                     f"mapeamento_origens_lancamento_{lancamento.id}"
                 ) or []
-                cache_por_texto = {m.get('origem'): m for m in mapeamento_origens}
+
+                def _item_do_cache(indice, texto):
+                    if (
+                        len(mapeamento_origens) == len(origens_list)
+                        and indice < len(mapeamento_origens)
+                        and mapeamento_origens[indice].get('origem') == texto
+                    ):
+                        return mapeamento_origens[indice]
+                    return next(
+                        (m for m in mapeamento_origens if m.get('origem') == texto),
+                        None,
+                    )
 
                 for i, origem in enumerate(origens_list):
                     origem_fim_cadeia = fim_cadeia_por_indice.get(i)
                     persistida = LancamentoOrigemService.encontrar_origem_persistida(
                         lancamento, origem, i
                     )
-                    em_cache = cache_por_texto.get(origem, {})
+                    em_cache = _item_do_cache(i, origem) or {}
                     if persistida:
                         cartorio_nome = persistida.cartorio.nome
                         cartorio_id = persistida.cartorio_id
