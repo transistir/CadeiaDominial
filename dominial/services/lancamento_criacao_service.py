@@ -3,6 +3,8 @@ Service especializado para criação e atualização de lançamentos
 """
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from ..models import Lancamento, LancamentoTipo
 from .lancamento_form_service import LancamentoFormService
@@ -282,71 +284,88 @@ class LancamentoCriacaoService:
             # Processar campos específicos por tipo de lançamento
             print("DEBUG: Processando campos específicos por tipo...")
             LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
-            
-            # Salvar o lançamento
-            print("DEBUG: Salvando lançamento...")
-            lancamento.save()
-            print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
-            
-            # #218: o update nunca grava livro/folha do documento; se o POST
-            # trouxe valor divergente (aba stale), avisar em vez de descartar.
-            LancamentoCriacaoService._avisar_divergencias(
-                request,
-                LancamentoCriacaoService._divergencias_livro_folha(
-                    lancamento.documento, request.POST),
-            )
-            
-            # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento
-            print("DEBUG: Aplicando regra pétrea...")
-            regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
-            if regra_aplicada:
-                print("DEBUG: Regra pétrea aplicada - livro e folha definidos no documento")
-            else:
-                print("DEBUG: Regra pétrea não aplicada - não é o primeiro lançamento")
-            
-            # Processar origens para criar documentos automáticos
-            origens_completas = request.POST.getlist('origem_completa[]')
-            if origens_completas:
-                # Filtrar origens vazias e concatenar
-                origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
-                origem = '; '.join(origens_validas) if origens_validas else ''
-            else:
-                # Fallback para campo único
-                origem = request.POST.get('origem_completa', '').strip()
-            
-            mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
-                lancamento, origem, imovel
-            )
-            
-            # Limpar pessoas existentes do lançamento
-            lancamento.pessoas.all().delete()
-            
-            # Processar transmitentes
-            transmitentes_data = request.POST.getlist('transmitente_nome[]')
-            transmitente_ids = request.POST.getlist('transmitente[]')
-            
-            # Pessoas processadas no service consolidado
-            LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, transmitentes_data, transmitente_ids, 'transmitente'
-            )
-            
-            # Processar adquirentes
-            adquirentes_data = request.POST.getlist('adquirente_nome[]')
-            adquirente_ids = request.POST.getlist('adquirente[]')
-            
-            # Pessoas processadas no service consolidado
-            LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, adquirentes_data, adquirente_ids, 'adquirente'
-            )
-            
+
+            # ATOMICIDADE (#144 rodada 3): o texto de `lancamento.origem` e as
+            # origens estruturadas são gravados na MESMA transação. Sem isso,
+            # uma falha na sincronização (ex.: origem nova sem cartório
+            # mapeado) deixava o texto novo persistido apontando origens que
+            # as linhas estruturadas não confirmam. O signal post_save roda
+            # dentro do atomic (savepoint) e também é coberto pelo rollback;
+            # `messages` e `cache.set` não são transacionais e ficam como
+            # estão. A falha de CRIAÇÃO de documento de origem segue contada
+            # na mensagem (capturada dentro de processar_origens_automaticas),
+            # sem derrubar a transação.
+            with transaction.atomic():
+                # Salvar o lançamento
+                print("DEBUG: Salvando lançamento...")
+                lancamento.save()
+                print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
+
+                # #218: o update nunca grava livro/folha do documento; se o POST
+                # trouxe valor divergente (aba stale), avisar em vez de descartar.
+                LancamentoCriacaoService._avisar_divergencias(
+                    request,
+                    LancamentoCriacaoService._divergencias_livro_folha(
+                        lancamento.documento, request.POST),
+                )
+
+                # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento
+                print("DEBUG: Aplicando regra pétrea...")
+                regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
+                if regra_aplicada:
+                    print("DEBUG: Regra pétrea aplicada - livro e folha definidos no documento")
+                else:
+                    print("DEBUG: Regra pétrea não aplicada - não é o primeiro lançamento")
+
+                # Processar origens para criar documentos automáticos
+                origens_completas = request.POST.getlist('origem_completa[]')
+                if origens_completas:
+                    # Filtrar origens vazias e concatenar
+                    origens_validas = [origem.strip() for origem in origens_completas if origem.strip()]
+                    origem = '; '.join(origens_validas) if origens_validas else ''
+                else:
+                    # Fallback para campo único
+                    origem = request.POST.get('origem_completa', '').strip()
+
+                mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
+                    lancamento, origem, imovel
+                )
+
+                # Limpar pessoas existentes do lançamento
+                lancamento.pessoas.all().delete()
+
+                # Processar transmitentes
+                transmitentes_data = request.POST.getlist('transmitente_nome[]')
+                transmitente_ids = request.POST.getlist('transmitente[]')
+
+                # Pessoas processadas no service consolidado
+                LancamentoPessoaService.processar_pessoas_lancamento(
+                    lancamento, transmitentes_data, transmitente_ids, 'transmitente'
+                )
+
+                # Processar adquirentes
+                adquirentes_data = request.POST.getlist('adquirente_nome[]')
+                adquirente_ids = request.POST.getlist('adquirente[]')
+
+                # Pessoas processadas no service consolidado
+                LancamentoPessoaService.processar_pessoas_lancamento(
+                    lancamento, adquirentes_data, adquirente_ids, 'adquirente'
+                )
+
             print("DEBUG: Lançamento atualizado com sucesso!")
             return True, mensagem_origens
-            
+
+        except ValidationError as e:
+            print(f"DEBUG: Atualização cancelada por validação: {str(e)}")
+            motivo = '; '.join(e.messages) if hasattr(e, 'messages') else str(e)
+            return False, (
+                f'Atualização cancelada: {motivo}. Nenhuma alteração foi salva.'
+            )
         except Exception as e:
             print(f"DEBUG: Erro durante atualização: {str(e)}")
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
-            return False, f'Erro ao atualizar lançamento: {str(e)}'
+            return False, f'Erro ao atualizar lançamento: {str(e)}. Nenhuma alteração foi salva.'
     
     @staticmethod
     def _avisar_divergencias(request, divergencias):

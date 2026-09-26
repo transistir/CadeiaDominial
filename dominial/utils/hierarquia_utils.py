@@ -365,7 +365,7 @@ def identificar_documentos_importados(imovel):
     return documentos_compartilhados
 
 
-def processar_origens_para_documentos(origem_texto, imovel, lancamento):
+def processar_origens_para_documentos(origem_texto, imovel, lancamento, cartorio=None):
     """
     Processa o texto de origem de um lançamento e extrai informações de documentos
     que podem ser criados automaticamente.
@@ -376,6 +376,9 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
         origem_texto (str): Texto contendo as origens (ex: "M123; T456")
         imovel: Objeto Imovel
         lancamento: Objeto Lancamento
+        cartorio: Cartório da(s) origem(ns) em ``origem_texto`` (#144). Sem ele,
+            cai no ``lancamento.cartorio_origem`` (cartório da PRIMEIRA
+            origem) — só correto quando o texto tem uma única origem.
     
     Returns:
         list: Lista de dicionários com informações dos documentos identificados
@@ -409,7 +412,7 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
         # VALIDAÇÃO 1: Apenas origens com formato M/T seguido de números
         if re.match(r'^[MT]\d+$', origem):
             # VALIDAÇÃO 2: Verificar se o documento já existe em outro imóvel
-            if _validar_origem_existente(origem, imovel, lancamento):
+            if _validar_origem_existente(origem, imovel, lancamento, cartorio):
                 tipo = 'matricula' if origem.startswith('M') else 'transcricao'
                 origens_processadas.append({
                     'numero': origem,
@@ -422,7 +425,7 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
         # VALIDAÇÃO 3: Números simples - assumir como matrícula (padrão)
         elif re.match(r'^\d+$', origem):
             # Para números simples, assumir como matrícula (padrão do sistema)
-            if _validar_origem_existente(f'M{origem}', imovel, lancamento):
+            if _validar_origem_existente(f'M{origem}', imovel, lancamento, cartorio):
                 origens_processadas.append({
                     'numero': f'M{origem}',
                     'tipo': 'matricula',
@@ -445,7 +448,7 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
                 numero_completo = f'{prefixo}{numero}'
                 
                 # VALIDAÇÃO 5: Verificar se existe em outros imóveis
-                if _validar_origem_existente(numero_completo, imovel, lancamento):
+                if _validar_origem_existente(numero_completo, imovel, lancamento, cartorio):
                     origens_processadas.append({
                         'numero': numero_completo,
                         'tipo': tipo,
@@ -457,7 +460,7 @@ def processar_origens_para_documentos(origem_texto, imovel, lancamento):
     return origens_processadas
 
 
-def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
+def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None, cartorio=None):
     """
     Valida se uma origem deve ser criada automaticamente.
     
@@ -471,16 +474,18 @@ def _validar_origem_existente(numero_documento, imovel_atual, lancamento=None):
         numero_documento (str): Número do documento (ex: "M123")
         imovel_atual: Objeto Imovel atual
         lancamento: Objeto Lancamento (opcional, para verificar tipo)
+        cartorio: Cartório da origem sendo validada (#144). Sem ele, usa
+            ``lancamento.cartorio_origem`` (cartório da primeira origem).
     
     Returns:
         bool: True se a origem deve ser criada, False caso contrário
     """
     from ..models import Documento, Lancamento
 
-    cartorio_origem = lancamento.cartorio_origem if lancamento else None
+    cartorio_origem = cartorio or (lancamento.cartorio_origem if lancamento else None)
 
     # Resolver pela identidade completa (tipo, número normalizado e cartório
-    # do lançamento) - nunca por número isolado.
+    # da PRÓPRIA origem) - nunca por número isolado.
     documento_existente = _resolver_documento_por_codigo(numero_documento, cartorio_origem)
     if documento_existente and documento_existente.imovel_id == imovel_atual.id:
         # É o próprio documento do imóvel atual, não uma origem em outro imóvel
