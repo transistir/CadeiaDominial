@@ -1,6 +1,7 @@
 """
 Service para processamento de origens automáticas dos lançamentos
 """
+import logging
 import re
 import uuid
 
@@ -17,6 +18,13 @@ from ..utils.documento_identidade_utils import (
     DocumentoIdentidade,
     normalizar_numero_documento,
 )
+
+logger = logging.getLogger(__name__)
+
+
+class OrigemAmbiguaError(Exception):
+    """A identidade da origem casa com mais de um documento (#144)."""
+
 
 class LancamentoOrigemService:
     @staticmethod
@@ -66,7 +74,7 @@ class LancamentoOrigemService:
         return None
 
     @staticmethod
-    def _extrair_identidade_origem(origem_individual, imovel, lancamento):
+    def _extrair_identidade_origem(origem_individual, imovel, lancamento, cartorio=None):
         """Extrai uma identidade documental sem converter fins de cadeia."""
         numero_informado = origem_individual.strip()
         prefixo_direto = re.match(r'^([MT])\s*\d', numero_informado, re.IGNORECASE)
@@ -91,6 +99,7 @@ class LancamentoOrigemService:
             numero_informado,
             imovel,
             lancamento,
+            cartorio,
         )
         if len(processadas) != 1:
             return None
@@ -111,20 +120,23 @@ class LancamentoOrigemService:
             if LancamentoOrigemService._is_fim_cadeia(origem_individual):
                 continue
 
-            identidade = LancamentoOrigemService._extrair_identidade_origem(
-                origem_individual,
-                imovel,
-                lancamento,
-            )
-            if not identidade:
-                continue
-
-            tipo_documento, numero = identidade
+            # Cartório da PRÓPRIA origem (#144): a validação de texto livre
+            # nunca usa o cartório da primeira origem para as demais.
             dados_origem = LancamentoOrigemService._buscar_dados_origem(
                 lancamento,
                 origem_individual,
             )
             cartorio = dados_origem['cartorio']
+            identidade = LancamentoOrigemService._extrair_identidade_origem(
+                origem_individual,
+                imovel,
+                lancamento,
+                cartorio,
+            )
+            if not identidade:
+                continue
+
+            tipo_documento, numero = identidade
             if not cartorio:
                 raise ValidationError(
                     f'Cartório obrigatório para a origem {indice_origem + 1}.'
@@ -241,36 +253,76 @@ class LancamentoOrigemService:
         """
         Processa origens normais (que criam documentos)
         """
-        # Processar origens identificadas
-        origens_processadas = processar_origens_para_documentos(origem, imovel, lancamento)
-        
-        if not origens_processadas:
-            return None
-        
         # Extrair origens individuais do texto concatenado
         origens_individuals = [o.strip() for o in origem.split(';') if o.strip()]
-        
-        # Se há múltiplas origens, processar cada uma com seu cartório específico
+
+        # Múltiplas origens: cada uma é validada e criada com o cartório
+        # específico dela (#144) - nunca pré-validar o texto todo com o
+        # cartório da primeira origem.
         if len(origens_individuals) > 1:
             return LancamentoOrigemService._processar_multiplas_origens(
                 lancamento, origens_individuals, imovel
             )
-        else:
-            # Processamento original para uma única origem
-            documentos_criados = []
-        
+
+        dados_origem = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, origens_individuals[0]
+        )
+        origens_processadas = processar_origens_para_documentos(
+            origem, imovel, lancamento, dados_origem['cartorio']
+        )
+
+        if not origens_processadas:
+            return None
+
+        documentos_criados = []
+        falhas = 0
         for origem_info in origens_processadas:
-            documento_criado = LancamentoOrigemService._criar_documento_automatico(
-                imovel, lancamento, origem_info
-            )
+            try:
+                with transaction.atomic():
+                    documento_criado = LancamentoOrigemService._criar_documento_automatico(
+                        imovel, lancamento, origem_info, dados_origem['cartorio']
+                    )
+            except Exception:
+                LancamentoOrigemService._registrar_falha_origem(lancamento, origem_info)
+                falhas += 1
+                continue
             if documento_criado:
                 documentos_criados.append(documento_criado)
-        
-        if documentos_criados:
-            return f'Foram criados {len(documentos_criados)} documento(s) automaticamente a partir das origens identificadas.'
-        
-        return f'Foram identificadas {len(origens_processadas)} origem(ns) para criação automática de documentos.'
-    
+
+        return LancamentoOrigemService._montar_mensagem_origens(
+            len(origens_processadas), len(documentos_criados), falhas,
+            'das origens identificadas',
+        )
+
+    @staticmethod
+    def _registrar_falha_origem(lancamento, origem_info):
+        """Falha na criação automática nunca é silenciosa (#144)."""
+        logger.exception(
+            "Falha ao criar documento automático para a origem %s do lançamento %s",
+            origem_info.get('numero'), lancamento.pk,
+        )
+
+    @staticmethod
+    def _montar_mensagem_origens(identificadas, criados, falhas, complemento):
+        """Mensagem ao usuário que reflete criações, reaproveitamentos e falhas."""
+        if falhas:
+            partes = []
+            if criados:
+                partes.append(f'{criados} documento(s) criado(s) automaticamente')
+            partes.append(
+                f'{falhas} não puderam ser vinculadas — verifique os avisos na árvore'
+            )
+            return (
+                f'Foram identificadas {identificadas} origem(ns): '
+                + '; '.join(partes) + '.'
+            )
+        if criados:
+            return f'Foram criados {criados} documento(s) automaticamente a partir {complemento}.'
+        return (
+            f'Foram identificadas {identificadas} origem(ns); '
+            'os documentos já existiam e foram reaproveitados.'
+        )
+
     @staticmethod
     def _processar_fim_cadeia(lancamento, origem, imovel):
         """
@@ -365,33 +417,51 @@ class LancamentoOrigemService:
         Processa múltiplas origens com seus respectivos cartórios
         """
         documentos_criados = []
-        
+        identificadas = 0
+        falhas = 0
+
         # Para cada origem individual, criar documento com cartório específico
         for origem_individual in origens_individuals:
-            # Processar origem individual para extrair informações
-            origens_processadas = processar_origens_para_documentos(origem_individual, imovel, lancamento)
-            
+            # Buscar cartório e metadados específicos desta origem.
+            dados_origem = LancamentoOrigemService._buscar_dados_origem(
+                lancamento, origem_individual
+            )
+
+            # Validar com o cartório DESTA origem (#144), não o da primeira.
+            origens_processadas = processar_origens_para_documentos(
+                origem_individual, imovel, lancamento, dados_origem['cartorio']
+            )
+
             for origem_info in origens_processadas:
-                # Buscar cartório e metadados específicos desta origem.
-                dados_origem = LancamentoOrigemService._buscar_dados_origem(
-                    lancamento, origem_individual
-                )
-                
-                documento_criado = LancamentoOrigemService._criar_documento_automatico_com_cartorio(
-                    imovel,
-                    lancamento,
-                    origem_info,
-                    dados_origem['cartorio'],
-                    livro_origem_informado=dados_origem['livro'],
-                    folha_origem_informada=dados_origem['folha'],
-                )
+                identificadas += 1
+                try:
+                    with transaction.atomic():
+                        documento_criado = (
+                            LancamentoOrigemService._criar_documento_automatico_com_cartorio(
+                                imovel,
+                                lancamento,
+                                origem_info,
+                                dados_origem['cartorio'],
+                                livro_origem_informado=dados_origem['livro'],
+                                folha_origem_informada=dados_origem['folha'],
+                            )
+                        )
+                except Exception:
+                    LancamentoOrigemService._registrar_falha_origem(
+                        lancamento, origem_info
+                    )
+                    falhas += 1
+                    continue
                 if documento_criado:
                     documentos_criados.append(documento_criado)
-        
-        if documentos_criados:
-            return f'Foram criados {len(documentos_criados)} documento(s) automaticamente a partir das múltiplas origens identificadas.'
-        
-        return f'Foram identificadas {len(origens_individuals)} origem(ns) para criação automática de documentos.'
+
+        if not identificadas:
+            return None
+
+        return LancamentoOrigemService._montar_mensagem_origens(
+            identificadas, len(documentos_criados), falhas,
+            'das múltiplas origens identificadas',
+        )
     
     @staticmethod
     def _buscar_dados_origem(lancamento, origem_individual):
@@ -483,76 +553,23 @@ class LancamentoOrigemService:
         return livro_origem, folha_origem
     
     @staticmethod
-    def _criar_documento_automatico(imovel, lancamento, origem_info):
+    def _criar_documento_automatico(imovel, lancamento, origem_info, cartorio_origem=None):
         """
         Cria um documento automaticamente a partir de uma origem
-        CORREÇÃO: Usa o cartório de origem do lançamento (lancamento.cartorio_origem)
+        CORREÇÃO: Usa o cartório da própria origem (#144); sem ele, o de origem
+        do lançamento e, por fim, o do documento atual
         HERANÇA: Livro e folha são herdados do primeiro lançamento do documento criado pela origem
+
+        Falhas propagam: o chamador registra (logger.exception) e contabiliza.
+        Retorna None apenas quando o documento já existe (reaproveitado).
         """
-        try:
-            # Obter tipo de documento
-            tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
-            
-            # DETERMINAR CARTÓRIO: Usar o cartório de origem do lançamento
-            cartorio_origem = None
-            
-            # Se o lançamento tem cartório de origem definido, usar ele
-            if lancamento.cartorio_origem:
-                cartorio_origem = lancamento.cartorio_origem
-            else:
-                # Fallback: usar cartório do documento atual
-                cartorio_origem = lancamento.documento.cartorio
-            
-            # Buscar o documento de origem pela identidade completa (tipo,
-            # número normalizado e cartório) - nunca por número isolado
-            documento_origem = LancamentoOrigemService._resolver_documento(
-                origem_info['tipo'], origem_info['numero'], cartorio_origem
-            )
+        if not cartorio_origem:
+            cartorio_origem = lancamento.cartorio_origem or lancamento.documento.cartorio
 
-            livro_origem, folha_origem = (
-                LancamentoOrigemService._obter_livro_folha_origem(
-                    lancamento,
-                    documento_origem=documento_origem,
-                )
-            )
-
-            # Documento já existe com esta identidade completa - reutilizar,
-            # nunca tratar um homônimo de outro cartório como edição dele
-            if documento_origem:
-                return None
-
-            # Criar documento com cartório da origem
-            dados_documento = {
-                'imovel': imovel,
-                'tipo': tipo_doc,
-                'numero': origem_info['numero'],
-                'data': timezone.localdate(),
-                'data_presumida': True,
-                'cartorio': cartorio_origem,  # CARTÓRIO DA ORIGEM
-                'livro': livro_origem if livro_origem else '0',  # LIVRO HERDADO DA ORIGEM
-                'folha': folha_origem if folha_origem else '0',  # FOLHA HERDADA DA ORIGEM
-                'origem': f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
-                'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}. Cartório herdado da origem: {cartorio_origem.nome}. Livro: {livro_origem or "não informado"}, Folha: {folha_origem or "não informada"}'
-            }
-
-            # Criar documento usando CRIService com CRI da origem
-            documento_criado = CRIService.criar_documento_com_cri(
-                imovel, dados_documento, cri_origem=cartorio_origem
-            )
-
-            # Invalidar cache do imóvel
-            CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
-
-            return documento_criado
-
-        except DocumentoTipo.DoesNotExist:
-            # Se o tipo não existir, não criar documento
-            return None
-        except Exception as e:
-            # Log do erro mas não falhar o processo
-            print(f"Erro ao criar documento automático: {e}")
-            return None
+        return LancamentoOrigemService._criar_documento_origem(
+            imovel, lancamento, origem_info, cartorio_origem,
+            rotulo_cartorio='Cartório herdado da origem',
+        )
 
     @staticmethod
     def _resolver_documento(tipo, numero, cartorio):
@@ -570,6 +587,27 @@ class LancamentoOrigemService:
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
+    def _resolver_documento_estrito(tipo, numero, cartorio):
+        """
+        Como ``_resolver_documento``, mas identidade ambígua levanta erro:
+        criar mais um homônimo só aprofundaria a duplicidade (#144).
+        """
+        if not cartorio:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
+        except (TypeError, ValueError):
+            return None
+        resultado = DocumentoIdentidadeService.resolver(identidade)
+        if resultado.status == 'ambiguo':
+            raise OrigemAmbiguaError(
+                f'A origem {numero} tem {len(resultado.candidatos)} documentos '
+                f'candidatos (ids {[d.pk for d in resultado.candidatos]}) no '
+                f'cartório {cartorio.nome}.'
+            )
+        return resultado.documento if resultado.status == 'encontrado' else None
+
+    @staticmethod
     def _criar_documento_automatico_com_cartorio(
         imovel,
         lancamento,
@@ -580,61 +618,71 @@ class LancamentoOrigemService:
     ):
         """
         Cria um documento automaticamente a partir de uma origem com cartório específico
+
+        Falhas propagam: o chamador registra (logger.exception) e contabiliza.
         """
-        try:
-            # Obter tipo de documento
-            tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
+        return LancamentoOrigemService._criar_documento_origem(
+            imovel, lancamento, origem_info, cartorio_origem,
+            livro_origem_informado=livro_origem_informado,
+            folha_origem_informada=folha_origem_informada,
+            rotulo_cartorio='Cartório da origem',
+        )
 
-            # Buscar o documento de origem pela identidade completa (tipo,
-            # número normalizado e cartório) - nunca por número isolado
-            documento_origem = LancamentoOrigemService._resolver_documento(
-                origem_info['tipo'], origem_info['numero'], cartorio_origem
+    @staticmethod
+    def _criar_documento_origem(
+        imovel,
+        lancamento,
+        origem_info,
+        cartorio_origem,
+        livro_origem_informado=None,
+        folha_origem_informada=None,
+        rotulo_cartorio='Cartório da origem',
+    ):
+        """Núcleo comum: resolve pela identidade completa e cria se não existir."""
+        # Obter tipo de documento
+        tipo_doc = DocumentoTipo.objects.get(tipo=origem_info['tipo'])
+
+        # Buscar o documento de origem pela identidade completa (tipo,
+        # número normalizado e cartório) - nunca por número isolado
+        documento_origem = LancamentoOrigemService._resolver_documento_estrito(
+            origem_info['tipo'], origem_info['numero'], cartorio_origem
+        )
+
+        livro_origem, folha_origem = (
+            LancamentoOrigemService._obter_livro_folha_origem(
+                lancamento,
+                documento_origem=documento_origem,
+                livro_origem_informado=livro_origem_informado,
+                folha_origem_informada=folha_origem_informada,
             )
+        )
 
-            livro_origem, folha_origem = (
-                LancamentoOrigemService._obter_livro_folha_origem(
-                    lancamento,
-                    documento_origem=documento_origem,
-                    livro_origem_informado=livro_origem_informado,
-                    folha_origem_informada=folha_origem_informada,
-                )
-            )
-
-            if documento_origem:
-                # Documento já existe com esta identidade - reutilizar, nunca
-                # tratar um homônimo de outro cartório como edição dele
-                return None
-
-            # Criar documento com cartório específico da origem
-            dados_documento = {
-                'imovel': imovel,
-                'tipo': tipo_doc,
-                'numero': origem_info['numero'],
-                'data': timezone.localdate(),
-                'data_presumida': True,
-                'cartorio': cartorio_origem,  # CARTÓRIO ESPECÍFICO DA ORIGEM
-                'livro': livro_origem if livro_origem else '0',  # LIVRO HERDADO DA ORIGEM
-                'folha': folha_origem if folha_origem else '0',  # FOLHA HERDADA DA ORIGEM
-                'origem': f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
-                'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}. Cartório da origem: {cartorio_origem.nome}. Livro: {livro_origem or "não informado"}, Folha: {folha_origem or "não informada"}'
-            }
-            
-            # Criar documento usando CRIService com CRI da origem
-            documento_criado = CRIService.criar_documento_com_cri(
-                imovel, dados_documento, cri_origem=cartorio_origem
-            )
-            
-            # Invalidar cache do imóvel
-            CacheService.invalidate_documentos_imovel(imovel.id)
-            CacheService.invalidate_tronco_principal(imovel.id)
-            
-            return documento_criado
-            
-        except DocumentoTipo.DoesNotExist:
-            # Se o tipo não existir, não criar documento
+        if documento_origem:
+            # Documento já existe com esta identidade - reutilizar, nunca
+            # tratar um homônimo de outro cartório como edição dele
             return None
-        except Exception as e:
-            # Log do erro mas não falhar o processo
-            print(f"Erro ao criar documento automático: {e}")
-            return None
-    
+
+        # Criar documento com o cartório da origem
+        dados_documento = {
+            'imovel': imovel,
+            'tipo': tipo_doc,
+            'numero': origem_info['numero'],
+            'data': timezone.localdate(),
+            'data_presumida': True,
+            'cartorio': cartorio_origem,  # CARTÓRIO DA ORIGEM
+            'livro': livro_origem if livro_origem else '0',  # LIVRO HERDADO DA ORIGEM
+            'folha': folha_origem if folha_origem else '0',  # FOLHA HERDADA DA ORIGEM
+            'origem': f'Criado automaticamente a partir de origem: {origem_info["numero"]}',
+            'observacoes': f'Documento criado automaticamente ao identificar origem "{origem_info["numero"]}" no lançamento {lancamento.numero_lancamento}. {rotulo_cartorio}: {cartorio_origem.nome}. Livro: {livro_origem or "não informado"}, Folha: {folha_origem or "não informada"}'
+        }
+
+        # Criar documento usando CRIService com CRI da origem
+        documento_criado = CRIService.criar_documento_com_cri(
+            imovel, dados_documento, cri_origem=cartorio_origem
+        )
+
+        # Invalidar cache do imóvel
+        CacheService.invalidate_documentos_imovel(imovel.id)
+        CacheService.invalidate_tronco_principal(imovel.id)
+
+        return documento_criado
