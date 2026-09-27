@@ -836,3 +836,76 @@ class T17NaoDuplicataTest(Issue144Rodada3Base):
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
+
+
+class T18FallbackTextualSoComCandidatoUnicoTest(Issue144Rodada3Base):
+    """P1 Codex r3: o texto só é fallback seguro com UM candidato compatível."""
+
+    def _homonimos_com_indices_legados(self, lancamento):
+        """"T366; T366" com linhas em A e B cujos índices (5, 6) não casam."""
+        for indice, cartorio in ((5, self.cartorio_a), (6, self.cartorio_b)):
+            LancamentoOrigem.objects.create(
+                lancamento=lancamento, indice_origem=indice,
+                tipo_documento="transcricao", numero="T366",
+                cartorio=cartorio, livro=f"L{indice}", folha=f"F{indice}",
+            )
+
+    def test_t18_persistido_homonimos_desalinhados_sao_ambiguos(self):
+        _, _, lancamento = self.criar_cenario_atual("T366; T366", self.cartorio_a)
+        self._homonimos_com_indices_legados(lancamento)
+
+        for posicao in (0, 1):
+            self.assertIsNone(
+                LancamentoOrigemService.encontrar_origem_persistida(
+                    lancamento, "T366", posicao
+                ),
+                f"posição {posicao} não pode herdar a 1ª linha homônima",
+            )
+            dados = LancamentoOrigemService._buscar_dados_origem(
+                lancamento, "T366", indice_origem=posicao, total_origens=2
+            )
+            self.assertIsNone(dados["cartorio"])
+
+    def test_t18_cache_parcial_com_homonimos_e_ambiguo(self):
+        _, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        # Linha existente que não casa com T366, para o caminho de edição.
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=2, tipo_documento="matricula",
+            numero="M100", cartorio=self.cartorio_a, livro="L1", folha="F1",
+        )
+        # Cache parcial: 2 entradas para 3 origens → sem acesso posicional.
+        _mapeamento(lancamento, [
+            ("T366", self.cartorio_a), ("T366", self.cartorio_b),
+        ])
+
+        for posicao in (0, 1):
+            dados = LancamentoOrigemService._buscar_dados_origem(
+                lancamento, "T366", indice_origem=posicao, total_origens=3
+            )
+            self.assertIsNone(
+                dados["cartorio"],
+                f"posição {posicao} não pode receber o cartório da 1ª entrada",
+            )
+
+    def test_t18_candidato_unico_pelo_texto_continua_casando(self):
+        _, _, lancamento = self.criar_cenario_atual("M100; T366", self.cartorio_a)
+        # Persistido: único T366, com índice legado que não casa a posição 1.
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=7, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_b, livro="LB", folha="FB",
+        )
+        persistida = LancamentoOrigemService.encontrar_origem_persistida(
+            lancamento, "T366", 1
+        )
+        self.assertIsNotNone(persistida)
+        self.assertEqual(persistida.cartorio, self.cartorio_b)
+
+        # Cache parcial (1 entrada para 2 origens) com um único T366.
+        LancamentoOrigem.objects.all().delete()
+        _mapeamento(lancamento, [("T366", self.cartorio_b)])
+        dados = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=1, total_origens=2
+        )
+        self.assertEqual(dados["cartorio"], self.cartorio_b)

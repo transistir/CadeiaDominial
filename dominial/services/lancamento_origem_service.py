@@ -573,12 +573,14 @@ class LancamentoOrigemService:
            normal de re-save, em que cada posição continua sendo a mesma
            origem. É a única forma de diferenciar "T366; T366" em cartórios
            distintos: o texto sozinho não distingue.
-        2. Homônimo em OUTRA posição — cobre a edição que trocou o texto da
-           posição (a linha antiga da posição não pode emprestar seu cartório
-           para a identidade nova) e o legado com índices reordenados. A
-           identidade carrega o cartório certo para a nova posição.
-        3. Nada casa → ``None``: o chamador falha de forma visível em vez de
-           regravar a origem com a identidade de outra.
+        2. Fallback por texto em OUTRA posição — cobre a edição que trocou o
+           texto da posição (a linha antiga da posição não pode emprestar seu
+           cartório para a identidade nova) e o legado com índices
+           reordenados. Só vale com EXATAMENTE UM candidato compatível:
+           homônimos ("T366; T366") com índices desalinhados são ambíguos e
+           nunca resolvem para a primeira ocorrência (#144 P1 Codex r3).
+        3. Nada casa, ou mais de um candidato → ``None``: o chamador falha de
+           forma visível em vez de regravar a origem com a identidade de outra.
         """
         if not lancamento.pk:
             return None
@@ -599,10 +601,11 @@ class LancamentoOrigemService:
                 na_posicao.numero_normalizado,
             ) == chave:
                 return na_posicao
-        for origem in origens:
-            if (origem.tipo_documento, origem.numero_normalizado) == chave:
-                return origem
-        return None
+        candidatos = [
+            origem for origem in origens
+            if (origem.tipo_documento, origem.numero_normalizado) == chave
+        ]
+        return candidatos[0] if len(candidatos) == 1 else None
 
     @staticmethod
     def _buscar_dados_origem(
@@ -621,7 +624,9 @@ class LancamentoOrigemService:
         A POSIÇÃO (``indice_origem``) é a chave primária do lookup em ambas
         as fontes (#144 rodada 3): origens textualmente idênticas em cartórios
         distintos ("T366; T366") só são diferenciadas pela posição. O match
-        por texto é o fallback para mapeamento parcial/legado.
+        por texto é o fallback para mapeamento parcial/legado e só vale com
+        UM candidato compatível; homônimos sem posição confiável são
+        ambíguos (P1 Codex r3) e caem no caminho de falha visível.
         """
         from django.core.cache import cache
 
@@ -642,11 +647,15 @@ class LancamentoOrigemService:
                 and mapeamento[indice_origem].get('origem') == origem_individual
             ):
                 itens_candidatos.append(mapeamento[indice_origem])
-            itens_candidatos.extend(
-                item
-                for item in mapeamento
-                if item.get('origem') == origem_individual
-            )
+            else:
+                por_texto = [
+                    item for item in mapeamento
+                    if item.get('origem') == origem_individual
+                ]
+                # Cache parcial com homônimos: sem posição confiável não há
+                # como saber a qual origem cada entrada pertence.
+                if len(por_texto) == 1:
+                    itens_candidatos.extend(por_texto)
         for item in itens_candidatos:
             cartorio = Cartorios.objects.filter(id=item.get('cartorio_id')).first()
             if cartorio is None and item.get('cartorio_nome'):
