@@ -626,7 +626,9 @@ class LancamentoOrigemService:
         distintos ("T366; T366") só são diferenciadas pela posição. O match
         por texto é o fallback para mapeamento parcial/legado e só vale com
         UM candidato compatível; homônimos sem posição confiável são
-        ambíguos (P1 Codex r3) e caem no caminho de falha visível.
+        ambíguos (P1 Codex r3) e caem no caminho de falha visível. A ambiguidade
+        no cache devolve ``cartorio=None`` na hora, sem consultar o cartório
+        do lançamento (P1 Opus r4).
         """
         from django.core.cache import cache
 
@@ -653,9 +655,12 @@ class LancamentoOrigemService:
                     if item.get('origem') == origem_individual
                 ]
                 # Cache parcial com homônimos: sem posição confiável não há
-                # como saber a qual origem cada entrada pertence.
-                if len(por_texto) == 1:
-                    itens_candidatos.extend(por_texto)
+                # como saber a qual origem cada entrada pertence. A ambiguidade
+                # encerra o lookup (P1 Opus r4): cair nas fontes seguintes
+                # gravaria o cartório da 1ª ocorrência nas duas posições.
+                if len(por_texto) > 1:
+                    return dados
+                itens_candidatos.extend(por_texto)
         for item in itens_candidatos:
             cartorio = Cartorios.objects.filter(id=item.get('cartorio_id')).first()
             if cartorio is None and item.get('cartorio_nome'):

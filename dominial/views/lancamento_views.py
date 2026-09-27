@@ -852,23 +852,27 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 ) or []
 
                 def _item_do_cache(indice, texto):
+                    """(item, ambiguo): o texto só casa com UM candidato."""
                     if (
                         len(mapeamento_origens) == len(origens_list)
                         and indice < len(mapeamento_origens)
                         and mapeamento_origens[indice].get('origem') == texto
                     ):
-                        return mapeamento_origens[indice]
-                    return next(
-                        (m for m in mapeamento_origens if m.get('origem') == texto),
-                        None,
-                    )
+                        return mapeamento_origens[indice], False
+                    por_texto = [
+                        m for m in mapeamento_origens if m.get('origem') == texto
+                    ]
+                    if len(por_texto) > 1:
+                        return None, True
+                    return (por_texto[0] if por_texto else None), False
 
                 for i, origem in enumerate(origens_list):
                     origem_fim_cadeia = fim_cadeia_por_indice.get(i)
                     persistida = LancamentoOrigemService.encontrar_origem_persistida(
                         lancamento, origem, i
                     )
-                    em_cache = _item_do_cache(i, origem) or {}
+                    em_cache, ambiguo = _item_do_cache(i, origem)
+                    em_cache = em_cache or {}
                     if persistida:
                         cartorio_nome = persistida.cartorio.nome
                         cartorio_id = persistida.cartorio_id
@@ -877,6 +881,11 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         cartorio_nome = em_cache.get('cartorio_nome', '')
                         cartorio_id = em_cache.get('cartorio_id', '')
                         livro, folha = em_cache.get('livro', ''), em_cache.get('folha', '')
+                    elif ambiguo:
+                        # Homônimos sem posição confiável: campos vazios, o
+                        # usuário preenche (P1 Codex r4) — nunca o valor da
+                        # 1ª ocorrência nem o cartório do lançamento.
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
                     elif i == 0 and lancamento.cartorio_origem:
                         # Só a PRIMEIRA origem pode herdar o cartório do
                         # lançamento; as demais ficam em branco em vez de

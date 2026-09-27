@@ -48,6 +48,7 @@ from django.test import Client, RequestFactory
 from django.urls import reverse
 
 from dominial.models import (
+    Cartorios,
     Documento,
     Lancamento,
     LancamentoOrigem,
@@ -909,3 +910,105 @@ class T18FallbackTextualSoComCandidatoUnicoTest(Issue144Rodada3Base):
             lancamento, "T366", indice_origem=1, total_origens=2
         )
         self.assertEqual(dados["cartorio"], self.cartorio_b)
+
+
+class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base):
+    """P1 Opus+Codex r4: ambiguidade é sempre falha visível, nunca o 1º cartório."""
+
+    def _cache_parcial_homonimos(self, lancamento, itens):
+        cache.set(
+            f"mapeamento_origens_lancamento_{lancamento.pk}",
+            [
+                {
+                    "origem": "T366", "cartorio_id": cartorio.pk,
+                    "cartorio_nome": cartorio.nome, "livro": livro,
+                    "folha": folha,
+                }
+                for cartorio, livro, folha in itens
+            ],
+            timeout=3600,
+        )
+
+    def test_t19a_sem_linhas_persistidas_cache_ambiguo_nao_grava_1o_cartorio(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        # Legado sem nenhuma LancamentoOrigem; cache parcial (2 de 3 entradas).
+        self._cache_parcial_homonimos(lancamento, [
+            (self.cartorio_a, "LA", "FA"), (self.cartorio_b, "LB", "FB"),
+        ])
+        self.assertFalse(
+            LancamentoOrigem.objects.filter(lancamento=lancamento).exists()
+        )
+
+        for posicao in (0, 1):
+            dados = LancamentoOrigemService._buscar_dados_origem(
+                lancamento, "T366", indice_origem=posicao, total_origens=3
+            )
+            self.assertIsNone(
+                dados["cartorio"],
+                f"posição {posicao} não pode cair em lancamento.cartorio_origem",
+            )
+
+        with self.assertRaises(ValidationError) as ctx:
+            LancamentoOrigemService._sincronizar_origens_estruturadas(
+                lancamento, ["T366", "T366", "M100"], imovel
+            )
+        self.assertIn("Cartório obrigatório", str(ctx.exception))
+        self.assertFalse(
+            LancamentoOrigem.objects.filter(lancamento=lancamento).exists()
+        )
+
+    def test_t19b_post_rejeitado_get_reenvio_nao_corrompe_persistidas(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(numero_lancamento="1")
+        for indice, numero, tipo, cartorio, livro, folha in (
+            (0, "T366", "transcricao", self.cartorio_b, "LB", "FB"),
+            (5, "T366", "transcricao", self.cartorio_a, "LA", "FA"),
+            (2, "M100", "matricula", self.cartorio_a, "L1", "F1"),
+        ):
+            LancamentoOrigem.objects.create(
+                lancamento=lancamento, indice_origem=indice,
+                tipo_documento=tipo, numero=numero, cartorio=cartorio,
+                livro=livro, folha=folha,
+            )
+        antes = self.estado_origens(lancamento)
+        # Sobra de um POST rejeitado: cache parcial com homônimos.
+        cartorio_c = Cartorios.objects.create(
+            nome="Cartório C", cns="CNS-C", cidade="Cidade C", estado="SP",
+        )
+        self._cache_parcial_homonimos(lancamento, [
+            (cartorio_c, "LC", "FC"), (self.cartorio_a, "LA", "FA"),
+        ])
+        User.objects.create_user(username="t19b", password="t19pass")
+        client = Client()
+        client.login(username="t19b", password="t19pass")
+        url = reverse("editar_lancamento", kwargs={
+            "tis_id": self.ti.id, "imovel_id": imovel.id,
+            "lancamento_id": lancamento.pk,
+        })
+
+        origens = client.get(url).context["origens_separadas"]
+
+        # A posição 1 é ambígua: o formulário a deixa vazia (nunca a 1ª
+        # entrada do cache, T366/C).
+        self.assertEqual(
+            (origens[1]["cartorio_id"], origens[1]["livro"], origens[1]["folha"]),
+            ("", "", ""),
+        )
+        response = client.post(url, {
+            "tipo_lancamento": str(lancamento.tipo_id),
+            "numero_lancamento": "1",
+            "data": "2026-01-02",
+            "observacoes": "",
+            "origem_completa[]": [o["texto"] for o in origens],
+            "cartorio_origem[]": [str(o["cartorio_id"]) for o in origens],
+            "cartorio_origem_nome[]": [o["cartorio_nome"] for o in origens],
+            "livro_origem[]": [o["livro"] for o in origens],
+            "folha_origem[]": [o["folha"] for o in origens],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.estado_origens(lancamento), antes)
