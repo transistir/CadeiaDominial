@@ -658,6 +658,10 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     tipos_lancamento = LancamentoService.obter_tipos_lancamento_por_documento(lancamento.documento)
     
     # Processar POST
+    # Origens do POST para o re-render de erro (P1-2): None marca que não
+    # houve POST (ou que ele teve sucesso e redirecionou) — o formulário
+    # então mostra as origens do banco.
+    origens_do_post = None
     if request.method == 'POST':
         # Usar o service para atualizar o lançamento completo
         sucesso, mensagem_origens = LancamentoService.atualizar_lancamento_completo(
@@ -680,6 +684,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
         else:
             messages.error(request, mensagem_origens)
+            # Re-render a partir do POST: nada foi salvo, então o banco e a
+            # instância não refletem o que o usuário digitou nas origens.
+            origens_do_post = _origens_separadas_do_post(request)
     
     # Obter pessoas do lançamento para exibição no formulário
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
@@ -711,7 +718,10 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     }
     
     # Preparar dados para o template
-    if context['modo_edicao'] and lancamento.origem:
+    if origens_do_post is not None:
+        # POST rejeitado: as origens vêm do que foi digitado, não do banco.
+        origens_separadas = origens_do_post
+    elif context['modo_edicao'] and lancamento.origem:
         # Separar múltiplas origens para o template
         origens_separadas = []
         

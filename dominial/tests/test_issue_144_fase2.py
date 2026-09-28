@@ -10,6 +10,7 @@ Issue #144 fase 2 — follow-ups do PR #226 (plano r2).
   `LancamentoOrigem.indice_origem` (D1).
 """
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -20,14 +21,18 @@ from django.urls import reverse
 from dominial.models import (
     Cartorios,
     Documento,
+    DocumentoTipo,
     Lancamento,
     LancamentoOrigem,
     LancamentoTipo,
     OrigemFimCadeia,
 )
 from dominial.services.lancamento_campos_service import LancamentoCamposService
+from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
+from dominial.services.regra_petrea_service import RegraPetreaService
 from dominial.tests.test_issue_144_origem_cartorio import Issue144Rodada3Base
+from dominial.tests.test_issue_159_162_form_bugs import FormBugsBase
 
 # Atributo temporário da instância (D4), como literal: o RED dos testes não
 # pode depender da API nova.
@@ -995,3 +1000,176 @@ class F2_11MensagemSemPontoDuploTest(Fase2Base):
         )
         for mensagem in mensagens:
             self.assertNotIn("..", mensagem, mensagem)
+
+
+class F2_12dFalhaNaEdicaoRerenderizaPostTest(Fase2Base):
+    """P1-2: o re-render de erro da edição mostra as origens do POST, não
+    as do banco."""
+
+    def test_f2_12d_falha_na_edicao_rerenderiza_origens_do_post(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "M100; T366", self.cartorio_a
+        )
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        client = self._login("f2_12d")
+        url = self._url_edicao(imovel, lancamento)
+
+        response = client.post(url, self._post_edicao(
+            lancamento,
+            ["M100", "M999"],
+            [str(self.cartorio_a.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, ""],
+            livros=["L1X", "L9"],
+            folhas=["F1", "F9"],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        origens = response.context["origens_separadas"]
+        self.assertEqual(len(origens), 2)
+        self.assertEqual(
+            [
+                (o["texto"], str(o["cartorio_id"]), o["livro"], o["folha"])
+                for o in origens
+            ],
+            [
+                ("M100", str(self.cartorio_a.pk), "L1X", "F1"),
+                ("M999", "", "L9", "F9"),
+            ],
+        )
+
+
+class F2_12eFalhaNaEdicaoLimpaAtributoTest(Fase2Base):
+    """Item 4: `atualizar_lancamento_completo` limpa o atributo mesmo quando
+    a atualização falha (chamada direta, sem a view)."""
+
+    def test_f2_12e_falha_na_edicao_limpa_o_atributo(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "M100; T366", self.cartorio_a
+        )
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        request = RequestFactory().post("/x/", self._post_edicao(
+            lancamento,
+            ["M100", "M999"],
+            [str(self.cartorio_a.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, ""],
+        ))
+
+        sucesso, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
+            request, lancamento, imovel
+        )
+
+        self.assertFalse(sucesso)
+        self.assertIn("Nenhuma alteração foi salva", mensagem)
+        self.assertFalse(hasattr(lancamento, ATRIBUTO))
+
+
+class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
+    """Item 4/P1-2: o mapeamento morre com a requisição de CRIAÇÃO — no
+    sucesso e nas falhas, antes ou depois do writer."""
+
+    def setUp(self):
+        super().setUp()
+        DocumentoTipo.objects.get_or_create(tipo="transcricao")
+        self.cartorio_a = Cartorios.objects.create(
+            nome="Cartório A F2-13", cns="CNS-A-F213",
+            cidade="Cidade A", estado="SP",
+        )
+        self.cartorio_b = Cartorios.objects.create(
+            nome="Cartório B F2-13", cns="CNS-B-F213",
+            cidade="Cidade B", estado="SP",
+        )
+
+    def _request_criacao(self):
+        """Registro nº 2 com origens homônimas em cartórios distintos."""
+        return RequestFactory().post("/novo/", {
+            "tipo_lancamento": str(self.tipo_registro.id),
+            "numero_lancamento": "2",
+            "numero_lancamento_simples": "2",
+            "data": "2020-03-03",
+            "origem_completa[]": ["T366", "T366"],
+            "cartorio_origem[]": [
+                str(self.cartorio_a.pk), str(self.cartorio_b.pk),
+            ],
+            "cartorio_origem_nome[]": [
+                self.cartorio_a.nome, self.cartorio_b.nome,
+            ],
+            "livro_origem[]": ["LA", "LB"],
+            "folha_origem[]": ["FA", "FB"],
+        })
+
+    def _criar_e_capturar(self, capturado):
+        original = LancamentoCriacaoService._criar_lancamento_basico
+
+        def criar(documento, dados, tipo):
+            inst = original(documento, dados, tipo)
+            capturado["lancamento"] = inst
+            return inst
+
+        return criar
+
+    def test_f2_13a_criacao_com_sucesso_grava_por_posicao_e_nao_deixa_mapeamento(self):
+        capturado = {}
+        with patch.object(
+            LancamentoCriacaoService, '_criar_lancamento_basico',
+            side_effect=self._criar_e_capturar(capturado),
+        ):
+            criado, _ = LancamentoCriacaoService.criar_lancamento_completo(
+                self._request_criacao(), self.tis, self.imovel, self.documento
+            )
+
+        self.assertIsNotNone(criado)
+        lancamento = capturado["lancamento"]
+        self.assertEqual(
+            [
+                (o.indice_origem, o.numero, o.cartorio_id, o.livro, o.folha)
+                for o in LancamentoOrigem.objects.filter(lancamento=lancamento)
+                .order_by("indice_origem")
+            ],
+            [
+                (0, "T366", self.cartorio_a.pk, "LA", "FA"),
+                (1, "T366", self.cartorio_b.pk, "LB", "FB"),
+            ],
+        )
+        self.assertIsNone(cache.get(CHAVE_LEGADA.format(lancamento.pk)))
+        self.assertFalse(hasattr(lancamento, ATRIBUTO))
+
+    def test_f2_13b_criacao_falha_depois_do_writer_limpa_mapeamento(self):
+        capturado = {}
+        with patch.object(
+            LancamentoCriacaoService, '_criar_lancamento_basico',
+            side_effect=self._criar_e_capturar(capturado),
+        ), patch.object(
+            RegraPetreaService, 'aplicar_regra_petrea',
+            side_effect=RuntimeError('falha F2-13b'),
+        ):
+            resultado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
+                self._request_criacao(), self.tis, self.imovel, self.documento
+            )
+
+        self.assertIsNone(resultado)
+        self.assertIn('Erro ao criar lançamento: falha F2-13b', mensagem)
+        lancamento = capturado["lancamento"]
+        self.assertFalse(hasattr(lancamento, ATRIBUTO))
+        self.assertIsNone(cache.get(CHAVE_LEGADA.format(lancamento.pk)))
+
+    def test_f2_13c_criacao_falha_antes_do_lancamento_nao_mascara_erro(self):
+        """Guarda do `finally`: sem `lancamento = None` antes do `try`, a
+        falha ANTES da atribuição viraria UnboundLocalError e mascara o erro
+        real."""
+        with patch.object(
+            LancamentoCriacaoService, '_criar_lancamento_basico',
+            side_effect=RuntimeError('falha F2-13c'),
+        ):
+            resultado, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
+                self._request_criacao(), self.tis, self.imovel, self.documento
+            )
+
+        self.assertIsNone(resultado)
+        self.assertIn('falha F2-13c', mensagem)
+        self.assertNotIn('UnboundLocalError', mensagem)

@@ -125,6 +125,11 @@ class LancamentoCriacaoService:
         
         print("DEBUG: Validação de cartórios das origens aprovada")
         
+        # O mapeamento do POST vive só durante a requisição (D4): o finally
+        # limpa da instância mesmo quando a criação falha no meio. Iniciado
+        # como None porque a falha pode acontecer ANTES da atribuição abaixo
+        # (o finally não pode mascarar o erro original com UnboundLocalError).
+        lancamento = None
         try:
             print("DEBUG: Criando lançamento básico...")
             # Criar o lançamento
@@ -210,6 +215,9 @@ class LancamentoCriacaoService:
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return None, f'Erro ao criar lançamento: {str(e)}'
+        finally:
+            if lancamento is not None:
+                LancamentoOrigemService.limpar_mapeamento(lancamento)
     
     @staticmethod
     def atualizar_lancamento_completo(request, lancamento, imovel):
@@ -371,6 +379,11 @@ class LancamentoCriacaoService:
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return False, f'Erro ao atualizar lançamento: {str(e)}. Nenhuma alteração foi salva.'
+        finally:
+            # O mapeamento do POST vive só durante a requisição (D4): limpar
+            # mesmo quando a atualização falha, para o re-render não herdar
+            # dados de um POST que não foi salvo (P1-2).
+            LancamentoOrigemService.limpar_mapeamento(lancamento)
     
     @staticmethod
     def _avisar_divergencias(request, divergencias):
