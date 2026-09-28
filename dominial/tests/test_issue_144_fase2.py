@@ -1173,3 +1173,105 @@ class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
         self.assertIsNone(resultado)
         self.assertIn('falha F2-13c', mensagem)
         self.assertNotIn('UnboundLocalError', mensagem)
+
+
+class F2_18FalhaNaEdicaoPreservaFimCadeiaTest(Fase2Base):
+    """P1-3/D7: o writer da edição (que apaga e recria `OrigemFimCadeia`)
+    roda na MESMA transação do restante — a falha desfaz tudo, não só o
+    `save()`."""
+
+    def _fim_cadeia(self, lancamento):
+        """(pk, indice, tipo, classificacao) de cada OrigemFimCadeia."""
+        return [
+            (f.pk, f.indice_origem, f.tipo_fim_cadeia,
+             f.classificacao_fim_cadeia)
+            for f in OrigemFimCadeia.objects.filter(lancamento=lancamento)
+            .order_by("indice_origem")
+        ]
+
+    def test_f2_18_falha_na_edicao_preserva_origem_fim_cadeia(self):
+        fim = "Destacamento Público:SIGLA:origem_lidima"
+        texto = f"{fim}; M100"
+        imovel, _, lancamento = self.criar_cenario_atual(
+            texto, self.cartorio_a
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=1, tipo_documento="matricula",
+            numero="M100", cartorio=self.cartorio_a, livro="L1", folha="F1",
+        )
+        OrigemFimCadeia.objects.create(
+            lancamento=lancamento, indice_origem=0, fim_cadeia=True,
+            tipo_fim_cadeia="destacamento_publico",
+            classificacao_fim_cadeia="origem_lidima",
+        )
+        linhas_antes = self.estado_origens(lancamento)
+        fim_cadeia_antes = self._fim_cadeia(lancamento)
+        client = self._login("f2_18")
+
+        # M999 (posição 3) sem cartório derruba a edição; o fim de cadeia do
+        # POST traz outra classificação, que NÃO pode ter sido gravada.
+        payload = self._post_edicao(
+            lancamento,
+            [fim, "M100", "M999"],
+            ["", str(self.cartorio_a.pk), ""],
+            cartorios_nomes=["", self.cartorio_a.nome, ""],
+            livros=["", "L1", ""],
+            folhas=["", "F1", ""],
+        )
+        payload.update({
+            "fim_cadeia[]": ["0"],
+            "tipo_fim_cadeia[]": ["destacamento_publico"],
+            "classificacao_fim_cadeia[]": ["sem_origem"],
+        })
+        response = client.post(self._url_edicao(imovel, lancamento), payload)
+
+        self.assertEqual(response.status_code, 200)
+        mensagens = [str(m) for m in response.context["messages"]]
+        self.assertTrue(
+            any("Cartório obrigatório para a origem 3" in m for m in mensagens),
+            mensagens,
+        )
+        self.assertEqual(self._fim_cadeia(lancamento), fim_cadeia_antes)
+        self.assertEqual(self.estado_origens(lancamento), linhas_antes)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.origem, texto)
+
+
+class F2_19FalhaNaEdicaoNaoDeixaCartorioCriadoTest(Fase2Base):
+    """P1-3/D7: cartório criado por nome pelo writer da edição some junto
+    com o rollback quando a edição falha."""
+
+    def test_f2_19_falha_na_edicao_nao_deixa_cartorio_criado(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "M100; T366", self.cartorio_a
+        )
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        client = self._login("f2_19")
+
+        # T400 traz um nome de cartório que não existe (o writer o cria);
+        # M999 (posição 3) sem cartório derruba a edição.
+        response = client.post(
+            self._url_edicao(imovel, lancamento),
+            self._post_edicao(
+                lancamento,
+                ["M100", "T400", "M999"],
+                [str(self.cartorio_a.pk), "", ""],
+                cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2", ""],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mensagens = [str(m) for m in response.context["messages"]]
+        self.assertTrue(
+            any("Cartório obrigatório para a origem 3" in m for m in mensagens),
+            mensagens,
+        )
+        self.assertFalse(
+            Cartorios.objects.filter(nome="Cartório Novo F2").exists()
+        )

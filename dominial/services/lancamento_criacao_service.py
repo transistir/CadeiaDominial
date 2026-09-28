@@ -289,21 +289,24 @@ class LancamentoCriacaoService:
                 
             lancamento.observacoes = observacoes
             
-            # Processar campos específicos por tipo de lançamento
-            print("DEBUG: Processando campos específicos por tipo...")
-            LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
-
-            # ATOMICIDADE (#144 rodada 3): o texto de `lancamento.origem` e as
-            # origens estruturadas são gravados na MESMA transação. Sem isso,
-            # uma falha na sincronização (ex.: origem nova sem cartório
-            # mapeado) deixava o texto novo persistido apontando origens que
-            # as linhas estruturadas não confirmam. O signal post_save roda
-            # dentro do atomic (savepoint) e também é coberto pelo rollback;
-            # `messages` e `cache.set` não são transacionais e ficam como
-            # estão. A falha de CRIAÇÃO de documento de origem segue contada
-            # na mensagem (capturada dentro de processar_origens_automaticas),
-            # sem derrubar a transação.
+            # ATOMICIDADE (#144 rodada 3 e fase 2 — D7): o writer de campos
+            # por tipo (cartórios criados por nome, OrigemFimCadeia apagada e
+            # recriada), o texto de `lancamento.origem` e as origens
+            # estruturadas são gravados na MESMA transação. Sem isso, uma
+            # falha na sincronização (ex.: origem nova sem cartório mapeado)
+            # deixava o texto novo persistido apontando origens que as linhas
+            # estruturadas não confirmam, e o writer, que rodava antes do
+            # atomic, deixava para trás o fim de cadeia recriado e os
+            # cartórios novos. O signal post_save roda dentro do atomic
+            # (savepoint) e também é coberto pelo rollback; `messages` não é
+            # transacional e fica como está. A falha de CRIAÇÃO de documento
+            # de origem segue contada na mensagem (capturada dentro de
+            # processar_origens_automaticas), sem derrubar a transação.
             with transaction.atomic():
+                # Processar campos específicos por tipo de lançamento
+                print("DEBUG: Processando campos específicos por tipo...")
+                LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+
                 # Salvar o lançamento
                 print("DEBUG: Salvando lançamento...")
                 lancamento.save()
