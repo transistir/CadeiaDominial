@@ -27,6 +27,43 @@ class OrigemAmbiguaError(Exception):
 
 
 class LancamentoOrigemService:
+    # Mapeamento origem→cartório/livro/folha do POST corrente, como atributo
+    # TEMPORÁRIO da instância (#144 fase 2, D4): vive exatamente uma
+    # requisição/um save na memória do objeto. O LocMem anterior vazava por
+    # TTL de 1h para POSTs seguintes e era um por processo (gunicorn com
+    # workers sync), como o do tronco que o #210 já tinha desligado.
+    ATRIBUTO_MAPEAMENTO = '_mapeamento_origens_post'
+
+    @staticmethod
+    def definir_mapeamento(lancamento, mapeamento):
+        """Grava o mapeamento do POST corrente na instância.
+
+        Lista vazia limpa: um POST sem cartório resolvido não pode deixar
+        o mapeamento de um POST anterior na mesma instância.
+        """
+        if mapeamento:
+            setattr(
+                lancamento,
+                LancamentoOrigemService.ATRIBUTO_MAPEAMENTO,
+                mapeamento,
+            )
+        else:
+            LancamentoOrigemService.limpar_mapeamento(lancamento)
+
+    @staticmethod
+    def obter_mapeamento(lancamento):
+        """O mapeamento do POST corrente, ou None (instância nova, já limpa)."""
+        return getattr(
+            lancamento, LancamentoOrigemService.ATRIBUTO_MAPEAMENTO, None
+        )
+
+    @staticmethod
+    def limpar_mapeamento(lancamento):
+        """Remove o atributo da instância (chamado no finally dos services)."""
+        lancamento.__dict__.pop(
+            LancamentoOrigemService.ATRIBUTO_MAPEAMENTO, None
+        )
+
     @staticmethod
     def processar_origens_automaticas(lancamento, origem, imovel):
         """
@@ -614,9 +651,11 @@ class LancamentoOrigemService:
         """
         Busca cartório, livro e folha específicos para uma origem individual.
 
-        A ``LancamentoOrigem`` persistida é a fonte durável (#144); o cache do
-        formulário só otimiza o POST corrente. Ordem: cache → linha persistida
-        → (criação nova) cartório da primeira origem, único caso em que ele é
+        A ``LancamentoOrigem`` persistida é a fonte durável (#144); o
+        mapeamento do POST corrente — atributo temporário da instância gravado
+        pelo writer do formulário (fase 2, D4), não mais o cache LocMem — só
+        otimiza o save corrente. Ordem: mapeamento → linha persistida →
+        (criação nova) cartório da primeira origem, único caso em que ele é
         o cartório correto. Com linhas persistidas e nenhuma casando, devolve
         ``cartorio=None`` para o chamador falhar de forma visível em vez de
         regravar a origem com a identidade de outra.
@@ -627,18 +666,16 @@ class LancamentoOrigemService:
         por texto é o fallback para mapeamento parcial/legado e só vale com
         UM candidato compatível; homônimos sem posição confiável são
         ambíguos (P1 Codex r3) e caem no caminho de falha visível. A ambiguidade
-        no cache devolve ``cartorio=None`` na hora, sem consultar o cartório
-        do lançamento (P1 Opus r4).
+        no mapeamento devolve ``cartorio=None`` na hora, sem consultar o
+        cartório do lançamento (P1 Opus r4).
         """
-        from django.core.cache import cache
-
         dados = {'cartorio': None, 'livro': None, 'folha': None}
 
-        # 1. Mapeamento do POST corrente (cache). O mapeamento gravado pelo
-        # formulário é uma lista ordenada por posição; o acesso posicional só
-        # vale quando ele cobre TODAS as origens (entradas sem cartório
-        # resolvido são omitidas) e o texto na posição bate.
-        mapeamento = cache.get(f"mapeamento_origens_lancamento_{lancamento.id}")
+        # 1. Mapeamento do POST corrente (atributo da instância). O mapeamento
+        # gravado pelo formulário é uma lista ordenada por posição; o acesso
+        # posicional só vale quando ele cobre TODAS as origens (entradas sem
+        # cartório resolvido são omitidas) e o texto na posição bate.
+        mapeamento = LancamentoOrigemService.obter_mapeamento(lancamento)
         itens_candidatos = []
         if mapeamento:
             if (
