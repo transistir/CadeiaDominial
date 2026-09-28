@@ -229,7 +229,7 @@ class LancamentoOrigemService:
         de ordem sem colisão na constraint ``(lancamento, indice_origem)``.
         """
         desejadas = []
-        identidades_vistas = set()
+        identidades_vistas = {}
 
         for indice_origem, origem_individual in enumerate(origens):
             if LancamentoOrigemService._is_fim_cadeia(origem_individual):
@@ -256,6 +256,17 @@ class LancamentoOrigemService:
 
             tipo_documento, numero = identidade
             if not cartorio:
+                if dados_origem['ambiguo']:
+                    # Homônima sem posição confiável: a mensagem explica o
+                    # motivo e cita o número, para o usuário saber qual
+                    # linha do formulário selecionar (D6).
+                    raise ValidationError(
+                        f'Cartório obrigatório para a origem '
+                        f'{indice_origem + 1} ({origem_individual}): há mais '
+                        'de uma origem com esse número e não foi possível '
+                        'identificar o cartório desta posição. Selecione o '
+                        'cartório.'
+                    )
                 raise ValidationError(
                     f'Cartório obrigatório para a origem {indice_origem + 1}.'
                 )
@@ -270,10 +281,15 @@ class LancamentoOrigemService:
                 cartorio.pk,
             )
             if chave_identidade in identidades_vistas:
+                # A mensagem cita a posição colidente para o usuário
+                # entender qual das linhas é a repetida (D6).
                 raise ValidationError(
-                    f'Origem documental duplicada na posição {indice_origem + 1}.'
+                    f'Origem documental duplicada na posição '
+                    f'{indice_origem + 1}: corresponde à origem da posição '
+                    f'{identidades_vistas[chave_identidade] + 1}, com o mesmo '
+                    'tipo, número e cartório.'
                 )
-            identidades_vistas.add(chave_identidade)
+            identidades_vistas[chave_identidade] = indice_origem
 
             documento_origem = LancamentoOrigemService._resolver_documento(
                 tipo_documento,

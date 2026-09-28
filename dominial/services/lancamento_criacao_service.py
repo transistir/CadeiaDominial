@@ -357,7 +357,12 @@ class LancamentoCriacaoService:
 
         except ValidationError as e:
             print(f"DEBUG: Atualização cancelada por validação: {str(e)}")
-            motivo = '; '.join(e.messages) if hasattr(e, 'messages') else str(e)
+            # As mensagens de validação já terminam com ponto; sem o rstrip a
+            # frase final nasceria com ponto duplo ("origem 2.. Nenhuma…").
+            motivo = (
+                '; '.join(m.rstrip('.') for m in e.messages)
+                if hasattr(e, 'messages') else str(e).rstrip('.')
+            )
             return False, (
                 f'Atualização cancelada: {motivo}. Nenhuma alteração foi salva.'
             )

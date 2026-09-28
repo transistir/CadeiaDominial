@@ -829,3 +829,169 @@ class F2_20ContratoDoSeletorTest(SimpleTestCase):
             item, ambiguo = item_do_mapeamento(mapeamento, "T366", None, None)
             self.assertFalse(ambiguo)
             self.assertEqual(item["cartorio_id"], 5)
+
+
+class F2_08HomonimosAmbiguosMensagemTest(Fase2Base):
+    """D6: homônimas ambíguas têm mensagem que explica o motivo e cita o
+    número da origem."""
+
+    def test_f2_08_homonimos_ambiguos_tem_mensagem_especifica(self):
+        # (a) fixture do T18: linhas homônimas com índices legados (5/A, 6/B)
+        # que não casam as posições do texto.
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        for indice, cartorio in ((5, self.cartorio_a), (6, self.cartorio_b)):
+            LancamentoOrigem.objects.create(
+                lancamento=lancamento, indice_origem=indice,
+                tipo_documento="transcricao", numero="T366",
+                cartorio=cartorio, livro=f"L{indice}", folha=f"F{indice}",
+            )
+
+        with self.subTest("indices_legados"):
+            with self.assertRaises(ValidationError) as ctx:
+                LancamentoOrigemService._sincronizar_origens_estruturadas(
+                    lancamento, ["T366", "T366"], imovel
+                )
+            self.assertIn(
+                "Cartório obrigatório para a origem 1 (T366): há mais de uma "
+                "origem com esse número e não foi possível identificar o "
+                "cartório desta posição. Selecione o cartório.",
+                str(ctx.exception),
+            )
+
+        # (b) cenário do F2-10b: cartório DIFERENTE do persistido na
+        # posição 0 — a ambígua é a posição 2. Imóvel/documento próprios
+        # (matrícula distinta) para não colidir na constraint de identidade.
+        imovel_b = self.criar_imovel("998", self.cartorio_a, nome="Atual F2-08b")
+        documento_b = self.criar_documento(
+            imovel_b, self.tipo_matricula, "M998", self.cartorio_a
+        )
+        lancamento_b = Lancamento(
+            documento=documento_b, tipo=self.tipo_inicio,
+            data=date(2026, 1, 2), origem="T366",
+            cartorio_origem=self.cartorio_a,
+        )
+        Lancamento.objects.bulk_create([lancamento_b])
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento_b, indice_origem=0,
+            tipo_documento="transcricao", numero="T366",
+            cartorio=self.cartorio_a, livro="LA", folha="FA",
+        )
+        request = RequestFactory().post("/x/", {
+            "origem_completa[]": ["T366", "T366"],
+            "cartorio_origem[]": [str(self.cartorio_b.pk), ""],
+            "cartorio_origem_nome[]": [self.cartorio_b.nome, ""],
+            "livro_origem[]": ["LB", ""],
+            "folha_origem[]": ["FB", ""],
+        })
+        LancamentoCamposService._processar_campos_inicio_matricula(
+            request, lancamento_b
+        )
+
+        with self.subTest("b_diferente_de_a"):
+            with self.assertRaises(ValidationError) as ctx:
+                LancamentoOrigemService._sincronizar_origens_estruturadas(
+                    lancamento_b, ["T366", "T366"], imovel_b
+                )
+            self.assertIn(
+                "Cartório obrigatório para a origem 2 (T366): há mais de uma "
+                "origem com esse número e não foi possível identificar o "
+                "cartório desta posição. Selecione o cartório.",
+                str(ctx.exception),
+            )
+
+
+class F2_09MapeamentoLegadoAmbiguoMensagemTest(Fase2Base):
+    """D6 no mapeamento LEGADO (sem 'indice'): ambiguidade da fase 1 também
+    tem a mensagem específica (cenário do T19a)."""
+
+    def test_f2_09_mapeamento_legado_ambiguo_tem_mensagem_especifica(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        # Mapeamento legado (sem 'indice') parcial: 2 entradas para 3 origens.
+        LancamentoOrigemService.definir_mapeamento(lancamento, [
+            {"origem": "T366", "cartorio_id": self.cartorio_a.pk,
+             "cartorio_nome": self.cartorio_a.nome, "livro": "LA", "folha": "FA"},
+            {"origem": "T366", "cartorio_id": self.cartorio_b.pk,
+             "cartorio_nome": self.cartorio_b.nome, "livro": "LB", "folha": "FB"},
+        ])
+        self.assertFalse(
+            LancamentoOrigem.objects.filter(lancamento=lancamento).exists()
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            LancamentoOrigemService._sincronizar_origens_estruturadas(
+                lancamento, ["T366", "T366", "M100"], imovel
+            )
+        self.assertIn(
+            "Cartório obrigatório para a origem 1 (T366): há mais de uma "
+            "origem com esse número e não foi possível identificar o "
+            "cartório desta posição. Selecione o cartório.",
+            str(ctx.exception),
+        )
+
+
+class F2_10aDuplicataCitaPosicaoColidenteTest(Fase2Base):
+    """D6: a duplicata cita a posição colidente, não só a própria."""
+
+    def test_f2_10a_duplicata_cita_a_posicao_colidente(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        # Cartório informado nas DUAS posições — ambas com A: a posição 2
+        # colide com a identidade da posição 1.
+        _mapeamento_indexado(lancamento, [
+            (0, "T366", self.cartorio_a, "LA", "FA"),
+            (1, "T366", self.cartorio_a, "LB", "FB"),
+        ])
+
+        with self.assertRaises(ValidationError) as ctx:
+            LancamentoOrigemService._sincronizar_origens_estruturadas(
+                lancamento, ["T366", "T366"], imovel
+            )
+
+        self.assertIn(
+            "Origem documental duplicada na posição 2: corresponde à origem "
+            "da posição 1, com o mesmo tipo, número e cartório.",
+            str(ctx.exception),
+        )
+
+
+class F2_11MensagemSemPontoDuploTest(Fase2Base):
+    """D6: a mensagem de erro não termina com ponto antes do ponto da
+    frase final (POST do T16/F2-12b)."""
+
+    def test_f2_11_mensagem_de_atualizacao_sem_ponto_duplo(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "M100; T366", self.cartorio_a
+        )
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        client = self._login("f2_11")
+        url = self._url_edicao(imovel, lancamento)
+
+        response = client.post(url, self._post_edicao(
+            lancamento,
+            ["M100", "M999"],
+            [str(self.cartorio_a.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, ""],
+            livros=["L1", ""],
+            folhas=["F1", ""],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        mensagens = [str(m) for m in response.context["messages"]]
+        self.assertTrue(
+            any(
+                "Cartório obrigatório para a origem 2. "
+                "Nenhuma alteração foi salva." in m
+                for m in mensagens
+            ),
+            mensagens,
+        )
+        for mensagem in mensagens:
+            self.assertNotIn("..", mensagem, mensagem)
