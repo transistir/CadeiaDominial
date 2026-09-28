@@ -31,6 +31,7 @@ from dominial.services.lancamento_campos_service import LancamentoCamposService
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.services.regra_petrea_service import RegraPetreaService
+from dominial.templatetags.dominial_extras import register
 from dominial.tests.test_issue_144_origem_cartorio import Issue144Rodada3Base
 from dominial.tests.test_issue_159_162_form_bugs import FormBugsBase
 
@@ -1275,3 +1276,13 @@ class F2_19FalhaNaEdicaoNaoDeixaCartorioCriadoTest(Fase2Base):
         self.assertFalse(
             Cartorios.objects.filter(nome="Cartório Novo F2").exists()
         )
+
+
+class F2_15FiltroMortoRemovidoTest(SimpleTestCase):
+    """Item 2/D5: `origem_cartorio_especifico` não era usado em nenhum
+    template e buscava o cartório só pelo texto da origem (colapsa
+    homônimas); a assinatura `(lancamento, texto)` não recebe a posição,
+    então não há como consertar — o filtro sai."""
+
+    def test_f2_15_filtro_origem_cartorio_especifico_removido(self):
+        self.assertNotIn("origem_cartorio_especifico", register.filters)
