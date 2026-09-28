@@ -848,13 +848,18 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 # não podem colapsar no primeiro casamento por texto.
                 for i, origem in enumerate(origens_list):
                     origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                    persistida = LancamentoOrigemService.encontrar_origem_persistida(
-                        lancamento, origem, i
+                    persistida, ambiguo = LancamentoOrigemService.resolver_origem_persistida(
+                        lancamento, origem, i, origens_atuais=origens_list
                     )
                     if persistida:
                         cartorio_nome = persistida.cartorio.nome
                         cartorio_id = persistida.cartorio_id
                         livro, folha = persistida.livro or '', persistida.folha or ''
+                    elif ambiguo:
+                        # Homônima sem linha na posição: nada confiável para
+                        # pré-preencher (D3) — nem a herança do cartório do
+                        # lançamento, que regravaria o cartório errado.
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
                     elif i == 0 and lancamento.cartorio_origem:
                         # Só a PRIMEIRA origem pode herdar o cartório do
                         # lançamento; as demais ficam em branco em vez de

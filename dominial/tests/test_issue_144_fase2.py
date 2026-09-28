@@ -13,14 +13,17 @@ from datetime import date
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import Client, RequestFactory
+from django.core.exceptions import ValidationError
+from django.test import Client, RequestFactory, SimpleTestCase
 from django.urls import reverse
 
 from dominial.models import (
     Cartorios,
+    Documento,
     Lancamento,
     LancamentoOrigem,
     LancamentoTipo,
+    OrigemFimCadeia,
 )
 from dominial.services.lancamento_campos_service import LancamentoCamposService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
@@ -438,3 +441,391 @@ class F2_16InstanciaCompartilhadaTest(Fase2Base):
             ids,
         )
         self.assertIsNone(cache.get(CHAVE_LEGADA.format(lancamento.pk)))
+
+
+class F2_03SeletorIndexadoTest(Fase2Base):
+    """D2: o seletor usa o 'indice' de cada entrada; D3: homônima sem entrada
+    nunca recebe cartório por texto."""
+
+    def test_f2_03_mapeamento_indexado_parcial_resolve_homonimos_por_posicao(self):
+        _, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        # Só a linha da posição 2 (M100/A) existe.
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=2,
+            tipo_documento="matricula", numero="M100",
+            cartorio=self.cartorio_a, livro="LM", folha="FM",
+        )
+        _mapeamento_indexado(lancamento, [
+            (0, "T366", self.cartorio_a, "LA", "FA"),
+            (1, "T366", self.cartorio_b, "LB", "FB"),
+        ])
+
+        dados_0 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=0, total_origens=3
+        )
+        dados_1 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=1, total_origens=3
+        )
+        dados_2 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "M100", indice_origem=2, total_origens=3
+        )
+
+        self.assertEqual(dados_0["cartorio"], self.cartorio_a)
+        self.assertEqual(dados_1["cartorio"], self.cartorio_b)
+        self.assertEqual(dados_2["cartorio"], self.cartorio_a)
+        self.assertEqual((dados_2["livro"], dados_2["folha"]), ("LM", "FM"))
+
+    def test_f2_03b_lista_fora_de_ordem_usa_indice(self):
+        _, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        # Ordem física da lista é ignorada: vale o 'indice' de cada entrada.
+        _mapeamento_indexado(lancamento, [
+            (2, "M100", self.cartorio_b, "LC", "FC"),
+            (1, "T366", self.cartorio_b, "LB", "FB"),
+            (0, "T366", self.cartorio_a, "LA", "FA"),
+        ])
+
+        for posicao, texto, esperado in (
+            (0, "T366", self.cartorio_a),
+            (1, "T366", self.cartorio_b),
+            (2, "M100", self.cartorio_b),
+        ):
+            with self.subTest(posicao=posicao):
+                dados = LancamentoOrigemService._buscar_dados_origem(
+                    lancamento, texto, indice_origem=posicao, total_origens=3
+                )
+                self.assertEqual(dados["cartorio"], esperado)
+
+    def test_f2_03c_indices_esparsos_homonima_sem_entrada_exige_cartorio(self):
+        _, _, lancamento = self.criar_cenario_atual(
+            "M100; T366; T366", self.cartorio_a
+        )
+        self.assertFalse(
+            LancamentoOrigem.objects.filter(lancamento=lancamento).exists()
+        )
+        _mapeamento_indexado(lancamento, [
+            (0, "M100", self.cartorio_a, "LA", "FA"),
+            (2, "T366", self.cartorio_b, "LB", "FB"),
+        ])
+
+        dados_1 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=1, total_origens=3
+        )
+        dados_2 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=2, total_origens=3
+        )
+
+        # A posição 1 não pode herdar B por texto (P1-1): é homônima sem
+        # entrada e sem linha — falha visível.
+        self.assertIsNone(dados_1["cartorio"])
+        self.assertTrue(dados_1["ambiguo"])
+        self.assertEqual(dados_2["cartorio"], self.cartorio_b)
+
+
+class F2_04PosicaoSemEntradaTest(Fase2Base):
+    """Item 5: posição sem entrada não herda entrada homônima de outra
+    posição — a linha persistida da PRÓPRIA posição resolve."""
+
+    def test_f2_04_posicao_sem_entrada_nao_herda_entrada_homonima(self):
+        _, _, lancamento = self.criar_cenario_atual("T366; T366", self.cartorio_a)
+        self.criar_origens_homonimas(lancamento)
+        _mapeamento_indexado(lancamento, [
+            (0, "T366", self.cartorio_a, "LA1", "FA1"),
+        ])
+
+        dados_1 = LancamentoOrigemService._buscar_dados_origem(
+            lancamento, "T366", indice_origem=1, total_origens=2
+        )
+
+        self.assertEqual(dados_1["cartorio"], self.cartorio_b)
+        self.assertEqual((dados_1["livro"], dados_1["folha"]), ("LB2", "FB2"))
+
+
+class F2_05EdicaoComMapeamentoParcialTest(Fase2Base):
+    """Item 6: o POST real com mapeamento parcial (última origem sem cartório)
+    usa a linha persistida da posição."""
+
+    def test_f2_05_edicao_com_mapeamento_parcial_usa_linha_persistida_da_posicao(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366; M100", self.cartorio_a
+        )
+        self.criar_origens_homonimas(lancamento)
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=2,
+            tipo_documento="matricula", numero="M100",
+            cartorio=self.cartorio_a, livro="L1", folha="F1",
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        antes = self._estado_completo(lancamento)
+        client = self._login("f2_05")
+        url = self._url_edicao(imovel, lancamento)
+
+        response = client.post(url, self._post_edicao(
+            lancamento,
+            ["T366", "T366", "M100"],
+            [str(self.cartorio_a.pk), str(self.cartorio_b.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, self.cartorio_b.nome, ""],
+            livros=["LA1", "LB2", "L1"],
+            folhas=["FA1", "FB2", "F1"],
+        ))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self._estado_completo(lancamento), antes)
+
+
+class F2_06ErroCitaPosicaoSemCartorioTest(Fase2Base):
+    """Item 3: o erro cita a posição que está SEM cartório, não a primeira."""
+
+    def test_f2_06_erro_cita_a_posicao_sem_cartorio(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        self.criar_origens_homonimas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        antes = self._estado_completo(lancamento)
+        client = self._login("f2_06")
+        url = self._url_edicao(imovel, lancamento)
+
+        response = client.post(url, self._post_edicao(
+            lancamento,
+            ["T366", "T366", "M100"],
+            [str(self.cartorio_a.pk), str(self.cartorio_b.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, self.cartorio_b.nome, ""],
+            livros=["LA1", "LB2", ""],
+            folhas=["FA1", "FB2", ""],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        mensagens = [str(m) for m in response.context["messages"]]
+        self.assertTrue(
+            any("Cartório obrigatório para a origem 3" in m for m in mensagens),
+            mensagens,
+        )
+        self.assertFalse(
+            any("origem 1" in m for m in mensagens),
+            mensagens,
+        )
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.origem, "T366; T366")
+        self.assertEqual(self._estado_completo(lancamento), antes)
+
+
+class F2_07FormEdicaoHomonimosSemLinhaTest(Fase2Base):
+    """D3 no GET: homônimos sem linha estruturada abrem em branco (nem a
+    herança do cartório do lançamento, nem resíduo de cache legado)."""
+
+    def test_f2_07_form_edicao_homonimos_sem_linha_ficam_em_branco(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366; T366", self.cartorio_a
+        )
+        cartorio_c = Cartorios.objects.create(
+            nome="Cartório C F2-07", cns="CNS-C-F207",
+            cidade="Cidade C", estado="SP",
+        )
+        # Resíduo pré-fase-2 no cache legado: a view não pode ler.
+        cache.set(CHAVE_LEGADA.format(lancamento.pk), [
+            {
+                "origem": "T366", "cartorio_id": cartorio_c.pk,
+                "cartorio_nome": cartorio_c.nome, "livro": "LC", "folha": "FC",
+            },
+        ], timeout=3600)
+        client = self._login("f2_07")
+
+        response = client.get(self._url_edicao(imovel, lancamento))
+
+        self.assertEqual(response.status_code, 200)
+        origens = response.context["origens_separadas"]
+        self.assertEqual(len(origens), 2)
+        for origem in origens:
+            with self.subTest(indice=origem["index"]):
+                self.assertEqual(
+                    (origem["cartorio_id"], origem["cartorio_nome"],
+                     origem["livro"], origem["folha"]),
+                    ("", "", "", ""),
+                )
+
+
+class F2_10bBDiferenteDeATest(Fase2Base):
+    """P1-1: homônima nova sem cartório, com cartório DIFERENTE do persistido
+    na posição 0.
+
+    Contra bfc6c3de, este cenário falha com `duplicada na posição 2`. Se a
+    leitura por posição fosse aplicada **sem** a regra D3, nenhum
+    `ValidationError` seria levantado e as linhas virariam
+    `[(T366,B),(T366,A)]`: gravação silenciosa (P1-1). Por isso o D3 entra
+    no mesmo commit.
+    """
+
+    def test_f2_10b_b_diferente_de_a_exige_cartorio(self):
+        imovel, _, lancamento = self.criar_cenario_atual("T366", self.cartorio_a)
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=0,
+            tipo_documento="transcricao", numero="T366",
+            cartorio=self.cartorio_a, livro="LA", folha="FA",
+        )
+        # O POST inverte: posição 0 com B, posição 1 sem cartório.
+        request = RequestFactory().post("/x/", {
+            "origem_completa[]": ["T366", "T366"],
+            "cartorio_origem[]": [str(self.cartorio_b.pk), ""],
+            "cartorio_origem_nome[]": [self.cartorio_b.nome, ""],
+            "livro_origem[]": ["LB", ""],
+            "folha_origem[]": ["FB", ""],
+        })
+        LancamentoCamposService._processar_campos_inicio_matricula(
+            request, lancamento
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            LancamentoOrigemService._sincronizar_origens_estruturadas(
+                lancamento, ["T366", "T366"], imovel
+            )
+
+        self.assertIn("Cartório obrigatório para a origem 2", str(ctx.exception))
+        self.assertEqual(self.estado_origens(lancamento), [
+            ("T366", self.cartorio_a.pk, "LA", "FA"),
+        ])
+
+
+class F2_17FimDeCadeiaAntesDeOrigemTest(Fase2Base):
+    """D1/F2-17: fim de cadeia conta para o índice; origens seguintes
+    resolvem pelas suas entradas indexadas."""
+
+    def test_f2_17_fluxo_com_fim_de_cadeia_antes_de_origem_documental(self):
+        imovel, _, lancamento = self.criar_cenario_atual("", None)
+        request = RequestFactory().post("/x/", {
+            "origem_completa[]": [
+                "Destacamento Público:SIGLA:origem_lidima", "T366", "T366",
+            ],
+            "cartorio_origem[]": ["", str(self.cartorio_a.pk), str(self.cartorio_b.pk)],
+            "cartorio_origem_nome[]": [
+                "", self.cartorio_a.nome, self.cartorio_b.nome,
+            ],
+            "livro_origem[]": ["", "LA1", "LB2"],
+            "folha_origem[]": ["", "FA1", "FB2"],
+            "fim_cadeia[]": ["0"],
+            "tipo_fim_cadeia[]": ["destacamento_publico"],
+            "classificacao_fim_cadeia[]": ["origem_lidima"],
+        })
+        LancamentoCamposService._processar_campos_inicio_matricula(
+            request, lancamento
+        )
+        self.assertEqual(lancamento.origem, (
+            "Destacamento Público:SIGLA:origem_lidima; T366; T366"
+        ))
+
+        # save() com o signal e a chamada explícita: ambos processam.
+        lancamento.save()
+        LancamentoOrigemService.processar_origens_automaticas(
+            lancamento, lancamento.origem, imovel
+        )
+
+        self.assertEqual(self._estado_completo(lancamento), [
+            (1, "T366", self.cartorio_a.pk, "LA1", "FA1"),
+            (2, "T366", self.cartorio_b.pk, "LB2", "FB2"),
+        ])
+        fim_cadeia = OrigemFimCadeia.objects.get(lancamento=lancamento)
+        self.assertEqual(fim_cadeia.indice_origem, 0)
+        self.assertEqual(fim_cadeia.tipo_fim_cadeia, "destacamento_publico")
+        self.assert_documento_t366_no_cartorio(self.cartorio_a)
+        self.assert_documento_t366_no_cartorio(self.cartorio_b)
+
+
+class F2_20ContratoDoSeletorTest(SimpleTestCase):
+    """P2-5: contrato completo de `item_do_mapeamento` (D2)."""
+
+    @staticmethod
+    def _item(indice=None, origem="T366", cartorio_id=1):
+        entrada = {"origem": origem, "cartorio_id": cartorio_id,
+                   "cartorio_nome": f"C{cartorio_id}", "livro": "L", "folha": "F"}
+        if indice is not None:
+            entrada["indice"] = indice
+        return entrada
+
+    def test_f2_20_contrato_do_seletor(self):
+        item_do_mapeamento = LancamentoOrigemService.item_do_mapeamento
+
+        # (a) formato novo por índice
+        mapeamento = [self._item(0, "T366", 1), self._item(1, "M100", 2)]
+        with self.subTest("formato novo por índice"):
+            item, ambiguo = item_do_mapeamento(mapeamento, "T366", 0, 2)
+            self.assertFalse(ambiguo)
+            self.assertEqual(item["cartorio_id"], 1)
+
+        # (b) lista fora de ordem física
+        mapeamento = [self._item(1, "M100", 2), self._item(0, "T366", 1)]
+        with self.subTest("lista fora de ordem"):
+            item, ambiguo = item_do_mapeamento(mapeamento, "T366", 0, 2)
+            self.assertFalse(ambiguo)
+            self.assertEqual(item["cartorio_id"], 1)
+
+        # (c) índice duplicado
+        mapeamento = [self._item(0, "T366", 1), self._item(0, "T366", 2)]
+        with self.subTest("índice duplicado"):
+            self.assertEqual(
+                item_do_mapeamento(mapeamento, "T366", 0, 2), (None, True)
+            )
+
+        # (d) chamada sem posição
+        with self.subTest("indice_origem None no formato novo"):
+            mapeamento = [self._item(0, "T366", 1)]
+            self.assertEqual(
+                item_do_mapeamento(mapeamento, "T366", None, 1), (None, False)
+            )
+
+        # (e) mapeamento misto: só a entrada indexada conta (nunca legado)
+        mapeamento = [self._item(0, "T366", 1), self._item(None, "T366", 9)]
+        with self.subTest("mapeamento misto"):
+            item, ambiguo = item_do_mapeamento(mapeamento, "T366", 0, 2)
+            self.assertFalse(ambiguo)
+            self.assertEqual(item["cartorio_id"], 1)
+            self.assertEqual(
+                item_do_mapeamento(mapeamento, "T366", 1, 2), (None, False)
+            )
+
+        # (f) 'indice' não-int (str e bool) — entrada descartada
+        mapeamento = [
+            {"indice": "1", "origem": "T366", "cartorio_id": 1},
+            {"indice": True, "origem": "T366", "cartorio_id": 2},
+        ]
+        with self.subTest("indice não-int"):
+            for posicao in (0, 1):
+                self.assertEqual(
+                    item_do_mapeamento(mapeamento, "T366", posicao, 2),
+                    (None, False),
+                )
+
+        # (g) texto divergente na posição: a entrada é de outra origem
+        mapeamento = [self._item(0, "M100", 1), self._item(1, "T366", 2)]
+        with self.subTest("texto divergente na posição"):
+            self.assertEqual(
+                item_do_mapeamento(mapeamento, "T366", 0, 2), (None, False)
+            )
+
+        # (h) legado (sem 'indice' em nenhuma entrada): regra da fase 1
+        with self.subTest("legado completo posicional"):
+            mapeamento = [self._item(None, "T366", 1), self._item(None, "M100", 2)]
+            item, ambiguo = item_do_mapeamento(mapeamento, "T366", 0, 2)
+            self.assertFalse(ambiguo)
+            self.assertEqual(item["cartorio_id"], 1)
+        with self.subTest("legado parcial com 1 candidato"):
+            mapeamento = [self._item(None, "T366", 5)]
+            item, ambiguo = item_do_mapeamento(mapeamento, "T366", 1, 3)
+            self.assertFalse(ambiguo)
+            self.assertEqual(item["cartorio_id"], 5)
+        with self.subTest("legado parcial com 2 candidatos"):
+            mapeamento = [self._item(None, "T366", 1), self._item(None, "T366", 2)]
+            self.assertEqual(
+                item_do_mapeamento(mapeamento, "T366", 0, 3), (None, True)
+            )
+        with self.subTest("legado sem posição, candidato único"):
+            mapeamento = [self._item(None, "T366", 5)]
+            item, ambiguo = item_do_mapeamento(mapeamento, "T366", None, None)
+            self.assertFalse(ambiguo)
+            self.assertEqual(item["cartorio_id"], 5)
