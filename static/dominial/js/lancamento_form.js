@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cartorioOrigemInicioSuggestions = document.querySelector('.cartorio-origem-inicio-suggestions');
     
     if (cartorioOrigemInicioInput && cartorioOrigemInicioHidden && cartorioOrigemInicioSuggestions) {
-        setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions);
+        setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions, { somenteCri: true });
     }
     
     // Adicionar listener para capturar envio do formulário
@@ -517,7 +517,7 @@ function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
 }
 
 // Função para configurar autocomplete de cartório
-function setupCartorioAutocomplete(input, hidden, suggestions) {
+function setupCartorioAutocomplete(input, hidden, suggestions, opcoes = {}) {
     let currentIndex = -1;
     let currentSuggestions = [];
     
@@ -531,7 +531,11 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
             return;
         }
         
-        fetch(`/dominial/cartorio-autocomplete/?q=${encodeURIComponent(query)}`)
+        let url = `/dominial/cartorio-autocomplete/?q=${encodeURIComponent(query)}`;
+        if (opcoes.somenteCri) {
+            url += '&somente_cri=true';
+        }
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 suggestions.innerHTML = '';
@@ -795,11 +799,11 @@ function adicionarOrigem() {
     
     container.appendChild(fimCadeiaContainer);
     
-    // Configurar autocomplete para o novo campo de cartório
+    // Configurar autocomplete para o novo campo de cartório (issue #227: só CRI)
     const newInput = origemDiv.querySelector(`#cartorio_origem_nome_${newIndex}`);
     const newHidden = origemDiv.querySelector(`#cartorio_origem_${newIndex}`);
     const newSuggestions = origemDiv.querySelector('.cartorio-origem-suggestions');
-    setupCartorioAutocomplete(newInput, newHidden, newSuggestions);
+    setupCartorioAutocomplete(newInput, newHidden, newSuggestions, { somenteCri: true });
     
     // Configurar toggle de fim de cadeia para a nova origem
     const newToggle = origemDiv.querySelector(`#fim_cadeia_${newIndex}`);
@@ -817,7 +821,7 @@ function adicionarOrigem() {
     }
 }
 
-// Função para configurar autocomplete geral de origens
+// Função para configurar autocomplete geral de origens (issue #227: só CRI)
 function setupOrigemAutocomplete() {
     // Configurar autocomplete para todos os campos de cartório de origem
     const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
@@ -828,7 +832,7 @@ function setupOrigemAutocomplete() {
         const suggestions = input.closest('.autocomplete-container').querySelector('.cartorio-origem-suggestions');
         
         if (input && hidden && suggestions) {
-            setupCartorioAutocomplete(input, hidden, suggestions);
+            setupCartorioAutocomplete(input, hidden, suggestions, { somenteCri: true });
         }
     });
 }
@@ -871,27 +875,14 @@ function ativarSugestoesCartorioOrigem() {
                     }, 100);
                 }
             });
-            
-            // Buscar cartórios quando o usuário digita
-            input.addEventListener('input', function() {
-                const query = this.value.trim();
-                console.log('Usuário digitando:', query);
-                
-                if (query.length >= 2) {
-                    console.log('Buscando cartórios para:', query);
-                    buscarCartoriosOrigem(this, hidden, suggestions, query);
-                } else if (query.length === 0) {
-                    // Se o campo estiver vazio, mostrar sugestões
-                    console.log('Campo vazio, mostrando sugestões...');
-                    setTimeout(() => {
-                        mostrarSugestoesCartorioOrigem(this, hidden, suggestions);
-                    }, 100);
-                } else {
-                    // Limpar sugestões se a query for muito curta
-                    suggestions.style.display = 'none';
-                }
-            });
-            
+
+            // NOTE (issue #227 P1): removido o listener `input` duplicado.
+            // A busca por digitação já é feita pelo `input` listener do
+            // setupCartorioAutocomplete (com somente_cri=true). Manter dois
+            // listeners causava corrida de 2 fetches por tecla e estado de
+            // teclado (currentSuggestions/currentIndex) compartilhado entre
+            // listeners distintos.
+
             // Modificar o placeholder para indicar sugestões
             input.placeholder = 'Digite o nome do cartório ou clique para ver sugestões';
             console.log('Sugestões ativadas para campo', index);
