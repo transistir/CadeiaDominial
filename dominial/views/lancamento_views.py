@@ -662,6 +662,10 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     # houve POST (ou que ele teve sucesso e redirecionou) — o formulário
     # então mostra as origens do banco.
     origens_do_post = None
+    # r2: nome da transmissão digitado no POST, para preservar no re-render
+    # (None = não houve POST ou POST sem nome digitado).
+    transmissao_nome_do_post = None
+    post_rejeitado = False
     if request.method == 'POST':
         # Usar o service para atualizar o lançamento completo
         sucesso, mensagem_origens = LancamentoService.atualizar_lancamento_completo(
@@ -687,6 +691,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # Re-render a partir do POST: nada foi salvo, então o banco e a
             # instância não refletem o que o usuário digitou nas origens.
             origens_do_post = _origens_separadas_do_post(request)
+            post_rejeitado = True
             
             # FIX A (#144 fase 2 P1): Após rollback do atomic, a instância
             # mantém PKs fantasma de cartórios criados e depois apagados.
@@ -706,6 +711,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # Reconstruir transmissão do POST (preservando intenção do usuário)
             transmissao_id = request.POST.get('cartorio_transmissao', '').strip()
             transmissao_nome = request.POST.get('cartorio_transmissao_nome', '').strip()
+            # r2: preservar o nome digitado no contexto da edição para o
+            # re-render mostrar o que o usuário digitou (não o legado/compat).
+            transmissao_nome_do_post = transmissao_nome
             if transmissao_id:
                 # Se o POST trouxe id, verificar se ainda existe no banco
                 try:
@@ -714,6 +722,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 except Cartorios.DoesNotExist:
                     # FK fantasma: limpar o id e preservar o nome para re-render
                     lancamento.cartorio_transmissao = None
+                    # r2: zerar também o legado para o compat não mostrar
+                    # o antigo no lugar do digitado (ramo de falha; nada salva).
+                    lancamento.cartorio_transacao = None
             elif transmissao_nome:
                 # POST trouxe só nome: verificar se existe no banco
                 cartorio_existente = Cartorios.objects.filter(
@@ -724,6 +735,12 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 else:
                     # Nome novo que foi rolled back: deixar vazio
                     lancamento.cartorio_transmissao = None
+                    # r2: idem — zerar legado para o compat não sobrepor
+                    lancamento.cartorio_transacao = None
+            else:
+                # POST sem id nem nome: limpar tudo
+                lancamento.cartorio_transmissao = None
+                lancamento.cartorio_transacao = None
     
     # Obter pessoas do lançamento para exibição no formulário
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
@@ -751,6 +768,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'is_lancamento_compartilhado': not is_lancamento_do_imovel,
         'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        # r2: preservar o nome digitado da transmissão no re-render pós-rollback
+        'transmissao_nome_do_post': transmissao_nome_do_post,
+        'post_rejeitado': post_rejeitado,
         **_flags_livro_folha_definidos(lancamento.documento),
     }
     

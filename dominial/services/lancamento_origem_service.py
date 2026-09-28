@@ -264,7 +264,7 @@ class LancamentoOrigemService:
                     # no banco (não da lista atual do usuário), a mensagem
                     # distingue dizendo "REGISTRADA".
                     origem_termo = (
-                        'REGISTRADA' if dados_origem.get('ambiguo_registrada')
+                        'origem registrada' if dados_origem.get('ambiguo_registrada')
                         else 'origem'
                     )
                     raise ValidationError(
@@ -711,7 +711,7 @@ class LancamentoOrigemService:
         """
         Localiza a ``LancamentoOrigem`` persistida da origem (D3, fase 2).
 
-        Devolve ``(linha | None, ambiguo)``:
+        Devolve ``(linha | None, ambiguo, ambiguo_registrada)``:
 
         1. Linha com ``indice_origem`` igual ao da origem sendo processada E
            identidade (tipo + número normalizado) igual ao texto — o caso
@@ -719,11 +719,12 @@ class LancamentoOrigemService:
            origem. É a única forma de diferenciar "T366; T366" em cartórios
            distintos: o texto sozinho não distingue.
         2. Origem HOMÔNIMA (a chave aparece 2+ vezes em ``origens_atuais``)
-           sem linha na posição → ``(None, True)``: SEM fallback por texto
+           sem linha na posição → ``(None, True, False)``: SEM fallback por texto
            (P1-1) — o texto não distingue qual linha é desta posição, e
            gravar em silêncio a 1ª candidata troca o cartório da origem.
         3. Origem não homônima → fallback por texto: exatamente 1 candidato
-           → a linha; 2 ou mais → ``(None, True)``; nenhum → ``(None, False)``.
+           → a linha; 2 ou mais → ``(None, True, True)`` (ambiguidade no banco,
+           mensagem distingue dizendo 'origem registrada'); nenhum → ``(None, False, False)``.
            Cobrem a edição que trocou o texto da posição e o legado com
            índices reordenados.
         """

@@ -1350,9 +1350,10 @@ class F2_19bFkFantasmaAposRollbackTest(Fase2Base):
     def test_f2_19b_reenvio_em_dois_posts_salva_sem_fk_fantasma(self):
         """POST 1 falha (rollback) → POST 2 corrigido com o mesmo payload
         de transmissão → salva sem IntegrityError e sem cartório duplicado.
-        
-        O browser envia de volta o hidden value do re-render. Se o re-render
-        tem o PK fantasma, o POST 2 tenta usar → IntegrityError FK."""
+
+        r2: extrai os valores renderizados do HTML (nome e hidden) em vez
+        de reinjetar o nome como literal. O hidden deve estar vazio quando
+        o POST 1 não trouxe id."""
         imovel, lancamento = self._cenario_registro(matricula="191")
         client = self._login("f2_19b2")
         url = self._url_edicao(imovel, lancamento)
@@ -1371,39 +1372,85 @@ class F2_19bFkFantasmaAposRollbackTest(Fase2Base):
         self.assertFalse(
             Cartorios.objects.filter(nome="Cartório Trans F2-19b2").exists()
         )
-        
-        # Extrair o PK fantasma do hidden field do re-render (simula browser)
+
+        # Extrair os DOIS valores renderizados do HTML (simula browser real)
         import re
         content = resp1.content.decode('utf-8')
-        match = re.search(
-            r'name="cartorio_transmissao"[^>]*value="([^"]*)"',
-            content
+        m_nome = re.search(
+            r'id="cartorio_transmissao_nome"[^>]*value="([^"]*)"',
+            content,
         )
-        pk_fantasma = match.group(1) if match else ""
+        nome_renderizado = m_nome.group(1) if m_nome else ""
+        m_hidden = re.search(
+            r'name="cartorio_transmissao" id="cartorio_transmissao"[^>]*value="([^"]*)"',
+            content,
+        )
+        hidden_renderizado = m_hidden.group(1) if m_hidden else ""
 
-        # POST 2: corrige só a origem 3; browser envia de volta o PK fantasma
+        # O nome digitado deve aparecer no re-render; o hidden deve estar vazio
+        self.assertEqual(nome_renderizado, "Cartório Trans F2-19b2")
+        self.assertEqual(hidden_renderizado, "")
+
+        # POST 2: usa os valores renderizados (como o browser faria)
         payload2 = self._post_edicao(
             lancamento,
             ["M100", "T400", "M999"],
             [str(self.cartorio_a.pk), str(self.cartorio_b.pk), str(self.cartorio_b.pk)],
             cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2-19b2", self.cartorio_b.nome],
         )
-        payload2["cartorio_transmissao"] = pk_fantasma  # browser envia o hidden
-        payload2["cartorio_transmissao_nome"] = "Cartório Trans F2-19b2"
+        payload2["cartorio_transmissao"] = hidden_renderizado
+        payload2["cartorio_transmissao_nome"] = nome_renderizado
         resp2 = client.post(url, payload2)
-        # Sucesso redireciona (302); erro re-render (200)
         if resp2.status_code != 302:
             mensagens = []
             if resp2.context is not None:
                 mensagens = [str(m) for m in resp2.context.get("messages", [])]
             self.fail(
                 f"POST 2 deveria redirecionar (302); status={resp2.status_code} "
-                f"mensagens={mensagens} pk_fantasma={pk_fantasma!r}"
+                f"mensagens={mensagens}"
             )
-        # Sem duplicação do cartório de transmissão
+        # Persistido: nome = digitado, sem duplicado
+        lancamento.refresh_from_db()
+        self.assertEqual(
+            lancamento.cartorio_transmissao.nome, "Cartório Trans F2-19b2",
+        )
         self.assertEqual(
             Cartorios.objects.filter(nome="Cartório Trans F2-19b2").count(), 1,
         )
+
+    def test_f2_19b_reenvio_com_cartorio_transacao_legado_nao_sobrescreve_nome(self):
+        """Variante r2: lançamento com cartorio_transacao (legado) preenchido.
+        O re-render não pode mostrar o nome legado no lugar do digitado."""
+        imovel, lancamento = self._cenario_registro(matricula="192")
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            cartorio_transacao=self.cartorio_b,
+        )
+        lancamento.refresh_from_db()
+
+        client = self._login("f2_19b3")
+        url = self._url_edicao(imovel, lancamento)
+
+        payload1 = self._post_edicao(
+            lancamento,
+            ["M100", "T400", "M999"],
+            [str(self.cartorio_a.pk), "", ""],
+            cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2-19b3", ""],
+        )
+        payload1["cartorio_transmissao"] = ""
+        payload1["cartorio_transmissao_nome"] = "Cartório Trans F2-19b3"
+        resp1 = client.post(url, payload1)
+        self.assertEqual(resp1.status_code, 200)
+
+        import re
+        content = resp1.content.decode('utf-8')
+        m_nome = re.search(
+            r'id="cartorio_transmissao_nome"[^>]*value="([^"]*)"',
+            content,
+        )
+        nome_renderizado = m_nome.group(1) if m_nome else ""
+
+        # O nome renderizado é o digitado, NÃO o legado
+        self.assertEqual(nome_renderizado, "Cartório Trans F2-19b3")
 
 
 class F2_12eMensagemEspecificaTest(Fase2Base):
@@ -1468,7 +1515,41 @@ class F2_21AmbiguidadeDistingueRegistradaTest(Fase2Base):
         )
 
         self.assertFalse(sucesso)
-        self.assertIn("REGISTRADA", mensagem)
+        self.assertIn("origem registrada", mensagem)
+
+
+class N3SemLinhaNaPosicaoComMultiplasCandidatasTest(Fase2Base):
+    """N3 (Opus r2): nenhuma linha na posição da origem + 2 ou mais candidatas
+    no banco (mesma chave identidade) → ramo :773-774: deve devolver
+    (None, True, True) — ambiguidade 'registrada'."""
+
+    def test_n3_resolver_sem_linha_na_posicao_com_multiplas_candidatas(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366", self.cartorio_a
+        )
+        # Duas linhas persistidas para T366 em posições diferentes da que
+        # vamos consultar (posição 5 — nenhuma linha lá).
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=0, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_a, livro="LA", folha="FA",
+        )
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=1, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_b, livro="LB", folha="FB",
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+
+        linha, ambiguo, ambiguo_registrada = (
+            LancamentoOrigemService.resolver_origem_persistida(
+                lancamento, "T366", indice_origem=5,
+                origens_atuais=["T366"],
+            )
+        )
+        self.assertIsNone(linha)
+        self.assertTrue(ambiguo)
+        self.assertTrue(ambiguo_registrada)
 
 
 class F2_15FiltroMortoRemovidoTest(SimpleTestCase):
