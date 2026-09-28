@@ -687,6 +687,43 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # Re-render a partir do POST: nada foi salvo, então o banco e a
             # instância não refletem o que o usuário digitou nas origens.
             origens_do_post = _origens_separadas_do_post(request)
+            
+            # FIX A (#144 fase 2 P1): Após rollback do atomic, a instância
+            # mantém PKs fantasma de cartórios criados e depois apagados.
+            # O template renderiza esses PKs em hiddens, e o reenvio usa
+            # o id (prioridade sobre nome em lancamento_campos_service.py:239-240)
+            # → IntegrityError em loop.
+            # Solução: reload dos FKs do banco + reconstrução da transmissão
+            # a partir do POST rejeitado.
+            try:
+                lancamento.refresh_from_db(
+                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao']
+                )
+            except Lancamento.DoesNotExist:
+                # Casos extremos: lançamento foi rolled back
+                pass
+            
+            # Reconstruir transmissão do POST (preservando intenção do usuário)
+            transmissao_id = request.POST.get('cartorio_transmissao', '').strip()
+            transmissao_nome = request.POST.get('cartorio_transmissao_nome', '').strip()
+            if transmissao_id:
+                # Se o POST trouxe id, verificar se ainda existe no banco
+                try:
+                    cartorio_trans = Cartorios.objects.get(pk=transmissao_id)
+                    lancamento.cartorio_transmissao = cartorio_trans
+                except Cartorios.DoesNotExist:
+                    # FK fantasma: limpar o id e preservar o nome para re-render
+                    lancamento.cartorio_transmissao = None
+            elif transmissao_nome:
+                # POST trouxe só nome: verificar se existe no banco
+                cartorio_existente = Cartorios.objects.filter(
+                    nome__iexact=transmissao_nome
+                ).first()
+                if cartorio_existente:
+                    lancamento.cartorio_transmissao = cartorio_existente
+                else:
+                    # Nome novo que foi rolled back: deixar vazio
+                    lancamento.cartorio_transmissao = None
     
     # Obter pessoas do lançamento para exibição no formulário
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
@@ -858,7 +895,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 # não podem colapsar no primeiro casamento por texto.
                 for i, origem in enumerate(origens_list):
                     origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                    persistida, ambiguo = LancamentoOrigemService.resolver_origem_persistida(
+                    persistida, ambiguo, _ = LancamentoOrigemService.resolver_origem_persistida(
                         lancamento, origem, i, origens_atuais=origens_list
                     )
                     if persistida:

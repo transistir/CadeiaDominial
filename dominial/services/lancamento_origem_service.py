@@ -260,10 +260,17 @@ class LancamentoOrigemService:
                     # Homônima sem posição confiável: a mensagem explica o
                     # motivo e cita o número, para o usuário saber qual
                     # linha do formulário selecionar (D6).
+                    # F2-21: Se a ambiguidade vem de linhas legadas/persistidas
+                    # no banco (não da lista atual do usuário), a mensagem
+                    # distingue dizendo "REGISTRADA".
+                    origem_termo = (
+                        'REGISTRADA' if dados_origem.get('ambiguo_registrada')
+                        else 'origem'
+                    )
                     raise ValidationError(
                         f'Cartório obrigatório para a origem '
                         f'{indice_origem + 1} ({origem_individual}): há mais '
-                        'de uma origem com esse número e não foi possível '
+                        f'de uma {origem_termo} com esse número e não foi possível '
                         'identificar o cartório desta posição. Selecione o '
                         'cartório.'
                     )
@@ -721,10 +728,10 @@ class LancamentoOrigemService:
            índices reordenados.
         """
         if not lancamento.pk:
-            return None, False
+            return None, False, False
         chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
         if not chave:
-            return None, False
+            return None, False, False
         origens = list(
             lancamento.origens_estruturadas.select_related('cartorio')
             .order_by('indice_origem')
@@ -734,26 +741,40 @@ class LancamentoOrigemService:
                 (origem for origem in origens if origem.indice_origem == indice_origem),
                 None,
             )
+            # F2-21: Mesmo com match na posição, se o banco tem múltiplas
+            # linhas para a mesma chave E a lista atual não as reconhece
+            # (não é homônima), é ambiguidade no banco (caso B).
             if na_posicao and (
                 na_posicao.tipo_documento,
                 na_posicao.numero_normalizado,
             ) == chave:
-                return na_posicao, False
+                if origens_atuais is None:
+                    origens_atuais = [
+                        o for o in (lancamento.origem or '').split(';') if o.strip()
+                    ]
+                if chave not in LancamentoOrigemService.chaves_homonimas(origens_atuais):
+                    candidatos = [
+                        origem for origem in origens
+                        if (origem.tipo_documento, origem.numero_normalizado) == chave
+                    ]
+                    if len(candidatos) > 1:
+                        return None, True, True
+                return na_posicao, False, False
         if origens_atuais is None:
             origens_atuais = [
                 o for o in (lancamento.origem or '').split(';') if o.strip()
             ]
         if chave in LancamentoOrigemService.chaves_homonimas(origens_atuais):
-            return None, True
+            return None, True, False
         candidatos = [
             origem for origem in origens
             if (origem.tipo_documento, origem.numero_normalizado) == chave
         ]
         if len(candidatos) > 1:
-            return None, True
+            return None, True, True
         if candidatos:
-            return candidatos[0], False
-        return None, False
+            return candidatos[0], False, False
+        return None, False, False
 
     @staticmethod
     def encontrar_origem_persistida(
@@ -763,7 +784,7 @@ class LancamentoOrigemService:
         Wrapper de ``resolver_origem_persistida`` que devolve só a linha
         (compatibilidade com os chamadores da fase 1).
         """
-        linha, _ = LancamentoOrigemService.resolver_origem_persistida(
+        linha, _, _ = LancamentoOrigemService.resolver_origem_persistida(
             lancamento, origem_individual, indice_origem, origens_atuais
         )
         return linha
@@ -801,6 +822,7 @@ class LancamentoOrigemService:
         """
         dados = {
             'cartorio': None, 'livro': None, 'folha': None, 'ambiguo': False,
+            'ambiguo_registrada': False,
         }
 
         # 1. Mapeamento do POST corrente (atributo da instância). O seletor
@@ -831,7 +853,7 @@ class LancamentoOrigemService:
 
         # 2. Linha persistida desta origem (D3): posição primeiro; homônima
         # sem linha na posição é ambígua e NÃO cai no fallback por texto.
-        persistida, ambiguo = LancamentoOrigemService.resolver_origem_persistida(
+        persistida, ambiguo, ambiguo_registrada = LancamentoOrigemService.resolver_origem_persistida(
             lancamento, origem_individual, indice_origem, origens_atuais
         )
         if persistida:
@@ -843,6 +865,9 @@ class LancamentoOrigemService:
             return dados
         if ambiguo:
             dados['ambiguo'] = True
+            # Ambiguidade vem de linhas legadas/persistidas no banco (não da
+            # lista atual do usuário): a mensagem distingue dizendo REGISTRADA.
+            dados['ambiguo_registrada'] = ambiguo_registrada
             return dados
 
         if total_origens is None:

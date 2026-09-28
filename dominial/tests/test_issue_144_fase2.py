@@ -1278,6 +1278,199 @@ class F2_19FalhaNaEdicaoNaoDeixaCartorioCriadoTest(Fase2Base):
         )
 
 
+class F2_19bFkFantasmaAposRollbackTest(Fase2Base):
+    """P1 (Opus/Codex): após rollback do atomic, o re-render NÃO pode
+    trazer um pk fantasma nos hiddens de cartório (transmissão ou origem).
+    Se o cartório foi criado pelo writer e o rollback o apagou, o id
+    renderizado tem que existir em Cartorios ou estar vazio."""
+
+    def _cenario_registro(self, matricula="190"):
+        """Registro sempre chama _processar_campos_transacao, gatilho do bug."""
+        imovel = self.criar_imovel(
+            matricula, self.cartorio_a, nome=f"Atual F2-19b {matricula}"
+        )
+        documento = self.criar_documento(
+            imovel, self.tipo_matricula, f"M{matricula}", self.cartorio_a
+        )
+        tipo_reg, _ = LancamentoTipo.objects.get_or_create(tipo="registro")
+        lancamento = Lancamento(
+            documento=documento, tipo=tipo_reg, data=date(2026, 1, 2),
+            origem="M100; T366", cartorio_origem=self.cartorio_a,
+        )
+        Lancamento.objects.bulk_create([lancamento])
+        lancamento = Lancamento.objects.get(pk=lancamento.pk)
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        return imovel, lancamento
+
+    def test_f2_19b_transmissao_pk_fantasma_nao_vaza_no_rerender(self):
+        imovel, lancamento = self._cenario_registro()
+        client = self._login("f2_19b")
+
+        # POST: transmissão com nome novo (writer cria cartório) +
+        # origem 3 sem cartório → falha → rollback apaga o cartório novo.
+        payload = self._post_edicao(
+            lancamento,
+            ["M100", "T400", "M999"],
+            [str(self.cartorio_a.pk), "", ""],
+            cartorios_nomes=[self.cartorio_a.nome, "Cartório Fantasma F2-19b", ""],
+        )
+        payload["cartorio_transmissao"] = ""
+        payload["cartorio_transmissao_nome"] = "Cartório Trans Fantasma F2-19b"
+        response = client.post(self._url_edicao(imovel, lancamento), payload)
+
+        self.assertEqual(response.status_code, 200)
+        # O cartório do rollback não pode existir no banco:
+        self.assertFalse(
+            Cartorios.objects.filter(
+                nome="Cartório Trans Fantasma F2-19b"
+            ).exists()
+        )
+        # O lancamento do contexto não pode apontar para pk inexistente:
+        ctx_lancamento = response.context["lancamento"]
+        transmissao = ctx_lancamento.cartorio_transmissao_compat
+        if transmissao is not None:
+            self.assertTrue(
+                Cartorios.objects.filter(pk=transmissao.pk).exists(),
+                f"FK fantasma: cartorio_transmissao pk={transmissao.pk} "
+                "não existe no banco após rollback",
+            )
+        # Idem para cartorio_origem:
+        if ctx_lancamento.cartorio_origem_id is not None:
+            self.assertTrue(
+                Cartorios.objects.filter(
+                    pk=ctx_lancamento.cartorio_origem_id
+                ).exists(),
+                f"FK fantasma: cartorio_origem "
+                f"pk={ctx_lancamento.cartorio_origem_id} não existe",
+            )
+
+    def test_f2_19b_reenvio_em_dois_posts_salva_sem_fk_fantasma(self):
+        """POST 1 falha (rollback) → POST 2 corrigido com o mesmo payload
+        de transmissão → salva sem IntegrityError e sem cartório duplicado.
+        
+        O browser envia de volta o hidden value do re-render. Se o re-render
+        tem o PK fantasma, o POST 2 tenta usar → IntegrityError FK."""
+        imovel, lancamento = self._cenario_registro(matricula="191")
+        client = self._login("f2_19b2")
+        url = self._url_edicao(imovel, lancamento)
+
+        # POST 1: falha por origem 3 sem cartório; transmissão com nome novo
+        payload1 = self._post_edicao(
+            lancamento,
+            ["M100", "T400", "M999"],
+            [str(self.cartorio_a.pk), "", ""],
+            cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2-19b2", ""],
+        )
+        payload1["cartorio_transmissao"] = ""
+        payload1["cartorio_transmissao_nome"] = "Cartório Trans F2-19b2"
+        resp1 = client.post(url, payload1)
+        self.assertEqual(resp1.status_code, 200)
+        self.assertFalse(
+            Cartorios.objects.filter(nome="Cartório Trans F2-19b2").exists()
+        )
+        
+        # Extrair o PK fantasma do hidden field do re-render (simula browser)
+        import re
+        content = resp1.content.decode('utf-8')
+        match = re.search(
+            r'name="cartorio_transmissao"[^>]*value="([^"]*)"',
+            content
+        )
+        pk_fantasma = match.group(1) if match else ""
+
+        # POST 2: corrige só a origem 3; browser envia de volta o PK fantasma
+        payload2 = self._post_edicao(
+            lancamento,
+            ["M100", "T400", "M999"],
+            [str(self.cartorio_a.pk), str(self.cartorio_b.pk), str(self.cartorio_b.pk)],
+            cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2-19b2", self.cartorio_b.nome],
+        )
+        payload2["cartorio_transmissao"] = pk_fantasma  # browser envia o hidden
+        payload2["cartorio_transmissao_nome"] = "Cartório Trans F2-19b2"
+        resp2 = client.post(url, payload2)
+        # Sucesso redireciona (302); erro re-render (200)
+        if resp2.status_code != 302:
+            mensagens = []
+            if resp2.context is not None:
+                mensagens = [str(m) for m in resp2.context.get("messages", [])]
+            self.fail(
+                f"POST 2 deveria redirecionar (302); status={resp2.status_code} "
+                f"mensagens={mensagens} pk_fantasma={pk_fantasma!r}"
+            )
+        # Sem duplicação do cartório de transmissão
+        self.assertEqual(
+            Cartorios.objects.filter(nome="Cartório Trans F2-19b2").count(), 1,
+        )
+
+
+class F2_12eMensagemEspecificaTest(Fase2Base):
+    """P2 (Opus): F2-12e deve assertar a mensagem do motivo específico da
+    falha, não só o sufixo genérico que sai também do `except Exception`."""
+
+    def test_f2_12e_mensagem_cita_cartorio_obrigatorio_origem_2(self):
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "M100; T366", self.cartorio_a
+        )
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        request = RequestFactory().post("/x/", self._post_edicao(
+            lancamento,
+            ["M100", "M999"],
+            [str(self.cartorio_a.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, ""],
+        ))
+
+        sucesso, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
+            request, lancamento, imovel
+        )
+
+        self.assertFalse(sucesso)
+        self.assertIn("Cartório obrigatório para a origem 2", mensagem)
+
+
+class F2_21AmbiguidadeDistingueRegistradaTest(Fase2Base):
+    """P2 (Opus): quando a ambiguidade vem do banco (linhas legadas) e não
+    da lista atual, a mensagem deve distinguir dizendo 'REGISTRADA'."""
+
+    def test_f2_21_ambiguidade_no_banco_diz_registrada(self):
+        """Lista com uma única origem T366, mas DUAS linhas persistidas
+        (legado desalinhado) → a mensagem deve conter 'REGISTRADA'."""
+        imovel, _, lancamento = self.criar_cenario_atual(
+            "T366", self.cartorio_a
+        )
+        # Duas linhas persistidas para T366 (ambiguidade SÓ no banco)
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=0, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_a, livro="LA", folha="FA",
+        )
+        LancamentoOrigem.objects.create(
+            lancamento=lancamento, indice_origem=1, tipo_documento="transcricao",
+            numero="T366", cartorio=self.cartorio_b, livro="LB", folha="FB",
+        )
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        # POST com UMA ÚNICA origem T366 (sem cartório); o banco tem 2 linhas
+        request = RequestFactory().post("/x/", self._post_edicao(
+            lancamento,
+            ["T366"],
+            [""],
+            cartorios_nomes=[""],
+        ))
+
+        sucesso, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
+            request, lancamento, imovel
+        )
+
+        self.assertFalse(sucesso)
+        self.assertIn("REGISTRADA", mensagem)
+
+
 class F2_15FiltroMortoRemovidoTest(SimpleTestCase):
     """Item 2/D5: `origem_cartorio_especifico` não era usado em nenhum
     template e buscava o cartório só pelo texto da origem (colapsa
