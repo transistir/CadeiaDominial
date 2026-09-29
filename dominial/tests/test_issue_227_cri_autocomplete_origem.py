@@ -9,13 +9,17 @@ Decisão de design (plano aprovado + co-review):
 - Campo de transmissão (cartorio_transacao) NÃO é filtrado (tabelionato é
   legítimo).
 
-Co-review (3 ajustes obrigatórios):
+Co-review (4 ajustes obrigatórios):
 - P1: REMOVER o listener sem filtro dos campos de origem (.cartorio-origem-nome)
   — não apenas igualar respostas. O fix deve remover o listener do
   setupCartorioAutocomplete dos campos de origem, não apenas confiar que as
   duas respostas são iguais.
 - P2: Busca deve ser insensível a acento (q=Imoveis deve achar 'Imóveis' e
   vice-versa). Implementado via strip de acentos no query + OR.
+- P2: renderizador de sugestões NÃO deve usar innerHTML com interpolação
+  de dados do cartório (XSS); usar helper com createElement + textContent.
+- P2: histórico vazio deve sincronizar o estado de teclado do autocomplete
+  (currentSuggestions/índice/display) para não deixar setas/Enter pendurados.
 
 Revisão r1 (fix-brief-227-r1.md):
 - P0/P1: clonagem (desativarSugestoes + adicionarOrigemSimples) remove o
@@ -28,6 +32,21 @@ Revisão r1 (fix-brief-227-r1.md):
 - P2 'ç': mapa de acentos inclui c/[cçCÇ].
 - P2 testes: metacaracteres regex (200 OK), Iguacu → Iguaçu, remover teste 14
   (código morto buscarCartoriosOrigem).
+
+Revisão r2 (fix-brief-227-r2.md):
+- P1: XSS armazenado — helper `preencherSugestaoCartorio` monta spans via
+  createElement + textContent em todos os 3 pontos; teste-guarda assertNotRegex
+  veta innerHTML com interpolação de cartorio.nome/formatarLocalizacaoCartorio.
+- P2: histórico vazio — mostrarSugestoesCartorioOrigem sincroniza também lista
+  vazia (`_setCurrentSuggestions([])` + ocultar div) e descarta resposta
+  obsoleta quando o input mudou entre fetch e resposta.
+- P2: adicionarOrigem() passa a chamar ligarBuscaCartorioOrigem (entra no
+  WeakSet); desativarSugestoesCartorioOrigem chama ligarBuscaCartorioOrigem
+  no clone após replaceChild (fecha o caso Registro/Averbação).
+- P2: testes/doc — fortalecer teste 16 (lê corpo da função alvo); teste-guarda
+  XSS; teste que lê corpo de ligarBuscaCartorioOrigem para garantir somenteCri;
+  remover `somente_cri=true` do fetch de histórico (backend ignora); docstring
+  lista 4 ajustes (era 3).
 
 Fixtures (plano seção 5):
   A: "Registro de Imóveis de Guaíra"
@@ -461,7 +480,14 @@ class SetupCartorioAutocompleteSomenteCriJsTest(TestCase):
         )
         self.assertIsNotNone(match_add, "adicionarOrigem não encontrada")
         add_body = match_add.group(1)
-        self.assertIn('somenteCri', add_body)
+        # Após r2: adicionarOrigem chama ligarBuscaCartorioOrigem (WeakSet)
+        # que internamente passa {somenteCri: true}
+        has_somenteCri = 'somenteCri' in add_body
+        has_ligar = 'ligarBuscaCartorioOrigem' in add_body
+        self.assertTrue(
+            has_somenteCri or has_ligar,
+            "adicionarOrigem deve ter somenteCri ou chamar ligarBuscaCartorioOrigem"
+        )
 
     # Guarda 13
     def test_cartorio_nome_e_transacao_sem_opcoes(self):
@@ -548,3 +574,169 @@ class MetacaracteresRegexTest(TestCase):
                 )
                 self.assertEqual(response.status_code, 200, f"q={q!r} retornou {response.status_code}")
 
+
+
+class XSSGuardTest(TestCase):
+    """Teste r2 P1: renderizador NÃO usa innerHTML com interpolação de dados do cartório."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        js_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+        )
+        with open(js_path, 'r', encoding='utf-8') as f:
+            cls.js_content = f.read()
+
+    def test_sem_innerHTML_com_interpolacao_de_cartorio(self):
+        """Nenhum innerHTML deve interpolar cartorio.nome ou formatarLocalizacaoCartorio."""
+        # Padrão: innerHTML = `...${cartorio.nome}...` ou innerHTML = `...${formatarLocalizacaoCartorio(...)}...`
+        # Deve usar preencherSugestaoCartorio (createElement + textContent)
+        self.assertNotRegex(
+            self.js_content,
+            r'innerHTML\s*=\s*`[^`]*\$\{cartorio\.nome\}',
+            "innerHTML não deve interpolar cartorio.nome (XSS); use preencherSugestaoCartorio"
+        )
+        self.assertNotRegex(
+            self.js_content,
+            r'innerHTML\s*=\s*`[^`]*\$\{formatarLocalizacaoCartorio\(',
+            "innerHTML não deve interpolar formatarLocalizacaoCartorio (XSS); use preencherSugestaoCartorio"
+        )
+
+
+class HistoricoVazioSyncTest(TestCase):
+    """Teste r2 P2: histórico vazio sincroniza estado de teclado."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        js_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+        )
+        with open(js_path, 'r', encoding='utf-8') as f:
+            cls.js_content = f.read()
+
+    def test_mostrarSugestoesCartorioOrigem_sincroniza_lista_vazia(self):
+        """mostrarSugestoesCartorioOrigem deve chamar _setCurrentSuggestions mesmo com lista vazia."""
+        match = re.search(
+            r'function\s+mostrarSugestoesCartorioOrigem\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "mostrarSugestoesCartorioOrigem não encontrada")
+        body = match.group(1)
+        # Deve chamar _setCurrentSuggestions ANTES do if (data.results && data.results.length > 0)
+        self.assertIn('_setCurrentSuggestions', body)
+        # Deve ocultar o div quando lista é vazia
+        self.assertIn('suggestions.style.display = \'none\'', body)
+
+    def test_mostrarSugestoesCartorioOrigem_descarta_resposta_obsoleta(self):
+        """mostrarSugestoesCartorioOrigem deve descartar resposta se input mudou."""
+        match = re.search(
+            r'function\s+mostrarSugestoesCartorioOrigem\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        body = match.group(1)
+        # Deve capturar valor do input no momento do fetch
+        self.assertIn('valorNoFetch', body)
+        # Deve comparar input.value !== valorNoFetch
+        self.assertIn('input.value !== valorNoFetch', body)
+
+
+class LigarBuscaCartorioOrigemSomenteCriTest(TestCase):
+    """Teste r2 P2: ligarBuscaCartorioOrigem passa {somenteCri: true}."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        js_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+        )
+        with open(js_path, 'r', encoding='utf-8') as f:
+            cls.js_content = f.read()
+
+    def test_ligarBuscaCartorioOrigem_passa_somenteCri_true(self):
+        """ligarBuscaCartorioOrigem deve chamar setupCartorioAutocomplete com {somenteCri: true}."""
+        match = re.search(
+            r'function\s+ligarBuscaCartorioOrigem\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "ligarBuscaCartorioOrigem não encontrada")
+        body = match.group(1)
+        self.assertIn('setupCartorioAutocomplete', body)
+        self.assertIn('somenteCri: true', body)
+
+
+class AdicionarOrigemEDesativarWeakSetTest(TestCase):
+    """Teste r2 P2: adicionarOrigem e desativarSugestoes usam ligarBuscaCartorioOrigem (WeakSet)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        js_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+        )
+        with open(js_path, 'r', encoding='utf-8') as f:
+            cls.js_content = f.read()
+
+    def test_adicionarOrigem_chama_ligarBuscaCartorioOrigem(self):
+        """adicionarOrigem deve chamar ligarBuscaCartorioOrigem (não setupCartorioAutocomplete direto)."""
+        match = re.search(
+            r'function\s+adicionarOrigem\s*\(\s*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "adicionarOrigem não encontrada")
+        body = match.group(1)
+        self.assertIn('ligarBuscaCartorioOrigem', body)
+        # NÃO deve chamar setupCartorioAutocomplete direto (WeakSet não vê)
+        self.assertNotRegex(body, r'setupCartorioAutocomplete\s*\(')
+
+    def test_desativarSugestoesCartorioOrigem_chama_ligarBuscaCartorioOrigem(self):
+        """desativarSugestoesCartorioOrigem deve chamar ligarBuscaCartorioOrigem após replaceChild."""
+        match = re.search(
+            r'function\s+desativarSugestoesCartorioOrigem\s*\(\s*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "desativarSugestoesCartorioOrigem não encontrada")
+        body = match.group(1)
+        self.assertIn('ligarBuscaCartorioOrigem', body)
+        # Deve chamar APÓS replaceChild (fecha caso Registro/Averbação)
+        self.assertIn('replaceChild', body)
+
+
+class HistoricoSemSomenteCriTest(TestCase):
+    """Teste r2 P2: fetch de histórico NÃO envia somente_cri (backend ignora)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        js_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+        )
+        with open(js_path, 'r', encoding='utf-8') as f:
+            cls.js_content = f.read()
+
+    def test_fetch_historico_sem_somente_cri(self):
+        """fetch de sugestões (histórico) NÃO deve enviar somente_cri=true."""
+        # Extrair corpo de mostrarSugestoesCartorioOrigem
+        match = re.search(
+            r'function\s+mostrarSugestoesCartorioOrigem\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "mostrarSugestoesCartorioOrigem não encontrada")
+        body = match.group(1)
+        # O fetch de histórico é /cartorio-autocomplete/?imovel_id=...&sugestoes=true
+        # NÃO deve ter somente_cri=true nesse fetch
+        fetch_match = re.search(
+            r'fetch\s*\(\s*[`\'][^`\']*cartorio-autocomplete[^`\']*sugestoes=true[^`\']*[`\']',
+            body,
+        )
+        self.assertIsNotNone(fetch_match, "fetch de sugestões não encontrado")
+        fetch_url = fetch_match.group(0)
+        self.assertNotIn('somente_cri', fetch_url,
+            "fetch de histórico não deve enviar somente_cri (backend ignora)")
