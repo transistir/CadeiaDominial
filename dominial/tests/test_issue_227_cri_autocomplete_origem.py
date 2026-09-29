@@ -644,6 +644,23 @@ class HistoricoVazioSyncTest(TestCase):
         # Deve comparar input.value !== valorNoFetch
         self.assertIn('input.value !== valorNoFetch', body)
 
+    def test_mostrarSugestoesCartorioOrigem_trim_antes_de_fetch(self):
+        """r3: corpo da função deve checar trim() ANTES do fetch (guarda de campo vazio)."""
+        match = re.search(
+            r'function\s+mostrarSugestoesCartorioOrigem\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "mostrarSugestoesCartorioOrigem não encontrada")
+        body = match.group(1)
+        # trim() deve aparecer ANTES do fetch( — garante que campo com texto
+        # aborta o histórico antes de disparar a requisição.
+        self.assertIn('trim()', body, "trim() não encontrado no corpo da função")
+        self.assertIn('fetch(', body, "fetch() não encontrado no corpo da função")
+        self.assertLess(
+            body.index('trim()'), body.index('fetch('),
+            "trim() deve aparecer ANTES de fetch() no corpo de mostrarSugestoesCartorioOrigem"
+        )
+
 
 class LigarBuscaCartorioOrigemSomenteCriTest(TestCase):
     """Teste r2 P2: ligarBuscaCartorioOrigem passa {somenteCri: true}."""

@@ -1018,6 +1018,14 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
         return;
     }
     
+    // Issue #227 r3 — P2: se o campo já tem texto, a busca por digitação é
+    // dona da lista. Retornar cedo evita que o histórico (agendado pelo
+    // setTimeout de focus/click em ~100ms) apague resultados visíveis quando
+    // o usuário colou/digitou dentro da janela.
+    if (input.value.trim() !== '') {
+        return;
+    }
+    
     // Fazer requisição para obter sugestões baseadas no histórico
     console.log('Fazendo requisição para:', `/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`);
     // Issue #227 r2 — P2: capturar o valor do campo no momento do fetch para
