@@ -1385,7 +1385,11 @@ class F2_19bFkFantasmaAposRollbackTest(Fase2Base):
             r'name="cartorio_transmissao" id="cartorio_transmissao"[^>]*value="([^"]*)"',
             content,
         )
-        hidden_renderizado = m_hidden.group(1) if m_hidden else ""
+        # N4: regex pode falhar — assertIsNotNone garante a falha explícita.
+        self.assertIsNotNone(m_nome, "input nome não encontrado no HTML")
+        self.assertIsNotNone(m_hidden, "input hidden não encontrado no HTML")
+        nome_renderizado = m_nome.group(1)
+        hidden_renderizado = m_hidden.group(1)
 
         # O nome digitado deve aparecer no re-render; o hidden deve estar vazio
         self.assertEqual(nome_renderizado, "Cartório Trans F2-19b2")
@@ -1418,7 +1422,79 @@ class F2_19bFkFantasmaAposRollbackTest(Fase2Base):
             Cartorios.objects.filter(nome="Cartório Trans F2-19b2").count(), 1,
         )
 
-    def test_f2_19b_reenvio_com_cartorio_transacao_legado_nao_sobrescreve_nome(self):
+    def test_f2_19c_homonimo_preserva_id_valido_do_post_no_rerender(self):
+        """P2-2: dois cartórios homônimos (mesmo nome, cns distintos).
+        POST 1 rejeitado deve preservar o id válido no hidden para o POST 2
+        resolver por id (não por nome, que daria MultipleObjectsReturned)."""
+        # Criar dois cartórios com mesmo nome (homônimos)
+        x1 = Cartorios.objects.create(nome="Cartório X", cns="CNS-X1")
+        x2 = Cartorios.objects.create(nome="Cartório X", cns="CNS-X2")
+        
+        imovel, lancamento = self._cenario_registro(matricula="193")
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            cartorio_transmissao=x1,
+        )
+        lancamento.refresh_from_db()
+
+        client = self._login("f2_19c")
+        url = self._url_edicao(imovel, lancamento)
+
+        # POST 1: rejeitado (origem sem cartório)
+        payload1 = self._post_edicao(
+            lancamento,
+            ["M100", "T400", "M999"],
+            [str(self.cartorio_a.pk), "", ""],
+            cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2-19c", ""],
+        )
+        payload1["cartorio_transmissao"] = str(x1.pk)
+        payload1["cartorio_transmissao_nome"] = "Cartório X"
+        resp1 = client.post(url, payload1)
+        self.assertEqual(resp1.status_code, 200)
+
+        import re
+        content = resp1.content.decode('utf-8')
+        m_nome = re.search(
+            r'id="cartorio_transmissao_nome"[^>]*value="([^"]*)"',
+            content,
+        )
+        m_hidden = re.search(
+            r'name="cartorio_transmissao" id="cartorio_transmissao"[^>]*value="([^"]*)"',
+            content,
+        )
+        self.assertIsNotNone(m_nome, "input nome não encontrado no HTML")
+        self.assertIsNotNone(m_hidden, "input hidden não encontrado no HTML")
+        nome_renderizado = m_nome.group(1)
+        hidden_renderizado = m_hidden.group(1)
+
+        # O re-render deve preservar o id válido do POST (não vazio)
+        self.assertEqual(hidden_renderizado, str(x1.pk))
+        self.assertEqual(nome_renderizado, "Cartório X")
+
+        # POST 2: usa os valores renderizados → 302 (sucesso)
+        payload2 = self._post_edicao(
+            lancamento,
+            ["M100", "T400", "M999"],
+            [str(self.cartorio_a.pk), str(self.cartorio_b.pk), str(self.cartorio_b.pk)],
+            cartorios_nomes=[self.cartorio_a.nome, "Cartório Novo F2-19c", self.cartorio_b.nome],
+        )
+        payload2["cartorio_transmissao"] = hidden_renderizado
+        payload2["cartorio_transmissao_nome"] = nome_renderizado
+        resp2 = client.post(url, payload2)
+        if resp2.status_code != 302:
+            mensagens = []
+            if resp2.context is not None:
+                mensagens = [str(m) for m in resp2.context.get("messages", [])]
+            self.fail(
+                f"POST 2 deveria redirecionar (302); status={resp2.status_code} "
+                f"mensagens={mensagens}"
+            )
+
+        # Persistido: transmissão aponta para x1 (não x2), sem duplicado
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.cartorio_transmissao_id, x1.pk)
+        self.assertEqual(Cartorios.objects.filter(nome="Cartório X").count(), 2)
+
+    def test_f2_19b_cartorio_transacao_legado_nao_sobrescreve_nome_no_render(self):
         """Variante r2: lançamento com cartorio_transacao (legado) preenchido.
         O re-render não pode mostrar o nome legado no lugar do digitado."""
         imovel, lancamento = self._cenario_registro(matricula="192")
@@ -1482,11 +1558,11 @@ class F2_12eMensagemEspecificaTest(Fase2Base):
 
 class F2_21AmbiguidadeDistingueRegistradaTest(Fase2Base):
     """P2 (Opus): quando a ambiguidade vem do banco (linhas legadas) e não
-    da lista atual, a mensagem deve distinguir dizendo 'REGISTRADA'."""
+    da lista atual, a mensagem deve distinguir dizendo 'registrada'."""
 
     def test_f2_21_ambiguidade_no_banco_diz_registrada(self):
         """Lista com uma única origem T366, mas DUAS linhas persistidas
-        (legado desalinhado) → a mensagem deve conter 'REGISTRADA'."""
+        (legado desalinhado) → a mensagem deve conter 'registrada'."""
         imovel, _, lancamento = self.criar_cenario_atual(
             "T366", self.cartorio_a
         )

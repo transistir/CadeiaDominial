@@ -665,6 +665,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     # r2: nome da transmissão digitado no POST, para preservar no re-render
     # (None = não houve POST ou POST sem nome digitado).
     transmissao_nome_do_post = None
+    # r3: preservar o id válido do POST para o hidden não esvaziar no re-render
+    # (sem isso, homônimos dão MultipleObjectsReturned no reenvio por nome).
+    transmissao_id_do_post = ''
     post_rejeitado = False
     if request.method == 'POST':
         # Usar o service para atualizar o lançamento completo
@@ -719,6 +722,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 try:
                     cartorio_trans = Cartorios.objects.get(pk=transmissao_id)
                     lancamento.cartorio_transmissao = cartorio_trans
+                    # r3: id válido encontrado no banco → preservar no hidden
+                    # para o re-render (homônimos não colidem por nome).
+                    transmissao_id_do_post = str(cartorio_trans.pk)
                 except Cartorios.DoesNotExist:
                     # FK fantasma: limpar o id e preservar o nome para re-render
                     lancamento.cartorio_transmissao = None
@@ -770,6 +776,8 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
         # r2: preservar o nome digitado da transmissão no re-render pós-rollback
         'transmissao_nome_do_post': transmissao_nome_do_post,
+        # r3: preservar o id válido do POST no hidden (homônimos não colidem)
+        'transmissao_id_do_post': transmissao_id_do_post,
         'post_rejeitado': post_rejeitado,
         **_flags_livro_folha_definidos(lancamento.documento),
     }

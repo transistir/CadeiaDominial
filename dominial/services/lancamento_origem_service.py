@@ -262,7 +262,7 @@ class LancamentoOrigemService:
                     # linha do formulário selecionar (D6).
                     # F2-21: Se a ambiguidade vem de linhas legadas/persistidas
                     # no banco (não da lista atual do usuário), a mensagem
-                    # distingue dizendo "REGISTRADA".
+                    # distingue dizendo "registrada".
                     origem_termo = (
                         'origem registrada' if dados_origem.get('ambiguo_registrada')
                         else 'origem'
@@ -867,7 +867,7 @@ class LancamentoOrigemService:
         if ambiguo:
             dados['ambiguo'] = True
             # Ambiguidade vem de linhas legadas/persistidas no banco (não da
-            # lista atual do usuário): a mensagem distingue dizendo REGISTRADA.
+            # lista atual do usuário): a mensagem distingue dizendo registrada.
             dados['ambiguo_registrada'] = ambiguo_registrada
             return dados
 
