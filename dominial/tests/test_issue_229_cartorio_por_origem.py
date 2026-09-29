@@ -252,6 +252,50 @@ class FormatarOrigemCompletaPorOrigemTest(_Fixture229, TestCase):
 
         self.assertEqual(resultado, 'T366 (Registro de Imóveis de Iguatemi)\nT366')
 
+    def test_fim_cadeia_desloca_indice_homonimos(self):
+        """Fim de cadeia na posição 0 desloca índices dos homônimos seguintes.
+
+        Se o formatador contasse só origens normais (ignorando o fim de cadeia
+        no split), os T366 receberiam cartórios trocados ou o mesmo cartório.
+        """
+        lancamento = self._criar_lancamento(
+            'Sem Origem::sem_origem; T366; T366', self.cartorio_iguatemi
+        )
+        self._criar_linha(lancamento, 1, 'transcricao', 'T366', self.cartorio_iguatemi)
+        self._criar_linha(lancamento, 2, 'transcricao', 'T366', self.cartorio_navirai)
+
+        resultado = formatar_origem_completa(lancamento)
+
+        self.assertEqual(
+            resultado,
+            'Sem Origem (Sem Origem)\n'
+            'T366 (Registro de Imóveis de Iguatemi)\n'
+            'T366 (Registro de Imóveis de Navirai)',
+        )
+
+    def test_fim_cadeia_com_texto_livre_posicao(self):
+        """Fim de cadeia desloca índice de texto livre posterior.
+
+        'Transcrição nº 55' está na posição 1 do split e a linha estruturada
+        tem indice_origem=1 — o casamento por posição deve funcionar mesmo
+        com um fim de cadeia na posição 0.
+        """
+        lancamento = self._criar_lancamento(
+            'Destacamento Público:INCRA:origem_lidima; Transcrição nº 55',
+            self.cartorio_iguatemi,
+        )
+        self._criar_linha(
+            lancamento, 1, 'transcricao', 'T55', self.cartorio_iguatemi
+        )
+
+        resultado = formatar_origem_completa(lancamento)
+
+        self.assertEqual(
+            resultado,
+            'Destacamento Público : INCRA (Origem Lídima)\n'
+            'Transcrição nº 55 (Registro de Imóveis de Iguatemi)',
+        )
+
     def test_identidade_divergente_nao_empresta_cartorio(self):
         lancamento = self._criar_lancamento('T100; M99', self.cartorio_iguatemi)
         self._criar_linha(lancamento, 0, 'transcricao', 'T100', self.cartorio_iguatemi)
@@ -578,6 +622,37 @@ class FormatarOrigemCompletaQueriesTest(_Fixture229, TestCase):
 
         with self.assertNumQueries(1):
             formatar_origem_completa(lancamento_recarregado)
+
+    def test_caminho_legado_frio_sem_select_related(self):
+        """Caminho frio: Lancamento.objects.get(pk=...) sem select_related.
+
+        Custo real: 2 queries.
+        - Query 1: linhas_estruturadas (SELECT em LancamentoOrigem, vazio)
+        - Query 2: cartorio_origem lazy load (SELECT em Cartorios)
+
+        Justificativa: sem raw SQL, não há como combinar as duas consultas
+        (linhas estruturadas + nome do cartório legado) em uma única query.
+        A verificação de linhas é obrigatória para correção (#229), e o nome
+        do cartório é necessário para exibição. O custo é aceitável para o
+        caminho frio (lançamentos legados sem prefetch), que é minoritário
+        no fluxo de exportação (onde o prefetch zera queries).
+
+        Round 2 de review: avaliar se vale a pena adicionar select_related
+        no carregamento legado para reduzir para 1 query.
+        """
+        lancamento = self._criar_lancamento('T100; T99', self.cartorio_iguatemi)
+        # Sem linhas estruturadas: caminho legado
+
+        lancamento_frio = Lancamento.objects.get(pk=lancamento.pk)
+
+        with self.assertNumQueries(2):
+            resultado = formatar_origem_completa(lancamento_frio)
+
+        self.assertEqual(
+            resultado,
+            'T100 (Registro de Imóveis de Iguatemi)\n'
+            'T99 (Registro de Imóveis de Iguatemi)',
+        )
 
     def test_so_fins_de_cadeia_nao_consulta_linhas(self):
         lancamento = self._criar_lancamento(

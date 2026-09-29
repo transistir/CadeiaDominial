@@ -63,6 +63,12 @@ def _cartorios_por_posicao(lancamento, origens):
     salvo, quando todas as partes são fim de cadeia ou quando não há nenhuma
     linha estruturada. Nos outros casos devolve uma lista alinhada a
     ``origens``: cartório resolvido ou ``None`` em cada posição.
+
+    Performance (caminho frio): quando não há linhas e o FK ``cartorio_origem``
+    não está em cache, o código faz 2 queries (1 para checar linhas + 1 lazy
+    load do FK). Não há forma limpa de combinar as duas sem raw SQL (vetado).
+    O custo é aceitável: o caminho frio é minoritário (lançamentos legados
+    sem prefetch), e o fluxo principal de exportação usa prefetch (0 queries).
     """
     # Imports tardios evitam o ciclo models -> utils -> services -> utils
     # (mesmo padrão de hierarquia_utils.py:21-28).
