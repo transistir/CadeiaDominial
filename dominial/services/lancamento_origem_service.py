@@ -705,11 +705,12 @@ class LancamentoOrigemService:
             return None
 
     @staticmethod
-    def resolver_origem_persistida(
-        lancamento, origem_individual, indice_origem=None, origens_atuais=None
+    def resolver_linha_por_posicao(
+        linhas, origem_individual, indice_origem, origens_atuais
     ):
         """
-        Localiza a ``LancamentoOrigem`` persistida da origem (D3, fase 2).
+        Lógica pura de ``resolver_origem_persistida`` (D3, fase 2), sem tocar
+        o banco: ``linhas`` já vem carregada pelo chamador.
 
         Devolve ``(linha | None, ambiguo, ambiguo_registrada)``:
 
@@ -728,18 +729,12 @@ class LancamentoOrigemService:
            Cobrem a edição que trocou o texto da posição e o legado com
            índices reordenados.
         """
-        if not lancamento.pk:
-            return None, False, False
         chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
         if not chave:
             return None, False, False
-        origens = list(
-            lancamento.origens_estruturadas.select_related('cartorio')
-            .order_by('indice_origem')
-        )
         if indice_origem is not None:
             na_posicao = next(
-                (origem for origem in origens if origem.indice_origem == indice_origem),
+                (origem for origem in linhas if origem.indice_origem == indice_origem),
                 None,
             )
             # F2-21: Mesmo com match na posição, se o banco tem múltiplas
@@ -749,26 +744,18 @@ class LancamentoOrigemService:
                 na_posicao.tipo_documento,
                 na_posicao.numero_normalizado,
             ) == chave:
-                if origens_atuais is None:
-                    origens_atuais = [
-                        o for o in (lancamento.origem or '').split(';') if o.strip()
-                    ]
                 if chave not in LancamentoOrigemService.chaves_homonimas(origens_atuais):
                     candidatos = [
-                        origem for origem in origens
+                        origem for origem in linhas
                         if (origem.tipo_documento, origem.numero_normalizado) == chave
                     ]
                     if len(candidatos) > 1:
                         return None, True, True
                 return na_posicao, False, False
-        if origens_atuais is None:
-            origens_atuais = [
-                o for o in (lancamento.origem or '').split(';') if o.strip()
-            ]
         if chave in LancamentoOrigemService.chaves_homonimas(origens_atuais):
             return None, True, False
         candidatos = [
-            origem for origem in origens
+            origem for origem in linhas
             if (origem.tipo_documento, origem.numero_normalizado) == chave
         ]
         if len(candidatos) > 1:
@@ -776,6 +763,35 @@ class LancamentoOrigemService:
         if candidatos:
             return candidatos[0], False, False
         return None, False, False
+
+    @staticmethod
+    def resolver_origem_persistida(
+        lancamento, origem_individual, indice_origem=None, origens_atuais=None
+    ):
+        """
+        Localiza a ``LancamentoOrigem`` persistida da origem (D3, fase 2).
+
+        Wrapper de ``resolver_linha_por_posicao``: mantém as guardas que
+        evitam a consulta ao banco quando o lançamento não está salvo ou o
+        texto não tem identidade (tipo + número), carrega as linhas e delega
+        a lógica pura.
+        """
+        if not lancamento.pk:
+            return None, False, False
+        chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
+        if not chave:
+            return None, False, False
+        linhas = list(
+            lancamento.origens_estruturadas.select_related('cartorio')
+            .order_by('indice_origem')
+        )
+        if origens_atuais is None:
+            origens_atuais = [
+                o for o in (lancamento.origem or '').split(';') if o.strip()
+            ]
+        return LancamentoOrigemService.resolver_linha_por_posicao(
+            linhas, origem_individual, indice_origem, origens_atuais
+        )
 
     @staticmethod
     def encontrar_origem_persistida(

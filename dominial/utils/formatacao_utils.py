@@ -2,6 +2,7 @@
 Utilitários para formatação de dados
 """
 
+import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
 
@@ -10,6 +11,101 @@ from django.utils.safestring import mark_safe
 
 
 _PREFIXO_CRI = "cartorio de registro de imoveis"
+
+_PADROES_FIM_CADEIA = (
+    'Destacamento Público:',
+    'Outra:',
+    'Sem Origem:',
+    'FIM_CADEIA',
+)
+
+
+def _eh_fim_cadeia(parte):
+    """Mesmo critério usado no laço de formatação, para não duplicar a lista."""
+    return any(padrao in parte for padrao in _PADROES_FIM_CADEIA)
+
+
+def _chaves_texto_livre(parte):
+    """
+    Identidades (tipo, número normalizado) que um texto sem prefixo M/T
+    citaria, uma por número presente no texto.
+
+    Espelho deliberado da VALIDAÇÃO 4 (hierarquia_utils.py); se a VALIDAÇÃO 4
+    mudar, divergir aqui pode casar menos ou de forma diferente — manter os
+    dois em sincronia.
+    """
+    # Import tardio evita o ciclo models -> utils -> services -> utils.
+    from .documento_identidade_utils import normalizar_numero_documento
+
+    tipo = (
+        'transcricao'
+        if 'transcrição' in parte.lower() or 'transcricao' in parte.lower()
+        else 'matricula'
+    )
+    chaves = set()
+    for numero in re.findall(r'\d+', parte):
+        try:
+            chaves.add((tipo, normalizar_numero_documento(numero, tipo)))
+        except (TypeError, ValueError):
+            continue
+    return chaves
+
+
+def _cartorios_por_posicao(lancamento, origens):
+    """
+    Cartório de cada origem normal de ``origens`` (mesma lista e mesmos
+    índices do laço de ``formatar_origem_completa``), resolvido pelas linhas
+    ``LancamentoOrigem`` da posição — nunca por ``lancamento.cartorio_origem``,
+    que é o cartório da PRIMEIRA origem válida do formulário, não o da
+    posição 0 (#229).
+
+    Devolve ``None`` (sinal para o legado) quando o lançamento não está
+    salvo, quando todas as partes são fim de cadeia ou quando não há nenhuma
+    linha estruturada. Nos outros casos devolve uma lista alinhada a
+    ``origens``: cartório resolvido ou ``None`` em cada posição.
+    """
+    # Imports tardios evitam o ciclo models -> utils -> services -> utils
+    # (mesmo padrão de hierarquia_utils.py:21-28).
+    from ..models import Lancamento
+    from ..services.lancamento_origem_leitura_service import (
+        LancamentoOrigemLeituraService,
+    )
+    from ..services.lancamento_origem_service import LancamentoOrigemService
+
+    if not isinstance(lancamento, Lancamento) or lancamento.pk is None:
+        return None
+    if all(_eh_fim_cadeia(origem) for origem in origens):
+        return None
+
+    linhas = LancamentoOrigemLeituraService.linhas_estruturadas(lancamento)
+    if not linhas:
+        return None
+
+    linhas_por_posicao = {linha.indice_origem: linha for linha in linhas}
+
+    cartorios = []
+    for indice, parte in enumerate(origens):
+        if _eh_fim_cadeia(parte):
+            cartorios.append(None)
+            continue
+
+        chave = LancamentoOrigemService._chave_identidade_texto(parte)
+        if chave:
+            linha, _ambiguo, _ambiguo_registrada = (
+                LancamentoOrigemService.resolver_linha_por_posicao(
+                    linhas, parte, indice, origens
+                )
+            )
+        else:
+            linha = linhas_por_posicao.get(indice)
+            if linha and (
+                linha.tipo_documento, linha.numero_normalizado
+            ) not in _chaves_texto_livre(parte):
+                linha = None
+
+        cartorios.append(linha.cartorio if linha else None)
+
+    return cartorios
 
 
 def _classificacao_fim_cadeia_display(classificacao):
@@ -46,15 +142,10 @@ def formatar_origem_completa(
 
     origens_formatadas = []
     origens = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
+    cartorios_por_posicao = _cartorios_por_posicao(lancamento, origens)
 
-    for origem in origens:
-        padroes_fim_cadeia = [
-            'Destacamento Público:',
-            'Outra:',
-            'Sem Origem:',
-            'FIM_CADEIA',
-        ]
-        is_fim_cadeia = any(padrao in origem for padrao in padroes_fim_cadeia)
+    for indice, origem in enumerate(origens):
+        is_fim_cadeia = _eh_fim_cadeia(origem)
 
         if is_fim_cadeia:
             if 'Destacamento Público:' in origem:
@@ -104,11 +195,15 @@ def formatar_origem_completa(
 
             origens_formatadas.append(origem_formatada)
         else:
-            cartorio_nome = (
-                lancamento.cartorio_origem.nome
-                if lancamento.cartorio_origem
-                else ''
-            )
+            if cartorios_por_posicao is not None:
+                cartorio = cartorios_por_posicao[indice]
+                cartorio_nome = cartorio.nome if cartorio else ''
+            else:
+                cartorio_nome = (
+                    lancamento.cartorio_origem.nome
+                    if lancamento.cartorio_origem
+                    else ''
+                )
             if cartorio_nome:
                 origem_formatada = f"{origem} ({cartorio_nome})"
             else:

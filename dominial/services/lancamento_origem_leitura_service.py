@@ -1,6 +1,8 @@
 import re
 from dataclasses import dataclass
 
+from django.db.models import Prefetch
+
 from ..utils.documento_identidade_utils import normalizar_numero_documento
 
 
@@ -36,13 +38,37 @@ class OrigemLancamentoLeitura:
 class LancamentoOrigemLeituraService:
     """Lê estrutura primeiro e usa o texto somente na ausência dela."""
 
+    ATRIBUTO_PREFETCH = '_origens_estruturadas_prefetch'
+
     @classmethod
-    def obter_origens(cls, lancamento):
-        estruturadas = list(
+    def prefetch_linhas(cls):
+        """``Prefetch`` para carregar em lote as linhas de vários lançamentos."""
+        # Import tardio evita o ciclo models -> utils -> services -> utils.
+        from ..models import LancamentoOrigem
+
+        return Prefetch(
+            'origens_estruturadas',
+            queryset=LancamentoOrigem.objects.select_related('cartorio').order_by(
+                'indice_origem', 'id'
+            ),
+            to_attr=cls.ATRIBUTO_PREFETCH,
+        )
+
+    @classmethod
+    def linhas_estruturadas(cls, lancamento):
+        """Linhas ``LancamentoOrigem`` do lançamento: do prefetch, se houver."""
+        prefetched = getattr(lancamento, cls.ATRIBUTO_PREFETCH, None)
+        if prefetched is not None:
+            return prefetched
+        return list(
             lancamento.origens_estruturadas.select_related('cartorio').order_by(
                 'indice_origem', 'id'
             )
         )
+
+    @classmethod
+    def obter_origens(cls, lancamento):
+        estruturadas = cls.linhas_estruturadas(lancamento)
         if estruturadas:
             return tuple(
                 OrigemLancamentoLeitura(

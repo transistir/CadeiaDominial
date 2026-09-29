@@ -75,6 +75,20 @@ class CadeiaDominialTabelaService:
         return None
 
     @staticmethod
+    def _lancamentos_do_documento(documento):
+        """
+        Lançamentos de um documento com as relações que o formatador de
+        origem e o template usam, em lote (#229): evita 1 query por
+        lançamento em `formatar_origem_completa` (`cartorio_origem` e as
+        linhas estruturadas) nas duas trilhas da tabela.
+        """
+        return documento.lancamentos.select_related(
+            'tipo', 'cartorio_origem'
+        ).prefetch_related(
+            'pessoas__pessoa', LancamentoOrigemLeituraService.prefetch_linhas()
+        ).order_by('id')
+
+    @staticmethod
     def _resolver_documento_por_codigo(codigo, cartorio):
         """
         Resolve um documento de origem pela identidade completa (tipo, número
@@ -121,10 +135,8 @@ class CadeiaDominialTabelaService:
         cadeia_processada = []
         for documento in tronco_principal:
             # Carregar lançamentos e ordenar por número simples (decrescente)
-            lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
-                'pessoas__pessoa'
-            ).order_by('id')
-            
+            lancamentos = self._lancamentos_do_documento(documento)
+
             # Ordenar por número simples em Python
             lancamentos_list = list(lancamentos)
             lancamentos_list.sort(key=lambda x: (
@@ -290,10 +302,8 @@ class CadeiaDominialTabelaService:
         cadeia_completa = []
         for documento in tronco_principal:
             # Carregar lançamentos com pessoas
-            lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
-                'pessoas__pessoa'
-            ).order_by('id')
-            
+            lancamentos = CadeiaDominialTabelaService._lancamentos_do_documento(documento)
+
             # Ordenar por número simples em Python
             lancamentos_list = list(lancamentos)
             lancamentos_list.sort(key=lambda x: (

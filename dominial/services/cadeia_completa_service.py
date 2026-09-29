@@ -286,7 +286,9 @@ class CadeiaCompletaService:
             'cartorio_origem',
             'cartorio_transmissao',
             'cartorio_transacao',
-        ).prefetch_related('pessoas__pessoa').order_by('id')
+        ).prefetch_related(
+            'pessoas__pessoa', LancamentoOrigemLeituraService.prefetch_linhas()
+        ).order_by('id')
         prefetch_related_objects(
             documentos,
             Prefetch(
