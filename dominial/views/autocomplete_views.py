@@ -23,12 +23,14 @@ def _q_busca_insensivel(query):
     
     # Regex pattern: cada vogal vira uma classe de caracteres com todas as variantes acentuadas
     # Isso cobre o caso onde o query não tem acento mas o banco tem (ex: "Imoveis" -> "Imóveis")
+    # Issue #227 r1: 'c' entra no mapa para cobrir 'ç' (Foz do Iguaçu, Serviço).
     vowel_variants = {
         'a': '[aáàâãäåAÁÀÂÃÄÅ]',
         'e': '[eéèêëEÉÈÊË]',
         'i': '[iíìîïIÍÌÎÏ]',
         'o': '[oóòôõöOÓÒÔÕÖ]',
         'u': '[uúùûüUÚÙÛÜ]',
+        'c': '[cçCÇ]',
     }
     # Escape special regex chars (exceto vogais que já tratamos)
     import re as _re

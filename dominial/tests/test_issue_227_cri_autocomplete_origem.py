@@ -14,11 +14,20 @@ Co-review (3 ajustes obrigatórios):
   — não apenas igualar respostas. O fix deve remover o listener do
   setupCartorioAutocomplete dos campos de origem, não apenas confiar que as
   duas respostas são iguais.
-- P2: Cenários de edição de registro/averbação conservam o listener sem filtro
-  (desativarSugestoes só roda no else dos ramos de tipo) — limitação conhecida,
-  follow-up.
 - P2: Busca deve ser insensível a acento (q=Imoveis deve achar 'Imóveis' e
   vice-versa). Implementado via strip de acentos no query + OR.
+
+Revisão r1 (fix-brief-227-r1.md):
+- P0/P1: clonagem (desativarSugestoes + adicionarOrigemSimples) remove o
+  listener `input` → helper `ligarBuscaCartorioOrigem` (WeakSet) chamado em
+  setupOrigemAutocomplete, ativarSugestoesCartorioOrigem e adicionarOrigemSimples.
+- P2 'mais usados': campo vazio recarrega histórico com somente_cri=true.
+- P2 cidade/UF: renderizador único mostra formatarLocalizacaoCartorio().
+- P1 pré-existente: mostrarSugestoesCartorioOrigem chama
+  suggestions._setCurrentSuggestions() para sincronizar o estado de teclado.
+- P2 'ç': mapa de acentos inclui c/[cçCÇ].
+- P2 testes: metacaracteres regex (200 OK), Iguacu → Iguaçu, remover teste 14
+  (código morto buscarCartoriosOrigem).
 
 Fixtures (plano seção 5):
   A: "Registro de Imóveis de Guaíra"
@@ -436,7 +445,14 @@ class SetupCartorioAutocompleteSomenteCriJsTest(TestCase):
         )
         self.assertIsNotNone(match_setup, "setupOrigemAutocomplete não encontrada")
         setup_body = match_setup.group(1)
-        self.assertIn('somenteCri', setup_body)
+        # Após r1: setupOrigemAutocomplete delega a ligarBuscaCartorioOrigem
+        # que internamente passa {somenteCri: true}
+        has_somenteCri = 'somenteCri' in setup_body
+        has_ligar = 'ligarBuscaCartorioOrigem' in setup_body
+        self.assertTrue(
+            has_somenteCri or has_ligar,
+            "setupOrigemAutocomplete deve ter somenteCri ou chamar ligarBuscaCartorioOrigem"
+        )
 
         # Extrair o corpo de adicionarOrigem
         match_add = re.search(
@@ -467,14 +483,68 @@ class SetupCartorioAutocompleteSomenteCriJsTest(TestCase):
                 self.assertNotIn('somenteCri', stripped,
                     f"Linha {i+1}: cartorio_nome não deve ter somenteCri")
 
-    # Guarda 14
-    def test_buscarCartoriosOrigem_usa_cartorio_imoveis_autocomplete(self):
-        """buscarCartoriosOrigem ainda usa /cartorio-imoveis-autocomplete/."""
-        self.assertIn('cartorio-imoveis-autocomplete/', self.js_content)
-        # mostrarSugestoesCartorioOrigem não tem somente_cri
-        match_mostrar = re.search(
-            r'function\s+mostrarSugestoesCartorioOrigem\s*\(.*?\)\s*\{(.*?)\n\}',
+    # Teste 15 (r1): ligarBuscaCartorioOrigem em ativarSugestoesCartorioOrigem
+    def test_ativarSugestoesCartorioOrigem_chama_ligarBuscaCartorioOrigem(self):
+        """ativarSugestoesCartorioOrigem deve chamar ligarBuscaCartorioOrigem (sem addEventListener('input')."""
+        match_ativar = re.search(
+            r'function\s+ativarSugestoesCartorioOrigem\s*\(\s*\)\s*\{(.*?)\n\}',
             self.js_content, re.DOTALL,
         )
-        if match_mostrar:
-            self.assertNotIn('somente_cri', match_mostrar.group(1))
+        self.assertIsNotNone(match_ativar, "ativarSugestoesCartorioOrigem não encontrada")
+        ativar_body = match_ativar.group(1)
+        self.assertIn('ligarBuscaCartorioOrigem', ativar_body)
+        # NÃO deve ter addEventListener('input' (busca é feita pelo helper)
+        self.assertNotIn("addEventListener('input'", ativar_body)
+
+    # Teste 16 (r1): origem_simples.js referencia ligarBuscaCartorioOrigem
+    def test_origem_simples_referencia_ligarBuscaCartorioOrigem(self):
+        """origem_simples.js deve chamar ligarBuscaCartorioOrigem após clonar."""
+        js_origem_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'origem_simples.js',
+        )
+        with open(js_origem_path, 'r', encoding='utf-8') as f:
+            origem_content = f.read()
+        self.assertIn('ligarBuscaCartorioOrigem', origem_content)
+
+
+class BuscaCedilhaTest(TestCase):
+    """Teste r1: 'ç' no mapa de acentos (Iguacu → Iguaçu)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.cri_com_cedilha = Cartorios.objects.create(
+            nome="Foz do Iguaçu - Serviço de Registro de Imóveis", cns="227401",
+            cidade="Foz do Iguaçu", estado="PR",
+        )
+
+    def test_busca_sem_cedilha_encontra_com_cedilha(self):
+        """q=Iguacu deve encontrar 'Foz do Iguaçu'."""
+        response = self.client.get(
+            reverse("cartorio-autocomplete"),
+            {"q": "Iguacu", "somente_cri": "true"},
+        )
+        nomes = {r["nome"] for r in response.json()["results"]}
+        self.assertIn(self.cri_com_cedilha.nome, nomes)
+
+
+class MetacaracteresRegexTest(TestCase):
+    """Teste r1: q com metacaracteres regex deve retornar 200 (sem 500)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        Cartorios.objects.create(
+            nome="Registro de Imóveis de Teste", cns="227501",
+            cidade="Teste", estado="TE",
+        )
+
+    def test_metacaracteres_nao_causam_erro_500(self):
+        r"""q com metacaracteres regex (R(, [a, a\) deve retornar 200."""
+        for q in ["R(", "[a", "a\\", ".*", "^test"]:
+            with self.subTest(q=q):
+                response = self.client.get(
+                    reverse("cartorio-autocomplete"),
+                    {"q": q, "somente_cri": "true"},
+                )
+                self.assertEqual(response.status_code, 200, f"q={q!r} retornou {response.status_code}")
+
