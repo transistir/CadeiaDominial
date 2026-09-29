@@ -540,7 +540,7 @@ function setupCartorioAutocomplete(input, hidden, suggestions, opcoes = {}) {
             if (query.length === 0 && opcoes.somenteCri) {
                 const imovelId = obterImovelIdDaUrl();
                 if (imovelId) {
-                    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`)
+                    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true&somente_cri=true`)
                         .then(r => r.json())
                         .then(data => {
                             const items = data.results || [];
@@ -570,9 +570,15 @@ function setupCartorioAutocomplete(input, hidden, suggestions, opcoes = {}) {
         if (opcoes.somenteCri) {
             url += '&somente_cri=true';
         }
+        // Issue #227 r4 — P1 (Greptile): guarda de resposta obsoleta.
+        // Capturar o valor do input ANTES do fetch e descartar a resposta
+        // atrasada se o campo já mudou (usuário apagou/digitou outra coisa).
+        const queryNoFetch = input.value;
         fetch(url)
             .then(response => response.json())
             .then(data => {
+                // Descartar resposta obsoleta antes de tocar no DOM.
+                if (input.value !== queryNoFetch) return;
                 suggestions.innerHTML = '';
                 currentSuggestions = data.results || [];
                 currentIndex = -1;
@@ -1033,7 +1039,7 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
     // selecionariam cartório sem item visível).
     const valorNoFetch = input.value;
     
-    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`)
+    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true&somente_cri=true`)
         .then(response => {
             console.log('Resposta recebida:', response.status);
             return response.json();

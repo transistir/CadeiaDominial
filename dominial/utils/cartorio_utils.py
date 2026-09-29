@@ -45,5 +45,7 @@ def q_nome_cri():
         Q(nome__icontains='imóveis') |
         Q(nome__icontains='imobiliario') |
         Q(nome__icontains='imobiliária') |
+        Q(nome__icontains='imobiliário') |
+        Q(nome__icontains='imobiliaria') |
         Q(nome__icontains='Registro de Imóveis')
     )

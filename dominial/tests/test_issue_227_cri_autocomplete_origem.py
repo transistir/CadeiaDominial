@@ -725,8 +725,78 @@ class AdicionarOrigemEDesativarWeakSetTest(TestCase):
         self.assertIn('replaceChild', body)
 
 
-class HistoricoSemSomenteCriTest(TestCase):
-    """Teste r2 P2: fetch de histórico NÃO envia somente_cri (backend ignora)."""
+class HistoricoFiltraCriNoBackendTest(TestCase):
+    """
+    Teste r4 P1 (Greptile): ramo sugestões do backend respeita somente_cri=true.
+
+    Cenário: imóvel com 2 origens históricas — um tabelionato (T) e um CRI (A).
+    - GET sugestoes SEM somente_cri → retorna ambos (comportamento preservado).
+    - GET sugestoes COM somente_cri=true → retorna só o CRI (filtra com q_nome_cri()).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.cri = Cartorios.objects.create(
+            nome="Registro de Imóveis de Guaíra", cns="227601",
+            cidade="Guaíra", estado="PR",
+        )
+        cls.tabelionato = Cartorios.objects.create(
+            nome="1º Tabelionato de Notas de Guaíra", cns="227602",
+            cidade="Guaíra", estado="PR",
+        )
+        ti = TIs.objects.create(nome="TI 227-hist", codigo="TI-227-hist", etnia="Teste")
+        pessoa = Pessoas.objects.create(nome="Pessoa 227-hist", cpf="22722722799")
+        cls.imovel = Imovel.objects.create(
+            terra_indigena_id=ti, nome="Imóvel 227-hist", proprietario=pessoa,
+            matricula="227-hist-1", tipo_documento_principal="matricula",
+            cartorio=cls.cri,
+        )
+        from datetime import date
+        from dominial.models import DocumentoTipo
+        doc_tipo = DocumentoTipo.objects.create(tipo="matricula")
+        lt = LancamentoTipo.objects.create(tipo="inicio_matricula")
+        doc = Documento.objects.create(
+            imovel=cls.imovel, tipo=doc_tipo, numero="M227-hist",
+            data=date(2026, 1, 1), cartorio=cls.cri,
+        )
+        Lancamento.objects.create(
+            documento=doc, cartorio_origem=cls.tabelionato,
+            tipo=lt, numero_lancamento="L-227-hist-1", data=date(2026, 1, 1),
+        )
+        Lancamento.objects.create(
+            documento=doc, cartorio_origem=cls.cri,
+            tipo=lt, numero_lancamento="L-227-hist-2", data=date(2026, 1, 2),
+        )
+
+    def test_sugestoes_sem_somente_cri_retorna_tabelionato_e_cri(self):
+        """Sem somente_cri, histórico continua amplo (tabelionato + CRI)."""
+        response = self.client.get(
+            reverse("cartorio-autocomplete"),
+            {"imovel_id": self.imovel.id, "sugestoes": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        nomes = {r["nome"] for r in response.json()["results"]}
+        self.assertIn(self.tabelionato.nome, nomes)
+        self.assertIn(self.cri.nome, nomes)
+
+    def test_sugestoes_com_somente_cri_exclui_tabelionato(self):
+        """Com somente_cri=true, tabelionato some do histórico (filtra com q_nome_cri())."""
+        response = self.client.get(
+            reverse("cartorio-autocomplete"),
+            {"imovel_id": self.imovel.id, "sugestoes": "true", "somente_cri": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        nomes = {r["nome"] for r in response.json()["results"]}
+        self.assertIn(self.cri.nome, nomes)
+        self.assertNotIn(self.tabelionato.nome, nomes)
+
+
+class HistoricoFetchComSomenteCriJsTest(TestCase):
+    """
+    Teste r4 P1 (frontend): os 2 fetches de histórico enviam somente_cri=true.
+    - :543 (recarga ao apagar o campo) → condicionado a opcoes.somenteCri.
+    - ~:1028 (mostrarSugestoesCartorioOrigem) → sempre (só campos de origem).
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -738,22 +808,152 @@ class HistoricoSemSomenteCriTest(TestCase):
         with open(js_path, 'r', encoding='utf-8') as f:
             cls.js_content = f.read()
 
-    def test_fetch_historico_sem_somente_cri(self):
-        """fetch de sugestões (histórico) NÃO deve enviar somente_cri=true."""
-        # Extrair corpo de mostrarSugestoesCartorioOrigem
+    def test_mostrarSugestoesCartorioOrigem_envia_somente_cri(self):
+        """fetch de histórico em mostrarSugestoesCartorioOrigem envia somente_cri=true."""
         match = re.search(
             r'function\s+mostrarSugestoesCartorioOrigem\s*\([^)]*\)\s*\{(.*?)\n\}',
             self.js_content, re.DOTALL,
         )
         self.assertIsNotNone(match, "mostrarSugestoesCartorioOrigem não encontrada")
         body = match.group(1)
-        # O fetch de histórico é /cartorio-autocomplete/?imovel_id=...&sugestoes=true
-        # NÃO deve ter somente_cri=true nesse fetch
+        # O fetch de histórico deve conter somente_cri=true
         fetch_match = re.search(
             r'fetch\s*\(\s*[`\'][^`\']*cartorio-autocomplete[^`\']*sugestoes=true[^`\']*[`\']',
             body,
         )
         self.assertIsNotNone(fetch_match, "fetch de sugestões não encontrado")
-        fetch_url = fetch_match.group(0)
-        self.assertNotIn('somente_cri', fetch_url,
-            "fetch de histórico não deve enviar somente_cri (backend ignora)")
+        self.assertIn('somente_cri=true', fetch_match.group(0),
+            "fetch de histórico (mostrarSugestoesCartorioOrigem) deve enviar somente_cri=true")
+
+    def test_handler_apagar_campo_envia_somente_cri_condicionado(self):
+        """
+        O fetch de recarga de histórico ao apagar o campo (dentro do handler
+        `input` de setupCartorioAutocomplete) inclui somente_cri=true e está
+        condicionado a opcoes.somenteCri.
+        """
+        # Extrair o bloco do handler `input` de setupCartorioAutocomplete:
+        # começa em "input.addEventListener('input'" e termina antes da próxima
+        # função declarada em nível 1. Usamos um recorte por linhas.
+        match = re.search(
+            r'function\s+setupCartorioAutocomplete\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "setupCartorioAutocomplete não encontrada")
+        body = match.group(1)
+        # Deve ter o bloco if (query.length === 0 && opcoes.somenteCri) seguido
+        # de fetch(...) que inclui somente_cri=true.
+        self.assertRegex(
+            body,
+            r'query\.length\s*===\s*0\s*&&\s*opcoes\.somenteCri[\s\S]*?fetch\s*\([^)]*somente_cri=true',
+            "fetch de recarga de histórico deve enviar somente_cri=true sob opcoes.somenteCri",
+        )
+
+
+class BuscaDigitadaDescartaRespostaObsoletaTest(TestCase):
+    """
+    Teste r4 P1 (Greptile): handler de busca digitada captura queryNoFetch
+    ANTES do fetch e descarta a resposta se o input mudou.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        js_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'dominial', 'js', 'lancamento_form.js',
+        )
+        with open(js_path, 'r', encoding='utf-8') as f:
+            cls.js_content = f.read()
+
+    def test_handler_busca_digitada_tem_guarda_queryNoFetch(self):
+        """
+        No handler `input` de setupCartorioAutocomplete:
+        - queryNoFetch é capturado ANTES do fetch da busca (não do histórico)
+        - input.value !== queryNoFetch é comparado ANTES de suggestions.innerHTML
+        """
+        match = re.search(
+            r'function\s+setupCartorioAutocomplete\s*\([^)]*\)\s*\{(.*?)\n\}',
+            self.js_content, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "setupCartorioAutocomplete não encontrada")
+        body = match.group(1)
+        # queryNoFetch deve aparecer (variável de guarda)
+        self.assertIn('queryNoFetch', body,
+            "handler de busca digitada deve capturar queryNoFetch")
+        # Captura: 'queryNoFetch = input.value'
+        m_captura = re.search(r'queryNoFetch\s*=\s*input\.value', body)
+        self.assertIsNotNone(m_captura, "captura 'queryNoFetch = input.value' não encontrada")
+        # O fetch da BUSCA digitada é o que usa `fetch(url)` (variável `url`).
+        # Localizar o fetch que usa 'fetch(url)' após a construção de `let url =`.
+        # A última ocorrência de `fetch(` no handler é a da busca (a do histórico
+        # vem antes, dentro do bloco query.length === 0).
+        fetch_positions = [m.start() for m in re.finditer(r'\bfetch\s*\(', body)]
+        self.assertGreaterEqual(len(fetch_positions), 2,
+            "esperados ao menos 2 fetches no handler (histórico + busca)")
+        last_fetch_pos = fetch_positions[-1]
+        self.assertLess(
+            m_captura.start(), last_fetch_pos,
+            "queryNoFetch = input.value deve aparecer ANTES do fetch() da busca",
+        )
+        # Guarda: comparação antes de mexer no DOM
+        m_guarda = re.search(r'input\.value\s*!==\s*queryNoFetch', body)
+        self.assertIsNotNone(m_guarda, "guarda 'input.value !== queryNoFetch' não encontrada")
+        # O suggestions.innerHTML da BUSCA digitada é o último no handler
+        # (o primeiro está no bloco de recarga de histórico).
+        inner_positions = [m.start() for m in re.finditer(r'suggestions\.innerHTML\s*=', body)]
+        self.assertGreaterEqual(len(inner_positions), 2,
+            "esperados ao menos 2 suggestions.innerHTML = (histórico + busca)")
+        last_inner_pos = inner_positions[-1]
+        self.assertLess(
+            m_guarda.start(), last_inner_pos,
+            "guarda deve acontecer ANTES de suggestions.innerHTML = da busca",
+        )
+
+
+class QNomeCRIVariantesImobiliarioTest(TestCase):
+    """
+    Teste r4 P2 (Codex): q_nome_cri deve incluir as variantes 'imobiliário'
+    (masc. com acento) e 'imobiliaria' (fem. sem acento).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.masc_acento = Cartorios.objects.create(
+            nome="Registro Imobiliário Teste", cns="227701",
+            cidade="Teste", estado="TE",
+        )
+        cls.fem_sem_acento = Cartorios.objects.create(
+            nome="Imobiliaria Teste", cns="227702",
+            cidade="Teste", estado="TE",
+        )
+        # Os 4 existentes continuam passando (sanity):
+        cls.existentes = []
+        for i, (nome, cns) in enumerate([
+            ("Registro de Imóveis de Guaíra", "227703"),
+            ("Registro de Imoveis de Terra Roxa", "227704"),
+            ("Registro Imobiliario de Tacuru", "227705"),
+            ("Cartório Imobiliária do Sul", "227706"),
+        ], start=1):
+            c = Cartorios.objects.create(
+                nome=nome, cns=cns, cidade="Cidade", estado="ES",
+            )
+            cls.existentes.append(c)
+
+    def test_q_nome_cri_inclui_imobiliario_masc_com_acento(self):
+        """'Registro Imobiliário Teste' deve passar no filtro (masc. com acento)."""
+        from dominial.utils.cartorio_utils import q_nome_cri
+        resultados = set(Cartorios.objects.filter(q_nome_cri()))
+        self.assertIn(self.masc_acento, resultados)
+
+    def test_q_nome_cri_inclui_imobiliaria_fem_sem_acento(self):
+        """'Imobiliaria Teste' deve passar no filtro (fem. sem acento)."""
+        from dominial.utils.cartorio_utils import q_nome_cri
+        resultados = set(Cartorios.objects.filter(q_nome_cri()))
+        self.assertIn(self.fem_sem_acento, resultados)
+
+    def test_q_nome_cri_continua_incluindo_variantes_existentes(self):
+        """Sanity: as 4 variantes já existentes continuam passando."""
+        from dominial.utils.cartorio_utils import q_nome_cri
+        resultados = set(Cartorios.objects.filter(q_nome_cri()))
+        for c in self.existentes:
+            self.assertIn(c, resultados, f"{c.nome} deveria continuar no resultado")

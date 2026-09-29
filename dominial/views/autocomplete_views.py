@@ -93,7 +93,7 @@ def cartorio_autocomplete(request):
             imovel = Imovel.objects.get(id=imovel_id)
             
             # Buscar cartórios mais usados nos lançamentos deste imóvel
-            cartorios_origem = Lancamento.objects.filter(
+            cartorios_origem_qs = Lancamento.objects.filter(
                 documento__imovel=imovel,
                 cartorio_origem__isnull=False
             ).values('cartorio_origem__id', 'cartorio_origem__nome', 'cartorio_origem__cidade', 'cartorio_origem__estado').annotate(
@@ -101,7 +101,15 @@ def cartorio_autocomplete(request):
             ).order_by('-count')[:5]
             
             results = []
-            for cartorio in cartorios_origem:
+            for cartorio in cartorios_origem_qs:
+                # Issue #227 r4 — P1 (Greptile): quando somente_cri=true,
+                # filtrar o histórico também (o ramo anterior retornava antes
+                # do filtro, oferecendo tabelionato histórico na origem).
+                if somente_cri:
+                    if not Cartorios.objects.filter(
+                        id=cartorio['cartorio_origem__id']
+                    ).filter(q_nome_cri()).exists():
+                        continue
                 results.append({
                     'id': cartorio['cartorio_origem__id'],
                     'nome': cartorio['cartorio_origem__nome'],
