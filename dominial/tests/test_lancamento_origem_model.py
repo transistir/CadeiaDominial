@@ -1,5 +1,4 @@
 from django.core.exceptions import ValidationError
-from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
@@ -15,6 +14,7 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
+from dominial.services.lancamento_origem_service import LancamentoOrigemService
 class LancamentoOrigemModelTest(TestCase):
     def setUp(self):
         self.tis = TIs.objects.create(
@@ -172,9 +172,8 @@ class LancamentoOrigemModelTest(TestCase):
             )
 
     def test_t22_fluxo_funcional_grava_origens_sem_alterar_texto_legado(self):
-        cache_key = f'mapeamento_origens_lancamento_{self.lancamento.pk}'
-        cache.set(
-            cache_key,
+        LancamentoOrigemService.definir_mapeamento(
+            self.lancamento,
             [
                 {
                     'origem': 'M123',
@@ -191,9 +190,7 @@ class LancamentoOrigemModelTest(TestCase):
                     'folha': '40',
                 },
             ],
-            timeout=3600,
         )
-        self.addCleanup(cache.delete, cache_key)
 
         self.lancamento.origem = 'M123; T456'
         self.lancamento.save(update_fields=['origem'])
@@ -219,12 +216,9 @@ class LancamentoOrigemModelTest(TestCase):
         )
 
     def test_t22_reprocessamento_reconcilia_sem_duplicar(self):
-        cache_key = f'mapeamento_origens_lancamento_{self.lancamento.pk}'
-        self.addCleanup(cache.delete, cache_key)
-
         def definir_mapeamento(origens):
-            cache.set(
-                cache_key,
+            LancamentoOrigemService.definir_mapeamento(
+                self.lancamento,
                 [
                     {
                         'origem': numero,
@@ -235,7 +229,6 @@ class LancamentoOrigemModelTest(TestCase):
                     }
                     for numero, cartorio, livro, folha in origens
                 ],
-                timeout=3600,
             )
 
         definir_mapeamento([

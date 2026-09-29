@@ -65,9 +65,11 @@ from dominial.tests.test_identidade_documento import IdentidadeDocumentoFixture
 
 
 def _mapeamento(lancamento, itens):
-    """Grava o mapeamento origem→cartório que o formulário deixa em cache."""
-    cache.set(
-        f"mapeamento_origens_lancamento_{lancamento.pk}",
+    """Grava o mapeamento origem→cartório que o formulário registra na
+    instância (formato legado, sem 'indice' — exercita o ramo legado do
+    seletor, como as listas que o pré-fase-2 gravava no cache)."""
+    LancamentoOrigemService.definir_mapeamento(
+        lancamento,
         [
             {
                 "origem": origem,
@@ -78,7 +80,6 @@ def _mapeamento(lancamento, itens):
             }
             for origem, cartorio in itens
         ],
-        timeout=3600,
     )
 
 
@@ -916,8 +917,9 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
     """P1 Opus+Codex r4: ambiguidade é sempre falha visível, nunca o 1º cartório."""
 
     def _cache_parcial_homonimos(self, lancamento, itens):
-        cache.set(
-            f"mapeamento_origens_lancamento_{lancamento.pk}",
+        """Mapeamento parcial com homônimos (formato legado, sem 'indice')."""
+        LancamentoOrigemService.definir_mapeamento(
+            lancamento,
             [
                 {
                     "origem": "T366", "cartorio_id": cartorio.pk,
@@ -926,7 +928,6 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
                 }
                 for cartorio, livro, folha in itens
             ],
-            timeout=3600,
         )
 
     def test_t19a_sem_linhas_persistidas_cache_ambiguo_nao_grava_1o_cartorio(self):
@@ -975,13 +976,31 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
                 livro=livro, folha=folha,
             )
         antes = self.estado_origens(lancamento)
-        # Sobra de um POST rejeitado: cache parcial com homônimos.
+        # Sobra de um POST rejeitado: mapeamento parcial com homônimos —
+        # e, como resíduo de um deploy pré-fase-2, a chave legada no cache,
+        # que nenhum código pode voltar a ler.
         cartorio_c = Cartorios.objects.create(
             nome="Cartório C", cns="CNS-C", cidade="Cidade C", estado="SP",
         )
         self._cache_parcial_homonimos(lancamento, [
             (cartorio_c, "LC", "FC"), (self.cartorio_a, "LA", "FA"),
         ])
+        cache.set(
+            f"mapeamento_origens_lancamento_{lancamento.pk}",
+            [
+                {
+                    "origem": "T366", "cartorio_id": cartorio_c.pk,
+                    "cartorio_nome": cartorio_c.nome,
+                    "livro": "LC", "folha": "FC",
+                },
+                {
+                    "origem": "T366", "cartorio_id": self.cartorio_a.pk,
+                    "cartorio_nome": self.cartorio_a.nome,
+                    "livro": "LA", "folha": "FA",
+                },
+            ],
+            timeout=3600,
+        )
         User.objects.create_user(username="t19b", password="t19pass")
         client = Client()
         client.login(username="t19b", password="t19pass")

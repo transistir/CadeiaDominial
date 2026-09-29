@@ -125,6 +125,11 @@ class LancamentoCriacaoService:
         
         print("DEBUG: Validação de cartórios das origens aprovada")
         
+        # O mapeamento do POST vive só durante a requisição (D4): o finally
+        # limpa da instância mesmo quando a criação falha no meio. Iniciado
+        # como None porque a falha pode acontecer ANTES da atribuição abaixo
+        # (o finally não pode mascarar o erro original com UnboundLocalError).
+        lancamento = None
         try:
             print("DEBUG: Criando lançamento básico...")
             # Criar o lançamento
@@ -210,6 +215,9 @@ class LancamentoCriacaoService:
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return None, f'Erro ao criar lançamento: {str(e)}'
+        finally:
+            if lancamento is not None:
+                LancamentoOrigemService.limpar_mapeamento(lancamento)
     
     @staticmethod
     def atualizar_lancamento_completo(request, lancamento, imovel):
@@ -281,21 +289,24 @@ class LancamentoCriacaoService:
                 
             lancamento.observacoes = observacoes
             
-            # Processar campos específicos por tipo de lançamento
-            print("DEBUG: Processando campos específicos por tipo...")
-            LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
-
-            # ATOMICIDADE (#144 rodada 3): o texto de `lancamento.origem` e as
-            # origens estruturadas são gravados na MESMA transação. Sem isso,
-            # uma falha na sincronização (ex.: origem nova sem cartório
-            # mapeado) deixava o texto novo persistido apontando origens que
-            # as linhas estruturadas não confirmam. O signal post_save roda
-            # dentro do atomic (savepoint) e também é coberto pelo rollback;
-            # `messages` e `cache.set` não são transacionais e ficam como
-            # estão. A falha de CRIAÇÃO de documento de origem segue contada
-            # na mensagem (capturada dentro de processar_origens_automaticas),
-            # sem derrubar a transação.
+            # ATOMICIDADE (#144 rodada 3 e fase 2 — D7): o writer de campos
+            # por tipo (cartórios criados por nome, OrigemFimCadeia apagada e
+            # recriada), o texto de `lancamento.origem` e as origens
+            # estruturadas são gravados na MESMA transação. Sem isso, uma
+            # falha na sincronização (ex.: origem nova sem cartório mapeado)
+            # deixava o texto novo persistido apontando origens que as linhas
+            # estruturadas não confirmam, e o writer, que rodava antes do
+            # atomic, deixava para trás o fim de cadeia recriado e os
+            # cartórios novos. O signal post_save roda dentro do atomic
+            # (savepoint) e também é coberto pelo rollback; `messages` não é
+            # transacional e fica como está. A falha de CRIAÇÃO de documento
+            # de origem segue contada na mensagem (capturada dentro de
+            # processar_origens_automaticas), sem derrubar a transação.
             with transaction.atomic():
+                # Processar campos específicos por tipo de lançamento
+                print("DEBUG: Processando campos específicos por tipo...")
+                LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+
                 # Salvar o lançamento
                 print("DEBUG: Salvando lançamento...")
                 lancamento.save()
@@ -357,7 +368,12 @@ class LancamentoCriacaoService:
 
         except ValidationError as e:
             print(f"DEBUG: Atualização cancelada por validação: {str(e)}")
-            motivo = '; '.join(e.messages) if hasattr(e, 'messages') else str(e)
+            # As mensagens de validação já terminam com ponto; sem o rstrip a
+            # frase final nasceria com ponto duplo ("origem 2.. Nenhuma…").
+            motivo = (
+                '; '.join(m.rstrip('.') for m in e.messages)
+                if hasattr(e, 'messages') else str(e).rstrip('.')
+            )
             return False, (
                 f'Atualização cancelada: {motivo}. Nenhuma alteração foi salva.'
             )
@@ -366,6 +382,11 @@ class LancamentoCriacaoService:
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return False, f'Erro ao atualizar lançamento: {str(e)}. Nenhuma alteração foi salva.'
+        finally:
+            # O mapeamento do POST vive só durante a requisição (D4): limpar
+            # mesmo quando a atualização falha, para o re-render não herdar
+            # dados de um POST que não foi salvo (P1-2).
+            LancamentoOrigemService.limpar_mapeamento(lancamento)
     
     @staticmethod
     def _avisar_divergencias(request, divergencias):

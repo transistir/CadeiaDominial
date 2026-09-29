@@ -135,9 +135,9 @@
                     <div class="autocomplete-container">
                         <input type="text" name="cartorio_transmissao_nome" id="cartorio_transmissao_nome" 
                                placeholder="Digite o nome do cartório" autocomplete="off"
-                               value="{% if modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% elif form_data and form_data.cartorio_transmissao_nome %}{{ form_data.cartorio_transmissao_nome }}{% endif %}">
+                               value="{% if post_rejeitado %}{{ transmissao_nome_do_post }}{% elif modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.nome }}{% elif form_data and form_data.cartorio_transmissao_nome %}{{ form_data.cartorio_transmissao_nome }}{% endif %}">
                         <input type="hidden" name="cartorio_transmissao" id="cartorio_transmissao" 
-                               value="{% if modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.id }}{% elif form_data and form_data.cartorio_transmissao %}{{ form_data.cartorio_transmissao }}{% endif %}">
+                               value="{% if post_rejeitado %}{{ transmissao_id_do_post }}{% elif modo_edicao and lancamento.cartorio_transmissao_compat %}{{ lancamento.cartorio_transmissao_compat.id }}{% elif form_data and form_data.cartorio_transmissao %}{{ form_data.cartorio_transmissao }}{% endif %}">
                         <div class="autocomplete-suggestions cartorio-transmissao-suggestions"></div>
                     </div>
                 </div>

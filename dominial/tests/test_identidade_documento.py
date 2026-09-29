@@ -867,13 +867,11 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
         return imovel, lancamento
 
     def test_cr07_multiplas_origens_preservam_livro_e_folha_individuais(self):
-        from django.core.cache import cache
-
         imovel, lancamento = self.criar_lancamento_multiplas_origens(
             "M101; T202",
         )
-        cache.set(
-            f"mapeamento_origens_lancamento_{lancamento.pk}",
+        LancamentoOrigemService.definir_mapeamento(
+            lancamento,
             [
                 {
                     "origem": "M101",
@@ -890,7 +888,6 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
                     "folha": "222",
                 },
             ],
-            timeout=3600,
         )
 
         LancamentoOrigemService.processar_origens_automaticas(
@@ -913,15 +910,13 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
         self.assertEqual((documento_t.livro, documento_t.folha), ("22", "222"))
 
     def test_multiplas_origens_usam_metadados_gerais_como_fallback(self):
-        from django.core.cache import cache
-
         imovel, lancamento = self.criar_lancamento_multiplas_origens(
             "M303; T404",
             livro=" 77 ",
             folha=" 88 ",
         )
-        cache.set(
-            f"mapeamento_origens_lancamento_{lancamento.pk}",
+        LancamentoOrigemService.definir_mapeamento(
+            lancamento,
             [
                 {
                     "origem": origem,
@@ -935,7 +930,6 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
                     ("T404", self.cartorio_b),
                 )
             ],
-            timeout=3600,
         )
 
         LancamentoOrigemService.processar_origens_automaticas(

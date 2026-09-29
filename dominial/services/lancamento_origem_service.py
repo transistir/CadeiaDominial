@@ -27,6 +27,118 @@ class OrigemAmbiguaError(Exception):
 
 
 class LancamentoOrigemService:
+    # Mapeamento origem→cartório/livro/folha do POST corrente, como atributo
+    # TEMPORÁRIO da instância (#144 fase 2, D4): vive exatamente uma
+    # requisição/um save na memória do objeto. O LocMem anterior vazava por
+    # TTL de 1h para POSTs seguintes e era um por processo (gunicorn com
+    # workers sync), como o do tronco que o #210 já tinha desligado.
+    ATRIBUTO_MAPEAMENTO = '_mapeamento_origens_post'
+
+    @staticmethod
+    def definir_mapeamento(lancamento, mapeamento):
+        """Grava o mapeamento do POST corrente na instância.
+
+        Lista vazia limpa: um POST sem cartório resolvido não pode deixar
+        o mapeamento de um POST anterior na mesma instância.
+        """
+        if mapeamento:
+            setattr(
+                lancamento,
+                LancamentoOrigemService.ATRIBUTO_MAPEAMENTO,
+                mapeamento,
+            )
+        else:
+            LancamentoOrigemService.limpar_mapeamento(lancamento)
+
+    @staticmethod
+    def obter_mapeamento(lancamento):
+        """O mapeamento do POST corrente, ou None (instância nova, já limpa)."""
+        return getattr(
+            lancamento, LancamentoOrigemService.ATRIBUTO_MAPEAMENTO, None
+        )
+
+    @staticmethod
+    def limpar_mapeamento(lancamento):
+        """Remove o atributo da instância (chamado no finally dos services)."""
+        lancamento.__dict__.pop(
+            LancamentoOrigemService.ATRIBUTO_MAPEAMENTO, None
+        )
+
+    @staticmethod
+    def item_do_mapeamento(
+        mapeamento, origem_individual, indice_origem=None, total_origens=None
+    ):
+        """
+        Seleciona a entrada do mapeamento para UMA origem (D2, fase 2).
+
+        Formato novo (pelo menos uma entrada tem ``indice``): vale só o valor
+        de ``indice`` — a ordem física da lista e ``total_origens`` são
+        ignorados. Entrada sem ``indice`` ou com ``indice`` não-int (inclui
+        ``bool``) é descartada; um mapeamento misto NUNCA cai na regra legada.
+
+        Formato legado (nenhuma entrada tem ``indice``, como as listas que o
+        pré-fase-2 gravava): regra da fase 1 — acesso posicional quando a
+        lista cobre todas as origens e o texto na posição bate; senão fallback
+        por texto, que só vale com UM candidato.
+
+        Devolve ``(item | None, ambiguo)``.
+        """
+        if not mapeamento:
+            return None, False
+
+        entradas = [
+            item for item in mapeamento if isinstance(item, dict)
+        ]
+        if any('indice' in item for item in entradas):
+            if indice_origem is None:
+                return None, False
+            na_posicao = [
+                item for item in entradas
+                if isinstance(item.get('indice'), int)
+                and not isinstance(item.get('indice'), bool)
+                and item['indice'] == indice_origem
+            ]
+            if len(na_posicao) > 1:
+                return None, True
+            if na_posicao:
+                item = na_posicao[0]
+                if item.get('origem') == origem_individual:
+                    return item, False
+                # Entrada na posição com texto divergente: é de outra origem,
+                # e a busca segue para a linha persistida.
+                return None, False
+            return None, False
+
+        # Legado (fase 1): posicional quando cobre todas as origens.
+        if (
+            indice_origem is not None
+            and total_origens is not None
+            and len(entradas) == total_origens
+            and 0 <= indice_origem < len(entradas)
+            and entradas[indice_origem].get('origem') == origem_individual
+        ):
+            return entradas[indice_origem], False
+        por_texto = [
+            item for item in entradas
+            if item.get('origem') == origem_individual
+        ]
+        if len(por_texto) > 1:
+            return None, True
+        return (por_texto[0] if por_texto else None), False
+
+    @staticmethod
+    def chaves_homonimas(origens):
+        """Chaves de identidade (tipo + número normalizado) que aparecem 2 ou
+        mais vezes na lista de origens."""
+        contagem = {}
+        for origem in origens:
+            chave = LancamentoOrigemService._chave_identidade_texto(origem)
+            if chave:
+                contagem[chave] = contagem.get(chave, 0) + 1
+        return {
+            chave for chave, total in contagem.items() if total > 1
+        }
+
     @staticmethod
     def processar_origens_automaticas(lancamento, origem, imovel):
         """
@@ -66,7 +178,8 @@ class LancamentoOrigemService:
         # Processar apenas origens normais (que criam documentos)
         if origens_normais:
             return LancamentoOrigemService._processar_origens_normais(
-                lancamento, origens_normais, imovel, len(origens_individuals)
+                lancamento, origens_normais, imovel, len(origens_individuals),
+                origens_atuais=origens_individuals,
             )
         
         # Se só tem fim de cadeia, retornar mensagem informativa
@@ -116,7 +229,7 @@ class LancamentoOrigemService:
         de ordem sem colisão na constraint ``(lancamento, indice_origem)``.
         """
         desejadas = []
-        identidades_vistas = set()
+        identidades_vistas = {}
 
         for indice_origem, origem_individual in enumerate(origens):
             if LancamentoOrigemService._is_fim_cadeia(origem_individual):
@@ -129,6 +242,7 @@ class LancamentoOrigemService:
                 origem_individual,
                 indice_origem=indice_origem,
                 total_origens=len(origens),
+                origens_atuais=origens,
             )
             cartorio = dados_origem['cartorio']
             identidade = LancamentoOrigemService._extrair_identidade_origem(
@@ -142,6 +256,24 @@ class LancamentoOrigemService:
 
             tipo_documento, numero = identidade
             if not cartorio:
+                if dados_origem['ambiguo']:
+                    # Homônima sem posição confiável: a mensagem explica o
+                    # motivo e cita o número, para o usuário saber qual
+                    # linha do formulário selecionar (D6).
+                    # F2-21: Se a ambiguidade vem de linhas legadas/persistidas
+                    # no banco (não da lista atual do usuário), a mensagem
+                    # distingue dizendo "registrada".
+                    origem_termo = (
+                        'origem registrada' if dados_origem.get('ambiguo_registrada')
+                        else 'origem'
+                    )
+                    raise ValidationError(
+                        f'Cartório obrigatório para a origem '
+                        f'{indice_origem + 1} ({origem_individual}): há mais '
+                        f'de uma {origem_termo} com esse número e não foi possível '
+                        'identificar o cartório desta posição. Selecione o '
+                        'cartório.'
+                    )
                 raise ValidationError(
                     f'Cartório obrigatório para a origem {indice_origem + 1}.'
                 )
@@ -156,10 +288,15 @@ class LancamentoOrigemService:
                 cartorio.pk,
             )
             if chave_identidade in identidades_vistas:
+                # A mensagem cita a posição colidente para o usuário
+                # entender qual das linhas é a repetida (D6).
                 raise ValidationError(
-                    f'Origem documental duplicada na posição {indice_origem + 1}.'
+                    f'Origem documental duplicada na posição '
+                    f'{indice_origem + 1}: corresponde à origem da posição '
+                    f'{identidades_vistas[chave_identidade] + 1}, com o mesmo '
+                    'tipo, número e cartório.'
                 )
-            identidades_vistas.add(chave_identidade)
+            identidades_vistas[chave_identidade] = indice_origem
 
             documento_origem = LancamentoOrigemService._resolver_documento(
                 tipo_documento,
@@ -268,20 +405,23 @@ class LancamentoOrigemService:
         return False
     
     @staticmethod
-    def _processar_origens_normais(lancamento, origens_normais, imovel, total_origens):
+    def _processar_origens_normais(
+        lancamento, origens_normais, imovel, total_origens, origens_atuais=None
+    ):
         """
         Processa origens normais (que criam documentos).
 
         ``origens_normais`` carrega ``(indice_no_texto_completo, texto)`` —
         índices do texto COMPLETO (fins de cadeia incluídos), os mesmos usados
-        pelas linhas persistidas e pelo cache do formulário (#144 rodada 3).
+        pelas linhas persistidas e pelo mapeamento do formulário (#144 rodada 3).
         """
         # Múltiplas origens: cada uma é validada e criada com o cartório
         # específico dela (#144) - nunca pré-validar o texto todo com o
         # cartório da primeira origem.
         if len(origens_normais) > 1:
             return LancamentoOrigemService._processar_multiplas_origens(
-                lancamento, origens_normais, imovel, total_origens
+                lancamento, origens_normais, imovel, total_origens,
+                origens_atuais=origens_atuais,
             )
 
         indice_unico, origem_unica = origens_normais[0]
@@ -290,6 +430,7 @@ class LancamentoOrigemService:
             origem_unica,
             indice_origem=indice_unico,
             total_origens=total_origens,
+            origens_atuais=origens_atuais,
         )
         origens_processadas = processar_origens_para_documentos(
             origem_unica, imovel, lancamento, dados_origem['cartorio']
@@ -461,7 +602,9 @@ class LancamentoOrigemService:
         return f'Documento de fim de cadeia criado: {documento_criado.numero} ({documento_criado.tipo.get_tipo_display()}) com classificação "{classificacao}"'
     
     @staticmethod
-    def _processar_multiplas_origens(lancamento, origens_normais, imovel, total_origens):
+    def _processar_multiplas_origens(
+        lancamento, origens_normais, imovel, total_origens, origens_atuais=None
+    ):
         """
         Processa múltiplas origens com seus respectivos cartórios.
 
@@ -481,6 +624,7 @@ class LancamentoOrigemService:
                 origem_individual,
                 indice_origem=indice_origem,
                 total_origens=total_origens,
+                origens_atuais=origens_atuais,
             )
             cartorio = dados_origem['cartorio']
 
@@ -561,32 +705,34 @@ class LancamentoOrigemService:
             return None
 
     @staticmethod
-    def encontrar_origem_persistida(lancamento, origem_individual, indice_origem=None):
+    def resolver_origem_persistida(
+        lancamento, origem_individual, indice_origem=None, origens_atuais=None
+    ):
         """
-        Localiza a ``LancamentoOrigem`` persistida da origem na POSIÇÃO do
-        texto (#144 rodada 3).
+        Localiza a ``LancamentoOrigem`` persistida da origem (D3, fase 2).
 
-        Ordem de resolução:
+        Devolve ``(linha | None, ambiguo, ambiguo_registrada)``:
 
         1. Linha com ``indice_origem`` igual ao da origem sendo processada E
            identidade (tipo + número normalizado) igual ao texto — o caso
            normal de re-save, em que cada posição continua sendo a mesma
            origem. É a única forma de diferenciar "T366; T366" em cartórios
            distintos: o texto sozinho não distingue.
-        2. Fallback por texto em OUTRA posição — cobre a edição que trocou o
-           texto da posição (a linha antiga da posição não pode emprestar seu
-           cartório para a identidade nova) e o legado com índices
-           reordenados. Só vale com EXATAMENTE UM candidato compatível:
-           homônimos ("T366; T366") com índices desalinhados são ambíguos e
-           nunca resolvem para a primeira ocorrência (#144 P1 Codex r3).
-        3. Nada casa, ou mais de um candidato → ``None``: o chamador falha de
-           forma visível em vez de regravar a origem com a identidade de outra.
+        2. Origem HOMÔNIMA (a chave aparece 2+ vezes em ``origens_atuais``)
+           sem linha na posição → ``(None, True, False)``: SEM fallback por texto
+           (P1-1) — o texto não distingue qual linha é desta posição, e
+           gravar em silêncio a 1ª candidata troca o cartório da origem.
+        3. Origem não homônima → fallback por texto: exatamente 1 candidato
+           → a linha; 2 ou mais → ``(None, True, True)`` (ambiguidade no banco,
+           mensagem distingue dizendo 'origem registrada'); nenhum → ``(None, False, False)``.
+           Cobrem a edição que trocou o texto da posição e o legado com
+           índices reordenados.
         """
         if not lancamento.pk:
-            return None
+            return None, False, False
         chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
         if not chave:
-            return None
+            return None, False, False
         origens = list(
             lancamento.origens_estruturadas.select_related('cartorio')
             .order_by('indice_origem')
@@ -596,27 +742,70 @@ class LancamentoOrigemService:
                 (origem for origem in origens if origem.indice_origem == indice_origem),
                 None,
             )
+            # F2-21: Mesmo com match na posição, se o banco tem múltiplas
+            # linhas para a mesma chave E a lista atual não as reconhece
+            # (não é homônima), é ambiguidade no banco (caso B).
             if na_posicao and (
                 na_posicao.tipo_documento,
                 na_posicao.numero_normalizado,
             ) == chave:
-                return na_posicao
+                if origens_atuais is None:
+                    origens_atuais = [
+                        o for o in (lancamento.origem or '').split(';') if o.strip()
+                    ]
+                if chave not in LancamentoOrigemService.chaves_homonimas(origens_atuais):
+                    candidatos = [
+                        origem for origem in origens
+                        if (origem.tipo_documento, origem.numero_normalizado) == chave
+                    ]
+                    if len(candidatos) > 1:
+                        return None, True, True
+                return na_posicao, False, False
+        if origens_atuais is None:
+            origens_atuais = [
+                o for o in (lancamento.origem or '').split(';') if o.strip()
+            ]
+        if chave in LancamentoOrigemService.chaves_homonimas(origens_atuais):
+            return None, True, False
         candidatos = [
             origem for origem in origens
             if (origem.tipo_documento, origem.numero_normalizado) == chave
         ]
-        return candidatos[0] if len(candidatos) == 1 else None
+        if len(candidatos) > 1:
+            return None, True, True
+        if candidatos:
+            return candidatos[0], False, False
+        return None, False, False
+
+    @staticmethod
+    def encontrar_origem_persistida(
+        lancamento, origem_individual, indice_origem=None, origens_atuais=None
+    ):
+        """
+        Wrapper de ``resolver_origem_persistida`` que devolve só a linha
+        (compatibilidade com os chamadores da fase 1).
+        """
+        linha, _, _ = LancamentoOrigemService.resolver_origem_persistida(
+            lancamento, origem_individual, indice_origem, origens_atuais
+        )
+        return linha
 
     @staticmethod
     def _buscar_dados_origem(
-        lancamento, origem_individual, indice_origem=None, total_origens=None
+        lancamento,
+        origem_individual,
+        indice_origem=None,
+        total_origens=None,
+        origens_atuais=None,
     ):
         """
         Busca cartório, livro e folha específicos para uma origem individual.
 
-        A ``LancamentoOrigem`` persistida é a fonte durável (#144); o cache do
-        formulário só otimiza o POST corrente. Ordem: cache → linha persistida
-        → (criação nova) cartório da primeira origem, único caso em que ele é
+        A ``LancamentoOrigem`` persistida é a fonte durável (#144); o
+        mapeamento do POST corrente — atributo temporário da instância gravado
+        pelo writer do formulário (fase 2, D4), não mais o cache LocMem — só
+        otimiza o save corrente. Ordem: mapeamento → linha persistida →
+        (criação nova) cartório da primeira origem, único caso em que ele é
         o cartório correto. Com linhas persistidas e nenhuma casando, devolve
         ``cartorio=None`` para o chamador falhar de forma visível em vez de
         regravar a origem com a identidade de outra.
@@ -626,42 +815,32 @@ class LancamentoOrigemService:
         distintos ("T366; T366") só são diferenciadas pela posição. O match
         por texto é o fallback para mapeamento parcial/legado e só vale com
         UM candidato compatível; homônimos sem posição confiável são
-        ambíguos (P1 Codex r3) e caem no caminho de falha visível. A ambiguidade
-        no cache devolve ``cartorio=None`` na hora, sem consultar o cartório
-        do lançamento (P1 Opus r4).
+        ambíguos (P1 Codex r3) e caem no caminho de falha visível — o dict
+        devolve ``'ambiguo': True`` e o chamador cita a posição (D3, P1-1).
+        A ambiguidade no mapeamento ou na linha persistida devolve
+        ``cartorio=None`` na hora, sem consultar as fontes seguintes nem o
+        cartório do lançamento (P1 Opus r4).
         """
-        from django.core.cache import cache
+        dados = {
+            'cartorio': None, 'livro': None, 'folha': None, 'ambiguo': False,
+            'ambiguo_registrada': False,
+        }
 
-        dados = {'cartorio': None, 'livro': None, 'folha': None}
-
-        # 1. Mapeamento do POST corrente (cache). O mapeamento gravado pelo
-        # formulário é uma lista ordenada por posição; o acesso posicional só
-        # vale quando ele cobre TODAS as origens (entradas sem cartório
-        # resolvido são omitidas) e o texto na posição bate.
-        mapeamento = cache.get(f"mapeamento_origens_lancamento_{lancamento.id}")
-        itens_candidatos = []
-        if mapeamento:
-            if (
-                indice_origem is not None
-                and total_origens is not None
-                and len(mapeamento) == total_origens
-                and 0 <= indice_origem < len(mapeamento)
-                and mapeamento[indice_origem].get('origem') == origem_individual
-            ):
-                itens_candidatos.append(mapeamento[indice_origem])
-            else:
-                por_texto = [
-                    item for item in mapeamento
-                    if item.get('origem') == origem_individual
-                ]
-                # Cache parcial com homônimos: sem posição confiável não há
-                # como saber a qual origem cada entrada pertence. A ambiguidade
-                # encerra o lookup (P1 Opus r4): cair nas fontes seguintes
-                # gravaria o cartório da 1ª ocorrência nas duas posições.
-                if len(por_texto) > 1:
-                    return dados
-                itens_candidatos.extend(por_texto)
-        for item in itens_candidatos:
+        # 1. Mapeamento do POST corrente (atributo da instância). O seletor
+        # (D2) concentra as regras: formato novo pelo 'indice' de cada
+        # entrada; legado posicional/fallback por texto da fase 1.
+        mapeamento = LancamentoOrigemService.obter_mapeamento(lancamento)
+        item, ambiguo = LancamentoOrigemService.item_do_mapeamento(
+            mapeamento, origem_individual, indice_origem, total_origens
+        )
+        if ambiguo:
+            # Sem posição confiável não há como saber a qual origem cada
+            # entrada pertence. A ambiguidade encerra o lookup (P1 Opus r4):
+            # cair nas fontes seguintes gravaria o cartório da 1ª ocorrência
+            # nas duas posições.
+            dados['ambiguo'] = True
+            return dados
+        if item:
             cartorio = Cartorios.objects.filter(id=item.get('cartorio_id')).first()
             if cartorio is None and item.get('cartorio_nome'):
                 cartorio = Cartorios.objects.filter(
@@ -673,9 +852,10 @@ class LancamentoOrigemService:
                 dados['cartorio'] = cartorio
                 return dados
 
-        # 2. Linha persistida desta origem
-        persistida = LancamentoOrigemService.encontrar_origem_persistida(
-            lancamento, origem_individual, indice_origem
+        # 2. Linha persistida desta origem (D3): posição primeiro; homônima
+        # sem linha na posição é ambígua e NÃO cai no fallback por texto.
+        persistida, ambiguo, ambiguo_registrada = LancamentoOrigemService.resolver_origem_persistida(
+            lancamento, origem_individual, indice_origem, origens_atuais
         )
         if persistida:
             dados.update(
@@ -683,6 +863,12 @@ class LancamentoOrigemService:
                 livro=persistida.livro,
                 folha=persistida.folha,
             )
+            return dados
+        if ambiguo:
+            dados['ambiguo'] = True
+            # Ambiguidade vem de linhas legadas/persistidas no banco (não da
+            # lista atual do usuário): a mensagem distingue dizendo registrada.
+            dados['ambiguo_registrada'] = ambiguo_registrada
             return dados
 
         if total_origens is None:
