@@ -533,6 +533,15 @@ function adicionarOrigemSimples() {
         if (typeof ativarSugestoesCartorioOrigem === 'function') {
             ativarSugestoesCartorioOrigem();
         }
+
+        // Issue #227 r1 (fluxo B): reinstala busca filtrada no input clonado.
+        // cloneNode em adicionarOrigemSimples remove listeners; ativarSugestoes
+        // já chama ligarBuscaCartorioOrigem internamente, mas chamamos aqui
+        // explicitamente para garantir que o input novo tenha busca.
+        const novoInputCartorio = document.getElementById(`cartorio_origem_nome_${proximoIndex}`);
+        if (novoInputCartorio && typeof ligarBuscaCartorioOrigem === 'function') {
+            ligarBuscaCartorioOrigem(novoInputCartorio);
+        }
     }
 }
 

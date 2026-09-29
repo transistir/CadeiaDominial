@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cartorioOrigemInicioSuggestions = document.querySelector('.cartorio-origem-inicio-suggestions');
     
     if (cartorioOrigemInicioInput && cartorioOrigemInicioHidden && cartorioOrigemInicioSuggestions) {
-        setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions);
+        setupCartorioAutocomplete(cartorioOrigemInicioInput, cartorioOrigemInicioHidden, cartorioOrigemInicioSuggestions, { somenteCri: true });
     }
     
     // Adicionar listener para capturar envio do formulário
@@ -517,10 +517,17 @@ function setupPessoaAutocompleteField(input, hidden, suggestions, tipo) {
 }
 
 // Função para configurar autocomplete de cartório
-function setupCartorioAutocomplete(input, hidden, suggestions) {
+function setupCartorioAutocomplete(input, hidden, suggestions, opcoes = {}) {
     let currentIndex = -1;
     let currentSuggestions = [];
-    
+
+    // Expõe setter para mostrarSugestoesCartorioOrigem sincronizar o estado
+    // de teclado quando renderiza a lista de "mais usados" (issue #227 r1 — F4).
+    suggestions._setCurrentSuggestions = function(items) {
+        currentSuggestions = items;
+        currentIndex = -1;
+    };
+
     input.addEventListener('input', function() {
         const query = this.value.trim();
         if (query.length < 2) {
@@ -528,12 +535,50 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
             currentIndex = -1;
             // Limpar campo hidden se não há seleção válida
             hidden.value = '';
+            // Campo vazio com foco + somenteCri → recarregar "mais usados"
+            // (issue #227 r1 — F2: apagar texto deve mostrar histórico CRI)
+            if (query.length === 0 && opcoes.somenteCri) {
+                const imovelId = obterImovelIdDaUrl();
+                if (imovelId) {
+                    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true&somente_cri=true`)
+                        .then(r => r.json())
+                        .then(data => {
+                            const items = data.results || [];
+                            if (items.length > 0 && !input.value.trim()) {
+                                suggestions.innerHTML = '';
+                                currentSuggestions = items;
+                                currentIndex = -1;
+                                items.forEach((cartorio, idx) => {
+                                    const div = document.createElement('div');
+                                    div.className = 'autocomplete-suggestion sugestao';
+                                    preencherSugestaoCartorio(div, cartorio);
+                                    div.setAttribute('data-index', idx);
+                                    div.addEventListener('click', function() { selectCartorioSuggestion(idx); });
+                                    suggestions.appendChild(div);
+                                });
+                                suggestions.style.display = 'block';
+                                suggestions.style.zIndex = '9999';
+                            }
+                        })
+                        .catch(() => {});
+                }
+            }
             return;
         }
         
-        fetch(`/dominial/cartorio-autocomplete/?q=${encodeURIComponent(query)}`)
+        let url = `/dominial/cartorio-autocomplete/?q=${encodeURIComponent(query)}`;
+        if (opcoes.somenteCri) {
+            url += '&somente_cri=true';
+        }
+        // Issue #227 r4 — P1 (Greptile): guarda de resposta obsoleta.
+        // Capturar o valor do input ANTES do fetch e descartar a resposta
+        // atrasada se o campo já mudou (usuário apagou/digitou outra coisa).
+        const queryNoFetch = input.value;
+        fetch(url)
             .then(response => response.json())
             .then(data => {
+                // Descartar resposta obsoleta antes de tocar no DOM.
+                if (input.value !== queryNoFetch) return;
                 suggestions.innerHTML = '';
                 currentSuggestions = data.results || [];
                 currentIndex = -1;
@@ -542,7 +587,7 @@ function setupCartorioAutocomplete(input, hidden, suggestions) {
                     currentSuggestions.forEach((cartorio, index) => {
                         const div = document.createElement('div');
                         div.className = 'autocomplete-suggestion';
-                        div.textContent = cartorio.nome;
+                        preencherSugestaoCartorio(div, cartorio);
                         div.setAttribute('data-index', index);
                         div.addEventListener('click', function() {
                             selectCartorioSuggestion(index);
@@ -795,11 +840,13 @@ function adicionarOrigem() {
     
     container.appendChild(fimCadeiaContainer);
     
-    // Configurar autocomplete para o novo campo de cartório
+    // Configurar autocomplete para o novo campo de cartório (issue #227: só CRI)
+    // Issue #227 r2 — P2: usar ligarBuscaCartorioOrigem para registrar no WeakSet
+    // e evitar duplicação de listeners se ativarSugestoesCartorioOrigem rodar depois.
     const newInput = origemDiv.querySelector(`#cartorio_origem_nome_${newIndex}`);
-    const newHidden = origemDiv.querySelector(`#cartorio_origem_${newIndex}`);
-    const newSuggestions = origemDiv.querySelector('.cartorio-origem-suggestions');
-    setupCartorioAutocomplete(newInput, newHidden, newSuggestions);
+    if (newInput && typeof ligarBuscaCartorioOrigem === 'function') {
+        ligarBuscaCartorioOrigem(newInput);
+    }
     
     // Configurar toggle de fim de cadeia para a nova origem
     const newToggle = origemDiv.querySelector(`#fim_cadeia_${newIndex}`);
@@ -817,19 +864,29 @@ function adicionarOrigem() {
     }
 }
 
-// Função para configurar autocomplete geral de origens
+// Helper idempotente: liga busca por digitação no campo de origem (issue #227 r1).
+// Usa WeakSet (não data-*) porque cloneNode copia atributos mas não listeners —
+// um clone herdaria a marca sem ter o listener se usássemos data-*.
+const _inputsBuscaLigados = new WeakSet();
+
+function ligarBuscaCartorioOrigem(input) {
+    if (!input || _inputsBuscaLigados.has(input)) return;
+    const container = input.closest('.autocomplete-container');
+    if (!container) return;
+    const hidden = container.querySelector('.cartorio-origem-id');
+    const suggestions = container.querySelector('.cartorio-origem-suggestions');
+    if (!hidden || !suggestions) return;
+    setupCartorioAutocomplete(input, hidden, suggestions, { somenteCri: true });
+    _inputsBuscaLigados.add(input);
+}
+
+// Função para configurar autocomplete geral de origens (issue #227: só CRI)
 function setupOrigemAutocomplete() {
     // Configurar autocomplete para todos os campos de cartório de origem
     const cartorioOrigemInputs = document.querySelectorAll('.cartorio-origem-nome');
     
     cartorioOrigemInputs.forEach((input, index) => {
-        // Buscar o campo hidden correspondente
-        const hidden = input.closest('.autocomplete-container').querySelector('.cartorio-origem-id');
-        const suggestions = input.closest('.autocomplete-container').querySelector('.cartorio-origem-suggestions');
-        
-        if (input && hidden && suggestions) {
-            setupCartorioAutocomplete(input, hidden, suggestions);
-        }
+        ligarBuscaCartorioOrigem(input);
     });
 }
 
@@ -871,27 +928,16 @@ function ativarSugestoesCartorioOrigem() {
                     }, 100);
                 }
             });
-            
-            // Buscar cartórios quando o usuário digita
-            input.addEventListener('input', function() {
-                const query = this.value.trim();
-                console.log('Usuário digitando:', query);
-                
-                if (query.length >= 2) {
-                    console.log('Buscando cartórios para:', query);
-                    buscarCartoriosOrigem(this, hidden, suggestions, query);
-                } else if (query.length === 0) {
-                    // Se o campo estiver vazio, mostrar sugestões
-                    console.log('Campo vazio, mostrando sugestões...');
-                    setTimeout(() => {
-                        mostrarSugestoesCartorioOrigem(this, hidden, suggestions);
-                    }, 100);
-                } else {
-                    // Limpar sugestões se a query for muito curta
-                    suggestions.style.display = 'none';
-                }
-            });
-            
+
+            // Reinstala busca por digitação (issue #227 r1 — fluxo A).
+            // cloneNode do desativarSugestoesCartorioOrigem remove TODOS os
+            // listeners, incluindo o `input` do setupCartorioAutocomplete;
+            // ligarBuscaCartorioOrigem é idempotente (WeakSet) e reinstala
+            // só se o input não tiver a busca ligada ainda.
+            if (typeof ligarBuscaCartorioOrigem === 'function') {
+                ligarBuscaCartorioOrigem(input);
+            }
+
             // Modificar o placeholder para indicar sugestões
             input.placeholder = 'Digite o nome do cartório ou clique para ver sugestões';
             console.log('Sugestões ativadas para campo', index);
@@ -913,6 +959,12 @@ function desativarSugestoesCartorioOrigem() {
         // Remover event listeners de sugestões (se existirem)
         const newInput = input.cloneNode(true);
         input.parentNode.replaceChild(newInput, input);
+
+        // Issue #227 r2 — P2: reinstalar busca no input clonado (registro/Averbação
+        // ficam sem busca após desativar). ligarBuscaCartorioOrigem é idempotente (WeakSet).
+        if (typeof ligarBuscaCartorioOrigem === 'function') {
+            ligarBuscaCartorioOrigem(newInput);
+        }
 
         // Greptile P1 (PR #222): o cloneNode acima remove TODOS os listeners
         // do campo, incluindo os da M anterior registrados por
@@ -945,50 +997,21 @@ function formatarLocalizacaoCartorio(cartorio) {
     return `(${cidade}/${estado})`;
 }
 
-// Função para buscar cartórios da origem (busca normal)
-function buscarCartoriosOrigem(input, hidden, suggestions, query) {
-    console.log('Fazendo busca por cartórios de imóveis:', query);
+// Helper seguro contra XSS: monta sugestão de cartório usando createElement + textContent
+// (não innerHTML) para escapar nome/cidade/UF vindos do backend (dado de usuário).
+// Issue #227 r2 — P1: XSS armazenado no renderizador compartilhado.
+function preencherSugestaoCartorio(div, cartorio) {
+    const spanNome = document.createElement('span');
+    spanNome.className = 'cartorio-nome';
+    spanNome.textContent = cartorio.nome;
     
-    // Fazer requisição para buscar cartórios de imóveis (filtrados)
-    fetch(`/dominial/cartorio-imoveis-autocomplete/?q=${encodeURIComponent(query)}`)
-        .then(response => {
-            console.log('Resposta da busca recebida:', response.status);
-            return response.json();
-        })
-        .then(data => {
-            console.log('Dados da busca recebidos:', data);
-            suggestions.innerHTML = '';
-
-            if (data && data.length > 0) {
-                console.log('Criando resultados da busca:', data.length);
-                
-                data.forEach(cartorio => {
-                    const div = document.createElement('div');
-                    div.className = 'autocomplete-suggestion';
-                    div.innerHTML = `
-                        <span class="cartorio-nome">${cartorio.nome}</span>
-                        <span class="cartorio-info">${formatarLocalizacaoCartorio(cartorio)}</span>
-                    `;
-                    div.addEventListener('click', function() {
-                        input.value = cartorio.nome;
-                        hidden.value = cartorio.id;
-                        suggestions.style.display = 'none';
-                        input.classList.remove('error');
-                    });
-                    suggestions.appendChild(div);
-                });
-
-                suggestions.style.display = 'block';
-                suggestions.style.zIndex = '9999';
-                console.log('Resultados da busca exibidos');
-            } else {
-                console.log('Nenhum cartório de imóveis encontrado na busca');
-                suggestions.style.display = 'none';
-            }
-        })
-        .catch(error => {
-            console.error('Erro ao buscar cartórios de imóveis:', error);
-        });
+    const spanInfo = document.createElement('span');
+    spanInfo.className = 'cartorio-info';
+    spanInfo.textContent = formatarLocalizacaoCartorio(cartorio);
+    
+    div.appendChild(spanNome);
+    div.appendChild(document.createTextNode(' '));
+    div.appendChild(spanInfo);
 }
 
 // Função para mostrar sugestões do cartório da origem
@@ -1001,19 +1024,47 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
         return;
     }
     
+    // Issue #227 r3 — P2: se o campo já tem texto, a busca por digitação é
+    // dona da lista. Retornar cedo evita que o histórico (agendado pelo
+    // setTimeout de focus/click em ~100ms) apague resultados visíveis quando
+    // o usuário colou/digitou dentro da janela.
+    if (input.value.trim() !== '') {
+        return;
+    }
+    
     // Fazer requisição para obter sugestões baseadas no histórico
     console.log('Fazendo requisição para:', `/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`);
-    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true`)
+    // Issue #227 r2 — P2: capturar o valor do campo no momento do fetch para
+    // descartar resposta obsoleta quando o usuário já mudou o input (setas/Enter
+    // selecionariam cartório sem item visível).
+    const valorNoFetch = input.value;
+    
+    fetch(`/dominial/cartorio-autocomplete/?imovel_id=${imovelId}&sugestoes=true&somente_cri=true`)
         .then(response => {
             console.log('Resposta recebida:', response.status);
             return response.json();
         })
         .then(data => {
             console.log('Dados recebidos:', data);
+            
+            // Issue #227 r2 — P2: descartar resposta obsoleta. Se o campo mudou
+            // desde o fetch, o estado de teclado ficaria dessincronizado.
+            if (input.value !== valorNoFetch) {
+                console.log('Resposta de histórico descartada (campo mudou)');
+                return;
+            }
+            
             suggestions.innerHTML = '';
             
+            // Issue #227 r2 — P2: sincronizar também quando histórico é vazio,
+            // para que currentSuggestions/índice/display não fiquem pendurados
+            // de uma busca anterior.
+            if (typeof suggestions._setCurrentSuggestions === 'function') {
+                suggestions._setCurrentSuggestions(data.results || []);
+            }
+            
             if (data.results && data.results.length > 0) {
-                console.log('Criando sugestões:', data.results.length);
+
                 // Mostrar título das sugestões
                 const tituloDiv = document.createElement('div');
                 tituloDiv.className = 'autocomplete-suggestion-title';
@@ -1023,10 +1074,7 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
                 data.results.forEach(cartorio => {
                     const div = document.createElement('div');
                     div.className = 'autocomplete-suggestion sugestao';
-                    div.innerHTML = `
-                        <span class="cartorio-nome">${cartorio.nome}</span>
-                        <span class="cartorio-info">${formatarLocalizacaoCartorio(cartorio)}</span>
-                    `;
+                    preencherSugestaoCartorio(div, cartorio);
                     div.addEventListener('click', function() {
                         input.value = cartorio.nome;
                         hidden.value = cartorio.id;
@@ -1048,6 +1096,9 @@ function mostrarSugestoesCartorioOrigem(input, hidden, suggestions) {
                 }, 500);
             } else {
                 console.log('Nenhuma sugestão encontrada');
+                // Issue #227 r2 — P2: ocultar o div quando histórico é vazio
+                // para não deixar display:block pendurado de busca anterior.
+                suggestions.style.display = 'none';
             }
         })
         .catch(error => {
