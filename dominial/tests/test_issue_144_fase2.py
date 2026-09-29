@@ -1636,3 +1636,63 @@ class F2_15FiltroMortoRemovidoTest(SimpleTestCase):
 
     def test_f2_15_filtro_origem_cartorio_especifico_removido(self):
         self.assertNotIn("origem_cartorio_especifico", register.filters)
+
+
+class F2_20ValueErrorPkNaoNumericoNoRerenderTest(Fase2Base):
+    """Greptile P2 do PR #231: POST de edição rejeitado com
+    cartorio_transmissao não-numérico ('not-a-number') → HTTP 200
+    (não 500), nome preservado no re-render."""
+
+    def _cenario_registro(self, matricula="200"):
+        imovel = self.criar_imovel(
+            matricula, self.cartorio_a, nome=f"Atual F2-20 {matricula}"
+        )
+        documento = self.criar_documento(
+            imovel, self.tipo_matricula, f"M{matricula}", self.cartorio_a
+        )
+        tipo_reg, _ = LancamentoTipo.objects.get_or_create(tipo="registro")
+        lancamento = Lancamento(
+            documento=documento, tipo=tipo_reg, data=date(2026, 1, 2),
+            origem="M100; T366", cartorio_origem=self.cartorio_a,
+        )
+        Lancamento.objects.bulk_create([lancamento])
+        lancamento = Lancamento.objects.get(pk=lancamento.pk)
+        self.criar_origens_persistidas(lancamento)
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            numero_lancamento="1"
+        )
+        return imovel, lancamento
+
+    def test_f2_20_pk_nao_numerico_retorna_200_e_preserva_nome(self):
+        import re
+        imovel, lancamento = self._cenario_registro()
+        client = self._login("f2_20")
+        url = self._url_edicao(imovel, lancamento)
+
+        # POST rejeitado: numero_lancamento_simples ausente (registro exige)
+        # + cartorio_transmissao não-numérico → NÃO pode dar 500.
+        payload = self._post_edicao(
+            lancamento,
+            ["M100", "T366"],
+            [str(self.cartorio_a.pk), ""],
+            cartorios_nomes=[self.cartorio_a.nome, ""],
+        )
+        # Remover o numero_lancamento_simples que o helper injeta para
+        # forçar a rejeição do formulário.
+        payload.pop("numero_lancamento_simples", None)
+        payload["cartorio_transmissao"] = "not-a-number"
+        payload["cartorio_transmissao_nome"] = "Cartório XPTO F2-20"
+
+        response = client.post(url, payload)
+
+        # 1) Não pode ser 500 — o ValueError de pk não-numérico tem que ser
+        # capturado junto com o DoesNotExist.
+        self.assertEqual(response.status_code, 200)
+        # 2) O nome digitado tem que estar preservado no re-render.
+        content = response.content.decode("utf-8")
+        m_nome = re.search(
+            r'id="cartorio_transmissao_nome"[^>]*value="([^"]*)"',
+            content,
+        )
+        self.assertIsNotNone(m_nome, "input nome não encontrado no HTML")
+        self.assertEqual(m_nome.group(1), "Cartório XPTO F2-20")

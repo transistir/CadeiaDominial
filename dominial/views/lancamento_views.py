@@ -725,8 +725,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                     # r3: id válido encontrado no banco → preservar no hidden
                     # para o re-render (homônimos não colidem por nome).
                     transmissao_id_do_post = str(cartorio_trans.pk)
-                except Cartorios.DoesNotExist:
-                    # FK fantasma: limpar o id e preservar o nome para re-render
+                except (Cartorios.DoesNotExist, ValueError):
+                    # FK fantasma OU id inválido (não-numérico): limpar o id
+                    # e preservar o nome para re-render
                     lancamento.cartorio_transmissao = None
                     # r2: zerar também o legado para o compat não mostrar
                     # o antigo no lugar do digitado (ramo de falha; nada salva).
