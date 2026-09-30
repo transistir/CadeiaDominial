@@ -132,83 +132,90 @@ class LancamentoCriacaoService:
         lancamento = None
         try:
             print("DEBUG: Criando lançamento básico...")
-            # Criar o lançamento
-            lancamento = LancamentoCriacaoService._criar_lancamento_basico(documento_ativo, dados_lancamento, tipo_lanc)
-            print(f"DEBUG: Lançamento criado com ID: {lancamento.id}")
             
-            # Processar cartório de origem
-            print("DEBUG: Processando cartório de origem...")
-            # Cartório de origem processado no service consolidado
-            
-            # Processar campos específicos por tipo de lançamento
-            print("DEBUG: Processando campos específicos...")
-            LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
-            
-            print("DEBUG: Salvando lançamento...")
-            lancamento.save()
-            print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
-            
-            # APLICAR CAMPOS DO DOCUMENTO: aplicar livro e folha ao documento
-            print("DEBUG: Aplicando campos do documento...")
-            divergencias = LancamentoCriacaoService._divergencias_livro_folha(
-                lancamento.documento, dados_lancamento
-            )
-            documento_atualizado = LancamentoCriacaoService._aplicar_campos_documento(
-                lancamento, dados_lancamento
-            )
-            LancamentoCriacaoService._avisar_divergencias(request, divergencias)
-            if documento_atualizado:
-                print("DEBUG: Campos do documento aplicados com sucesso")
-            else:
-                print("DEBUG: Campos do documento não aplicados")
+            # ATOMICIDADE (#241): espelha atualizar_lancamento_completo (:305).
+            # Qualquer erro após o lançamento básico (cartório de origem,
+            # processar_origens_automaticas, pessoas) desfaz TUDO — nada de
+            # órfão persistido. O except fica FORA do atomic para capturar
+            # o rollback automático e retornar a mensagem ao usuário.
+            with transaction.atomic():
+                # Criar o lançamento
+                lancamento = LancamentoCriacaoService._criar_lancamento_basico(documento_ativo, dados_lancamento, tipo_lanc)
+                print(f"DEBUG: Lançamento criado com ID: {lancamento.id}")
                 
-            # VALIDAR CAMPOS OBRIGATÓRIOS NO PRIMEIRO LANÇAMENTO
-            print("DEBUG: Validando campos obrigatórios no primeiro lançamento...")
-            is_primeiro_lancamento = lancamento.documento.lancamentos.count() == 1
-            
-            if is_primeiro_lancamento:
-                # Se é o primeiro lançamento, verificar se livro e folha foram definidos
-                if not lancamento.documento.livro or lancamento.documento.livro == '0':
-                    print("DEBUG: AVISO - Primeiro lançamento sem livro definido")
-                if not lancamento.documento.folha or lancamento.documento.folha == '0':
-                    print("DEBUG: AVISO - Primeiro lançamento sem folha definida")
-            
-            # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento (se não aplicado acima)
-            print("DEBUG: Aplicando regra pétrea...")
-            regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
-            if regra_aplicada:
-                print("DEBUG: Regra pétrea aplicada - livro e folha definidos no documento")
-            else:
-                print("DEBUG: Regra pétrea não aplicada - não é o primeiro lançamento")
-            
-            # Processar origens para criar documentos automáticos
-            print("DEBUG: Processando origens...")
-            mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
-                lancamento, dados_lancamento['origem'], imovel
-            )
-            
-            # Processar transmitentes
-            print("DEBUG: Processando transmitentes...")
-            transmitentes_data = request.POST.getlist('transmitente_nome[]')
-            transmitente_ids = request.POST.getlist('transmitente[]')
-            
-            # Pessoas processadas no service consolidado
-            LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, transmitentes_data, transmitente_ids, 'transmitente'
-            )
-            
-            # Processar adquirentes
-            print("DEBUG: Processando adquirentes...")
-            adquirentes_data = request.POST.getlist('adquirente_nome[]')
-            adquirente_ids = request.POST.getlist('adquirente[]')
-            
-            # Pessoas processadas no service consolidado
-            LancamentoPessoaService.processar_pessoas_lancamento(
-                lancamento, adquirentes_data, adquirente_ids, 'adquirente'
-            )
-            
-            print("DEBUG: Lançamento criado com sucesso!")
-            return lancamento, mensagem_origens
+                # Processar cartório de origem
+                print("DEBUG: Processando cartório de origem...")
+                # Cartório de origem processado no service consolidado
+                
+                # Processar campos específicos por tipo de lançamento
+                print("DEBUG: Processando campos específicos...")
+                LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
+                
+                print("DEBUG: Salvando lançamento...")
+                lancamento.save()
+                print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
+                
+                # APLICAR CAMPOS DO DOCUMENTO: aplicar livro e folha ao documento
+                print("DEBUG: Aplicando campos do documento...")
+                divergencias = LancamentoCriacaoService._divergencias_livro_folha(
+                    lancamento.documento, dados_lancamento
+                )
+                documento_atualizado = LancamentoCriacaoService._aplicar_campos_documento(
+                    lancamento, dados_lancamento
+                )
+                LancamentoCriacaoService._avisar_divergencias(request, divergencias)
+                if documento_atualizado:
+                    print("DEBUG: Campos do documento aplicados com sucesso")
+                else:
+                    print("DEBUG: Campos do documento não aplicados")
+                    
+                # VALIDAR CAMPOS OBRIGATÓRIOS NO PRIMEIRO LANÇAMENTO
+                print("DEBUG: Validando campos obrigatórios no primeiro lançamento...")
+                is_primeiro_lancamento = lancamento.documento.lancamentos.count() == 1
+                
+                if is_primeiro_lancamento:
+                    # Se é o primeiro lançamento, verificar se livro e folha foram definidos
+                    if not lancamento.documento.livro or lancamento.documento.livro == '0':
+                        print("DEBUG: AVISO - Primeiro lançamento sem livro definido")
+                    if not lancamento.documento.folha or lancamento.documento.folha == '0':
+                        print("DEBUG: AVISO - Primeiro lançamento sem folha definida")
+                
+                # APLICAR REGRA PÉTREA: primeiro lançamento define livro e folha do documento (se não aplicado acima)
+                print("DEBUG: Aplicando regra pétrea...")
+                regra_aplicada = RegraPetreaService.aplicar_regra_petrea(lancamento)
+                if regra_aplicada:
+                    print("DEBUG: Regra pétrea aplicada - livro e folha definidos no documento")
+                else:
+                    print("DEBUG: Regra pétrea não aplicada - não é o primeiro lançamento")
+                
+                # Processar origens para criar documentos automáticos
+                print("DEBUG: Processando origens...")
+                mensagem_origens = LancamentoOrigemService.processar_origens_automaticas(
+                    lancamento, dados_lancamento['origem'], imovel
+                )
+                
+                # Processar transmitentes
+                print("DEBUG: Processando transmitentes...")
+                transmitentes_data = request.POST.getlist('transmitente_nome[]')
+                transmitente_ids = request.POST.getlist('transmitente[]')
+                
+                # Pessoas processadas no service consolidado
+                LancamentoPessoaService.processar_pessoas_lancamento(
+                    lancamento, transmitentes_data, transmitente_ids, 'transmitente'
+                )
+                
+                # Processar adquirentes
+                print("DEBUG: Processando adquirentes...")
+                adquirentes_data = request.POST.getlist('adquirente_nome[]')
+                adquirente_ids = request.POST.getlist('adquirente[]')
+                
+                # Pessoas processadas no service consolidado
+                LancamentoPessoaService.processar_pessoas_lancamento(
+                    lancamento, adquirentes_data, adquirente_ids, 'adquirente'
+                )
+                
+                print("DEBUG: Lançamento criado com sucesso!")
+                return lancamento, mensagem_origens
             
         except Exception as e:
             print(f"DEBUG: Erro durante criação: {str(e)}")
