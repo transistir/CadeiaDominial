@@ -294,7 +294,8 @@ class TestIssue118MultiplasOrigens(TestCase):
     e o documento ATUAL não recebe livro/folha de nenhuma origem.
 
     O fluxo que já funciona (e NÃO deve ser tocado):
-      lancamento_campos_service → cache 'mapeamento_origens_lancamento_{id}'
+      lancamento_campos_service → mapeamento na instância
+      (LancamentoOrigemService.definir_mapeamento, fase 2 do #144)
       → lancamento_origem_service._sincronizar_origens_estruturadas
       → cria LancamentoOrigem por origem com seu livro/folha
     """
@@ -328,11 +329,13 @@ class TestIssue118MultiplasOrigens(TestCase):
         )
 
     def _criar_lancamento_com_mapeamento_multiplas_origens(self):
-        """Cria um lançamento cujo cache de mapeamento tem 2 origens, cada uma
+        """Cria um lançamento cujo mapeamento tem 2 origens, cada uma
         com seu próprio livro/folha — espelhando o que
         ``lancamento_campos_service`` grava para ``livro_origem[]``/``folha_origem[]``.
         """
-        from django.core.cache import cache
+        from dominial.services.lancamento_origem_service import (
+            LancamentoOrigemService,
+        )
 
         lancamento = Lancamento.objects.create(
             documento=self.documento_a,
@@ -343,8 +346,7 @@ class TestIssue118MultiplasOrigens(TestCase):
         )
 
         # Mapeamento por origem, exatamente como lancamento_campos_service faz.
-        cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
-        cache.set(cache_key, [
+        LancamentoOrigemService.definir_mapeamento(lancamento, [
             {
                 "origem": "M101",
                 "cartorio_id": self.cri.id,
@@ -359,7 +361,7 @@ class TestIssue118MultiplasOrigens(TestCase):
                 "livro": "12",
                 "folha": "20",
             },
-        ], timeout=3600)
+        ])
         return lancamento
 
     def test_multiplas_origens_cada_uma_preserva_seu_livro_folha(self):

@@ -6,6 +6,7 @@ from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
 from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
 from ..services.lancamento_service import LancamentoService
+from ..services.lancamento_origem_service import LancamentoOrigemService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
 import logging
@@ -251,6 +252,15 @@ def _origens_separadas_do_post(request):
     return origens_separadas
 
 
+def _flags_livro_folha_definidos(documento):
+    """Flags para o template travar Livro/Folha já definidos (#218).
+    Vazio e '0' contam como NÃO definido."""
+    return {
+        'doc_livro_definido': bool(documento.livro) and documento.livro != '0',
+        'doc_folha_definida': bool(documento.folha) and documento.folha != '0',
+    }
+
+
 def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoas,
                                    cartorios, tipos_lancamento, emitir_avisos=True):
     """Contexto base do formulário de novo lançamento — fonte única de verdade.
@@ -279,6 +289,7 @@ def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoa
         'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
         'is_novo_lancamento': True,
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        **_flags_livro_folha_definidos(documento_ativo),
     }
 
     # Verificar se é o primeiro lançamento do documento
@@ -647,6 +658,17 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     tipos_lancamento = LancamentoService.obter_tipos_lancamento_por_documento(lancamento.documento)
     
     # Processar POST
+    # Origens do POST para o re-render de erro (P1-2): None marca que não
+    # houve POST (ou que ele teve sucesso e redirecionou) — o formulário
+    # então mostra as origens do banco.
+    origens_do_post = None
+    # r2: nome da transmissão digitado no POST, para preservar no re-render
+    # (None = não houve POST ou POST sem nome digitado).
+    transmissao_nome_do_post = None
+    # r3: preservar o id válido do POST para o hidden não esvaziar no re-render
+    # (sem isso, homônimos dão MultipleObjectsReturned no reenvio por nome).
+    transmissao_id_do_post = ''
+    post_rejeitado = False
     if request.method == 'POST':
         # Usar o service para atualizar o lançamento completo
         sucesso, mensagem_origens = LancamentoService.atualizar_lancamento_completo(
@@ -669,6 +691,63 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
         else:
             messages.error(request, mensagem_origens)
+            # Re-render a partir do POST: nada foi salvo, então o banco e a
+            # instância não refletem o que o usuário digitou nas origens.
+            origens_do_post = _origens_separadas_do_post(request)
+            post_rejeitado = True
+            
+            # FIX A (#144 fase 2 P1): Após rollback do atomic, a instância
+            # mantém PKs fantasma de cartórios criados e depois apagados.
+            # O template renderiza esses PKs em hiddens, e o reenvio usa
+            # o id (prioridade sobre nome em lancamento_campos_service.py:239-240)
+            # → IntegrityError em loop.
+            # Solução: reload dos FKs do banco + reconstrução da transmissão
+            # a partir do POST rejeitado.
+            try:
+                lancamento.refresh_from_db(
+                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao']
+                )
+            except Lancamento.DoesNotExist:
+                # Casos extremos: lançamento foi rolled back
+                pass
+            
+            # Reconstruir transmissão do POST (preservando intenção do usuário)
+            transmissao_id = request.POST.get('cartorio_transmissao', '').strip()
+            transmissao_nome = request.POST.get('cartorio_transmissao_nome', '').strip()
+            # r2: preservar o nome digitado no contexto da edição para o
+            # re-render mostrar o que o usuário digitou (não o legado/compat).
+            transmissao_nome_do_post = transmissao_nome
+            if transmissao_id:
+                # Se o POST trouxe id, verificar se ainda existe no banco
+                try:
+                    cartorio_trans = Cartorios.objects.get(pk=transmissao_id)
+                    lancamento.cartorio_transmissao = cartorio_trans
+                    # r3: id válido encontrado no banco → preservar no hidden
+                    # para o re-render (homônimos não colidem por nome).
+                    transmissao_id_do_post = str(cartorio_trans.pk)
+                except (Cartorios.DoesNotExist, ValueError):
+                    # FK fantasma OU id inválido (não-numérico): limpar o id
+                    # e preservar o nome para re-render
+                    lancamento.cartorio_transmissao = None
+                    # r2: zerar também o legado para o compat não mostrar
+                    # o antigo no lugar do digitado (ramo de falha; nada salva).
+                    lancamento.cartorio_transacao = None
+            elif transmissao_nome:
+                # POST trouxe só nome: verificar se existe no banco
+                cartorio_existente = Cartorios.objects.filter(
+                    nome__iexact=transmissao_nome
+                ).first()
+                if cartorio_existente:
+                    lancamento.cartorio_transmissao = cartorio_existente
+                else:
+                    # Nome novo que foi rolled back: deixar vazio
+                    lancamento.cartorio_transmissao = None
+                    # r2: idem — zerar legado para o compat não sobrepor
+                    lancamento.cartorio_transacao = None
+            else:
+                # POST sem id nem nome: limpar tudo
+                lancamento.cartorio_transmissao = None
+                lancamento.cartorio_transacao = None
     
     # Obter pessoas do lançamento para exibição no formulário
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
@@ -689,15 +768,26 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
         'modo_edicao': True,
+        # O update não persiste livro/folha do documento (#218): travar sempre.
+        'is_edicao_lancamento': True,
         'cartorio_origem_correto': cartorio_origem_correto,
         'is_lancamento_do_imovel': is_lancamento_do_imovel,
         'is_lancamento_compartilhado': not is_lancamento_do_imovel,
         'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        # r2: preservar o nome digitado da transmissão no re-render pós-rollback
+        'transmissao_nome_do_post': transmissao_nome_do_post,
+        # r3: preservar o id válido do POST no hidden (homônimos não colidem)
+        'transmissao_id_do_post': transmissao_id_do_post,
+        'post_rejeitado': post_rejeitado,
+        **_flags_livro_folha_definidos(lancamento.documento),
     }
     
     # Preparar dados para o template
-    if context['modo_edicao'] and lancamento.origem:
+    if origens_do_post is not None:
+        # POST rejeitado: as origens vêm do que foi digitado, não do banco.
+        origens_separadas = origens_do_post
+    elif context['modo_edicao'] and lancamento.origem:
         # Separar múltiplas origens para o template
         origens_separadas = []
         
@@ -823,51 +913,52 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         })
         else:
             # Processar origens normais
-            # Tentar recuperar mapeamento de origens e cartórios do cache
-            from django.core.cache import cache
-            cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
-            mapeamento_origens = cache.get(cache_key)
-            
             if ';' in lancamento.origem:
                 origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                
-                if mapeamento_origens and len(mapeamento_origens) == len(origens_list):
-                    # Usar mapeamento do cache se disponível
-                    for i, origem in enumerate(origens_list):
-                        mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
-                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                        
-                        origens_separadas.append({
-                            'texto': origem,
-                            'index': i,
-                            'cartorio_nome': mapeamento.get('cartorio_nome', ''),
-                            'cartorio_id': mapeamento.get('cartorio_id', ''),
-                            'livro': mapeamento.get('livro', ''),
-                            'folha': mapeamento.get('folha', ''),
-                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
-                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
-                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
-                            'sigla_patrimonio_publico': '',
-                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
-                        })
-                else:
-                    # Fallback: usar cartório geral do lançamento para todas as origens
-                    for i, origem in enumerate(origens_list):
-                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                        
-                        origens_separadas.append({
-                            'texto': origem,
-                            'index': i,
-                            'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
-                            'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
-                            'livro': lancamento.livro_origem,
-                            'folha': lancamento.folha_origem,
-                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
-                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
-                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
-                            'sigla_patrimonio_publico': '',
-                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
-                        })
+
+                # A LancamentoOrigem persistida é a fonte durável do cartório
+                # de cada origem (#144); o GET não tem mapeamento do POST (o
+                # atributo temporário da instância vive só durante um save,
+                # fase 2 D4). A posição é a chave primária também aqui
+                # (#144 rodada 3): textos idênticos em cartórios distintos
+                # não podem colapsar no primeiro casamento por texto.
+                for i, origem in enumerate(origens_list):
+                    origem_fim_cadeia = fim_cadeia_por_indice.get(i)
+                    persistida, ambiguo, _ = LancamentoOrigemService.resolver_origem_persistida(
+                        lancamento, origem, i, origens_atuais=origens_list
+                    )
+                    if persistida:
+                        cartorio_nome = persistida.cartorio.nome
+                        cartorio_id = persistida.cartorio_id
+                        livro, folha = persistida.livro or '', persistida.folha or ''
+                    elif ambiguo:
+                        # Homônima sem linha na posição: nada confiável para
+                        # pré-preencher (D3) — nem a herança do cartório do
+                        # lançamento, que regravaria o cartório errado.
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
+                    elif i == 0 and lancamento.cartorio_origem:
+                        # Só a PRIMEIRA origem pode herdar o cartório do
+                        # lançamento; as demais ficam em branco em vez de
+                        # receberem (e regravarem) o cartório errado.
+                        cartorio_nome = lancamento.cartorio_origem.nome
+                        cartorio_id = lancamento.cartorio_origem.id
+                        livro, folha = lancamento.livro_origem, lancamento.folha_origem
+                    else:
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
+
+                    origens_separadas.append({
+                        'texto': origem,
+                        'index': i,
+                        'cartorio_nome': cartorio_nome,
+                        'cartorio_id': cartorio_id,
+                        'livro': livro,
+                        'folha': folha,
+                        'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
+                        'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
+                        'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
+                        'sigla_patrimonio_publico': '',
+                        'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
+                    })
             else:
                 # Uma única origem
                 origem_fim_cadeia = fim_cadeia_por_indice.get(0)

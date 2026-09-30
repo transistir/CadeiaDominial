@@ -27,5 +27,8 @@ def processar_origens_automaticas_signal(sender, instance, created, **kwargs):
         if resultado:
             logger.info(f"Signal: {resultado} (Lançamento {instance.id})")
         
-    except Exception as e:
-        logger.error(f"Erro ao processar origens automaticamente para lançamento {instance.id}: {e}")
+    except Exception:
+        # O signal não pode derrubar o save, mas a falha nunca é silenciosa (#144)
+        logger.exception(
+            "Erro ao processar origens automaticamente para lançamento %s", instance.id
+        )

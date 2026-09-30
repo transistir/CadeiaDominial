@@ -42,41 +42,21 @@ class DocumentoService:
     @staticmethod
     def atualizar_documento(request, documento):
         """
-        Atualiza um documento existente a partir dos dados do formulário (POST)
+        Atualiza um documento existente a partir dos dados do formulário (POST).
+
+        #245: na edição, SOMENTE livro e folha são gravados — identidade
+        (tipo, número, data, cartório, origem, observações) é imutável
+        nesta rota, mesmo com POST forjado (defesa em profundidade).
+        Regra #138 mantida: matrícula não tem folha (forçada a '').
         """
-        numero = request.POST.get('numero', '').strip()
-        if not numero:
-            return False, "Número do documento é obrigatório"
-
-        try:
-            tipo = DocumentoTipo.objects.get(id=request.POST.get('tipo'))
-        except (DocumentoTipo.DoesNotExist, ValueError, TypeError):
-            return False, "Tipo de documento inválido"
-
-        cartorio_id = request.POST.get('cartorio_id')
-        if cartorio_id:
-            try:
-                documento.cartorio = Cartorios.objects.get(id=cartorio_id)
-            except (Cartorios.DoesNotExist, ValueError):
-                return False, "Cartório inválido"
-
-        documento.tipo = tipo
-        documento.numero = numero
-
-        data = request.POST.get('data', '').strip()
-        if data:
-            documento.data = data
-
         documento.livro = request.POST.get('livro', '').strip()
 
         # Matrículas não têm campo folha (#138) — FLS é irrelevante para M.
-        if tipo.tipo == 'matricula':
+        if documento.tipo.tipo == 'matricula':
             documento.folha = ''
         else:
             documento.folha = request.POST.get('folha', '').strip()
 
-        documento.origem = request.POST.get('origem', '').strip() or None
-        documento.observacoes = request.POST.get('observacoes', '').strip() or None
         documento.save()
 
         return True, documento.numero

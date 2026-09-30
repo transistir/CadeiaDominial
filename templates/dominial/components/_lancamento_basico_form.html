@@ -26,23 +26,33 @@
     </div>
     {% endif %}
     
+    {% url 'editar_documento' tis_id=documento.imovel.terra_indigena_id_id imovel_id=documento.imovel_id documento_id=documento.id as url_editar_documento %}
+    {% if doc_livro_definido and doc_folha_definida %}
+    <small class="form-text text-muted">Livro/Folha pertencem ao documento e não são alterados aqui. Para corrigir, use <a href="{{ url_editar_documento }}" target="_blank" rel="noopener">Corrigir em Editar Documento</a> (abre em nova aba).</small>
+    {% elif is_edicao_lancamento %}
+    <small class="form-text text-muted">Livro/Folha não são alterados na edição do lançamento. Para corrigir, use <a href="{{ url_editar_documento }}" target="_blank" rel="noopener">Corrigir em Editar Documento</a> (abre em nova aba).</small>
+    {% elif doc_livro_definido %}
+    <small class="form-text text-muted">O Livro do documento ({{ documento.livro }}) não é alterado aqui. Para corrigir, use <a href="{{ url_editar_documento }}" target="_blank" rel="noopener">Corrigir em Editar Documento</a> (abre em nova aba).</small>
+    {% elif doc_folha_definida %}
+    <small class="form-text text-muted">A Folha do documento ({{ documento.folha }}) não é alterada aqui. Para corrigir, use <a href="{{ url_editar_documento }}" target="_blank" rel="noopener">Corrigir em Editar Documento</a> (abre em nova aba).</small>
+    {% endif %}
     <div class="grid-3">
         <div class="form-group">
-            <label for="livro_documento">Livro do Documento *</label>
-            <input type="text" name="livro_documento" id="livro_documento" required
-                   {% if modo_edicao and lancamento.documento.livro and lancamento.documento.livro != '0' %}readonly{% endif %}
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.livro }}{% elif documento.livro %}{{ documento.livro }}{% elif form_data %}{{ form_data.livro_documento|default_if_none:'' }}{% endif %}"
+            <label for="livro_documento">Livro do Documento{% if not doc_livro_definido and not is_edicao_lancamento %} *{% endif %}</label>
+            <input type="text" name="livro_documento" id="livro_documento" {% if not doc_livro_definido and not is_edicao_lancamento %}required{% endif %}
+                   {% if doc_livro_definido or is_edicao_lancamento %}disabled tabindex="-1" style="background-color: #f8f9fa;"{% endif %}
+                   value="{% if doc_livro_definido %}{{ documento.livro }}{% elif is_edicao_lancamento %}{% elif form_data %}{{ form_data.livro_documento|default_if_none:'' }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">Livro do documento atual (não muda após o primeiro lançamento)</small>
         </div>
 
         <div class="form-group">
-            <label for="folha_documento">Folha do Documento{% if documento.tipo.tipo != 'matricula' %} *{% endif %}</label>
+            <label for="folha_documento">Folha do Documento{% if documento.tipo.tipo != 'matricula' and not doc_folha_definida and not is_edicao_lancamento %} *{% endif %}</label>
             <input type="text" name="folha_documento" id="folha_documento"
                    {% if documento.tipo.tipo == 'matricula' %}disabled
-                   {% elif modo_edicao and lancamento.documento.folha and lancamento.documento.folha != '0' %}readonly
+                   {% elif doc_folha_definida or is_edicao_lancamento %}disabled tabindex="-1" style="background-color: #f8f9fa;"
                    {% else %}required{% endif %}
-                   value="{% if modo_edicao and lancamento.documento %}{{ lancamento.documento.folha }}{% elif documento.folha %}{{ documento.folha }}{% elif form_data %}{{ form_data.folha_documento|default_if_none:'' }}{% endif %}"
+                   value="{% if doc_folha_definida %}{{ documento.folha }}{% elif is_edicao_lancamento %}{% elif form_data %}{{ form_data.folha_documento|default_if_none:'' }}{% endif %}"
                    placeholder="Ex: 1, 2, A, etc.">
             <small class="form-text text-muted">{% if documento.tipo.tipo == 'matricula' %}Não aplicável para matrículas{% else %}Folha do documento atual (herdada da origem){% endif %}</small>
         </div>

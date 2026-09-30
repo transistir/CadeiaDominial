@@ -134,6 +134,50 @@ function renderizarCardOverlays(node) {
       return tooltip;
     });
 
+  // Aviso de origens não resolvidas (#144): canto superior esquerdo, discreto.
+  // Somente leitura — lista o que a árvore não conseguiu ligar a um documento.
+  const comOrigensNaoResolvidas = node.filter(
+    (d) =>
+      d.data.origens_nao_resolvidas &&
+      d.data.origens_nao_resolvidas.length > 0,
+  );
+
+  const avisoOrigens = comOrigensNaoResolvidas
+    .append("g")
+    .attr("class", "origens-nao-resolvidas");
+
+  avisoOrigens
+    .append("circle")
+    .attr("cx", -55)
+    .attr("cy", -25)
+    .attr("r", 8)
+    .attr("fill", "#dc3545") // Vermelho de alerta
+    .attr("stroke", "white")
+    .attr("stroke-width", 2);
+
+  avisoOrigens
+    .append("text")
+    .attr("x", -55)
+    .attr("y", -21)
+    .attr("text-anchor", "middle")
+    .attr("fill", "white")
+    .attr("font-size", 10)
+    .attr("font-weight", "bold")
+    .text("!");
+
+  // <title> filho é o que o SVG realmente exibe como tooltip nativo.
+  avisoOrigens.append("title").text((d) => {
+    const linhas = d.data.origens_nao_resolvidas.map((o) => {
+      const motivo =
+        o.status === "ambiguo"
+          ? `ambígua (${(o.candidatos || []).length} documentos candidatos)`
+          : "não encontrada";
+      const cartorio = o.cartorio_nome ? ` — ${o.cartorio_nome}` : "";
+      return `• ${o.numero}${cartorio}: ${motivo}`;
+    });
+    return `Origens não resolvidas:\n${linhas.join("\n")}`;
+  });
+
   // Botões SVG (não mostrar para cards de fim de cadeia)
   const btnGroup = node
     .filter((d) => !d.data.is_fim_cadeia)
