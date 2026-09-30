@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load i18n static %}
 
-{% block title %}{{ modo|title }} Documento - {{ imovel.nome }}{% endblock %}
+{% block title %}{% if modo_edicao %}Editar{% else %}Novo{% endif %} Documento - {{ imovel.nome }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'dominial/css/documento_form.css' %}">
@@ -9,7 +9,7 @@
 
 {% block content %}
 <div class="container">
-    <h1>{% if modo == 'editar' %}✏️ Editar{% else %}📄 Novo{% endif %} Documento</h1>
+    <h1>{% if modo_edicao %}✏️ Editar{% else %}📄 Novo{% endif %} Documento</h1>
     
     <div class="field-group">
         <h4>{{ imovel.nome }}</h4>
@@ -20,7 +20,7 @@
             <div>
                 <strong>Proprietário:</strong> {{ imovel.proprietario.nome }}
             </div>
-            {% if modo == 'editar' %}
+            {% if modo_edicao %}
             <div>
                 <strong>Documento:</strong> {{ documento.numero }}
             </div>

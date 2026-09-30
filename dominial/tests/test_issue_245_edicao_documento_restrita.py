@@ -248,6 +248,16 @@ class Issue245EdicaoDocumentoRestritaTest(TestCase):
 
     def test_template_editar_documento_folha_habilitada_transcricao(self):
         """Template em modo edição com transcrição → folha habilitada."""
+        import re
+
+        def _tem_disabled(html, field_id):
+            """Verifica se o input/select com o dado id tem atributo disabled."""
+            pattern = rf'<(?:input|select|textarea)[^>]*id="{field_id}"[^>]*disabled'
+            if re.search(pattern, html):
+                return True
+            pattern2 = rf'<(?:input|select|textarea)[^>]*disabled[^>]*id="{field_id}"'
+            return bool(re.search(pattern2, html))
+
         doc_transcricao = Documento.objects.create(
             numero='T245',
             tipo=self.doc_tipo_transcricao,
@@ -276,8 +286,12 @@ class Issue245EdicaoDocumentoRestritaTest(TestCase):
         # (O JavaScript atualizarCampoFolha() cuida disso dinamicamente,
         # mas o HTML inicial deve permitir edição)
         self.assertIn('id="folha"', html)
-        # Para transcrição, folha não deve ter disabled no HTML inicial
+        # Para transcrição, folha NÃO deve ter disabled no HTML inicial
         # (o JS pode desabilitar se mudar para matrícula)
+        self.assertFalse(
+            _tem_disabled(html, 'folha'),
+            "Campo folha NÃO deve ter disabled na edição de transcrição",
+        )
 
 
 class Issue245VazamentoObservacoesDocumentoTest(TestCase):

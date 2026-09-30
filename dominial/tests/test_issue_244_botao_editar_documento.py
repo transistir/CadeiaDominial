@@ -81,6 +81,17 @@ class Issue244BotaoEditarDocumentoTest(TestCase):
         html = self._render_documento_form({'modo_edicao': True})
         self.assertIn('Atualizar Documento', html)
 
+    def test_editar_documento_h1_mostra_editar(self):
+        """Contexto com modo_edicao=True → h1 mostra '✏️ Editar Documento' (não '📄 Novo')."""
+        html = self._render_documento_form({'modo_edicao': True})
+        self.assertIn('Editar', html)
+        self.assertNotIn('Novo Documento', html)
+
+    def test_editar_documento_exibe_numero_no_box(self):
+        """Contexto com modo_edicao=True → box mostra 'Documento: M244'."""
+        html = self._render_documento_form({'modo_edicao': True})
+        self.assertIn('<strong>Documento:</strong> M244', html)
+
     def test_novo_documento_renderiza_botao_criar(self):
         """Contexto sem modo_edicao → botão 'Criar Documento'."""
         html = self._render_documento_form()
