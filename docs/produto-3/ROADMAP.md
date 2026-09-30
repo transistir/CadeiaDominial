@@ -155,16 +155,27 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    desde 13/08). Revalidar contra o código atual (nota acima).
    **Fase 1 ✅** PR #226 (squash `bfc6c3de`) — árvore; **fase 2 ✅** PR #231
    (squash `e0089329`) — cartório/livro/folha por posição de origem na
-   persistência. Débitos derivados: **#228**, **#229** (item 2a), **#230**.
-2a. **#229** 🐛 URGENTE (Hiure 29/09, repro lançamento 8374 no teste):
+   persistência. Débitos derivados: **#228**, **#229** (item 2a, ✅), **#230**
+   (item 2b), **#237** (follow-up dos P2 do PR #236).
+2a. **#229** ✅ URGENTE (Hiure 29/09, repro lançamento 8374 no teste):
    tabela da cadeia detalhada/API/XLSX mostram o MESMO cartório para todas as
    origens — `formatar_origem_completa` anexa o `cartorio_origem` único legado
    a todas as partes do texto e ignora as linhas `LancamentoOrigem` (que a
-   fase 2 do #144 já grava corretamente por posição). Fix: consultar
-   `LancamentoOrigemLeituraService.obter_origens()`; fallback textual só para
-   legados sem linhas. **EM EXECUÇÃO 29/09** (worktree
-   `worktrees/issue-229-cartorio-por-origem`, pipeline senior-junior; Opus 5.5
-   plan + Sonnet 5 impl + Opus/Codex review).
+   fase 2 do #144 já grava corretamente por posição). **CONCLUÍDO 29/09** —
+   PR #236, squash `7f87318d` em develop (Opus 5.5 APPROVE ×2 + Codex astra
+   APPROVE ×2 no head `6cf7aa7e`; Greptile 4/5 com 2 P2 não-bloqueantes →
+   dívida em #237; Jev 3.64/0.78/0.11; suíte 766, zero regressão; merge
+   autorizado pelo Hiure). Implementação: Sonnet 5 (round 1) + qwen3.7-max
+   (round 2). Validar no teste: lançamento 8374 → T100 Iguatemi / T99 Navirai.
+2b. **#230** 🐛 URGENTE (Maurício Ufpa via Hiure 28/09, produção imóvel 691):
+   imóvel criado como Transcrição ganha documento automático `M{nº}`/matrícula
+   — `criar_documento_matricula_automatico` hardcode matricula e ignora
+   `tipo_documento_principal`. Efeitos: form de lançamento abre na matrícula
+   errada, árvore não resolve o documento principal. Reparo do 691 é MANUAL
+   pelo usuário (regra 26/09 — sem script em produção). Inclui #114 (FK
+   cartório não-nullable no mesmo método). **EM EXECUÇÃO 29/09** (worktree
+   `worktrees/issue-230-doc-auto-transcricao`; Opus 5.5 plan + qwen3.7-max
+   impl (rota nova Hiure 29/09) + Opus/Codex review).
 3. **#219** 🐛 validação: início de matrícula aceita a própria matrícula/
    transcrição como origem (auto-loop). Ponto de correção:
    `_sincronizar_origens_estruturadas` (identidade tipo + número normalizado
