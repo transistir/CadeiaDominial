@@ -278,3 +278,87 @@ class Issue245EdicaoDocumentoRestritaTest(TestCase):
         self.assertIn('id="folha"', html)
         # Para transcrição, folha não deve ter disabled no HTML inicial
         # (o JS pode desabilitar se mudar para matrícula)
+
+
+class Issue245VazamentoObservacoesDocumentoTest(TestCase):
+    """Anti-regressão: observações do documento não vazam para form de lançamento.
+
+    DEFITO 1 (fix #245): em _observacoes_form.html, o elif {% elif documento.observacoes %}
+    exibia as observações do DOCUMENTO em qualquer tela que tivesse 'documento' no contexto —
+    incluindo lancamento_form.html (a view passa 'documento': documento_ativo). Corrigido para
+    {% elif campo_somente_leitura and documento.observacoes %}, de modo que lancamento_form
+    (que não passa campo_somente_leitura) tem comportamento idêntico ao de antes do fix.
+    """
+
+    def setUp(self):
+        self.tis = TIs.objects.create(
+            nome='TI Vazamento', codigo='TI-VAZ', etnia='Teste',
+        )
+        self.pessoa = Pessoas.objects.create(nome='Pessoa Vazamento')
+        self.cartorio = Cartorios.objects.create(
+            nome='Cartório Vazamento', cns='CNS-VAZ', cidade='Cidade Vaz', estado='MS',
+        )
+        self.factory = RequestFactory()
+        self.imovel = Imovel.objects.create(
+            terra_indigena_id=self.tis,
+            nome='Imóvel Vaz',
+            proprietario=self.pessoa,
+            matricula='VAZ',
+            tipo_documento_principal='matricula',
+            cartorio=self.cartorio,
+        )
+        doc_tipo, _ = DocumentoTipo.objects.get_or_create(tipo='matricula')
+        self.documento = Documento.objects.create(
+            numero='VAZ-001',
+            tipo=doc_tipo,
+            imovel=self.imovel,
+            cartorio=self.cartorio,
+            data=timezone.localdate(),
+            data_presumida=True,
+            livro='Livro-Vaz',
+            observacoes='TEXTO-SECRETO-DO-DOCUMENTO-QUE-NAO-DEVE-VAZAR',
+        )
+
+    def test_componente_sem_campo_somente_leitura_nao_vaza_observacoes_do_documento(self):
+        """Contexto típico do lançamento_form: documento com observações + sem flag → não vaza."""
+        html = render_to_string(
+            'dominial/components/_observacoes_form.html',
+            {
+                'documento': self.documento,
+                'observacoes_obrigatorio': False,
+                # campo_somente_leitura NÃO é passado (falso/undefined)
+            },
+            request=self.factory.get('/'),
+        )
+        self.assertNotIn(
+            'TEXTO-SECRETO-DO-DOCUMENTO-QUE-NAO-DEVE-VAZAR',
+            html,
+            "Observações do documento NÃO devem vazar para form que não passa campo_somente_leitura "
+            "(cenário de lançamento_form.html — novo lançamento não herda obs do documento).",
+        )
+
+    def test_componente_com_campo_somente_leitura_exibe_observacoes_do_documento(self):
+        """Contexto típico da edição de documento: flag ativa → exibe obs do documento (read-only)."""
+        html = render_to_string(
+            'dominial/components/_observacoes_form.html',
+            {
+                'documento': self.documento,
+                'observacoes_obrigatorio': False,
+                'campo_somente_leitura': True,
+            },
+            request=self.factory.get('/'),
+        )
+        self.assertIn(
+            'TEXTO-SECRETO-DO-DOCUMENTO-QUE-NAO-DEVE-VAZAR',
+            html,
+            "Na edição de documento (campo_somente_leitura=True), as observações do documento "
+            "DEVEM ser exibidas (read-only) no textarea.",
+        )
+        # E deve estar disabled
+        import re
+        pattern = r'<textarea[^>]*id="observacoes"[^>]*disabled'
+        pattern2 = r'<textarea[^>]*disabled[^>]*id="observacoes"'
+        self.assertTrue(
+            bool(re.search(pattern, html) or re.search(pattern2, html)),
+            "textarea#observacoes deve ter disabled quando campo_somente_leitura=True",
+        )

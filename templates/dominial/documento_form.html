@@ -33,12 +33,12 @@
         
         <div class="form-group">
             <label for="numero">Número do Documento:</label>
-            <input type="text" id="numero" name="numero" value="{{ documento.numero|default:'' }}" required>
+            <input type="text" id="numero" name="numero" value="{{ documento.numero|default:'' }}" required {% if modo_edicao %}disabled{% endif %}>
         </div>
         
         <div class="form-group">
             <label for="tipo">Tipo de Documento:</label>
-            <select id="tipo" name="tipo" required>
+            <select id="tipo" name="tipo" required {% if modo_edicao %}disabled{% endif %}>
                 {% for tipo in tipos_documento %}
                 <option value="{{ tipo.id }}" data-tipo-valor="{{ tipo.tipo }}" {% if documento.tipo.id == tipo.id %}selected{% endif %}>
                     {{ tipo.get_tipo_display }}
@@ -49,12 +49,12 @@
         
         <div class="form-group">
             <label for="data">Data:</label>
-            <input type="date" id="data" name="data" value="{{ documento.data|date:'Y-m-d'|default:'' }}">
+            <input type="date" id="data" name="data" value="{{ documento.data|date:'Y-m-d'|default:'' }}" {% if modo_edicao %}disabled{% endif %}>
         </div>
         
         <div class="form-group">
             <label for="cartorio">CRI:</label>
-            <input type="text" id="cartorio" name="cartorio" value="{{ documento.cartorio.nome|default:'' }}" placeholder="Digite o nome do registro imobiliário..." autocomplete="off">
+            <input type="text" id="cartorio" name="cartorio" value="{{ documento.cartorio.nome|default:'' }}" placeholder="Digite o nome do registro imobiliário..." autocomplete="off" {% if modo_edicao %}disabled{% endif %}>
             <input type="hidden" id="cartorio_id" name="cartorio_id" value="{{ documento.cartorio.id|default:'' }}">
             <div id="cartorio-sugestoes" class="sugestoes-container" style="display: none;"></div>
         </div>
@@ -74,10 +74,10 @@
         
         <div class="form-group">
             <label for="origem">Origem:</label>
-            <textarea id="origem" name="origem" rows="2">{{ documento.origem|default:'' }}</textarea>
+            <textarea id="origem" name="origem" rows="2" {% if modo_edicao %}disabled{% endif %}>{{ documento.origem|default:'' }}</textarea>
         </div>
         
-        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o documento" rows=3 %}
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações sobre o documento" rows=3 modo_edicao=modo_edicao campo_somente_leitura=modo_edicao %}
         
         <div class="actions">
             <button type="submit" class="btn btn-primary">
