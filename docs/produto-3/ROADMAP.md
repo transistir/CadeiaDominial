@@ -153,6 +153,18 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 2. **#144** 🐛 produção: origem lançada (T585) não aparece na árvore —
    regressão v1.0.3→v1.0.5 ligada a cartórios (imóvel M955, Amambai; aberta
    desde 13/08). Revalidar contra o código atual (nota acima).
+   **Fase 1 ✅** PR #226 (squash `bfc6c3de`) — árvore; **fase 2 ✅** PR #231
+   (squash `e0089329`) — cartório/livro/folha por posição de origem na
+   persistência. Débitos derivados: **#228**, **#229** (item 2a), **#230**.
+2a. **#229** 🐛 URGENTE (Hiure 29/09, repro lançamento 8374 no teste):
+   tabela da cadeia detalhada/API/XLSX mostram o MESMO cartório para todas as
+   origens — `formatar_origem_completa` anexa o `cartorio_origem` único legado
+   a todas as partes do texto e ignora as linhas `LancamentoOrigem` (que a
+   fase 2 do #144 já grava corretamente por posição). Fix: consultar
+   `LancamentoOrigemLeituraService.obter_origens()`; fallback textual só para
+   legados sem linhas. **EM EXECUÇÃO 29/09** (worktree
+   `worktrees/issue-229-cartorio-por-origem`, pipeline senior-junior; Opus 5.5
+   plan + Sonnet 5 impl + Opus/Codex review).
 3. **#219** 🐛 validação: início de matrícula aceita a própria matrícula/
    transcrição como origem (auto-loop). Ponto de correção:
    `_sincronizar_origens_estruturadas` (identidade tipo + número normalizado
