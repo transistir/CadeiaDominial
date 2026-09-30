@@ -75,13 +75,17 @@ def imovel_form(request, tis_id, imovel_id=None):
                             ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
                         )
 
-                # Criar automaticamente o documento de matrícula para o imóvel
+                # Criar automaticamente o documento principal para o imóvel
                 if not imovel_id:  # Apenas para novos imóveis
                     try:
-                        documento_matricula = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
-                        messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
+                        documento_principal = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
+                        rotulo = documento_principal.tipo.get_tipo_display().lower()
+                        messages.info(
+                            request,
+                            f'Documento de {rotulo} "{documento_principal.numero}" criado automaticamente.',
+                        )
                     except Exception as e:
-                        messages.warning(request, f'Imóvel criado, mas houve um problema ao criar o documento de matrícula: {str(e)}')
+                        messages.warning(request, f'Imóvel criado, mas houve um problema ao criar o documento principal: {str(e)}')
 
                 if aviso_sincronizacao:
                     messages.warning(request, aviso_sincronizacao)
