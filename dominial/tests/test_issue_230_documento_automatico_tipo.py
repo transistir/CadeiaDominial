@@ -179,8 +179,8 @@ class CriarDocumentoAutomaticoRespeitaTipoTest(Issue230Fixture, TestCase):
         for valor, numero in casos:
             with self.subTest(tipo=valor):
                 imovel = self.criar_imovel(numero, 'matricula')
-                # Aplicar o tipo anormal só em memória
-                imovel.tipo_documento_principal = valor if valor is not None else ''
+                # Aplicar o tipo anormal só em memória (None real, não '')
+                imovel.tipo_documento_principal = valor
                 doc = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
                 self.assertEqual(doc.tipo.tipo, 'matricula')
                 self.assertTrue(doc.numero.upper().startswith('M'))
@@ -224,7 +224,7 @@ class CriarDocumentoAutomaticoRespeitaTipoTest(Issue230Fixture, TestCase):
 
         with self.subTest('cartorio=None (simula RelatedObjectDoesNotExist)'):
             imovel = self.criar_imovel('7202', 'transcricao')
-            imovel.cartorio_id = None
+            imovel.cartorio = None  # via descriptor (cartorio_id também fica None)
             with self.assertRaisesMessage(
                 ValidationError,
                 'Cartório é obrigatório para criar o documento principal',
