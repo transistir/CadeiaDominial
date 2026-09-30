@@ -217,11 +217,49 @@ class LancamentoCriacaoService:
                 print("DEBUG: Lançamento criado com sucesso!")
                 return lancamento, mensagem_origens
             
+        except ValidationError as e:
+            print(f"DEBUG: Criação cancelada por validação: {str(e)}")
+            # Espelha atualizar_lancamento_completo (:376-386): mensagens de
+            # validação já terminam com ponto; o rstrip evita ponto duplo na
+            # frase final ("origem 2.. Nenhuma…"). O sufixo deixa explícito
+            # para o usuário que nada foi persistido (o atomic faz rollback
+            # automático, mas a view precisa comunicar isso).
+            motivo = (
+                '; '.join(m.rstrip('.') for m in e.messages)
+                if hasattr(e, 'messages') else str(e).rstrip('.')
+            )
+            # BLOCKER (Opus review): o atomic desfaz o banco, mas a instância
+            # ``documento_ativo`` passada pelo caller continua com livro/folha
+            # SUJOS em memória (escritos por ``_aplicar_campos_documento`` e
+            # ``RegraPetreaService.aplicar_regra_petrea`` ANTES da falha).
+            # A view re-renderiza com essa instância → ``doc_livro_definido=
+            # True`` → campo Livro disabled com valor não salvo → no reenvio
+            # o campo disabled não vai no POST e o livro se perde em
+            # silêncio. ``refresh_from_db`` restaura os valores do banco
+            # (rollback) na instância em memória.
+            try:
+                documento_ativo.refresh_from_db(fields=['livro', 'folha'])
+            except Exception:
+                # Se o documento foi criado DENTRO do atomic e rollback
+                # apagou, refresh_from_db pode falhar — não mascarar o
+                # erro original.
+                pass
+            return None, (
+                f'Criação cancelada: {motivo}. Nenhum lançamento foi salvo.'
+            )
         except Exception as e:
             print(f"DEBUG: Erro durante criação: {str(e)}")
             import traceback
             print(f"DEBUG: Traceback: {traceback.format_exc()}")
-            return None, f'Erro ao criar lançamento: {str(e)}'
+            # Mesmo caminho para erros genéricos: limpar o documento em
+            # memória (mesmo BLOCKER acima) e deixar claro que nada ficou.
+            try:
+                documento_ativo.refresh_from_db(fields=['livro', 'folha'])
+            except Exception:
+                pass
+            return None, (
+                f'Criação cancelada: {str(e)}. Nenhum lançamento foi salvo.'
+            )
         finally:
             if lancamento is not None:
                 LancamentoOrigemService.limpar_mapeamento(lancamento)
