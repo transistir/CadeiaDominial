@@ -1154,7 +1154,8 @@ class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
             )
 
         self.assertIsNone(resultado)
-        self.assertIn('Erro ao criar lançamento: falha F2-13b', mensagem)
+        self.assertIn('Criação cancelada: falha F2-13b', mensagem)
+        self.assertIn('Nenhum lançamento foi salvo', mensagem)
         lancamento = capturado["lancamento"]
         self.assertFalse(hasattr(lancamento, ATRIBUTO))
         self.assertIsNone(cache.get(CHAVE_LEGADA.format(lancamento.pk)))
