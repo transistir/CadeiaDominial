@@ -11,6 +11,7 @@ from .documento_identidade_service import DocumentoIdentidadeService
 from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from .hierarquia_arvore_niveis_helper import recalcular_niveis
 from ..utils.documento_identidade_utils import DocumentoIdentidade
+from ..managers import documentos_no_escopo
 import re
 from collections import deque
 
@@ -37,8 +38,7 @@ class HierarquiaArvoreService:
             imovel: Objeto Imovel
             criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
         """
-        if documentos_queryset is None:
-            documentos_queryset = Documento.objects.all()
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
 
         # 1. Identificar documento principal do imóvel
         documento_principal = HierarquiaArvoreService._identificar_documento_principal(
@@ -76,8 +76,7 @@ class HierarquiaArvoreService:
         Identifica o documento principal do imóvel
         Prioridade: 1) Documento com número igual à matrícula, 2) Primeiro documento do imóvel
         """
-        if documentos_queryset is None:
-            documentos_queryset = Documento.objects.all()
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
 
         # Primeiro, tentar encontrar a identidade registral exata do imóvel.
         documento_principal = documentos_queryset.filter(
@@ -105,8 +104,7 @@ class HierarquiaArvoreService:
         """
         Constrói a árvore a partir do documento principal
         """
-        if documentos_queryset is None:
-            documentos_queryset = Documento.objects.all()
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
 
         # Inicializar estrutura da árvore
         arvore = {
@@ -225,6 +223,7 @@ class HierarquiaArvoreService:
         normalizado e cartório), nunca por número isolado. Sem cartório, com
         tipo incompatível ou com identidade ambígua, não seleciona documento.
         """
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
         if not cartorio or not codigo:
             return None
         primeiro = codigo.strip()[:1].upper()
@@ -252,6 +251,7 @@ class HierarquiaArvoreService:
         ``ambiguo``), ``pendencia`` descreve a origem para a árvore em vez de
         descartá-la em silêncio (#144).
         """
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
         pendencia = {
             'numero': origem.numero,
             'tipo_documento': origem.tipo_documento,
@@ -283,6 +283,7 @@ class HierarquiaArvoreService:
         Busca documentos pais (origens) de um documento
         CORREÇÃO: Para o documento do imóvel atual, buscar apenas origens diretas
         """
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
         return HierarquiaArvoreService._buscar_documentos_pais_e_pendencias(
             documento, imovel, criar_documentos_automaticos, documentos_queryset
         )[0]
@@ -293,6 +294,7 @@ class HierarquiaArvoreService:
         Como ``_buscar_documentos_pais``, mas devolve também a lista de origens
         não resolvidas (``origens_nao_resolvidas``), somente leitura (#144).
         """
+        documentos_queryset = documentos_no_escopo(documentos_queryset)
         documentos_pais = []
         origens_nao_resolvidas = []
         documentos_processados = set()

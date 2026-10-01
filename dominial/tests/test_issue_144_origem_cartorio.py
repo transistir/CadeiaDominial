@@ -47,6 +47,7 @@ from django.core.exceptions import ValidationError
 from django.test import Client, RequestFactory
 from django.urls import reverse
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -143,7 +144,7 @@ class T1CartorioPorOrigemTest(Issue144Base):
             ).exists()
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
         arestas = {(c["from"], c["to"]) for c in arvore["conexoes"]}
         self.assertIn((documento_atual.pk, t366_em_b.pk), arestas)
         self.assertNotIn((documento_atual.pk, t366_em_a.pk), arestas)
@@ -238,7 +239,7 @@ class T3OrigensNaoResolvidasTest(Issue144Base):
             cartorio=self.cartorio_b,
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
 
         no = self._no(arvore, documento)
         self.assertEqual(
@@ -308,14 +309,14 @@ class T3OrigensNaoResolvidasTest(Issue144Base):
     def test_t3_sem_pendencias_o_campo_existe_e_vem_vazio(self):
         imovel, documento, _ = self.criar_cenario_atual("", None)
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
 
         self.assertEqual(self._no(arvore, documento)["origens_nao_resolvidas"], [])
 
     def test_t3_retrocompatibilidade_do_payload(self):
         imovel, documento, _ = self.criar_cenario_atual("", None)
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
 
         for chave in ("imovel", "documentos", "origens_identificadas", "conexoes"):
             self.assertIn(chave, arvore)
@@ -337,7 +338,7 @@ class T4RegressaoT585Test(Issue144Base):
             cartorio=self.cartorio_b,
         )
 
-        antes = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        antes = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(antes["conexoes"], [])
         no_antes = next(n for n in antes["documentos"] if n["id"] == documento.pk)
         self.assertEqual(
@@ -351,7 +352,7 @@ class T4RegressaoT585Test(Issue144Base):
             outro_imovel, self.tipo_transcricao, "T585", self.cartorio_b
         )
 
-        depois = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        depois = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(
             {(c["from"], c["to"]) for c in depois["conexoes"]},
             {(documento.pk, t585.pk)},

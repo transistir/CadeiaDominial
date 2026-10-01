@@ -472,7 +472,9 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         testes de regressão abaixo seriam vazios e passariam mesmo com o
         bug presente (o problema da classe `ExportacaoCadeiaParidadeTest`).
         """
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
 
         nos_fim_cadeia = [d for d in arvore['documentos'] if d.get('is_fim_cadeia')]
         self.assertEqual(len(nos_fim_cadeia), 1)
@@ -499,7 +501,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         deve derrubar `CadeiaCompletaService.get_cadeia_completa` com
         `ValueError: Field 'id' expected a number but got 'fim_cadeia_...'`.
         """
-        resultado = CadeiaCompletaService().get_cadeia_completa(
+        resultado = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
 
@@ -512,7 +514,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         (M500 e T90), todos instâncias de `Documento` com id inteiro, e
         nenhuma entrada sintética de fim de cadeia.
         """
-        resultado = CadeiaCompletaService().get_cadeia_completa(
+        resultado = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
 

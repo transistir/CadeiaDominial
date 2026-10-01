@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -141,7 +142,8 @@ class LancamentoOrigemLeituraServiceTest(TestCase):
             self.documento_atual, documentos_queryset=Documento.objects.all()
         )
         pais = HierarquiaArvoreService._buscar_documentos_pais(
-            self.documento_atual, self.imovel_atual, False
+            self.documento_atual, self.imovel_atual, False,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
         completa = CadeiaCompletaService(documentos_queryset=Documento.objects.all())._expandir_todas_origens_documento(
             self.documento_atual

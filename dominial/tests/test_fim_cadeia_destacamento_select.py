@@ -10,6 +10,7 @@ from django.test import TestCase, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     TIs, Pessoas, Imovel, Cartorios,
     DocumentoTipo, LancamentoTipo,
@@ -355,7 +356,9 @@ class NoFimCadeiaInfoAdicionalTest(TestCase):
         )
 
     def test_no_expoe_sigla_e_info_adicional(self):
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL
+        )
         no_fc = next(d for d in arvore['documentos'] if d.get('is_fim_cadeia'))
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'BA')
         self.assertEqual(no_fc['info_adicional_fim_cadeia'], 'Secretaria de Terras')

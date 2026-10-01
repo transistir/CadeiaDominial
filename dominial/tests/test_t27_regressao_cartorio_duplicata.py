@@ -27,6 +27,7 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 from django.contrib.messages.storage.fallback import FallbackStorage
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import LancamentoTipo
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
@@ -102,7 +103,7 @@ class T27RegressaoCartorioDuplicataTest(IdentidadeDocumentoFixture):
 
         # Passo 4: a árvore reconstruída liga ao documento certo por ID e
         # não confunde com o homônimo do cartório B.
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel_destino)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel_destino, documentos_queryset=ESCOPO_GLOBAL)
         conexoes = {(c['from'], c['to']) for c in arvore['conexoes']}
         self.assertIn((documento_ativo.pk, doc_origem_a.pk), conexoes)
         self.assertNotIn((documento_ativo.pk, doc_origem_b.pk), conexoes)

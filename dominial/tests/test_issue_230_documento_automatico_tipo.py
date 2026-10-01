@@ -18,6 +18,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -344,7 +345,9 @@ class IdentificarDocumentoPrincipalTranscricaoTest(Issue230Fixture, TestCase):
             folha='0',
         )
 
-        principal = HierarquiaArvoreService._identificar_documento_principal(imovel)
+        principal = HierarquiaArvoreService._identificar_documento_principal(
+            imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
 
         self.assertEqual(principal.id, doc_auto.id)
         self.assertEqual(principal.tipo.tipo, 'transcricao')
@@ -384,7 +387,9 @@ class IdentificarDocumentoPrincipalTranscricaoTest(Issue230Fixture, TestCase):
             cartorio=self.cartorio,
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
 
         # (a) Conexão from=auto → to=t3858
         conexoes = arvore['conexoes']

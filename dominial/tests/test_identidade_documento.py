@@ -1212,6 +1212,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             documento_atual,
             imovel,
             criar_documentos_automaticos=False,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
 
         self.assertIn(documento_b, pais)
