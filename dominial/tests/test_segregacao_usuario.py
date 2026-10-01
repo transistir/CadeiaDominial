@@ -32,6 +32,7 @@ from django.urls import reverse
 
 import dominial
 from dominial.managers import (
+    ESCOPO_GLOBAL,
     documentos_for_user,
     lancamentos_for_user,
     pessoas_for_user,
@@ -2403,7 +2404,7 @@ class BlockersRound3Test(SegregacaoBaseTestCase):
 
         # Simula um cálculo global anterior que colocaria a origem alheia no
         # cache legado do imóvel.
-        tronco_global = HierarquiaService.obter_tronco_principal(self.imovel_a)
+        tronco_global = HierarquiaService.obter_tronco_principal(self.imovel_a, documentos_queryset=ESCOPO_GLOBAL)
         self.assertIn(self.documento_b, tronco_global)
 
         tronco_usuario = HierarquiaService.obter_tronco_principal(

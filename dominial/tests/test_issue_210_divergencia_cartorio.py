@@ -317,19 +317,25 @@ class CadeiaAposSincronizacaoTest(_Issue210Fixture, TestCase):
         self.imovel.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.imovel.cartorio_id)
 
-        tronco = HierarquiaService.obter_tronco_principal(self.imovel)
+        tronco = HierarquiaService.obter_tronco_principal(
+            self.imovel, documentos_queryset=Documento.objects.all()
+        )
         self.assertTrue(tronco)
         self.assertEqual(tronco[0].id, self.documento.id)
 
     def test_cache_desabilitado_reflete_novo_cartorio_imediatamente(self):
-        tronco_antes = HierarquiaService.obter_tronco_principal(self.imovel)
+        tronco_antes = HierarquiaService.obter_tronco_principal(
+            self.imovel, documentos_queryset=Documento.objects.all()
+        )
         self.assertEqual(tronco_antes[0].cartorio_id, self.cartorio_a.id)
 
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
         ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
 
-        tronco_depois = HierarquiaService.obter_tronco_principal(self.imovel)
+        tronco_depois = HierarquiaService.obter_tronco_principal(
+            self.imovel, documentos_queryset=Documento.objects.all()
+        )
         self.assertEqual(tronco_depois[0].cartorio_id, self.cartorio_b.id)
 
 

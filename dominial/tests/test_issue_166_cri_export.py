@@ -28,6 +28,7 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.utils.formatacao_utils import abreviar_cartorio
 from dominial.views import cadeia_dominial_views
@@ -266,7 +267,7 @@ class ExportacaoUsaSiglaCRITest(TestCase):
     # -------------------------------------------------------------------- PDF
 
     def _render_pdf(self):
-        contexto = CadeiaCompletaService().get_cadeia_completa(
+        contexto = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
         return render_to_string("dominial/cadeia_completa_pdf.html", contexto)

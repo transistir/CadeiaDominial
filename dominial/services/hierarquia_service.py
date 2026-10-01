@@ -31,17 +31,17 @@ class HierarquiaService:
         if escolhas_origem is None:
             escolhas_origem = {}
 
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
         # Cache do tronco desabilitado (#210): LocMemCache multi-worker não é
         # compartilhado entre processos, e a invalidação transitiva completa
         # (imóveis consumidores da identidade antiga) não é viável neste
         # hotfix. Recalcular sempre evita servir tronco desatualizado após
         # sincronização de cartório.
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
         return identificar_tronco_principal(
             imovel,
             escolhas_origem,
@@ -57,12 +57,12 @@ class HierarquiaService:
         """
         Obtém os troncos secundários da cadeia dominial
         """
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
         tronco_principal = identificar_tronco_principal(
             imovel,
             documentos_queryset=documentos_queryset,
@@ -78,13 +78,13 @@ class HierarquiaService:
         """
         Calcula a hierarquia completa dos documentos de um imóvel
         """
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
         # Obter todos os documentos do imóvel
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
         documentos = documentos_queryset.filter(imovel=imovel).select_related('tipo', 'cartorio')
         
         # Calcular hierarquia baseada nas origens
@@ -112,13 +112,12 @@ class HierarquiaService:
         """
         Valida se a hierarquia de documentos está consistente
         """
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
         try:
-            if documentos_queryset is None:
-                documentos_queryset = (
-                    documentos_for_user(user)
-                    if user is not None
-                    else Documento.objects.all()
-                )
             tronco = HierarquiaService.obter_tronco_principal(
                 imovel,
                 documentos_queryset=documentos_queryset,
@@ -172,12 +171,12 @@ class HierarquiaService:
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         """
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
         return HierarquiaArvoreService.construir_arvore_cadeia_dominial(
             imovel,
             criar_documentos_automaticos,
@@ -187,11 +186,13 @@ class HierarquiaService:
     # ==================== ORIGENS ====================
     
     @staticmethod
-    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False):
+    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False, *, documentos_queryset=None):
         """
         Processa origens identificadas de lançamentos
         """
-        return HierarquiaOrigemService.processar_origens_identificadas(imovel, criar_documentos_automaticos)
+        return HierarquiaOrigemService.processar_origens_identificadas(
+            imovel, criar_documentos_automaticos, documentos_queryset=documentos_queryset
+        )
     
     # ==================== MÉTODOS AUXILIARES ====================
     

@@ -47,6 +47,11 @@ class DuplicataVerificacaoService:
         e cartório), nunca por número isolado. Sem cartório, com tipo
         incompatível ou com identidade ambígua, não seleciona nenhum documento.
         """
+        if documentos_queryset is None:
+            raise TypeError(
+                'DuplicataVerificacaoService._resolver_documento exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
         if not codigo or not cartorio_id:
             return None
         tipo = DuplicataVerificacaoService._tipo_do_codigo(codigo)
@@ -77,19 +82,21 @@ class DuplicataVerificacaoService:
             origem: Número da origem/documento
             cartorio_id: ID do cartório
             imovel_atual_id: ID do imóvel atual (para excluir da busca)
+            user: Usuário para escopo (opcional se documentos_queryset fornecido)
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
 
         Returns:
             Dict com informações sobre a duplicata encontrada ou None
         """
+        # C2: escopo obrigatório (verificado ANTES do feature flag para que a
+        # assinatura seja sempre respeitada)
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+
         if not getattr(settings, 'DUPLICATA_VERIFICACAO_ENABLED', False):
             return {'tem_duplicata': False}
-
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
 
         documentos_fora_do_imovel = documentos_queryset.exclude(
             imovel_id=imovel_atual_id
@@ -153,16 +160,17 @@ class DuplicataVerificacaoService:
         
         Args:
             documento_origem: Documento de origem para calcular importáveis
+            user: Usuário para escopo (opcional se documentos_queryset fornecido)
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
             
         Returns:
             Lista de documentos que podem ser importados (incluindo toda a cadeia dominial)
         """
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
 
         documentos_importaveis = []
         documentos_processados = set()  # Para evitar loops infinitos
@@ -214,16 +222,17 @@ class DuplicataVerificacaoService:
         
         Args:
             documento_origem: Documento de origem
+            user: Usuário para escopo (opcional se documentos_queryset fornecido)
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
             
         Returns:
             Lista com informações da cadeia dominial completa
         """
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
 
         cadeia = []
         documentos_processados = set()  # Para evitar loops infinitos

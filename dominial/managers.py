@@ -179,3 +179,79 @@ def pessoas_for_user(user):
         | Q(transmitente__imovel_id__in=imoveis)
         | Q(adquirente__imovel_id__in=imoveis)
     ).distinct()
+
+
+# ============================================================================
+# ESCOPO_GLOBAL — sentinela para acesso global explícito (C2)
+# ============================================================================
+
+class _EscopoGlobal:
+    """Sentinela para acesso global explícito a documentos/imóveis.
+
+    Uso restrito a casos legítimos de acesso global (ver allowlist no teste
+    T11): commands de manutenção, relatórios globais, ImovelDocumentoService
+    (#210), conflito_global da duplicata. Qualquer outro uso é violação do
+    contrato de segregação.
+    """
+
+    def __repr__(self):
+        return 'ESCOPO_GLOBAL'
+
+
+ESCOPO_GLOBAL = _EscopoGlobal()
+
+
+def documentos_no_escopo(escopo):
+    """Valida e normaliza um escopo de documentos.
+
+    - QuerySet de Documento → devolve o próprio.
+    - ESCOPO_GLOBAL → devolve Documento.objects.all().
+    - Qualquer outra coisa → TypeError.
+
+    Usado em funções que recebem um escopo já resolvido (queryset ou sentinela).
+    """
+    from .models import Documento
+
+    if escopo is ESCOPO_GLOBAL:
+        return Documento.objects.all()
+    # Verificar se é QuerySet de Documento
+    if hasattr(escopo, 'model') and hasattr(escopo, 'filter'):
+        # Duck typing: QuerySet tem .model e .filter
+        return escopo
+    raise TypeError(
+        f'Escopo de documentos inválido: {escopo!r}. '
+        f'Esperado QuerySet de Documento ou ESCOPO_GLOBAL.'
+    )
+
+
+def escopo_documentos(user=None, documentos_queryset=None):
+    """Resolve o escopo de documentos a partir de user ou queryset explícito.
+
+    Regras (contrato C2):
+    1. Queryset explícito vence (incluindo ESCOPO_GLOBAL como queryset).
+    2. Senão, documentos_for_user(user) se user não-None.
+    3. Sem nenhum dos dois → TypeError.
+
+    Não aceita user=None + queryset=None (proibido None→global).
+    """
+    # Queryset explícito vence
+    if documentos_queryset is not None:
+        # Se é ESCOPO_GLOBAL, transformar em all()
+        if documentos_queryset is ESCOPO_GLOBAL:
+            from .models import Documento
+            return Documento.objects.all()
+        return documentos_queryset
+
+    # Senão, usar user
+    if user is not None:
+        # Se user é ESCOPO_GLOBAL, tratar como global
+        if user is ESCOPO_GLOBAL:
+            from .models import Documento
+            return Documento.objects.all()
+        return documentos_for_user(user)
+
+    # Sem queryset e sem user → erro
+    raise TypeError(
+        'Escopo de documentos obrigatório: passe user ou documentos_queryset. '
+        'None→global é proibido (contrato C2).'
+    )

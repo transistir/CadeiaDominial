@@ -19,19 +19,21 @@ class CadeiaCompletaService:
     """
     
     def __init__(self, user=None, documentos_queryset=None):
+        from ..managers import escopo_documentos, _EscopoGlobal
+        self.documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
         self.hierarquia_service = HierarquiaService()
         self.imovel_atual = None
-        if documentos_queryset is None:
-            documentos_queryset = (
-                documentos_for_user(user)
-                if user is not None
-                else Documento.objects.all()
-            )
-        self.documentos_queryset = documentos_queryset
+        # Imoveis: só filtra por user quando é usuário real; ESCOPO_GLOBAL
+        # (em user ou em documentos_queryset) implica acesso global.
+        user_real = (
+            user is not None
+            and not isinstance(user, _EscopoGlobal)
+            and not isinstance(documentos_queryset, _EscopoGlobal)
+        )
         self.imoveis_queryset = (
-            Imovel.objects.for_user(user)
-            if user is not None
-            else Imovel.objects.all()
+            Imovel.objects.for_user(user) if user_real else Imovel.objects.all()
         )
     
     @staticmethod
@@ -166,6 +168,11 @@ class CadeiaCompletaService:
         normalizado e cartório), nunca por número isolado. Sem cartório, com
         tipo incompatível ou com identidade ambígua, não seleciona documento.
         """
+        if documentos_queryset is None:
+            raise TypeError(
+                'CadeiaCompletaService._resolver_documento_por_codigo exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
         if not cartorio or not codigo:
             return None
         primeiro = codigo.strip()[:1].upper()

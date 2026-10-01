@@ -40,7 +40,7 @@ def _tipo_do_codigo(codigo):
     return None
 
 
-def _resolver_documento_por_codigo(codigo, cartorio, documentos_queryset=None):
+def _resolver_documento_por_codigo(codigo, cartorio, documentos_queryset):
     """
     Resolve um documento pela identidade completa (tipo, número normalizado e
     cartório), nunca por número isolado. Sem cartório, com tipo incompatível
@@ -114,7 +114,7 @@ class OrigemResolvida(NamedTuple):
     documento: Documento
 
 
-def obter_origens_resolvidas(documento, lancamentos=None, documentos_queryset=None):
+def obter_origens_resolvidas(documento, lancamentos=None, *, documentos_queryset):
     """
     Origens de um documento que resolvem para um documento real, na ordem
     canônica da cadeia.
@@ -132,6 +132,7 @@ def obter_origens_resolvidas(documento, lancamentos=None, documentos_queryset=No
     Args:
         documento: Documento cujas origens serão lidas
         lancamentos: Lançamentos do documento já carregados (padrão: todos)
+        documentos_queryset: QuerySet de documentos para resolução (obrigatório)
 
     Returns:
         list[OrigemResolvida]
@@ -180,7 +181,8 @@ def calcular_niveis_hierarquicos_otimizada(documentos, conexoes):
 def identificar_tronco_principal(
     imovel,
     escolhas_origem=None,
-    documentos_queryset=None,
+    *,
+    documentos_queryset,
 ):
     """
     Identifica o tronco principal da cadeia dominial de um imóvel.
@@ -198,8 +200,6 @@ def identificar_tronco_principal(
     """
     if escolhas_origem is None:
         escolhas_origem = {}
-    if documentos_queryset is None:
-        documentos_queryset = Documento.objects.all()
 
     # Ordem técnica (pk), nunca a data: ela só desempata documentos de chave
     # canônica idêntica na escolha do documento inicial, abaixo
@@ -324,7 +324,7 @@ def identificar_troncos_secundarios(imovel, tronco_principal):
     pass
 
 
-def identificar_documentos_importados(imovel, documentos_queryset=None):
+def identificar_documentos_importados(imovel, *, documentos_queryset):
     """
     Identifica documentos compartilhados que são referenciados pelos lançamentos deste imóvel
     e também os documentos que são referenciados pelos documentos compartilhados (expansão recursiva)
@@ -336,9 +336,6 @@ def identificar_documentos_importados(imovel, documentos_queryset=None):
         list: Lista de documentos compartilhados (que pertencem a outros imóveis)
     """
     from ..models import Lancamento
-
-    if documentos_queryset is None:
-        documentos_queryset = Documento.objects.all()
 
     # Buscar todos os lançamentos do imóvel que têm origens
     lancamentos_com_origem = Lancamento.objects.filter(documento__imovel=imovel)
@@ -409,10 +406,16 @@ def processar_origens_para_documentos(
         cartorio: Cartório da(s) origem(ns) em ``origem_texto`` (#144). Sem ele,
             cai no ``lancamento.cartorio_origem`` (cartório da PRIMEIRA
             origem) — só correto quando o texto tem uma única origem.
+        documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2).
     
     Returns:
         list: Lista de dicionários com informações dos documentos identificados
     """
+    if documentos_queryset is None:
+        raise TypeError(
+            'processar_origens_para_documentos exige documentos_queryset. '
+            'None→global é proibido (contrato C2).'
+        )
     if not origem_texto:
         return []
     
@@ -513,7 +516,8 @@ def _validar_origem_existente(
     imovel_atual,
     lancamento=None,
     cartorio=None,
-    documentos_queryset=None,
+    *,
+    documentos_queryset,
 ):
     """
     Valida se uma origem deve ser criada automaticamente.
@@ -537,11 +541,6 @@ def _validar_origem_existente(
     from ..models import Documento, Lancamento
 
     cartorio_origem = cartorio or (lancamento.cartorio_origem if lancamento else None)
-    documentos_disponiveis = (
-        documentos_queryset
-        if documentos_queryset is not None
-        else Documento.objects.all()
-    )
 
     # Resolver pela identidade completa (tipo, número normalizado e cartório
     # da PRÓPRIA origem) - nunca por número isolado.
@@ -565,7 +564,7 @@ def _validar_origem_existente(
         # Verificar se não existe no imóvel atual, com a mesma identidade completa
         documento_no_imovel_atual = (
             cartorio_origem
-            and documentos_disponiveis.filter(
+            and documentos_queryset.filter(
                 tipo__tipo=_tipo_do_codigo(numero_documento),
                 numero=numero_documento,
                 cartorio=cartorio_origem,
@@ -593,7 +592,7 @@ def _validar_origem_existente(
         return False
 
     # Verificar se não existe no imóvel atual
-    documento_no_imovel_atual = documentos_disponiveis.filter(
+    documento_no_imovel_atual = documentos_queryset.filter(
         numero=numero_documento,
         imovel=imovel_atual
     ).exists()

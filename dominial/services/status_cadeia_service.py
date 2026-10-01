@@ -69,7 +69,12 @@ class StatusCadeiaService:
     """Service para status de cadeia finalizada por imóvel de uma TI."""
 
     @staticmethod
-    def status_por_imovel(tis_id: int) -> Dict[int, Optional[str]]:
+    def status_por_imovel(
+        tis_id: int,
+        *,
+        imoveis_queryset=None,
+        documentos_queryset=None,
+    ) -> Dict[int, Optional[str]]:
         """Devolve {imovel_id: classificacao} para imóveis com cadeia
         finalizada.
 
@@ -86,19 +91,33 @@ class StatusCadeiaService:
         ao imóvel dono do documento fazia com que docs compartilhados
         contaminassem imóveis que não os alcançam. Por isso derivamos
         o status pela ÁRVORE alcançável de cada imóvel.
+        
+        C2: escopo obrigatório via imoveis_queryset e documentos_queryset.
         """
+        # C2: escopo obrigatório
+        from dominial.managers import escopo_documentos, documentos_for_user
+        documentos_queryset = escopo_documentos(
+            user=None, documentos_queryset=documentos_queryset
+        )
+        
         from dominial.models import Imovel, Documento, OrigemFimCadeia
         from dominial.services.hierarquia_arvore_service import (
             HierarquiaArvoreService,
         )
+        
+        # Se imoveis_queryset não foi passado, usar todos os imóveis da TI
+        # (compatibilidade com chamadores que não têm escopo de usuário)
+        if imoveis_queryset is None:
+            imoveis_queryset = Imovel.objects.filter(terra_indigena_id_id=tis_id)
 
         # 1) Pré-construir árvores de todos os imóveis da TI e cachear
         #    o conjunto de IDs de Documento alcançáveis por cada um.
         docs_alcancaveis_por_imovel: Dict[int, set] = {}
-        for imovel in Imovel.objects.filter(terra_indigena_id_id=tis_id):
+        for imovel in imoveis_queryset:
             try:
                 arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
                     imovel, criar_documentos_automaticos=False,
+                    documentos_queryset=documentos_queryset,
                 )
             except Exception as exc:  # pragma: no cover — defensivo
                 logger.warning(

@@ -196,7 +196,8 @@ class ServicoSemEscolhaTest(_Issue201Fixture, TestCase):
     """Comportamento 1: sem escolha, o serviço segue o tronco linear."""
 
     def test_tronco_sem_escolha_segue_a_origem_de_maior_numero(self):
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel_a)
+        from dominial.managers import ESCOPO_GLOBAL
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel_a)
         # Garante a caminhada hierárquica pela origem padrão entre as irmãs.
         self.assertEqual(
             self._numeros_service(cadeia),
@@ -208,7 +209,8 @@ class ServicoComEscolhaTest(_Issue201Fixture, TestCase):
     """Comportamento 2: com escolha, só o tronco da origem escolhida aparece."""
 
     def test_escolha_t3280_segue_apenas_o_tronco_ate_t2391(self):
-        service = CadeiaDominialTabelaService()
+        from dominial.managers import ESCOPO_GLOBAL
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         resultado = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel_a.id,
             escolhas_origem_param={str(self.doc_t10786.id): 'T3280'},
@@ -221,7 +223,8 @@ class ServicoComEscolhaTest(_Issue201Fixture, TestCase):
         )
 
     def test_escolha_t3281_segue_apenas_o_tronco_ate_t4558(self):
-        service = CadeiaDominialTabelaService()
+        from dominial.managers import ESCOPO_GLOBAL
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         resultado = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel_a.id,
             escolhas_origem_param={str(self.doc_t10786.id): 'T3281'},
@@ -238,7 +241,8 @@ class OrigensDisponiveisTest(_Issue201Fixture, TestCase):
     """Comportamento 3: metadados de múltiplas origens/escolha atual."""
 
     def test_com_escolha_t3280_marca_origem_e_remove_galho_t3281(self):
-        service = CadeiaDominialTabelaService()
+        from dominial.managers import ESCOPO_GLOBAL
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         resultado = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel_a.id,
             escolhas_origem_param={str(self.doc_t10786.id): 'T3280'},
@@ -277,7 +281,8 @@ class OrigensDisponiveisTest(_Issue201Fixture, TestCase):
             )
 
     def test_sem_escolha_marca_t3281_como_escolha_padrao(self):
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel_a)
+        from dominial.managers import ESCOPO_GLOBAL
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel_a)
         por_numero = {item['documento'].numero: item for item in cadeia}
 
         item_t10786 = por_numero['T10786']

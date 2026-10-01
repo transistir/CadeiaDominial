@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -157,7 +158,7 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             },
         ]
 
-        estatisticas = CadeiaCompletaService()._calcular_estatisticas_completas(
+        estatisticas = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL)._calcular_estatisticas_completas(
             cadeia_completa
         )
 

@@ -28,6 +28,7 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -311,7 +312,7 @@ class _Forma384(_OrdemCadeiaFixture):
     ]
 
     def _cadeia_com_escolha(self):
-        return CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+        return CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
             escolhas_origem_param={str(self.docs['M7775'].id): 'M2622'},
         )['cadeia']
@@ -321,7 +322,7 @@ class Forma384SemEscolhaTest(_Forma384, TestCase):
     """Trilha sem escolha (`obter_cadeia_tabela`): o tronco principal."""
 
     def test_linhas_na_ordem_hierarquica(self):
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)
         # Garante a verdade de campo sem escolha, em ordem hierárquica literal.
         self.assertEqual(_numeros(cadeia), self.ORDEM_SEM_ESCOLHA)
 
@@ -342,7 +343,7 @@ class Forma384SemEscolhaTest(_Forma384, TestCase):
         self.assertEqual([numero_por_id[doc_id] for doc_id in ids], self.ORDEM_SEM_ESCOLHA)
 
     def test_chamadas_repetidas_dao_a_mesma_ordem(self):
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         primeira = _numeros(service.obter_cadeia_tabela(self.imovel))
         # A segunda chamada recalcula o tronco principal (cache desabilitado, #210).
         segunda = _numeros(service.obter_cadeia_tabela(self.imovel))
@@ -359,7 +360,7 @@ class Forma384ComEscolhaTest(_Forma384, TestCase):
         self.assertEqual(_numeros(self._cadeia_com_escolha()), self.ORDEM_COM_ESCOLHA)
 
     def test_escolha_preserva_prefixo_e_substitui_o_restante_do_tronco(self):
-        sem_escolha = _numeros(CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel))
+        sem_escolha = _numeros(CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel))
         com_escolha = _numeros(self._cadeia_com_escolha())
 
         # Garante o prefixo comum e os dois galhos mutuamente exclusivos completos.
@@ -542,7 +543,7 @@ class _FormaTipoAbsoluto(_OrdemCadeiaFixture):
     }
 
     def _cadeia_com_escolha_t3987(self):
-        return CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+        return CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
             escolhas_origem_param={str(self.docs['M7618'].id): 'T3987'},
         )['cadeia']
@@ -553,14 +554,14 @@ class PrioridadeAbsolutaDeTipoTest(_FormaTipoAbsoluto, TestCase):
     transcrição tenha número maior."""
 
     def test_sem_escolha_botoes_padrao_e_tronco_seguem_a_matricula(self):
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)
         item_m7618 = _por_numero(cadeia)['M7618']
 
         self.assertEqual(_opcoes(item_m7618), ['M6861', 'T21820', 'T17675', 'T3987'])
         self.assertEqual(item_m7618['escolha_atual'], 'M6861')
         # A caminhada do tronco segue M6861 (antes seguia T21820, o maior número).
         self.assertEqual(
-            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            [documento.numero for documento in identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())],
             ['M7618', 'M6861', 'M500'],
         )
         self.assertEqual(_numeros(cadeia), ['M7618', 'M6861', 'M500'])
@@ -602,7 +603,7 @@ class OrigemPadraoEhAPrimeiraDaListaTest(_FormaNumeroInteiro, TestCase):
     exibida seguia M1612 (ordem numérica)."""
 
     def test_sem_escolha_botao_destacado_e_a_origem_seguida(self):
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)
         item_m6726 = _por_numero(cadeia)['M6726']
 
         self.assertEqual(_opcoes(item_m6726), self.ORDEM_ORIGENS)
@@ -622,7 +623,7 @@ class OrigemPadraoEhAPrimeiraDaListaTest(_FormaNumeroInteiro, TestCase):
         self.assertEqual(_numeros(cadeia), ['M6726', 'M1612'])
 
     def test_botoes_tem_a_mesma_ordem_nas_duas_trilhas(self):
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         item_sem_escolha = _por_numero(service.obter_cadeia_tabela(self.imovel))['M6726']
         item_com_escolha = _por_numero(service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
@@ -650,7 +651,7 @@ class _FormaCaminhadaForaDaOrdem(_OrdemCadeiaFixture):
 class DocumentoDoImovelPrimeiroTest(_FormaCaminhadaForaDaOrdem, TestCase):
 
     def test_documento_do_imovel_inicia_a_caminhada_hierarquica(self):
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         sem_escolha = service.obter_cadeia_tabela(self.imovel)
         com_escolha = service.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
@@ -668,7 +669,7 @@ class CompartilhamentoNaoOrdenaLinhasTest(_FormaCaminhadaForaDaOrdem, TestCase):
         self.docs['T300'].imovel = self.imovel
         self.docs['T300'].save(update_fields=['imovel'])
 
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)
 
         # Garante que linhas próprias e compartilhadas intercalam-se pela hierarquia.
         self.assertEqual(_numeros(cadeia), ['M100', 'M5000', 'T300', 'T9000'])
@@ -689,10 +690,10 @@ class CacheDoTroncoPrincipalTest(_FormaCaminhadaForaDaOrdem, TestCase):
     """
 
     def test_obter_cadeia_tabela_nao_reordena_o_tronco_recalculado(self):
-        tronco = identificar_tronco_principal(self.imovel)
+        tronco = identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())
         self.assertEqual([documento.numero for documento in tronco], self.ORDEM_HIERARQUICA)
 
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)
 
         self.assertEqual(_numeros(cadeia), self.ORDEM_HIERARQUICA)
 
@@ -710,7 +711,7 @@ class OrigensDeChaveIdenticaTest(_OrdemCadeiaFixture, TestCase):
     ORIGENS_OUTRO_IMOVEL = {'M0123': '', 'M123': ''}
 
     def test_botoes_mantem_a_ordem_de_leitura_nas_duas_trilhas(self):
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         for numero, esperado in (('M1', ['M0123', 'M123']), ('M2', ['M123', 'M0123'])):
             documento = self.docs[numero]
             lancamentos = list(documento.lancamentos.select_related('tipo'))
@@ -727,7 +728,7 @@ class OrigensDeChaveIdenticaTest(_OrdemCadeiaFixture, TestCase):
                 self.assertEqual(escolha_atual, esperado[0])
                 # A caminhada segue a mesma primeira origem.
                 self.assertEqual(
-                    obter_origens_resolvidas(documento)[0].documento.numero, esperado[0]
+                    obter_origens_resolvidas(documento, documentos_queryset=Documento.objects.all())[0].documento.numero, esperado[0]
                 )
 
 
@@ -759,11 +760,11 @@ class InicioDoTroncoSemDocumentoDoImovelTest(_FormaSemDocumentoDoImovel, TestCas
         ))
         # Pela data (max(key=data)), o tronco era M100 -> T7.
         self.assertEqual(
-            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            [documento.numero for documento in identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())],
             ['M900', 'T8'],
         )
         self.assertEqual(
-            _numeros(CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)),
+            _numeros(CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)),
             ['M900', 'T8'],
         )
 
@@ -776,7 +777,7 @@ class InicioDoTroncoSemMatriculaTest(_FormaSemDocumentoDoImovel, TestCase):
     def test_tronco_comeca_pela_transcricao_de_maior_numero(self):
         # Pela data, o tronco era T100 -> T7.
         self.assertEqual(
-            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            [documento.numero for documento in identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())],
             ['T900', 'T8'],
         )
 
@@ -791,7 +792,7 @@ class InicioDoTroncoComDescendenteMatriculaMaiorTest(
 
     def test_tronco_comeca_pela_raiz_e_nao_pelo_descendente_maior(self):
         self.assertEqual(
-            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            [documento.numero for documento in identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())],
             ['M100', 'M900', 'T7'],
         )
 
@@ -806,7 +807,7 @@ class InicioDoTroncoComDescendenteTranscricaoMaiorTest(
 
     def test_tronco_comeca_pela_raiz_e_nao_pelo_descendente_maior(self):
         self.assertEqual(
-            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            [documento.numero for documento in identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())],
             ['T100', 'T900', 'T7'],
         )
 
@@ -823,11 +824,11 @@ class InicioDoTroncoComCicloTest(_FormaSemDocumentoDoImovel, TestCase):
             for documento in self.docs.values()
         ))
         self.assertEqual(
-            [documento.numero for documento in identificar_tronco_principal(self.imovel)],
+            [documento.numero for documento in identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())],
             ['M200', 'M100'],
         )
         self.assertEqual(
-            _numeros(CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)),
+            _numeros(CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)),
             ['M200', 'M100'],
         )
 
@@ -845,7 +846,7 @@ class InicioDoTroncoComChaveIdenticaTest(_FormaSemDocumentoDoImovel, TestCase):
         ):
             Documento.objects.filter(pk=self.docs['M0900'].pk).update(data=data_m0900)
             Documento.objects.filter(pk=self.docs['M900'].pk).update(data=data_m900)
-            inicios.append(identificar_tronco_principal(self.imovel)[0].numero)
+            inicios.append(identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())[0].numero)
 
         self.assertEqual(inicios[0], inicios[1])
 
@@ -880,7 +881,7 @@ class OrigemInexistenteNaoEhBotaoTest(_FormaOrigensInexistentes, TestCase):
     padrão: a padrão é a maior origem resolvida, a que a cadeia segue."""
 
     def test_sem_escolha(self):
-        cadeia = CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel)
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel)
         por_numero = _por_numero(cadeia)
 
         self.assertEqual(_numeros(cadeia), ['M100', 'M500', 'M40'])
@@ -890,7 +891,7 @@ class OrigemInexistenteNaoEhBotaoTest(_FormaOrigensInexistentes, TestCase):
                 self.assertEqual(por_numero[numero]['escolha_atual'], self.BOTOES[numero][0])
 
     def test_com_escolha(self):
-        cadeia = CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
         )['cadeia']
         por_numero = _por_numero(cadeia)
@@ -943,20 +944,20 @@ class OrigemPadraoEstaNosBotoesEEhASeguidaTest(_FormaOrigensInexistentes, TestCa
 
     def test_sem_escolha_padrao_e_o_proximo_documento_do_tronco(self):
         # Garante que cada botão padrão aponta para a linha hierárquica seguinte.
-        tronco = identificar_tronco_principal(self.imovel)
+        tronco = identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all())
         seguidas = {
             atual.numero: proximo.numero for atual, proximo in zip(tronco, tronco[1:])
         }
         self.assertEqual(seguidas, {'M100': 'M500', 'M500': 'M40'})
 
         self._verificar(
-            CadeiaDominialTabelaService().obter_cadeia_tabela(self.imovel),
+            CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).obter_cadeia_tabela(self.imovel),
             seguidas,
             ['M100', 'M500', 'M40'],
         )
 
     def test_trilha_com_escolha_vazia_mantem_apenas_o_tronco_padrao(self):
-        cadeia = CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
         )['cadeia']
 
@@ -1003,7 +1004,7 @@ class OrigensHomonimasDeCartoriosDiferentesTest(_OrdemCadeiaFixture, TestCase):
         self.assertEqual(
             [
                 (origem.codigo, origem.documento)
-                for origem in obter_origens_resolvidas(self.docs['M100'])
+                for origem in obter_origens_resolvidas(self.docs['M100'], documentos_queryset=Documento.objects.all())
             ],
             [
                 ('M123', self.m123_outro_cartorio),
@@ -1013,12 +1014,12 @@ class OrigensHomonimasDeCartoriosDiferentesTest(_OrdemCadeiaFixture, TestCase):
         )
         # A caminhada segue a primeira, a destacada nos botões.
         self.assertEqual(
-            identificar_tronco_principal(self.imovel),
+            identificar_tronco_principal(self.imovel, documentos_queryset=Documento.objects.all()),
             [self.docs['M100'], self.m123_outro_cartorio],
         )
 
     def test_homonimos_sao_botoes_distintos_nas_duas_trilhas(self):
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL)
         for trilha, cadeia in (
             ('sem escolha', service.obter_cadeia_tabela(self.imovel)),
             (
@@ -1038,7 +1039,7 @@ class OrigensHomonimasDeCartoriosDiferentesTest(_OrdemCadeiaFixture, TestCase):
                 self.assertEqual(item['escolha_atual'], 'M123')
 
     def test_com_escolha_vazia_exibe_so_o_homonimo_padrao(self):
-        cadeia = CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id,
         )['cadeia']
         documentos = [item['documento'] for item in cadeia]

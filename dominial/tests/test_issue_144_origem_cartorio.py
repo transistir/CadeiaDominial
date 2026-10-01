@@ -279,19 +279,21 @@ class T3OrigensNaoResolvidasTest(Issue144Base):
         )
         original = DocumentoIdentidadeService.resolver
 
-        def resolver(identidade):
+        def resolver(identidade, queryset=None):
             if identidade.numero_normalizado == "777":
                 return ResultadoResolucaoDocumento(
                     status="ambiguo",
                     identidade=identidade,
                     candidatos=(cand_1, cand_2),
                 )
-            return original(identidade)
+            return original(identidade, queryset=queryset)
 
         with patch.object(
             DocumentoIdentidadeService, "resolver", side_effect=resolver
         ):
-            arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+            arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+                imovel, documentos_queryset=Documento.objects.all()
+            )
 
         no = self._no(arvore, documento)
         self.assertEqual(len(no["origens_nao_resolvidas"]), 1)
@@ -392,7 +394,8 @@ class T6ResaveSemCacheTest(Issue144Rodada2Base):
         cache.clear()
 
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["M100", "T366"], imovel
+            lancamento, ["M100", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -460,7 +463,8 @@ class T7FormEdicaoTest(Issue144Rodada2Base):
         })
         LancamentoCamposService._processar_campos_inicio_matricula(request, lancamento)
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["M100", "T366"], imovel
+            lancamento, ["M100", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -488,7 +492,8 @@ class T8SemFonteDeCartorioTest(Issue144Rodada2Base):
 
         with self.assertRaises(ValidationError):
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["M100", "T400"], imovel
+                lancamento, ["M100", "T400"], imovel,
+            documentos_queryset=Documento.objects.all()
             )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -749,7 +754,8 @@ class T15EdicaoTrocaOrigemTest(Issue144Rodada3Base):
 
         with self.assertRaises(ValidationError):
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "M999"], imovel
+                lancamento, ["T366", "M999"], imovel,
+            documentos_queryset=Documento.objects.all()
             )
         self.assertEqual(self.estado_origens(lancamento), antes)
 
@@ -770,7 +776,8 @@ class T15EdicaoTrocaOrigemTest(Issue144Rodada3Base):
         # "T366; M999" virou "M999; T366": cada identidade leva seu cartório
         # para a nova posição.
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["M999", "T366"], imovel
+            lancamento, ["M999", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), [
@@ -834,7 +841,8 @@ class T17NaoDuplicataTest(Issue144Rodada3Base):
         # A chave de identidade inclui o cartório: não é "Origem documental
         # duplicada", e as duas linhas são reaproveitadas nas suas posições.
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["T366", "T366"], imovel
+            lancamento, ["T366", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -953,7 +961,8 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366", "M100"], imovel
+                lancamento, ["T366", "T366", "M100"], imovel,
+            documentos_queryset=Documento.objects.all()
             )
         self.assertIn("Cartório obrigatório", str(ctx.exception))
         self.assertFalse(

@@ -181,7 +181,8 @@ class ExportacaoXlsIssue204Test(TestCase):
     # -- Fixture ----------------------------------------------------------
 
     def test_fixture_tem_documento_compartilhado_marcado_como_importado(self):
-        contexto = CadeiaCompletaService().get_cadeia_completa(
+        from dominial.managers import ESCOPO_GLOBAL
+        contexto = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel_a.id
         )
         itens_t204 = [

@@ -690,7 +690,8 @@ class F2_10bBDiferenteDeATest(Fase2Base):
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366"], imovel
+                lancamento, ["T366", "T366"], imovel,
+                documentos_queryset=Documento.objects.all()
             )
 
         self.assertIn("Cartório obrigatório para a origem 2", str(ctx.exception))
@@ -857,7 +858,8 @@ class F2_08HomonimosAmbiguosMensagemTest(Fase2Base):
         with self.subTest("indices_legados"):
             with self.assertRaises(ValidationError) as ctx:
                 LancamentoOrigemService._sincronizar_origens_estruturadas(
-                    lancamento, ["T366", "T366"], imovel
+                    lancamento, ["T366", "T366"], imovel,
+                documentos_queryset=Documento.objects.all()
                 )
             self.assertIn(
                 "Cartório obrigatório para a origem 1 (T366): há mais de uma "
@@ -898,7 +900,8 @@ class F2_08HomonimosAmbiguosMensagemTest(Fase2Base):
         with self.subTest("b_diferente_de_a"):
             with self.assertRaises(ValidationError) as ctx:
                 LancamentoOrigemService._sincronizar_origens_estruturadas(
-                    lancamento_b, ["T366", "T366"], imovel_b
+                    lancamento_b, ["T366", "T366"], imovel_b,
+                documentos_queryset=Documento.objects.all()
                 )
             self.assertIn(
                 "Cartório obrigatório para a origem 2 (T366): há mais de uma "
@@ -929,7 +932,8 @@ class F2_09MapeamentoLegadoAmbiguoMensagemTest(Fase2Base):
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366", "M100"], imovel
+                lancamento, ["T366", "T366", "M100"], imovel,
+                documentos_queryset=Documento.objects.all()
             )
         self.assertIn(
             "Cartório obrigatório para a origem 1 (T366): há mais de uma "
@@ -955,7 +959,8 @@ class F2_10aDuplicataCitaPosicaoColidenteTest(Fase2Base):
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366"], imovel
+                lancamento, ["T366", "T366"], imovel,
+                documentos_queryset=Documento.objects.all()
             )
 
         self.assertIn(

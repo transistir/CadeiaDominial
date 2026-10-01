@@ -688,7 +688,7 @@ class ExportacaoXlsxCartorioPorOrigemTest(_Fixture229, TestCase):
         self._criar_linha(lancamento, 0, 'transcricao', 'T100', self.cartorio_iguatemi)
         self._criar_linha(lancamento, 1, 'transcricao', 'T99', self.cartorio_navirai)
 
-        service = CadeiaCompletaService()
+        service = CadeiaCompletaService(documentos_queryset=Documento.objects.all())
         resultado = service.get_cadeia_completa(self.tis.id, self.imovel.id)
 
         ws = Workbook().active

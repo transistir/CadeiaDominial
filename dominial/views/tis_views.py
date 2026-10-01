@@ -108,7 +108,12 @@ def tis_detail(request, tis_id):
     )
 
     from ..services.status_cadeia_service import StatusCadeiaService
-    status_cadeia_map = StatusCadeiaService.status_por_imovel(tis_id)
+    from ..managers import documentos_for_user
+    status_cadeia_map = StatusCadeiaService.status_por_imovel(
+        tis_id,
+        imoveis_queryset=imoveis_ordenados,
+        documentos_queryset=documentos_for_user(request.user),
+    )
     for imovel in imoveis_ordenados:
         imovel.status_cadeia = status_cadeia_map.get(imovel.id)
     return render(request, 'dominial/tis_detail.html', {

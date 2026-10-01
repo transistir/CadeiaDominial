@@ -38,6 +38,7 @@ from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.cadeia_dominial_tabela_service import (
     CadeiaDominialTabelaService,
 )
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.utils.formatacao_utils import formatar_area_ha
 
 
@@ -260,16 +261,17 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         self.assertNotIn("1.234,5678", html)
 
     def test_templates_pdf_usam_o_filtro_de_area(self):
+        from dominial.managers import ESCOPO_GLOBAL
         contextos = (
             (
                 "dominial/cadeia_dominial_pdf.html",
-                CadeiaDominialTabelaService().get_cadeia_dominial_tabela(
+                CadeiaDominialTabelaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_dominial_tabela(
                     self.tis.id, self.imovel.id, session={}
                 ),
             ),
             (
                 "dominial/cadeia_completa_pdf.html",
-                CadeiaCompletaService().get_cadeia_completa(
+                CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
                     self.tis.id, self.imovel.id
                 ),
             ),
