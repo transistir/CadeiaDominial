@@ -2,9 +2,11 @@ import logging
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from ..managers import usuario_tem_ti_inteira
 from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
 from ..services.imovel_documento_service import ImovelDocumentoService
@@ -14,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 @login_required
 def imovel_form(request, tis_id, imovel_id=None):
+    if not usuario_tem_ti_inteira(request.user, tis_id):
+        raise Http404
     tis = get_object_or_404(TIs, pk=tis_id)
     imovel = None
     if imovel_id:

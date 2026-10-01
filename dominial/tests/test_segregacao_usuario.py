@@ -2347,6 +2347,70 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
         )
 
 
+class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
+    """P1-B (#132): criação de imóvel exige usuario_tem_ti_inteira na TI alvo.
+
+    Sem esse guard, qualquer usuário logado cria imóvel+proprietário+documento
+    em TI de outra equipe (imovel_form não roda for_user na criação).
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.url_alheia = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_b.id})
+        self.post_data = {
+            'matricula': '9999',
+            'nome': 'Imóvel Invasor',
+            'tipo_documento_principal': 'matricula',
+            'proprietario_nome': 'Invasor',
+            'cartorio': self.cartorio.id,
+            'estado': 'SP',
+            'cidade': 'São Paulo',
+        }
+
+    def _count_imoveis(self):
+        return Imovel.objects.count()
+
+    def test_usuario_sem_nada_get_404(self):
+        self.client.force_login(self.sem_acesso)
+        count_before = self._count_imoveis()
+        response = self.client.get(self.url_alheia)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._count_imoveis(), count_before)
+
+    def test_usuario_sem_nada_post_nao_cria_imovel(self):
+        self.client.force_login(self.sem_acesso)
+        count_before = self._count_imoveis()
+        response = self.client.post(self.url_alheia, self.post_data)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._count_imoveis(), count_before)
+
+    def test_usuario_com_userimovel_legado_404_na_criacao(self):
+        """UserImovel legado NÃO concede TI inteira (helper exclui de propósito)."""
+        UserImovel.objects.create(
+            user=self.sem_acesso, imovel=self.imovel_b, atribuido_por=self.superuser
+        )
+        self.client.force_login(self.sem_acesso)
+        count_before = self._count_imoveis()
+        response = self.client.get(self.url_alheia)
+        self.assertEqual(response.status_code, 404)
+        response = self.client.post(self.url_alheia, self.post_data)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._count_imoveis(), count_before)
+
+    def test_usuario_com_userti_get_200(self):
+        UserTI.objects.create(
+            user=self.sem_acesso, tis=self.tis_b, atribuido_por=self.superuser
+        )
+        self.client.force_login(self.sem_acesso)
+        response = self.client.get(self.url_alheia)
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_get_200(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(self.url_alheia)
+        self.assertEqual(response.status_code, 200)
+
+
 class BlockersRound3Test(SegregacaoBaseTestCase):
     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""
 
