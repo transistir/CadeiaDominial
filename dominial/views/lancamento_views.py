@@ -5,10 +5,11 @@ from django.views.decorators.http import require_http_methods, require_POST, req
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
 from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
-from ..managers import documentos_for_user, lancamentos_for_user
+from ..managers import documentos_for_user, lancamentos_for_user, identidade_existe_fora_do_escopo
 from ..services.lancamento_service import LancamentoService
 from ..services.lancamento_origem_service import LancamentoOrigemService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
+from ..utils.segregacao_utils import MENSAGEM_DOCUMENTO_OUTRA_TI
 from datetime import date
 import logging
 import re
@@ -1077,14 +1078,20 @@ def buscar_m_anterior(request):
     aquela origem referencia) já cadastrada no acervo — é aí que costuma
     acontecer a quebra da cadeia sucessória (issue #167).
 
+    C6 (#132, S2/D3): o lookup é feito sobre `documentos_for_user(request.user)`.
+    Quando o documento existe mas está fora do escopo, a resposta avisa apenas
+    que existe (sem id, matrícula, imóvel ou TI) — mesma política do D1.
+
     Resposta JSON:
       {
         "encontrado": bool,
+        "restrito": bool,  # C6: existe só em outra TI, sem dados
         "doc_id": int | None,
         "matricula": str | None,
         "imovel_nome": str | None,
         "outra_ti": bool,   # documento existe mas pertence a outra TI
         "mesma_ti": bool,   # documento existe e pertence à TI em contexto
+        "mensagem": str | None,  # C6: MENSAGEM_DOCUMENTO_OUTRA_TI se restrito
       }
 
     `tis_id` é opcional: sem ele (nem `tis_id` na sessão) a comparação de TI
@@ -1108,12 +1115,12 @@ def buscar_m_anterior(request):
     if numero_normalizado[:1] in ('M', 'T'):
         numero_normalizado = numero_normalizado[1:].strip()
 
-    # Issue #167 (Codex review P1): restringir o lookup estritamente a
-    # matrículas (M). Sem `tipo`, um cartório que tivesse T e M com mesmo
-    # `numero_normalizado` poderia retornar a T e reportar imóvel/TI errada
-    # como "M anterior vinculada".
+    # C6 (#132, D3): lookup dentro do escopo do usuário (substitui
+    # Documento.objects). Mantido o filtro issue #167 (só matrículas),
+    # o select_related e o .first().
+    escopo = documentos_for_user(request.user)
     documento = (
-        Documento.objects
+        escopo
         .filter(
             numero_normalizado=numero_normalizado,
             cartorio_id=cartorio_id,
@@ -1124,13 +1131,32 @@ def buscar_m_anterior(request):
     )
 
     if documento is None:
+        # C6: se a identidade existe fora do escopo, avisa só que existe.
+        if identidade_existe_fora_do_escopo(
+            escopo,
+            tipo='matricula',
+            numero_normalizado=numero_normalizado,
+            cartorio_id=cartorio_id,
+        ):
+            return JsonResponse({
+                'encontrado': True,
+                'restrito': True,
+                'doc_id': None,
+                'matricula': None,
+                'imovel_nome': None,
+                'outra_ti': True,
+                'mesma_ti': False,
+                'mensagem': MENSAGEM_DOCUMENTO_OUTRA_TI,
+            })
         return JsonResponse({
             'encontrado': False,
+            'restrito': False,
             'doc_id': None,
             'matricula': None,
             'imovel_nome': None,
             'outra_ti': False,
             'mesma_ti': False,
+            'mensagem': None,
         })
 
     tis_id_contexto = request.GET.get('tis_id') or request.session.get('tis_id')
@@ -1143,11 +1169,13 @@ def buscar_m_anterior(request):
 
     return JsonResponse({
         'encontrado': True,
+        'restrito': False,
         'doc_id': documento.id,
         'matricula': documento.numero,
         'imovel_nome': documento.imovel.nome,
         'outra_ti': not mesma_ti,
         'mesma_ti': mesma_ti,
+        'mensagem': None,
     })
 
 

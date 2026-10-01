@@ -20,6 +20,9 @@ class BuscarMAnteriorTest(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_user('u', 'u@x.com', 'pw')
+        
+        # C6 (#132, D3): atribuir TIs ao usuário para documentos_for_user funcionar
+        from dominial.tests.segregacao_fixtures import atribuir_tis
 
         self.pessoa = Pessoas.objects.create(nome='P')
         self.cart_a = Cartorios.objects.create(nome='CRI A', cidade='C', cns='CNS-A')
@@ -29,6 +32,9 @@ class BuscarMAnteriorTest(TestCase):
 
         self.ti1 = TIs.objects.create(nome='TI 1', codigo='TI-001')
         self.ti2 = TIs.objects.create(nome='TI 2', codigo='TI-002')
+        
+        # Atribuir ambas as TIs ao usuário para que tenha acesso aos documentos
+        atribuir_tis(self.user, self.ti1, self.ti2)
 
         self.imovel_ti1 = Imovel.objects.create(
             nome='Imóvel TI1', matricula='001',

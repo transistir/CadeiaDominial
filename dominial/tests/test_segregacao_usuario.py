@@ -4167,3 +4167,96 @@ class D2AcessoAoDocumentoTest(OrigemOutraTIBaseTestCase):
         url = reverse('editar_lancamento', args=[self.tis_c.id, self.imovel_c1.id, self.lanc_c2.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+
+
+class BuscarMAnteriorD3Test(SegregacaoFase2BaseTestCase):
+    """C6 (#132): D3 — `buscar_m_anterior` informa só que o documento existe."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Fixtures usadas: documento_b (M2000, TI B, imóvel B) e
+        # documento_c2 (M3001, TI C, imóvel C2) do SegregacaoBaseTestCase/
+        # SegregacaoFase2BaseTestCase; documento_a (M1000, TI A, imóvel A)
+        # pertence a `dono` via UserImovel legado.
+        cls.url = reverse('buscar_m_anterior')
+
+    def _get(self, user, numero, cartorio=None, tis=None):
+        self.client.force_login(user)
+        params = {'numero': numero, 'cartorio_id': (cartorio or self.cartorio).id}
+        if tis is not None:
+            params['tis_id'] = tis.id
+        return self.client.get(self.url, params)
+
+    def test_outra_ti_so_existencia(self):
+        """via_ti consulta M2000 (TI B, fora do escopo): só o aviso, sem dado."""
+        from dominial.utils.segregacao_utils import MENSAGEM_DOCUMENTO_OUTRA_TI
+
+        resp = self._get(self.via_ti, 'M2000', tis=self.tis_c)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json(),
+            {
+                'encontrado': True,
+                'restrito': True,
+                'doc_id': None,
+                'matricula': None,
+                'imovel_nome': None,
+                'outra_ti': True,
+                'mesma_ti': False,
+                'mensagem': MENSAGEM_DOCUMENTO_OUTRA_TI,
+            },
+        )
+        # Nenhum dado da TI B vaza na resposta.
+        self.assertNotContains(resp, 'Imóvel B')
+        self.assertNotContains(resp, 'TI Beta')
+        self.assertNotContains(resp, 'TI-B')
+
+    def test_mesma_ti_retorna_dados(self):
+        """via_ti consulta M3001 (TI C): dados completos do documento_c2."""
+        resp = self._get(self.via_ti, 'M3001', tis=self.tis_c)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['doc_id'], self.documento_c2.pk)
+        self.assertEqual(data['matricula'], 'M3001')
+        self.assertEqual(data['imovel_nome'], 'Imóvel C2')
+        self.assertTrue(data['mesma_ti'])
+        self.assertFalse(data['outra_ti'])
+        self.assertFalse(data['restrito'])
+
+    def test_inexistente(self):
+        """M9999: não encontrado, sem restrição."""
+        resp = self._get(self.via_ti, 'M9999', tis=self.tis_c)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data['encontrado'])
+        self.assertFalse(data['restrito'])
+
+    def test_sem_nada_ve_restrito(self):
+        """sem_nada (sem atribuição) consulta M3001: restrito True, doc_id None."""
+        resp = self._get(self.sem_nada, 'M3001', tis=self.tis_c)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['restrito'])
+        self.assertTrue(data['encontrado'])
+        self.assertIsNone(data['doc_id'])
+
+    def test_superuser_ve_dados(self):
+        """Superuser consulta M2000 (TI B, com tis_id=TIs C): dados completos."""
+        resp = self._get(self.superuser, 'M2000', tis=self.tis_c)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['doc_id'], self.documento_b.pk)
+        self.assertEqual(data['matricula'], 'M2000')
+        self.assertTrue(data['outra_ti'])
+        self.assertFalse(data['restrito'])
+
+    def test_userimovel_legado(self):
+        """dono (UserImovel legado no imóvel A) consulta M1000: dados completos."""
+        resp = self._get(self.dono, 'M1000', tis=self.tis_a)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['encontrado'])
+        self.assertEqual(data['doc_id'], self.documento_a.pk)
+        self.assertEqual(data['matricula'], 'M1000')
+        self.assertFalse(data['restrito'])
