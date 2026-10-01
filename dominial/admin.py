@@ -1583,8 +1583,13 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         P1-G (#132): revalida `usuario_tem_ti_inteira` na adição — o
         `formfield_for_foreignkey` é UX; aqui é a barreira real contra
         manipulação de POST.
+
+        P1-H (#132): na edição, revalida também quando `terra_indigena_id`
+        mudou (`changed_data`). Preserva P1-D (edição legítima sem mover TI
+        segue sem revalidar — `changed_data` não contém o campo).
         """
-        if not change and not usuario_tem_ti_inteira(request.user, obj.terra_indigena_id_id):
+        eh_mudanca_de_ti = change and 'terra_indigena_id' in getattr(form, 'changed_data', [])
+        if (not change or eh_mudanca_de_ti) and not usuario_tem_ti_inteira(request.user, obj.terra_indigena_id_id):
             raise PermissionDenied(MENSAGEM_TI_SEM_ACESSO)
         with transaction.atomic():
             super().save_model(request, obj, form, change)
@@ -1667,7 +1672,15 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         num_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).count()
         
         ti_atual = imovel.terra_indigena_id
-        todas_tis = tis_for_user(request.user).order_by('nome')
+        # P1-H (#132): dropdown coerente — superuser vê tudo; demais só TIs
+        # inteiras + a TI atual do imóvel (para o select não perder a atual).
+        if usuario_ve_tudo(request.user):
+            todas_tis = tis_for_user(request.user).order_by('nome')
+        else:
+            ids_inteiras = list(tis_atribuidas_ids(request.user).values_list('pk', flat=True))
+            if ti_atual.id not in ids_inteiras:
+                ids_inteiras.append(ti_atual.id)
+            todas_tis = TIs.objects.filter(pk__in=ids_inteiras).order_by('nome')
         
         if request.method == 'POST':
             nova_ti_id = request.POST.get('nova_ti')
@@ -1682,6 +1695,10 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
                     if nova_ti.id == ti_atual.id:
                         messages.warning(request, 'O imóvel já está associado a esta Terra Indígena.')
                         return redirect('admin:dominial_imovel_change', imovel_id)
+                    
+                    # P1-H (#132): barreira real — destino exige TI inteira.
+                    if not usuario_tem_ti_inteira(request.user, nova_ti.id):
+                        raise PermissionDenied(MENSAGEM_TI_SEM_ACESSO)
                     
                     # Validar se há documentos ou lançamentos
                     if num_documentos > 0 or num_lancamentos > 0:
