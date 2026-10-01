@@ -26,6 +26,7 @@ from dominial.models import (
 )
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
+from dominial.tests.segregacao_fixtures import usuario_com_tis
 from dominial.views import cadeia_dominial_views
 
 
@@ -385,6 +386,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         self.tis = TIs.objects.create(
             nome="TI Teste 146", codigo="TI146", etnia="Teste"
         )
+        self.user = usuario_com_tis('user146', self.tis)
         self.cartorio = Cartorios.objects.create(
             nome="Cartório Teste 146", cns="146146", cidade="Cidade", estado="TS"
         )
@@ -463,7 +465,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
 
     def _request(self, path):
         request = self.factory.get(path)
-        request.user = SimpleNamespace(is_authenticated=True)
+        request.user = self.user
         return request
 
     def test_fixture_gera_no_sintetico_fim_cadeia_na_arvore(self):

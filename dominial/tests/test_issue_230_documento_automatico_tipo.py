@@ -32,6 +32,7 @@ from dominial.models import (
 )
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.lancamento_documento_service import LancamentoDocumentoService
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class Issue230Fixture:
@@ -58,6 +59,7 @@ class Issue230Fixture:
         cls.user = User.objects.create_user(
             username='issue230', password='issue230pass',
         )
+        atribuir_tis(cls.user, cls.tis)
 
     def criar_imovel(self, numero, tipo='matricula'):
         return Imovel.objects.create(

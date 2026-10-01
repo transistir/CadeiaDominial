@@ -37,6 +37,7 @@ from dominial.services.lancamento_origem_leitura_service import (
 )
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.templatetags.dominial_extras import origem_formatada_completa
+from dominial.tests.segregacao_fixtures import atribuir_tis
 from dominial.utils.formatacao_utils import formatar_origem_completa
 
 
@@ -715,6 +716,7 @@ class ApiOrigemFormatadaPorOrigemTest(_Fixture229, TestCase):
         self._criar_linha(lancamento, 1, 'transcricao', 'T99', self.cartorio_navirai)
 
         user = User.objects.create_user(username='issue229', password='issue229pass')
+        atribuir_tis(user, self.tis)
         self.client.force_login(user)
         url = reverse(
             'get_cadeia_dominial_atualizada',
