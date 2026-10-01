@@ -47,6 +47,7 @@ from dominial.models import (
     TIs,
 )
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.tests.segregacao_fixtures import usuario_com_tis
 from dominial.views import cadeia_dominial_views
 
 
@@ -129,7 +130,7 @@ class ExportacaoXlsIssue204Test(TestCase):
 
     def _request(self, path):
         request = self.factory.get(path)
-        request.user = SimpleNamespace(is_authenticated=True)
+        request.user = usuario_com_tis("user_test_204", self.tis)
         return request
 
     def _abrir_xlsx(self, response):

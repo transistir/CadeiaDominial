@@ -52,6 +52,8 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
+from dominial.tests.segregacao_fixtures import usuario_com_tis
+from django.contrib.auth.models import User
 from dominial.services import exportacao_excel_service
 from dominial.services.exportacao_excel_service import (
     CABECALHOS_DETALHADOS,
@@ -252,7 +254,7 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
 
     def _request(self, path):
         request = self.factory.get(path)
-        request.user = SimpleNamespace(is_authenticated=True)
+        request.user = usuario_com_tis('user_test_179', self.tis)
         return request
 
     def _exportar(self, tis):
@@ -503,7 +505,11 @@ class ExportacaoTisXlsConsolidadoTest(TestCase):
         # nó (fora do escopo da #179). O teto cobre 3 imóveis x 2 documentos
         # com folga pequena, mas não admite as 2 consultas adicionais por
         # lançamento que `.transmitentes/.adquirentes.filter()` causavam.
-        self.assertLessEqual(len(queries), 100)
+        # +10 consultas (C8 #132): o guard D5 da view agora roda
+        # usuario_tem_ti_inteira (TIs/UserTI/Equipe) e Imovel.objects.for_user
+        # dentro do contexto capturado — custo de autorização, não da fixture
+        # (usuario_com_tis roda no setUp/_request, antes da captura).
+        self.assertLessEqual(len(queries), 110)
         counts_de_imoveis = [
             query["sql"]
             for query in queries.captured_queries
@@ -1005,7 +1011,7 @@ class ExportacaoTisXlsImovelSemDocumentosTest(TestCase):
 
     def _request(self, path):
         request = self.factory.get(path)
-        request.user = SimpleNamespace(is_authenticated=True)
+        request.user = usuario_com_tis("user_test_179_sd", self.tis)
         return request
 
     def test_imovel_sem_documentos_gera_secao_com_aviso(self):

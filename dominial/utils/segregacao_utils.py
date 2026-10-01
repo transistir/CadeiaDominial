@@ -21,6 +21,8 @@ MENSAGEM_ORIGEM_RESTRITA = 'Origem em outra TI — sem acesso / solicite ao admi
 MENSAGEM_DOCUMENTO_OUTRA_TI = 'Documento existe em outra TI — solicite acesso ao administrador.'
 # D4 (#132, S7/#210): alteração de cartório do imóvel restrita ao superuser   [C7]
 MENSAGEM_CARTORIO_SO_SUPERUSER = 'Somente o superusuário pode alterar o cartório de um imóvel.'
+# D5 (#132, S1/#179): XLS por TI exige a TI inteira atribuída               [C8]
+MENSAGEM_TI_SEM_ACESSO = 'Você não tem acesso a esta Terra Indígena.'
 
 
 def usuario_tem_acesso_imovel(user, imovel_id):

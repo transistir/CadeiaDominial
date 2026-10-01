@@ -3385,6 +3385,55 @@ class MustFixRound9Test(SegregacaoBaseTestCase):
         self.assertEqual(response.json()['message'], ERRO_IMPORTACAO)
 
 
+class UsuarioTemTIInteiraTest(SegregacaoFase2BaseTestCase):
+    """D5 (#132, S1/#179): XLS por TI só com a TI inteira atribuída."""
+
+    def test_superuser_tem_qualquer_ti(self):
+        from dominial.managers import usuario_tem_ti_inteira
+        
+        self.assertTrue(usuario_tem_ti_inteira(self.superuser, self.tis_a.pk))
+        self.assertTrue(usuario_tem_ti_inteira(self.superuser, self.tis_b.pk))
+        self.assertTrue(usuario_tem_ti_inteira(self.superuser, self.tis_c.pk))
+
+    def test_usuario_nao_autenticado_nao_tem_nenhuma_ti(self):
+        from dominial.managers import usuario_tem_ti_inteira
+        
+        self.assertFalse(usuario_tem_ti_inteira(None, self.tis_a.pk))
+        self.assertFalse(usuario_tem_ti_inteira(AnonymousUser(), self.tis_a.pk))
+
+    def test_usuario_com_ti_atribuida_tem_aquela_ti(self):
+        from dominial.managers import usuario_tem_ti_inteira
+        
+        # via_ti tem tis_c atribuída
+        self.assertTrue(usuario_tem_ti_inteira(self.via_ti, self.tis_c.pk))
+        # via_equipe tem tis_c via equipe
+        self.assertTrue(usuario_tem_ti_inteira(self.via_equipe, self.tis_c.pk))
+        # membro_global tem todas as TIs
+        self.assertTrue(usuario_tem_ti_inteira(self.membro_global, self.tis_a.pk))
+        self.assertTrue(usuario_tem_ti_inteira(self.membro_global, self.tis_b.pk))
+        self.assertTrue(usuario_tem_ti_inteira(self.membro_global, self.tis_c.pk))
+
+    def test_usuario_sem_ti_atribuida_nao_tem_aquela_ti(self):
+        from dominial.managers import usuario_tem_ti_inteira
+        
+        # via_ti não tem tis_a nem tis_b
+        self.assertFalse(usuario_tem_ti_inteira(self.via_ti, self.tis_a.pk))
+        self.assertFalse(usuario_tem_ti_inteira(self.via_ti, self.tis_b.pk))
+        # via_equipe não tem tis_a nem tis_b
+        self.assertFalse(usuario_tem_ti_inteira(self.via_equipe, self.tis_a.pk))
+        self.assertFalse(usuario_tem_ti_inteira(self.via_equipe, self.tis_b.pk))
+        # dono tem imovel_a (via UserImovel legado) mas NÃO tem tis_a inteira
+        self.assertFalse(usuario_tem_ti_inteira(self.dono, self.tis_a.pk))
+
+    def test_user_imovel_legado_nao_concede_ti_inteira(self):
+        """UserImovel legado concede acesso ao imóvel, mas NÃO à TI inteira."""
+        from dominial.managers import usuario_tem_ti_inteira
+        
+        # dono tem imovel_a via UserImovel, mas isso não concede tis_a inteira
+        self.assertIn(self.imovel_a, Imovel.objects.for_user(self.dono))
+        self.assertFalse(usuario_tem_ti_inteira(self.dono, self.tis_a.pk))
+
+
 class ManagerOptInRegressaoTest(TestCase):
     """
     N-1: o manager é opt-in, então esquecer `.for_user()` falha aberto.
@@ -4365,3 +4414,146 @@ class CartorioSoSuperuserTest(SegregacaoFase2BaseTestCase):
         # Staff comum sem objeto (criação): cartório editável
         campos_novo = admin_instance.get_readonly_fields(req_staff, None)
         self.assertNotIn('cartorio', campos_novo)
+
+
+class XlsPorTIEscopoTest(OrigemOutraTIBaseTestCase):
+    """D5 (#132, S1/#179): XLS por TI só com a TI inteira atribuída + escopo."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_via_ti_com_tis_c_atribuida_gera_xls_com_escopo(self):
+        """via_ti tem tis_c atribuída: 200, 3 abas, sem vazar dados de outras TIs."""
+        from io import BytesIO
+        from openpyxl import load_workbook
+        
+        self.client.force_login(self.via_ti)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_c.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+        # Abrir o XLS e verificar estrutura
+        wb = load_workbook(BytesIO(response.content))
+        # Deve ter Resumo + 2 abas (imovel_c1 e imovel_c2)
+        self.assertEqual(len(wb.sheetnames), 3)
+        self.assertEqual(wb.sheetnames[0], 'Resumo')
+        
+        # Verificar que NÃO vaza dados de outras TIs (imovel_b da tis_b)
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            for row in ws.iter_rows():
+                for cell in row:
+                    if cell.value:
+                        valor_str = str(cell.value)
+                        self.assertNotIn('R1M2000', valor_str)
+                        self.assertNotIn('Imóvel B', valor_str)
+
+    def test_via_ti_sem_tis_b_retorna_404(self):
+        """via_ti não tem tis_b: 404 (não 500, não 403)."""
+        self.client.force_login(self.via_ti)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_b.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_dono_com_user_imovel_legado_retorna_404(self):
+        """dono tem imovel_a via UserImovel legado, mas NÃO tem tis_a inteira: 404."""
+        self.client.force_login(self.dono)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_a.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_via_equipe_com_tis_c_atribuida_gera_xls(self):
+        """via_equipe tem tis_c via equipe: 200."""
+        self.client.force_login(self.via_equipe)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_c.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_membro_global_com_tis_b_gera_xls(self):
+        """membro_global tem todas as TIs: 200 para tis_b."""
+        self.client.force_login(self.membro_global)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_b.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_com_tis_b_gera_xls(self):
+        """superuser vê tudo: 200 para tis_b."""
+        self.client.force_login(self.superuser)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_b.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_ti_inexistente_retorna_404_nao_500(self):
+        """TI inexistente (id=999999) retorna 404, não 500."""
+        self.client.force_login(self.superuser)
+        url = reverse('exportar_cadeia_tis_excel', args=[999999])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_erro_no_service_nao_vaza_informacao_interna(self):
+        """Exception no CadeiaCompletaService: 200 com mensagem genérica, sem vazar detalhes."""
+        self.client.force_login(self.superuser)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_c.id])
+        
+        # CadeiaCompletaService é importado localmente na função, então mockamos no módulo de origem
+        with patch(
+            'dominial.services.cadeia_completa_service.CadeiaCompletaService.get_cadeia_completa',
+            side_effect=Exception('SEGREDO /opt/x.py')
+        ):
+            response = self.client.get(url)
+
+        # Deve retornar 200 (erro tratado por imóvel, não global)
+        self.assertEqual(response.status_code, 200)
+        
+        # Verificar que NÃO vaza a mensagem de erro interna
+        from io import BytesIO
+        from openpyxl import load_workbook
+        wb = load_workbook(BytesIO(response.content))
+        
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            for row in ws.iter_rows():
+                for cell in row:
+                    if cell.value:
+                        valor_str = str(cell.value)
+                        self.assertNotIn('SEGREDO', valor_str)
+
+    def test_erro_global_retorna_500_sem_vazar_informacao(self):
+        """Exception global (ex: criar_estilos): 500 sem vazar detalhes."""
+        self.client.force_login(self.superuser)
+        url = reverse('exportar_cadeia_tis_excel', args=[self.tis_c.id])
+        
+        # Mockar criar_estilos no caminho onde é importado/usado na view
+        with patch(
+            'dominial.views.cadeia_dominial_views.criar_estilos',
+            side_effect=Exception('SEGREDO')
+        ):
+            response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response['Content-Type'], 'text/plain')
+        
+        # Verificar que NÃO vaza a mensagem de erro interna
+        conteudo = response.content.decode('utf-8')
+        self.assertNotIn('SEGREDO', conteudo)
+        # Deve ter a mensagem genérica
+        self.assertIn('Erro ao gerar Excel', conteudo)
+        self.assertIn('contate o administrador', conteudo)

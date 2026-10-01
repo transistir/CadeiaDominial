@@ -201,6 +201,20 @@ class _EscopoGlobal:
 ESCOPO_GLOBAL = _EscopoGlobal()
 
 
+def usuario_tem_ti_inteira(user, tis_id):
+    """D5 (#132): a TI inteira está atribuída (equipe, equipe global ou UserTI).
+    
+    UserImovel legado NÃO conta. Superuser: sempre True. Não-autenticado: False.
+    """
+    from .models import TIs
+    
+    if not usuario_autenticado(user):
+        return False
+    if usuario_ve_tudo(user):
+        return True
+    return TIs.objects.filter(pk=tis_id, pk__in=tis_atribuidas_ids(user)).exists()
+
+
 def documentos_no_escopo(escopo):
     """Valida e normaliza um escopo de documentos.
 

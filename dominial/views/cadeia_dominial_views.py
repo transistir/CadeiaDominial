@@ -1,11 +1,11 @@
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils import normalizar_texto_opcional
-from ..managers import documentos_for_user
-from ..utils.segregacao_utils import require_imovel_atribuido
+from ..managers import documentos_for_user, usuario_tem_ti_inteira
+from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_TI_SEM_ACESSO
 from ..utils.ordenacao_cadeia import chave_ordem_serializada
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
@@ -558,23 +558,28 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
     Issue #179: exporta em um ÚNICO arquivo Excel a cadeia dominial completa
     de TODOS os imóveis de uma Terra Indígena. A primeira aba traz o resumo;
     cada aba seguinte contém um imóvel no mesmo layout do export individual,
-    reaproveitado via `renderizar_planilha_imovel` para não haver divergência.
+    reaproveitando via `renderizar_planilha_imovel` para não haver divergência.
     """
+    # D5 (#132, S1/#179): verificar acesso à TI inteira FORA do try (A4)
+    if not usuario_tem_ti_inteira(request.user, tis_id):
+        raise Http404(MENSAGEM_TI_SEM_ACESSO)
+    
+    tis = get_object_or_404(TIs, id=tis_id)
+    
     # Import local, igual ao da view por imóvel: `CadeiaCompletaService`
     # guarda `imovel_atual` como estado de instância, por isso cada imóvel
     # do laço abaixo usa uma instância NOVA do service.
     from ..services.cadeia_completa_service import CadeiaCompletaService
     try:
-        tis = get_object_or_404(TIs, id=tis_id)
 
         # Mesma ordenação por matrícula da listagem de imóveis da TI, com `id`
         # apenas como desempate determinístico para matrículas repetidas, e o
         # MESMO universo: sem filtrar `arquivado`, portanto inclui imóveis
         # arquivados, assim como a listagem também os inclui.
         imoveis = list(
-            Imovel.objects.filter(terra_indigena_id=tis).select_related(
-                'cartorio', 'proprietario'
-            ).order_by('matricula', 'id')
+            Imovel.objects.for_user(request.user).filter(
+                terra_indigena_id=tis
+            ).select_related('cartorio', 'proprietario').order_by('matricula', 'id')
         )
 
         wb = Workbook()
@@ -649,7 +654,7 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         for imovel, nome_aba in abas_imoveis:
             ws_imovel = wb.create_sheet(title=nome_aba)
             try:
-                contexto = CadeiaCompletaService().get_cadeia_completa(tis.id, imovel.id)
+                contexto = CadeiaCompletaService(user=request.user).get_cadeia_completa(tis.id, imovel.id)
                 renderizar_planilha_imovel(
                     ws_imovel,
                     tis,
@@ -689,13 +694,13 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         wb.save(response)
         return response
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             "Erro ao gerar Excel consolidado da cadeia dominial da TI (tis_id=%s)",
             tis_id
         )
         error_response = HttpResponse(
-            f"Erro ao gerar Excel: {str(e)}",
+            'Erro ao gerar Excel. Tente novamente; se persistir, contate o administrador.',
             content_type='text/plain'
         )
         error_response.status_code = 500
