@@ -444,8 +444,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > chame o opus para fazer uma revisão de compatibilidade com o develop
 > atual"). Aprovação da fila C1–C9 pelo Hiure em 01/10 ("Ok seguir").
 >
-> **EXCEÇÃO DE FILA R3/R3.5 (aprovada pelo Hiure em 30/09, mesmo veículo da
-> reordenação — a proposta partiu dele):** R3 e R3.5 ficam **PAUSADOS** até
+> **EXCEÇÃO DE FILA R3/R3.5 (decorrente da reordenação aprovada pelo Hiure
+> em 30/09 — a proposta partiu dele):** R3 e R3.5 ficam **PAUSADOS** até
 > a release v1.1.0 (R9 antecipado). Itens abertos (#230/2b, #219, #212,
 > #114, #141, #149, #110, #223, #206, housekeeping R1) não bloqueiam o R9.
 > P1 de produção do R3 (#230, #223) podem furar a fila **caso a caso, com
@@ -529,6 +529,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      pendências de push passam pelo Jev — push+PR automáticos se
      quality≥3.5 ∧ readiness≥0.6 ∧ gov-conflict≤0.3; merge/tag seguem
      humanos.
+     *Origem das duas últimas linhas (review Opus 01/10, notas 3–4): ambas
+     são decisões literais do Hiure em 01/10 no grupo Transistir_CadDomDev
+     — reforço de harnesses ("utilize o kiro-cli e agy como modelos
+     auxiliares na falta do codex") e delegação do push ("o que estiver
+     pendende de ok passe pelo jev antes" + "sim quando o jev aprovar").
+     Registradas também em `~/.hermes/harness-state.yaml` (bloco
+     `auxiliary:` e `push_delegation`), que é a fonte de verdade de rotas.*
    - Release: ao fim dos commits C1–C9 + Fase 4 + Fase 5 + validação no
      test server (incl. T9: migrar 0056→0061 sobre dump de produção), PR
      develop → main + tag **v1.1.0** com GATE-LUANDRO.
@@ -609,9 +616,9 @@ Sem 21/09–25/09  R1 housekeeping (#187, milestone, #168/#201/#204/#210 ✅
                  → R3 #218 → #144
 Sem 28/09–02/10  ⚠️ SUPERADO: R9 antecipado (v1.1.0/#132) — avaliação do
                  PR #133 (30/09), D1–D6, merge C1 + escopo C2 (01/10)
-Sem 05/10 em di- R9/v1.1.0 (cont.): C3–C9 + fixtures + reviews + release
-                 ante (estimativa   (GATE-LUANDRO na tag) → depois: resto de
-                 35–50h)           R3/R3.5 → R4–R8 replanejados
+Sem 05/10→       R9/v1.1.0 (cont., ~35–50h): C3–C9 + fixtures + reviews
+                 + release (GATE-LUANDRO na tag)
+                 → resto de R3/R3.5 → R4–R8 replanejados
 ```
 
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
