@@ -20,7 +20,7 @@ def imovel_form(request, tis_id, imovel_id=None):
         raise Http404
     tis = get_object_or_404(TIs, pk=tis_id)
     imovel = None
-    if imovel_id:
+    if imovel_id is not None:
         imovel = get_object_or_404(
             Imovel.objects.for_user(request.user),
             pk=imovel_id,
@@ -84,11 +84,11 @@ def imovel_form(request, tis_id, imovel_id=None):
                         )
                     
                     # Criar automaticamente o documento principal para o imóvel (#230)
-                    if not imovel_id:  # Apenas para novos imóveis
+                    if imovel_id is None:  # Apenas para novos imóveis
                         documento_principal = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
                 
                 # Mensagens após o commit
-                if not imovel_id:
+                if imovel_id is None:
                     rotulo = documento_principal.tipo.get_tipo_display().lower()
                     messages.info(
                         request,

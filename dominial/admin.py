@@ -53,9 +53,12 @@ from .managers import (
     documentos_for_user,
     lancamentos_for_user,
     pessoas_for_user,
+    tis_atribuidas_ids,
     tis_for_user,
+    usuario_tem_ti_inteira,
     usuario_ve_tudo,
 )
+from .utils.segregacao_utils import MENSAGEM_TI_SEM_ACESSO
 
 logger = logging.getLogger(__name__)
 
@@ -1554,7 +1557,15 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'terra_indigena_id':
-            kwargs['queryset'] = tis_for_user(request.user)
+            # P1-G (#132): na adição, só TIs com atribuição inteira; na edição
+            # mantém tis_for_user para não quebrar acesso legado (P1-D).
+            eh_adicao = request.resolver_match and request.resolver_match.url_name and request.resolver_match.url_name.endswith('_add')
+            if eh_adicao and not usuario_ve_tudo(request.user):
+                kwargs['queryset'] = TIs.objects.filter(
+                    pk__in=tis_atribuidas_ids(request.user)
+                )
+            else:
+                kwargs['queryset'] = tis_for_user(request.user)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_readonly_fields(self, request, obj=None):
@@ -1568,7 +1579,13 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         """Salva o imóvel e, se o cartório mudou, sincroniza o documento
         principal na mesma transação (#210). `ImovelAdminForm.clean()` já
         garantiu que não há ambiguidade/colisão antes de chegar aqui.
+
+        P1-G (#132): revalida `usuario_tem_ti_inteira` na adição — o
+        `formfield_for_foreignkey` é UX; aqui é a barreira real contra
+        manipulação de POST.
         """
+        if not change and not usuario_tem_ti_inteira(request.user, obj.terra_indigena_id_id):
+            raise PermissionDenied(MENSAGEM_TI_SEM_ACESSO)
         with transaction.atomic():
             super().save_model(request, obj, form, change)
             if change and getattr(form, 'cartorio_mudou', False):

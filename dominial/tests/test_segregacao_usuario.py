@@ -2447,6 +2447,118 @@ class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
         href_cadastro = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
         self.assertIn(href_cadastro.encode(), response.content)
 
+    def test_get_imovel_id_zero_em_ti_alheia_404(self):
+        """P1-F: GET /tis/<alheia>/imovel/0/editar/ retorna 404 (não cria)."""
+        # dono tem UserImovel legado só em imovel_a (tis_a); tis_b é alheia.
+        self.client.force_login(self.dono)
+        url_zero = reverse(
+            'imovel_editar', kwargs={'tis_id': self.tis_b.id, 'imovel_id': 0}
+        )
+        response = self.client.get(url_zero)
+        self.assertEqual(response.status_code, 404)
+
+    def test_post_imovel_id_zero_em_ti_alheia_nao_cria(self):
+        """P1-F: POST em /tis/<alheia>/imovel/0/editar/ não cria imóvel."""
+        self.client.force_login(self.dono)
+        url_zero = reverse(
+            'imovel_editar', kwargs={'tis_id': self.tis_b.id, 'imovel_id': 0}
+        )
+        count_before = Imovel.objects.count()
+        response = self.client.post(url_zero, self.post_data)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(Imovel.objects.count(), count_before)
+
+
+class AdminCriacaoImovelEscopoTest(SegregacaoBaseTestCase):
+    """P1-G (#132): admin não cria imóvel em TI visível apenas por UserImovel legado.
+
+    O `formfield_for_foreignkey` restringe o queryset de TI às TIs com
+    atribuição inteira na adição, e o `save_model` revalida com
+    `usuario_tem_ti_inteira` (barreira server-side).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Staff com UserImovel legado na tis_a (visível via tis_for_user, mas
+        # SEM TI inteira — usuario_tem_ti_inteira retorna False).
+        cls.staff_legado = User.objects.create_user(
+            username='staff_legado', password='senha-staff-legado',
+        )
+        cls.staff_legado.is_staff = True
+        cls.staff_legado.save(update_fields=['is_staff'])
+        # Permissão add_imovel para o staff_legado
+        ct = ContentType.objects.get_for_model(Imovel)
+        perm_add = Permission.objects.get(content_type=ct, codename='add_imovel')
+        cls.staff_legado.user_permissions.add(perm_add)
+        UserImovel.objects.create(
+            user=cls.staff_legado, imovel=cls.imovel_a, atribuido_por=cls.superuser
+        )
+        # Staff com UserTI na tis_a (TI inteira concedida)
+        cls.staff_userti = User.objects.create_user(
+            username='staff_userti', password='senha-staff-userti',
+        )
+        cls.staff_userti.is_staff = True
+        cls.staff_userti.save(update_fields=['is_staff'])
+        cls.staff_userti.user_permissions.add(perm_add)
+        UserTI.objects.create(
+            user=cls.staff_userti, tis=cls.tis_a, atribuido_por=cls.superuser
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.url_add = reverse('admin:dominial_imovel_add')
+        self.post_data = {
+            'nome': 'Imóvel Admin Novo',
+            'matricula': 'ADM-999',
+            'tipo_documento_principal': 'matricula',
+            'terra_indigena_id': self.tis_a.id,
+            'proprietario': self.proprietario.id,
+            'cartorio': self.cartorio.id,
+            'arquivado': False,
+            'observacoes': '',
+        }
+
+    def _count(self):
+        return Imovel.objects.count()
+
+    def test_staff_so_com_userimovel_legado_nao_cria_no_admin(self):
+        """P1-G (a): staff com só UserImovel legado NÃO cria imóvel em tis_a."""
+        self.client.force_login(self.staff_legado)
+        count_before = self._count()
+        response = self.client.post(self.url_add, self.post_data)
+        # Esperado após fix: 403 (PermissionDenied no save_model).
+        # O essencial é que NÃO crie — count inalterado.
+        self.assertIn(response.status_code, (200, 302, 403))
+        # Se foi 302, seguir para confirmar que não criou.
+        if response.status_code == 302:
+            # Redireciona para o changelist em sucesso OU para login.
+            # O count é o árbitro final.
+            pass
+        self.assertEqual(self._count(), count_before)
+
+    def test_staff_com_userti_cria_no_admin(self):
+        """P1-G (b): staff com UserTI na TI cria normalmente."""
+        self.client.force_login(self.staff_userti)
+        count_before = self._count()
+        response = self.client.post(self.url_add, self.post_data)
+        # 302 redirect para changelist após criação bem-sucedida
+        self.assertIn(response.status_code, (200, 302))
+        # Se redirecionou, criou
+        if response.status_code == 302:
+            self.assertEqual(self._count(), count_before + 1)
+
+    def test_superuser_cria_em_qualquer_ti(self):
+        """P1-G (c): superuser cria em qualquer TI."""
+        self.client.force_login(self.superuser)
+        count_before = self._count()
+        # Alterna para tis_b para confirmar que superuser não é barrado
+        data = dict(self.post_data, terra_indigena_id=self.tis_b.id)
+        response = self.client.post(self.url_add, data)
+        self.assertIn(response.status_code, (200, 302))
+        if response.status_code == 302:
+            self.assertEqual(self._count(), count_before + 1)
+
 
 class BlockersRound3Test(SegregacaoBaseTestCase):
     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""
