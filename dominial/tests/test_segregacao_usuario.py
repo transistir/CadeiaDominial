@@ -2646,7 +2646,13 @@ class AdminEdicaoImovelEscopoTest(SegregacaoBaseTestCase):
 
     def test_changeform_nao_move_imovel_para_ti_so_legado(self):
         """P1-H (a): POST no changeform tentando mover imóvel de tis_a para
-        tis_b (onde o staff só tem UserImovel legado) NÃO altera o banco."""
+        tis_b (onde o staff só tem UserImovel legado) → 403 estrito.
+
+        A tis_b entra no queryset do form (visível via legado), então o form
+        valida; a barreira real é o save_model que levanta PermissionDenied
+        quando `terra_indigena_id` está em changed_data e o usuário não tem
+        TI inteira no destino. O código é deterministicamente 403.
+        """
         self.client.force_login(self.staff_misto)
         self.imovel_alvo.refresh_from_db()
         ti_original = self.imovel_alvo.terra_indigena_id_id
@@ -2654,11 +2660,53 @@ class AdminEdicaoImovelEscopoTest(SegregacaoBaseTestCase):
         data = self._change_post_data(self.imovel_alvo, self.tis_b.id)
         response = self.client.post(self._get_change_url(self.imovel_alvo), data)
 
-        # Pode ser 200 (form inválido — TI fora do queryset) ou 403
-        # (save_model barrou). O árbitro é o banco.
-        self.assertIn(response.status_code, (200, 403))
+        self.assertEqual(response.status_code, 403)
         self.imovel_alvo.refresh_from_db()
         self.assertEqual(self.imovel_alvo.terra_indigena_id_id, ti_original)
+
+    def test_changeform_edicao_sem_trocar_ti_funciona(self):
+        """P1-D (regressão): staff com UserTI na TI do imóvel edita campo
+        seguro (nome) sem trocar terra_indigena_id → 302 + banco alterado.
+
+        O guard do save_model só revalida quando 'terra_indigena_id' está em
+        changed_data; edições que não mexem na TI seguem o fluxo normal.
+        """
+        self.client.force_login(self.staff_misto)
+        self.imovel_alvo.refresh_from_db()
+        nome_original = self.imovel_alvo.nome
+        nome_novo = nome_original + ' (editado P1-D)'
+
+        data = self._change_post_data(self.imovel_alvo, self.imovel_alvo.terra_indigena_id_id)
+        data['nome'] = nome_novo
+        response = self.client.post(self._get_change_url(self.imovel_alvo), data)
+
+        self.assertEqual(response.status_code, 302)
+        self.imovel_alvo.refresh_from_db()
+        self.assertEqual(self.imovel_alvo.nome, nome_novo)
+        # TI não mudou
+        self.assertEqual(self.imovel_alvo.terra_indigena_id_id, self.tis_a.id)
+
+    def test_changeform_move_ti_com_userti_em_ambas(self):
+        """P1-H (positivo): staff com UserTI em tis_a E tis_b move imóvel
+        de tis_a para tis_b pelo changeform → 302 + banco movido.
+
+        Complementa test_alterar_ti_view_para_ti_com_userti_funciona (que
+        cobre a alterar_ti_view dedicada); aqui o caminho é o changeform
+        padrão do admin com o campo terra_indigena_id no POST.
+        """
+        UserTI.objects.create(
+            user=self.staff_misto, tis=self.tis_b, atribuido_por=self.superuser
+        )
+        self.client.force_login(self.staff_misto)
+        self.imovel_alvo.refresh_from_db()
+        self.assertEqual(self.imovel_alvo.terra_indigena_id_id, self.tis_a.id)
+
+        data = self._change_post_data(self.imovel_alvo, self.tis_b.id)
+        response = self.client.post(self._get_change_url(self.imovel_alvo), data)
+
+        self.assertEqual(response.status_code, 302)
+        self.imovel_alvo.refresh_from_db()
+        self.assertEqual(self.imovel_alvo.terra_indigena_id_id, self.tis_b.id)
 
     def test_alterar_ti_view_destino_legado_eh_barrado(self):
         """P1-H (b): POST na alterar_ti_view com destino tis_b (só legado) →
