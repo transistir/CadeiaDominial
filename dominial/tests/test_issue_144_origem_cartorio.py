@@ -411,9 +411,10 @@ class T6ResaveSemCacheTest(Issue144Rodada2Base):
 
 class T7FormEdicaoTest(Issue144Rodada2Base):
     def test_t7_form_de_edicao_traz_cartorio_de_cada_origem_sem_cache(self):
-        User.objects.create_user(username="t7", password="t7pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t7", self.ti)
         client = Client()
-        client.login(username="t7", password="t7pass")
+        client.force_login(user)
         imovel, _, lancamento = self.criar_cenario_atual(
             "M100; T366", self.cartorio_a
         )
@@ -446,9 +447,10 @@ class T7FormEdicaoTest(Issue144Rodada2Base):
         self.criar_origens_persistidas(lancamento)
         antes = self.estado_origens(lancamento)
         cache.clear()
-        User.objects.create_user(username="t7b", password="t7pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t7b", self.ti)
         client = Client()
-        client.login(username="t7b", password="t7pass")
+        client.force_login(user)
         url = reverse("editar_lancamento", kwargs={
             "tis_id": self.ti.id, "imovel_id": imovel.id,
             "lancamento_id": lancamento.pk,
@@ -516,13 +518,13 @@ class T9SignalOrigemAmbiguaTest(Issue144Rodada2Base):
         )
         original = DocumentoIdentidadeService.resolver
 
-        def resolver(identidade):
+        def resolver(identidade, queryset=None):
             if identidade.numero_normalizado == "777":
                 return ResultadoResolucaoDocumento(
                     status="ambiguo", identidade=identidade,
                     candidatos=(cand_1, cand_2),
                 )
-            return original(identidade)
+            return original(identidade, queryset=queryset)
 
         with patch.object(
             DocumentoIdentidadeService, "resolver", side_effect=resolver
@@ -796,9 +798,10 @@ class T16AtomicidadeEdicaoTest(Issue144Rodada3Base):
         self.criar_origens_persistidas(lancamento)
         antes_origens = self.estado_origens(lancamento)
         cache.clear()
-        User.objects.create_user(username="t16", password="t16pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t16", self.ti)
         client = Client()
-        client.login(username="t16", password="t16pass")
+        client.force_login(user)
 
         # Usuário trocou a 2ª origem para M999 sem cartório mapeado.
         response = client.post(reverse("editar_lancamento", kwargs={
@@ -1011,9 +1014,10 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
             ],
             timeout=3600,
         )
-        User.objects.create_user(username="t19b", password="t19pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t19b", self.ti)
         client = Client()
-        client.login(username="t19b", password="t19pass")
+        client.force_login(user)
         url = reverse("editar_lancamento", kwargs={
             "tis_id": self.ti.id, "imovel_id": imovel.id,
             "lancamento_id": lancamento.pk,

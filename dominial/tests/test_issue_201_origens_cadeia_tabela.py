@@ -53,6 +53,7 @@ from dominial.models import (
     TIs,
 )
 from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class _Issue201Fixture:
@@ -73,6 +74,7 @@ class _Issue201Fixture:
         self.user = User.objects.create_user(username='issue201', password='issue201pass')
 
         self.tis = TIs.objects.create(nome='TI 201', codigo='TI-201', etnia='Teste')
+        atribuir_tis(self.user, self.tis)
 
         # Nome com "&" para exercitar a paridade de escape HTML entre a API
         # e o template (issue #201).

@@ -45,6 +45,7 @@ from dominial.utils.hierarquia_utils import (
     identificar_tronco_principal,
     obter_origens_resolvidas,
 )
+from dominial.tests.segregacao_fixtures import atribuir_tis
 from dominial.utils.ordenacao_cadeia import (
     chave_ordem_cadeia,
     chave_ordem_origem,
@@ -260,9 +261,9 @@ class _OrdemCadeiaFixture:
         ])
 
     def _logar(self):
-        self.client.force_login(
-            User.objects.create_user(username='issue201b', password='issue201bpass')
-        )
+        user = User.objects.create_user(username='issue201b', password='issue201bpass')
+        atribuir_tis(user, self.tis)
+        self.client.force_login(user)
 
 
 class _Forma384(_OrdemCadeiaFixture):
