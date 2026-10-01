@@ -2,6 +2,7 @@
 
 import os
 import re
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -26,12 +27,22 @@ class VarreduraEstaticaTest(TestCase):
         violations = []
         views_dir = os.path.join(os.path.dirname(__file__), '..', 'views')
         admin_file = os.path.join(os.path.dirname(__file__), '..', 'admin.py')
+        services_dir = os.path.join(os.path.dirname(__file__), '..', 'services')
         
         files_to_check = []
         for filename in os.listdir(views_dir):
             if filename.endswith('.py'):
                 files_to_check.append(os.path.join(views_dir, filename))
         files_to_check.append(admin_file)
+        
+        # P1-C: estender varredura S8 para services (pontos confirmados de str(e))
+        services_alvo = [
+            'importacao_cadeia_service.py',
+            'lancamento_duplicata_service.py',
+            'cartorio_verificacao_service.py',
+        ]
+        for nome in services_alvo:
+            files_to_check.append(os.path.join(services_dir, nome))
         
         for filepath in files_to_check:
             if not os.path.exists(filepath):
@@ -134,3 +145,90 @@ class ComportamentalEscolherOrigemTest(TestCase):
         response_data = response.json()
         self.assertEqual(response_data['error'], ERRO_INTERNO)
         self.assertNotIn('SEGREDO', response.content.decode('utf-8'))
+
+
+class ComportamentalImportacaoCadeiaNaoVazaSegredoTest(TestCase):
+    """P1-C: importacao_cadeia_service não pode vazar str(e) no dict de erro.
+
+    Opção escolhida: chamada direta do service (mais simples e robusta que
+    subir a view com autenticação + TI + imóvel). O dict é o contrato que a
+    view repassa ao cliente — se a mensagem é fixa, nenhuma exceção interna
+    chega ao frontend.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from dominial.models import Cartorios, Documento, DocumentoTipo, Imovel, Pessoas, TIs
+        from dominial.tests.segregacao_fixtures import atribuir_tis
+
+        self.user = User.objects.create_user(username='srv_chain', password='x')
+        self.tis = TIs.objects.create(nome='TI Chain', codigo='TI-CH', etnia='Ch')
+        self.cartorio = Cartorios.objects.create(nome='Cartório Chain', cns='333333')
+        self.pessoa = Pessoas.objects.create(nome='Prop Chain')
+        self.imovel = Imovel.objects.create(
+            nome='Imóvel Chain', matricula='CH1',
+            terra_indigena_id=self.tis, cartorio=self.cartorio,
+            proprietario=self.pessoa,
+        )
+        self.doc_tipo = DocumentoTipo.objects.create(tipo='matricula')
+        self.doc = Documento.objects.create(
+            imovel=self.imovel, tipo=self.doc_tipo, numero='CH1',
+            cartorio=self.cartorio, livro='1', folha='1',
+            data=date(2024, 1, 1),
+        )
+        atribuir_tis(self.user, self.tis)
+
+    def test_excecao_inesperada_nao_vaza_str_e(self):
+        """RuntimeError interna → 'erros' com mensagem fixa, sem SEGREDO."""
+        from dominial.services.importacao_cadeia_service import ImportacaoCadeiaService
+
+        with patch(
+            'dominial.services.importacao_cadeia_service.ImportacaoCadeiaService.marcar_documento_importado',
+            side_effect=RuntimeError('SEGREDO-XYZ /opt/app/chain.py linha 42'),
+        ):
+            with self.assertLogs('dominial.services.importacao_cadeia_service', level='ERROR'):
+                resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
+                    imovel_destino_id=self.imovel.id,
+                    documento_origem_id=self.doc.id,
+                    documentos_importaveis_ids=[self.doc.id],
+                    usuario_id=self.user.id,
+                )
+
+        self.assertFalse(resultado['sucesso'])
+        # Caminho cai no else (loop interno captura a exceção → lista 'erros')
+        for erro_msg in resultado.get('erros', []):
+            self.assertNotIn('SEGREDO', erro_msg)
+            self.assertNotIn('/opt/app', erro_msg)
+            self.assertNotIn('linha 42', erro_msg)
+        self.assertNotIn('SEGREDO', resultado.get('mensagem', ''))
+
+
+class ComportamentalCartorioVerificacaoNaoVazaSegredoTest(TestCase):
+    """P1-C: cartorio_verificacao_service não pode vazar str(e)."""
+
+    def test_verificar_cartorios_nao_vaza_str_e(self):
+        from dominial.services.cartorio_verificacao_service import CartorioVerificacaoService
+
+        with patch(
+            'dominial.services.cartorio_verificacao_service.Cartorios.objects.filter',
+            side_effect=RuntimeError('SEGREDO-ABC db/connection.py'),
+        ):
+            with self.assertLogs('dominial.services.cartorio_verificacao_service', level='ERROR'):
+                resultado = CartorioVerificacaoService.verificar_cartorios_estado('SP')
+
+        self.assertNotIn('SEGREDO', resultado.get('erro', ''))
+        self.assertNotIn('db/connection', resultado.get('erro', ''))
+
+    def test_importar_cartorios_nao_vaza_str_e(self):
+        from dominial.services.cartorio_verificacao_service import CartorioVerificacaoService
+
+        with patch(
+            'dominial.services.cartorio_verificacao_service.call_command',
+            side_effect=RuntimeError('SEGREDO-DEF falha-de-import'),
+        ):
+            with self.assertLogs('dominial.services.cartorio_verificacao_service', level='ERROR'):
+                resultado = CartorioVerificacaoService.importar_cartorios_estado('SP')
+
+        self.assertFalse(resultado['success'])
+        self.assertNotIn('SEGREDO', resultado.get('error', ''))
+        self.assertNotIn('falha-de-import', resultado.get('error', ''))

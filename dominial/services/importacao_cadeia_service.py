@@ -3,11 +3,15 @@ Service para importação de cadeias dominiais.
 Importa documentos de outras cadeias dominiais para o imóvel atual.
 """
 
+import logging
+
 from django.db import transaction
 from django.contrib.auth.models import User
 from typing import Dict, List, Any
 from ..models import Documento, DocumentoImportado, Imovel
 from ..managers import documentos_for_user
+
+logger = logging.getLogger(__name__)
 
 
 class ImportacaoCadeiaService:
@@ -92,8 +96,9 @@ class ImportacaoCadeiaService:
                         
                     except KeyError:
                         erros.append('Documento selecionado não encontrado')
-                    except Exception as e:
-                        erros.append(f"Erro ao importar documento {doc_id}: {str(e)}")
+                    except Exception:
+                        logger.exception('Erro ao importar documento doc_id=%s', doc_id)
+                        erros.append('Erro ao importar documento')
                 
                 # Se todos os documentos já foram importados, considerar como sucesso
                 if len(documentos_importados) == 0 and len(erros) > 0 and all('já foi importado' in erro for erro in erros):
@@ -139,10 +144,11 @@ class ImportacaoCadeiaService:
                 'sucesso': False,
                 'erro': f'Usuário com ID {usuario_id} não encontrado'
             }
-        except Exception as e:
+        except Exception:
+            logger.exception('Erro inesperado ao importar cadeia dominial')
             return {
                 'sucesso': False,
-                'erro': f'Erro inesperado: {str(e)}'
+                'erro': 'Erro inesperado na importação'
             }
     
     @staticmethod
@@ -239,8 +245,9 @@ class ImportacaoCadeiaService:
                 'sucesso': False,
                 'erro': f'Registro de importação com ID {documento_importado_id} não encontrado'
             }
-        except Exception as e:
+        except Exception:
+            logger.exception('Erro ao desfazer importação documento_importado_id=%s', documento_importado_id)
             return {
                 'sucesso': False,
-                'erro': f'Erro ao desfazer importação: {str(e)}'
+                'erro': 'Erro ao desfazer importação'
             }

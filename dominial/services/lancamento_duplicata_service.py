@@ -2,9 +2,13 @@
 Service para integração da verificação de duplicatas com o processo de criação de lançamentos
 """
 
+import logging
+
 from .duplicata_verificacao_service import DuplicataVerificacaoService
 from .importacao_cadeia_service import ImportacaoCadeiaService
 from ..models import Cartorios
+
+logger = logging.getLogger(__name__)
 
 
 class LancamentoDuplicataService:
@@ -175,13 +179,11 @@ class LancamentoDuplicataService:
                     'mensagem': erro_msg
                 }
                 
-        except Exception as e:
-            print(f"DEBUG IMPORTACAO: Exceção durante importação: {str(e)}")
-            import traceback
-            print(f"DEBUG IMPORTACAO: Traceback: {traceback.format_exc()}")
+        except Exception:
+            logger.exception('Erro durante importação')
             return {
                 'sucesso': False,
-                'mensagem': f'Erro durante importação: {str(e)}'
+                'mensagem': 'Erro durante importação'
             }
 
     @staticmethod
