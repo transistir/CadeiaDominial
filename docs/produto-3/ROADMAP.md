@@ -3,6 +3,9 @@
 > **Fila reordenada 04/09/2026 por sequência lógica de desenvolvimento;
 > nova reordenação aprovada pelo Hiure em 23/09/2026** (bugs de produção
 > primeiro no R3, a começar pelo #218 — ver "Status geral").
+> **Reordenação 30/09/2026 (aprovada pelo Hiure): R9 antecipado** — #132
+> (PR #133) passa a ser o próximo bloco de execução, com meta de release
+> **v1.1.0**. R4–R8 deslizam para depois do R9. Ver seção R9.
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -429,20 +432,63 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    juntos fecham o ciclo do incidente de 12/09 — candidatos a fast-track
    se o time quiser)*
 
-## R9 — Segregação por usuário (a maior feature, ~2 semanas)
+## R9 — Segregação por usuário (a maior feature, ~2 semanas) — 🔥 ANTECIPADO (reordenação 30/09, aprovada pelo Hiure)
+
+> **Reordenação 30/09/2026:** R9 vira o próximo bloco de execução (antes de
+> R4–R8, que deslizam na sequência). Meta: mergear o #132 no develop e
+> lançar **tag v1.1.0** (GATE-LUANDRO segue obrigatório para a tag).
+> Decisão do Hiure no grupo Transistir_CadDomDev em 30/09 ("vamos trabalhar
+> em uma nova versão do sistema e ir para uma tag v1.1.0 resolvendo o PR
+> #133"; "aprovo a reordenação").
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
+   - **PR zumbi #133 AVALIADO (30/09)**: revisão de compatibilidade do
+     Opus 5.5 contra o develop atual (62 commits / v1.0.9→v1.0.12 desde o
+     merge-base 0d95b54f). Veredito: **reaproveitar via merge develop →
+     branch de integração** (rebase e reimplementação rejeitados).
+     Relatório completo: `/tmp/pr133-opus-review.md` (anexado ao PR #133).
+   - Achados que viram escopo de trabalho obrigatório:
+     - **15 arquivos em conflito** (6 mecânicos, 9 com decisão de negócio);
+       pior caso: `lancamento_criacao_service.py` e
+       `lancamento_origem_service.py` (develop reescreveu ambos).
+     - **8 vazamentos silenciosos (S1–S8)**: código NOVO do develop pós
+       merge-base que o `for_user` do PR não cobre, em regiões
+       auto-mergeadas — S5/S6 CRÍTICOS (escrita cross-tenant via #152 e
+       vínculo de documento de outra TI via #144/#229), S1 alto (XLS por TI
+       #179 sem escopo). Mitigação: commits S1–S8 em TDD + testes T1–T9 +
+       inventário de rotas (T8).
+     - **Migrations sem colisão** (0057→0061 em linha reta após 0056), mas
+       **0058 e 0060 irreversíveis** → `pg_dump` obrigatório antes do
+       migrate; runbook de go-live: não-superusers ficam trancados até ter
+       TI atribuída; grupos preexistentes viram "equipe" (auditar antes).
+     - Armadilha nginx: o `403 /media/documentos_digitais/` do develop
+       precisa SAIR (o `internal` + X-Accel-Redirect do PR substitui) senão
+       download de documento quebra.
+   - Esforço estimado (Opus): **~35–50h de agente** — Fases 1–6 no plano
+     do relatório.
    - A issue é de **levantamento e planejamento**: entrega o "plano de
      comportamento esperado", que deve ser **aprovado por luandro antes de
      abrir issues filhas de implementação** (corpo da #132, checklist).
-   - Semana 1: design de schema + middleware/filtros (Opus 5 no design)
-     → produzir o plano e submetê-lo a luandro.
-   - Semana 2: implementação gradual + testes de isolamento — **só inicia
-     com o plano aprovado**; sem aprovação, a implementação fica bloqueada
-     e o cronograma é revisto (revisão Codex 24/09).
-   - **Kickoff com luandro** — decisões de produto obrigatórias antes.
-   - **Antes do kickoff: avaliar o PR zumbi #133** (→#132, parado desde
-     09/08 — reaproveitar ou fechar; ver R1 item 6).
+     **Com a reordenação 30/09, o plano efetivo é o relatório de
+     compatibilidade do PR #133** (estratégia (a) + Fases 1–6 + D1–D6).
+   - **GATE-PRODUTO — evento (1) kickoff: decisões D1–D6 pendentes**
+     (Hiure/luandro; recomendações do Opus entre parênteses):
+     - D1 — origem que resolve para documento sem acesso: ("origem
+       restrita" sem dados, na visualização; na criação, mensagem explícita)
+     - D2 — #152 editar/excluir lançamento de documento compartilhado:
+       (só permitir com acesso ao imóvel dono do documento)
+     - D3 — #167 `buscar_m_anterior`: (restringir a `documentos_for_user`)
+     - D4 — #210 troca de cartório com referências fora do escopo:
+       (bloquear para não-superuser)
+     - D5 — #179 XLS por TI: (exportar só os imóveis visíveis)
+     - D6 — go-live: (equipe global provisória com todos os usuários atuais
+       OU atribuição fina antes da abertura)
+   - **GATE-PRODUTO — evento (2) aprovação do plano:** com D1–D6 decididas,
+     registrar a aprovação (luandro/Hiure) e iniciar a Fase 1 (conflitos
+     mecânicos) em worktree novo a partir do HEAD do PR (9c95b117).
+   - Release: ao fim das Fases 1–5 + validação no test server (incl. T9:
+     migrar 0056→0061 sobre dump de produção), PR develop → main + tag
+     **v1.1.0** com GATE-LUANDRO.
 
 ---
 
@@ -543,7 +589,20 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 24/09/2026 (rodada 2, PR #221) — P2s do Codex
+*Última atualização: 30/09/2026 — reordenação aprovada pelo Hiure: R9
+antecipado, PR #133 avaliado e reaproveitado (relatório Opus 5.5), meta
+v1.1.0.*
+
+*30/09/2026 — **reordenação da fila aprovada pelo Hiure** (grupo
+Transistir_CadDomDev): R9 (#132, PR #133) antecipado para próximo bloco de
+execução, com meta de release **v1.1.0**; R4–R8 deslizam na sequência.
+PR zumbi #133 avaliado via revisão de compatibilidade Opus 5.5 (develop
++62 commits desde o merge-base): estratégia (a) merge develop → branch de
+integração; 15 conflitos, 8 vazamentos silenciosos S1–S8, migrations
+0058/0060 irreversíveis; esforço ~35–50h. GATE-PRODUTO evento (1):
+decisões D1–D6 pendentes.*
+
+*24/09/2026 (rodada 2, PR #221) — P2s do Codex
 connector + Greptile incorporados: consumidores da chave canônica
 documentados no escopo da regra M>T (tronco inicial sem doc do imóvel +
 modal de sequência, `ordenacao_cadeia.py`); responsável do gate #215
