@@ -471,18 +471,26 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      abrir issues filhas de implementação** (corpo da #132, checklist).
      **Com a reordenação 30/09, o plano efetivo é o relatório de
      compatibilidade do PR #133** (estratégia (a) + Fases 1–6 + D1–D6).
-   - **GATE-PRODUTO — evento (1) kickoff: decisões D1–D6 pendentes**
-     (Hiure/luandro; recomendações do Opus entre parênteses):
-     - D1 — origem que resolve para documento sem acesso: ("origem
-       restrita" sem dados, na visualização; na criação, mensagem explícita)
-     - D2 — #152 editar/excluir lançamento de documento compartilhado:
-       (só permitir com acesso ao imóvel dono do documento)
-     - D3 — #167 `buscar_m_anterior`: (restringir a `documentos_for_user`)
-     - D4 — #210 troca de cartório com referências fora do escopo:
-       (bloquear para não-superuser)
-     - D5 — #179 XLS por TI: (exportar só os imóveis visíveis)
-     - D6 — go-live: (equipe global provisória com todos os usuários atuais
-       OU atribuição fina antes da abertura)
+   - **GATE-PRODUTO — evento (1) kickoff: decisões D1–D6 TOMADAS pelo
+     Hiure em 30/09/2026** (grupo Transistir_CadDomDev):
+     - **D1 — Granularidade de acesso = TI inteira.** Se o usuário tem
+       acesso a um imóvel, tem acesso a todos da mesma TI. O `for_user` do
+       PR já implementa isso (`terra_indigena_id__in=tis_atribuidas_ids`) —
+       caso residual (cadeia cruzando para outra TI) tratado como origem
+       restrita.
+     - **D2 — Acesso ao documento ⇒ pode editar/excluir** o lançamento
+       vinculado (inclusive documento compartilhado, #152/S6).
+     - **D3 — `buscar_m_anterior` (#167/S2):** se o documento existe em
+       outra TI, informar "existe em outra TI" e orientar pedir acesso ao
+       admin — SEM doc_id, matrícula ou nome do imóvel de outra TI.
+     - **D4 — Só superuser edita cartório** (#210/S7): remoção/sincronização
+       de cartório vira operação exclusiva de superuser no form e no admin.
+     - **D5 — XLS por TI (#179/S1): TI inteira.** Exportação exige a TI
+       atribuída; sem atribuição, 404.
+     - **D6 — Go-live com atribuição FINA por TI** antes de abrir o
+       sistema: sem equipe global provisória; runbook deve atribuir todas
+       as TIs aos usuários/equipes ANTES do deploy (não-superuser sem TI
+       atribuída fica trancado).
    - **GATE-PRODUTO — evento (2) aprovação do plano:** com D1–D6 decididas,
      registrar a aprovação (luandro/Hiure) e iniciar a Fase 1 (conflitos
      mecânicos) em worktree novo a partir do HEAD do PR (9c95b117).
@@ -599,8 +607,11 @@ execução, com meta de release **v1.1.0**; R4–R8 deslizam na sequência.
 PR zumbi #133 avaliado via revisão de compatibilidade Opus 5.5 (develop
 +62 commits desde o merge-base): estratégia (a) merge develop → branch de
 integração; 15 conflitos, 8 vazamentos silenciosos S1–S8, migrations
-0058/0060 irreversíveis; esforço ~35–50h. GATE-PRODUTO evento (1):
-decisões D1–D6 pendentes.*
+0058/0060 irreversíveis; esforço ~35–50h. GATE-PRODUTO evento (1)
+CONCLUÍDO: decisões D1–D6 tomadas pelo Hiure em 30/09 (granularidade TI,
+D2 acesso ao documento ⇒ edita/exclui, D3 informar existência em outra TI
+sem dados, D4 cartório só superuser, D5 XLS exige TI inteira, D6 atribuição
+fina antes do go-live).*
 
 *24/09/2026 (rodada 2, PR #221) — P2s do Codex
 connector + Greptile incorporados: consumidores da chave canônica
