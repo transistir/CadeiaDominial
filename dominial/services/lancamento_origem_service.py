@@ -10,6 +10,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..utils.hierarquia_utils import processar_origens_para_documentos
+from ..managers import identidade_existe_fora_do_escopo
+from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ..models import Cartorios, Documento, DocumentoTipo, LancamentoOrigem
 from ..services.cri_service import CRIService
 from ..services.cache_service import CacheService
@@ -26,6 +28,12 @@ class OrigemAmbiguaError(Exception):
     """A identidade da origem casa com mais de um documento (#144)."""
 
 
+class OrigemRestritaError(Exception):
+    """D1 (#132): a origem existe, mas em TI fora do escopo. Mensagem fixa."""
+    def __init__(self):
+        super().__init__(MENSAGEM_ORIGEM_RESTRITA)
+
+
 class LancamentoOrigemService:
     # Mapeamento origem→cartório/livro/folha do POST corrente, como atributo
     # TEMPORÁRIO da instância (#144 fase 2, D4): vive exatamente uma
@@ -33,6 +41,21 @@ class LancamentoOrigemService:
     # TTL de 1h para POSTs seguintes e era um por processo (gunicorn com
     # workers sync), como o do tronco que o #210 já tinha desligado.
     ATRIBUTO_MAPEAMENTO = '_mapeamento_origens_post'
+
+    @staticmethod
+    def _origem_restrita(tipo, numero, cartorio, documentos_queryset):
+        """True quando (tipo, número, cartório) existe só fora do escopo (D1)."""
+        if not tipo or not cartorio:
+            return False
+        try:
+            identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
+        except (TypeError, ValueError):
+            return False
+        return identidade_existe_fora_do_escopo(
+            documentos_queryset, tipo=identidade.tipo,
+            numero_normalizado=identidade.numero_normalizado,
+            cartorio_id=identidade.cartorio_id,
+        )
 
     @staticmethod
     def definir_mapeamento(lancamento, mapeamento):
@@ -454,6 +477,21 @@ class LancamentoOrigemService:
             total_origens=total_origens,
             origens_atuais=origens_atuais,
         )
+        
+        # D1 (#132): pré-check de origem restrita antes de processar
+        restritas = []
+        chave = LancamentoOrigemService._chave_identidade_texto(origem_unica)
+        if chave and LancamentoOrigemService._origem_restrita(
+            chave[0], origem_unica, dados_origem['cartorio'], documentos_queryset,
+        ):
+            logger.info(
+                "Origem %s do lançamento %s em TI fora do escopo; não vinculada",
+                indice_unico + 1, lancamento.pk,
+            )
+            return LancamentoOrigemService._montar_mensagem_origens(
+                1, 0, 0, 'da origem identificada', restritas=[indice_unico]
+            )
+        
         origens_processadas = processar_origens_para_documentos(
             origem_unica, imovel, lancamento, dados_origem['cartorio'],
             documentos_queryset=documentos_queryset,
@@ -482,6 +520,9 @@ class LancamentoOrigemService:
                         imovel, lancamento, origem_info, dados_origem['cartorio'],
                         documentos_queryset=documentos_queryset,
                     )
+            except OrigemRestritaError:
+                restritas.append(indice_unico)
+                continue
             except Exception:
                 LancamentoOrigemService._registrar_falha_origem(lancamento, origem_info)
                 falhas += 1
@@ -491,7 +532,7 @@ class LancamentoOrigemService:
 
         return LancamentoOrigemService._montar_mensagem_origens(
             len(origens_processadas), len(documentos_criados), falhas,
-            'das origens identificadas',
+            'das origens identificadas', restritas=restritas,
         )
 
     @staticmethod
@@ -517,8 +558,18 @@ class LancamentoOrigemService:
         )
 
     @staticmethod
-    def _montar_mensagem_origens(identificadas, criados, falhas, complemento):
+    def _montar_mensagem_origens(identificadas, criados, falhas, complemento, *, restritas=()):
         """Mensagem ao usuário que reflete criações, reaproveitamentos e falhas."""
+        # D1 (#132): aviso de origens restritas com posições
+        aviso = ''
+        if restritas:
+            posicoes = ', '.join(str(i + 1) for i in sorted(set(restritas)))
+            aviso = f'Origem(ns) na(s) posição(ões) {posicoes} não vinculada(s): {MENSAGEM_ORIGEM_RESTRITA}.'
+            identificadas -= len(restritas)
+        
+        if identificadas <= 0:
+            return aviso
+        
         if falhas:
             partes = []
             if criados:
@@ -526,16 +577,19 @@ class LancamentoOrigemService:
             partes.append(
                 f'{falhas} não puderam ser vinculadas — verifique os avisos na árvore'
             )
-            return (
+            base = (
                 f'Foram identificadas {identificadas} origem(ns): '
                 + '; '.join(partes) + '.'
             )
+            return f'{base} {aviso}'.strip()
         if criados:
-            return f'Foram criados {criados} documento(s) automaticamente a partir {complemento}.'
-        return (
+            base = f'Foram criados {criados} documento(s) automaticamente a partir {complemento}.'
+            return f'{base} {aviso}'.strip()
+        base = (
             f'Foram identificadas {identificadas} origem(ns); '
             'os documentos já existiam e foram reaproveitados.'
         )
+        return f'{base} {aviso}'.strip()
 
     @staticmethod
     def _processar_fim_cadeia(lancamento, origem, imovel):
@@ -639,6 +693,7 @@ class LancamentoOrigemService:
         documentos_criados = []
         identificadas = 0
         falhas = 0
+        restritas = []
 
         # Para cada origem individual, criar documento com cartório específico
         for indice_origem, origem_individual in origens_normais:
@@ -661,6 +716,19 @@ class LancamentoOrigemService:
                 )
                 identificadas += 1
                 falhas += 1
+                continue
+
+            # D1 (#132): pré-check de origem restrita antes de processar
+            chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
+            if chave and LancamentoOrigemService._origem_restrita(
+                chave[0], origem_individual, cartorio, documentos_queryset,
+            ):
+                logger.info(
+                    "Origem %s do lançamento %s em TI fora do escopo; não vinculada",
+                    indice_origem + 1, lancamento.pk,
+                )
+                identificadas += 1
+                restritas.append(indice_origem)
                 continue
 
             # Validar com o cartório DESTA origem (#144), não o da primeira.
@@ -697,6 +765,9 @@ class LancamentoOrigemService:
                                 documentos_queryset=documentos_queryset,
                             )
                         )
+                except OrigemRestritaError:
+                    restritas.append(indice_origem)
+                    continue
                 except Exception:
                     LancamentoOrigemService._registrar_falha_origem(
                         lancamento, origem_info
@@ -711,7 +782,7 @@ class LancamentoOrigemService:
 
         return LancamentoOrigemService._montar_mensagem_origens(
             identificadas, len(documentos_criados), falhas,
-            'das múltiplas origens identificadas',
+            'das múltiplas origens identificadas', restritas=restritas,
         )
     
     @staticmethod
@@ -1097,6 +1168,13 @@ class LancamentoOrigemService:
             origem_info['tipo'], origem_info['numero'], cartorio_origem,
             documentos_queryset=documentos_queryset,
         )
+
+        # D1 (#132): se não resolveu no escopo mas existe em outra TI, aborta
+        # a criação sem IntegrityError — a LancamentoOrigem já foi gravada.
+        if documento_origem is None and LancamentoOrigemService._origem_restrita(
+            origem_info['tipo'], origem_info['numero'], cartorio_origem, documentos_queryset,
+        ):
+            raise OrigemRestritaError()
 
         livro_origem, folha_origem = (
             LancamentoOrigemService._obter_livro_folha_origem(

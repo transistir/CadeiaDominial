@@ -3841,6 +3841,159 @@ class OrigemRestritaLeituraTest(OrigemOutraTIBaseTestCase):
         self.assertEqual(pendencias[0]['status'], 'restrito')
 
 
+class OrigemRestritaEscritaTest(OrigemOutraTIBaseTestCase):
+    """C4 (#132): D1 na escrita — origem restrita não vincula, mensagem explícita."""
+
+    def test_lancamento_comum_salva_sem_vincular(self):
+        """Lançamento comum: salva sem criar documento, mensagem com posição."""
+        from dominial.managers import documentos_for_user
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        escopo = documentos_for_user(self.via_ti)
+        lanc = Lancamento.objects.create(
+            documento=self.documento_c1, tipo=self.lanc_tipo,
+            numero_lancamento='R2M3000', data=date(2024, 4, 1),
+            origem='M2000', cartorio_origem=self.cartorio,
+        )
+        
+        doc_antes = Documento.objects.count()
+        imp_antes = DocumentoImportado.objects.count()
+        
+        mensagem = LancamentoOrigemService.processar_origens_automaticas(
+            lanc, 'M2000', self.imovel_c1, documentos_queryset=escopo
+        )
+        
+        self.assertIn(MENSAGEM_ORIGEM_RESTRITA, mensagem)
+        self.assertIn('posição(ões) 1', mensagem)
+        self.assertEqual(Documento.objects.count(), doc_antes)
+        self.assertEqual(DocumentoImportado.objects.count(), imp_antes)
+        self.assertTrue(
+            LancamentoOrigem.objects.filter(lancamento=lanc, numero='M2000').exists()
+        )
+
+    def test_inicio_matricula_nao_tenta_criar(self):
+        """Início de matrícula: não tenta criar documento, sem ERROR log."""
+        import logging
+        from dominial.managers import documentos_for_user
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        tipo_inicio = LancamentoTipo.objects.get_or_create(tipo='inicio_matricula')[0]
+        lanc = Lancamento.objects.create(
+            documento=self.documento_c1, tipo=tipo_inicio,
+            numero_lancamento='R3M3000', data=date(2024, 4, 2),
+            origem='M2000', cartorio_origem=self.cartorio,
+        )
+        
+        escopo = documentos_for_user(self.via_ti)
+        doc_antes = Documento.objects.count()
+        
+        with self.assertLogs('dominial.services.lancamento_origem_service', level='INFO') as cm:
+            mensagem = LancamentoOrigemService.processar_origens_automaticas(
+                lanc, 'M2000', self.imovel_c1, documentos_queryset=escopo
+            )
+        
+        self.assertIn(MENSAGEM_ORIGEM_RESTRITA, mensagem)
+        self.assertEqual(Documento.objects.count(), doc_antes)
+        self.assertTrue(
+            LancamentoOrigem.objects.filter(lancamento=lanc, numero='M2000').exists()
+        )
+        # Sem ERROR logs
+        error_logs = [line for line in cm.output if 'ERROR' in line]
+        self.assertEqual(len(error_logs), 0)
+
+    def test_multiplas_origens_mistas(self):
+        """Múltiplas origens: M3001 (OK) + M2000 (restrita) — posição 2."""
+        from dominial.managers import documentos_for_user
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        lanc = Lancamento.objects.create(
+            documento=self.documento_c1, tipo=self.lanc_tipo,
+            numero_lancamento='R4M3000', data=date(2024, 4, 3),
+            origem='M3001; M2000', cartorio_origem=self.cartorio,
+        )
+        
+        escopo = documentos_for_user(self.via_ti)
+        doc_antes = Documento.objects.count()
+        
+        mensagem = LancamentoOrigemService.processar_origens_automaticas(
+            lanc, 'M3001; M2000', self.imovel_c1, documentos_queryset=escopo
+        )
+        
+        self.assertIn('posição(ões) 2', mensagem)
+        self.assertIn(MENSAGEM_ORIGEM_RESTRITA, mensagem)
+        self.assertEqual(Documento.objects.count(), doc_antes)
+
+    def test_ponto_unico_bloqueia(self):
+        """_criar_documento_origem: levanta OrigemRestritaError."""
+        from dominial.managers import documentos_for_user
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService, OrigemRestritaError
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        lanc = Lancamento.objects.create(
+            documento=self.documento_c1, tipo=self.lanc_tipo,
+            numero_lancamento='R5M3000', data=date(2024, 4, 4),
+        )
+        escopo = documentos_for_user(self.via_ti)
+        
+        with self.assertRaises(OrigemRestritaError) as cm:
+            LancamentoOrigemService._criar_documento_origem(
+                self.imovel_c1, lanc, {'tipo': 'matricula', 'numero': 'M2000'},
+                self.cartorio, documentos_queryset=escopo
+            )
+        
+        self.assertEqual(str(cm.exception), MENSAGEM_ORIGEM_RESTRITA)
+
+    def test_superuser_sem_aviso(self):
+        """Superuser: mensagem não contém aviso restrito."""
+        from dominial.services.lancamento_origem_service import LancamentoOrigemService
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        lanc = Lancamento.objects.create(
+            documento=self.documento_c1, tipo=self.lanc_tipo,
+            numero_lancamento='R6M3000', data=date(2024, 4, 5),
+            origem='M2000', cartorio_origem=self.cartorio,
+        )
+        
+        mensagem = LancamentoOrigemService.processar_origens_automaticas(
+            lanc, 'M2000', self.imovel_c1, documentos_queryset=Documento.objects.all()
+        )
+        
+        self.assertNotIn(MENSAGEM_ORIGEM_RESTRITA, mensagem or '')
+
+    def test_escolher_origem_documento_sem_oraculo(self):
+        """API escolher_origem_documento: 400 genérico, sem vazar doc_id."""
+        self.client.force_login(self.via_ti)
+        url = reverse('escolher_origem_documento')
+        
+        # Tentar com documento_b (existe em outra TI)
+        payload = {
+            'documento_id': self.documento_c1.pk,
+            'origem_identidade': f'documento:{self.documento_b.pk}',
+            'tis_id': self.tis_c.id,
+            'imovel_id': self.imovel_c1.id,
+        }
+        response1 = self.client.post(url, data=json.dumps(payload), content_type='application/json')
+        
+        # Tentar com documento inexistente (mesmo erro)
+        payload['origem_identidade'] = 'documento:999999'
+        response2 = self.client.post(url, data=json.dumps(payload), content_type='application/json')
+        
+        self.assertEqual(response1.status_code, 400)
+        self.assertEqual(response2.status_code, 400)
+        self.assertEqual(response1.json(), response2.json())
+        self.assertEqual(
+            response1.json()['error'],
+            'Origem não pertence às origens resolvidas do documento'
+        )
+        
+        # Sessão não ganha origem_documento_<id>
+        sessao = self.client.session
+        self.assertNotIn(f'origem_documento_{self.documento_c1.pk}', sessao)
+
+
 class CriacaoDeTITest(SegregacaoBaseTestCase):
     """
     Fase 3, F8/F9: cadastrar TI passa a exigir o perfil Administrador (ou
