@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @login_required
 def imovel_form(request, tis_id, imovel_id=None):
-    if not usuario_tem_ti_inteira(request.user, tis_id):
+    if imovel_id is None and not usuario_tem_ti_inteira(request.user, tis_id):
         raise Http404
     tis = get_object_or_404(TIs, pk=tis_id)
     imovel = None

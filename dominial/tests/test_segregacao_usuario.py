@@ -2410,6 +2410,22 @@ class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
         response = self.client.get(self.url_alheia)
         self.assertEqual(response.status_code, 200)
 
+    def test_usuario_com_userimovel_legado_get_200_na_edicao(self):
+        """P1-D: UserImovel legado permite editar (for_user inclui), mas não criar."""
+        # dono já tem UserImovel legado no imovel_a (setUpTestData)
+        self.client.force_login(self.dono)
+        url_edicao = reverse('imovel_editar', kwargs={'tis_id': self.tis_a.id, 'imovel_id': self.imovel_a.id})
+        response = self.client.get(url_edicao)
+        self.assertEqual(response.status_code, 200)
+
+    def test_usuario_com_userimovel_legado_404_na_criacao_da_mesma_ti(self):
+        """P1-D: UserImovel legado NÃO concede TI inteira para criação."""
+        # dono já tem UserImovel legado no imovel_a (setUpTestData), sem UserTI
+        self.client.force_login(self.dono)
+        url_criacao = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
+        response = self.client.get(url_criacao)
+        self.assertEqual(response.status_code, 404)
+
 
 class BlockersRound3Test(SegregacaoBaseTestCase):
     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""

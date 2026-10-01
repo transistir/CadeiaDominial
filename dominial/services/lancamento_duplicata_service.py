@@ -44,6 +44,8 @@ class LancamentoDuplicataService:
             'Sem Origem:'
         ]
         
+        inacessivel = None
+        
         for i, origem in enumerate(origens):
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
@@ -84,11 +86,13 @@ class LancamentoDuplicataService:
             if duplicata_info['tem_duplicata']:
                 print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
                 if not duplicata_info.get('acessivel', True):
-                    return {
-                        'tem_duplicata': True,
-                        'acessivel': False,
-                        'mensagem': duplicata_info['mensagem'],
-                    }
+                    if inacessivel is None:
+                        inacessivel = {
+                            'tem_duplicata': True,
+                            'acessivel': False,
+                            'mensagem': duplicata_info['mensagem'],
+                        }
+                    continue
                 return {
                     'tem_duplicata': True,
                     'acessivel': True,
@@ -98,6 +102,10 @@ class LancamentoDuplicataService:
                     'documentos_importaveis': duplicata_info['documentos_importaveis'],
                     'cadeia_dominial': duplicata_info['cadeia_dominial']
                 }
+        
+        # Se encontrou duplicata inacessível (e nenhuma acessível), retorna D1
+        if inacessivel is not None:
+            return inacessivel
         
         # Se chegou até aqui, não há duplicatas
         return {
