@@ -1012,6 +1012,11 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
             obj.save(update_fields=['is_staff'])
 
     def save_model(self, request, obj, form, change):
+        # Captura o valor anterior de is_superuser para detectar rebaixamento
+        era_superuser = (
+            User.objects.filter(pk=obj.pk).values_list('is_superuser', flat=True).first()
+            if change else False
+        )
         super().save_model(request, obj, form, change)
         if request.user.is_superuser:
             self._sincronizar_perfil(
@@ -1019,6 +1024,15 @@ class UserAdmin(AtribuicaoAuditoriaMixin, DjangoUserAdmin):
                 form.cleaned_data['perfil'],
                 form.cleaned_data.get('equipes', []),
             )
+        # Política de rebaixamento (Greptile P1 #133, decisão do dono 01/10):
+        # is_superuser True→False revoga acesso legado (UserImovel).
+        if era_superuser and not obj.is_superuser:
+            apagados = UserImovel.objects.filter(user=obj).delete()[0]
+            if apagados > 0:
+                logger.info(
+                    "Rebaixamento de %s: %d UserImovel(legado) apagado(s)",
+                    obj.username, apagados,
+                )
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)

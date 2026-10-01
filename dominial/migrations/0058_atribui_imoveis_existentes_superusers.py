@@ -3,8 +3,14 @@ Data migration defensiva (#132).
 
 Atribui todos os imóveis existentes a cada superuser. Não é necessária para o
 acesso funcionar hoje — ``for_user()`` já bypassa a segregação para
-``is_superuser`` — mas garante que, se o flag de superuser for removido de
-alguém no futuro, essa pessoa não perca acesso ao acervo existente.
+``is_superuser`` — mas serve como rede de rollback da migração
+UserImovel→UserTI (D7, fase 6, 2026-08).
+
+POLÍTICA DE REBAIXAMENTO (Greptile P1 PR #133, decisão do dono 01/10/2026):
+rebaixamento (is_superuser True→False) revoga o acesso legado — o UserAdmin
+apaga as linhas UserImovel do usuário rebaixado (logger.info com quantidade),
+preservando atribuições canônicas (UserTI/GroupTI/equipes). Esta migration
+não é re-executada; a revogação roda no save_model do UserAdmin.
 """
 
 from django.db import migrations

@@ -5040,3 +5040,158 @@ class BadgeStatusCadeiaEscopoTest(OrigemOutraTIBaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'cadeia-badge-lidima')
 
+
+class RebaixamentoRevogaLegadoTest(SegregacaoBaseTestCase):
+    """Greptile P1 (#133): rebaixamento (is_superuser True→False) revoga
+    acesso legado (UserImovel), preservando UserTI/equipes.
+
+    Política definida pelo dono (Hiure) em 01/10: rebaixamento revoga.
+    As linhas UserImovel do superuser são 100% legado da migration 0058
+    (UserImovelAdmin é invisível desde o #132 — não há rota manual).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Superuser que será rebaixado, com UserImovel legado + UserTI canônico
+        cls.rebaixado = User.objects.create_superuser(
+            username='rebaixado', password='senha-rebaixado',
+            email='rebaixado@example.com',
+        )
+        # Legado da migration 0058 (linhas que a revogação deve apagar)
+        UserImovel.objects.create(
+            user=cls.rebaixado, imovel=cls.imovel_a, atribuido_por=cls.rebaixado
+        )
+        UserImovel.objects.create(
+            user=cls.rebaixado, imovel=cls.imovel_b, atribuido_por=cls.rebaixado
+        )
+        # Atribuição canônica (UserTI) — NÃO deve ser tocada
+        UserTI.objects.create(
+            user=cls.rebaixado, tis=cls.tis_a, atribuido_por=cls.superuser
+        )
+        # Editor superuser que fará a edição no admin
+        cls.editor_su = User.objects.create_superuser(
+            username='editor_su', password='senha-editor-su',
+            email='editor_su@example.com',
+        )
+
+    def setUp(self):
+        from django.contrib import admin as dj_admin
+        from types import SimpleNamespace
+        self.ma = UserAdmin(User, dj_admin.site)
+        self.factory = RequestFactory()
+        self.SimpleNamespace = SimpleNamespace
+
+    def _make_request(self):
+        request = self.factory.post('/admin/auth/user/{}/change/'.format(self.rebaixado.pk))
+        request.user = self.editor_su
+        return request
+
+    def _form(self, perfil='admin', equipes=None):
+        return self.SimpleNamespace(
+            cleaned_data={'perfil': perfil, 'equipes': equipes or []},
+            changed_data=[],
+        )
+
+    def test_1_save_model_rebaixamento_apaga_userimovel(self):
+        """Rebaixamento via save_model apaga UserImovel; UserTI intacto."""
+        obj = User.objects.get(pk=self.rebaixado.pk)
+        self.assertTrue(obj.is_superuser)
+        self.assertEqual(UserImovel.objects.filter(user=obj).count(), 2)
+        userti_pk = UserTI.objects.filter(user=obj).values_list('pk', flat=True).first()
+
+        request = self._make_request()
+        obj.is_superuser = False
+        self.ma.save_model(request, obj, self._form(), change=True)
+
+        self.assertEqual(UserImovel.objects.filter(user=obj).count(), 0)
+        self.assertTrue(UserTI.objects.filter(pk=userti_pk).exists())
+        obj.refresh_from_db()
+        self.assertFalse(obj.is_superuser)
+
+    def test_2_rebaixado_sem_userti_nao_ve_imoveis(self):
+        """E2E: rebaixado sem UserTI não vê nenhum imóvel (Greptile P1)."""
+        # Remover o UserTI canônico — só legado restava
+        UserTI.objects.filter(user=self.rebaixado).delete()
+        obj = User.objects.get(pk=self.rebaixado.pk)
+        request = self._make_request()
+        obj.is_superuser = False
+        self.ma.save_model(request, obj, self._form(), change=True)
+
+        # Após rebaixamento + sem UserTI + UserImovel revogado → for_user vazio
+        self.assertEqual(Imovel.objects.for_user(obj).count(), 0)
+
+    def test_3_sem_rebaixamento_nao_revoga(self):
+        """Editar superuser SEM mudar is_superuser NÃO apaga UserImovel."""
+        obj = User.objects.get(pk=self.rebaixado.pk)
+        self.assertTrue(obj.is_superuser)
+        request = self._make_request()
+        # Não muda is_superuser
+        self.ma.save_model(request, obj, self._form(), change=True)
+        self.assertEqual(UserImovel.objects.filter(user=obj).count(), 2)
+
+    def test_4_promocao_nao_cria_nem_apaga(self):
+        """Promover usuário comum a superuser não cria/apaga UserImovel."""
+        novo = User.objects.create_user(username='novo', password='senha-novo')
+        self.assertFalse(novo.is_superuser)
+        self.assertEqual(UserImovel.objects.filter(user=novo).count(), 0)
+
+        request = self.factory.post('/admin/auth/user/{}/change/'.format(novo.pk))
+        request.user = self.editor_su
+        novo.is_superuser = True
+        self.ma.save_model(request, novo, self._form(), change=True)
+
+        novo.refresh_from_db()
+        self.assertTrue(novo.is_superuser)
+        self.assertEqual(UserImovel.objects.filter(user=novo).count(), 0)
+
+    def test_5_changeform_post_rebaixamento_apaga(self):
+        """POST completo no changeform do User rebaixando apaga UserImovel."""
+        obj = User.objects.get(pk=self.rebaixado.pk)
+        self.assertTrue(obj.is_superuser)
+        self.assertEqual(UserImovel.objects.filter(user=obj).count(), 2)
+
+        client = Client()
+        client.force_login(self.editor_su)
+        url = reverse('admin:auth_user_change', args=[obj.pk])
+        # GET para colher form
+        resp = client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        form = resp.context['adminform'].form
+        data = {}
+        # Copiar initial, tratando None como string vazia
+        for key, value in form.initial.items():
+            data[key] = '' if value is None else value
+        
+        # AdminSplitDateTime exige _0 (data) e _1 (hora) separados.
+        if obj.date_joined:
+            data['date_joined_0'] = obj.date_joined.strftime('%Y-%m-%d')
+            data['date_joined_1'] = obj.date_joined.strftime('%H:%M:%S')
+        if obj.last_login:
+            data['last_login_0'] = obj.last_login.strftime('%Y-%m-%d')
+            data['last_login_1'] = obj.last_login.strftime('%H:%M:%S')
+        else:
+            data['last_login_0'] = ''
+            data['last_login_1'] = ''
+        
+        # Campos obrigatórios do UserAdmin
+        data.update({
+            'username': obj.username,
+            'is_active': obj.is_active,
+            'is_staff': obj.is_staff,
+            'is_superuser': False,  # REBAIXAMENTO
+            'perfil': 'admin',
+            # management form do inline
+            'userti_set-TOTAL_FORMS': '0',
+            'userti_set-INITIAL_FORMS': '0',
+            'userti_set-MIN_NUM_FORMS': '0',
+            'userti_set-MAX_NUM_FORMS': '1000',
+            '_save': 'Save',
+        })
+        resp = client.post(url, data)
+        # 302 = sucesso; 200 = form reexibido (falha de validação)
+        self.assertEqual(resp.status_code, 302, "changeform POST deve rebaixar (302)")
+        obj.refresh_from_db()
+        self.assertFalse(obj.is_superuser)
+        self.assertEqual(UserImovel.objects.filter(user=obj).count(), 0)
+

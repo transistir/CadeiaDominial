@@ -1,0 +1,41 @@
+{
+  "model": "typesafe/jev-1.13-20260917",
+  "answers": {
+    "quality_score": {
+      "type": "score",
+      "score": 3.74,
+      "legend": {
+        "0": "1: Unsafe or unsupported; serious correctness or evidence gaps.",
+        "1": "2: Major gaps remain; substantial rework is needed.",
+        "2": "3: Mixed; usable but notable risks or missing evidence remain.",
+        "3": "4: Strong; requirements and evidence are substantially satisfied.",
+        "4": "5: Excellent; clear, scoped, tested, and independently reviewed."
+      },
+      "probabilities": {
+        "0": 0.01,
+        "1": 0.01,
+        "2": 0.02,
+        "3": 0.16,
+        "4": 0.8
+      },
+      "confidence": 0.78
+    },
+    "ready_for_human_decision": {
+      "type": "noul",
+      "noul": 0.8
+    },
+    "v1_governance_conflict": {
+      "type": "noul",
+      "noul": 0.13
+    }
+  },
+  "usage": {
+    "input_tokens": 7233,
+    "output_tokens": 62,
+    "cost": 0.000607572
+  },
+  "id": "gen-dec-1790890781-J5BSySCGe4yqp1SFK8Bv",
+  "provider": "TypeSafe",
+  "task_id": "tae5772c-d57f-4c6a-b67f-41b1c95db00d",
+  "consumed": "0.000607572"
+}
