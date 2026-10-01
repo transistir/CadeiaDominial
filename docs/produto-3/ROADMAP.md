@@ -29,6 +29,10 @@
    início do R4 para dar tempo de resposta até o R7.
 6. **Features grandes por último** — #123 (certificação) e #132
    (multi-usuário) só depois do solo estabilizado.
+   **Exceção 30/09 (aprovada pelo Hiure):** #132/R9 foi antecipado como
+   próximo bloco (meta v1.1.0) porque o PR #133 ficou zumbi e o solo já
+   está estabilizado desde a v1.0.12; R3/R3.5 pausados durante o R9 — ver
+   EXCEÇÃO DE FILA na seção R9. #123 segue por último.
 
 ## Status geral (snapshot 23/09/2026 — ver reordenação 30/09 na seção R9)
 
@@ -459,8 +463,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      branch de integração** (rebase e reimplementação rejeitados).
      Relatório completo: o original `/tmp/pr133-opus-review.md` foi perdido
      na limpeza do /tmp; os achados estão consolidados no contrato
-     executável `.hermes/plans/c3-c9-contrato.md` (worktree de integração)
-     e serão resumidos no PR #133.
+     executável, versionado em `docs/produto-3/contratos/c3-c9-contrato-v110.md`
+     (mesma branch deste roadmap; cópia de trabalho em
+     `.hermes/plans/c3-c9-contrato.md` no worktree de integração) e serão
+     resumidos no PR #133.
    - Achados que viram escopo de trabalho obrigatório:
      - **15 arquivos em conflito** (6 mecânicos, 9 com decisão de negócio);
        pior caso: `lancamento_criacao_service.py` e
@@ -517,15 +523,25 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    - **GATE-PRODUTO — evento (2) aprovação do plano: CONCLUÍDO em
      01/10/2026.** Plano aprovado pelo **Hiure** no grupo
      Transistir_CadDomDev ("Ok seguir", após status com a fila
-     C1–C9). Mapeamento do plano efetivo (contrato executável do Opus em
-     `.hermes/plans/c3-c9-contrato.md` no worktree de integração):
+     C1–C9). Mapeamento do plano efetivo (contrato executável do Opus,
+     versionado em `docs/produto-3/contratos/c3-c9-contrato-v110.md`):
      Fases 1–2 do relatório = **C1** (merge `6306fcca`) · arquitetura de
      escopo = **C2** (`b4163140`) + hotfixes **C2a/C2b** (achados A1/A2 da
      revisão do contrato) · D1 leitura = **C3** · D1 escrita = **C4** ·
      D2/#152 = **C5** · D3/#167 = **C6** · D4/#210 = **C7** · D5/S1/#179 =
      **C8** · S8+badge = **C9** · Fase 4 = adaptação de fixtures dos testes
      do develop · Fase 5 = reviews (Opus + kiro-cli gpt-5.6-sol substituindo
-     Codex + agy) · Fase 6 = release. Registro de delegação (Hiure, 01/10):
+     Codex + agy) · Fase 6 = release. **Compatibilidade da Fase 5 com o gate
+     do AGENTS.md (Greptile P1, PR #250):** o gate de 3 modelos do AGENTS.md
+     exige Codex como revisor de runtime/sandbox; na Fase 5 o Codex está
+     INDISPONÍVEL (usage limit semanal 100% até 03/10) e o Hiure autorizou
+     explicitamente os substitutos em 01/10 ("utilize o kiro-cli e agy como
+     modelos auxiliares na falta do codex" — registrado em harness-state.yaml,
+     bloco `auxiliary:`). Regra efetiva da Fase 5: Opus APPROVE obrigatório +
+     kiro-cli gpt-5.6-sol e agy no papel do Codex; **se o Codex voltar a ter
+     cota antes do fim da Fase 5, ele reassume o papel** (os auxiliares não o
+     aposentam). O pre-merge gate do AGENTS.md permanece: nenhum merge sem
+     autorização humana explícita, com ou sem os 3 APPROVEs. Registro de delegação (Hiure, 01/10):
      pendências de push passam pelo Jev — push+PR automáticos se
      quality≥3.5 ∧ readiness≥0.6 ∧ gov-conflict≤0.3; merge/tag seguem
      humanos.
