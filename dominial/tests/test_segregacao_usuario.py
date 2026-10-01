@@ -4260,3 +4260,108 @@ class BuscarMAnteriorD3Test(SegregacaoFase2BaseTestCase):
         self.assertEqual(data['doc_id'], self.documento_a.pk)
         self.assertEqual(data['matricula'], 'M1000')
         self.assertFalse(data['restrito'])
+
+
+# ============================================================================
+# D4 (#132, C7): cartório do imóvel só editável por superuser
+# ============================================================================
+
+from dominial.services.imovel_documento_service import ImovelDocumentoService
+from dominial.utils.segregacao_utils import MENSAGEM_CARTORIO_SO_SUPERUSER
+
+
+class CartorioSoSuperuserTest(SegregacaoFase2BaseTestCase):
+    """D4 (#132, C7): edição do cartório de imóvel existente é restrita ao
+    superuser. Na criação, o cartório é livre para quem pode criar o imóvel."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.cartorio2 = Cartorios.objects.create(
+            nome='CRI Dois', cns='222222', estado='SP', cidade='São Paulo',
+        )
+        # Staff comum (para o teste do admin readonly_fields).
+        cls.staff = User.objects.create_user(
+            username='staff_cartorio', password='senha-staff', is_staff=True,
+        )
+
+    def _dados_edicao(self, cartorio_destino):
+        """POST data para editar `imovel_c1` via `imovel_editar`."""
+        return {
+            'nome': self.imovel_c1.nome,
+            'matricula': self.imovel_c1.matricula,
+            'tipo_documento_principal': self.imovel_c1.tipo_documento_principal,
+            'cartorio': cartorio_destino.id,
+            'proprietario_nome': self.proprietario.nome,
+            'estado': cartorio_destino.estado,
+            'cidade': cartorio_destino.cidade,
+        }
+
+    def test_usuario_comum_nao_troca_cartorio(self):
+        """via_ti tenta editar o cartório de imovel_c1: imóvel e documento
+        permanecem no cartório original e MENSAGEM_CARTORIO_SO_SUPERUSER aparece."""
+        self.client.force_login(self.via_ti)
+        url = reverse('imovel_editar', args=[self.tis_c.id, self.imovel_c1.id])
+
+        response = self.client.post(url, self._dados_edicao(self.cartorio2))
+
+        self.imovel_c1.refresh_from_db()
+        self.documento_c1.refresh_from_db()
+        self.assertEqual(self.imovel_c1.cartorio_id, self.cartorio.id)
+        self.assertEqual(self.documento_c1.cartorio_id, self.cartorio.id)
+        self.assertIn(MENSAGEM_CARTORIO_SO_SUPERUSER, response.content.decode())
+
+    def test_superuser_troca_e_sincroniza(self):
+        """Superuser edita o cartório de imovel_c1: imóvel e documento principal
+        passam para cartorio2."""
+        self.client.force_login(self.superuser)
+        url = reverse('imovel_editar', args=[self.tis_c.id, self.imovel_c1.id])
+
+        response = self.client.post(url, self._dados_edicao(self.cartorio2))
+
+        self.assertEqual(response.status_code, 302)
+        self.imovel_c1.refresh_from_db()
+        self.documento_c1.refresh_from_db()
+        self.assertEqual(self.imovel_c1.cartorio_id, self.cartorio2.id)
+        self.assertEqual(self.documento_c1.cartorio_id, self.cartorio2.id)
+
+    def test_service_exige_superuser(self):
+        """`sincronizar_cartorio_documento_principal` exige user=superuser.
+
+        - `user=via_ti` → PermissionDenied
+        - `user=None` → PermissionDenied
+        - sem o kwarg → TypeError
+        """
+        imovel = self.imovel_c1
+        with self.assertRaises(PermissionDenied):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                imovel, user=self.via_ti,
+            )
+        with self.assertRaises(PermissionDenied):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                imovel, user=None,
+            )
+        with self.assertRaises(TypeError):
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
+
+    def test_admin_cartorio_readonly(self):
+        """`ImovelAdmin.get_readonly_fields`: 'cartorio' está readonly para
+        staff comum quando `obj is not None`, e não está readonly para o
+        superuser nem para `obj=None`."""
+        admin_instance = ImovelAdmin(Imovel, admin.site)
+
+        # Staff comum com objeto existente: cartório readonly
+        req_staff = RequestFactory().get('/')
+        req_staff.user = self.staff
+        campos_staff = admin_instance.get_readonly_fields(req_staff, self.imovel_c1)
+        self.assertIn('cartorio', campos_staff)
+
+        # Superuser com objeto existente: cartório editável
+        req_super = RequestFactory().get('/')
+        req_super.user = self.superuser
+        campos_super = admin_instance.get_readonly_fields(req_super, self.imovel_c1)
+        self.assertNotIn('cartorio', campos_super)
+
+        # Staff comum sem objeto (criação): cartório editável
+        campos_novo = admin_instance.get_readonly_fields(req_staff, None)
+        self.assertNotIn('cartorio', campos_novo)

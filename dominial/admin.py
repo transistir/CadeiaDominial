@@ -1557,6 +1557,13 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
             kwargs['queryset'] = tis_for_user(request.user)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def get_readonly_fields(self, request, obj=None):
+        """D4 (#132, C7): cartório só é editável por superusuário em imóveis existentes."""
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None and not request.user.is_superuser:
+            readonly.append('cartorio')
+        return readonly
+
     def save_model(self, request, obj, form, change):
         """Salva o imóvel e, se o cartório mudou, sincroniza o documento
         principal na mesma transação (#210). `ImovelAdminForm.clean()` já
@@ -1565,7 +1572,9 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
         with transaction.atomic():
             super().save_model(request, obj, form, change)
             if change and getattr(form, 'cartorio_mudou', False):
-                aviso = ImovelDocumentoService.sincronizar_cartorio_documento_principal(obj)
+                aviso = ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                    obj, user=request.user
+                )
                 if aviso:
                     messages.warning(request, aviso)
 

@@ -18,7 +18,9 @@ MENSAGEM_SEM_IMOVEIS = 'Nenhum imóvel atribuído ao seu usuário.'
 # D1 (#132): origem que aponta para documento de TI não atribuída.            [C3]
 MENSAGEM_ORIGEM_RESTRITA = 'Origem em outra TI — sem acesso / solicite ao admin'
 # D3 (#132, S2): matrícula consultada existe, mas fora do escopo.             [C6]
-MENSAGEM_DOCUMENTO_OUTRA_TI = 'Documento em outra TI — sem acesso / solicite ao admin'
+MENSAGEM_DOCUMENTO_OUTRA_TI = 'Documento existe em outra TI — solicite acesso ao administrador.'
+# D4 (#132, S7/#210): alteração de cartório do imóvel restrita ao superuser   [C7]
+MENSAGEM_CARTORIO_SO_SUPERUSER = 'Somente o superusuário pode alterar o cartório de um imóvel.'
 
 
 def usuario_tem_acesso_imovel(user, imovel_id):

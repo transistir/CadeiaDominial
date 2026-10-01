@@ -160,7 +160,7 @@ def imovel_detail(request, tis_id, imovel_id):
     imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     if request.method == 'POST':
-        form = ImovelForm(request.POST, instance=imovel)
+        form = ImovelForm(request.POST, instance=imovel, user=request.user)
         if form.is_valid():
             try:
                 form.save()
@@ -173,7 +173,7 @@ def imovel_detail(request, tis_id, imovel_id):
             except Exception as e:
                 messages.error(request, f'Erro ao atualizar imóvel: {str(e)}')
     else:
-        form = ImovelForm(instance=imovel)
+        form = ImovelForm(instance=imovel, user=request.user)
     
     return render(request, 'dominial/imovel_form.html', {
         'form': form,

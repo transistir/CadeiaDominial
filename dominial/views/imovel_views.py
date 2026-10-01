@@ -20,7 +20,7 @@ def imovel_form(request, tis_id, imovel_id=None):
         )
     
     if request.method == 'POST':
-        form = ImovelForm(request.POST, instance=imovel)
+        form = ImovelForm(request.POST, instance=imovel, user=request.user)
         
         # Obter dados do formulário
         nome_proprietario = request.POST.get('proprietario_nome')
@@ -70,7 +70,9 @@ def imovel_form(request, tis_id, imovel_id=None):
                     aviso_sincronizacao = None
                     if getattr(form, 'cartorio_mudou', False):
                         aviso_sincronizacao = (
-                            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
+                            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                                imovel, user=request.user
+                            )
                         )
                     
                     # Criar automaticamente o documento principal para o imóvel (#230)
@@ -104,6 +106,6 @@ def imovel_form(request, tis_id, imovel_id=None):
             if not form.errors:
                 messages.error(request, 'Erro no formulário. Verifique os dados.')
     else:
-        form = ImovelForm(instance=imovel)
+        form = ImovelForm(instance=imovel, user=request.user)
     
     return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})

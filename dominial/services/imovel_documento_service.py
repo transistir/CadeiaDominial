@@ -149,8 +149,11 @@ class ImovelDocumentoService:
         return candidatos
 
     @staticmethod
-    def sincronizar_cartorio_documento_principal(imovel):
+    def sincronizar_cartorio_documento_principal(imovel, *, user):
         """Alinha o cartório do documento principal ao `imovel.cartorio` atual.
+
+        D4 (#132, C7): exige `user` superuser para permitir a troca.
+        Levanta `PermissionDenied` se o usuário não for superuser.
 
         Deve ser chamada logo após `imovel.save()`, dentro da mesma
         `transaction.atomic()` do chamador (admin, form ou view). Retorna uma
@@ -158,6 +161,13 @@ class ImovelDocumentoService:
         o save do imóvel é permitido mesmo assim. Levanta `ValidationError`
         em caso de ambiguidade ou colisão de identidade.
         """
+        from django.core.exceptions import PermissionDenied
+        from ..managers import usuario_ve_tudo
+        from ..utils.segregacao_utils import MENSAGEM_CARTORIO_SO_SUPERUSER
+
+        if not usuario_ve_tudo(user):
+            raise PermissionDenied(MENSAGEM_CARTORIO_SO_SUPERUSER)
+
         novo_cartorio = imovel.cartorio
         candidatos = ImovelDocumentoService.validar_troca_cartorio(imovel, novo_cartorio)
 
