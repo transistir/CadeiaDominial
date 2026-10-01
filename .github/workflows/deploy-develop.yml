@@ -67,7 +67,7 @@ jobs:
               git checkout --track -b develop origin/develop
             fi
 
-            git pull --ff-only origin develop
+            git reset --hard origin/develop
 
             echo "==> Commit que será implantado"
             git log -1 --oneline

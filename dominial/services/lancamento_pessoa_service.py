@@ -9,45 +9,49 @@ class LancamentoPessoaService:
     """
     Service para processar pessoas em lançamentos
     """
-    
+
     @staticmethod
     def processar_pessoas_lancamento(lancamento, pessoas_data, pessoas_ids, tipo_pessoa):
         """
-        Processa pessoas do lançamento
+        Processa pessoas do lançamento.
+
+        Importante (issue #213): este método NUNCA altera o cadastro global de
+        `Pessoas`. Quando o texto digitado diverge do nome da pessoa vinculada
+        pelo autocomplete (caso típico de um registro `Pessoas` com nome
+        composto, ex. "João, José e Paulo"), a linha passa a apontar para o
+        registro de nome exato (`nome__iexact`), criando-o se necessário — o
+        registro composto original permanece intocado. Cada nome digitado
+        gera sua própria linha de `LancamentoPessoa`.
         """
         for i, nome in enumerate(pessoas_data):
-            if nome and nome.strip():
-                nome_clean = nome.strip()
-                pessoa_id = pessoas_ids[i] if i < len(pessoas_ids) and pessoas_ids[i] else None
-                
-                if pessoa_id and pessoa_id.strip():
-                    # Se foi selecionada uma pessoa existente via autocomplete
-                    try:
-                        pessoa = Pessoas.objects.get(id=pessoa_id)
-                        # Atualizar nome se foi alterado
-                        if pessoa.nome != nome_clean:
-                            pessoa.nome = nome_clean
-                            pessoa.save()
-                    except Pessoas.DoesNotExist:
-                        # Se o ID não existe, procurar por nome ou criar nova
-                        pessoa = Pessoas.objects.filter(nome__iexact=nome_clean).first()
-                        if not pessoa:
-                            pessoa = Pessoas.objects.create(nome=nome_clean)
-                else:
-                    # Se não foi selecionada pessoa existente, procurar por nome ou criar nova
-                    pessoa = Pessoas.objects.filter(nome__iexact=nome_clean).first()
-                    if not pessoa:
-                        pessoa = Pessoas.objects.create(nome=nome_clean)
-                
-                # Criar ou atualizar relacionamento LancamentoPessoa
-                lancamento_pessoa, created = LancamentoPessoa.objects.get_or_create(
-                    lancamento=lancamento,
-                    pessoa=pessoa,
-                    tipo=tipo_pessoa,
-                    defaults={'nome_digitado': nome_clean}
-                )
-                
-                if not created:
-                    # Atualizar nome digitado se já existe
-                    lancamento_pessoa.nome_digitado = nome_clean
-                    lancamento_pessoa.save()
+            if not (nome and nome.strip()):
+                continue
+
+            nome_clean = nome.strip()
+            pessoa_id = pessoas_ids[i] if i < len(pessoas_ids) and pessoas_ids[i] else None
+
+            pessoa_vinculada = None
+            if pessoa_id and str(pessoa_id).strip():
+                try:
+                    pessoa_vinculada = Pessoas.objects.filter(id=pessoa_id).first()
+                except (ValueError, TypeError):
+                    # pessoa_id não numérico/inválido: trata como "não encontrado".
+                    pessoa_vinculada = None
+
+            if pessoa_vinculada is not None and pessoa_vinculada.nome.strip().lower() == nome_clean.lower():
+                # Nome digitado igual ao nome vinculado: reaproveita o registro existente.
+                pessoa = pessoa_vinculada
+            else:
+                # Sem pessoa_id, id inexistente, ou texto divergente do vínculo
+                # (registro composto): resolve pelo nome exato digitado.
+                pessoa = Pessoas.objects.filter(nome__iexact=nome_clean).first()
+                if not pessoa:
+                    pessoa = Pessoas.objects.create(nome=nome_clean)
+
+            # Uma linha própria por nome digitado.
+            LancamentoPessoa.objects.update_or_create(
+                lancamento=lancamento,
+                pessoa=pessoa,
+                tipo=tipo_pessoa,
+                defaults={'nome_digitado': nome_clean}
+            )

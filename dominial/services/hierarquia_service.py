@@ -4,7 +4,6 @@ Consolida funcionalidades de múltiplos services de hierarquia em um único serv
 """
 
 from ..utils.hierarquia_utils import identificar_tronco_principal, identificar_troncos_secundarios
-from .cache_service import CacheService
 from .hierarquia_arvore_service import HierarquiaArvoreService
 from .hierarquia_origem_service import HierarquiaOrigemService
 from ..managers import documentos_for_user
@@ -27,38 +26,27 @@ class HierarquiaService:
         documentos_queryset=None,
     ):
         """
-        Obtém o tronco principal da cadeia dominial com cache
+        Obtém o tronco principal da cadeia dominial (sempre recalculado; cache desabilitado, ver #210)
         """
         if escolhas_origem is None:
             escolhas_origem = {}
-        
-        escopo_explicito = user is not None or documentos_queryset is not None
+
+        # Cache do tronco desabilitado (#210): LocMemCache multi-worker não é
+        # compartilhado entre processos, e a invalidação transitiva completa
+        # (imóveis consumidores da identidade antiga) não é viável neste
+        # hotfix. Recalcular sempre evita servir tronco desatualizado após
+        # sincronização de cartório.
         if documentos_queryset is None:
             documentos_queryset = (
                 documentos_for_user(user)
                 if user is not None
                 else Documento.objects.all()
             )
-
-        # O cache legado é global por imóvel. Para requisições segregadas ele
-        # é deliberadamente ignorado, impedindo reutilização entre usuários.
-        if not escolhas_origem and not escopo_explicito:
-            cached_tronco = CacheService.get_cached_tronco_principal(imovel.id)
-            if cached_tronco:
-                return cached_tronco
-        
-        # Calcular tronco considerando escolhas de origem
-        tronco = identificar_tronco_principal(
+        return identificar_tronco_principal(
             imovel,
             escolhas_origem,
             documentos_queryset=documentos_queryset,
         )
-        
-        # Armazenar em cache apenas se não houver escolhas
-        if not escolhas_origem and not escopo_explicito:
-            CacheService.set_cached_tronco_principal(imovel.id, tronco)
-        
-        return tronco
     
     @staticmethod
     def obter_troncos_secundarios(

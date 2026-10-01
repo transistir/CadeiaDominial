@@ -136,7 +136,12 @@
 }
 
 .th-nome {
-    width: 60%;
+    width: 45%;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.th-cadeia {
+    width: 15%;
     border-right: 1px solid rgba(255,255,255,0.1);
 }
 
@@ -189,9 +194,46 @@
     border-right: 1px solid #f1f3f4;
 }
 
+.td-cadeia {
+    border-right: 1px solid #f1f3f4;
+    text-align: center;
+}
+
 .td-acoes {
     text-align: center;
     padding: 12px 20px;
+}
+
+/* ========================================
+   BADGE DE STATUS DA CADEIA (issue #174)
+   ======================================== */
+.cadeia-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: #fff;
+}
+
+.cadeia-badge-lidima {
+    background: #28a745;
+}
+
+.cadeia-badge-sem-origem {
+    background: #dc3545;
+}
+
+.cadeia-badge-inconclusa {
+    background: #ffc107;
+    color: #4d3c00;
+}
+
+.cadeia-badge-vazio {
+    color: #adb5bd;
+    font-weight: 600;
 }
 
 /* ========================================

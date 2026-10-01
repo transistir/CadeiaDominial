@@ -13,7 +13,9 @@ from .formatacao_utils import (
     formatar_telefone,
     formatar_valor_monetario,
     formatar_area,
-    normalizar_texto_opcional
+    formatar_area_ha,
+    normalizar_texto_opcional,
+    abreviar_cartorio
 )
 from .documento_identidade_utils import DocumentoIdentidade, normalizar_numero_documento
 from .permissoes_utils import usuario_pode_criar_ti
@@ -31,7 +33,9 @@ __all__ = [
     'formatar_telefone',
     'formatar_valor_monetario',
     'formatar_area',
+    'formatar_area_ha',
     'normalizar_texto_opcional',
+    'abreviar_cartorio',
     'DocumentoIdentidade',
     'normalizar_numero_documento',
     'usuario_pode_criar_ti',

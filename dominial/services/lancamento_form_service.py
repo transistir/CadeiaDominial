@@ -93,9 +93,12 @@ class LancamentoFormService:
             forma_value = request.POST.get('forma_averbacao', '').strip()
             descricao_clean = request.POST.get('descricao') if request.POST.get('descricao') and request.POST.get('descricao').strip() else None
         elif tipo_lanc.tipo == 'registro':
-            forma_value = request.POST.get('forma_registro', '').strip()
+            # Issue #157: `forma_registro` era um nome fantasma (nenhum template
+            # emitia esse campo); o bloco Transmissão posta `forma_transacao`.
+            forma_value = request.POST.get('forma_transacao', '').strip()
         elif tipo_lanc.tipo == 'inicio_matricula':
-            forma_value = request.POST.get('forma_inicio', '').strip()
+            # Issue #157: idem — `forma_inicio` nunca era emitido.
+            forma_value = request.POST.get('forma_transacao', '').strip()
             descricao_clean = request.POST.get('descricao') if request.POST.get('descricao') and request.POST.get('descricao').strip() else None
         else:
             forma_value = request.POST.get('forma', '').strip()
@@ -138,93 +141,3 @@ class LancamentoFormService:
             return sigla_matricula  # Repete a sigla da matrícula
         else:
             return numero_simples
-
-    @staticmethod
-    def processar_campos_averbacao(request, lancamento):
-        forma_value = request.POST.get('forma_averbacao', '').strip()
-        lancamento.forma = forma_value if forma_value else None
-        if request.POST.get('incluir_cartorio_averbacao') == 'on':
-            cartorio_origem_id = request.POST.get('cartorio_origem_averbacao')
-            cartorio_origem_nome = request.POST.get('cartorio_origem_nome_averbacao', '').strip()
-            if cartorio_origem_id and cartorio_origem_id.strip():
-                lancamento.cartorio_origem_id = cartorio_origem_id
-            elif cartorio_origem_nome:
-                from ..models import Cartorios
-                try:
-                    cartorio = Cartorios.objects.get(nome__iexact=cartorio_origem_nome)
-                    lancamento.cartorio_origem = cartorio
-                except Cartorios.DoesNotExist:
-                    import uuid
-                    cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                    cartorio = Cartorios.objects.create(
-                        nome=cartorio_origem_nome,
-                        cns=cns_unico,
-                        cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                    )
-                    lancamento.cartorio_origem = cartorio
-            lancamento.livro_origem = request.POST.get('livro_origem_averbacao') if request.POST.get('livro_origem_averbacao') and request.POST.get('livro_origem_averbacao').strip() else None
-            lancamento.folha_origem = request.POST.get('folha_origem_averbacao') if request.POST.get('folha_origem_averbacao') and request.POST.get('folha_origem_averbacao').strip() else None
-            lancamento.data_origem = request.POST.get('data_origem_averbacao') if request.POST.get('data_origem_averbacao') else None
-            lancamento.titulo = request.POST.get('titulo_averbacao') if request.POST.get('titulo_averbacao') and request.POST.get('titulo_averbacao').strip() else None
-        else:
-            lancamento.cartorio_origem_id = None
-            lancamento.livro_origem = None
-            lancamento.folha_origem = None
-            lancamento.data_origem = None
-
-    @staticmethod
-    def processar_campos_registro(request, lancamento):
-        # Campos específicos do registro (transmitentes e adquirentes são processados separadamente)
-        # Não há mais campos específicos no bloco de registro, apenas pessoas
-        pass
-
-    @staticmethod
-    def processar_campos_transacao(request, lancamento):
-        """
-        Processa os campos do bloco de transação (Transmissão)
-        """
-        # Campos de transação
-        forma_value = request.POST.get('forma_transacao', '').strip()
-        lancamento.forma = forma_value if forma_value else None
-        
-        titulo_value = request.POST.get('titulo_transacao', '').strip()
-        lancamento.titulo = titulo_value if titulo_value else None
-        
-        # Cartório de transação
-        cartorio_transacao_id = request.POST.get('cartorio_transacao')
-        cartorio_transacao_nome = request.POST.get('cartorio_transacao_nome', '').strip()
-        if cartorio_transacao_id and cartorio_transacao_id.strip():
-            lancamento.cartorio_origem_id = cartorio_transacao_id
-        elif cartorio_transacao_nome:
-            from ..models import Cartorios
-            try:
-                cartorio = Cartorios.objects.get(nome__iexact=cartorio_transacao_nome)
-                lancamento.cartorio_origem = cartorio
-            except Cartorios.DoesNotExist:
-                import uuid
-                cns_unico = f"CNS{str(uuid.uuid4().int)[:10]}"
-                cartorio = Cartorios.objects.create(
-                    nome=cartorio_transacao_nome,
-                    cns=cns_unico,
-                    cidade=Cartorios.objects.first().cidade if Cartorios.objects.exists() else None
-                )
-                lancamento.cartorio_origem = cartorio
-        else:
-            lancamento.cartorio_origem_id = None
-        
-        # Livro, folha e data de transação
-        livro_transacao_clean = request.POST.get('livro_transacao') if request.POST.get('livro_transacao') and request.POST.get('livro_transacao').strip() else None
-        folha_transacao_clean = request.POST.get('folha_transacao') if request.POST.get('folha_transacao') and request.POST.get('folha_transacao').strip() else None
-        lancamento.livro_origem = livro_transacao_clean
-        lancamento.folha_origem = folha_transacao_clean
-        lancamento.data_origem = request.POST.get('data_transacao') if request.POST.get('data_transacao') else None
-
-    @staticmethod
-    def processar_campos_inicio_matricula(request, lancamento):
-        forma_value = request.POST.get('forma_inicio', '').strip()
-        lancamento.forma = forma_value if forma_value else None
-        area_value = request.POST.get('area', '').strip() if request.POST.get('area') else None
-        lancamento.area = float(area_value) if area_value else None
-        lancamento.origem = request.POST.get('origem_completa', '').strip() if request.POST.get('origem_completa') else None
-        lancamento.descricao = request.POST.get('descricao', '').strip() if request.POST.get('descricao') else None
-        lancamento.titulo = request.POST.get('titulo', '').strip() if request.POST.get('titulo') else None

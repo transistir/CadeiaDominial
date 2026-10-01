@@ -62,6 +62,15 @@
                         </div>
                     </div>
                     
+                    {% if documento_compartilhado %}
+                    <div class="alert alert-danger">
+                        <strong>⚠️ Documento compartilhado.</strong>
+                        Este lançamento pertence ao documento <strong>{{ lancamento.documento.numero }}</strong>, do imóvel
+                        <strong>{{ lancamento.documento.imovel.matricula }}</strong>, usado por outras cadeias dominiais.
+                        A exclusão remove o lançamento de <strong>todas</strong> elas.
+                    </div>
+                    {% endif %}
+
                     <form method="post">
                         {% csrf_token %}
                         <div class="d-flex justify-content-between">

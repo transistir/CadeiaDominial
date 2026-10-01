@@ -18,6 +18,12 @@
     Total de imóveis encontrados: {{ imoveis|length }}
 </div>
 
+{% if tis %}
+<p>
+    <a href="{% url 'exportar_cadeia_tis_excel' tis_id=tis.id %}" class="btn btn-info" target="_blank">Exportar XLS da TI</a>
+</p>
+{% endif %}
+
 <ul>
     {% for imovel in imoveis %}
         <li><strong>{{ imovel.nome }}</strong> — matrícula: {{ imovel.matricula }}</li>

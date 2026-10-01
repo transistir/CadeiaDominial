@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -106,6 +107,10 @@ def tis_detail(request, tis_id):
         .order_by('-atividade', 'matricula')
     )
 
+    from ..services.status_cadeia_service import StatusCadeiaService
+    status_cadeia_map = StatusCadeiaService.status_por_imovel(tis_id)
+    for imovel in imoveis_ordenados:
+        imovel.status_cadeia = status_cadeia_map.get(imovel.id)
     return render(request, 'dominial/tis_detail.html', {
         'tis': tis,
         'imoveis': imoveis_ordenados,
@@ -138,8 +143,11 @@ def imoveis(request, tis_id=None):
         tis = get_object_or_404(TIs, id=tis_id)
         imoveis = Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis).order_by('matricula')
     else:
+        # Listagem geral (sem TI): não há TI para o botão de export
+        # consolidado (issue #179) apontar, por isso `tis` fica None.
+        tis = None
         imoveis = Imovel.objects.for_user(request.user).order_by('matricula')
-    return render(request, 'dominial/imoveis.html', {'imoveis': imoveis})
+    return render(request, 'dominial/imoveis.html', {'imoveis': imoveis, 'tis': tis})
 
 @login_required
 def imovel_detail(request, tis_id, imovel_id):
@@ -151,8 +159,12 @@ def imovel_detail(request, tis_id, imovel_id):
         if form.is_valid():
             try:
                 form.save()
+                if getattr(form, 'sincronizacao_aviso', None):
+                    messages.warning(request, form.sincronizacao_aviso)
                 messages.success(request, 'Imóvel atualizado com sucesso!')
                 return redirect('tis_detail', tis_id=tis.id)
+            except ValidationError as e:
+                messages.error(request, '; '.join(e.messages))
             except Exception as e:
                 messages.error(request, f'Erro ao atualizar imóvel: {str(e)}')
     else:

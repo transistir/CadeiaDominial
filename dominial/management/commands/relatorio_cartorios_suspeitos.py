@@ -146,7 +146,7 @@ def banco_somente_leitura():
 
         if connection.in_atomic_block or not connection.get_autocommit():
             raise CommandError(
-                'PostgreSQL já está em transação; execute o command fora de atomic().' 
+                'PostgreSQL já está em transação; execute o command fora de atomic().'
             )
         connection.set_autocommit(False)
         try:

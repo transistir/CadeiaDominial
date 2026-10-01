@@ -3,6 +3,7 @@ Service para gerar a cadeia dominial completa
 """
 
 import re
+from django.db.models import Prefetch, prefetch_related_objects
 from django.shortcuts import get_object_or_404
 from ..models import TIs, Imovel, Documento, Lancamento
 from ..services.hierarquia_service import HierarquiaService
@@ -107,9 +108,14 @@ class CadeiaCompletaService:
             for doc_node in arvore['documentos']
             if not doc_node.get('is_fim_cadeia')
         ]
+        # Nós sintéticos de "fim de cadeia" (issue #85) são dicts com id
+        # string (ex.: "fim_cadeia_123_456_789") criados apenas para
+        # exibição na árvore, sem Documento real correspondente no
+        # banco. Pular para evitar ValueError no Documento.objects.get
+        # (issue #146).
         documentos_por_id = self.documentos_queryset.filter(
             id__in=ids_arvore
-        ).in_bulk()
+        ).select_related('tipo', 'cartorio', 'imovel').in_bulk()
         todos_documentos = [
             documentos_por_id[doc_id]
             for doc_id in ids_arvore
@@ -225,7 +231,7 @@ class CadeiaCompletaService:
         if tronco_principal:
             cadeia_organizada.append({
                 'tipo': 'tronco_principal',
-                'titulo': '🌳 TRONCO PRINCIPAL',
+                'titulo': 'TRONCO PRINCIPAL',
                 'documentos': self._processar_documentos_para_template(tronco_principal)
             })
         
@@ -234,7 +240,7 @@ class CadeiaCompletaService:
             if tronco:
                 cadeia_organizada.append({
                     'tipo': 'tronco_secundario',
-                    'titulo': f'🌿 TRONCO SECUNDÁRIO {i}',
+                    'titulo': f'TRONCO SECUNDÁRIO {i}',
                     'documentos': self._processar_documentos_para_template(tronco)
                 })
         
@@ -244,16 +250,14 @@ class CadeiaCompletaService:
         """
         Processa documentos para o formato do template
         """
+        documentos = list(documentos)
+        self._prefetch_dados_exportacao(documentos)
         documentos_processados = []
         
         for documento in documentos:
             # Carregar lançamentos
-            lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
-                'pessoas__pessoa'
-            ).order_by('id')
-            
             # Ordenar por número simples em Python
-            lancamentos_list = list(lancamentos)
+            lancamentos_list = list(documento._lancamentos_exportacao)
             lancamentos_list.sort(key=lambda x: (
                 -self._extrair_numero_simples(x.numero_lancamento),
                 x.id
@@ -267,7 +271,9 @@ class CadeiaCompletaService:
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'is_importado': is_importado,
-                'origens_disponiveis': self._obter_origens_documento(documento)
+                'origens_disponiveis': self._obter_origens_documento(
+                    documento, lancamentos
+                )
             })
         
         return documentos_processados
@@ -276,13 +282,10 @@ class CadeiaCompletaService:
         """
         Processa um único documento para o formato do template
         """
-        # Carregar lançamentos
-        lancamentos = documento.lancamentos.select_related('tipo').prefetch_related(
-            'pessoas__pessoa'
-        ).order_by('id')
+        self._prefetch_dados_exportacao([documento])
         
         # Ordenar por número simples em Python
-        lancamentos_list = list(lancamentos)
+        lancamentos_list = list(documento._lancamentos_exportacao)
         lancamentos_list.sort(key=lambda x: (
             -CadeiaCompletaService._extrair_numero_simples(x.numero_lancamento),
             x.id
@@ -296,16 +299,43 @@ class CadeiaCompletaService:
             'documento': documento,
             'lancamentos': lancamentos,
             'is_importado': is_importado,
-            'origens_disponiveis': self._obter_origens_documento(documento)
+            'origens_disponiveis': self._obter_origens_documento(
+                documento, lancamentos
+            )
         }
-    
-    def _obter_origens_documento(self, documento):
+
+    @staticmethod
+    def _prefetch_dados_exportacao(documentos):
+        """Carrega em lote as relações acessadas pelo renderer do Excel/PDF."""
+        if not documentos:
+            return
+        lancamentos = Lancamento.objects.select_related(
+            'tipo',
+            'cartorio_origem',
+            'cartorio_transmissao',
+            'cartorio_transacao',
+        ).prefetch_related(
+            'pessoas__pessoa', LancamentoOrigemLeituraService.prefetch_linhas()
+        ).order_by('id')
+        prefetch_related_objects(
+            documentos,
+            Prefetch(
+                'lancamentos',
+                queryset=lancamentos,
+                to_attr='_lancamentos_exportacao',
+            ),
+        )
+
+    def _obter_origens_documento(self, documento, lancamentos=None):
         """
         Obtém as origens disponíveis para um documento
         """
         origens = set()
         
-        for lancamento in documento.lancamentos.all():
+        if lancamentos is None:
+            lancamentos = documento.lancamentos.select_related('tipo').all()
+
+        for lancamento in lancamentos:
             if lancamento.tipo.tipo == 'inicio_matricula':
                 origens.update(
                     origem.codigo
@@ -452,7 +482,7 @@ class CadeiaCompletaService:
             cadeia_completa = [
                 {
                     'tipo': 'tronco_principal',
-                    'titulo': '🌳 TRONCO PRINCIPAL',
+                    'titulo': 'TRONCO PRINCIPAL',
                     'documentos': documentos_processados
                 }
             ]

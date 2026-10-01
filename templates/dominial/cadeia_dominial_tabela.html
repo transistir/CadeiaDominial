@@ -5,7 +5,7 @@
 {% block title %}Cadeia Dominial - {{ imovel.nome }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}?v=9">
+<link rel="stylesheet" href="{% static 'dominial/css/cadeia_dominial_tabela.css' %}?v=10">
 {% endblock %}
 
 {% block content %}
@@ -191,7 +191,7 @@
                                                 <!-- Matrícula -->
                                                 <th>Nº</th>
                                                 <th>L</th>
-                                                <th>Fls.</th>
+                                                <th>{% if item.documento.tipo.tipo == 'matricula' %}&nbsp;{% else %}Fls.{% endif %}</th>
                                                 <th>CRI</th>
                                                 <th>Data</th>
                                                 <!-- Transmitente/Adquirente -->
@@ -212,7 +212,11 @@
                                                 <!-- Matrícula -->
                                                 <td>{{ lancamento|numero_documento_criado }}</td>
                                                 <td>{{ item.documento.livro|default_if_none:"-" }}</td>
+                                                {% if item.documento.tipo.tipo == 'matricula' %}
+                                                <td>-</td>
+                                                {% else %}
                                                 <td>{{ item.documento.folha|default_if_none:"-" }}</td>
+                                                {% endif %}
                                                 <td>{{ item.documento.cartorio.nome }}</td>
                                                 <td>{{ lancamento.data|date:'d/m/Y' }}</td>
                                                 <!-- Transmitente -->
@@ -253,7 +257,7 @@
                                                     </td>
                                                 {% endif %}
                                                 <!-- Restante -->
-                                                <td>{{ lancamento.area|default_if_none:"-" }}</td>
+                                                <td>{{ lancamento.area|area_ha }}</td>
                                                 <td>
                                                   {% if lancamento.origem %}
                                                     {{ lancamento|origem_formatada_completa|safe }}
@@ -283,6 +287,7 @@
                                                     <button class="origem-btn {% if origem.escolhida %}ativo{% endif %}" 
                                                             data-documento-id="{{ item.documento.id }}"
                                                             data-origem-numero="{{ origem.numero }}"
+                                                            data-origem-identidade="{{ origem.identidade }}"
                                                             title="Escolher origem {{ origem.numero }}">
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                             <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -393,6 +398,7 @@
                 <p>Selecione a sequência de documentos para exportação do PDF. A ordem será exatamente como você organizar abaixo.</p>
             </div>
             
+            <div class="modal-sequencia-layout">
             <div class="sequencia-container">
                 <div class="sequencia-header">
                     <h3>Sequência de Documentos</h3>
@@ -433,8 +439,24 @@
                     </div>
                 </div>
             </div>
+
+            <div class="arvore-panel" id="modalArvorePanel"
+                 data-arvore-url="{% url 'cadeia_dominial_arvore' tis_id=tis.id imovel_id=imovel.id %}">
+                <div class="arvore-panel-header">
+                    <h3>Árvore da cadeia</h3>
+                    <a href="{% url 'cadeia_dominial_d3' tis_id=tis.id imovel_id=imovel.id %}"
+                       target="_blank" rel="noopener" class="arvore-panel-link">
+                        Abrir em tela cheia
+                    </a>
+                </div>
+                <div class="arvore-panel-viewport">
+                    <svg id="modal-arvore-svg"></svg>
+                    <div class="arvore-panel-status" id="modalArvoreStatus">Carregando árvore...</div>
+                </div>
+            </div>
+            </div>
         </div>
-        
+
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="fecharModalSelecaoSequencia()">Cancelar</button>
             <button class="btn btn-primary" onclick="exportarComSequenciaSelecionada()">
@@ -454,5 +476,21 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'dominial/js/cadeia_dominial_tabela.js' %}"></script>
+<script src="{% static 'dominial/js/vendor/d3.v7.min.js' %}"></script>
+<script>
+    // Globais consumidos pelos módulos D3 reutilizados (links dos cards etc.)
+    window.tisId = {{ tis.id }};
+    window.imovelId = {{ imovel.id }};
+</script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/data.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/layout_spacing.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/layout.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/edges.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/cards.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/card_overlays.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/render.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/viewport_fit.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/zoom_controls.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_d3/fim_cadeia_drawer.js' %}"></script>
+<script src="{% static 'dominial/js/cadeia_dominial_tabela.js' %}?v=11"></script>
 {% endblock %}

@@ -1,9 +1,11 @@
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db import transaction
 from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
+from ..services.imovel_documento_service import ImovelDocumentoService
 from ..services.lancamento_documento_service import LancamentoDocumentoService
 
 @login_required
@@ -42,7 +44,7 @@ def imovel_form(request, tis_id, imovel_id=None):
                 messages.error(request, 'Seleção de cartório é obrigatória.')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             
-            # Salvar imóvel
+            # Salvar imóvel (e sincronizar cartório do documento principal, #210)
             try:
                 with transaction.atomic():
                     # Resolver/criar o proprietário na mesma transação do imóvel
@@ -63,14 +65,34 @@ def imovel_form(request, tis_id, imovel_id=None):
                         )
                     imovel.proprietario = proprietario
                     imovel.save()
-
-                    # Criar automaticamente o documento de matrícula para o imóvel
+                    
+                    # Sincronizar cartório do documento principal (#210)
+                    aviso_sincronizacao = None
+                    if getattr(form, 'cartorio_mudou', False):
+                        aviso_sincronizacao = (
+                            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel)
+                        )
+                    
+                    # Criar automaticamente o documento principal para o imóvel (#230)
                     if not imovel_id:  # Apenas para novos imóveis
-                        documento_matricula = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
-                        messages.info(request, f'Documento de matrícula "{documento_matricula.numero}" criado automaticamente.')
+                        documento_principal = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
+                
+                # Mensagens após o commit
+                if not imovel_id:
+                    rotulo = documento_principal.tipo.get_tipo_display().lower()
+                    messages.info(
+                        request,
+                        f'Documento de {rotulo} "{documento_principal.numero}" criado automaticamente.',
+                    )
+                
+                if aviso_sincronizacao:
+                    messages.warning(request, aviso_sincronizacao)
                 
                 messages.success(request, 'Imóvel cadastrado com sucesso!')
                 return redirect('tis_detail', tis_id=tis_id)
+            except ValidationError as e:
+                messages.error(request, '; '.join(e.messages))
+                return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
             except Exception as e:
                 messages.error(request, f'Erro ao salvar imóvel: {str(e)}')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})

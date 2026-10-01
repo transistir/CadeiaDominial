@@ -1,20 +1,26 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_http_methods, require_POST, require_GET
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
-from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, LancamentoPessoa, FimCadeia
+from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
 from ..managers import documentos_for_user, lancamentos_for_user
 from ..services.lancamento_service import LancamentoService
+from ..services.lancamento_origem_service import LancamentoOrigemService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
 from datetime import date
+import logging
+import re
 import unicodedata
 import uuid
 from ..services.lancamento_heranca_service import LancamentoHerancaService
 from ..services.lancamento_duplicata_service import LancamentoDuplicataService
 from ..services.documento_service import DocumentoService
 from ..services.lancamento_consulta_service import LancamentoConsultaService
+
+
+logger = logging.getLogger(__name__)
 
 
 def _build_fim_cadeia_opcoes():
@@ -55,6 +61,365 @@ def _build_documento_lancamentos(documento, current_lancamento_id=None):
         }
         for lanc in lancamentos
     ]
+
+
+class LancamentoForaDaCadeiaError(Exception):
+    """O lançamento existe, mas o documento dele não é referenciado — direta
+       nem indiretamente — na cadeia dominial deste imóvel."""
+    def __init__(self, lancamento):
+        self.lancamento = lancamento
+        super().__init__(f'Lançamento {lancamento.id} fora da cadeia do imóvel')
+
+
+def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id, user):
+    """Resolve um lançamento visto pela URL de `imovel`, aceitando documentos
+       compartilhados (importados) — o mesmo cenário que o `documento_detalhado`
+       já suporta (issue #152).
+
+       Retorna (lancamento, is_lancamento_do_imovel).
+       Levanta Http404 se o lançamento não existe.
+       Levanta LancamentoForaDaCadeiaError se existe mas o documento dele não é
+       referenciado nesta cadeia (protege contra exclusão/edição de homônimo em
+       outra cadeia — ver test_divida_edicao_lancamento_homonimo.py)."""
+    try:
+        return lancamentos_for_user(user).get(id=lancamento_id, documento__imovel=imovel), True
+    except Lancamento.DoesNotExist:
+        pass
+
+    try:
+        lancamento = lancamentos_for_user(user).get(id=lancamento_id)
+    except Lancamento.DoesNotExist:
+        raise Http404("Lançamento não encontrado")
+
+    # imports locais: preservar como estão hoje para não alterar o grafo de
+    # imports do módulo
+    from ..models import Lancamento as LancamentoModel
+    from ..services.hierarquia_arvore_service import HierarquiaArvoreService
+    from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
+
+    # Verificar referência direta pela identidade completa (tipo +
+    # número normalizado + cartório), nunca por número isolado: um
+    # texto de origem que apenas contenha o mesmo número não prova
+    # que é o mesmo documento - pode ser um homônimo em outro
+    # cartório que não pertence à cadeia deste imóvel.
+    documento_referenciado = lancamento.documento
+    lancamentos_referenciando_direta = False
+    for lanc_do_imovel in LancamentoModel.objects.filter(documento__imovel=imovel):
+        for origem_info in LancamentoOrigemLeituraService.obter_origens(lanc_do_imovel):
+            if (
+                origem_info.tipo_documento == documento_referenciado.tipo.tipo
+                and origem_info.numero_normalizado == documento_referenciado.numero_normalizado
+                and origem_info.cartorio_id == documento_referenciado.cartorio_id
+            ):
+                lancamentos_referenciando_direta = True
+                break
+        if lancamentos_referenciando_direta:
+            break
+
+    # Verificar referência indireta (através da cadeia dominial)
+    lancamentos_referenciando_indireta = False
+    if not lancamentos_referenciando_direta:
+        # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            documentos_queryset=documentos_for_user(user),
+        )
+        documento_na_arvore = any(
+            doc['id'] == lancamento.documento.id and doc['is_compartilhado']
+            for doc in arvore['documentos']
+        )
+        lancamentos_referenciando_indireta = documento_na_arvore
+
+    if not lancamentos_referenciando_direta and not lancamentos_referenciando_indireta:
+        raise LancamentoForaDaCadeiaError(lancamento)
+
+    return lancamento, False
+
+
+def _form_data_do_post(request):
+    """Reconstrói o estado do formulário de lançamento a partir do POST para
+       re-renderizar o formulário sem perder o que o usuário digitou depois de
+       um erro de validação ou do fluxo de duplicata (issue #157).
+
+       Inclui os 7 campos do bloco Transmissão (`*_transacao`), que antes eram
+       lidos por nomes fantasmas (`forma`/`titulo`) e nunca sobreviviam."""
+    return {
+        'tipo_lancamento': request.POST.get('tipo_lancamento'),
+        'numero_lancamento': request.POST.get('numero_lancamento'),
+        'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
+        'data': request.POST.get('data'),
+        'observacoes': request.POST.get('observacoes'),
+        'livro_documento': request.POST.get('livro_documento'),
+        'folha_documento': request.POST.get('folha_documento'),
+        'transmitente_ids': request.POST.getlist('transmitente[]'),
+        'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
+        'adquirente_ids': request.POST.getlist('adquirente[]'),
+        'adquirente_nomes': request.POST.getlist('adquirente_nome[]'),
+        'area': request.POST.get('area'),
+        'descricao': request.POST.get('descricao'),
+        # Campos específicos por tipo
+        'forma_averbacao': request.POST.get('forma_averbacao'),
+        # Bloco Transmissão (issue #157) — `registro`/`inicio_matricula` também
+        # leem `forma_transacao` (os nomes `forma_registro`/`forma_inicio` eram
+        # fantasmas, sem emitter em template).
+        'forma_transacao': request.POST.get('forma_transacao'),
+        'titulo_transacao': request.POST.get('titulo_transacao'),
+        'cartorio_transmissao': request.POST.get('cartorio_transmissao'),
+        'cartorio_transmissao_nome': request.POST.get('cartorio_transmissao_nome'),
+        'livro_transacao': request.POST.get('livro_transacao'),
+        'folha_transacao': request.POST.get('folha_transacao'),
+        'data_transacao': request.POST.get('data_transacao'),
+    }
+
+
+def _origens_separadas_do_post(request):
+    """Reconstrói `origens_separadas` a partir do POST para re-renderizar o
+    bloco Origem (e os campos de fim de cadeia) após um erro de validação no
+    fluxo de NOVO lançamento (issue #161).
+
+    O template `_area_origem_form.html` só renderiza origens digitadas via
+    `origens_separadas`, contexto que antes era populado apenas pela view de
+    edição. Sem isto, o re-render de erro perdia tudo que o usuário digitou
+    nos blocos de origem e fim de cadeia (diferente dos demais campos, que
+    ganharam fallback `form_data` no PR #158)."""
+    origens_completas = request.POST.getlist('origem_completa[]')
+    cartorios_id = request.POST.getlist('cartorio_origem[]')
+    cartorios_nome = request.POST.getlist('cartorio_origem_nome[]')
+    livros = request.POST.getlist('livro_origem[]')
+    folhas = request.POST.getlist('folha_origem[]')
+    fim_cadeia_indices = request.POST.getlist('fim_cadeia[]')
+    tipos_fc = request.POST.getlist('tipo_fim_cadeia[]')
+    classificacoes_fc = request.POST.getlist('classificacao_fim_cadeia[]')
+    especificacoes_fc = request.POST.getlist('especificacao_fim_cadeia[]')
+    siglas_pp = request.POST.getlist('sigla_patrimonio_publico[]')
+    infos_fc = request.POST.getlist('info_adicional_fim_cadeia[]')
+
+    def _pos(arr, i):
+        """Valor da linha `i` num array paralelo (vazio se faltar)."""
+        return arr[i] if i < len(arr) else ''
+
+    tem_conteudo = (
+        any((t or '').strip() for t in origens_completas)
+        or any((c or '').strip() for c in cartorios_nome)
+        or any((c or '').strip() for c in cartorios_id)
+        or any((v or '').strip() for v in livros)
+        or any((v or '').strip() for v in folhas)
+        or bool(fim_cadeia_indices)
+    )
+    if not tem_conteudo:
+        return []
+
+    origens_separadas = []
+    for i, texto in enumerate(origens_completas):
+        # Todos os arrays paralelos abaixo são DENSOS: template e JS emitem um
+        # valor por linha de origem renderizada, na ordem das linhas
+        # (`origem_completa[]` é a âncora da contagem/ordem). Os controles de
+        # cartório/livro/folha ficam `readonly` — não `disabled` — nas linhas de
+        # fim de cadeia justamente para não sumirem do POST e desalinharem tudo
+        # (issue #159 rodada 2).
+        tipo_fc = _pos(tipos_fc, i)
+        classificacao_fc = _pos(classificacoes_fc, i)
+        especificacao_fc = _pos(especificacoes_fc, i)
+        sigla_pp = _pos(siglas_pp, i)
+        info_fc = _pos(infos_fc, i)
+
+        # O checkbox `fim_cadeia[]` só carrega as linhas MARCADAS e seu `value`
+        # pode não bater com a posição `i` (linhas removidas sem renumerar). Por
+        # isso o fim de cadeia é inferido também pelos arrays densos acima, que
+        # sempre têm a linha certa na posição certa (issue #162 rodada 2).
+        is_fim_cadeia = (
+            str(i) in fim_cadeia_indices
+            or any((v or '').strip() for v in
+                   (tipo_fc, classificacao_fc, especificacao_fc, sigla_pp, info_fc))
+        )
+        if not is_fim_cadeia:
+            tipo_fc = classificacao_fc = especificacao_fc = sigla_pp = info_fc = ''
+
+        match = re.match(r'^([MT])(\d+)', (texto or '').strip())
+        origens_separadas.append({
+            'texto': texto,
+            'index': i,
+            'tipo_origem': match.group(1) if match else '',
+            'numero_origem': match.group(2) if match else '',
+            'cartorio_nome': _pos(cartorios_nome, i),
+            'cartorio_id': _pos(cartorios_id, i),
+            'livro': _pos(livros, i),
+            'folha': _pos(folhas, i),
+            'fim_cadeia': is_fim_cadeia,
+            'tipo_fim_cadeia': tipo_fc,
+            'classificacao_fim_cadeia': classificacao_fc,
+            'especificacao_fim_cadeia': especificacao_fc,
+            'sigla_patrimonio_publico': sigla_pp,
+            'info_adicional_fim_cadeia': info_fc,
+            'is_destacamento_publico': tipo_fc == 'destacamento_publico',
+        })
+    return origens_separadas
+
+
+def _flags_livro_folha_definidos(documento):
+    """Flags para o template travar Livro/Folha já definidos (#218).
+    Vazio e '0' contam como NÃO definido."""
+    return {
+        'doc_livro_definido': bool(documento.livro) and documento.livro != '0',
+        'doc_folha_definida': bool(documento.folha) and documento.folha != '0',
+    }
+
+
+def _build_novo_lancamento_context(request, tis, imovel, documento_ativo, pessoas,
+                                   cartorios, tipos_lancamento, emitir_avisos=True):
+    """Contexto base do formulário de novo lançamento — fonte única de verdade.
+
+       Reúne os metadados do documento e a lógica de herança de cartório
+       (`is_primeiro_lancamento` / `lancamento` herdado / `cartorio_matricula`).
+
+       Tanto o branch GET quanto o re-render de erro
+       (`_render_erro_novo_lancamento`) chamam esta função. Antes, o caminho de
+       erro caía no fluxo GET e essa metadata de cartório/herança se perdia
+       (issue #157).
+
+       `emitir_avisos=False` no re-render de erro para não duplicar o aviso de
+       cartório indefinido."""
+    context = {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento_ativo,
+        'pessoas': pessoas,
+        'cartorios': cartorios,
+        'tipos_lancamento': tipos_lancamento,
+        'transmitentes': [],
+        'adquirentes': [],
+        'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
+        'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
+        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
+        'is_novo_lancamento': True,
+        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        **_flags_livro_folha_definidos(documento_ativo),
+    }
+
+    # Verificar se é o primeiro lançamento do documento
+    total_lancamentos = Lancamento.objects.filter(documento=documento_ativo).count()
+    is_primeiro_lancamento = total_lancamentos == 0
+
+    # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
+    is_primeiro_documento_cadeia = (documento_ativo.tipo.tipo == 'matricula' and
+                                    documento_ativo.numero == imovel.matricula)
+
+    if is_primeiro_lancamento:
+        # Para o primeiro lançamento, verificar se deve usar cartório da matrícula ou do documento
+        if is_primeiro_documento_cadeia:
+            # É o primeiro documento da cadeia (matrícula atual) - usar cartório da matrícula
+            context['is_primeiro_lancamento'] = True
+            context['cartorio_matricula'] = imovel.cartorio
+            context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
+
+            # Se não há cartório definido, mostrar aviso
+            if not imovel.cartorio and emitir_avisos:
+                messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
+        else:
+            # É um documento criado automaticamente a partir de uma origem - usar cartório do documento
+            context['is_primeiro_lancamento'] = False
+            context['modo_edicao'] = True
+
+            # Criar um lançamento temporário com o cartório do documento
+            lancamento_herdado = Lancamento()
+            lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+            context['lancamento'] = lancamento_herdado
+    else:
+        # Para lançamentos subsequentes, herdar dados do primeiro lançamento
+        context['is_primeiro_lancamento'] = False
+
+        # Obter dados do primeiro lançamento para herança
+        dados_primeiro = LancamentoHerancaService.obter_dados_primeiro_lancamento(documento_ativo)
+
+        # Para lançamentos subsequentes, usar o cartório do próprio documento
+        lancamento_herdado = Lancamento()
+
+        # CORREÇÃO: Usar o cartório do próprio documento (que foi definido quando ele foi criado)
+        # O cartório do documento é o cartório que foi informado no lançamento de início de matrícula que criou este documento
+        lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+
+        context['lancamento'] = lancamento_herdado
+        context['modo_edicao'] = True  # Para usar os dados herdados no template
+
+        # CORREÇÃO: Adicionar cartorio_origem_correto para o template usar
+        context['cartorio_origem_correto'] = documento_ativo.cartorio
+
+    return context
+
+
+def _render_erro_novo_lancamento(request, tis, imovel, documento_ativo, pessoas,
+                                 cartorios, tipos_lancamento,
+                                 numero_lancamento_error=False):
+    """Re-renderiza o formulário de novo lançamento preservando o POST.
+
+       Usado tanto pelo branch de falha de validação (`sucesso is None`) quanto
+       pelo `except` — antes só o `except` re-renderizava e o branch de falha
+       caía no fluxo GET, perdendo TODOS os campos digitados (issue #157)."""
+    # Adicionar dados das pessoas para preservação
+    transmitentes_data = []
+    for i, nome in enumerate(request.POST.getlist('transmitente_nome[]')):
+        if nome.strip():
+            transmitentes_data.append({
+                'nome': nome.strip(),
+                'id': request.POST.getlist('transmitente[]')[i] if i < len(request.POST.getlist('transmitente[]')) else ''
+            })
+
+    adquirentes_data = []
+    for i, nome in enumerate(request.POST.getlist('adquirente_nome[]')):
+        if nome.strip():
+            adquirentes_data.append({
+                'nome': nome.strip(),
+                'id': request.POST.getlist('adquirente[]')[i] if i < len(request.POST.getlist('adquirente[]')) else ''
+            })
+
+    # Buscar lançamentos anteriores (para painel lateral mesmo em caso de erro)
+    lancamentos_anteriores = (
+        Lancamento.objects
+        .filter(documento=documento_ativo)
+        .select_related('tipo', 'documento')
+        .prefetch_related(
+            Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
+        )
+        .order_by('-data', '-id')[:20]
+    )
+    lancamentos_com_pessoas = []
+    for lanc in lancamentos_anteriores:
+        relacoes = lanc.pessoas.all()
+        transmitentes = [lp.pessoa for lp in relacoes if lp.tipo == 'transmitente']
+        adquirentes = [lp.pessoa for lp in relacoes if lp.tipo == 'adquirente']
+        lancamentos_com_pessoas.append({
+            'lancamento': lanc,
+            'transmitentes': transmitentes,
+            'adquirentes': adquirentes,
+        })
+
+    # Partir do contexto base (mesma fonte do branch GET): herança de cartório,
+    # is_primeiro_lancamento, cartorio_matricula, fim_cadeia_opcoes, etc.
+    context = _build_novo_lancamento_context(
+        request, tis, imovel, documento_ativo, pessoas, cartorios, tipos_lancamento,
+        emitir_avisos=False,
+    )
+
+    # O `modo_edicao` fica exatamente como o builder o definiu — igual ao branch
+    # GET (herança → True + `lancamento` herdado; primeiro lançamento da cadeia →
+    # `is_primeiro_lancamento`). Não forçamos `modo_edicao=False`: o `lancamento`
+    # herdado é um `Lancamento()` vazio (só `cartorio_origem`), então todo guard
+    # `modo_edicao and lancamento.X` do bloco Transmissão
+    # (lancamento_form.html:124-160) já é False e o `form_data` do POST vence.
+    # Forçar False zerava os hidden `cartorio`/`cartorio_nome` que o GET preenche
+    # (issue #157, revisão Codex round-2).
+
+    context.update({
+        'form_data': _form_data_do_post(request),
+        'numero_lancamento_error': numero_lancamento_error,
+        'lancamentos_com_pessoas': lancamentos_com_pessoas,
+        'transmitentes': transmitentes_data,
+        'adquirentes': adquirentes_data,
+        # issue #161: preservar origens e fim de cadeia digitados no POST
+        'origens_separadas': _origens_separadas_do_post(request),
+    })
+
+    return render(request, 'dominial/lancamento_form.html', context)
 
 
 @login_required
@@ -139,9 +504,17 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'cartorio': request.POST.get('cartorio'),
                         'cartorio_nome': request.POST.get('cartorio_nome'),
                         'area': request.POST.get('area'),
-                        'forma': request.POST.get('forma'),
                         'descricao': request.POST.get('descricao'),
-                        'titulo': request.POST.get('titulo'),
+                        # Bloco Transmissão (issue #157): antes lia os nomes
+                        # fantasmas 'forma'/'titulo' e não repassava os hidden
+                        # fields, perdendo o bloco no fluxo de duplicata.
+                        'forma_transacao': request.POST.get('forma_transacao'),
+                        'titulo_transacao': request.POST.get('titulo_transacao'),
+                        'cartorio_transmissao': request.POST.get('cartorio_transmissao'),
+                        'cartorio_transmissao_nome': request.POST.get('cartorio_transmissao_nome'),
+                        'livro_transacao': request.POST.get('livro_transacao'),
+                        'folha_transacao': request.POST.get('folha_transacao'),
+                        'data_transacao': request.POST.get('data_transacao'),
                         'origem_completa': request.POST.getlist('origem_completa[]'),
                         'cartorio_origem': request.POST.getlist('cartorio_origem[]'),
                         'cartorio_origem_nome': request.POST.getlist('cartorio_origem_nome[]'),
@@ -190,105 +563,36 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                     # Redirecionar para a página do documento detalhado
                     return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=documento_ativo.id)
             else:
+                # Falha de validação (ex.: número de lançamento duplicado):
+                # o service retorna (None, mensagem). Antes NÃO havia return
+                # aqui e o fluxo caía no branch GET, re-renderizando o
+                # formulário sem `form_data` — perdendo TODOS os campos
+                # digitados, inclusive o bloco Transmissão (issue #157).
                 messages.error(request, mensagem_origens)
-                
+                numero_lancamento_error = (
+                    'Já existe um lançamento com o número' in (mensagem_origens or '')
+                )
+                return _render_erro_novo_lancamento(
+                    request, tis, imovel, documento_ativo, pessoas, cartorios,
+                    tipos_lancamento, numero_lancamento_error=numero_lancamento_error,
+                )
+
         except Exception as e:
-            # Capturar exceções para debug
-            import traceback
-            error_msg = f'Erro inesperado: {str(e)}\n{traceback.format_exc()}'
-            messages.error(request, f'❌ {error_msg}')
-            print(f"ERRO NA CRIAÇÃO DE LANÇAMENTO: {error_msg}")
-            
+            # Traceback completo só no log do servidor (issue #162): antes ia
+            # inteiro para `messages.error`, expondo paths/estrutura interna ao
+            # usuário.
+            logger.exception('Erro inesperado ao criar lançamento (imovel=%s, documento=%s)',
+                             getattr(imovel, 'id', None), getattr(documento_ativo, 'id', None))
+            messages.error(request, '❌ Erro interno ao salvar o lançamento. Tente novamente.')
+
             # Verificar se é erro de número duplicado para destacar o campo
             numero_lancamento_error = 'Já existe um lançamento com o número' in str(e)
-            
-            # Adicionar dados das pessoas para preservação
-            transmitentes_data = []
-            for i, nome in enumerate(request.POST.getlist('transmitente_nome[]')):
-                if nome.strip():
-                    transmitentes_data.append({
-                        'nome': nome.strip(),
-                        'id': request.POST.getlist('transmitente[]')[i] if i < len(request.POST.getlist('transmitente[]')) else ''
-                    })
-            
-            adquirentes_data = []
-            for i, nome in enumerate(request.POST.getlist('adquirente_nome[]')):
-                if nome.strip():
-                    adquirentes_data.append({
-                        'nome': nome.strip(),
-                        'id': request.POST.getlist('adquirente[]')[i] if i < len(request.POST.getlist('adquirente[]')) else ''
-                    })
-            
-            # Buscar lançamentos anteriores (para painel lateral mesmo em caso de erro)
-            lancamentos_anteriores = (
-                Lancamento.objects
-                .filter(documento=documento_ativo)
-                .select_related('tipo', 'documento')
-                .prefetch_related(
-                    Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
-                )
-                .order_by('-data', '-id')[:20]
-            )
-            lancamentos_com_pessoas = []
-            for lanc in lancamentos_anteriores:
-                relacoes = lanc.pessoas.all()
-                transmitentes = [lp.pessoa for lp in relacoes if lp.tipo == 'transmitente']
-                adquirentes = [lp.pessoa for lp in relacoes if lp.tipo == 'adquirente']
-                lancamentos_com_pessoas.append({
-                    'lancamento': lanc,
-                    'transmitentes': transmitentes,
-                    'adquirentes': adquirentes,
-                })
 
-            context = {
-                'tis': tis,
-                'imovel': imovel,
-                'documento': documento_ativo,
-                'pessoas': pessoas,
-                'cartorios': cartorios,
-                'tipos_lancamento': tipos_lancamento,
-                'form_data': {
-                    'tipo_lancamento': request.POST.get('tipo_lancamento'),
-                    'numero_lancamento': request.POST.get('numero_lancamento'),
-                    'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
-                    'data': request.POST.get('data'),
-                    'observacoes': request.POST.get('observacoes'),
-                    'livro': request.POST.get('livro'),
-                    'folha': request.POST.get('folha'),
-                    'cartorio': request.POST.get('cartorio'),
-                    'cartorio_nome': request.POST.get('cartorio_nome'),
-                    'transmitente_ids': request.POST.getlist('transmitente[]'),
-                    'transmitente_nomes': request.POST.getlist('transmitente_nome[]'),
-                    'adquirente_ids': request.POST.getlist('adquirente[]'),
-                    'adquirente_nomes': request.POST.getlist('adquirente_nome[]'),
-                    'area': request.POST.get('area'),
-                    'origem': request.POST.get('origem_completa') or request.POST.get('origem'),
-                    'forma': request.POST.get('forma'),
-                    'descricao': request.POST.get('descricao'),
-                    'titulo': request.POST.get('titulo'),
-                    'cartorio_origem': request.POST.get('cartorio_origem'),
-                    'livro_origem': request.POST.get('livro_origem'),
-                    'folha_origem': request.POST.get('folha_origem'),
-                    'data_origem': request.POST.get('data_origem'),
-                    # Campos específicos por tipo
-                    'forma_averbacao': request.POST.get('forma_averbacao'),
-                    'forma_registro': request.POST.get('forma_registro'),
-                    'forma_inicio': request.POST.get('forma_inicio'),
-                },
-                'numero_lancamento_error': numero_lancamento_error,
-                'lancamentos_com_pessoas': lancamentos_com_pessoas,
-                'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
-                'is_novo_lancamento': True,
-                # Sem isso o select de destacamento volta vazio ao re-renderizar
-                # o formulário depois de um erro (issue #104)
-                'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
-            }
-            
-            context['transmitentes'] = transmitentes_data
-            context['adquirentes'] = adquirentes_data
-            
-            return render(request, 'dominial/lancamento_form.html', context)
-    
+            return _render_erro_novo_lancamento(
+                request, tis, imovel, documento_ativo, pessoas, cartorios,
+                tipos_lancamento, numero_lancamento_error=numero_lancamento_error,
+            )
+
     # GET - mostrar formulário
     # Limpar dados de duplicata cancelada da sessão sempre
     request.session.pop('duplicata_cancelada', None)
@@ -320,74 +624,14 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
             'adquirentes': adquirentes,
         })
 
-    context = {
-        'tis': tis,
-        'imovel': imovel,
-        'documento': documento_ativo,
-        'pessoas': pessoas,
-        'cartorios': cartorios,
-        'duplicata_cancelada': duplicata_cancelada,
-        'duplicata_origem': duplicata_origem,
-        'duplicata_cartorio': duplicata_cartorio,
-        'tipos_lancamento': tipos_lancamento,
-        'transmitentes': [],
-        'adquirentes': [],
-        'is_documento_importado': getattr(documento_ativo, 'is_importado', False),  # Usar flag do service
-        'cartorio_origem_correto': documento_ativo.cartorio,  # SEMPRE passar o cartório correto
-        'lancamentos_com_pessoas': lancamentos_com_pessoas,
-        'documento_lancamentos': _build_documento_lancamentos(documento_ativo, current_lancamento_id=None),
-        'is_novo_lancamento': True,
-        'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
-    }
-    
-    # Verificar se é o primeiro lançamento do documento
-    total_lancamentos = Lancamento.objects.filter(documento=documento_ativo).count()
-    is_primeiro_lancamento = total_lancamentos == 0
-    
-    # Verificar se é o primeiro documento da cadeia dominial (matrícula atual)
-    is_primeiro_documento_cadeia = (documento_ativo.tipo.tipo == 'matricula' and 
-                                   documento_ativo.numero == imovel.matricula)
-    
-    if is_primeiro_lancamento:
-        # Para o primeiro lançamento, verificar se deve usar cartório da matrícula ou do documento
-        if is_primeiro_documento_cadeia:
-            # É o primeiro documento da cadeia (matrícula atual) - usar cartório da matrícula
-            context['is_primeiro_lancamento'] = True
-            context['cartorio_matricula'] = imovel.cartorio
-            context['cartorio_matricula_nome'] = imovel.cartorio.nome if imovel.cartorio else 'Cartório não definido'
-            
-            # Se não há cartório definido, mostrar aviso
-            if not imovel.cartorio:
-                messages.warning(request, '⚠️ Atenção: O imóvel não possui cartório definido. Será necessário definir um cartório.')
-        else:
-            # É um documento criado automaticamente a partir de uma origem - usar cartório do documento
-            context['is_primeiro_lancamento'] = False
-            context['modo_edicao'] = True
-            
-            # Criar um lançamento temporário com o cartório do documento
-            lancamento_herdado = Lancamento()
-            lancamento_herdado.cartorio_origem = documento_ativo.cartorio
-            context['lancamento'] = lancamento_herdado
-    else:
-        # Para lançamentos subsequentes, herdar dados do primeiro lançamento
-        context['is_primeiro_lancamento'] = False
-        
-        # Obter dados do primeiro lançamento para herança
-        dados_primeiro = LancamentoHerancaService.obter_dados_primeiro_lancamento(documento_ativo)
-        
-        # Para lançamentos subsequentes, usar o cartório do próprio documento
-        lancamento_herdado = Lancamento()
-        
-        # CORREÇÃO: Usar o cartório do próprio documento (que foi definido quando ele foi criado)
-        # O cartório do documento é o cartório que foi informado no lançamento de início de matrícula que criou este documento
-        lancamento_herdado.cartorio_origem = documento_ativo.cartorio
+    context = _build_novo_lancamento_context(
+        request, tis, imovel, documento_ativo, pessoas, cartorios, tipos_lancamento
+    )
+    context['duplicata_cancelada'] = duplicata_cancelada
+    context['duplicata_origem'] = duplicata_origem
+    context['duplicata_cartorio'] = duplicata_cartorio
+    context['lancamentos_com_pessoas'] = lancamentos_com_pessoas
 
-        context['lancamento'] = lancamento_herdado
-        context['modo_edicao'] = True  # Para usar os dados herdados no template
-        
-        # CORREÇÃO: Adicionar cartorio_origem_correto para o template usar
-        context['cartorio_origem_correto'] = documento_ativo.cartorio
-    
     return render(request, 'dominial/lancamento_form.html', context)
 
 @login_required
@@ -399,69 +643,35 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
-    # Permitir edição de lançamentos de documentos compartilhados
-    # Primeiro, tentar buscar o lançamento no imóvel atual
+    # Permitir edição de lançamentos de documentos compartilhados (issue #152)
     try:
-        lancamento = Lancamento.objects.get(id=lancamento_id, documento__imovel=imovel)
-        is_lancamento_do_imovel = True
-    except Lancamento.DoesNotExist:
-        # Se não encontrou, verificar se é um lançamento de documento compartilhado
-        try:
-            lancamento = lancamentos_for_user(request.user).get(id=lancamento_id)
-            is_lancamento_do_imovel = False
-            
-            # Verificar se o documento do lançamento é compartilhado (referenciado como origem)
-            from ..models import Lancamento as LancamentoModel
-            from ..services.hierarquia_arvore_service import HierarquiaArvoreService
-            from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
-
-            # Verificar referência direta pela identidade completa (tipo +
-            # número normalizado + cartório), nunca por número isolado: um
-            # texto de origem que apenas contenha o mesmo número não prova
-            # que é o mesmo documento - pode ser um homônimo em outro
-            # cartório que não pertence à cadeia deste imóvel.
-            documento_referenciado = lancamento.documento
-            lancamentos_referenciando_direta = False
-            for lanc_do_imovel in LancamentoModel.objects.filter(documento__imovel=imovel):
-                for origem_info in LancamentoOrigemLeituraService.obter_origens(lanc_do_imovel):
-                    if (
-                        origem_info.tipo_documento == documento_referenciado.tipo.tipo
-                        and origem_info.numero_normalizado == documento_referenciado.numero_normalizado
-                        and origem_info.cartorio_id == documento_referenciado.cartorio_id
-                    ):
-                        lancamentos_referenciando_direta = True
-                        break
-                if lancamentos_referenciando_direta:
-                    break
-            
-            # Verificar referência indireta (através da cadeia dominial)
-            lancamentos_referenciando_indireta = False
-            if not lancamentos_referenciando_direta:
-                # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
-                arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
-                    imovel,
-                    documentos_queryset=documentos_for_user(request.user),
-                )
-                documento_na_arvore = any(
-                    doc['id'] == lancamento.documento.id and doc['is_compartilhado'] 
-                    for doc in arvore['documentos']
-                )
-                lancamentos_referenciando_indireta = documento_na_arvore
-            
-            if not lancamentos_referenciando_direta and not lancamentos_referenciando_indireta:
-                # Se não é referenciado (direta ou indiretamente), não permitir edição
-                messages.error(request, f'Lançamento {lancamento.numero_lancamento} não pode ser editado pois não é referenciado como origem neste imóvel.')
-                return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-                
-        except Lancamento.DoesNotExist:
-            raise Http404("Lançamento não encontrado")
-    
+        lancamento, is_lancamento_do_imovel = _resolver_lancamento_no_contexto_do_imovel(
+            imovel, lancamento_id, request.user
+        )
+    except LancamentoForaDaCadeiaError as erro:
+        messages.error(
+            request,
+            f'Lançamento {erro.lancamento.numero_lancamento} não pode ser editado '
+            f'pois não é referenciado como origem neste imóvel.'
+        )
+        return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
     # Obter dados para o formulário
     pessoas = Pessoas.objects.all().order_by('nome')
     cartorios = Cartorios.objects.all().order_by('nome')
     tipos_lancamento = LancamentoService.obter_tipos_lancamento_por_documento(lancamento.documento)
     
     # Processar POST
+    # Origens do POST para o re-render de erro (P1-2): None marca que não
+    # houve POST (ou que ele teve sucesso e redirecionou) — o formulário
+    # então mostra as origens do banco.
+    origens_do_post = None
+    # r2: nome da transmissão digitado no POST, para preservar no re-render
+    # (None = não houve POST ou POST sem nome digitado).
+    transmissao_nome_do_post = None
+    # r3: preservar o id válido do POST para o hidden não esvaziar no re-render
+    # (sem isso, homônimos dão MultipleObjectsReturned no reenvio por nome).
+    transmissao_id_do_post = ''
+    post_rejeitado = False
     if request.method == 'POST':
         # Usar o service para atualizar o lançamento completo
         sucesso, mensagem_origens = LancamentoService.atualizar_lancamento_completo(
@@ -484,6 +694,63 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                 return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
         else:
             messages.error(request, mensagem_origens)
+            # Re-render a partir do POST: nada foi salvo, então o banco e a
+            # instância não refletem o que o usuário digitou nas origens.
+            origens_do_post = _origens_separadas_do_post(request)
+            post_rejeitado = True
+            
+            # FIX A (#144 fase 2 P1): Após rollback do atomic, a instância
+            # mantém PKs fantasma de cartórios criados e depois apagados.
+            # O template renderiza esses PKs em hiddens, e o reenvio usa
+            # o id (prioridade sobre nome em lancamento_campos_service.py:239-240)
+            # → IntegrityError em loop.
+            # Solução: reload dos FKs do banco + reconstrução da transmissão
+            # a partir do POST rejeitado.
+            try:
+                lancamento.refresh_from_db(
+                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao']
+                )
+            except Lancamento.DoesNotExist:
+                # Casos extremos: lançamento foi rolled back
+                pass
+            
+            # Reconstruir transmissão do POST (preservando intenção do usuário)
+            transmissao_id = request.POST.get('cartorio_transmissao', '').strip()
+            transmissao_nome = request.POST.get('cartorio_transmissao_nome', '').strip()
+            # r2: preservar o nome digitado no contexto da edição para o
+            # re-render mostrar o que o usuário digitou (não o legado/compat).
+            transmissao_nome_do_post = transmissao_nome
+            if transmissao_id:
+                # Se o POST trouxe id, verificar se ainda existe no banco
+                try:
+                    cartorio_trans = Cartorios.objects.get(pk=transmissao_id)
+                    lancamento.cartorio_transmissao = cartorio_trans
+                    # r3: id válido encontrado no banco → preservar no hidden
+                    # para o re-render (homônimos não colidem por nome).
+                    transmissao_id_do_post = str(cartorio_trans.pk)
+                except (Cartorios.DoesNotExist, ValueError):
+                    # FK fantasma OU id inválido (não-numérico): limpar o id
+                    # e preservar o nome para re-render
+                    lancamento.cartorio_transmissao = None
+                    # r2: zerar também o legado para o compat não mostrar
+                    # o antigo no lugar do digitado (ramo de falha; nada salva).
+                    lancamento.cartorio_transacao = None
+            elif transmissao_nome:
+                # POST trouxe só nome: verificar se existe no banco
+                cartorio_existente = Cartorios.objects.filter(
+                    nome__iexact=transmissao_nome
+                ).first()
+                if cartorio_existente:
+                    lancamento.cartorio_transmissao = cartorio_existente
+                else:
+                    # Nome novo que foi rolled back: deixar vazio
+                    lancamento.cartorio_transmissao = None
+                    # r2: idem — zerar legado para o compat não sobrepor
+                    lancamento.cartorio_transacao = None
+            else:
+                # POST sem id nem nome: limpar tudo
+                lancamento.cartorio_transmissao = None
+                lancamento.cartorio_transacao = None
     
     # Obter pessoas do lançamento para exibição no formulário
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
@@ -504,15 +771,26 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
         'modo_edicao': True,
+        # O update não persiste livro/folha do documento (#218): travar sempre.
+        'is_edicao_lancamento': True,
         'cartorio_origem_correto': cartorio_origem_correto,
         'is_lancamento_do_imovel': is_lancamento_do_imovel,
         'is_lancamento_compartilhado': not is_lancamento_do_imovel,
         'documento_lancamentos': _build_documento_lancamentos(lancamento.documento, current_lancamento_id=lancamento.id),
         'fim_cadeia_opcoes': _build_fim_cadeia_opcoes(),
+        # r2: preservar o nome digitado da transmissão no re-render pós-rollback
+        'transmissao_nome_do_post': transmissao_nome_do_post,
+        # r3: preservar o id válido do POST no hidden (homônimos não colidem)
+        'transmissao_id_do_post': transmissao_id_do_post,
+        'post_rejeitado': post_rejeitado,
+        **_flags_livro_folha_definidos(lancamento.documento),
     }
     
     # Preparar dados para o template
-    if context['modo_edicao'] and lancamento.origem:
+    if origens_do_post is not None:
+        # POST rejeitado: as origens vêm do que foi digitado, não do banco.
+        origens_separadas = origens_do_post
+    elif context['modo_edicao'] and lancamento.origem:
         # Separar múltiplas origens para o template
         origens_separadas = []
         
@@ -638,51 +916,52 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
                         })
         else:
             # Processar origens normais
-            # Tentar recuperar mapeamento de origens e cartórios do cache
-            from django.core.cache import cache
-            cache_key = f"mapeamento_origens_lancamento_{lancamento.id}"
-            mapeamento_origens = cache.get(cache_key)
-            
             if ';' in lancamento.origem:
                 origens_list = [o.strip() for o in lancamento.origem.split(';') if o.strip()]
-                
-                if mapeamento_origens and len(mapeamento_origens) == len(origens_list):
-                    # Usar mapeamento do cache se disponível
-                    for i, origem in enumerate(origens_list):
-                        mapeamento = mapeamento_origens[i] if i < len(mapeamento_origens) else {}
-                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                        
-                        origens_separadas.append({
-                            'texto': origem,
-                            'index': i,
-                            'cartorio_nome': mapeamento.get('cartorio_nome', ''),
-                            'cartorio_id': mapeamento.get('cartorio_id', ''),
-                            'livro': mapeamento.get('livro', ''),
-                            'folha': mapeamento.get('folha', ''),
-                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
-                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
-                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
-                            'sigla_patrimonio_publico': '',
-                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
-                        })
-                else:
-                    # Fallback: usar cartório geral do lançamento para todas as origens
-                    for i, origem in enumerate(origens_list):
-                        origem_fim_cadeia = fim_cadeia_por_indice.get(i)
-                        
-                        origens_separadas.append({
-                            'texto': origem,
-                            'index': i,
-                            'cartorio_nome': lancamento.cartorio_origem.nome if lancamento.cartorio_origem else '',
-                            'cartorio_id': lancamento.cartorio_origem.id if lancamento.cartorio_origem else '',
-                            'livro': lancamento.livro_origem,
-                            'folha': lancamento.folha_origem,
-                            'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
-                            'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
-                            'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
-                            'sigla_patrimonio_publico': '',
-                            'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
-                        })
+
+                # A LancamentoOrigem persistida é a fonte durável do cartório
+                # de cada origem (#144); o GET não tem mapeamento do POST (o
+                # atributo temporário da instância vive só durante um save,
+                # fase 2 D4). A posição é a chave primária também aqui
+                # (#144 rodada 3): textos idênticos em cartórios distintos
+                # não podem colapsar no primeiro casamento por texto.
+                for i, origem in enumerate(origens_list):
+                    origem_fim_cadeia = fim_cadeia_por_indice.get(i)
+                    persistida, ambiguo, _ = LancamentoOrigemService.resolver_origem_persistida(
+                        lancamento, origem, i, origens_atuais=origens_list
+                    )
+                    if persistida:
+                        cartorio_nome = persistida.cartorio.nome
+                        cartorio_id = persistida.cartorio_id
+                        livro, folha = persistida.livro or '', persistida.folha or ''
+                    elif ambiguo:
+                        # Homônima sem linha na posição: nada confiável para
+                        # pré-preencher (D3) — nem a herança do cartório do
+                        # lançamento, que regravaria o cartório errado.
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
+                    elif i == 0 and lancamento.cartorio_origem:
+                        # Só a PRIMEIRA origem pode herdar o cartório do
+                        # lançamento; as demais ficam em branco em vez de
+                        # receberem (e regravarem) o cartório errado.
+                        cartorio_nome = lancamento.cartorio_origem.nome
+                        cartorio_id = lancamento.cartorio_origem.id
+                        livro, folha = lancamento.livro_origem, lancamento.folha_origem
+                    else:
+                        cartorio_nome, cartorio_id, livro, folha = '', '', '', ''
+
+                    origens_separadas.append({
+                        'texto': origem,
+                        'index': i,
+                        'cartorio_nome': cartorio_nome,
+                        'cartorio_id': cartorio_id,
+                        'livro': livro,
+                        'folha': folha,
+                        'fim_cadeia': origem_fim_cadeia.fim_cadeia if origem_fim_cadeia else False,
+                        'tipo_fim_cadeia': origem_fim_cadeia.tipo_fim_cadeia if origem_fim_cadeia else '',
+                        'classificacao_fim_cadeia': origem_fim_cadeia.classificacao_fim_cadeia if origem_fim_cadeia else '',
+                        'sigla_patrimonio_publico': '',
+                        'especificacao_fim_cadeia': origem_fim_cadeia.especificacao_fim_cadeia if origem_fim_cadeia else ''
+                    })
             else:
                 # Uma única origem
                 origem_fim_cadeia = fim_cadeia_por_indice.get(0)
@@ -719,8 +998,19 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
     """View para excluir um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
-    lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
-    
+
+    # Permitir exclusão de lançamentos de documentos compartilhados (issue #152)
+    try:
+        lancamento, is_lancamento_do_imovel = _resolver_lancamento_no_contexto_do_imovel(
+            imovel, lancamento_id, request.user
+        )
+    except LancamentoForaDaCadeiaError as erro:
+        messages.error(
+            request,
+            f'Lançamento {erro.lancamento.numero_lancamento} não pode ser excluído '
+            f'pois não é referenciado como origem neste imóvel.'
+        )
+        return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
     if request.method == 'POST':
         try:
             documento_id = lancamento.documento.id
@@ -728,14 +1018,30 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
             lancamento.delete()
             messages.success(request, f'Lançamento "{numero_lancamento}" excluído com sucesso!')
             return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir lançamento: {str(e)}')
-    
+        except Exception:
+            # Detalhe do erro só no log do servidor (issue #162): antes
+            # `str(e)` ia para `messages.error`, expondo estrutura interna ao
+            # usuário.
+            logger.exception(
+                'Erro inesperado ao excluir lançamento (imovel=%s, lancamento=%s)',
+                getattr(imovel, 'id', None), lancamento_id,
+            )
+            messages.error(request, '❌ Erro interno ao excluir o lançamento. Tente novamente.')
+
+    # Alinha com documento_detalhado: o aviso também vale quando o imóvel é o
+    # DONO de um documento que outras cadeias importaram (issue #152, AC#3).
+    from ..models import DocumentoImportado
+    documento_compartilhado = (not is_lancamento_do_imovel) or DocumentoImportado.objects.filter(
+        documento=lancamento.documento
+    ).exists()
+
     return render(request, 'dominial/lancamento_confirm_delete.html', {
         'tis': tis,
         'imovel': imovel,
         'lancamento': lancamento,
-        'documento': lancamento.documento
+        'documento': lancamento.documento,
+        'is_lancamento_do_imovel': is_lancamento_do_imovel,
+        'documento_compartilhado': documento_compartilhado,
     })
 
 @login_required
@@ -758,6 +1064,90 @@ def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
         'adquirentes': adquirentes,
         'tis': tis,
         'imovel': imovel,
+    })
+
+
+@login_required
+@require_GET
+def buscar_m_anterior(request):
+    """GET /dominial/buscar-m-anterior/?numero=...&cartorio_id=...&tis_id=...
+
+    Dado o par (número da origem, cartório da origem) digitado numa linha de
+    origem do tipo Matrícula, devolve a matrícula anterior (o documento que
+    aquela origem referencia) já cadastrada no acervo — é aí que costuma
+    acontecer a quebra da cadeia sucessória (issue #167).
+
+    Resposta JSON:
+      {
+        "encontrado": bool,
+        "doc_id": int | None,
+        "matricula": str | None,
+        "imovel_nome": str | None,
+        "outra_ti": bool,   # documento existe mas pertence a outra TI
+        "mesma_ti": bool,   # documento existe e pertence à TI em contexto
+      }
+
+    `tis_id` é opcional: sem ele (nem `tis_id` na sessão) a comparação de TI
+    não é feita e a resposta é apenas informativa (`mesma_ti=True`).
+    """
+    numero = (request.GET.get('numero') or '').strip()
+    cartorio_id = (request.GET.get('cartorio_id') or '').strip()
+    if not numero or not cartorio_id:
+        return JsonResponse(
+            {'erro': 'Parâmetros obrigatórios: numero e cartorio_id.'}, status=400
+        )
+    try:
+        cartorio_id = int(cartorio_id)
+    except (TypeError, ValueError):
+        return JsonResponse({'erro': 'cartorio_id inválido.'}, status=400)
+
+    # Normalização conservadora, espelhando o GeneratedField
+    # `Documento.numero_normalizado`: só remove espaços externos e o prefixo
+    # de apresentação M/T. Zeros à esquerda e pontuação são preservados.
+    numero_normalizado = numero.upper()
+    if numero_normalizado[:1] in ('M', 'T'):
+        numero_normalizado = numero_normalizado[1:].strip()
+
+    # Issue #167 (Codex review P1): restringir o lookup estritamente a
+    # matrículas (M). Sem `tipo`, um cartório que tivesse T e M com mesmo
+    # `numero_normalizado` poderia retornar a T e reportar imóvel/TI errada
+    # como "M anterior vinculada".
+    documento = (
+        Documento.objects
+        .filter(
+            numero_normalizado=numero_normalizado,
+            cartorio_id=cartorio_id,
+            tipo_id__tipo='matricula',
+        )
+        .select_related('imovel', 'imovel__terra_indigena_id', 'tipo')
+        .first()
+    )
+
+    if documento is None:
+        return JsonResponse({
+            'encontrado': False,
+            'doc_id': None,
+            'matricula': None,
+            'imovel_nome': None,
+            'outra_ti': False,
+            'mesma_ti': False,
+        })
+
+    tis_id_contexto = request.GET.get('tis_id') or request.session.get('tis_id')
+    documento_tis_id = documento.imovel.terra_indigena_id_id
+    try:
+        mesma_ti = int(tis_id_contexto) == documento_tis_id
+    except (TypeError, ValueError):
+        # Sem contexto de TI: resposta apenas informativa.
+        mesma_ti = True
+
+    return JsonResponse({
+        'encontrado': True,
+        'doc_id': documento.id,
+        'matricula': documento.numero,
+        'imovel_nome': documento.imovel.nome,
+        'outra_ti': not mesma_ti,
+        'mesma_ti': mesma_ti,
     })
 
 

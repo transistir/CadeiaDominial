@@ -9,6 +9,12 @@ from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lan
 from ..managers import documentos_for_user, lancamentos_for_user
 from ..utils import normalizar_texto_opcional
 from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_SEM_ACESSO
+from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
+from ..utils.hierarquia_utils import (
+    _selecionar_origem_contextual,
+    obter_origens_resolvidas,
+    serializar_identidade_origem,
+)
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
@@ -231,36 +237,66 @@ def lancamentos(request):
 @require_http_methods(["POST"])
 def escolher_origem_documento(request):
     """
-    API para escolher origem no nível do documento
+    API para escolher origem no nível do documento.
+
+    Recebe ``origem_identidade="documento:<id>"``. ``origem_numero`` é
+    mantido para clientes antigos, mas só é aceito quando o código resolve uma
+    única origem do documento.
     """
     try:
         data = json.loads(request.body)
         documento_id = data.get('documento_id')
+        origem_identidade = data.get('origem_identidade')
         origem_numero = data.get('origem_numero')
+        escolha_origem = origem_identidade or origem_numero
         tis_id = data.get('tis_id')
         imovel_id = data.get('imovel_id')
         
-        if not all([documento_id, origem_numero, tis_id, imovel_id]):
+        if not all([documento_id, escolha_origem, tis_id, imovel_id]):
             return JsonResponse({
                 'success': False,
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
 
-        if not documentos_for_user(request.user).filter(
-            id=documento_id,
-            imovel_id=imovel_id,
-            imovel__terra_indigena_id_id=tis_id,
+        # Guard: imóvel do usuário na TI correta
+        if not Imovel.objects.for_user(request.user).filter(
+            pk=imovel_id, terra_indigena_id=tis_id
         ).exists():
             return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
 
+        # Documento vem do escopo do usuário (sem filtro por imóvel — documento compartilhado)
+        documento = documentos_for_user(request.user).filter(pk=documento_id).first()
+        if documento is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Documento não encontrado',
+            }, status=404)
+
+        origens_resolvidas = obter_origens_resolvidas(
+            documento, documentos_queryset=documentos_for_user(request.user)
+        )
+        documento_origem = _selecionar_origem_contextual(
+            [origem.documento for origem in origens_resolvidas],
+            escolha_origem,
+        )
+        if documento_origem is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Origem não pertence às origens resolvidas do documento',
+            }, status=400)
+
+        escolha_canonica = serializar_identidade_origem(documento_origem)
         # Salvar escolha na sessão
         session_key = f'origem_documento_{documento_id}'
-        request.session[session_key] = origem_numero
+        request.session[session_key] = escolha_canonica
         
         # Não retornar cadeia_data para evitar erro de serialização
         return JsonResponse({
             'success': True,
-            'message': f'Origem {origem_numero} escolhida para documento {documento_id}'
+            'message': (
+                f'Origem {documento_origem.numero} escolhida para documento '
+                f'{documento_id}'
+            ),
         })
         
     except json.JSONDecodeError:
@@ -370,6 +406,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                     'numero': documento.numero,
                     'data': documento.data_exibicao.strftime('%d/%m/%Y') if is_primeiro else None,
                     'label_data': 'Análise iniciada em:' if is_primeiro else '',
+                    'tipo': documento.tipo.tipo if documento.tipo else '',
                     'tipo_display': documento.tipo.get_tipo_display() if documento.tipo else '',
                     'cartorio_nome': documento.cartorio.nome if documento.cartorio else '',
                     'livro': documento.livro,
@@ -396,7 +433,14 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                         'titulo': normalizar_texto_opcional(lancamento.titulo),
                         'descricao': normalizar_texto_opcional(lancamento.descricao),
                         'area': lancamento.area,
+                        # Issue #201: mesma formatação usada pelo template server-side
+                        # (filtros `area_ha`/`origem_formatada_completa`), para o
+                        # re-render via AJAX não divergir do render inicial da página.
+                        'area_formatada': formatar_area_ha(lancamento.area),
                         'origem': normalizar_texto_opcional(lancamento.origem),
+                        'origem_formatada': formatar_origem_completa(
+                            lancamento, separador='<br>', escapar_html=True
+                        ),
                         'observacoes': normalizar_texto_opcional(lancamento.observacoes),
                         'keyword_encontrada': getattr(lancamento, 'keyword_encontrada', None),
                         'cartorio_transmissao_nome': lancamento.cartorio_transmissao_compat.nome if lancamento.cartorio_transmissao_compat else None,

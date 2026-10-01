@@ -12,8 +12,9 @@
     <h5>Origem</h5>
     
     <div id="{{ container_id|default:'origens-container' }}">
-        {% if modo_edicao %}
-            {% if origens_separadas %}
+        {# origens_separadas: populado pela view de edição e pelo re-render de   #}
+        {# erro de novo lançamento (issue #161). Fora disso, cai nos brancos.    #}
+        {% if origens_separadas %}
                 {% for origem in origens_separadas %}
             <div class="origem-item" data-origem-index="{{ origem.index }}">
                 <div class="form-group origem-field">
@@ -64,7 +65,14 @@
                     
                     <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
                 </div>
-                
+
+                <!-- M anterior vinculada (issue #167): preenchida por JS ao digitar a origem -->
+                <div class="m-anterior-info" id="m-anterior-info-{{ origem.index }}"
+                     data-numero="{{ origem.numero_origem }}"
+                     data-cartorio="{{ origem.cartorio_id }}"
+                     data-tis-id="{{ tis.id }}"
+                     style="display: none;"></div>
+
                 <!-- Campos de fim de cadeia para esta origem específica -->
                 <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_{{ origem.index }}" 
                      style="display: {% if origem.fim_cadeia %}block{% else %}none{% endif %};">
@@ -102,7 +110,7 @@
                     </div>
                 </div>
                 {% endfor %}
-            {% else %}
+            {% elif modo_edicao %}
             <div class="origem-item" data-origem-index="0">
                 <div class="form-group origem-field">
                     <label class="field-label">Tipo{% if origem_obrigatorio %} *{% endif %}</label>
@@ -146,11 +154,16 @@
                         </label>
                     </div>
                 </div>
-                
-                
+
+
                 <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
             </div>
-                
+
+                <!-- M anterior vinculada (issue #167): preenchida por JS ao digitar a origem -->
+                <div class="m-anterior-info" id="m-anterior-info-0"
+                     data-numero="" data-cartorio="" data-tis-id="{{ tis.id }}"
+                     style="display: none;"></div>
+
                 <!-- Campos de fim de cadeia para a primeira origem -->
                 <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
                     <div class="grid-2">
@@ -185,7 +198,6 @@
                                   placeholder="Detalhe a especificação..."></textarea>
                     </div>
                 </div>
-            {% endif %}
         {% else %}
             <div class="origem-item" data-origem-index="0">
                 <div class="form-group origem-field">
@@ -227,7 +239,12 @@
                 </div>
                 <button type="button" class="btn btn-sm btn-danger remove-origem" onclick="removeOrigem(this)" title="Remover origem">×</button>
             </div>
-            
+
+            <!-- M anterior vinculada (issue #167): preenchida por JS ao digitar a origem -->
+            <div class="m-anterior-info" id="m-anterior-info-0"
+                 data-numero="" data-cartorio="" data-tis-id="{{ tis.id }}"
+                 style="display: none;"></div>
+
             <!-- Campos de fim de cadeia para a primeira origem -->
             <div class="fim-cadeia-origem-container" id="fim-cadeia-origem-container_0" style="display: none;">
                 <div class="grid-2">

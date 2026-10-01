@@ -49,7 +49,8 @@ function initializeCadeiaTabela() {
             
             const documentoId = this.dataset.documentoId;
             const origemNumero = this.dataset.origemNumero;
-            escolherOrigem(documentoId, origemNumero);
+            const origemIdentidade = this.dataset.origemIdentidade;
+            escolherOrigem(documentoId, origemIdentidade, origemNumero);
         });
     });
 }
@@ -95,7 +96,7 @@ function toggleLancamentos(documentoId) {
     }
 }
 
-function escolherOrigem(documentoId, origemNumero) {
+function escolherOrigem(documentoId, origemIdentidade, origemNumero) {
     if (isLoading) {
         return;
     }
@@ -127,6 +128,7 @@ function escolherOrigem(documentoId, origemNumero) {
         },
         body: JSON.stringify({
             documento_id: documentoId,
+            origem_identidade: origemIdentidade,
             origem_numero: origemNumero,
             tis_id: tisId,
             imovel_id: imovelId
@@ -141,7 +143,7 @@ function escolherOrigem(documentoId, origemNumero) {
             origemButtons.forEach(btn => {
                 btn.classList.remove('ativo', 'loading');
                 btn.disabled = false;
-                if (btn.dataset.origemNumero === origemNumero) {
+                if (btn.dataset.origemIdentidade === origemIdentidade) {
                     btn.classList.add('ativo');
                 }
             });
@@ -201,48 +203,6 @@ function atualizarTabelaCadeia(cadeia) {
     cadeia.forEach(item => {
         console.log('Processando item:', item.documento.numero, 'com', item.lancamentos.length, 'lançamentos');
         
-        // Verificar se este documento deve ser exibido baseado na escolha de origem
-        let deveExibir = true;
-        
-        // Encontrar a origem escolhida global (do documento que tem múltiplas origens)
-        // Procurar pelo documento que tem múltiplas origens e uma delas está escolhida
-        const documentoComEscolha = cadeia.find(otherItem => 
-            otherItem.tem_multiplas_origens && otherItem.origens_disponiveis && 
-            otherItem.origens_disponiveis.some(origem => origem.escolhida)
-        );
-        const origemEscolhidaGlobal = documentoComEscolha ? documentoComEscolha.escolha_atual : null;
-        
-        console.log(`  - ${item.documento.numero}: escolha_atual=${item.escolha_atual}, origemEscolhidaGlobal=${origemEscolhidaGlobal}, is_compartilhado=${item.is_compartilhado}`);
-        
-        if (origemEscolhidaGlobal) {
-            // Para documentos do imóvel atual, sempre exibir
-            if (!item.is_compartilhado) {
-                deveExibir = true;
-                console.log(`    -> Documento do imóvel atual: sempre exibir`);
-            } else {
-                // Para documentos compartilhados:
-                // 1. Sempre exibir o documento que tem a escolha (M8487)
-                // 2. Exibir apenas a origem escolhida (M583)
-                // 3. Esconder as outras origens (M4897, M543, M387)
-                if (item.tem_multiplas_origens && item.origens_disponiveis && 
-                    item.origens_disponiveis.some(origem => origem.escolhida)) {
-                    // Este documento tem múltiplas origens e uma escolha ativa, sempre exibir
-                    deveExibir = true;
-                    console.log(`    -> Documento com múltiplas origens e escolha ativa: sempre exibir`);
-                } else {
-                    // Este documento é uma origem, verificar se é a escolhida
-                    deveExibir = item.documento.numero === origemEscolhidaGlobal;
-                    console.log(`    -> Documento origem: ${item.documento.numero} === ${origemEscolhidaGlobal} = ${deveExibir}`);
-                }
-            }
-        } else {
-            // Se não há origem escolhida global, exibir todos
-            deveExibir = true;
-            console.log(`    -> Sem origem escolhida global: exibir todos`);
-        }
-        
-        console.log(`Documento ${item.documento.numero}: deveExibir = ${deveExibir}`);
-        
         // Criar linha do documento
         const documentoRow = document.createElement('tr');
         let rowClasses = 'documento-row';
@@ -250,12 +210,6 @@ function atualizarTabelaCadeia(cadeia) {
         // Adicionar classe para documentos importados
         if (item.is_compartilhado) {
             rowClasses += ' documento-compartilhado';
-        }
-        
-        // Adicionar classe para documentos ocultos
-        if (!deveExibir) {
-            rowClasses += ' documento-oculto';
-            console.log(`  -> Aplicando classe documento-oculto para ${item.documento.numero}`);
         }
         
         documentoRow.className = rowClasses;
@@ -300,14 +254,9 @@ function atualizarTabelaCadeia(cadeia) {
         lancamentosRow.className = 'lancamentos-row';
         lancamentosRow.id = `lancamentos-${item.documento.id}`;
         
-        // Aplicar lógica de exibição baseada na escolha de origem
-        if (deveExibir) {
-            lancamentosRow.style.display = 'table-row';
-            lancamentosRow.classList.add('show');
-        } else {
-            lancamentosRow.style.display = 'none';
-            lancamentosRow.classList.remove('show');
-        }
+        // Exibir sempre expandido
+        lancamentosRow.style.display = 'table-row';
+        lancamentosRow.classList.add('show');
         
         // Criar conteúdo dos lançamentos
         const lancamentosContent = criarConteudoLancamentos(item);
@@ -389,6 +338,7 @@ function criarConteudoLancamentos(item) {
                 <button class="origem-btn ${ativoClass}" 
                         data-documento-id="${item.documento.id}"
                         data-origem-numero="${origem.numero}"
+                        data-origem-identidade="${origem.identidade}"
                         title="Escolher origem ${origem.numero}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -437,7 +387,7 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
             <!-- Matrícula -->
             <td>${lancamento.numero_lancamento || '-'}</td>
             <td>${documento.livro || '-'}</td>
-            <td>${documento.folha || '-'}</td>
+            <td>${documento.tipo === 'matricula' ? '-' : (documento.folha || '-')}</td>
             <td>${documento.cartorio_nome || '-'}</td>
             <td>${lancamento.data || '-'}</td>
             <!-- Transmitente -->
@@ -455,8 +405,8 @@ function criarLinhaLancamentoPlanilha(lancamento, documento, rowClass) {
                  <td>${lancamento.data_transacao || '-'}</td>`
             }
             <!-- Restante -->
-            <td>${lancamento.area || '-'}</td>
-            <td>${formatarOrigemCompleta(lancamento)}</td>
+            <td>${lancamento.area_formatada || '-'}</td>
+            <td>${lancamento.origem_formatada || '-'}</td>
             <td>${
               lancamento.keyword_encontrada
                 ? `<div class="alerta-badge alerta-badge-${lancamento.keyword_encontrada.slug}">${lancamento.keyword_encontrada.label}</div>`
@@ -960,7 +910,80 @@ function abrirModalSelecaoSequencia() {
     
     document.getElementById('modalSelecaoSequencia').style.display = 'block';
     carregarDocumentosArvore();
+    carregarArvoreModal();
 }
+
+// ---- Árvore da cadeia dentro do modal (issue #171) ----
+// Reaproveita os módulos D3 da visualização em tela cheia para renderizar
+// uma prévia navegável ao lado da lista de sequência.
+let arvoreModalCarregada = false;
+
+function carregarArvoreModal() {
+    // Renderiza uma única vez por página; reabrir o modal reaproveita o SVG.
+    if (arvoreModalCarregada) return;
+
+    const svgEl = document.getElementById('modal-arvore-svg');
+    const statusEl = document.getElementById('modalArvoreStatus');
+    if (!svgEl || typeof d3 === 'undefined' ||
+        typeof converterParaArvoreD3 !== 'function' ||
+        typeof renderArvoreD3 !== 'function') {
+        if (statusEl) statusEl.textContent = 'Árvore indisponível.';
+        return;
+    }
+
+    // Módulos D3 leem os ids de window.*
+    window.tisId = tisId;
+    window.imovelId = imovelId;
+
+    if (statusEl) {
+        statusEl.style.display = '';
+        statusEl.textContent = 'Carregando árvore...';
+    }
+
+    const svg = d3.select('#modal-arvore-svg');
+    const rect = svgEl.getBoundingClientRect();
+    const width = Math.max(rect.width || 600, 2000);
+    const height = Math.max(rect.height || 460, 460);
+    svg.attr('width', width).attr('height', height);
+    svg.selectAll('*').remove();
+
+    const zoomGroup = svg.append('g').attr('id', 'modal-arvore-zoom-group');
+    configurarZoom(svg, zoomGroup);
+
+    const arvoreUrl = document.getElementById('modalArvorePanel')?.dataset.arvoreUrl
+        || `/dominial/cadeia-dominial/${tisId}/${imovelId}/arvore/`;
+    fetch(arvoreUrl)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+            const arvore = converterParaArvoreD3(data);
+            renderArvoreD3(arvore, zoomGroup, width, height);
+            arvoreModalCarregada = true;
+            if (statusEl) statusEl.style.display = 'none';
+            requestAnimationFrame(() => {
+                if (typeof fitTreeToViewport === 'function') fitTreeToViewport();
+            });
+        })
+        .catch(error => {
+            if (statusEl) {
+                statusEl.style.display = '';
+                statusEl.textContent = 'Erro ao carregar a árvore: ' + error.message;
+            }
+        });
+}
+
+// Com o modal de sequência aberto, clicar num card da árvore não deve
+// navegar para fora da página — o objetivo é apenas consultar a árvore
+// para montar a sequência.
+window.addEventListener('d3:node-click', function (event) {
+    const modal = document.getElementById('modalSelecaoSequencia');
+    if (modal && modal.style.display === 'block') {
+        event.preventDefault();
+    }
+});
 
 // Fechar modal
 function fecharModalSelecaoSequencia() {
@@ -1202,99 +1225,4 @@ window.onclick = function(event) {
     if (event.target === modal) {
         fecharModalSelecaoSequencia();
     }
-}
-
-function formatarClassificacaoFimCadeia(classificacao) {
-    const chave = classificacao
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/ /g, '_');
-    const labels = {
-        origem_lidima: 'Origem Lídima',
-        origem_identificada: 'Origem Lídima',
-        sem_origem: 'Sem Origem',
-        situacao_inconclusa: 'Situação Inconclusa',
-        inconclusa: 'Situação Inconclusa'
-    };
-    return labels[chave] || classificacao;
-}
-
-// Função para formatar origem completa igual ao filtro Django
-function formatarOrigemCompleta(lancamento) {
-    if (!lancamento.origem) {
-        return '-';
-    }
-    
-    const origens_formatadas = [];
-    const origens = lancamento.origem.split(';').map(o => o.trim()).filter(o => o);
-    
-    for (const origem of origens) {
-        // Verificar se é fim de cadeia
-        const padroes_fim_cadeia = [
-            'Destacamento Público:',
-            'Outra:',
-            'Sem Origem:',
-            'FIM_CADEIA'
-        ];
-        
-        const is_fim_cadeia = padroes_fim_cadeia.some(padrao => origem.includes(padrao));
-        
-        if (is_fim_cadeia) {
-            // Formatar fim de cadeia
-            if (origem.includes('Destacamento Público:')) {
-                const partes = origem.split(':');
-                if (partes.length >= 2) {
-                    const sigla = partes[1].trim();
-                    const classificacao = partes[2] ? formatarClassificacaoFimCadeia(partes[2].trim()) : '';
-                    let origem_formatada = `Destacamento Público : ${sigla}`;
-                    if (classificacao) {
-                        origem_formatada += ` (${classificacao})`;
-                    }
-                    origens_formatadas.push(origem_formatada);
-                } else {
-                    origens_formatadas.push(origem);
-                }
-            } else if (origem.includes('Outra:')) {
-                const partes = origem.split(':');
-                if (partes.length >= 2) {
-                    const especificacao = partes[1].trim();
-                    const classificacao = partes[2] ? formatarClassificacaoFimCadeia(partes[2].trim()) : '';
-                    let origem_formatada = `Outra : ${especificacao}`;
-                    if (classificacao) {
-                        origem_formatada += ` (${classificacao})`;
-                    }
-                    origens_formatadas.push(origem_formatada);
-                } else {
-                    origens_formatadas.push(origem);
-                }
-            } else if (origem.includes('Sem Origem:')) {
-                const partes = origem.split(':');
-                if (partes.length >= 3) {
-                    const classificacao = formatarClassificacaoFimCadeia(partes[2].trim());
-                    let origem_formatada = 'Sem Origem';
-                    if (classificacao) {
-                        origem_formatada += ` (${classificacao})`;
-                    }
-                    origens_formatadas.push(origem_formatada);
-                } else {
-                    origens_formatadas.push('Sem Origem');
-                }
-            } else {
-                // Para formato antigo FIM_CADEIA, usar como está
-                origens_formatadas.push(origem);
-            }
-        } else {
-            // Para origem normal, adicionar cartório se disponível
-            const cartorio_nome = lancamento.cartorio_origem_nome || '';
-            if (cartorio_nome) {
-                origens_formatadas.push(`${origem} (${cartorio_nome})`);
-            } else {
-                origens_formatadas.push(origem);
-            }
-        }
-    }
-    
-    // Juntar com quebras de linha para melhor visualização
-    return origens_formatadas.join('<br>');
 }

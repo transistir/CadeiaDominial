@@ -1,15 +1,36 @@
 from io import BytesIO
 from pathlib import Path
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import RequestFactory, SimpleTestCase
+from django.core.cache import cache
+from django.template.loader import render_to_string
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils import timezone
 from openpyxl import load_workbook
 
+from dominial.models import (
+    Cartorios,
+    Documento,
+    DocumentoTipo,
+    Imovel,
+    Lancamento,
+    LancamentoTipo,
+    OrigemFimCadeia,
+    Pessoas,
+    TIs,
+)
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.views import cadeia_dominial_views
+
+
+PICTOGRAMAS_EXPORT = re.compile(
+    r"[\u2000-\u218F\u20E3\uFE0F\u2190-\u2BFF\U0001F000-\U0001FAFF]"
+)
 
 
 class TipoDocumentoFake:
@@ -79,6 +100,11 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
         # banco), então a segregação da #132 precisa passar direto sem query.
         request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
         return request
+
+    def test_detector_cobre_pictogramas_variation_selector_e_keycap(self):
+        for pictograma in ("‼", "™", "ℹ", "\uFE0F", "\u20E3"):
+            with self.subTest(pictograma=pictograma):
+                self.assertIsNotNone(PICTOGRAMAS_EXPORT.search(pictograma))
 
     def test_botao_pdf_padrao_aponta_para_exportacao_completa(self):
         template = (
@@ -179,6 +205,7 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
     def test_excel_usa_mesmo_servico_e_preserva_ordem_dos_documentos(
         self, get_object_mock, service_class_mock
     ):
+        self.imovel.matricula = "M 100/Á"
         get_object_mock.side_effect = [self.tis, self.imovel]
         service = service_class_mock.return_value
         service.get_cadeia_completa.return_value = self.contexto_completo
@@ -189,14 +216,112 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
         service.get_cadeia_completa.assert_called_once_with(self.tis.id, self.imovel.id)
         workbook = load_workbook(BytesIO(response.content))
-        valores_coluna_a = [cell.value for cell in workbook.active["A"]]
-        titulos_esperados = ["Matrícula: M100", "📥 Transcrição: T90"]
+        ws = workbook.active
+        valores_coluna_a = [cell.value for cell in ws["A"]]
+        # Issue #204: T90 (`is_importado=True`) sai sem prefixo, como M100.
+        titulos_esperados = [
+            "Matrícula: M100",
+            "Transcrição: T90",
+        ]
         titulos_documentos = [valor for valor in valores_coluna_a if valor in titulos_esperados]
         self.assertEqual(titulos_documentos, titulos_esperados)
+        self.assertNotIn("ESTATÍSTICAS", valores_coluna_a)
+        self.assertNotIn("Total de Documentos:", valores_coluna_a)
+        self.assertNotIn("Total de Lançamentos:", valores_coluna_a)
+        self.assertNotIn("Documentos Compartilhados:", valores_coluna_a)
+        self.assertEqual(ws["A1"].font.name, "Arial")
+        self.assertEqual(ws["A1"].font.sz, 18)
+        self.assertEqual(ws["A1"].font.color.rgb[-6:], "2C5AA0")
+        self.assertEqual(ws["A3"].font.name, "Arial")
+        self.assertEqual(ws["A3"].font.sz, 8)
+        self.assertTrue(ws["A3"].font.bold)
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is not None:
+                    self.assertEqual(cell.font.name, "Arial")
         self.assertEqual(
             response["Content-Type"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        self.assertRegex(
+            response["Content-Disposition"],
+            r'^attachment; filename="cadeia_dominial_geral_m-100a_\d{8}\.xlsx"$',
+        )
+        self.assertNotIn("M 100/Á", response["Content-Disposition"])
+
+    @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
+    @patch.object(cadeia_dominial_views, "get_object_or_404")
+    def test_excel_individual_nao_clipa_nomes_longos_do_imovel_e_cartorio(
+        self, get_object_mock, service_class_mock
+    ):
+        self.imovel.nome = "Imóvel com nome longo que precisa permanecer visível"
+        self.imovel.cartorio.nome = (
+            "Cartório de Registro de Imóveis da Comarca com Nome Muito Longo"
+        )
+        get_object_mock.side_effect = [self.tis, self.imovel]
+        service_class_mock.return_value.get_cadeia_completa.return_value = (
+            self.contexto_completo
+        )
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        ws = load_workbook(BytesIO(response.content)).active
+
+        self.assertEqual(ws["B5"].value, self.imovel.nome)
+        self.assertEqual(ws["B7"].value, self.imovel.cartorio.nome)
+        for coordenada in ("B5", "B7"):
+            with self.subTest(coordenada=coordenada):
+                celula = ws[coordenada]
+                self.assertFalse(celula.alignment.wrap_text)
+                self.assertIsNone(ws.row_dimensions[celula.row].height)
+                self.assertFalse(ws.row_dimensions[celula.row].customHeight)
+
+    @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
+    @patch.object(cadeia_dominial_views, "get_object_or_404")
+    def test_excel_nao_contem_pictogramas(
+        self, get_object_mock, service_class_mock
+    ):
+        get_object_mock.side_effect = [self.tis, self.imovel]
+        service_class_mock.return_value.get_cadeia_completa.return_value = (
+            self.contexto_completo
+        )
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        workbook = load_workbook(BytesIO(response.content))
+
+        for row in workbook.active.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str):
+                    self.assertIsNone(
+                        PICTOGRAMAS_EXPORT.search(cell.value),
+                        f"Pictograma encontrado em {cell.coordinate}: {cell.value!r}",
+                    )
+
+    def test_templates_pdf_nao_contem_pictogramas(self):
+        contextos = (
+            ("dominial/cadeia_completa_pdf.html", self.contexto_completo),
+            (
+                "dominial/cadeia_dominial_pdf.html",
+                {
+                    **self.contexto_completo,
+                    "cadeia": self.contexto_completo["cadeia_completa"][0][
+                        "documentos"
+                    ],
+                    "tem_lancamentos": True,
+                },
+            ),
+        )
+
+        for template, contexto in contextos:
+            with self.subTest(template=template):
+                html = render_to_string(template, contexto)
+                self.assertIsNone(
+                    PICTOGRAMAS_EXPORT.search(html),
+                    f"Pictograma encontrado na saída de {template}",
+                )
 
     @patch("dominial.services.cadeia_completa_service.CadeiaCompletaService")
     @patch.object(cadeia_dominial_views, "get_object_or_404")
@@ -228,3 +353,249 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             self.tis.id, self.imovel.id, "202,101"
         )
         service.get_cadeia_completa.assert_not_called()
+
+
+class ExportacaoCadeiaComFimCadeiaTest(TestCase):
+    """
+    Regressão da issue #146 (banco de dados real).
+
+    `ExportacaoCadeiaParidadeTest`, acima, usa apenas `SimpleNamespace` e
+    nunca toca o banco — por isso não pegou este bug. Aqui montamos uma
+    cadeia real (matrícula -> transcrição de origem) com uma origem de fim
+    de cadeia (issue #85), que faz `HierarquiaArvoreService` injetar em
+    `arvore['documentos']` um nó sintético (dict puro, sem Documento por
+    trás) cujo id é a string `fim_cadeia_{doc_id}_{lanc_id}_{origem_id}`.
+
+    `CadeiaCompletaService._obter_tronco_principal_completo` fazia
+    `Documento.objects.get(id=doc_node['id'])` para todo nó da árvore,
+    inclusive o sintético, e explodia com:
+        ValueError: Field 'id' expected a number but got 'fim_cadeia_...'
+    derrubando com HTTP 500 tanto a exportação em Excel quanto o PDF padrão.
+    """
+
+    def setUp(self):
+        # LocMemCache é compartilhado entre métodos de teste no mesmo
+        # processo (só o banco é revertido a cada teste); sem isso, o cache
+        # de tronco principal por imovel_id poderia vazar entre os testes
+        # desta classe, já que os IDs são reaproveitados a cada rollback.
+        cache.clear()
+        self.factory = RequestFactory()
+
+        self.tis = TIs.objects.create(
+            nome="TI Teste 146", codigo="TI146", etnia="Teste"
+        )
+        self.cartorio = Cartorios.objects.create(
+            nome="Cartório Teste 146", cns="146146", cidade="Cidade", estado="TS"
+        )
+        self.proprietario = Pessoas.objects.create(
+            nome="Proprietário 146", cpf="11122233344"
+        )
+        self.imovel = Imovel.objects.create(
+            terra_indigena_id=self.tis,
+            nome="Imóvel Teste 146",
+            proprietario=self.proprietario,
+            matricula="M500",
+            cartorio=self.cartorio,
+        )
+
+        self.tipo_matricula = DocumentoTipo.objects.create(tipo='matricula')
+        self.tipo_transcricao = DocumentoTipo.objects.create(tipo='transcricao')
+        self.tipo_inicio = LancamentoTipo.objects.create(tipo='inicio_matricula')
+
+        # Documento 1 (nível 0): matrícula que é a identidade registral do
+        # imóvel — é o ponto de partida de HierarquiaArvoreService.
+        self.documento_matricula = Documento.objects.create(
+            imovel=self.imovel,
+            tipo=self.tipo_matricula,
+            numero="M500",
+            data=timezone.now().date(),
+            cartorio=self.cartorio,
+            livro="1",
+            folha="1",
+        )
+
+        # Documento 2 (nível 1): transcrição de origem que será referenciada
+        # pelo início de matrícula abaixo via identidade (tipo + número +
+        # cartório) — cadeia real, encadeada de fato, com mais de um documento.
+        self.documento_transcricao = Documento.objects.create(
+            imovel=self.imovel,
+            tipo=self.tipo_transcricao,
+            numero="T90",
+            data=timezone.now().date(),
+            cartorio=self.cartorio,
+            livro="2",
+            folha="5",
+        )
+
+        # Início de matrícula do documento 1 aponta para "T90" (fallback
+        # textual lido por LancamentoOrigemLeituraService, sem
+        # LancamentoOrigem estruturada). Usa bulk_create para não disparar o
+        # signal post_save de Lancamento (processar_origens_automaticas_signal,
+        # dominial/signals.py) — ele criaria automaticamente um segundo
+        # Documento "T90" e colidiria com o que acabamos de criar acima
+        # (mesmo padrão de test_divida_cartorio_arbitrario_arvore.py).
+        Lancamento.objects.bulk_create([
+            Lancamento(
+                documento=self.documento_matricula,
+                tipo=self.tipo_inicio,
+                data=timezone.now().date(),
+                cartorio_origem=self.cartorio,
+                origem="T90",
+            ),
+        ])
+        # Lançamento da transcrição sem origem própria: é nele que a origem
+        # de fim de cadeia (issue #85) é registrada, encerrando a cadeia.
+        self.lancamento_transcricao = Lancamento.objects.create(
+            documento=self.documento_transcricao,
+            tipo=self.tipo_inicio,
+            data=timezone.now().date(),
+            valor_transacao=1000.00,
+            origem="",
+        )
+        self.origem_fim_cadeia = OrigemFimCadeia.objects.create(
+            lancamento=self.lancamento_transcricao,
+            indice_origem=0,
+            fim_cadeia=True,
+            tipo_fim_cadeia='destacamento_publico',
+            classificacao_fim_cadeia='origem_lidima',
+        )
+
+    def _request(self, path):
+        request = self.factory.get(path)
+        request.user = SimpleNamespace(is_authenticated=True)
+        return request
+
+    def test_fixture_gera_no_sintetico_fim_cadeia_na_arvore(self):
+        """
+        Prova que a fixture realmente aciona a issue #85: sem isto, os
+        testes de regressão abaixo seriam vazios e passariam mesmo com o
+        bug presente (o problema da classe `ExportacaoCadeiaParidadeTest`).
+        """
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+
+        nos_fim_cadeia = [d for d in arvore['documentos'] if d.get('is_fim_cadeia')]
+        self.assertEqual(len(nos_fim_cadeia), 1)
+
+        no_fc = nos_fim_cadeia[0]
+        self.assertIsInstance(no_fc['id'], str)
+        self.assertEqual(
+            no_fc['id'],
+            f"fim_cadeia_{self.documento_transcricao.id}_"
+            f"{self.lancamento_transcricao.id}_{self.origem_fim_cadeia.id}",
+        )
+
+        # E a árvore contém os dois documentos reais da cadeia, além do nó sintético.
+        ids_reais = {
+            d['id'] for d in arvore['documentos'] if not d.get('is_fim_cadeia')
+        }
+        self.assertEqual(
+            ids_reais, {self.documento_matricula.id, self.documento_transcricao.id}
+        )
+
+    def test_get_cadeia_completa_nao_lanca_valueerror(self):
+        """
+        Regressão direta da issue #146: o nó sintético de fim de cadeia não
+        deve derrubar `CadeiaCompletaService.get_cadeia_completa` com
+        `ValueError: Field 'id' expected a number but got 'fim_cadeia_...'`.
+        """
+        resultado = CadeiaCompletaService().get_cadeia_completa(
+            self.tis.id, self.imovel.id
+        )
+
+        self.assertIn('cadeia_completa', resultado)
+        self.assertEqual(resultado['estatisticas']['total_documentos'], 2)
+
+    def test_cadeia_completa_contem_apenas_documentos_reais(self):
+        """
+        A cadeia completa deve conter exatamente os documentos reais criados
+        (M500 e T90), todos instâncias de `Documento` com id inteiro, e
+        nenhuma entrada sintética de fim de cadeia.
+        """
+        resultado = CadeiaCompletaService().get_cadeia_completa(
+            self.tis.id, self.imovel.id
+        )
+
+        documentos = [
+            item['documento']
+            for tronco in resultado['cadeia_completa']
+            for item in tronco['documentos']
+        ]
+
+        self.assertEqual(len(documentos), 2)
+        for documento in documentos:
+            self.assertIsInstance(documento, Documento)
+            self.assertIsInstance(documento.id, int)
+
+        self.assertEqual(
+            {documento.numero for documento in documentos}, {"M500", "T90"}
+        )
+        self.assertEqual(
+            {documento.id for documento in documentos},
+            {self.documento_matricula.id, self.documento_transcricao.id},
+        )
+
+    def test_excel_export_retorna_200_com_no_fim_cadeia(self):
+        """
+        Regressão da issue #146: o botão de exportação Excel não deve mais
+        devolver HTTP 500 (`Erro ao gerar Excel: ...`, text/plain) quando a
+        árvore contém um nó sintético de fim de cadeia.
+        """
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def test_excel_export_abre_no_openpyxl_com_documentos_reais(self):
+        """
+        O arquivo XLSX gerado deve abrir corretamente no openpyxl e conter
+        as linhas de título dos dois documentos reais da cadeia.
+        """
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        self.assertEqual(response.status_code, 200)
+
+        workbook = load_workbook(BytesIO(response.content))
+        valores_coluna_a = [cell.value for cell in workbook.active["A"]]
+
+        titulos_esperados = ["Matrícula: M500", "Transcrição: T90"]
+        titulos_documentos = [
+            valor for valor in valores_coluna_a if valor in titulos_esperados
+        ]
+        self.assertEqual(titulos_documentos, titulos_esperados)
+
+        # Nenhuma linha de documento deve corresponder ao nó sintético de
+        # fim de cadeia (ele não é um Documento e não deve virar uma linha).
+        self.assertFalse(
+            any(
+                isinstance(valor, str) and "Fim de Cadeia" in valor
+                for valor in valores_coluna_a
+            )
+        )
+
+    def test_excel_export_neutraliza_formula_na_observacao(self):
+        formula = "=SUM(1+1)"
+        self.lancamento_transcricao.observacoes = formula
+        self.lancamento_transcricao.save(update_fields=["observacoes"])
+
+        response = cadeia_dominial_views.exportar_cadeia_dominial_excel.__wrapped__(
+            self._request("/excel/"), self.tis.id, self.imovel.id
+        )
+        self.assertEqual(response.status_code, 200)
+
+        ws = load_workbook(BytesIO(response.content)).active
+        celulas = [
+            cell
+            for row in ws.iter_rows()
+            for cell in row
+            if cell.value == formula
+        ]
+
+        self.assertEqual(len(celulas), 1)
+        self.assertEqual(celulas[0].value, formula)
+        self.assertEqual(celulas[0].data_type, "s")

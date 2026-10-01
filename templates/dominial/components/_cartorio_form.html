@@ -75,12 +75,12 @@
     <div class="form-group">
         <label for="livro_origem_{{ prefix }}">Livro{% if livro_obrigatorio %} *{% endif %}</label>
         <input type="text" name="livro_origem_{{ prefix }}" id="livro_origem_{{ prefix }}" 
-               value="{% if modo_edicao %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_prefix }}{% endif %}">
+               value="{% if modo_edicao and lancamento.livro_origem %}{{ lancamento.livro_origem }}{% elif form_data %}{{ form_data.livro_origem_prefix }}{% endif %}">
     </div>
     <div class="form-group">
         <label for="folha_origem_{{ prefix }}">Folha{% if folha_obrigatorio %} *{% endif %}</label>
         <input type="text" name="folha_origem_{{ prefix }}" id="folha_origem_{{ prefix }}" 
-               value="{% if modo_edicao %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_prefix }}{% endif %}">
+               value="{% if modo_edicao and lancamento.folha_origem %}{{ lancamento.folha_origem }}{% elif form_data %}{{ form_data.folha_origem_prefix }}{% endif %}">
     </div>
     <div class="form-group">
         <label for="data_origem_{{ prefix }}">Data{% if data_obrigatorio %} *{% endif %}</label>
@@ -91,7 +91,7 @@
     <div class="form-group">
         <label for="titulo_{{ prefix }}">Título *</label>
         <input type="text" name="titulo_{{ prefix }}" id="titulo_{{ prefix }}" placeholder="Título do registro"
-               value="{% if modo_edicao %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo_prefix }}{% endif %}">
+               value="{% if modo_edicao and lancamento.titulo %}{{ lancamento.titulo }}{% elif form_data %}{{ form_data.titulo_prefix }}{% endif %}">
     </div>
     {% endif %}
 </div> 

@@ -1,5 +1,7 @@
 from django import forms
+from django.db import transaction
 from ..models import Imovel, Cartorios
+from ..services.imovel_documento_service import ImovelDocumentoService
 from ..utils.documento_identidade_utils import normalizar_numero_documento
 
 
@@ -100,7 +102,43 @@ class ImovelForm(forms.ModelForm):
                     f'cartório) no cartório "{cartorio.nome}".'
                 )
 
+        # Sincronização de cartório com o documento principal (#210): só se
+        # aplica à edição de um imóvel existente cujo cartório mudou.
+        self.cartorio_mudou = False
+        if self.instance and self.instance.pk and cartorio:
+            cartorio_mudou = cartorio.pk != self.instance.cartorio_id
+            matricula_mudou = matricula is not None and matricula != self.instance.matricula
+            tipo_mudou = (
+                tipo_documento_principal is not None
+                and tipo_documento_principal != self.instance.tipo_documento_principal
+            )
+            if cartorio_mudou and (matricula_mudou or tipo_mudou):
+                raise forms.ValidationError(
+                    'Não é possível trocar o cartório e editar a matrícula ou o '
+                    'tipo do documento principal na mesma edição. Troque o '
+                    'cartório separadamente da matrícula/tipo do documento.'
+                )
+            if cartorio_mudou:
+                self.cartorio_mudou = True
+                ImovelDocumentoService.validar_troca_cartorio(self.instance, cartorio)
+
         return cleaned_data
+
+    def save(self, commit=True):
+        # `save(commit=False)` seguido de um save manual do `instance` PULA
+        # a sincronização abaixo. Quem fizer isso precisa chamar
+        # `ImovelDocumentoService.sincronizar_cartorio_documento_principal`
+        # na mesma transação do save (é o que as views fazem hoje).
+        instance = super().save(commit=False)
+        self.sincronizacao_aviso = None
+        if commit:
+            with transaction.atomic():
+                instance.save()
+                if getattr(self, 'cartorio_mudou', False):
+                    self.sincronizacao_aviso = (
+                        ImovelDocumentoService.sincronizar_cartorio_documento_principal(instance)
+                    )
+        return instance
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -38,7 +38,29 @@ class DocumentoService:
         )
         
         return documento
-    
+
+    @staticmethod
+    def atualizar_documento(request, documento):
+        """
+        Atualiza um documento existente a partir dos dados do formulário (POST).
+
+        #245: na edição, SOMENTE livro e folha são gravados — identidade
+        (tipo, número, data, cartório, origem, observações) é imutável
+        nesta rota, mesmo com POST forjado (defesa em profundidade).
+        Regra #138 mantida: matrícula não tem folha (forçada a '').
+        """
+        documento.livro = request.POST.get('livro', '').strip()
+
+        # Matrículas não têm campo folha (#138) — FLS é irrelevante para M.
+        if documento.tipo.tipo == 'matricula':
+            documento.folha = ''
+        else:
+            documento.folha = request.POST.get('folha', '').strip()
+
+        documento.save()
+
+        return True, documento.numero
+
     @staticmethod
     def obter_documentos_imovel(imovel):
         """

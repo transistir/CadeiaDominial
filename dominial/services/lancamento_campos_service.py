@@ -3,6 +3,7 @@ Service especializado para processamento de campos específicos por tipo de lan�
 """
 
 from ..models import Cartorios
+from .lancamento_origem_service import LancamentoOrigemService
 import uuid
 
 
@@ -25,9 +26,14 @@ class LancamentoCamposService:
         
         if lancamento.tipo.tipo == 'averbacao':
             LancamentoCamposService._processar_campos_averbacao(request, lancamento)
-            # Para transcrições, sempre processar campos de transação
+            # Para transcrições, sempre processar campos de transação.
+            # `preservar_forma`/`preservar_titulo`: o bloco Transmissão vazio
+            # NÃO pode apagar o que a averbação já gravou via `forma_averbacao`
+            # (issue #157). Transação preenchida ainda vence a averbação.
             if is_transcricao:
-                LancamentoCamposService._processar_campos_transacao(request, lancamento)
+                LancamentoCamposService._processar_campos_transacao(
+                    request, lancamento, preservar_forma=True, preservar_titulo=True
+                )
         elif lancamento.tipo.tipo == 'registro':
             LancamentoCamposService._processar_campos_registro(request, lancamento)
             # Para registro, também processar campos de transação
@@ -42,6 +48,53 @@ class LancamentoCamposService:
             if is_transcricao:
                 LancamentoCamposService._processar_campos_transacao(request, lancamento)
     
+    @staticmethod
+    def _registrar_mapeamento_origens(request, lancamento):
+        """
+        Registro/averbação enviam um bloco de cartório por origem
+        (``cartorio_origem[]``), como o início de matrícula. Grava o mapeamento
+        origem→cartório/livro/folha lido por ``LancamentoOrigemService`` para
+        cada origem ser vinculada ao cartório PRÓPRIO e não ao do lançamento.
+        Só há mapeamento quando o cartório da origem foi informado (id ou nome
+        existente); a linha persistida segue como fonte durável.
+        """
+        origens = [o.strip() for o in request.POST.getlist('origem_completa[]')]
+        # O writer sempre sobrescreve o mapeamento anterior (#144 fase 2, D4):
+        # o retorno antecipado inclusive limpa o que um POST prévio deixou.
+        LancamentoOrigemService.limpar_mapeamento(lancamento)
+        if not any(origens):
+            return
+        ids = request.POST.getlist('cartorio_origem[]')
+        nomes = request.POST.getlist('cartorio_origem_nome[]')
+        livros = request.POST.getlist('livro_origem[]')
+        folhas = request.POST.getlist('folha_origem[]')
+
+        validas = []
+        mapeamento = []
+        for i, origem in enumerate(origens):
+            if not origem:
+                continue
+            validas.append(origem)
+            cartorio = None
+            if i < len(ids) and ids[i].strip():
+                cartorio = Cartorios.objects.filter(id=ids[i]).first()
+            if not cartorio and i < len(nomes) and nomes[i].strip():
+                cartorio = Cartorios.objects.filter(nome__iexact=nomes[i].strip()).first()
+            if cartorio:
+                mapeamento.append({
+                    # Posição no texto filtrado e unido (D1), não o índice
+                    # bruto do POST: linha em branco não desloca a origem.
+                    'indice': len(validas) - 1,
+                    'origem': origem,
+                    'cartorio_id': cartorio.id,
+                    'cartorio_nome': cartorio.nome,
+                    'livro': livros[i] if i < len(livros) else None,
+                    'folha': folhas[i] if i < len(folhas) else None,
+                })
+
+        lancamento.origem = '; '.join(validas)
+        LancamentoOrigemService.definir_mapeamento(lancamento, mapeamento)
+
     @staticmethod
     def _processar_campos_averbacao(request, lancamento):
         """
@@ -63,6 +116,8 @@ class LancamentoCamposService:
         origem_value = request.POST.get('origem_completa', '').strip()
         if origem_value:
             lancamento.origem = origem_value
+        # Um cartório por origem (#144): o service de origens lê este mapeamento
+        LancamentoCamposService._registrar_mapeamento_origens(request, lancamento)
         
         # Processar cartório da origem (se presente)
         cartorio_origem_id = request.POST.get('cartorio_origem')
@@ -101,6 +156,8 @@ class LancamentoCamposService:
         origem_value = request.POST.get('origem_completa', '').strip()
         if origem_value:
             lancamento.origem = origem_value
+        # Um cartório por origem (#144): o service de origens lê este mapeamento
+        LancamentoCamposService._registrar_mapeamento_origens(request, lancamento)
         
         # Processar cartório da origem (se presente)
         cartorio_origem_id = request.POST.get('cartorio_origem')
@@ -123,17 +180,65 @@ class LancamentoCamposService:
                 )
                 lancamento.cartorio_origem = cartorio
 
+    # Campos que compõem o bloco Transmissão no formulário de lançamento.
+    # `area` entra aqui porque a averbação em transcrição grava a área via
+    # `_processar_campos_averbacao` (POST `area`): uma averbação com SÓ a área
+    # preenchida não pode ser tratada como bloco vazio e limpar o `titulo`.
+    _CAMPOS_BLOCO_TRANSMISSAO = (
+        'forma_transacao', 'titulo_transacao', 'cartorio_transmissao',
+        'cartorio_transmissao_nome', 'livro_transacao', 'folha_transacao',
+        'data_transacao', 'area',
+    )
+
     @staticmethod
-    def _processar_campos_transacao(request, lancamento):
+    def _bloco_transmissao_vazio(request):
+        """True quando nenhum campo do bloco Transmissão foi preenchido no POST
+        (issue #160)."""
+        return not any(
+            request.POST.get(campo, '').strip()
+            for campo in LancamentoCamposService._CAMPOS_BLOCO_TRANSMISSAO
+        )
+
+    @staticmethod
+    def _processar_campos_transacao(request, lancamento, preservar_forma=False,
+                                    preservar_titulo=False):
         """
-        Processa campos do bloco de transação (Transmissão)
+        Processa campos do bloco de transação (Transmissão).
+
+        `preservar_forma`/`preservar_titulo` (issue #157): quando o bloco vem
+        de uma averbação em transcrição, um bloco Transmissão vazio NÃO pode
+        sobrescrever `forma`/`titulo` com `None`. Só um valor preenchido no
+        bloco vence.
+
+        - `forma` É gravada pela averbação (`_processar_campos_averbacao`);
+          `preservar_forma` impede que o bloco vazio apague esse valor.
+        - `titulo` NÃO é gravado pela averbação (ela grava
+          forma/descricao/area/origem/cartorio_origem, nunca titulo);
+          `preservar_titulo` mantém o valor já existente no banco quando o
+          bloco Transmissão vem PARCIALMENTE preenchido. Se o bloco inteiro
+          vier vazio, `titulo` é limpo (issue #160), simétrico ao `forma`.
+
+        O comportamento padrão (edição de registro/transação limpando o campo
+        → `None`) é mantido com os defaults `False`.
         """
         # Campos de transação
         forma_value = request.POST.get('forma_transacao', '').strip()
-        lancamento.forma = forma_value if forma_value else None
-        
+        if not preservar_forma:
+            lancamento.forma = forma_value if forma_value else None
+        elif forma_value:
+            lancamento.forma = forma_value  # transação preenchida vence averbação
+
         titulo_value = request.POST.get('titulo_transacao', '').strip()
-        lancamento.titulo = titulo_value if titulo_value else None
+        if not preservar_titulo:
+            lancamento.titulo = titulo_value if titulo_value else None
+        elif titulo_value:
+            lancamento.titulo = titulo_value
+        elif LancamentoCamposService._bloco_transmissao_vazio(request):
+            # issue #160: `preservar_titulo` deixou de ser via de mão única.
+            # Bloco Transmissão INTEIRO vazio → limpar `titulo` (simétrico ao
+            # `forma`, que a averbação já zera). Bloco parcialmente preenchido
+            # ainda preserva o valor antigo do banco.
+            lancamento.titulo = None
         
         # Cartório de transmissão (usar campo específico)
         cartorio_transmissao_id = request.POST.get('cartorio_transmissao')
@@ -190,6 +295,10 @@ class LancamentoCamposService:
         Processa campos específicos para lançamentos do tipo início de matrícula
         HERANÇA: Livro e folha são herdados do primeiro lançamento do documento criado pela origem
         """
+        # O writer sempre sobrescreve o mapeamento anterior (#144 fase 2, D4):
+        # POST sem origens não pode deixar mapeamento de um POST prévio.
+        LancamentoOrigemService.limpar_mapeamento(lancamento)
+
         # Processar múltiplas origens
         origens_completas = request.POST.getlist('origem_completa[]')
         cartorios_origem_ids = request.POST.getlist('cartorio_origem[]')
@@ -259,21 +368,24 @@ class LancamentoCamposService:
         if origens_com_cartorios:
             lancamento.origem = '; '.join([item['origem'] for item in origens_com_cartorios])
             lancamento.cartorio_origem = cartorio_origem_encontrado
-            
-            # Armazenar mapeamento em cache temporário para uso posterior
-            from django.core.cache import cache
-            cache_key = f"mapeamento_origens_lancamento_{lancamento.id if lancamento.id else 'novo'}"
+
+            # Mapeamento como atributo temporário da instância (#144 fase 2,
+            # D4), cada entrada com a posição no texto unido (D1) — os fins de
+            # cadeia contam para o índice.
             mapeamento_origens = []
-            for item in origens_com_cartorios:
+            for indice, item in enumerate(origens_com_cartorios):
                 if item['cartorio']:  # Só incluir se tiver cartório
                     mapeamento_origens.append({
+                        'indice': indice,
                         'origem': item['origem'],
                         'cartorio_id': item['cartorio'].id,
                         'cartorio_nome': item['cartorio'].nome,
                         'livro': item['livro'],
                         'folha': item['folha']
                     })
-            cache.set(cache_key, mapeamento_origens, timeout=3600)  # 1 hora
+            LancamentoOrigemService.definir_mapeamento(
+                lancamento, mapeamento_origens
+            )
         
         # PROCESSAR LIVRO E FOLHA DE ORIGEM para múltiplas origens
         # HERANÇA: Buscar livro e folha do primeiro lançamento do documento criado pela origem

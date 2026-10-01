@@ -30,11 +30,13 @@
                 <div class="info-item">
                     <strong>Livro:</strong> {{ documento.livro }}
                 </div>
+                {% if documento.tipo.tipo != 'matricula' %}
                 <div class="info-item">
                     <strong>Folha:</strong> {{ documento.folha }}
                 </div>
+                {% endif %}
             </div>
-            
+
             {% if documento.origem %}
             <div class="origem-info">
                 <strong>Origem:</strong> {{ documento.origem }}

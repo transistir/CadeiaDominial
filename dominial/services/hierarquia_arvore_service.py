@@ -32,7 +32,7 @@ class HierarquiaArvoreService:
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         Lógica corrigida: filho -> pai (esquerda -> direita)
-        
+
         Args:
             imovel: Objeto Imovel
             criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
@@ -128,7 +128,7 @@ class HierarquiaArvoreService:
             'lancamentos__tipo',
             'lancamentos__origens_fim_cadeia'
         ).get(id=documento_principal.id)
-        
+
         # Usar busca em largura para construir a árvore
         documentos_processados = set()
         conexoes_processadas = set()
@@ -167,12 +167,13 @@ class HierarquiaArvoreService:
                     })
 
             # Buscar documentos pais (origens) deste documento
-            documentos_pais = HierarquiaArvoreService._buscar_documentos_pais(
-                documento_atual,
-                imovel,
-                criar_documentos_automaticos,
-                documentos_queryset,
+            documentos_pais, origens_nao_resolvidas = (
+                HierarquiaArvoreService._buscar_documentos_pais_e_pendencias(
+                    documento_atual, imovel, criar_documentos_automaticos,
+                    documentos_queryset,
+                )
             )
+            doc_node['origens_nao_resolvidas'] = origens_nao_resolvidas
             
             # Adicionar conexões diretas e documentos pais à fila
             for doc_pai in documentos_pais:
@@ -244,23 +245,59 @@ class HierarquiaArvoreService:
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
-    def _buscar_documentos_pais(
-        documento,
-        imovel,
-        criar_documentos_automaticos,
-        documentos_queryset=None,
-    ):
+    def _resolver_origem(origem, documentos_queryset):
+        """
+        Resolve uma origem estruturada pela identidade completa e devolve
+        ``(documento, pendencia)``. Quando não resolve (``nao_encontrado`` ou
+        ``ambiguo``), ``pendencia`` descreve a origem para a árvore em vez de
+        descartá-la em silêncio (#144).
+        """
+        pendencia = {
+            'numero': origem.numero,
+            'tipo_documento': origem.tipo_documento,
+            'cartorio_nome': origem.cartorio.nome if origem.cartorio else '',
+            'status': 'nao_encontrado',
+            'candidatos': [],
+        }
+        if not origem.cartorio:
+            return None, pendencia
+        try:
+            identidade = DocumentoIdentidade(
+                origem.tipo_documento, origem.codigo, origem.cartorio_id
+            )
+        except (TypeError, ValueError):
+            return None, pendencia
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade, queryset=documentos_queryset
+        )
+        if resultado.status == 'encontrado':
+            return resultado.documento, None
+        if resultado.status == 'ambiguo':
+            pendencia['status'] = 'ambiguo'
+            pendencia['candidatos'] = [d.pk for d in resultado.candidatos]
+        return None, pendencia
+
+    @staticmethod
+    def _buscar_documentos_pais(documento, imovel, criar_documentos_automaticos, documentos_queryset=None):
         """
         Busca documentos pais (origens) de um documento
         CORREÇÃO: Para o documento do imóvel atual, buscar apenas origens diretas
         """
-        if documentos_queryset is None:
-            documentos_queryset = Documento.objects.all()
+        return HierarquiaArvoreService._buscar_documentos_pais_e_pendencias(
+            documento, imovel, criar_documentos_automaticos, documentos_queryset
+        )[0]
 
+    @staticmethod
+    def _buscar_documentos_pais_e_pendencias(documento, imovel, criar_documentos_automaticos, documentos_queryset):
+        """
+        Como ``_buscar_documentos_pais``, mas devolve também a lista de origens
+        não resolvidas (``origens_nao_resolvidas``), somente leitura (#144).
+        """
         documentos_pais = []
+        origens_nao_resolvidas = []
         documentos_processados = set()
 
-        # CORREÇÃO: Verificar se é o documento principal do imóvel atual
+        # Para o documento principal, só origens diretas: nunca cria documento
         is_documento_principal = (
             documento.imovel_id == imovel.id
             and documento.tipo.tipo == imovel.tipo_documento_principal
@@ -268,60 +305,38 @@ class HierarquiaArvoreService:
             and documento.cartorio_id == imovel.cartorio_id
         )
 
-        # Buscar lançamentos com origens
-        lancamentos = documento.lancamentos.all()
+        for lancamento in documento.lancamentos.all():
+            for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
+                chave = (origem.codigo, origem.cartorio_id)
+                if chave in documentos_processados:
+                    continue
 
-        for lancamento in lancamentos:
-            # CORREÇÃO: Para documento principal, buscar apenas origens diretas
-            if is_documento_principal:
-                # Para o documento principal, buscar apenas documentos que são origens diretas
-                # (documentos que estão no mesmo imóvel e são citados como origem)
-                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
-                    chave = (origem.codigo, origem.cartorio_id)
-                    if chave in documentos_processados:
-                        continue
+                documentos_processados.add(chave)
 
-                    documentos_processados.add(chave)
+                # Resolver documento pela identidade completa
+                doc_pai, pendencia = HierarquiaArvoreService._resolver_origem(
+                    origem, documentos_queryset
+                )
 
-                    # Resolver documento pela identidade completa
-                    doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
-                        origem.codigo,
-                        origem.cartorio,
-                        documentos_queryset,
+                if (
+                    doc_pai is None
+                    and pendencia['status'] == 'nao_encontrado'
+                    and criar_documentos_automaticos
+                    and not is_documento_principal
+                ):
+                    # Criar documento automaticamente se solicitado, sempre
+                    # com o cartório da própria origem (nunca um cartório
+                    # arbitrário).
+                    doc_pai = HierarquiaArvoreService._criar_documento_automatico(
+                        origem.codigo, origem.cartorio, imovel
                     )
 
-                    if doc_pai:
-                        # Adicionar como origem direta do documento principal
-                        documentos_pais.append(doc_pai)
-            else:
-                # Para outros documentos, usar lógica normal
-                for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
-                    chave = (origem.codigo, origem.cartorio_id)
-                    if chave in documentos_processados:
-                        continue
+                if doc_pai:
+                    documentos_pais.append(doc_pai)
+                else:
+                    origens_nao_resolvidas.append(pendencia)
 
-                    documentos_processados.add(chave)
-
-                    # Resolver documento pela identidade completa
-                    doc_pai = HierarquiaArvoreService._resolver_documento_por_codigo(
-                        origem.codigo,
-                        origem.cartorio,
-                        documentos_queryset,
-                    )
-
-                    if doc_pai:
-                        documentos_pais.append(doc_pai)
-                    elif criar_documentos_automaticos:
-                        # Criar documento automaticamente se solicitado, sempre
-                        # com o cartório da própria origem (nunca um cartório
-                        # arbitrário).
-                        doc_pai = HierarquiaArvoreService._criar_documento_automatico(
-                            origem.codigo, origem.cartorio, imovel
-                        )
-                        if doc_pai:
-                            documentos_pais.append(doc_pai)
-
-        return documentos_pais
+        return documentos_pais, origens_nao_resolvidas
     
     @staticmethod
     def _criar_documento_automatico(numero_documento, cartorio, imovel):
@@ -409,7 +424,8 @@ class HierarquiaArvoreService:
             'info_importacao': '',
             'tooltip_importacao': '',
             'cadeias_dominiais': [],
-            'total_cadeias': 0
+            'total_cadeias': 0,
+            'origens_nao_resolvidas': []
         }
     
     @staticmethod
