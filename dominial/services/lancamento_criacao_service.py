@@ -291,7 +291,8 @@ class LancamentoCriacaoService:
             # O mapeamento do POST vive só durante a requisição (D4): limpar
             # mesmo quando a criação falha, para o re-render não herdar
             # dados de um POST que não foi salvo (P1-2).
-            LancamentoOrigemService.limpar_mapeamento(lancamento)
+            if lancamento is not None:
+                LancamentoOrigemService.limpar_mapeamento(lancamento)
     @staticmethod
     def atualizar_lancamento_completo(request, lancamento, imovel):
         """
