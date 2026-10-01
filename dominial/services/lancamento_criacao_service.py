@@ -186,11 +186,15 @@ class LancamentoCriacaoService:
                 lancamento.save()
                 print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
 
-                # Aplicar livro e folha ao documento
+                # APLICAR CAMPOS DO DOCUMENTO: aplicar livro e folha ao documento
                 print("DEBUG: Aplicando campos do documento...")
+                divergencias = LancamentoCriacaoService._divergencias_livro_folha(
+                    lancamento.documento, dados_lancamento
+                )
                 documento_atualizado = LancamentoCriacaoService._aplicar_campos_documento(
                     lancamento, dados_lancamento
                 )
+                LancamentoCriacaoService._avisar_divergencias(request, divergencias)
                 if documento_atualizado:
                     print("DEBUG: Campos do documento aplicados com sucesso")
                 else:
