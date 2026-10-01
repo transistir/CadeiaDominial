@@ -4,6 +4,8 @@ from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+from .migration_utils import executor_para_migracao_historica
+
 
 class IdentidadeCanonicaMigrationTest(TransactionTestCase):
     migrate_from = [('dominial', '0047_alter_lancamentoorigem_id')]
@@ -11,7 +13,7 @@ class IdentidadeCanonicaMigrationTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
-        executor = MigrationExecutor(connection)
+        executor = executor_para_migracao_historica(connection)
         executor.migrate(self.migrate_from)
         self.apps_antes = executor.loader.project_state(self.migrate_from).apps
         self.cartorio, self.tis, self.pessoa, self.tipo = self.criar_base()

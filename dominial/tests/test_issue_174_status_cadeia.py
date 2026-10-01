@@ -9,6 +9,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from ..managers import ESCOPO_GLOBAL
 from ..models import (
     Cartorios,
     Documento,
@@ -30,6 +31,8 @@ class StatusCadeiaBase(TestCase):
         self.client.login(username="t174", password="t174pass")
 
         self.tis = TIs.objects.create(nome="TI 174", etnia="Teste", codigo="TI174")
+        from dominial.tests.segregacao_fixtures import atribuir_tis
+        atribuir_tis(self.user, self.tis)
         self.cartorio = Cartorios.objects.create(
             nome="Cartório 174", cns="CNS174174", cidade="Cidade"
         )
@@ -77,19 +80,19 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
     def test_origem_lidima(self):
         imovel = self._criar_imovel("M1")
         self._fim_cadeia(self._criar_lancamento(imovel), "origem_lidima")
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(status_map.get(imovel.id), "origem_lidima")
 
     def test_sem_origem(self):
         imovel = self._criar_imovel("M2")
         self._fim_cadeia(self._criar_lancamento(imovel), "sem_origem")
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(status_map.get(imovel.id), "sem_origem")
 
     def test_imovel_sem_fim_de_cadeia_ausente_do_dict(self):
         imovel = self._criar_imovel("M3")
         self._criar_lancamento(imovel)  # sem OrigemFimCadeia
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertNotIn(imovel.id, status_map)
         self.assertIsNone(status_map.get(imovel.id))
 
@@ -102,7 +105,7 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
             fim_cadeia=False,
             classificacao_fim_cadeia="origem_lidima",
         )
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertNotIn(imovel.id, status_map)
 
     def test_prioridade_pior_situacao(self):
@@ -110,13 +113,13 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
         lancamento = self._criar_lancamento(imovel)
         self._fim_cadeia(lancamento, "origem_lidima", indice_origem=0)
         self._fim_cadeia(lancamento, "sem_origem", indice_origem=1)
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(status_map.get(imovel.id), "sem_origem")
 
     def test_inconclusa_reconhecida(self):
         imovel = self._criar_imovel("M5")
         self._fim_cadeia(self._criar_lancamento(imovel), "inconclusa")
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(status_map.get(imovel.id), "inconclusa")
 
     def test_classificacao_desconheca_nao_derruba_e_retorna_none(self):
@@ -129,7 +132,7 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
             tipo_fim_cadeia="destacamento_publico",
             classificacao_fim_cadeia="foo_bar_baz",
         )
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertNotIn(imovel.id, status_map)
         self.assertIsNone(status_map.get(imovel.id))
 
@@ -143,7 +146,7 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
             tipo_fim_cadeia="destacamento_publico",
             classificacao_fim_cadeia=None,
         )
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertNotIn(imovel.id, status_map)
         self.assertIsNone(status_map.get(imovel.id))
 
@@ -157,7 +160,7 @@ class StatusCadeiaServiceTest(StatusCadeiaBase):
             cartorio=self.cartorio,
         )
         self._fim_cadeia(self._criar_lancamento(imovel_outra), "origem_lidima")
-        status_map = StatusCadeiaService.status_por_imovel(self.tis.id)
+        status_map = StatusCadeiaService.status_por_imovel(self.tis.id, documentos_queryset=ESCOPO_GLOBAL)
         self.assertNotIn(imovel_outra.id, status_map)
 
 

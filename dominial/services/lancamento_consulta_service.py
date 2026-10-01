@@ -34,20 +34,24 @@ class LancamentoConsultaService:
         return 0
     
     @staticmethod
-    def filtrar_lancamentos(filtros=None, pagina=None, itens_por_pagina=10):
+    def filtrar_lancamentos(filtros=None, pagina=None, itens_por_pagina=10, queryset_base=None):
         """
         Filtra lançamentos com base nos parâmetros fornecidos
-        
+
         Args:
             filtros: Dicionário com filtros (tipo_documento, tipo_lancamento, busca)
             pagina: Número da página para paginação
             itens_por_pagina: Quantidade de itens por página
-            
+            queryset_base: QuerySet inicial de Lancamento a ser usado no lugar de
+                Lancamento.objects (ex.: já filtrado por segregação de usuário).
+                Precisa suportar os mesmos select_related/prefetch_related abaixo.
+
         Returns:
             dict: Dicionário com lançamentos paginados e metadados
         """
         # Iniciar queryset com otimizações
-        lancamentos = Lancamento.objects.select_related(
+        base = Lancamento.objects if queryset_base is None else queryset_base
+        lancamentos = base.select_related(
             'documento', 'documento__tipo', 'documento__imovel', 'tipo'
         ).prefetch_related('pessoas')
         

@@ -93,8 +93,10 @@
         {% endfor %}
     </div>
 
+    {% if pode_criar_ti %}
     <div style="text-align: center;">
     <a href="{% url 'tis_form' %}" class="add-tis-button">{% trans 'Cadastrar Nova Terra Indígena' %}</a>
     </div>
+    {% endif %}
 </div>
 {% endblock %} 

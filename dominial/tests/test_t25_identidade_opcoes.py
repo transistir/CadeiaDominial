@@ -32,6 +32,10 @@ class T25IdentidadeOpcoesTest(IdentidadeDocumentoFixture):
         self.client = Client()
         self.client.login(username="t25", password="t25pass")
 
+    def criar_imovel(self, *args, **kwargs):
+        """Todo imóvel criado aqui é atribuído ao usuário autenticado (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
+
     # ------------------------------------------------------------------
     # DTO da duplicata/importação — obter_dados_duplicata_para_template
     # ------------------------------------------------------------------

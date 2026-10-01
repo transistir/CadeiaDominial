@@ -45,6 +45,10 @@ class T26SelecaoDocumentoTest(IdentidadeDocumentoFixture):
         self.client = Client()
         self.client.login(username="t26", password="t26pass")
 
+    def criar_imovel(self, *args, **kwargs):
+        """Todo imóvel criado aqui é atribuído ao usuário autenticado (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
+
     def test_documento_id_de_outro_imovel_redireciona_para_origem(self):
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
         imovel_b = self.criar_imovel("456", self.cartorio_b, nome="Imóvel B")
@@ -66,13 +70,16 @@ class T26SelecaoDocumentoTest(IdentidadeDocumentoFixture):
         imóvel de origem do documento, não a TI da URL atual."""
         ti_b = TIs.objects.create(nome="TI Outra", codigo="TI-OUT", etnia="Outra")
         imovel_a = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")
-        imovel_b = Imovel.objects.create(
-            terra_indigena_id=ti_b,
-            nome="Imóvel B",
-            proprietario=self.pessoa,
-            matricula="456",
-            tipo_documento_principal="matricula",
-            cartorio=self.cartorio_b,
+        imovel_b = self.atribuir_imovel(
+            Imovel.objects.create(
+                terra_indigena_id=ti_b,
+                nome="Imóvel B",
+                proprietario=self.pessoa,
+                matricula="456",
+                tipo_documento_principal="matricula",
+                cartorio=self.cartorio_b,
+            ),
+            self.user,
         )
         doc_a = self.criar_documento(imovel_a, self.tipo_matricula, "M123", self.cartorio_a)
 
@@ -115,6 +122,10 @@ class T26ImportacaoDuplicataIdentidadeTest(IdentidadeDocumentoFixture):
     def setUp(self):
         super().setUp()
         self.factory = RequestFactory()
+
+    def criar_imovel(self, *args, **kwargs):
+        """Os imóveis desta fixture pertencem ao usuário que importa (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
 
     def test_importacao_aceita_quando_identidade_confere(self):
         imovel_origem = self.criar_imovel("123", self.cartorio_a, nome="Imóvel A")

@@ -27,6 +27,7 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 from django.contrib.messages.storage.fallback import FallbackStorage
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import LancamentoTipo
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
@@ -49,6 +50,10 @@ class T27RegressaoCartorioDuplicataTest(IdentidadeDocumentoFixture):
         cls.tipo_registro = LancamentoTipo.objects.create(
             tipo='registro', requer_transmissao=False,
         )
+
+    def criar_imovel(self, *args, **kwargs):
+        """Toda a cadeia exercitada no teste é visível ao importador (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
 
     def test_confirmacao_duplicata_usa_cartorio_ponta_a_ponta(self):
         # Homônimos M123 em cartórios diferentes.
@@ -80,15 +85,14 @@ class T27RegressaoCartorioDuplicataTest(IdentidadeDocumentoFixture):
         )
         self.assertTrue(resultado_importacao['sucesso'], resultado_importacao.get('mensagem'))
 
-        # Passo 2: criar o lançamento original (mesmo caminho da view,
-        # `apos_importacao=true` pula a nova verificação de duplicata).
-        request.POST = request.POST.copy()
-        request.POST['apos_importacao'] = 'true'
+        # Passo 2: criar o lançamento original (mesmo caminho da view; apenas
+        # o fluxo interno pós-importação pode pular a nova verificação).
         lancamento, mensagem = LancamentoCriacaoService.criar_lancamento_completo(
             request=request,
             tis=self.ti,
             imovel=imovel_destino,
             documento_ativo=documento_ativo,
+            apos_importacao=True,
         )
         self.assertIsNotNone(lancamento, mensagem)
 
@@ -99,7 +103,7 @@ class T27RegressaoCartorioDuplicataTest(IdentidadeDocumentoFixture):
 
         # Passo 4: a árvore reconstruída liga ao documento certo por ID e
         # não confunde com o homônimo do cartório B.
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel_destino)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel_destino, documentos_queryset=ESCOPO_GLOBAL)
         conexoes = {(c['from'], c['to']) for c in arvore['conexoes']}
         self.assertIn((documento_ativo.pk, doc_origem_a.pk), conexoes)
         self.assertNotIn((documento_ativo.pk, doc_origem_b.pk), conexoes)

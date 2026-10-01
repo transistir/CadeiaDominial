@@ -1,0 +1,449 @@
+diff --git a/dominial/services/cartorio_verificacao_service.py b/dominial/services/cartorio_verificacao_service.py
+index 3b355675..4dbde607 100644
+--- a/dominial/services/cartorio_verificacao_service.py
++++ b/dominial/services/cartorio_verificacao_service.py
+@@ -31,13 +31,13 @@ class CartorioVerificacaoService:
+                 'total_cartorios': cartorios_count,
+                 'estado': estado
+             }
+-        except Exception as e:
+-            logger.error(f"Erro ao verificar cartórios para {estado}: {str(e)}")
++        except Exception:
++            logger.exception('Erro ao verificar cartórios para estado=%s', estado)
+             return {
+                 'existem_cartorios': False,
+                 'total_cartorios': 0,
+                 'estado': estado,
+-                'erro': str(e)
++                'erro': 'Erro ao verificar cartórios'
+             }
+     
+     @staticmethod
+@@ -77,10 +77,10 @@ class CartorioVerificacaoService:
+                     'cartorios_importados': cartorios_importados,
+                     'estado': estado
+                 }
+-        except Exception as e:
+-            logger.error(f"Erro ao importar cartórios para {estado}: {str(e)}")
++        except Exception:
++            logger.exception('Erro ao importar cartórios para estado=%s', estado)
+             return {
+                 'success': False,
+-                'error': f'Erro ao importar cartórios: {str(e)}',
++                'error': 'Erro ao importar cartórios',
+                 'estado': estado
+             } 
+\ No newline at end of file
+diff --git a/dominial/services/importacao_cadeia_service.py b/dominial/services/importacao_cadeia_service.py
+index ee11f729..63e6d83d 100644
+--- a/dominial/services/importacao_cadeia_service.py
++++ b/dominial/services/importacao_cadeia_service.py
+@@ -3,12 +3,16 @@ Service para importação de cadeias dominiais.
+ Importa documentos de outras cadeias dominiais para o imóvel atual.
+ """
+ 
++import logging
++
+ from django.db import transaction
+ from django.contrib.auth.models import User
+ from typing import Dict, List, Any
+ from ..models import Documento, DocumentoImportado, Imovel
+ from ..managers import documentos_for_user
+ 
++logger = logging.getLogger(__name__)
++
+ 
+ class ImportacaoCadeiaService:
+     """
+@@ -92,8 +96,9 @@ class ImportacaoCadeiaService:
+                         
+                     except KeyError:
+                         erros.append('Documento selecionado não encontrado')
+-                    except Exception as e:
+-                        erros.append(f"Erro ao importar documento {doc_id}: {str(e)}")
++                    except Exception:
++                        logger.exception('Erro ao importar documento doc_id=%s', doc_id)
++                        erros.append('Erro ao importar documento')
+                 
+                 # Se todos os documentos já foram importados, considerar como sucesso
+                 if len(documentos_importados) == 0 and len(erros) > 0 and all('já foi importado' in erro for erro in erros):
+@@ -139,10 +144,11 @@ class ImportacaoCadeiaService:
+                 'sucesso': False,
+                 'erro': f'Usuário com ID {usuario_id} não encontrado'
+             }
+-        except Exception as e:
++        except Exception:
++            logger.exception('Erro inesperado ao importar cadeia dominial')
+             return {
+                 'sucesso': False,
+-                'erro': f'Erro inesperado: {str(e)}'
++                'erro': 'Erro inesperado na importação'
+             }
+     
+     @staticmethod
+@@ -239,8 +245,9 @@ class ImportacaoCadeiaService:
+                 'sucesso': False,
+                 'erro': f'Registro de importação com ID {documento_importado_id} não encontrado'
+             }
+-        except Exception as e:
++        except Exception:
++            logger.exception('Erro ao desfazer importação documento_importado_id=%s', documento_importado_id)
+             return {
+                 'sucesso': False,
+-                'erro': f'Erro ao desfazer importação: {str(e)}'
++                'erro': 'Erro ao desfazer importação'
+             }
+diff --git a/dominial/services/lancamento_criacao_service.py b/dominial/services/lancamento_criacao_service.py
+index 4674b8c0..ecba002e 100644
+--- a/dominial/services/lancamento_criacao_service.py
++++ b/dominial/services/lancamento_criacao_service.py
+@@ -100,10 +100,17 @@ class LancamentoCriacaoService:
+ 
+             if duplicata_resultado['tem_duplicata']:
+                 print(f"DEBUG: Duplicata encontrada: {duplicata_resultado['mensagem']}")
+-                return {
+-                    'tipo': 'duplicata_encontrada',
+-                    'duplicata_info': duplicata_resultado
+-                }, duplicata_resultado['mensagem']
++                # P1-A (review Opus Fase 5): origem que só existe em outra TI
++                # (acessivel=False) NÃO abre tela de importação vazia — segue
++                # o fluxo normal, onde o D1 (OrigemRestritaError em
++                # processar_origens_automaticas) salva sem vincular + aviso.
++                if not duplicata_resultado.get('acessivel', True):
++                    print("DEBUG: Duplicata inacessível — seguindo pelo caminho D1")
++                else:
++                    return {
++                        'tipo': 'duplicata_encontrada',
++                        'duplicata_info': duplicata_resultado
++                    }, duplicata_resultado['mensagem']
+         else:
+             print("DEBUG: Pulando verificação de duplicatas (após importação)")
+         
+diff --git a/dominial/services/lancamento_duplicata_service.py b/dominial/services/lancamento_duplicata_service.py
+index 57d1ff10..b18206c5 100644
+--- a/dominial/services/lancamento_duplicata_service.py
++++ b/dominial/services/lancamento_duplicata_service.py
+@@ -2,10 +2,14 @@
+ Service para integração da verificação de duplicatas com o processo de criação de lançamentos
+ """
+ 
++import logging
++
+ from .duplicata_verificacao_service import DuplicataVerificacaoService
+ from .importacao_cadeia_service import ImportacaoCadeiaService
+ from ..models import Cartorios
+ 
++logger = logging.getLogger(__name__)
++
+ 
+ class LancamentoDuplicataService:
+     """
+@@ -175,13 +179,11 @@ class LancamentoDuplicataService:
+                     'mensagem': erro_msg
+                 }
+                 
+-        except Exception as e:
+-            print(f"DEBUG IMPORTACAO: Exceção durante importação: {str(e)}")
+-            import traceback
+-            print(f"DEBUG IMPORTACAO: Traceback: {traceback.format_exc()}")
++        except Exception:
++            logger.exception('Erro durante importação')
+             return {
+                 'sucesso': False,
+-                'mensagem': f'Erro durante importação: {str(e)}'
++                'mensagem': 'Erro durante importação'
+             }
+ 
+     @staticmethod
+diff --git a/dominial/tests/test_s8_sem_str_e.py b/dominial/tests/test_s8_sem_str_e.py
+index c1bae7b3..31bb4f89 100644
+--- a/dominial/tests/test_s8_sem_str_e.py
++++ b/dominial/tests/test_s8_sem_str_e.py
+@@ -2,6 +2,7 @@
+ 
+ import os
+ import re
++from datetime import date
+ from unittest.mock import patch
+ 
+ from django.contrib.auth.models import User
+@@ -26,6 +27,7 @@ class VarreduraEstaticaTest(TestCase):
+         violations = []
+         views_dir = os.path.join(os.path.dirname(__file__), '..', 'views')
+         admin_file = os.path.join(os.path.dirname(__file__), '..', 'admin.py')
++        services_dir = os.path.join(os.path.dirname(__file__), '..', 'services')
+         
+         files_to_check = []
+         for filename in os.listdir(views_dir):
+@@ -33,6 +35,15 @@ class VarreduraEstaticaTest(TestCase):
+                 files_to_check.append(os.path.join(views_dir, filename))
+         files_to_check.append(admin_file)
+         
++        # P1-C: estender varredura S8 para services (pontos confirmados de str(e))
++        services_alvo = [
++            'importacao_cadeia_service.py',
++            'lancamento_duplicata_service.py',
++            'cartorio_verificacao_service.py',
++        ]
++        for nome in services_alvo:
++            files_to_check.append(os.path.join(services_dir, nome))
++        
+         for filepath in files_to_check:
+             if not os.path.exists(filepath):
+                 continue
+@@ -134,3 +145,90 @@ class ComportamentalEscolherOrigemTest(TestCase):
+         response_data = response.json()
+         self.assertEqual(response_data['error'], ERRO_INTERNO)
+         self.assertNotIn('SEGREDO', response.content.decode('utf-8'))
++
++
++class ComportamentalImportacaoCadeiaNaoVazaSegredoTest(TestCase):
++    """P1-C: importacao_cadeia_service não pode vazar str(e) no dict de erro.
++
++    Opção escolhida: chamada direta do service (mais simples e robusta que
++    subir a view com autenticação + TI + imóvel). O dict é o contrato que a
++    view repassa ao cliente — se a mensagem é fixa, nenhuma exceção interna
++    chega ao frontend.
++    """
++
++    def setUp(self):
++        from django.contrib.auth.models import User
++        from dominial.models import Cartorios, Documento, DocumentoTipo, Imovel, Pessoas, TIs
++        from dominial.tests.segregacao_fixtures import atribuir_tis
++
++        self.user = User.objects.create_user(username='srv_chain', password='x')
++        self.tis = TIs.objects.create(nome='TI Chain', codigo='TI-CH', etnia='Ch')
++        self.cartorio = Cartorios.objects.create(nome='Cartório Chain', cns='333333')
++        self.pessoa = Pessoas.objects.create(nome='Prop Chain')
++        self.imovel = Imovel.objects.create(
++            nome='Imóvel Chain', matricula='CH1',
++            terra_indigena_id=self.tis, cartorio=self.cartorio,
++            proprietario=self.pessoa,
++        )
++        self.doc_tipo = DocumentoTipo.objects.create(tipo='matricula')
++        self.doc = Documento.objects.create(
++            imovel=self.imovel, tipo=self.doc_tipo, numero='CH1',
++            cartorio=self.cartorio, livro='1', folha='1',
++            data=date(2024, 1, 1),
++        )
++        atribuir_tis(self.user, self.tis)
++
++    def test_excecao_inesperada_nao_vaza_str_e(self):
++        """RuntimeError interna → 'erros' com mensagem fixa, sem SEGREDO."""
++        from dominial.services.importacao_cadeia_service import ImportacaoCadeiaService
++
++        with patch(
++            'dominial.services.importacao_cadeia_service.ImportacaoCadeiaService.marcar_documento_importado',
++            side_effect=RuntimeError('SEGREDO-XYZ /opt/app/chain.py linha 42'),
++        ):
++            with self.assertLogs('dominial.services.importacao_cadeia_service', level='ERROR'):
++                resultado = ImportacaoCadeiaService.importar_cadeia_dominial(
++                    imovel_destino_id=self.imovel.id,
++                    documento_origem_id=self.doc.id,
++                    documentos_importaveis_ids=[self.doc.id],
++                    usuario_id=self.user.id,
++                )
++
++        self.assertFalse(resultado['sucesso'])
++        # Caminho cai no else (loop interno captura a exceção → lista 'erros')
++        for erro_msg in resultado.get('erros', []):
++            self.assertNotIn('SEGREDO', erro_msg)
++            self.assertNotIn('/opt/app', erro_msg)
++            self.assertNotIn('linha 42', erro_msg)
++        self.assertNotIn('SEGREDO', resultado.get('mensagem', ''))
++
++
++class ComportamentalCartorioVerificacaoNaoVazaSegredoTest(TestCase):
++    """P1-C: cartorio_verificacao_service não pode vazar str(e)."""
++
++    def test_verificar_cartorios_nao_vaza_str_e(self):
++        from dominial.services.cartorio_verificacao_service import CartorioVerificacaoService
++
++        with patch(
++            'dominial.services.cartorio_verificacao_service.Cartorios.objects.filter',
++            side_effect=RuntimeError('SEGREDO-ABC db/connection.py'),
++        ):
++            with self.assertLogs('dominial.services.cartorio_verificacao_service', level='ERROR'):
++                resultado = CartorioVerificacaoService.verificar_cartorios_estado('SP')
++
++        self.assertNotIn('SEGREDO', resultado.get('erro', ''))
++        self.assertNotIn('db/connection', resultado.get('erro', ''))
++
++    def test_importar_cartorios_nao_vaza_str_e(self):
++        from dominial.services.cartorio_verificacao_service import CartorioVerificacaoService
++
++        with patch(
++            'dominial.services.cartorio_verificacao_service.call_command',
++            side_effect=RuntimeError('SEGREDO-DEF falha-de-import'),
++        ):
++            with self.assertLogs('dominial.services.cartorio_verificacao_service', level='ERROR'):
++                resultado = CartorioVerificacaoService.importar_cartorios_estado('SP')
++
++        self.assertFalse(resultado['success'])
++        self.assertNotIn('SEGREDO', resultado.get('error', ''))
++        self.assertNotIn('falha-de-import', resultado.get('error', ''))
+diff --git a/dominial/tests/test_segregacao_usuario.py b/dominial/tests/test_segregacao_usuario.py
+index 93024053..e8d13e5f 100644
+--- a/dominial/tests/test_segregacao_usuario.py
++++ b/dominial/tests/test_segregacao_usuario.py
+@@ -27,7 +27,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
+ from django.core.management import call_command
+ from django.db import connection
+ from django.test import Client, RequestFactory, TestCase
+-from django.test.utils import CaptureQueriesContext
++from django.test.utils import CaptureQueriesContext, override_settings
+ from django.urls import reverse
+ 
+ import dominial
+@@ -2347,6 +2347,70 @@ class CriacaoAtribuiAoAutorTest(SegregacaoBaseTestCase):
+         )
+ 
+ 
++class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
++    """P1-B (#132): criação de imóvel exige usuario_tem_ti_inteira na TI alvo.
++
++    Sem esse guard, qualquer usuário logado cria imóvel+proprietário+documento
++    em TI de outra equipe (imovel_form não roda for_user na criação).
++    """
++
++    def setUp(self):
++        self.client = Client()
++        self.url_alheia = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_b.id})
++        self.post_data = {
++            'matricula': '9999',
++            'nome': 'Imóvel Invasor',
++            'tipo_documento_principal': 'matricula',
++            'proprietario_nome': 'Invasor',
++            'cartorio': self.cartorio.id,
++            'estado': 'SP',
++            'cidade': 'São Paulo',
++        }
++
++    def _count_imoveis(self):
++        return Imovel.objects.count()
++
++    def test_usuario_sem_nada_get_404(self):
++        self.client.force_login(self.sem_acesso)
++        count_before = self._count_imoveis()
++        response = self.client.get(self.url_alheia)
++        self.assertEqual(response.status_code, 404)
++        self.assertEqual(self._count_imoveis(), count_before)
++
++    def test_usuario_sem_nada_post_nao_cria_imovel(self):
++        self.client.force_login(self.sem_acesso)
++        count_before = self._count_imoveis()
++        response = self.client.post(self.url_alheia, self.post_data)
++        self.assertEqual(response.status_code, 404)
++        self.assertEqual(self._count_imoveis(), count_before)
++
++    def test_usuario_com_userimovel_legado_404_na_criacao(self):
++        """UserImovel legado NÃO concede TI inteira (helper exclui de propósito)."""
++        UserImovel.objects.create(
++            user=self.sem_acesso, imovel=self.imovel_b, atribuido_por=self.superuser
++        )
++        self.client.force_login(self.sem_acesso)
++        count_before = self._count_imoveis()
++        response = self.client.get(self.url_alheia)
++        self.assertEqual(response.status_code, 404)
++        response = self.client.post(self.url_alheia, self.post_data)
++        self.assertEqual(response.status_code, 404)
++        self.assertEqual(self._count_imoveis(), count_before)
++
++    def test_usuario_com_userti_get_200(self):
++        UserTI.objects.create(
++            user=self.sem_acesso, tis=self.tis_b, atribuido_por=self.superuser
++        )
++        self.client.force_login(self.sem_acesso)
++        response = self.client.get(self.url_alheia)
++        self.assertEqual(response.status_code, 200)
++
++    def test_superuser_get_200(self):
++        self.client.force_login(self.superuser)
++        response = self.client.get(self.url_alheia)
++        self.assertEqual(response.status_code, 200)
++
++
+ class BlockersRound3Test(SegregacaoBaseTestCase):
+     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""
+ 
+@@ -4043,6 +4107,55 @@ class OrigemRestritaEscritaTest(OrigemOutraTIBaseTestCase):
+         self.assertNotIn(f'origem_documento_{self.documento_c1.pk}', sessao)
+ 
+ 
++class D1EscritaViaViewTest(OrigemOutraTIBaseTestCase):
++    """P1-A (review Opus Fase 5): origem que só existe em outra TI não pode
++    travar a criação na tela de duplicata vazia — deve seguir o caminho D1
++    (salva sem vincular + aviso MENSAGEM_ORIGEM_RESTRITA)."""
++
++    def setUp(self):
++        self.client = Client()
++        self.client.force_login(self.via_ti)
++
++    @override_settings(DUPLICATA_VERIFICACAO_ENABLED=True)
++    def test_origem_em_outra_ti_cria_lancamento_pelo_caminho_D1(self):
++        """POST com origem M2000 (só em TI B) → 302, lançamento criado,
++        mensagem de origem restrita, sem renderizar duplicata_importacao.html."""
++        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
++
++        url = reverse('novo_lancamento', args=[self.tis_c.id, self.imovel_c1.id])
++        lancamentos_antes = Lancamento.objects.count()
++
++        response = self.client.post(url, {
++            'tipo_lancamento': str(self.lanc_tipo.id),
++            'numero_lancamento_simples': '99',
++            'data': '2024-05-01',
++            'origem_completa[]': 'M2000',
++            'cartorio_origem[]': str(self.cartorio.id),
++            'cartorio_origem_nome[]': self.cartorio.nome,
++        })
++
++        # 1) Redirect de sucesso (302), não tela de duplicata (200)
++        self.assertEqual(response.status_code, 302)
++        self.assertNotEqual(
++            getattr(response, 'template_name', ''),
++            'dominial/duplicata_importacao.html',
++        )
++
++        # 2) Lançamento foi criado no banco
++        self.assertEqual(Lancamento.objects.count(), lancamentos_antes + 1)
++        lanc_criado = Lancamento.objects.filter(
++            documento=self.documento_c1,
++        ).order_by('-id').first()
++        self.assertIsNotNone(lanc_criado, 'Lançamento não foi criado no banco')
++        self.assertTrue(lanc_criado.numero_lancamento.startswith('R99'))
++
++        # 3) Mensagem de origem restrita presente nas messages
++        from django.contrib.messages import get_messages
++        msgs = [str(m) for m in get_messages(response.wsgi_request)]
++        joined = ' '.join(msgs)
++        self.assertIn(MENSAGEM_ORIGEM_RESTRITA, joined)
++
++
+ class CriacaoDeTITest(SegregacaoBaseTestCase):
+     """
+     Fase 3, F8/F9: cadastrar TI passa a exigir o perfil Administrador (ou
+diff --git a/dominial/views/imovel_views.py b/dominial/views/imovel_views.py
+index 3cb70369..e1e2d06a 100644
+--- a/dominial/views/imovel_views.py
++++ b/dominial/views/imovel_views.py
+@@ -2,9 +2,11 @@ import logging
+ 
+ from django.core.exceptions import ValidationError
+ from django.db import transaction
++from django.http import Http404
+ from django.shortcuts import render, redirect, get_object_or_404
+ from django.contrib.auth.decorators import login_required
+ from django.contrib import messages
++from ..managers import usuario_tem_ti_inteira
+ from ..models import Imovel, TIs, Pessoas, Cartorios
+ from ..forms import ImovelForm
+ from ..services.imovel_documento_service import ImovelDocumentoService
+@@ -14,6 +16,8 @@ logger = logging.getLogger(__name__)
+ 
+ @login_required
+ def imovel_form(request, tis_id, imovel_id=None):
++    if not usuario_tem_ti_inteira(request.user, tis_id):
++        raise Http404
+     tis = get_object_or_404(TIs, pk=tis_id)
+     imovel = None
+     if imovel_id:

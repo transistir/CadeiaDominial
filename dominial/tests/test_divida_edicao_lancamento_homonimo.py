@@ -35,6 +35,10 @@ class EdicaoLancamentoHomonimoTest(IdentidadeDocumentoFixture):
         self.client = Client()
         self.client.login(username="editlanc", password="editlancpass")
 
+    def criar_imovel(self, *args, **kwargs):
+        """Todo imóvel criado aqui é atribuído ao usuário autenticado (#132)."""
+        return self.atribuir_imovel(super().criar_imovel(*args, **kwargs), self.user)
+
     def test_homonimo_em_outro_cartorio_nao_referenciado_e_recusado(self):
         """M123/cartorio_a é a origem real do imóvel atual. M123/cartorio_b é
         um homônimo em outro imóvel, não referenciado por esta cadeia. Editar

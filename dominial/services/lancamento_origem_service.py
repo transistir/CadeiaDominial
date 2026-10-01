@@ -10,6 +10,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..utils.hierarquia_utils import processar_origens_para_documentos
+from ..managers import identidade_existe_fora_do_escopo
+from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ..models import Cartorios, Documento, DocumentoTipo, LancamentoOrigem
 from ..services.cri_service import CRIService
 from ..services.cache_service import CacheService
@@ -26,6 +28,12 @@ class OrigemAmbiguaError(Exception):
     """A identidade da origem casa com mais de um documento (#144)."""
 
 
+class OrigemRestritaError(Exception):
+    """D1 (#132): a origem existe, mas em TI fora do escopo. Mensagem fixa."""
+    def __init__(self):
+        super().__init__(MENSAGEM_ORIGEM_RESTRITA)
+
+
 class LancamentoOrigemService:
     # Mapeamento origem→cartório/livro/folha do POST corrente, como atributo
     # TEMPORÁRIO da instância (#144 fase 2, D4): vive exatamente uma
@@ -33,6 +41,21 @@ class LancamentoOrigemService:
     # TTL de 1h para POSTs seguintes e era um por processo (gunicorn com
     # workers sync), como o do tronco que o #210 já tinha desligado.
     ATRIBUTO_MAPEAMENTO = '_mapeamento_origens_post'
+
+    @staticmethod
+    def _origem_restrita(tipo, numero, cartorio, documentos_queryset):
+        """True quando (tipo, número, cartório) existe só fora do escopo (D1)."""
+        if not tipo or not cartorio:
+            return False
+        try:
+            identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
+        except (TypeError, ValueError):
+            return False
+        return identidade_existe_fora_do_escopo(
+            documentos_queryset, tipo=identidade.tipo,
+            numero_normalizado=identidade.numero_normalizado,
+            cartorio_id=identidade.cartorio_id,
+        )
 
     @staticmethod
     def definir_mapeamento(lancamento, mapeamento):
@@ -140,16 +163,28 @@ class LancamentoOrigemService:
         }
 
     @staticmethod
-    def processar_origens_automaticas(lancamento, origem, imovel):
+    def processar_origens_automaticas(
+        lancamento,
+        origem,
+        imovel,
+        documentos_queryset=None,
+    ):
         """
         Processa origens para criar documentos automáticos
         NOVO: Fim de cadeia não cria documentos, apenas formata a origem
         """
+        # Chamadas originadas de requests passam documentos_for_user(user).
+        # O fallback existe para signals/rotinas internas sem usuário e fica
+        # deliberadamente restrito ao imóvel do lançamento.
+        if documentos_queryset is None:
+            documentos_queryset = Documento.objects.filter(imovel=imovel)
+
         if not origem:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
                 lancamento,
                 [],
                 imovel,
+                documentos_queryset,
             )
             return None
         
@@ -173,6 +208,7 @@ class LancamentoOrigemService:
             lancamento,
             origens_individuals,
             imovel,
+            documentos_queryset,
         )
 
         # Processar apenas origens normais (que criam documentos)
@@ -180,6 +216,7 @@ class LancamentoOrigemService:
             return LancamentoOrigemService._processar_origens_normais(
                 lancamento, origens_normais, imovel, len(origens_individuals),
                 origens_atuais=origens_individuals,
+                documentos_queryset=documentos_queryset,
             )
         
         # Se só tem fim de cadeia, retornar mensagem informativa
@@ -189,7 +226,7 @@ class LancamentoOrigemService:
         return None
 
     @staticmethod
-    def _extrair_identidade_origem(origem_individual, imovel, lancamento, cartorio=None):
+    def _extrair_identidade_origem(origem_individual, imovel, lancamento, cartorio, documentos_queryset):
         """Extrai uma identidade documental sem converter fins de cadeia."""
         numero_informado = origem_individual.strip()
         prefixo_direto = re.match(r'^([MT])\s*\d', numero_informado, re.IGNORECASE)
@@ -215,13 +252,19 @@ class LancamentoOrigemService:
             imovel,
             lancamento,
             cartorio,
+            documentos_queryset=documentos_queryset,
         )
         if len(processadas) != 1:
             return None
         return processadas[0]['tipo'], processadas[0]['numero']
 
     @staticmethod
-    def _sincronizar_origens_estruturadas(lancamento, origens, imovel):
+    def _sincronizar_origens_estruturadas(
+        lancamento,
+        origens,
+        imovel,
+        documentos_queryset,
+    ):
         """
         Reconcilia o conjunto estruturado preservando IDs e o texto legado.
 
@@ -250,6 +293,7 @@ class LancamentoOrigemService:
                 imovel,
                 lancamento,
                 cartorio,
+                documentos_queryset=documentos_queryset,
             )
             if not identidade:
                 continue
@@ -302,6 +346,7 @@ class LancamentoOrigemService:
                 tipo_documento,
                 numero,
                 cartorio,
+                documentos_queryset,
             )
             livro, folha = LancamentoOrigemService._obter_livro_folha_origem(
                 lancamento,
@@ -406,7 +451,7 @@ class LancamentoOrigemService:
     
     @staticmethod
     def _processar_origens_normais(
-        lancamento, origens_normais, imovel, total_origens, origens_atuais=None
+        lancamento, origens_normais, imovel, total_origens, origens_atuais=None, *, documentos_queryset
     ):
         """
         Processa origens normais (que criam documentos).
@@ -421,7 +466,7 @@ class LancamentoOrigemService:
         if len(origens_normais) > 1:
             return LancamentoOrigemService._processar_multiplas_origens(
                 lancamento, origens_normais, imovel, total_origens,
-                origens_atuais=origens_atuais,
+                origens_atuais=origens_atuais, documentos_queryset=documentos_queryset,
             )
 
         indice_unico, origem_unica = origens_normais[0]
@@ -432,13 +477,29 @@ class LancamentoOrigemService:
             total_origens=total_origens,
             origens_atuais=origens_atuais,
         )
+        
+        # D1 (#132): pré-check de origem restrita antes de processar
+        restritas = []
+        chave = LancamentoOrigemService._chave_identidade_texto(origem_unica)
+        if chave and LancamentoOrigemService._origem_restrita(
+            chave[0], origem_unica, dados_origem['cartorio'], documentos_queryset,
+        ):
+            logger.info(
+                "Origem %s do lançamento %s em TI fora do escopo; não vinculada",
+                indice_unico + 1, lancamento.pk,
+            )
+            return LancamentoOrigemService._montar_mensagem_origens(
+                1, 0, 0, 'da origem identificada', restritas=[indice_unico]
+            )
+        
         origens_processadas = processar_origens_para_documentos(
-            origem_unica, imovel, lancamento, dados_origem['cartorio']
+            origem_unica, imovel, lancamento, dados_origem['cartorio'],
+            documentos_queryset=documentos_queryset,
         )
 
         if not origens_processadas:
             if LancamentoOrigemService._origem_ambigua(
-                origem_unica, dados_origem['cartorio']
+                origem_unica, dados_origem['cartorio'], documentos_queryset
             ):
                 logger.warning(
                     "Origem %r do lançamento %s é ambígua no cartório %s; não vinculada",
@@ -456,8 +517,12 @@ class LancamentoOrigemService:
             try:
                 with transaction.atomic():
                     documento_criado = LancamentoOrigemService._criar_documento_automatico(
-                        imovel, lancamento, origem_info, dados_origem['cartorio']
+                        imovel, lancamento, origem_info, dados_origem['cartorio'],
+                        documentos_queryset=documentos_queryset,
                     )
+            except OrigemRestritaError:
+                restritas.append(indice_unico)
+                continue
             except Exception:
                 LancamentoOrigemService._registrar_falha_origem(lancamento, origem_info)
                 falhas += 1
@@ -467,18 +532,18 @@ class LancamentoOrigemService:
 
         return LancamentoOrigemService._montar_mensagem_origens(
             len(origens_processadas), len(documentos_criados), falhas,
-            'das origens identificadas',
+            'das origens identificadas', restritas=restritas,
         )
 
     @staticmethod
-    def _origem_ambigua(origem_individual, cartorio):
+    def _origem_ambigua(origem_individual, cartorio, documentos_queryset):
         """True quando a identidade da origem casa com mais de um documento."""
         chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
         if not chave or not cartorio:
             return False
         try:
             LancamentoOrigemService._resolver_documento_estrito(
-                chave[0], origem_individual, cartorio
+                chave[0], origem_individual, cartorio, documentos_queryset
             )
         except OrigemAmbiguaError:
             return True
@@ -493,8 +558,18 @@ class LancamentoOrigemService:
         )
 
     @staticmethod
-    def _montar_mensagem_origens(identificadas, criados, falhas, complemento):
+    def _montar_mensagem_origens(identificadas, criados, falhas, complemento, *, restritas=()):
         """Mensagem ao usuário que reflete criações, reaproveitamentos e falhas."""
+        # D1 (#132): aviso de origens restritas com posições
+        aviso = ''
+        if restritas:
+            posicoes = ', '.join(str(i + 1) for i in sorted(set(restritas)))
+            aviso = f'Origem(ns) na(s) posição(ões) {posicoes} não vinculada(s): {MENSAGEM_ORIGEM_RESTRITA}.'
+            identificadas -= len(restritas)
+        
+        if identificadas <= 0:
+            return aviso
+        
         if falhas:
             partes = []
             if criados:
@@ -502,16 +577,19 @@ class LancamentoOrigemService:
             partes.append(
                 f'{falhas} não puderam ser vinculadas — verifique os avisos na árvore'
             )
-            return (
+            base = (
                 f'Foram identificadas {identificadas} origem(ns): '
                 + '; '.join(partes) + '.'
             )
+            return f'{base} {aviso}'.strip()
         if criados:
-            return f'Foram criados {criados} documento(s) automaticamente a partir {complemento}.'
-        return (
+            base = f'Foram criados {criados} documento(s) automaticamente a partir {complemento}.'
+            return f'{base} {aviso}'.strip()
+        base = (
             f'Foram identificadas {identificadas} origem(ns); '
             'os documentos já existiam e foram reaproveitados.'
         )
+        return f'{base} {aviso}'.strip()
 
     @staticmethod
     def _processar_fim_cadeia(lancamento, origem, imovel):
@@ -603,7 +681,7 @@ class LancamentoOrigemService:
     
     @staticmethod
     def _processar_multiplas_origens(
-        lancamento, origens_normais, imovel, total_origens, origens_atuais=None
+        lancamento, origens_normais, imovel, total_origens, origens_atuais=None, *, documentos_queryset
     ):
         """
         Processa múltiplas origens com seus respectivos cartórios.
@@ -615,6 +693,7 @@ class LancamentoOrigemService:
         documentos_criados = []
         identificadas = 0
         falhas = 0
+        restritas = []
 
         # Para cada origem individual, criar documento com cartório específico
         for indice_origem, origem_individual in origens_normais:
@@ -639,13 +718,27 @@ class LancamentoOrigemService:
                 falhas += 1
                 continue
 
+            # D1 (#132): pré-check de origem restrita antes de processar
+            chave = LancamentoOrigemService._chave_identidade_texto(origem_individual)
+            if chave and LancamentoOrigemService._origem_restrita(
+                chave[0], origem_individual, cartorio, documentos_queryset,
+            ):
+                logger.info(
+                    "Origem %s do lançamento %s em TI fora do escopo; não vinculada",
+                    indice_origem + 1, lancamento.pk,
+                )
+                identificadas += 1
+                restritas.append(indice_origem)
+                continue
+
             # Validar com o cartório DESTA origem (#144), não o da primeira.
             origens_processadas = processar_origens_para_documentos(
-                origem_individual, imovel, lancamento, cartorio
+                origem_individual, imovel, lancamento, cartorio,
+                documentos_queryset=documentos_queryset,
             )
 
             if not origens_processadas and LancamentoOrigemService._origem_ambigua(
-                origem_individual, cartorio
+                origem_individual, cartorio, documentos_queryset=documentos_queryset,
             ):
                 # A validação descarta origem ambígua em silêncio; aqui ela
                 # entra na contagem para a mensagem não omitir a rejeição.
@@ -669,8 +762,12 @@ class LancamentoOrigemService:
                                 cartorio,
                                 livro_origem_informado=dados_origem['livro'],
                                 folha_origem_informada=dados_origem['folha'],
+                                documentos_queryset=documentos_queryset,
                             )
                         )
+                except OrigemRestritaError:
+                    restritas.append(indice_origem)
+                    continue
                 except Exception:
                     LancamentoOrigemService._registrar_falha_origem(
                         lancamento, origem_info
@@ -685,7 +782,7 @@ class LancamentoOrigemService:
 
         return LancamentoOrigemService._montar_mensagem_origens(
             identificadas, len(documentos_criados), falhas,
-            'das múltiplas origens identificadas',
+            'das múltiplas origens identificadas', restritas=restritas,
         )
     
     @staticmethod
@@ -960,7 +1057,7 @@ class LancamentoOrigemService:
         return livro_origem, folha_origem
     
     @staticmethod
-    def _criar_documento_automatico(imovel, lancamento, origem_info, cartorio_origem=None):
+    def _criar_documento_automatico(imovel, lancamento, origem_info, cartorio_origem=None, *, documentos_queryset):
         """
         Cria um documento automaticamente a partir de uma origem
         CORREÇÃO: Usa o cartório da própria origem (#144); sem ele, o de origem
@@ -976,36 +1073,47 @@ class LancamentoOrigemService:
         return LancamentoOrigemService._criar_documento_origem(
             imovel, lancamento, origem_info, cartorio_origem,
             rotulo_cartorio='Cartório herdado da origem',
+            documentos_queryset=documentos_queryset,
         )
 
     @staticmethod
-    def _resolver_documento(tipo, numero, cartorio):
+    def _resolver_documento(
+        tipo,
+        numero,
+        cartorio,
+        documentos_queryset,
+    ):
         """
         Resolve um documento pela identidade completa (tipo, número
         normalizado e cartório), nunca por número isolado.
         """
-        if not cartorio:
+        if not cartorio or documentos_queryset is None:
             return None
         try:
             identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade,
+            queryset=documentos_queryset,
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
-    def _resolver_documento_estrito(tipo, numero, cartorio):
+    def _resolver_documento_estrito(tipo, numero, cartorio, documentos_queryset):
         """
         Como ``_resolver_documento``, mas identidade ambígua levanta erro:
         criar mais um homônimo só aprofundaria a duplicidade (#144).
         """
+        if documentos_queryset is None:
+            raise TypeError('_resolver_documento_estrito exige documentos_queryset explícito')
         if not cartorio:
             return None
         try:
             identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(identidade, queryset=documentos_queryset)
         if resultado.status == 'ambiguo':
             raise OrigemAmbiguaError(
                 f'A origem {numero} tem {len(resultado.candidatos)} documentos '
@@ -1022,6 +1130,8 @@ class LancamentoOrigemService:
         cartorio_origem,
         livro_origem_informado=None,
         folha_origem_informada=None,
+        *,
+        documentos_queryset,
     ):
         """
         Cria um documento automaticamente a partir de uma origem com cartório específico
@@ -1033,6 +1143,7 @@ class LancamentoOrigemService:
             livro_origem_informado=livro_origem_informado,
             folha_origem_informada=folha_origem_informada,
             rotulo_cartorio='Cartório da origem',
+            documentos_queryset=documentos_queryset,
         )
 
     @staticmethod
@@ -1044,6 +1155,8 @@ class LancamentoOrigemService:
         livro_origem_informado=None,
         folha_origem_informada=None,
         rotulo_cartorio='Cartório da origem',
+        *,
+        documentos_queryset,
     ):
         """Núcleo comum: resolve pela identidade completa e cria se não existir."""
         # Obter tipo de documento
@@ -1052,8 +1165,16 @@ class LancamentoOrigemService:
         # Buscar o documento de origem pela identidade completa (tipo,
         # número normalizado e cartório) - nunca por número isolado
         documento_origem = LancamentoOrigemService._resolver_documento_estrito(
-            origem_info['tipo'], origem_info['numero'], cartorio_origem
+            origem_info['tipo'], origem_info['numero'], cartorio_origem,
+            documentos_queryset=documentos_queryset,
         )
+
+        # D1 (#132): se não resolveu no escopo mas existe em outra TI, aborta
+        # a criação sem IntegrityError — a LancamentoOrigem já foi gravada.
+        if documento_origem is None and LancamentoOrigemService._origem_restrita(
+            origem_info['tipo'], origem_info['numero'], cartorio_origem, documentos_queryset,
+        ):
+            raise OrigemRestritaError()
 
         livro_origem, folha_origem = (
             LancamentoOrigemService._obter_livro_folha_origem(

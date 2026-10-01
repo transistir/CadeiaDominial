@@ -2,6 +2,8 @@ from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+from .migration_utils import executor_para_migracao_historica
+
 
 class ImovelCartorioNotNullMigrationTest(TransactionTestCase):
     migrate_from = [('dominial', '0044_imovel_identidade_constraint')]
@@ -9,7 +11,7 @@ class ImovelCartorioNotNullMigrationTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
-        self.executor = MigrationExecutor(connection)
+        self.executor = executor_para_migracao_historica(connection)
         self.executor.migrate(self.migrate_from)
         self.apps_antes = self.executor.loader.project_state(
             self.migrate_from

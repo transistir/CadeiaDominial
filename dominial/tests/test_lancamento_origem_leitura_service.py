@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -135,19 +136,20 @@ class LancamentoOrigemLeituraServiceTest(TestCase):
 
         origens = LancamentoOrigemLeituraService.obter_origens(lancamento)
         importaveis = DuplicataVerificacaoService.calcular_documentos_importaveis(
-            self.documento_atual
+            self.documento_atual, documentos_queryset=Documento.objects.all()
         )
         cadeia = DuplicataVerificacaoService.obter_cadeia_dominial_origem(
-            self.documento_atual
+            self.documento_atual, documentos_queryset=Documento.objects.all()
         )
         pais = HierarquiaArvoreService._buscar_documentos_pais(
-            self.documento_atual, self.imovel_atual, False
+            self.documento_atual, self.imovel_atual, False,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
-        completa = CadeiaCompletaService()._expandir_todas_origens_documento(
+        completa = CadeiaCompletaService(documentos_queryset=Documento.objects.all())._expandir_todas_origens_documento(
             self.documento_atual
         )
-        tronco = identificar_tronco_principal(self.imovel_atual)
-        tabela = CadeiaDominialTabelaService()
+        tronco = identificar_tronco_principal(self.imovel_atual, documentos_queryset=Documento.objects.all())
+        tabela = CadeiaDominialTabelaService(documentos_queryset=Documento.objects.all())
         origem_mais_alta = tabela._obter_documento_origem_mais_alto(
             self.documento_atual
         )
@@ -155,7 +157,7 @@ class LancamentoOrigemLeituraServiceTest(TestCase):
             self.documento_atual, [lancamento]
         )
         origens_hierarquia = HierarquiaOrigemService.processar_origens_identificadas(
-            self.imovel_atual
+            self.imovel_atual, documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual([(origem.codigo, origem.fonte) for origem in origens], [('T222', 'estruturada')])

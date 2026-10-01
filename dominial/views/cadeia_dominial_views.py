@@ -1,9 +1,12 @@
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils import normalizar_texto_opcional
+from ..managers import documentos_for_user, usuario_tem_ti_inteira
+from ..utils.mensagens_erro import ERRO_INTERNO
+from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_TI_SEM_ACESSO
 from ..utils.ordenacao_cadeia import chave_ordem_serializada
 from ..services import HierarquiaService
 from ..services.hierarquia_arvore_service import HierarquiaArvoreService
@@ -19,14 +22,15 @@ from ..services.exportacao_excel_service import (
     escrever_celula_segura,
     renderizar_planilha_imovel,
 )
-from datetime import date
 import json
-from weasyprint import HTML
-from django.template.loader import render_to_string
-from django.conf import settings
-import os
-from openpyxl import Workbook
 import logging
+import os
+from datetime import date
+
+from django.conf import settings
+from django.template.loader import render_to_string
+from openpyxl import Workbook
+from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +56,13 @@ def _buscar_keyword_prioritaria(lancamentos):
 def cadeia_dominial(request, tis_id, imovel_id):
     # Otimização: usar select_related para reduzir queries
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter documentos seguindo a hierarquia correta (tronco principal)
-    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    tronco_principal = HierarquiaService.obter_tronco_principal(
+        imovel,
+        user=request.user,
+    )
     documentos = list(tronco_principal)  # Usar a ordem do tronco principal
     
     tem_documentos = len(documentos) > 0
@@ -68,7 +75,10 @@ def cadeia_dominial(request, tis_id, imovel_id):
     # Refatoração: delegar identificação de troncos para o service
     troncos_secundarios = []
     if tem_documentos:
-        troncos_secundarios = HierarquiaService.obter_troncos_secundarios(imovel)
+        troncos_secundarios = HierarquiaService.obter_troncos_secundarios(
+            imovel,
+            user=request.user,
+        )
 
     context = {
         'tis': tis,
@@ -87,21 +97,26 @@ def cadeia_dominial(request, tis_id, imovel_id):
         return render(request, 'dominial/cadeia_dominial_arvore.html', context)
 
 @login_required
+@require_imovel_atribuido
 def cadeia_dominial_arvore(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato de árvore para o diagrama"""
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         # Delegar a construção da árvore para um service/utilitário
         # criar_documentos_automaticos=False: não criar documentos fantasma ao
         # carregar a árvore (estanca a geração de ramos espúrios).
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            criar_documentos_automaticos=False,
+            documentos_queryset=documentos_for_user(request.user),
+        )
 
         # Expor no JSON consumido pelo D3 a keyword de maior prioridade de
         # cada documento.
         documentos_por_id = {
             documento.id: documento
-            for documento in Documento.objects.filter(
+            for documento in documentos_for_user(request.user).filter(
                 id__in=[
                     documento['id']
                     for documento in arvore.get('documentos', [])
@@ -123,10 +138,9 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         response['Pragma'] = 'no-cache'
         response['Expires'] = '0'
         return response
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception('Erro ao gerar árvore dominial tis=%s imovel=%s', tis_id, imovel_id)
+        return JsonResponse({'error': ERRO_INTERNO}, status=500)
 
 @login_required
 def tronco_principal(request, tis_id, imovel_id):
@@ -137,7 +151,7 @@ def tronco_principal(request, tis_id, imovel_id):
     contextual com esse código.
     """
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter escolhas de origem da URL (se houver)
     escolhas_origem = None
@@ -160,7 +174,7 @@ def tronco_principal(request, tis_id, imovel_id):
     
     # Obter cadeia em formato de tabela. O método completo combina as escolhas
     # persistidas na sessão com o override opcional recebido pela URL.
-    service = CadeiaDominialTabelaService()
+    service = CadeiaDominialTabelaService(user=request.user)
     result = service.get_cadeia_dominial_tabela(
         tis_id,
         imovel_id,
@@ -188,10 +202,13 @@ def tronco_principal(request, tis_id, imovel_id):
 def cadeia_dominial_dados(request, tis_id, imovel_id):
     """Retorna os dados da cadeia dominial em formato JSON para o diagrama de árvore"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Obter documentos seguindo a hierarquia correta (tronco principal)
-    tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+    tronco_principal = HierarquiaService.obter_tronco_principal(
+        imovel,
+        user=request.user,
+    )
     documentos = list(tronco_principal)  # Usar a ordem do tronco principal
     
     # Estrutura para o diagrama de árvore
@@ -252,6 +269,7 @@ def cadeia_dominial_dados(request, tis_id, imovel_id):
     return JsonResponse(tree_data, safe=False)
 
 @login_required
+@require_imovel_atribuido
 def cadeia_dominial_tabela(request, tis_id, imovel_id):
     """
     View para visualização de tabela da cadeia dominial
@@ -260,9 +278,15 @@ def cadeia_dominial_tabela(request, tis_id, imovel_id):
     origem_escolhida = request.GET.get('origem')
     documento_id = request.GET.get('documento_id')
     if origem_escolhida and documento_id:
+        get_object_or_404(
+            documentos_for_user(request.user),
+            id=documento_id,
+            imovel_id=imovel_id,
+            imovel__terra_indigena_id_id=tis_id,
+        )
         request.session[f'origem_documento_{documento_id}'] = origem_escolhida
 
-    service = CadeiaDominialTabelaService()
+    service = CadeiaDominialTabelaService(user=request.user)
     context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
 
     # Adicionar estatísticas
@@ -275,7 +299,7 @@ def cadeia_dominial_tabela(request, tis_id, imovel_id):
 def cadeia_dominial_d3(request, tis_id, imovel_id):
     """Nova visualização D3.js da árvore da cadeia dominial"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     documentos = Documento.objects.filter(imovel=imovel)\
         .select_related('cartorio', 'tipo')\
         .prefetch_related('lancamentos', 'lancamentos__tipo')\
@@ -300,7 +324,7 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     Suporta documentos importados de outras cadeias dominiais
     """
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Buscar o documento - pode estar em outro imóvel se for importado
     documento = None
@@ -313,7 +337,7 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     except Documento.DoesNotExist:
         # Se não encontrou no imóvel atual, pode ser um documento importado
         try:
-            documento = Documento.objects.get(id=documento_id)
+            documento = documentos_for_user(request.user).get(id=documento_id)
             is_importado = True
             
             # Buscar informações de importação
@@ -373,16 +397,17 @@ def documento_detalhado(request, tis_id, imovel_id, documento_id):
     return render(request, 'dominial/documento_detalhado.html', context) 
 
 @login_required
+@require_imovel_atribuido
 def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
     """
     Exporta a cadeia dominial em formato PDF
     """
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # Obter dados da cadeia dominial
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         context = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
         
         # Adicionar estatísticas
@@ -410,14 +435,13 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
         return response
         
     except Exception as e:
-        # Em caso de erro, retornar uma página de erro simples
-        error_html = f"""
+        logger.exception("Erro ao gerar PDF da cadeia dominial")
+        error_html = """
         <html>
         <head><title>Erro na Geração do PDF</title></head>
         <body>
             <h1>Erro na Geração do PDF</h1>
             <p>Ocorreu um erro ao gerar o PDF da cadeia dominial.</p>
-            <p>Erro: {str(e)}</p>
             <p><a href="javascript:history.back()">Voltar</a></p>
         </body>
         </html>
@@ -425,16 +449,17 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
         return HttpResponse(error_html, content_type='text/html')
 
 @login_required
+@require_imovel_atribuido
 def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # Verificar se há sequência personalizada
         sequencia_ids = request.GET.get('sequencia')
         
         from ..services.cadeia_completa_service import CadeiaCompletaService
-        service = CadeiaCompletaService()
+        service = CadeiaCompletaService(user=request.user)
         
         if sequencia_ids:
             # Usar sequência personalizada
@@ -459,16 +484,13 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
             "Erro ao gerar PDF da cadeia completa (tis_id=%s, imovel_id=%s)",
             tis_id, imovel_id
         )
-        error_html = f"""
+        error_html = """
         <html>
         <head><title>Erro na Geração do PDF</title></head>
         <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8f9fa;">
             <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                 <h1 style="color: #dc3545; margin-bottom: 20px;">Erro na Geração do PDF</h1>
                 <p style="color: #6c757d; margin-bottom: 15px;">Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
-                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; border-left: 4px solid #dc3545;">
-                    <strong>Erro:</strong> {str(e)}
-                </div>
                 <div style="margin-top: 20px;">
                     <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Voltar</a>
                 </div>
@@ -479,17 +501,18 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
         return HttpResponse(error_html, content_type='text/html')
 
 @login_required
+@require_imovel_atribuido
 def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
     """
     Exporta a cadeia dominial geral em formato Excel (mesma estrutura da página ver-cadeia-dominial)
     """
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
-
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
+        
         # Usar o CadeiaCompletaService (mesmo do PDF) para incluir TODOS os documentos
         from ..services.cadeia_completa_service import CadeiaCompletaService
-        service = CadeiaCompletaService()
+        service = CadeiaCompletaService(user=request.user)
         context = service.get_cadeia_completa(tis_id, imovel_id)
 
         # Criar workbook Excel
@@ -520,7 +543,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
             tis_id, imovel_id
         )
         error_response = HttpResponse(
-            f"Erro ao gerar Excel: {str(e)}",
+            "Erro ao gerar Excel. Tente novamente; se persistir, contate o administrador.",
             content_type='text/plain'
         )
         error_response.status_code = 500
@@ -532,23 +555,28 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
     Issue #179: exporta em um ÚNICO arquivo Excel a cadeia dominial completa
     de TODOS os imóveis de uma Terra Indígena. A primeira aba traz o resumo;
     cada aba seguinte contém um imóvel no mesmo layout do export individual,
-    reaproveitado via `renderizar_planilha_imovel` para não haver divergência.
+    reaproveitando via `renderizar_planilha_imovel` para não haver divergência.
     """
+    # D5 (#132, S1/#179): verificar acesso à TI inteira FORA do try (A4)
+    if not usuario_tem_ti_inteira(request.user, tis_id):
+        raise Http404(MENSAGEM_TI_SEM_ACESSO)
+    
+    tis = get_object_or_404(TIs, id=tis_id)
+    
     # Import local, igual ao da view por imóvel: `CadeiaCompletaService`
     # guarda `imovel_atual` como estado de instância, por isso cada imóvel
     # do laço abaixo usa uma instância NOVA do service.
     from ..services.cadeia_completa_service import CadeiaCompletaService
     try:
-        tis = get_object_or_404(TIs, id=tis_id)
 
         # Mesma ordenação por matrícula da listagem de imóveis da TI, com `id`
         # apenas como desempate determinístico para matrículas repetidas, e o
         # MESMO universo: sem filtrar `arquivado`, portanto inclui imóveis
         # arquivados, assim como a listagem também os inclui.
         imoveis = list(
-            Imovel.objects.filter(terra_indigena_id=tis).select_related(
-                'cartorio', 'proprietario'
-            ).order_by('matricula', 'id')
+            Imovel.objects.for_user(request.user).filter(
+                terra_indigena_id=tis
+            ).select_related('cartorio', 'proprietario').order_by('matricula', 'id')
         )
 
         wb = Workbook()
@@ -623,7 +651,7 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         for imovel, nome_aba in abas_imoveis:
             ws_imovel = wb.create_sheet(title=nome_aba)
             try:
-                contexto = CadeiaCompletaService().get_cadeia_completa(tis.id, imovel.id)
+                contexto = CadeiaCompletaService(user=request.user).get_cadeia_completa(tis.id, imovel.id)
                 renderizar_planilha_imovel(
                     ws_imovel,
                     tis,
@@ -663,30 +691,37 @@ def exportar_cadeia_dominial_excel_tis(request, tis_id):
         wb.save(response)
         return response
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             "Erro ao gerar Excel consolidado da cadeia dominial da TI (tis_id=%s)",
             tis_id
         )
         error_response = HttpResponse(
-            f"Erro ao gerar Excel: {str(e)}",
+            'Erro ao gerar Excel. Tente novamente; se persistir, contate o administrador.',
             content_type='text/plain'
         )
         error_response.status_code = 500
         return error_response
 
 @login_required
+@require_imovel_atribuido
 def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
     """Retorna os dados da árvore da cadeia dominial para o modal de seleção de sequência"""
     try:
         tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+        imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
         
         # 1. Primeiro obter o tronco principal na sequência correta
-        tronco_principal = HierarquiaService.obter_tronco_principal(imovel)
+        tronco_principal = HierarquiaService.obter_tronco_principal(
+            imovel,
+            user=request.user,
+        )
         
         # 2. Obter todos os documentos da árvore
-        arvore = HierarquiaService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaService.construir_arvore_cadeia_dominial(
+            imovel,
+            user=request.user,
+        )
         
         # 3. Organizar documentos: tronco principal primeiro, depois o resto
         documentos_organizados = []
@@ -760,10 +795,11 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
         
         return JsonResponse(response_data)
         
-    except Exception as e:
+    except Exception:
+        logger.exception('Erro ao buscar dados do imóvel tis=%s imovel=%s', tis_id, imovel_id)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 def organizar_documentos_hierarquicamente(documentos, arvore):

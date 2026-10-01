@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -25,6 +26,7 @@ from dominial.models import (
 )
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
+from dominial.tests.segregacao_fixtures import usuario_com_tis
 from dominial.views import cadeia_dominial_views
 
 
@@ -96,7 +98,9 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
 
     def _request(self, path, query=None):
         request = self.factory.get(path, data=query or {})
-        request.user = SimpleNamespace(is_authenticated=True)
+        # Superuser: estes testes cobrem a exportação em si (SimpleTestCase, sem
+        # banco), então a segregação da #132 precisa passar direto sem query.
+        request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
         return request
 
     def test_detector_cobre_pictogramas_variation_selector_e_keycap(self):
@@ -155,7 +159,7 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             },
         ]
 
-        estatisticas = CadeiaCompletaService()._calcular_estatisticas_completas(
+        estatisticas = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL)._calcular_estatisticas_completas(
             cadeia_completa
         )
 
@@ -382,6 +386,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         self.tis = TIs.objects.create(
             nome="TI Teste 146", codigo="TI146", etnia="Teste"
         )
+        self.user = usuario_com_tis('user146', self.tis)
         self.cartorio = Cartorios.objects.create(
             nome="Cartório Teste 146", cns="146146", cidade="Cidade", estado="TS"
         )
@@ -460,7 +465,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
 
     def _request(self, path):
         request = self.factory.get(path)
-        request.user = SimpleNamespace(is_authenticated=True)
+        request.user = self.user
         return request
 
     def test_fixture_gera_no_sintetico_fim_cadeia_na_arvore(self):
@@ -469,7 +474,9 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         testes de regressão abaixo seriam vazios e passariam mesmo com o
         bug presente (o problema da classe `ExportacaoCadeiaParidadeTest`).
         """
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
 
         nos_fim_cadeia = [d for d in arvore['documentos'] if d.get('is_fim_cadeia')]
         self.assertEqual(len(nos_fim_cadeia), 1)
@@ -496,7 +503,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         deve derrubar `CadeiaCompletaService.get_cadeia_completa` com
         `ValueError: Field 'id' expected a number but got 'fim_cadeia_...'`.
         """
-        resultado = CadeiaCompletaService().get_cadeia_completa(
+        resultado = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
 
@@ -509,7 +516,7 @@ class ExportacaoCadeiaComFimCadeiaTest(TestCase):
         (M500 e T90), todos instâncias de `Documento` com id inteiro, e
         nenhuma entrada sintética de fim de cadeia.
         """
-        resultado = CadeiaCompletaService().get_cadeia_completa(
+        resultado = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
 

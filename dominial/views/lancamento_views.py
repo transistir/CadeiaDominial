@@ -5,9 +5,11 @@ from django.views.decorators.http import require_http_methods, require_POST, req
 from django.http import Http404, JsonResponse
 from django.db.models import Prefetch
 from ..models import TIs, Imovel, Lancamento, Pessoas, Cartorios, Documento, DocumentoTipo, LancamentoPessoa, FimCadeia
+from ..managers import documentos_for_user, lancamentos_for_user, identidade_existe_fora_do_escopo
 from ..services.lancamento_service import LancamentoService
 from ..services.lancamento_origem_service import LancamentoOrigemService
 from ..utils.hierarquia_utils import processar_origens_para_documentos
+from ..utils.segregacao_utils import MENSAGEM_DOCUMENTO_OUTRA_TI
 from datetime import date
 import logging
 import re
@@ -70,7 +72,7 @@ class LancamentoForaDaCadeiaError(Exception):
         super().__init__(f'Lançamento {lancamento.id} fora da cadeia do imóvel')
 
 
-def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id):
+def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id, user):
     """Resolve um lançamento visto pela URL de `imovel`, aceitando documentos
        compartilhados (importados) — o mesmo cenário que o `documento_detalhado`
        já suporta (issue #152).
@@ -81,12 +83,12 @@ def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id):
        referenciado nesta cadeia (protege contra exclusão/edição de homônimo em
        outra cadeia — ver test_divida_edicao_lancamento_homonimo.py)."""
     try:
-        return Lancamento.objects.get(id=lancamento_id, documento__imovel=imovel), True
+        return lancamentos_for_user(user).get(id=lancamento_id, documento__imovel=imovel), True
     except Lancamento.DoesNotExist:
         pass
 
     try:
-        lancamento = Lancamento.objects.get(id=lancamento_id)
+        lancamento = lancamentos_for_user(user).get(id=lancamento_id)
     except Lancamento.DoesNotExist:
         raise Http404("Lançamento não encontrado")
 
@@ -119,7 +121,10 @@ def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id):
     lancamentos_referenciando_indireta = False
     if not lancamentos_referenciando_direta:
         # Usar o HierarquiaArvoreService para verificar se o documento aparece na cadeia dominial
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            documentos_queryset=documentos_for_user(user),
+        )
         documento_na_arvore = any(
             doc['id'] == lancamento.documento.id and doc['is_compartilhado']
             for doc in arvore['documentos']
@@ -425,7 +430,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
     """
     # Obter objetos básicos
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Determinar documento ativo - MODIFICAÇÃO PARA SUPORTAR DOCUMENTOS IMPORTADOS
     documento_ativo = None
@@ -437,7 +442,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
         except Documento.DoesNotExist:
             # Se não encontrou no imóvel atual, pode ser um documento importado
             try:
-                documento_ativo = Documento.objects.get(id=documento_id)
+                documento_ativo = documentos_for_user(request.user).get(id=documento_id)
                 # Redirecionar para o imóvel correto
                 messages.info(request, '📄 Documento importado — redirecionado para o imóvel de origem.')
                 return redirect(
@@ -637,12 +642,12 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
     """
     # Obter objetos básicos
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Permitir edição de lançamentos de documentos compartilhados (issue #152)
     try:
         lancamento, is_lancamento_do_imovel = _resolver_lancamento_no_contexto_do_imovel(
-            imovel, lancamento_id
+            imovel, lancamento_id, request.user
         )
     except LancamentoForaDaCadeiaError as erro:
         messages.error(
@@ -651,7 +656,6 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             f'pois não é referenciado como origem neste imóvel.'
         )
         return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-
     # Obter dados para o formulário
     pessoas = Pessoas.objects.all().order_by('nome')
     cartorios = Cartorios.objects.all().order_by('nome')
@@ -994,12 +998,12 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
 def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
     """View para excluir um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
 
     # Permitir exclusão de lançamentos de documentos compartilhados (issue #152)
     try:
         lancamento, is_lancamento_do_imovel = _resolver_lancamento_no_contexto_do_imovel(
-            imovel, lancamento_id
+            imovel, lancamento_id, request.user
         )
     except LancamentoForaDaCadeiaError as erro:
         messages.error(
@@ -1008,7 +1012,6 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
             f'pois não é referenciado como origem neste imóvel.'
         )
         return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-
     if request.method == 'POST':
         try:
             documento_id = lancamento.documento.id
@@ -1046,7 +1049,7 @@ def excluir_lancamento(request, tis_id, imovel_id, lancamento_id):
 def lancamento_resumo_partial(request, tis_id, imovel_id, lancamento_id):
     """Retorna HTML parcial com o resumo de um lançamento (para sidebar AJAX)."""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(
         Lancamento.objects.select_related('documento', 'tipo').prefetch_related(
             Prefetch('pessoas', queryset=LancamentoPessoa.objects.select_related('pessoa'))
@@ -1075,14 +1078,20 @@ def buscar_m_anterior(request):
     aquela origem referencia) já cadastrada no acervo — é aí que costuma
     acontecer a quebra da cadeia sucessória (issue #167).
 
+    C6 (#132, S2/D3): o lookup é feito sobre `documentos_for_user(request.user)`.
+    Quando o documento existe mas está fora do escopo, a resposta avisa apenas
+    que existe (sem id, matrícula, imóvel ou TI) — mesma política do D1.
+
     Resposta JSON:
       {
         "encontrado": bool,
+        "restrito": bool,  # C6: existe só em outra TI, sem dados
         "doc_id": int | None,
         "matricula": str | None,
         "imovel_nome": str | None,
         "outra_ti": bool,   # documento existe mas pertence a outra TI
         "mesma_ti": bool,   # documento existe e pertence à TI em contexto
+        "mensagem": str | None,  # C6: MENSAGEM_DOCUMENTO_OUTRA_TI se restrito
       }
 
     `tis_id` é opcional: sem ele (nem `tis_id` na sessão) a comparação de TI
@@ -1106,12 +1115,12 @@ def buscar_m_anterior(request):
     if numero_normalizado[:1] in ('M', 'T'):
         numero_normalizado = numero_normalizado[1:].strip()
 
-    # Issue #167 (Codex review P1): restringir o lookup estritamente a
-    # matrículas (M). Sem `tipo`, um cartório que tivesse T e M com mesmo
-    # `numero_normalizado` poderia retornar a T e reportar imóvel/TI errada
-    # como "M anterior vinculada".
+    # C6 (#132, D3): lookup dentro do escopo do usuário (substitui
+    # Documento.objects). Mantido o filtro issue #167 (só matrículas),
+    # o select_related e o .first().
+    escopo = documentos_for_user(request.user)
     documento = (
-        Documento.objects
+        escopo
         .filter(
             numero_normalizado=numero_normalizado,
             cartorio_id=cartorio_id,
@@ -1122,13 +1131,32 @@ def buscar_m_anterior(request):
     )
 
     if documento is None:
+        # C6: se a identidade existe fora do escopo, avisa só que existe.
+        if identidade_existe_fora_do_escopo(
+            escopo,
+            tipo='matricula',
+            numero_normalizado=numero_normalizado,
+            cartorio_id=cartorio_id,
+        ):
+            return JsonResponse({
+                'encontrado': True,
+                'restrito': True,
+                'doc_id': None,
+                'matricula': None,
+                'imovel_nome': None,
+                'outra_ti': True,
+                'mesma_ti': False,
+                'mensagem': MENSAGEM_DOCUMENTO_OUTRA_TI,
+            })
         return JsonResponse({
             'encontrado': False,
+            'restrito': False,
             'doc_id': None,
             'matricula': None,
             'imovel_nome': None,
             'outra_ti': False,
             'mesma_ti': False,
+            'mensagem': None,
         })
 
     tis_id_contexto = request.GET.get('tis_id') or request.session.get('tis_id')
@@ -1141,11 +1169,13 @@ def buscar_m_anterior(request):
 
     return JsonResponse({
         'encontrado': True,
+        'restrito': False,
         'doc_id': documento.id,
         'matricula': documento.numero,
         'imovel_nome': documento.imovel.nome,
         'outra_ti': not mesma_ti,
         'mesma_ti': mesma_ti,
+        'mensagem': None,
     })
 
 
@@ -1153,7 +1183,7 @@ def buscar_m_anterior(request):
 def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
     """View para visualizar detalhes de um lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
     
     # Obter pessoas do lançamento

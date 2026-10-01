@@ -17,14 +17,21 @@ class HierarquiaOrigemService:
     """
     
     @staticmethod
-    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False):
+    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False, *, documentos_queryset=None):
         """
         Processa origens identificadas de lançamentos que ainda não foram convertidas em documentos
         
         Args:
             imovel: Objeto Imovel
             criar_documentos_automaticos: Se True, cria documentos automaticamente para origens identificadas
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
         """
+        # C2: escopo obrigatório
+        if documentos_queryset is None:
+            raise TypeError(
+                'HierarquiaOrigemService.processar_origens_identificadas exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
         origens_identificadas = []
         origens_processadas = set()  # Para evitar duplicação
         
@@ -53,6 +60,7 @@ class HierarquiaOrigemService:
                         origem_info,
                         criar_documentos_automaticos,
                         cartorio_origem=cartorio_da_origem,
+                        documentos_queryset=documentos_queryset,
                     )
                     if origem_identificada:
                         origens_identificadas.append(origem_identificada)
@@ -61,19 +69,27 @@ class HierarquiaOrigemService:
         return origens_identificadas
     
     @staticmethod
-    def _resolver_documento(tipo, numero, cartorio):
+    def _resolver_documento(tipo, numero, cartorio, documentos_queryset=None):
         """
         Resolve um documento pela identidade completa (tipo, número
         normalizado e cartório), nunca por número isolado. Identidades
         ambíguas não são escolhidas.
         """
+        # C2: escopo obrigatório
+        if documentos_queryset is None:
+            raise TypeError(
+                'HierarquiaOrigemService._resolver_documento exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
         if not cartorio:
             return None
         try:
             identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade, queryset=documentos_queryset
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
@@ -83,6 +99,8 @@ class HierarquiaOrigemService:
         origem_info,
         criar_documentos_automaticos=False,
         cartorio_origem=None,
+        *,
+        documentos_queryset=None,
     ):
         """
         Processa uma origem individual
@@ -96,14 +114,14 @@ class HierarquiaOrigemService:
         # O cartório da origem vem de lancamento.cartorio_origem quando
         # informado; só cai para o cartório do documento atual na ausência dele.
         documento_existente = HierarquiaOrigemService._resolver_documento(
-            origem_info['tipo'], origem_info['numero'], cartorio_origem
+            origem_info['tipo'], origem_info['numero'], cartorio_origem, documentos_queryset
         )
 
         if not documento_existente:
             if criar_documentos_automaticos:
                 # Criar o documento automaticamente com CRI da origem
                 return HierarquiaOrigemService._criar_documento_automatico(
-                    imovel, lancamento, origem_info, cartorio_origem
+                    imovel, lancamento, origem_info, cartorio_origem, documentos_queryset
                 )
             else:
                 # Apenas listar como origem identificada sem criar documento
@@ -118,7 +136,7 @@ class HierarquiaOrigemService:
     
     @staticmethod
     def _criar_documento_automatico(
-        imovel, lancamento, origem_info, cartorio_origem
+        imovel, lancamento, origem_info, cartorio_origem, documentos_queryset
     ):
         """
         Cria um documento automaticamente a partir de uma origem
@@ -129,7 +147,7 @@ class HierarquiaOrigemService:
 
             # Verificar se já existe um documento com esta identidade completa
             documento_existente = HierarquiaOrigemService._resolver_documento(
-                origem_info['tipo'], origem_info['numero'], cartorio_origem
+                origem_info['tipo'], origem_info['numero'], cartorio_origem, documentos_queryset
             )
 
             if documento_existente:

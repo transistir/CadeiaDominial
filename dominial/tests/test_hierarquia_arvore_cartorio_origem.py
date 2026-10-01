@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.utils import timezone
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     TIs, Pessoas, Imovel, Cartorios,
     DocumentoTipo, LancamentoTipo,
@@ -77,14 +78,16 @@ class HierarquiaArvoreCartorioOrigemTest(TestCase):
 
     def test_busca_documento_pai_respeita_cartorio_origem_do_lancamento(self):
         documentos_pais = HierarquiaArvoreService._buscar_documentos_pais(
-            self.doc_principal, self.imovel, criar_documentos_automaticos=False
+            self.doc_principal, self.imovel, criar_documentos_automaticos=False,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
 
         self.assertIn(self.doc_pai_cartorio_b, documentos_pais)
 
     def test_arvore_completa_inclui_origem_de_outro_cartorio(self):
         arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
-            self.imovel, criar_documentos_automaticos=False
+            self.imovel, criar_documentos_automaticos=False,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
 
         numeros_na_arvore = {no['numero'] for no in arvore['documentos']}

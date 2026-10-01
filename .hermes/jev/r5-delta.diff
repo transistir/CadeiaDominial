@@ -1,0 +1,248 @@
+diff --git a/dominial/admin.py b/dominial/admin.py
+index a2e181fa..9c0232d5 100644
+--- a/dominial/admin.py
++++ b/dominial/admin.py
+@@ -1583,8 +1583,13 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
+         P1-G (#132): revalida `usuario_tem_ti_inteira` na adição — o
+         `formfield_for_foreignkey` é UX; aqui é a barreira real contra
+         manipulação de POST.
++
++        P1-H (#132): na edição, revalida também quando `terra_indigena_id`
++        mudou (`changed_data`). Preserva P1-D (edição legítima sem mover TI
++        segue sem revalidar — `changed_data` não contém o campo).
+         """
+-        if not change and not usuario_tem_ti_inteira(request.user, obj.terra_indigena_id_id):
++        eh_mudanca_de_ti = change and 'terra_indigena_id' in getattr(form, 'changed_data', [])
++        if (not change or eh_mudanca_de_ti) and not usuario_tem_ti_inteira(request.user, obj.terra_indigena_id_id):
+             raise PermissionDenied(MENSAGEM_TI_SEM_ACESSO)
+         with transaction.atomic():
+             super().save_model(request, obj, form, change)
+@@ -1667,7 +1672,15 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
+         num_lancamentos = Lancamento.objects.filter(documento__imovel=imovel).count()
+         
+         ti_atual = imovel.terra_indigena_id
+-        todas_tis = tis_for_user(request.user).order_by('nome')
++        # P1-H (#132): dropdown coerente — superuser vê tudo; demais só TIs
++        # inteiras + a TI atual do imóvel (para o select não perder a atual).
++        if usuario_ve_tudo(request.user):
++            todas_tis = tis_for_user(request.user).order_by('nome')
++        else:
++            ids_inteiras = list(tis_atribuidas_ids(request.user).values_list('pk', flat=True))
++            if ti_atual.id not in ids_inteiras:
++                ids_inteiras.append(ti_atual.id)
++            todas_tis = TIs.objects.filter(pk__in=ids_inteiras).order_by('nome')
+         
+         if request.method == 'POST':
+             nova_ti_id = request.POST.get('nova_ti')
+@@ -1683,6 +1696,10 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
+                         messages.warning(request, 'O imóvel já está associado a esta Terra Indígena.')
+                         return redirect('admin:dominial_imovel_change', imovel_id)
+                     
++                    # P1-H (#132): barreira real — destino exige TI inteira.
++                    if not usuario_tem_ti_inteira(request.user, nova_ti.id):
++                        raise PermissionDenied(MENSAGEM_TI_SEM_ACESSO)
++                    
+                     # Validar se há documentos ou lançamentos
+                     if num_documentos > 0 or num_lancamentos > 0:
+                         # Mostrar aviso mas permitir a mudança
+diff --git a/dominial/tests/test_segregacao_usuario.py b/dominial/tests/test_segregacao_usuario.py
+index ca915491..62899b87 100644
+--- a/dominial/tests/test_segregacao_usuario.py
++++ b/dominial/tests/test_segregacao_usuario.py
+@@ -2523,41 +2523,178 @@ class AdminCriacaoImovelEscopoTest(SegregacaoBaseTestCase):
+         return Imovel.objects.count()
+ 
+     def test_staff_so_com_userimovel_legado_nao_cria_no_admin(self):
+-        """P1-G (a): staff com só UserImovel legado NÃO cria imóvel em tis_a."""
++        """P1-G (a): staff com só UserImovel legado NÃO cria imóvel em tis_a.
++
++        A barreira do formfield gera 200 (form inválido — TI fora do queryset)
++        e a do save_model gera 403 (PermissionDenied). 302 significaria sucesso
++        e é inaceitável aqui.
++        """
+         self.client.force_login(self.staff_legado)
+         count_before = self._count()
+         response = self.client.post(self.url_add, self.post_data)
+-        # Esperado após fix: 403 (PermissionDenied no save_model).
+-        # O essencial é que NÃO crie — count inalterado.
+-        self.assertIn(response.status_code, (200, 302, 403))
+-        # Se foi 302, seguir para confirmar que não criou.
+-        if response.status_code == 302:
+-            # Redireciona para o changelist em sucesso OU para login.
+-            # O count é o árbitro final.
+-            pass
++        # 200 = form reexibido (TI fora do queryset); 403 = save_model barrou.
++        self.assertIn(response.status_code, (200, 403))
+         self.assertEqual(self._count(), count_before)
+ 
+     def test_staff_com_userti_cria_no_admin(self):
+-        """P1-G (b): staff com UserTI na TI cria normalmente."""
++        """P1-G (b): staff com UserTI na TI cria normalmente (302 + count+1)."""
+         self.client.force_login(self.staff_userti)
+         count_before = self._count()
+         response = self.client.post(self.url_add, self.post_data)
+         # 302 redirect para changelist após criação bem-sucedida
+-        self.assertIn(response.status_code, (200, 302))
+-        # Se redirecionou, criou
+-        if response.status_code == 302:
+-            self.assertEqual(self._count(), count_before + 1)
++        self.assertEqual(response.status_code, 302)
++        self.assertEqual(self._count(), count_before + 1)
+ 
+     def test_superuser_cria_em_qualquer_ti(self):
+-        """P1-G (c): superuser cria em qualquer TI."""
++        """P1-G (c): superuser cria em qualquer TI (302 + count+1)."""
+         self.client.force_login(self.superuser)
+         count_before = self._count()
+         # Alterna para tis_b para confirmar que superuser não é barrado
+         data = dict(self.post_data, terra_indigena_id=self.tis_b.id)
+         response = self.client.post(self.url_add, data)
+-        self.assertIn(response.status_code, (200, 302))
+-        if response.status_code == 302:
+-            self.assertEqual(self._count(), count_before + 1)
++        self.assertEqual(response.status_code, 302)
++        self.assertEqual(self._count(), count_before + 1)
++
++    def test_save_model_direto_bloqueia_criacao_em_ti_legada(self):
++        """P1-G (d): teste direto da barreira save_model — assertRaises(PermissionDenied)."""
++        from django.contrib import admin as dj_admin
++        from types import SimpleNamespace
++
++        ma = ImovelAdmin(Imovel, dj_admin.site)
++        factory = RequestFactory()
++        request = factory.post('/admin/dominial/imovel/add/')
++        request.user = self.staff_legado
++
++        obj = Imovel(
++            nome='Teste Direto',
++            matricula='DIRETO-001',
++            tipo_documento_principal='matricula',
++            terra_indigena_id=self.tis_a,
++            proprietario=self.proprietario,
++            cartorio=self.cartorio,
++        )
++        form = SimpleNamespace(changed_data=[])
++
++        with self.assertRaises(PermissionDenied):
++            ma.save_model(request, obj, form, change=False)
++
++
++class AdminEdicaoImovelEscopoTest(SegregacaoBaseTestCase):
++    """P1-H (#132): save_model revalida usuario_tem_ti_inteira quando
++    terra_indigena_id muda na edição, e alterar_ti_view exige TI inteira
++    no destino (dropdown coerente — só TIs inteiras + TI atual).
++
++    Cenário comum: staff com UserTI na tis_a (TI inteira) + UserImovel legado
++    em imóvel da tis_b (só legado → NÃO tem TI inteira em tis_b).
++    Tentar mover imóvel de tis_a para tis_b deve ser barrado.
++    """
++
++    @classmethod
++    def setUpTestData(cls):
++        super().setUpTestData()
++        # Staff com UserTI em tis_a (TI inteira)
++        cls.staff_misto = User.objects.create_user(
++            username='staff_misto', password='senha-staff-misto',
++        )
++        cls.staff_misto.is_staff = True
++        cls.staff_misto.save(update_fields=['is_staff'])
++        ct = ContentType.objects.get_for_model(Imovel)
++        perm_change = Permission.objects.get(content_type=ct, codename='change_imovel')
++        cls.staff_misto.user_permissions.add(perm_change)
++        # TI inteira em tis_a
++        UserTI.objects.create(
++            user=cls.staff_misto, tis=cls.tis_a, atribuido_por=cls.superuser
++        )
++        # Imóvel legado em tis_b (só visível por UserImovel, NÃO é TI inteira)
++        cls.imovel_legado_b = Imovel.objects.create(
++            nome='Legado B', matricula='LEG-B',
++            terra_indigena_id=cls.tis_b,
++            proprietario=cls.proprietario, cartorio=cls.cartorio,
++        )
++        UserImovel.objects.create(
++            user=cls.staff_misto, imovel=cls.imovel_legado_b,
++            atribuido_por=cls.superuser,
++        )
++        # Imóvel em tis_a que será alvo do teste de mover
++        cls.imovel_alvo = Imovel.objects.create(
++            nome='Alvo A', matricula='ALV-A',
++            terra_indigena_id=cls.tis_a,
++            proprietario=cls.proprietario, cartorio=cls.cartorio,
++        )
++
++    def setUp(self):
++        self.client = Client()
++
++    def _get_change_url(self, imovel):
++        return reverse('admin:dominial_imovel_change', args=[imovel.id])
++
++    def _get_alterar_ti_url(self, imovel):
++        return reverse('admin:dominial_imovel_alterar_ti', args=[imovel.id])
++
++    def _change_post_data(self, imovel, terra_indigena_id):
++        """Campos mínimos para o changeform POST do admin."""
++        return {
++            'nome': imovel.nome,
++            'matricula': imovel.matricula,
++            'tipo_documento_principal': imovel.tipo_documento_principal,
++            'terra_indigena_id': terra_indigena_id,
++            'proprietario': imovel.proprietario_id,
++            'cartorio': imovel.cartorio_id,
++            'arquivado': imovel.arquivado,
++            'observacoes': imovel.observacoes or '',
++        }
++
++    def test_changeform_nao_move_imovel_para_ti_so_legado(self):
++        """P1-H (a): POST no changeform tentando mover imóvel de tis_a para
++        tis_b (onde o staff só tem UserImovel legado) NÃO altera o banco."""
++        self.client.force_login(self.staff_misto)
++        self.imovel_alvo.refresh_from_db()
++        ti_original = self.imovel_alvo.terra_indigena_id_id
++
++        data = self._change_post_data(self.imovel_alvo, self.tis_b.id)
++        response = self.client.post(self._get_change_url(self.imovel_alvo), data)
++
++        # Pode ser 200 (form inválido — TI fora do queryset) ou 403
++        # (save_model barrou). O árbitro é o banco.
++        self.assertIn(response.status_code, (200, 403))
++        self.imovel_alvo.refresh_from_db()
++        self.assertEqual(self.imovel_alvo.terra_indigena_id_id, ti_original)
++
++    def test_alterar_ti_view_destino_legado_eh_barrado(self):
++        """P1-H (b): POST na alterar_ti_view com destino tis_b (só legado) →
++        403 PermissionDenied e imóvel continua na TI original."""
++        self.client.force_login(self.staff_misto)
++        self.imovel_alvo.refresh_from_db()
++        ti_original = self.imovel_alvo.terra_indigena_id_id
++
++        response = self.client.post(
++            self._get_alterar_ti_url(self.imovel_alvo),
++            {'nova_ti': self.tis_b.id, 'motivo': 'teste'},
++        )
++
++        self.assertEqual(response.status_code, 403)
++        self.imovel_alvo.refresh_from_db()
++        self.assertEqual(self.imovel_alvo.terra_indigena_id_id, ti_original)
++
++    def test_alterar_ti_view_para_ti_com_userti_funciona(self):
++        """P1-H (c): se o staff tem UserTI em ambas as TIs, a mudança ocorre."""
++        # Concede TI inteira em tis_b também
++        UserTI.objects.create(
++            user=self.staff_misto, tis=self.tis_b, atribuido_por=self.superuser
++        )
++        self.client.force_login(self.staff_misto)
++        self.imovel_alvo.refresh_from_db()
++
++        response = self.client.post(
++            self._get_alterar_ti_url(self.imovel_alvo),
++            {'nova_ti': self.tis_b.id, 'motivo': 'ok'},
++            follow=False,
++        )
++
++        # Redireciona após sucesso
++        self.assertEqual(response.status_code, 302)
++        self.imovel_alvo.refresh_from_db()
++        self.assertEqual(self.imovel_alvo.terra_indigena_id_id, self.tis_b.id)
+ 
+ 
+ class BlockersRound3Test(SegregacaoBaseTestCase):

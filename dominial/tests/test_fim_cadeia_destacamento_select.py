@@ -10,10 +10,11 @@ from django.test import TestCase, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     TIs, Pessoas, Imovel, Cartorios,
     DocumentoTipo, LancamentoTipo,
-    Documento, Lancamento, OrigemFimCadeia, FimCadeia,
+    Documento, Lancamento, OrigemFimCadeia, FimCadeia, UserImovel,
 )
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.lancamento_campos_service import LancamentoCamposService
@@ -287,10 +288,10 @@ class NovoLancamentoContextoErroTest(TestCase):
        vazio — o contexto precisa carregar as opções em todos os caminhos."""
 
     def setUp(self):
-        usuario = get_user_model().objects.create_user(
+        self.usuario = get_user_model().objects.create_user(
             username='tester104', password='senha-104'
         )
-        self.client.force_login(usuario)
+        self.client.force_login(self.usuario)
 
         tis = TIs.objects.create(nome='TI Teste', codigo='T106', etnia='Teste')
         cartorio = Cartorios.objects.create(
@@ -306,6 +307,8 @@ class NovoLancamentoContextoErroTest(TestCase):
             numero='M106', data=timezone.now().date(), cartorio=cartorio,
             livro='1', folha='1',
         )
+        # Segregação (#132): o usuário comum só enxerga imóveis atribuídos a ele.
+        UserImovel.objects.create(user=self.usuario, imovel=self.imovel)
         self.tis = tis
 
     @patch('dominial.views.lancamento_views.LancamentoService.criar_lancamento_completo')
@@ -353,7 +356,9 @@ class NoFimCadeiaInfoAdicionalTest(TestCase):
         )
 
     def test_no_expoe_sigla_e_info_adicional(self):
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL
+        )
         no_fc = next(d for d in arvore['documentos'] if d.get('is_fim_cadeia'))
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'BA')
         self.assertEqual(no_fc['info_adicional_fim_cadeia'], 'Secretaria de Terras')

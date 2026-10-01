@@ -1,3 +1,4 @@
+import logging
 import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -6,10 +7,14 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from ..models import Documento, DocumentoTipo, Imovel, TIs, Cartorios, Lancamento
+from ..managers import documentos_for_user
 from ..forms import ImovelForm
 from ..services.documento_service import DocumentoService
 from ..services.cache_service import CacheService
+from ..utils.mensagens_erro import ERRO_INTERNO
 import json
+
+logger = logging.getLogger(__name__)
 
 
 def _extrair_numero_simples(numero_lancamento):
@@ -35,7 +40,7 @@ def _extrair_numero_simples(numero_lancamento):
 def documentos(request, tis_id, imovel_id):
     """Lista todos os documentos de um imóvel"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Otimização: usar select_related e prefetch_related
     documentos = Documento.objects.filter(imovel=imovel)\
@@ -56,7 +61,7 @@ def documentos(request, tis_id, imovel_id):
 def novo_documento(request, tis_id, imovel_id):
     """Cria um novo documento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Otimização: usar select_related para cartórios
     cartorios = Cartorios.objects.all().select_related().order_by('nome')
@@ -87,7 +92,7 @@ def novo_documento(request, tis_id, imovel_id):
 def editar_documento(request, tis_id, imovel_id, documento_id):
     """Edita um documento existente"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     
     # Otimização: usar select_related para cartórios
@@ -121,7 +126,7 @@ def editar_documento(request, tis_id, imovel_id, documento_id):
 def excluir_documento(request, tis_id, imovel_id, documento_id):
     """Exclui um documento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     
     if request.method == 'POST':
@@ -133,8 +138,9 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
             CacheService.invalidate_documentos_imovel(imovel.id)
             CacheService.invalidate_tronco_principal(imovel.id)
             return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir documento: {str(e)}')
+        except Exception:
+            logger.exception('Erro ao excluir documento id=%s', documento_id)
+            messages.error(request, 'Erro ao excluir documento.')
     
     return render(request, 'dominial/documento_confirm_delete.html', {
         'tis': tis,
@@ -146,7 +152,7 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
 def documento_lancamentos(request, tis_id, imovel_id, documento_id):
     """Visualiza os lançamentos de um documento específico"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     
     # Otimização: usar select_related e prefetch_related
@@ -180,7 +186,7 @@ def documento_lancamentos(request, tis_id, imovel_id, documento_id):
 def selecionar_documento_lancamento(request, tis_id, imovel_id):
     """Página para selecionar em qual documento adicionar um novo lançamento"""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Otimização: usar select_related e prefetch_related
     documentos = Documento.objects.filter(imovel=imovel)\
@@ -204,7 +210,7 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
     CORREÇÃO: Não usar cartório da matrícula atual, mas determinar baseado no contexto
     """
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     
     # Determinar o tipo baseado no prefixo
     if codigo_origem.upper().startswith('M'):
@@ -328,10 +334,11 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
             return JsonResponse({'error': f'Tipo de documento "{tipo_documento}" não encontrado.'}, status=400)
         messages.error(request, f'Tipo de documento "{tipo_documento}" não encontrado.')
         return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
-    except Exception as e:
+    except Exception:
+        logger.exception('Erro ao criar documento imovel=%s', imovel_id)
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': f'Erro ao criar documento: {str(e)}'}, status=500)
-        messages.error(request, f'Erro ao criar documento: {str(e)}')
+            return JsonResponse({'error': 'Erro ao criar documento.'}, status=500)
+        messages.error(request, 'Erro ao criar documento.')
         return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
 
 @login_required
@@ -340,8 +347,11 @@ def ajustar_nivel_documento(request, documento_id):
     """
     Ajusta o nível manual de um documento via AJAX
     """
+    # Fora do try: o 404 de documento fora do escopo do usuário não pode ser
+    # convertido em 500 pelo except genérico abaixo.
+    documento = get_object_or_404(documentos_for_user(request.user), id=documento_id)
+
     try:
-        documento = get_object_or_404(Documento, id=documento_id)
         
         # Verificar se o usuário tem permissão para editar este documento
         if not (request.user.is_staff or request.user.is_superuser):
@@ -375,5 +385,6 @@ def ajustar_nivel_documento(request, documento_id):
         
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Dados JSON inválidos'}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception('Erro ao ajustar nível do documento')
+        return JsonResponse({'error': ERRO_INTERNO}, status=500)

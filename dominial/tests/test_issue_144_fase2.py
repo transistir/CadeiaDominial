@@ -28,12 +28,13 @@ from dominial.models import (
     OrigemFimCadeia,
 )
 from dominial.services.lancamento_campos_service import LancamentoCamposService
-from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
+from dominial.services.lancamento_criacao_service import LancamentoCriacaoService, ERRO_CRIACAO
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.services.regra_petrea_service import RegraPetreaService
 from dominial.templatetags.dominial_extras import register
 from dominial.tests.test_issue_144_origem_cartorio import Issue144Rodada3Base
 from dominial.tests.test_issue_159_162_form_bugs import FormBugsBase
+from dominial.tests.segregacao_fixtures import atribuir_tis, usuario_com_tis
 
 # Atributo temporário da instância (D4), como literal: o RED dos testes não
 # pode depender da API nova.
@@ -88,9 +89,10 @@ class Fase2Base(Issue144Rodada3Base):
         })
 
     def _login(self, rotulo):
-        User.objects.create_user(
+        user = User.objects.create_user(
             username=rotulo, password=f"{rotulo}-f2pass"
         )
+        atribuir_tis(user, self.ti)
         client = Client()
         client.login(username=rotulo, password=f"{rotulo}-f2pass")
         return client
@@ -690,7 +692,8 @@ class F2_10bBDiferenteDeATest(Fase2Base):
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366"], imovel
+                lancamento, ["T366", "T366"], imovel,
+                documentos_queryset=Documento.objects.all()
             )
 
         self.assertIn("Cartório obrigatório para a origem 2", str(ctx.exception))
@@ -857,7 +860,8 @@ class F2_08HomonimosAmbiguosMensagemTest(Fase2Base):
         with self.subTest("indices_legados"):
             with self.assertRaises(ValidationError) as ctx:
                 LancamentoOrigemService._sincronizar_origens_estruturadas(
-                    lancamento, ["T366", "T366"], imovel
+                    lancamento, ["T366", "T366"], imovel,
+                documentos_queryset=Documento.objects.all()
                 )
             self.assertIn(
                 "Cartório obrigatório para a origem 1 (T366): há mais de uma "
@@ -898,7 +902,8 @@ class F2_08HomonimosAmbiguosMensagemTest(Fase2Base):
         with self.subTest("b_diferente_de_a"):
             with self.assertRaises(ValidationError) as ctx:
                 LancamentoOrigemService._sincronizar_origens_estruturadas(
-                    lancamento_b, ["T366", "T366"], imovel_b
+                    lancamento_b, ["T366", "T366"], imovel_b,
+                documentos_queryset=Documento.objects.all()
                 )
             self.assertIn(
                 "Cartório obrigatório para a origem 2 (T366): há mais de uma "
@@ -929,7 +934,8 @@ class F2_09MapeamentoLegadoAmbiguoMensagemTest(Fase2Base):
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366", "M100"], imovel
+                lancamento, ["T366", "T366", "M100"], imovel,
+                documentos_queryset=Documento.objects.all()
             )
         self.assertIn(
             "Cartório obrigatório para a origem 1 (T366): há mais de uma "
@@ -955,7 +961,8 @@ class F2_10aDuplicataCitaPosicaoColidenteTest(Fase2Base):
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366"], imovel
+                lancamento, ["T366", "T366"], imovel,
+                documentos_queryset=Documento.objects.all()
             )
 
         self.assertIn(
@@ -1060,6 +1067,7 @@ class F2_12eFalhaNaEdicaoLimpaAtributoTest(Fase2Base):
             [str(self.cartorio_a.pk), ""],
             cartorios_nomes=[self.cartorio_a.nome, ""],
         ))
+        request.user = usuario_com_tis("user_f2_12e", self.ti)
 
         sucesso, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
             request, lancamento, imovel
@@ -1088,7 +1096,7 @@ class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
 
     def _request_criacao(self):
         """Registro nº 2 com origens homônimas em cartórios distintos."""
-        return RequestFactory().post("/novo/", {
+        request = RequestFactory().post("/novo/", {
             "tipo_lancamento": str(self.tipo_registro.id),
             "numero_lancamento": "2",
             "numero_lancamento_simples": "2",
@@ -1103,6 +1111,8 @@ class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
             "livro_origem[]": ["LA", "LB"],
             "folha_origem[]": ["FA", "FB"],
         })
+        request.user = self.user
+        return request
 
     def _criar_e_capturar(self, capturado):
         original = LancamentoCriacaoService._criar_lancamento_basico
@@ -1154,7 +1164,8 @@ class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
             )
 
         self.assertIsNone(resultado)
-        self.assertIn('Criação cancelada: falha F2-13b', mensagem)
+        # S8 (#132): erro genérico não vaza str(e) — mensagem fixa ERRO_CRIACAO
+        self.assertIn(ERRO_CRIACAO, mensagem)
         self.assertIn('Nenhum lançamento foi salvo', mensagem)
         lancamento = capturado["lancamento"]
         self.assertFalse(hasattr(lancamento, ATRIBUTO))
@@ -1173,8 +1184,10 @@ class F2_13CriacaoLimpaMapeamentoTest(FormBugsBase):
             )
 
         self.assertIsNone(resultado)
-        self.assertIn('falha F2-13c', mensagem)
+        # S8 (#132): erro genérico não vaza str(e) — mensagem fixa ERRO_CRIACAO
+        self.assertIn(ERRO_CRIACAO, mensagem)
         self.assertNotIn('UnboundLocalError', mensagem)
+        self.assertNotIn('AttributeError', mensagem)
 
 
 class F2_18FalhaNaEdicaoPreservaFimCadeiaTest(Fase2Base):
@@ -1548,6 +1561,7 @@ class F2_12eMensagemEspecificaTest(Fase2Base):
             [str(self.cartorio_a.pk), ""],
             cartorios_nomes=[self.cartorio_a.nome, ""],
         ))
+        request.user = usuario_com_tis("user_f2_12e_msg", self.ti)
 
         sucesso, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
             request, lancamento, imovel
@@ -1560,6 +1574,10 @@ class F2_12eMensagemEspecificaTest(Fase2Base):
 class F2_21AmbiguidadeDistingueRegistradaTest(Fase2Base):
     """P2 (Opus): quando a ambiguidade vem do banco (linhas legadas) e não
     da lista atual, a mensagem deve distinguir dizendo 'registrada'."""
+
+    def setUp(self):
+        super().setUp()
+        self._user_f2_21 = usuario_com_tis('user_f2_21', self.ti)
 
     def test_f2_21_ambiguidade_no_banco_diz_registrada(self):
         """Lista com uma única origem T366, mas DUAS linhas persistidas
@@ -1586,6 +1604,7 @@ class F2_21AmbiguidadeDistingueRegistradaTest(Fase2Base):
             [""],
             cartorios_nomes=[""],
         ))
+        request.user = self._user_f2_21
 
         sucesso, mensagem = LancamentoCriacaoService.atualizar_lancamento_completo(
             request, lancamento, imovel

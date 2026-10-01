@@ -3,9 +3,15 @@ Service consolidado para operações de hierarquia
 Consolida funcionalidades de múltiplos services de hierarquia em um único service coeso
 """
 
+import logging
+
 from ..utils.hierarquia_utils import identificar_tronco_principal, identificar_troncos_secundarios
 from .hierarquia_arvore_service import HierarquiaArvoreService
 from .hierarquia_origem_service import HierarquiaOrigemService
+from ..managers import documentos_for_user
+from ..models import Documento
+
+logger = logging.getLogger(__name__)
 
 
 class HierarquiaService:
@@ -17,37 +23,73 @@ class HierarquiaService:
     # ==================== TRONCO PRINCIPAL ====================
     
     @staticmethod
-    def obter_tronco_principal(imovel, escolhas_origem=None):
+    def obter_tronco_principal(
+        imovel,
+        escolhas_origem=None,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Obtém o tronco principal da cadeia dominial (sempre recalculado; cache desabilitado, ver #210)
         """
         if escolhas_origem is None:
             escolhas_origem = {}
 
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
         # Cache do tronco desabilitado (#210): LocMemCache multi-worker não é
         # compartilhado entre processos, e a invalidação transitiva completa
         # (imóveis consumidores da identidade antiga) não é viável neste
         # hotfix. Recalcular sempre evita servir tronco desatualizado após
         # sincronização de cartório.
-        return identificar_tronco_principal(imovel, escolhas_origem)
+        return identificar_tronco_principal(
+            imovel,
+            escolhas_origem,
+            documentos_queryset=documentos_queryset,
+        )
     
     @staticmethod
-    def obter_troncos_secundarios(imovel):
+    def obter_troncos_secundarios(
+        imovel,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Obtém os troncos secundários da cadeia dominial
         """
-        tronco_principal = identificar_tronco_principal(imovel)
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
+        tronco_principal = identificar_tronco_principal(
+            imovel,
+            documentos_queryset=documentos_queryset,
+        )
         return identificar_troncos_secundarios(imovel, tronco_principal)
     
     @staticmethod
-    def calcular_hierarquia_documentos(imovel):
+    def calcular_hierarquia_documentos(
+        imovel,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Calcula a hierarquia completa dos documentos de um imóvel
         """
-        from ..models import Documento
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
         
         # Obter todos os documentos do imóvel
-        documentos = Documento.objects.filter(imovel=imovel).select_related('tipo', 'cartorio')
+        documentos = documentos_queryset.filter(imovel=imovel).select_related('tipo', 'cartorio')
         
         # Calcular hierarquia baseada nas origens
         hierarquia = {}
@@ -66,17 +108,31 @@ class HierarquiaService:
         return hierarquia
     
     @staticmethod
-    def validar_hierarquia(imovel):
+    def validar_hierarquia(
+        imovel,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Valida se a hierarquia de documentos está consistente
         """
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
         try:
-            tronco = HierarquiaService.obter_tronco_principal(imovel)
-            troncos_secundarios = HierarquiaService.obter_troncos_secundarios(imovel)
+            tronco = HierarquiaService.obter_tronco_principal(
+                imovel,
+                documentos_queryset=documentos_queryset,
+            )
+            troncos_secundarios = HierarquiaService.obter_troncos_secundarios(
+                imovel,
+                documentos_queryset=documentos_queryset,
+            )
             
             # Verificar se há documentos órfãos
-            from ..models import Documento
-            todos_documentos = Documento.objects.filter(imovel=imovel)
+            todos_documentos = documentos_queryset.filter(imovel=imovel)
             documentos_hierarquia = set()
             
             # Adicionar documentos do tronco principal
@@ -98,10 +154,11 @@ class HierarquiaService:
                 'troncos_secundarios': len(troncos_secundarios)
             }
             
-        except Exception as e:
+        except Exception:
+            logger.exception('Erro ao validar hierarquia')
             return {
                 'valida': False,
-                'erro': str(e),
+                'erro': 'Erro ao validar hierarquia.',
                 'documentos_orfaos': [],
                 'tronco_principal': 0,
                 'troncos_secundarios': 0
@@ -110,20 +167,37 @@ class HierarquiaService:
     # ==================== ÁRVORE D3 ====================
     
     @staticmethod
-    def construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos=False):
+    def construir_arvore_cadeia_dominial(
+        imovel,
+        criar_documentos_automaticos=False,
+        user=None,
+        documentos_queryset=None,
+    ):
         """
         Constrói a estrutura de árvore da cadeia dominial para visualização
         """
-        return HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, criar_documentos_automaticos)
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+        
+        return HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel,
+            criar_documentos_automaticos,
+            documentos_queryset=documentos_queryset,
+        )
     
     # ==================== ORIGENS ====================
     
     @staticmethod
-    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False):
+    def processar_origens_identificadas(imovel, criar_documentos_automaticos=False, *, documentos_queryset=None):
         """
         Processa origens identificadas de lançamentos
         """
-        return HierarquiaOrigemService.processar_origens_identificadas(imovel, criar_documentos_automaticos)
+        return HierarquiaOrigemService.processar_origens_identificadas(
+            imovel, criar_documentos_automaticos, documentos_queryset=documentos_queryset
+        )
     
     # ==================== MÉTODOS AUXILIARES ====================
     

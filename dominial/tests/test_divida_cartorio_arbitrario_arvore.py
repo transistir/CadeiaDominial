@@ -12,6 +12,7 @@ Nenhuma migração é aplicada; os testes rodam no banco de testes.
 
 from datetime import date
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import Documento, Lancamento, LancamentoTipo
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.tests.test_identidade_documento import IdentidadeDocumentoFixture
@@ -63,6 +64,7 @@ class CartorioArbitrarioNaCriacaoAutomaticaTest(IdentidadeDocumentoFixture):
 
         HierarquiaArvoreService.construir_arvore_cadeia_dominial(
             imovel_atual, criar_documentos_automaticos=True,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
 
         criado = Documento.objects.get(numero_normalizado="321")

@@ -18,6 +18,7 @@ from .formatacao_utils import (
     abreviar_cartorio
 )
 from .documento_identidade_utils import DocumentoIdentidade, normalizar_numero_documento
+from .permissoes_utils import usuario_pode_criar_ti
 
 # Exportar todos os utilitários para uso externo
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     'abreviar_cartorio',
     'DocumentoIdentidade',
     'normalizar_numero_documento',
+    'usuario_pode_criar_ti',
 ]
