@@ -277,3 +277,10 @@ class FuncoesEndurecidasTest(TestCase):
         cartorio_mock.pk = 1
         with self.assertRaisesRegex(TypeError, self.REGEX_ESCOPO):
             HierarquiaOrigemService._resolver_documento('matricula', '123', cartorio_mock)
+
+    def test_hierarquia_utils_contar_origens_restritas(self):
+        """contar_origens_restritas exige documentos_queryset."""
+        from dominial.utils.hierarquia_utils import contar_origens_restritas
+        documento_mock = Mock()
+        with self.assertRaisesRegex(TypeError, self.REGEX_ESCOPO):
+            contar_origens_restritas(documento_mock)

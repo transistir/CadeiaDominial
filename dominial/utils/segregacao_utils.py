@@ -15,6 +15,8 @@ from ..managers import usuario_autenticado, usuario_ve_tudo
 
 MENSAGEM_SEM_ACESSO = 'Imóvel não encontrado ou não atribuído ao seu usuário.'
 MENSAGEM_SEM_IMOVEIS = 'Nenhum imóvel atribuído ao seu usuário.'
+# D1 (#132): origem que aponta para documento de TI não atribuída.            [C3]
+MENSAGEM_ORIGEM_RESTRITA = 'Origem em outra TI — sem acesso / solicite ao admin'
 
 
 def usuario_tem_acesso_imovel(user, imovel_id):

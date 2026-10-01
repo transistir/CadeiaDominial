@@ -50,6 +50,7 @@ from dominial.models import (
     GrupoAcesso,
     Imovel,
     Lancamento,
+    LancamentoOrigem,
     LancamentoPessoa,
     LancamentoTipo,
     Pessoas,
@@ -3580,6 +3581,264 @@ class TisDetailOrderingTest(SegregacaoBaseTestCase):
         (obtido,) = [i for i in response.context['imoveis'] if i.id == imovel.id]
         self.assertEqual(obtido.ultimo_documento, date(2023, 3, 3))
         self.assertEqual(obtido.ultimo_lancamento, date(2023, 4, 4))
+
+
+class OrigemOutraTIBaseTestCase(SegregacaoFase2BaseTestCase):
+    """C3 (#132): imóvel C1 (TI C) com lançamento que cita M3001 (C2, mesma TI) e
+    M2000 (documento_b, TI B — fora do escopo de via_ti)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Criar lançamento com origens; signal cria LancamentoOrigem automaticamente
+        cls.lanc_c1_origens = Lancamento.objects.create(
+            documento=cls.documento_c1, tipo=cls.lanc_tipo,
+            numero_lancamento='R1M3000', data=date(2024, 3, 1),
+            origem='M3001; M2000', cartorio_origem=cls.cartorio,
+        )
+        cls.lanc_c2 = Lancamento.objects.create(
+            documento=cls.documento_c2, tipo=cls.lanc_tipo,
+            numero_lancamento='R1M3001', data=date(2024, 3, 1),
+        )
+
+
+class OrigemRestritaLeituraTest(OrigemOutraTIBaseTestCase):
+    """C3 (#132): D1 na leitura — origem restrita sem dados."""
+
+    def test_helper_identidade_fora_do_escopo(self):
+        """identidade_existe_fora_do_escopo: True só quando existe fora do escopo."""
+        from dominial.managers import documentos_for_user, identidade_existe_fora_do_escopo, ESCOPO_GLOBAL
+        
+        escopo = documentos_for_user(self.via_ti)
+        
+        # M2000 existe em TI B (fora do escopo de via_ti) → True
+        self.assertTrue(
+            identidade_existe_fora_do_escopo(
+                escopo, tipo='matricula', numero_normalizado='2000',
+                cartorio_id=self.cartorio.pk
+            )
+        )
+        
+        # M3001 existe em TI C (dentro do escopo) → False
+        self.assertFalse(
+            identidade_existe_fora_do_escopo(
+                escopo, tipo='matricula', numero_normalizado='3001',
+                cartorio_id=self.cartorio.pk
+            )
+        )
+        
+        # M9999 não existe → False
+        self.assertFalse(
+            identidade_existe_fora_do_escopo(
+                escopo, tipo='matricula', numero_normalizado='9999',
+                cartorio_id=self.cartorio.pk
+            )
+        )
+        
+        # Com ESCOPO_GLOBAL → False (tudo está no escopo)
+        self.assertFalse(
+            identidade_existe_fora_do_escopo(
+                ESCOPO_GLOBAL, tipo='matricula', numero_normalizado='2000',
+                cartorio_id=self.cartorio.pk
+            )
+        )
+        
+        # Sem escopo → TypeError
+        with self.assertRaises(TypeError):
+            identidade_existe_fora_do_escopo(
+                None, tipo='matricula', numero_normalizado='2000',
+                cartorio_id=self.cartorio.pk
+            )
+
+    def test_tabela_marca_origem_restrita_sem_dados(self):
+        """Tabela: origens_restritas=1, mensagem correta, sem vazar dados da TI B."""
+        from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        from dominial.managers import documentos_for_user
+        import json
+        
+        service = CadeiaDominialTabelaService(user=self.via_ti)
+        resultado = service.obter_cadeia_tabela(self.imovel_c1)
+        
+        # Encontrar o item do documento_c1
+        item_c1 = next(
+            (item for item in resultado if item['documento'].pk == self.documento_c1.pk),
+            None
+        )
+        self.assertIsNotNone(item_c1)
+        
+        # Verificar contagem e mensagem
+        self.assertEqual(item_c1['origens_restritas'], 1)
+        self.assertEqual(item_c1['mensagem_origem_restrita'], MENSAGEM_ORIGEM_RESTRITA)
+        
+        # Verificar que origens_disponiveis só tem M3001 (não M2000)
+        numeros_disponiveis = [o['numero'] for o in item_c1['origens_disponiveis']]
+        self.assertEqual(numeros_disponiveis, ['M3001'])
+        
+        # Verificar que não vaza dados da TI B
+        dados_serializados = json.dumps({
+            'origens_disponiveis': item_c1['origens_disponiveis'],
+            'origens_restritas': item_c1['origens_restritas'],
+            'mensagem_origem_restrita': item_c1['mensagem_origem_restrita'],
+            'escolha_atual': item_c1.get('escolha_atual'),
+        })
+        self.assertNotIn(f'documento:{self.documento_b.pk}', dados_serializados)
+        self.assertNotIn('M2000', dados_serializados)
+
+    def test_tabela_superuser_sem_restrita(self):
+        """Superuser vê M2000 nas origens disponíveis, origens_restritas=0."""
+        from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
+        
+        service = CadeiaDominialTabelaService(user=self.superuser)
+        resultado = service.obter_cadeia_tabela(self.imovel_c1)
+        
+        item_c1 = next(
+            (item for item in resultado if item['documento'].pk == self.documento_c1.pk),
+            None
+        )
+        self.assertIsNotNone(item_c1)
+        
+        # Superuser não tem restrição
+        self.assertEqual(item_c1['origens_restritas'], 0)
+        
+        # M2000 aparece nas origens disponíveis
+        numeros_disponiveis = [o['numero'] for o in item_c1['origens_disponiveis']]
+        self.assertIn('M2000', numeros_disponiveis)
+
+    def test_origem_inexistente_nao_conta(self):
+        """Origem que não existe (M9999) não incrementa origens_restritas."""
+        from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
+        
+        # Adicionar lançamento com origem inexistente
+        lanc_extra = Lancamento.objects.create(
+            documento=self.documento_c1, tipo=self.lanc_tipo,
+            numero_lancamento='R2M3000', data=date(2024, 3, 2),
+            origem='M9999', cartorio_origem=self.cartorio,
+        )
+        # signal cria LancamentoOrigem automaticamente
+        
+        service = CadeiaDominialTabelaService(user=self.via_ti)
+        resultado = service.obter_cadeia_tabela(self.imovel_c1)
+        
+        item_c1 = next(
+            (item for item in resultado if item['documento'].pk == self.documento_c1.pk),
+            None
+        )
+        self.assertIsNotNone(item_c1)
+        
+        # Continua 1 (só M2000), M9999 não conta
+        self.assertEqual(item_c1['origens_restritas'], 1)
+
+    def test_view_tabela_mostra_aviso_e_nao_vaza(self):
+        """View HTML: mostra aviso, não vaza dados da TI B."""
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        self.client.force_login(self.via_ti)
+        url = reverse('cadeia_dominial_tabela', args=[self.tis_c.id, self.imovel_c1.id])
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, MENSAGEM_ORIGEM_RESTRITA)
+        
+        # Não vaza dados da TI B
+        self.assertNotContains(response, 'Imóvel B')
+        self.assertNotContains(response, 'TI Beta')
+        self.assertNotContains(response, f'documento:{self.documento_b.pk}')
+        self.assertNotContains(response, 'R1M2000')
+
+    def test_api_atualizada_serializa_restrita(self):
+        """API get_cadeia_dominial_atualizada: serializa origens_restritas, não vaza doc_id."""
+        self.client.force_login(self.via_ti)
+        url = reverse('get_cadeia_dominial_atualizada', args=[self.tis_c.id, self.imovel_c1.id])
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        
+        # Encontrar item do C1
+        item_c1 = next(
+            (item for item in data['cadeia'] 
+             if item['documento']['id'] == self.documento_c1.pk),
+            None
+        )
+        self.assertIsNotNone(item_c1)
+        
+        # Verificar chaves novas
+        self.assertIn('origens_restritas', item_c1)
+        self.assertIn('mensagem_origem_restrita', item_c1)
+        self.assertEqual(item_c1['origens_restritas'], 1)
+        
+        # Não vaza documento_b
+        content = response.content.decode('utf-8')
+        self.assertNotIn(f'documento:{self.documento_b.pk}', content)
+
+    def test_arvore_pendencia_restrita_sem_dados(self):
+        """Árvore: pendência restrita tem status='restrito', sem dados da TI B."""
+        from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
+        from dominial.managers import documentos_for_user
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+        
+        escopo = documentos_for_user(self.via_ti)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel_c1, documentos_queryset=escopo
+        )
+        
+        # Encontrar nó do documento_c1
+        no_c1 = next(
+            (no for no in arvore['documentos'] if no.get('id') == self.documento_c1.pk),
+            None
+        )
+        self.assertIsNotNone(no_c1)
+        
+        # Verificar que tem exatamente 1 pendência restrita
+        pendencias = no_c1.get('origens_nao_resolvidas', [])
+        pendencias_restritas = [p for p in pendencias if p.get('status') == 'restrito']
+        self.assertEqual(len(pendencias_restritas), 1)
+        
+        pendencia = pendencias_restritas[0]
+        self.assertEqual(pendencia['numero'], '')
+        self.assertEqual(pendencia['tipo_documento'], '')
+        self.assertEqual(pendencia['cartorio_nome'], '')
+        self.assertEqual(pendencia['status'], 'restrito')
+        self.assertEqual(pendencia['candidatos'], [])
+        self.assertEqual(pendencia['mensagem'], MENSAGEM_ORIGEM_RESTRITA)
+        
+        # Nenhum nó tem id do documento_b
+        ids_nos = [no.get('id') for no in arvore['documentos']]
+        self.assertNotIn(self.documento_b.pk, ids_nos)
+
+    def test_arvore_restrita_nunca_cria_documento(self):
+        """Árvore: origem restrita não cria documento automático."""
+        from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
+        from dominial.managers import documentos_for_user
+        
+        # Criar documento secundário com origem em TI B
+        doc_extra = Documento.objects.create(
+            imovel=self.imovel_c1, tipo=self.doc_tipo, numero='M3999',
+            data=date(2024, 1, 1), cartorio=self.cartorio, livro='1', folha='1',
+        )
+        lanc_extra = Lancamento.objects.create(
+            documento=doc_extra, tipo=self.lanc_tipo,
+            numero_lancamento='R1M3999', data=date(2024, 3, 1),
+            origem='M2000', cartorio_origem=self.cartorio,
+        )
+        # signal cria LancamentoOrigem automaticamente
+        
+        escopo = documentos_for_user(self.via_ti)
+        contagem_antes = Documento.objects.count()
+        
+        # Chamar _buscar_documentos_pais_e_pendencias
+        docs_pais, pendencias = HierarquiaArvoreService._buscar_documentos_pais_e_pendencias(
+            doc_extra, self.imovel_c1, True, escopo
+        )
+        
+        # Não criou documento novo
+        self.assertEqual(Documento.objects.count(), contagem_antes)
+        
+        # docs_pais vazio, pendências tem 1 restrita
+        self.assertEqual(docs_pais, [])
+        self.assertEqual(len(pendencias), 1)
+        self.assertEqual(pendencias[0]['status'], 'restrito')
 
 
 class CriacaoDeTITest(SegregacaoBaseTestCase):

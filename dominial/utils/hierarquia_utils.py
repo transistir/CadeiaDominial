@@ -159,6 +159,39 @@ def obter_origens_resolvidas(documento, lancamentos=None, *, documentos_queryset
     ]
 
 
+def contar_origens_restritas(documento, lancamentos=None, *, documentos_queryset):
+    """D1 (#132): quantas origens distintas do documento apontam para um
+    documento que existe, mas fora de ``documentos_queryset`` (outra TI).
+    Só a contagem sai daqui. Inexistente, ambígua no escopo ou sem cartório
+    não conta."""
+    from ..managers import documentos_no_escopo, identidade_existe_fora_do_escopo
+
+    documentos_queryset = documentos_no_escopo(documentos_queryset)
+    if lancamentos is None:
+        lancamentos = documento.lancamentos.all()
+    vistas, restritas = set(), 0
+    for lancamento in sorted(lancamentos, key=lambda lancamento: lancamento.pk):
+        for origem in _obter_origens_lancamento(lancamento):
+            tipo = _tipo_do_codigo(origem.codigo)
+            if not origem.cartorio_id or not tipo:
+                continue
+            try:
+                identidade = DocumentoIdentidade(tipo, origem.codigo, origem.cartorio_id)
+            except (TypeError, ValueError):
+                continue
+            chave = (identidade.tipo, identidade.numero_normalizado, identidade.cartorio_id)
+            if chave in vistas:
+                continue
+            vistas.add(chave)
+            if identidade_existe_fora_do_escopo(
+                documentos_queryset, tipo=identidade.tipo,
+                numero_normalizado=identidade.numero_normalizado,
+                cartorio_id=identidade.cartorio_id,
+            ):
+                restritas += 1
+    return restritas
+
+
 def ajustar_nivel_para_nova_conexao(documentos, from_numero, to_numero):
     """
     Se ambos os documentos já existem, não altera nenhum nível.

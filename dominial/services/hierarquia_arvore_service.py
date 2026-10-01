@@ -11,7 +11,8 @@ from .documento_identidade_service import DocumentoIdentidadeService
 from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from .hierarquia_arvore_niveis_helper import recalcular_niveis
 from ..utils.documento_identidade_utils import DocumentoIdentidade
-from ..managers import documentos_no_escopo
+from ..managers import documentos_no_escopo, identidade_existe_fora_do_escopo
+from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 import re
 from collections import deque
 
@@ -275,6 +276,19 @@ class HierarquiaArvoreService:
         if resultado.status == 'ambiguo':
             pendencia['status'] = 'ambiguo'
             pendencia['candidatos'] = [d.pk for d in resultado.candidatos]
+            return None, pendencia
+        # D1 (#132): origem existe em TI fora do escopo - não vaza dados
+        if resultado.status == 'nao_encontrado' and identidade_existe_fora_do_escopo(
+            documentos_queryset, tipo=identidade.tipo,
+            numero_normalizado=identidade.numero_normalizado, cartorio_id=identidade.cartorio_id
+        ):
+            pendencia['status'] = 'restrito'
+            pendencia['mensagem'] = MENSAGEM_ORIGEM_RESTRITA
+            # Limpar dados sensíveis - não vazar número, cartório ou documento_id
+            pendencia['numero'] = ''
+            pendencia['tipo_documento'] = ''
+            pendencia['cartorio_nome'] = ''
+            pendencia['candidatos'] = []
         return None, pendencia
 
     @staticmethod
@@ -329,6 +343,7 @@ class HierarquiaArvoreService:
                     # Criar documento automaticamente se solicitado, sempre
                     # com o cartório da própria origem (nunca um cartório
                     # arbitrário).
+                    # D1 (#132): status='restrito' nunca chega aqui (retorna antes)
                     doc_pai = HierarquiaArvoreService._criar_documento_automatico(
                         origem.codigo, origem.cartorio, imovel
                     )

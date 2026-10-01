@@ -13,9 +13,11 @@ from ..utils.documento_identidade_utils import DocumentoIdentidade
 from ..managers import documentos_for_user
 from ..utils.hierarquia_utils import (
     _selecionar_origem_contextual,
+    contar_origens_restritas,
     obter_origens_resolvidas,
     serializar_identidade_origem,
 )
+from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem
 
 
@@ -195,13 +197,20 @@ class CadeiaDominialTabelaService:
             # Verificar se documento é compartilhado (pertence a outro imóvel)
             is_compartilhado = documento.imovel != imovel
             
+            # D1 (#132): origens restritas (existe em outra TI)
+            origens_restritas, mensagem_origem_restrita = self._origens_restritas(
+                documento, lancamentos
+            )
+            
             cadeia_processada.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'origens_disponiveis': origens_formatadas,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'escolha_atual': escolha_atual,
-                'is_compartilhado': is_compartilhado
+                'is_compartilhado': is_compartilhado,
+                'origens_restritas': origens_restritas,
+                'mensagem_origem_restrita': mensagem_origem_restrita,
             })
         
         result = {
@@ -264,6 +273,13 @@ class CadeiaDominialTabelaService:
             for origem in origens
         ]
         return origens_formatadas, escolha_atual
+
+    def _origens_restritas(self, documento, lancamentos):
+        """D1 (#132): (contagem, mensagem) das origens em outra TI, sem dados delas."""
+        quantidade = contar_origens_restritas(
+            documento, lancamentos, documentos_queryset=self.documentos_queryset
+        )
+        return quantidade, (MENSAGEM_ORIGEM_RESTRITA if quantidade else '')
     
     def _extrair_origens(self, origem_string):
         """
@@ -360,17 +376,24 @@ class CadeiaDominialTabelaService:
                 documento, lancamentos, escolhas_origem.get(str(documento.id))
             )
             tem_multiplas_origens = len(origens_formatadas) > 1
-            
+
             # Verificar se documento é compartilhado (pertence a outro imóvel)
             is_compartilhado = documento.imovel != imovel
-            
+
+            # D1 (#132): origens restritas (existe em outra TI)
+            origens_restritas, mensagem_origem_restrita = self._origens_restritas(
+                documento, lancamentos
+            )
+
             cadeia_completa.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'origens_disponiveis': origens_formatadas,
                 'escolha_atual': escolha_atual,
-                'is_compartilhado': is_compartilhado
+                'is_compartilhado': is_compartilhado,
+                'origens_restritas': origens_restritas,
+                'mensagem_origem_restrita': mensagem_origem_restrita,
             })
         
         return cadeia_completa

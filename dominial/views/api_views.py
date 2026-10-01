@@ -475,7 +475,9 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                 'escolha_atual': item.get('escolha_atual'),
                 'is_compartilhado': item.get('is_compartilhado', False),
                 'grupo_importacao': item.get('grupo_importacao'),
-                'is_primeiro_grupo': item.get('is_primeiro_grupo', False)
+                'is_primeiro_grupo': item.get('is_primeiro_grupo', False),
+                'origens_restritas': item.get('origens_restritas', 0),
+                'mensagem_origem_restrita': item.get('mensagem_origem_restrita', ''),
             }
             
             cadeia_serializada.append(item_serializado)

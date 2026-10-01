@@ -255,3 +255,27 @@ def escopo_documentos(user=None, documentos_queryset=None):
         'Escopo de documentos obrigatório: passe user ou documentos_queryset. '
         'None→global é proibido (contrato C2).'
     )
+
+
+def identidade_existe_fora_do_escopo(documentos_queryset, *, tipo, numero_normalizado, cartorio_id):
+    """D1/D3 (#132): True se a identidade registral (tipo, número normalizado,
+    cartório) existe no banco mas NÃO dentro de ``documentos_queryset``.
+
+    Devolve só booleano — nunca objeto, id, número, imóvel ou TI. Única
+    consulta global permitida para distinguir "origem restrita" de "origem
+    inexistente" (mesmo padrão de ``conflito_global`` em
+    ``DuplicataVerificacaoService.verificar_duplicata_origem``).
+    """
+    from .models import Documento
+
+    escopo = documentos_no_escopo(documentos_queryset)  # None → TypeError (C2)
+    if not (tipo and numero_normalizado and cartorio_id):
+        return False
+    filtro = {
+        'tipo__tipo': tipo,
+        'numero_normalizado': numero_normalizado,
+        'cartorio_id': cartorio_id,
+    }
+    if escopo.filter(**filtro).exists():
+        return False
+    return Documento.objects.filter(**filtro).exists()
