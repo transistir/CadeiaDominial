@@ -5,7 +5,8 @@
 > primeiro no R3, a começar pelo #218 — ver "Status geral").
 > **Reordenação 30/09/2026 (aprovada pelo Hiure): R9 antecipado** — #132
 > (PR #133) passa a ser o próximo bloco de execução, com meta de release
-> **v1.1.0**. R4–R8 deslizam para depois do R9. Ver seção R9.
+> **v1.1.0**. R4–R8 deslizam para depois do R9; **R3/R3.5 ficam PAUSADOS
+> até a v1.1.0** (exceção de fila registrada na seção R9). Ver seção R9.
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -29,7 +30,7 @@
 6. **Features grandes por último** — #123 (certificação) e #132
    (multi-usuário) só depois do solo estabilizado.
 
-## Status geral (snapshot 23/09/2026)
+## Status geral (snapshot 23/09/2026 — ver reordenação 30/09 na seção R9)
 
 **✅ Entregue (mergeado em develop, PRs #177–#195):**
 #108 CI · #159–#162 form bugs · #166 CRI · #145 PDF averbações · #172 troncos ·
@@ -438,15 +439,28 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > R4–R8, que deslizam na sequência). Meta: mergear o #132 no develop e
 > lançar **tag v1.1.0** (GATE-LUANDRO segue obrigatório para a tag).
 > Decisão do Hiure no grupo Transistir_CadDomDev em 30/09 ("vamos trabalhar
-> em uma nova versão do sistema e ir para uma tag v1.1.0 resolvendo o PR
-> #133"; "aprovo a reordenação").
+> em uma nova versão do sistema e ir para uma tag v1.1.0 que vai ser
+> resolvendo o PR https://github.com/transistir/CadeiaDominial/pull/133...
+> chame o opus para fazer uma revisão de compatibilidade com o develop
+> atual"). Aprovação da fila C1–C9 pelo Hiure em 01/10 ("Ok seguir").
+>
+> **EXCEÇÃO DE FILA R3/R3.5 (aprovada pelo Hiure em 30/09, mesmo veículo da
+> reordenação — a proposta partiu dele):** R3 e R3.5 ficam **PAUSADOS** até
+> a release v1.1.0 (R9 antecipado). Itens abertos (#230/2b, #219, #212,
+> #114, #141, #149, #110, #223, #206, housekeeping R1) não bloqueiam o R9.
+> P1 de produção do R3 (#230, #223) podem furar a fila **caso a caso, com
+> aprovação explícita do Hiure registrada aqui**. Mesma lógica da EXCEÇÃO
+> #215 (não segurar blocos por pendência externa).
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
    - **PR zumbi #133 AVALIADO (30/09)**: revisão de compatibilidade do
      Opus 5.5 contra o develop atual (62 commits / v1.0.9→v1.0.12 desde o
      merge-base 0d95b54f). Veredito: **reaproveitar via merge develop →
      branch de integração** (rebase e reimplementação rejeitados).
-     Relatório completo: `/tmp/pr133-opus-review.md` (anexado ao PR #133).
+     Relatório completo: o original `/tmp/pr133-opus-review.md` foi perdido
+     na limpeza do /tmp; os achados estão consolidados no contrato
+     executável `.hermes/plans/c3-c9-contrato.md` (worktree de integração)
+     e serão resumidos no PR #133.
    - Achados que viram escopo de trabalho obrigatório:
      - **15 arquivos em conflito** (6 mecânicos, 9 com decisão de negócio);
        pior caso: `lancamento_criacao_service.py` e
@@ -475,28 +489,49 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      Hiure em 30/09/2026** (grupo Transistir_CadDomDev):
      - **D1 — Granularidade de acesso = TI inteira.** Se o usuário tem
        acesso a um imóvel, tem acesso a todos da mesma TI. O `for_user` do
-       PR já implementa isso (`terra_indigena_id__in=tis_atribuidas_ids`) —
-       caso residual (cadeia cruzando para outra TI) tratado como origem
-       restrita.
+       PR já implementa isso (`terra_indigena_id__in=tis_atribuidas_ids`).
+       *(Implementação derivada — recomendação Opus, não decisão literal do
+       owner: o caso residual, cadeia cruzando para outra TI, é tratado
+       como "origem restrita" sem expor dados.)*
      - **D2 — Acesso ao documento ⇒ pode editar/excluir** o lançamento
        vinculado (inclusive documento compartilhado, #152/S6).
+       **Definição operacional (resolve ambiguidade apontada pelo Opus):**
+       "acesso ao documento" = documento visível via `documentos_for_user(user)`
+       (o imóvel dono do documento está em TI atribuída ao usuário); caso
+       contrário → 404. O teste de autorização é por DOCUMENTO, não por
+       "dono do imóvel". **S6 mantém teste TDD de negação cross-TI**
+       (usuário sem acesso NÃO edita/exclui).
      - **D3 — `buscar_m_anterior` (#167/S2):** se o documento existe em
        outra TI, informar "existe em outra TI" e orientar pedir acesso ao
        admin — SEM doc_id, matrícula ou nome do imóvel de outra TI.
      - **D4 — Só superuser edita cartório** (#210/S7): remoção/sincronização
-       de cartório vira operação exclusiva de superuser no form e no admin.
+       de cartório vira operação exclusiva de superuser. *(Implementação
+       derivada — recomendação Opus: gatear no form e no admin de imóvel.)*
      - **D5 — XLS por TI (#179/S1): TI inteira.** Exportação exige a TI
-       atribuída; sem atribuição, 404.
+       atribuída. *(Implementação derivada — recomendação Opus: sem
+       atribuição, 404.)*
      - **D6 — Go-live com atribuição FINA por TI** antes de abrir o
        sistema: sem equipe global provisória; runbook deve atribuir todas
        as TIs aos usuários/equipes ANTES do deploy (não-superuser sem TI
        atribuída fica trancado).
-   - **GATE-PRODUTO — evento (2) aprovação do plano:** com D1–D6 decididas,
-     registrar a aprovação (luandro/Hiure) e iniciar a Fase 1 (conflitos
-     mecânicos) em worktree novo a partir do HEAD do PR (9c95b117).
-   - Release: ao fim das Fases 1–5 + validação no test server (incl. T9:
-     migrar 0056→0061 sobre dump de produção), PR develop → main + tag
-     **v1.1.0** com GATE-LUANDRO.
+   - **GATE-PRODUTO — evento (2) aprovação do plano: CONCLUÍDO em
+     01/10/2026.** Plano aprovado pelo **Hiure** no grupo
+     Transistir_CadDomDev ("Ok seguir", após status com a fila
+     C1–C9). Mapeamento do plano efetivo (contrato executável do Opus em
+     `.hermes/plans/c3-c9-contrato.md` no worktree de integração):
+     Fases 1–2 do relatório = **C1** (merge `6306fcca`) · arquitetura de
+     escopo = **C2** (`b4163140`) + hotfixes **C2a/C2b** (achados A1/A2 da
+     revisão do contrato) · D1 leitura = **C3** · D1 escrita = **C4** ·
+     D2/#152 = **C5** · D3/#167 = **C6** · D4/#210 = **C7** · D5/S1/#179 =
+     **C8** · S8+badge = **C9** · Fase 4 = adaptação de fixtures dos testes
+     do develop · Fase 5 = reviews (Opus + kiro-cli gpt-5.6-sol substituindo
+     Codex + agy) · Fase 6 = release. Registro de delegação (Hiure, 01/10):
+     pendências de push passam pelo Jev — push+PR automáticos se
+     quality≥3.5 ∧ readiness≥0.6 ∧ gov-conflict≤0.3; merge/tag seguem
+     humanos.
+   - Release: ao fim dos commits C1–C9 + Fase 4 + Fase 5 + validação no
+     test server (incl. T9: migrar 0056→0061 sobre dump de produção), PR
+     develop → main + tag **v1.1.0** com GATE-LUANDRO.
 
 ---
 
@@ -513,6 +548,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
   de produto para redigir o plano; (2) **aprovação do plano** = evento que
   autoriza abrir as issues filhas e iniciar a implementação. Sem o evento
   (2), a Semana 2 do R9 não começa (mesma lógica do #150 no R7).
+  **Prática corrente (registrar 01/10):** na ausência do luandro, o
+  **Hiure decide o gate** (mesmo arranjo do GATE-LUANDRO para releases);
+  evento (1) = D1–D6 em 30/09; evento (2) = aprovação do plano C1–C9 em
+  01/10 ("Ok seguir") — ambos na seção R9. Gate CONCLUÍDO para o v1.1.0.
 - **EXCEÇÃO #215 (aprovada pelo Hiure em 23/09/2026):** o reparo dos dados
   de `Pessoas` (#215, R4 item 6) é gateado na validação do cliente, mas
   **NÃO bloqueia o fechamento do R4 nem o avanço para o R5**. Se o gate não
@@ -553,6 +592,12 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > PRD (fora do cronograma), R4 com #215 gateado. A partir do R4 a fila
 > desloca ~1 semana (GATE-CLIENTE: 21–25/09 → ~29/09–03/10).
 
+> **Atualizado 30/09–01/10 (reordenação R9 antecipado — cronograma abaixo
+> SUPERADO a partir da semana 28/09–02/10):** R9/v1.1.0 em execução desde
+> 30/09 (~35–50h de agente; C1+C2 commitados em 01/10). R3/R3.5 PAUSADOS
+> (ver EXCEÇÃO DE FILA na seção R9). R4–R8 deslizam para depois da v1.1.0;
+> replanejar datas ao fim da release.
+
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
                  milestone seguem no housekeeping) + R2 #13/#179 XLS consolidado ✅
@@ -562,16 +607,11 @@ Sem 14/09–18/09  R3.5 hotfix #201 Fases 0+0b + #204 ✅ (12–13/09) · R3 #21
 Sem 21/09–25/09  R1 housekeeping (#187, milestone, #168/#201/#204/#210 ✅
                  fechadas 23/09, PR zumbi #103; inventário #215 em paralelo)
                  → R3 #218 → #144
-Sem 28/09–02/10  R3 (cont.) #219 → #212 → #114/#141/#149/#110 → R3.5 #206
-                 (revalidar + estimar; saída do bloco só com correção
-                 validada OU encerramento com evidência — ver R3.5 item 2)
-                 → início do R4 ~29/09–03/10 (+ disparar GATE-CLIENTE)
-Sem 05/10–09/10  R4 (cont.; #215 só com validação do cliente) / R5 #113 + #135
-Sem 12/10–16/10  R5/R6 multi-cadeia/navegação
-Sem 19/10–23/10  R6/R7 (se gate respondido) — senão R8
-Sem 26/10–30/10  R7/R8 débitos + certificação
-Sem 02/11–06/11  R8/R9 kickoff #132 (avaliar PR zumbi #133 antes)
-Sem 09/11–13/11  R9 (reserva)
+Sem 28/09–02/10  ⚠️ SUPERADO: R9 antecipado (v1.1.0/#132) — avaliação do
+                 PR #133 (30/09), D1–D6, merge C1 + escopo C2 (01/10)
+Sem 05/10 em di- R9/v1.1.0 (cont.): C3–C9 + fixtures + reviews + release
+                 ante (estimativa   (GATE-LUANDRO na tag) → depois: resto de
+                 35–50h)           R3/R3.5 → R4–R8 replanejados
 ```
 
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
