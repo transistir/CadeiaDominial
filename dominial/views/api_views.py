@@ -5,11 +5,13 @@ from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.core.management import call_command
 from django.db.models import Q
+import logging
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
 from ..managers import documentos_for_user, lancamentos_for_user
 from ..utils import normalizar_texto_opcional
 from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_SEM_ACESSO
 from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
+from ..utils.mensagens_erro import ERRO_INTERNO
 from ..utils.hierarquia_utils import (
     _selecionar_origem_contextual,
     obter_origens_resolvidas,
@@ -18,6 +20,8 @@ from ..utils.hierarquia_utils import (
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
+
+logger = logging.getLogger(__name__)
 from django.views.decorators.csrf import csrf_exempt
 from .cadeia_dominial_views import cadeia_dominial_tabela
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
@@ -183,9 +187,10 @@ def criar_cartorio(request):
             'error': 'Dados inválidos.'
         }, status=400)
     except Exception as e:
+        logger.exception('Erro ao criar cartório')
         return JsonResponse({
             'success': False,
-            'error': f'Erro ao criar cartório: {str(e)}'
+            'error': 'Erro ao criar cartório.'
         }, status=500)
 
 @login_required
@@ -305,9 +310,10 @@ def escolher_origem_documento(request):
             'error': 'JSON inválido'
         }, status=400)
     except Exception as e:
+        logger.exception('Erro ao escolher origem do documento')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 
@@ -359,9 +365,10 @@ def escolher_origem_lancamento(request):
             'error': 'JSON inválido'
         }, status=400)
     except Exception as e:
+        logger.exception('Erro ao escolher origem do lançamento')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 @login_required
@@ -488,11 +495,10 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception('Erro ao atualizar cadeia dominial')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 @login_required
@@ -521,9 +527,8 @@ def limpar_escolhas_origem(request):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception('Erro ao limpar escolhas de origem')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)

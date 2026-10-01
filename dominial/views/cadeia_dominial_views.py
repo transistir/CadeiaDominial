@@ -5,6 +5,7 @@ from django.utils.text import slugify
 from ..models import Imovel, TIs, Documento, Lancamento, Cartorios, DocumentoTipo
 from ..utils import normalizar_texto_opcional
 from ..managers import documentos_for_user, usuario_tem_ti_inteira
+from ..utils.mensagens_erro import ERRO_INTERNO
 from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_TI_SEM_ACESSO
 from ..utils.ordenacao_cadeia import chave_ordem_serializada
 from ..services import HierarquiaService
@@ -21,14 +22,15 @@ from ..services.exportacao_excel_service import (
     escrever_celula_segura,
     renderizar_planilha_imovel,
 )
-from datetime import date
 import json
-from weasyprint import HTML
-from django.template.loader import render_to_string
-from django.conf import settings
-import os
-from openpyxl import Workbook
 import logging
+import os
+from datetime import date
+
+from django.conf import settings
+from django.template.loader import render_to_string
+from openpyxl import Workbook
+from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
 
@@ -136,10 +138,9 @@ def cadeia_dominial_arvore(request, tis_id, imovel_id):
         response['Pragma'] = 'no-cache'
         response['Expires'] = '0'
         return response
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception('Erro ao gerar árvore dominial tis=%s imovel=%s', tis_id, imovel_id)
+        return JsonResponse({'error': ERRO_INTERNO}, status=500)
 
 @login_required
 def tronco_principal(request, tis_id, imovel_id):
@@ -434,14 +435,13 @@ def exportar_cadeia_dominial_pdf(request, tis_id, imovel_id):
         return response
         
     except Exception as e:
-        # Em caso de erro, retornar uma página de erro simples
-        error_html = f"""
+        logger.exception("Erro ao gerar PDF da cadeia dominial")
+        error_html = """
         <html>
         <head><title>Erro na Geração do PDF</title></head>
         <body>
             <h1>Erro na Geração do PDF</h1>
             <p>Ocorreu um erro ao gerar o PDF da cadeia dominial.</p>
-            <p>Erro: {str(e)}</p>
             <p><a href="javascript:history.back()">Voltar</a></p>
         </body>
         </html>
@@ -484,16 +484,13 @@ def exportar_cadeia_completa_pdf(request, tis_id, imovel_id):
             "Erro ao gerar PDF da cadeia completa (tis_id=%s, imovel_id=%s)",
             tis_id, imovel_id
         )
-        error_html = f"""
+        error_html = """
         <html>
         <head><title>Erro na Geração do PDF</title></head>
         <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8f9fa;">
             <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                 <h1 style="color: #dc3545; margin-bottom: 20px;">Erro na Geração do PDF</h1>
                 <p style="color: #6c757d; margin-bottom: 15px;">Ocorreu um erro ao gerar o PDF da cadeia dominial completa.</p>
-                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; border-left: 4px solid #dc3545;">
-                    <strong>Erro:</strong> {str(e)}
-                </div>
                 <div style="margin-top: 20px;">
                     <a href="javascript:history.back()" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Voltar</a>
                 </div>
@@ -546,7 +543,7 @@ def exportar_cadeia_dominial_excel(request, tis_id, imovel_id):
             tis_id, imovel_id
         )
         error_response = HttpResponse(
-            f"Erro ao gerar Excel: {str(e)}",
+            "Erro ao gerar Excel. Tente novamente; se persistir, contate o administrador.",
             content_type='text/plain'
         )
         error_response.status_code = 500
@@ -798,10 +795,11 @@ def obter_arvore_cadeia_dominial(request, tis_id, imovel_id):
         
         return JsonResponse(response_data)
         
-    except Exception as e:
+    except Exception:
+        logger.exception('Erro ao buscar dados do imóvel tis=%s imovel=%s', tis_id, imovel_id)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 def organizar_documentos_hierarquicamente(documentos, arvore):

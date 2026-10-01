@@ -1,3 +1,4 @@
+import logging
 import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -10,7 +11,10 @@ from ..managers import documentos_for_user
 from ..forms import ImovelForm
 from ..services.documento_service import DocumentoService
 from ..services.cache_service import CacheService
+from ..utils.mensagens_erro import ERRO_INTERNO
 import json
+
+logger = logging.getLogger(__name__)
 
 
 def _extrair_numero_simples(numero_lancamento):
@@ -134,8 +138,9 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
             CacheService.invalidate_documentos_imovel(imovel.id)
             CacheService.invalidate_tronco_principal(imovel.id)
             return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir documento: {str(e)}')
+        except Exception:
+            logger.exception('Erro ao excluir documento id=%s', documento_id)
+            messages.error(request, 'Erro ao excluir documento.')
     
     return render(request, 'dominial/documento_confirm_delete.html', {
         'tis': tis,
@@ -329,10 +334,11 @@ def criar_documento_automatico(request, tis_id, imovel_id, codigo_origem):
             return JsonResponse({'error': f'Tipo de documento "{tipo_documento}" não encontrado.'}, status=400)
         messages.error(request, f'Tipo de documento "{tipo_documento}" não encontrado.')
         return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
-    except Exception as e:
+    except Exception:
+        logger.exception('Erro ao criar documento imovel=%s', imovel_id)
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': f'Erro ao criar documento: {str(e)}'}, status=500)
-        messages.error(request, f'Erro ao criar documento: {str(e)}')
+            return JsonResponse({'error': 'Erro ao criar documento.'}, status=500)
+        messages.error(request, 'Erro ao criar documento.')
         return redirect('cadeia_dominial', tis_id=tis_id, imovel_id=imovel_id)
 
 @login_required
@@ -379,5 +385,6 @@ def ajustar_nivel_documento(request, documento_id):
         
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Dados JSON inválidos'}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception('Erro ao ajustar nível do documento')
+        return JsonResponse({'error': ERRO_INTERNO}, status=500)

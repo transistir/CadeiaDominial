@@ -31,6 +31,8 @@ class StatusCadeiaBase(TestCase):
         self.client.login(username="t174", password="t174pass")
 
         self.tis = TIs.objects.create(nome="TI 174", etnia="Teste", codigo="TI174")
+        from dominial.tests.segregacao_fixtures import atribuir_tis
+        atribuir_tis(self.user, self.tis)
         self.cartorio = Cartorios.objects.create(
             nome="Cartório 174", cns="CNS174174", cidade="Cidade"
         )

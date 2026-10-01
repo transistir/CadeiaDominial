@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -11,6 +13,8 @@ from django.http import Http404
 from ..managers import tis_for_user, usuario_ve_tudo
 from ..utils.permissoes_utils import usuario_pode_criar_ti
 from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
+
+logger = logging.getLogger(__name__)
 
 @login_required
 def home(request):
@@ -75,8 +79,9 @@ def tis_form(request):
                 form.save()
                 messages.success(request, 'Terra Indígena cadastrada com sucesso!')
                 return redirect('home')
-            except Exception as e:
-                messages.error(request, f'Erro ao cadastrar Terra Indígena: {str(e)}')
+            except Exception:
+                logger.exception('Erro ao cadastrar Terra Indígena')
+                messages.error(request, 'Erro ao cadastrar Terra Indígena.')
     else:
         form = TIsForm()
     return render(request, 'dominial/tis_form.html', {'form': form})
@@ -138,8 +143,9 @@ def tis_delete(request, tis_id):
             tis.delete()
             messages.success(request, f'Terra Indígena "{nome}" excluída com sucesso!')
             return redirect('home')
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir Terra Indígena: {str(e)}')
+        except Exception:
+            logger.exception('Erro ao excluir Terra Indígena id=%s', tis.id)
+            messages.error(request, 'Erro ao excluir Terra Indígena.')
     return render(request, 'dominial/tis_confirm_delete.html', {'tis': tis})
 
 @login_required
@@ -170,8 +176,9 @@ def imovel_detail(request, tis_id, imovel_id):
                 return redirect('tis_detail', tis_id=tis.id)
             except ValidationError as e:
                 messages.error(request, '; '.join(e.messages))
-            except Exception as e:
-                messages.error(request, f'Erro ao atualizar imóvel: {str(e)}')
+            except Exception:
+                logger.exception('Erro ao atualizar imóvel id=%s', imovel_id)
+                messages.error(request, 'Erro ao atualizar imóvel.')
     else:
         form = ImovelForm(instance=imovel, user=request.user)
     
@@ -192,8 +199,9 @@ def imovel_delete(request, tis_id, imovel_id):
             imovel.delete()
             messages.success(request, f'Imóvel "{matricula}" excluído com sucesso!')
             return redirect('tis_detail', tis_id=tis.id)
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir imóvel: {str(e)}')
+        except Exception:
+            logger.exception('Erro ao excluir imóvel id=%s', imovel_id)
+            messages.error(request, 'Erro ao excluir imóvel.')
     
     return render(request, 'dominial/imovel_confirm_delete.html', {
         'imovel': imovel,
@@ -219,6 +227,7 @@ def arquivar_imovel(request, tis_id, imovel_id):
             messages.success(request, f'Imóvel "{imovel.nome}" desarquivado com sucesso!')
             # Redirecionar para lista de arquivados (onde estava antes)
             return redirect(f'/dominial/tis/{tis.id}/?status=arquivados')
-    except Exception as e:
-        messages.error(request, f'Erro ao alterar status do imóvel: {str(e)}')
+    except Exception:
+        logger.exception('Erro ao alterar status do imóvel id=%s', imovel_id)
+        messages.error(request, 'Erro ao alterar status do imóvel.')
         return redirect('tis_detail', tis_id=tis.id)

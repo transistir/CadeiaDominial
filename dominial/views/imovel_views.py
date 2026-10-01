@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
@@ -7,6 +9,8 @@ from ..models import Imovel, TIs, Pessoas, Cartorios
 from ..forms import ImovelForm
 from ..services.imovel_documento_service import ImovelDocumentoService
 from ..services.lancamento_documento_service import LancamentoDocumentoService
+
+logger = logging.getLogger(__name__)
 
 @login_required
 def imovel_form(request, tis_id, imovel_id=None):
@@ -95,8 +99,9 @@ def imovel_form(request, tis_id, imovel_id=None):
             except ValidationError as e:
                 messages.error(request, '; '.join(e.messages))
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
-            except Exception as e:
-                messages.error(request, f'Erro ao salvar imóvel: {str(e)}')
+            except Exception:
+                logger.exception('Erro ao salvar imóvel tis=%s imovel=%s', tis_id, imovel_id)
+                messages.error(request, 'Erro ao salvar imóvel.')
                 return render(request, 'dominial/imovel_form.html', {'form': form, 'tis': tis, 'imovel': imovel})
         else:
             # Exibir erros específicos do formulário

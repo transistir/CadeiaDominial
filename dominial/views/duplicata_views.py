@@ -109,8 +109,9 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
                 else:
                     messages.warning(request, "⚠️ Importação realizada, mas houve um problema na criação do lançamento original.")
                     
-            except Exception as e:
-                messages.warning(request, f"⚠️ Importação realizada, mas erro na criação do lançamento: {str(e)}")
+            except Exception:
+                logger.exception('Erro ao criar lançamento após importação')
+                messages.warning(request, "⚠️ Importação realizada, mas houve erro ao criar o lançamento.")
             
             # Redirecionar para a visualização de tabela da cadeia dominial
             return redirect('cadeia_dominial_tabela', 
@@ -128,8 +129,9 @@ def importar_duplicata(request, tis_id, imovel_id, documento_id):
     except Http404:
         messages.error(request, "❌ Documento não encontrado.")
         return redirect('imoveis', tis_id=tis_id)
-    except Exception as e:
-        messages.error(request, f"❌ Erro inesperado: {str(e)}")
+    except Exception:
+        logger.exception('Erro inesperado na importação de duplicata')
+        messages.error(request, "❌ Erro inesperado.")
         # Verificar se documento_ativo foi definido antes de usar
         if 'documento_ativo' in locals():
             return redirect('novo_lancamento_documento', 
@@ -171,8 +173,9 @@ def cancelar_importacao_duplicata(request, tis_id, imovel_id, documento_id):
     except Http404:
         messages.error(request, "❌ Documento não encontrado.")
         return redirect('imoveis', tis_id=tis_id)
-    except Exception as e:
-        messages.error(request, f"❌ Erro: {str(e)}")
+    except Exception:
+        logger.exception('Erro ao processar importação de duplicata')
+        messages.error(request, "❌ Erro ao processar a importação.")
         # Verificar se documento_ativo foi definido antes de usar
         if 'documento_ativo' in locals():
             return redirect('novo_lancamento_documento', 

@@ -4557,3 +4557,39 @@ class XlsPorTIEscopoTest(OrigemOutraTIBaseTestCase):
         # Deve ter a mensagem genérica
         self.assertIn('Erro ao gerar Excel', conteudo)
         self.assertIn('contate o administrador', conteudo)
+
+
+class BadgeStatusCadeiaEscopoTest(OrigemOutraTIBaseTestCase):
+    """C9 (#174): badge de status de cadeia respeita escopo de documentos.
+
+    OrigemFimCadeia em lancamento_b (documento_b, TI B — fora do escopo de
+    via_ti) NÃO aparece no tis_detail de tis_c para via_ti, mas aparece
+    para superuser (que vê todos os documentos).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from dominial.models import OrigemFimCadeia
+        OrigemFimCadeia.objects.create(
+            lancamento=cls.lancamento_b,
+            indice_origem=0,
+            fim_cadeia=True,
+            tipo_fim_cadeia='destacamento_publico',
+            classificacao_fim_cadeia='origem_lidima',
+        )
+
+    def test_via_ti_nao_ve_badge_fora_do_escopo(self):
+        """via_ti: documento_b está fora do escopo → sem badge no imovel_c1."""
+        self.client.force_login(self.via_ti)
+        response = self.client.get(reverse('tis_detail', args=[self.tis_c.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'cadeia-badge-lidima')
+
+    def test_superuser_ve_badge_fora_do_escopo(self):
+        """superuser: vê documento_b → badge aparece no imovel_c1."""
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('tis_detail', args=[self.tis_c.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'cadeia-badge-lidima')
+
