@@ -614,7 +614,14 @@ C2a → C2b → C3 → C4 ─┬→ C5 ─┐
 - **R8**: `contar_origens_restritas` faz até 2 queries por origem não resolvida, por documento. Se algum teste de teto de queries quebrar no C3: **parar** e reportar as contagens.
 - **R9**: se o regex do T11 (C2b) expuser mais testes vacuosos: **parar** e reportar.
 - **R10**: dizer que a origem existe (D1/D3) é decisão de produto aceita, não vazamento. Os testes documentam isso.
-- **R11 — NÃO VERIFICADO, investigar antes do C9**: `cadeia_dominial_views.py:349` monta `'imovel_nome': importacao.imovel_origem.nome` (cadeias que importam um documento). Pode expor o nome de imóvel de TI não atribuída. Confira se `importacao` vem filtrado por escopo. Se não vier, parar e perguntar (provável C3b).
+- **R11 — RESOLVIDO (decisão do Hiure, 01/10)**: `cadeia_dominial_views.py:349`
+  monta `'imovel_nome': importacao.imovel_origem.nome` (cadeias que importam um
+  documento). Investigado: `DocumentoImportado.objects.filter(documento=documento)`
+  não filtra por escopo — expõe nome/matrícula/id do imóvel de origem e
+  `importado_por` mesmo em TI não atribuída. **Decisão do owner: ACEITAR COMO
+  PRODUTO** ("aceitar como produto", Hiure 01/10) — documento importado revela a
+  origem por rastreabilidade; não é vazamento a corrigir na v1.1.0. Sem C3b.
+  Registrado aqui para auditoria futura.
 - **R12**: `UserTI.atribuido_por` pode ser NOT NULL (3.3). Leia antes de usar o helper.
 
 ## 7. Fase 4: os testes do develop que falham por usuário sem TI
