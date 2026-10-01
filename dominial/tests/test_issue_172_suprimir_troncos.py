@@ -35,6 +35,7 @@ from dominial.models import (
     TIs,
 )
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.views.cadeia_dominial_views import HTML
 
 
@@ -169,7 +170,9 @@ class _BaseCadeia172(TestCase):
         )
 
     def _contexto(self):
-        return CadeiaCompletaService().get_cadeia_completa(
+        return CadeiaCompletaService(
+            documentos_queryset=ESCOPO_GLOBAL
+        ).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
 
@@ -181,7 +184,7 @@ class _BaseCadeia172(TestCase):
         quando há troncos secundários, exercitando a supressão do rótulo
         "TRONCO SECUNDÁRIO 1" que o service coloca em `tronco.titulo`.
         """
-        service = CadeiaCompletaService()
+        service = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL)
         service.imovel_atual = self.imovel
         cadeia = service._organizar_cadeia_hierarquica(
             [self.matricula, self.transcricao],
@@ -195,7 +198,9 @@ class _BaseCadeia172(TestCase):
         }
 
     def _contexto_sequencia_personalizada(self):
-        return CadeiaCompletaService().get_cadeia_completa_com_sequencia_personalizada(
+        return CadeiaCompletaService(
+            documentos_queryset=ESCOPO_GLOBAL
+        ).get_cadeia_completa_com_sequencia_personalizada(
             self.tis.id,
             self.imovel.id,
             f"{self.matricula.id},{self.transcricao.id}",

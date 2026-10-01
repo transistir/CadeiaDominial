@@ -22,6 +22,7 @@ from dominial.models import (
     LancamentoTipo, Lancamento, OrigemFimCadeia,
 )
 from dominial.services.status_cadeia_service import StatusCadeiaService
+from dominial.managers import ESCOPO_GLOBAL
 
 
 class GreptileP2N1QueryTest(TestCase):
@@ -73,7 +74,8 @@ class GreptileP2N1QueryTest(TestCase):
         """
         # Roda uma vez para aquecer caches internos do ORM e não contar
         # setup de tipos.
-        StatusCadeiaService.status_por_imovel(self.ti.id)
+        StatusCadeiaService.status_por_imovel(
+            self.ti.id, documentos_queryset=ESCOPO_GLOBAL)
 
         # Mede só o queryset-alvo: OrigemFimCadeia com JOIN Lancamento.
         from dominial.models import OrigemFimCadeia
@@ -110,7 +112,8 @@ class GreptileP2N1QueryTest(TestCase):
         INNER JOIN Lancamento — esperado: exatamente 1.
         """
         with CaptureQueriesContext(connection) as ctx:
-            result = StatusCadeiaService.status_por_imovel(self.ti.id)
+            result = StatusCadeiaService.status_por_imovel(
+                self.ti.id, documentos_queryset=ESCOPO_GLOBAL)
 
         self.assertEqual(len(result), self.quantidade)
 
