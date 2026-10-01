@@ -27,7 +27,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.db import connection
 from django.test import Client, RequestFactory, TestCase
-from django.test.utils import CaptureQueriesContext
+from django.test.utils import CaptureQueriesContext, override_settings
 from django.urls import reverse
 
 import dominial
@@ -4041,6 +4041,55 @@ class OrigemRestritaEscritaTest(OrigemOutraTIBaseTestCase):
         # Sessão não ganha origem_documento_<id>
         sessao = self.client.session
         self.assertNotIn(f'origem_documento_{self.documento_c1.pk}', sessao)
+
+
+class D1EscritaViaViewTest(OrigemOutraTIBaseTestCase):
+    """P1-A (review Opus Fase 5): origem que só existe em outra TI não pode
+    travar a criação na tela de duplicata vazia — deve seguir o caminho D1
+    (salva sem vincular + aviso MENSAGEM_ORIGEM_RESTRITA)."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.via_ti)
+
+    @override_settings(DUPLICATA_VERIFICACAO_ENABLED=True)
+    def test_origem_em_outra_ti_cria_lancamento_pelo_caminho_D1(self):
+        """POST com origem M2000 (só em TI B) → 302, lançamento criado,
+        mensagem de origem restrita, sem renderizar duplicata_importacao.html."""
+        from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+
+        url = reverse('novo_lancamento', args=[self.tis_c.id, self.imovel_c1.id])
+        lancamentos_antes = Lancamento.objects.count()
+
+        response = self.client.post(url, {
+            'tipo_lancamento': str(self.lanc_tipo.id),
+            'numero_lancamento_simples': '99',
+            'data': '2024-05-01',
+            'origem_completa[]': 'M2000',
+            'cartorio_origem[]': str(self.cartorio.id),
+            'cartorio_origem_nome[]': self.cartorio.nome,
+        })
+
+        # 1) Redirect de sucesso (302), não tela de duplicata (200)
+        self.assertEqual(response.status_code, 302)
+        self.assertNotEqual(
+            getattr(response, 'template_name', ''),
+            'dominial/duplicata_importacao.html',
+        )
+
+        # 2) Lançamento foi criado no banco
+        self.assertEqual(Lancamento.objects.count(), lancamentos_antes + 1)
+        lanc_criado = Lancamento.objects.filter(
+            documento=self.documento_c1,
+        ).order_by('-id').first()
+        self.assertIsNotNone(lanc_criado, 'Lançamento não foi criado no banco')
+        self.assertTrue(lanc_criado.numero_lancamento.startswith('R99'))
+
+        # 3) Mensagem de origem restrita presente nas messages
+        from django.contrib.messages import get_messages
+        msgs = [str(m) for m in get_messages(response.wsgi_request)]
+        joined = ' '.join(msgs)
+        self.assertIn(MENSAGEM_ORIGEM_RESTRITA, joined)
 
 
 class CriacaoDeTITest(SegregacaoBaseTestCase):

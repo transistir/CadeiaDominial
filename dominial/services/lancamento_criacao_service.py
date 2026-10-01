@@ -100,10 +100,17 @@ class LancamentoCriacaoService:
 
             if duplicata_resultado['tem_duplicata']:
                 print(f"DEBUG: Duplicata encontrada: {duplicata_resultado['mensagem']}")
-                return {
-                    'tipo': 'duplicata_encontrada',
-                    'duplicata_info': duplicata_resultado
-                }, duplicata_resultado['mensagem']
+                # P1-A (review Opus Fase 5): origem que só existe em outra TI
+                # (acessivel=False) NÃO abre tela de importação vazia — segue
+                # o fluxo normal, onde o D1 (OrigemRestritaError em
+                # processar_origens_automaticas) salva sem vincular + aviso.
+                if not duplicata_resultado.get('acessivel', True):
+                    print("DEBUG: Duplicata inacessível — seguindo pelo caminho D1")
+                else:
+                    return {
+                        'tipo': 'duplicata_encontrada',
+                        'duplicata_info': duplicata_resultado
+                    }, duplicata_resultado['mensagem']
         else:
             print("DEBUG: Pulando verificação de duplicatas (após importação)")
         
