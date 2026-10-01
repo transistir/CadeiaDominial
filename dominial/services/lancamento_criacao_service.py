@@ -174,7 +174,7 @@ class LancamentoCriacaoService:
 
                 # Processar cartório de origem
                 print("DEBUG: Processando cartório de origem...")
-                LancamentoOrigemService.processar_cartorio_origem(lancamento, request.POST)
+                # Cartório de origem processado no service consolidado
 
                 # Processar campos específicos por tipo de lançamento
                 print("DEBUG: Processando campos específicos...")
