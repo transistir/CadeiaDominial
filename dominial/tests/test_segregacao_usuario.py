@@ -4120,3 +4120,50 @@ class CriacaoDeTITest(SegregacaoBaseTestCase):
         self.assertEqual(response_post.status_code, 302)
         self.assertIn('/accounts/login/', response_post.url)
         self.assertFalse(TIs.objects.filter(codigo='TI-ANONIMO-BLOQUEADO').exists())
+
+
+class D2AcessoAoDocumentoTest(OrigemOutraTIBaseTestCase):
+    """C5 (#132): D2 regressão — acesso ao documento ⇒ edita/exclui lançamento compartilhado."""
+
+    def test_mesma_ti_edita_doc_compartilhado(self):
+        """via_ti edita lançamento do documento_c2 via imóvel C1: 200."""
+        self.client.force_login(self.via_ti)
+        url = reverse('editar_lancamento', args=[self.tis_c.id, self.imovel_c1.id, self.lanc_c2.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_mesma_ti_exclui_doc_compartilhado(self):
+        """via_ti exclui lançamento do documento_c2 via imóvel C1: 302, some."""
+        self.client.force_login(self.via_ti)
+        url = reverse('excluir_lancamento', args=[self.tis_c.id, self.imovel_c1.id, self.lanc_c2.id])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Lancamento.objects.filter(pk=self.lanc_c2.pk).exists())
+
+    def test_outra_ti_404(self):
+        """lancamento_b (TI B) via URL de imóvel C1: 404, lançamento preservado."""
+        self.client.force_login(self.via_ti)
+        url_edit = reverse('editar_lancamento', args=[self.tis_c.id, self.imovel_c1.id, self.lancamento_b.id])
+        url_exc = reverse('excluir_lancamento', args=[self.tis_c.id, self.imovel_c1.id, self.lancamento_b.id])
+        self.assertEqual(self.client.get(url_edit).status_code, 404)
+        self.assertEqual(self.client.post(url_exc).status_code, 404)
+        self.assertTrue(Lancamento.objects.filter(pk=self.lancamento_b.pk).exists())
+
+    def test_service_recusa_sem_acesso_ao_documento(self):
+        """LancamentoCriacaoService: lança NAO_AUTORIZADO_LANCAMENTO para via_ti × lancamento_b."""
+        from django.test import RequestFactory
+        request = RequestFactory().post('/')
+        request.user = self.via_ti
+        request.POST = {'tipo_lancamento': self.lanc_tipo.id}
+        ok, msg = LancamentoCriacaoService.atualizar_lancamento_completo(
+            request, self.lancamento_b, self.imovel_c1
+        )
+        self.assertFalse(ok)
+        self.assertEqual(msg, NAO_AUTORIZADO_LANCAMENTO)
+
+    def test_equipe_global_edita(self):
+        """membro_global: edita lançamento via imóvel C1."""
+        self.client.force_login(self.membro_global)
+        url = reverse('editar_lancamento', args=[self.tis_c.id, self.imovel_c1.id, self.lanc_c2.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
