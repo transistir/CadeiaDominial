@@ -35,14 +35,10 @@ class VarreduraEstaticaTest(TestCase):
                 files_to_check.append(os.path.join(views_dir, filename))
         files_to_check.append(admin_file)
         
-        # P1-C: estender varredura S8 para services (pontos confirmados de str(e))
-        services_alvo = [
-            'importacao_cadeia_service.py',
-            'lancamento_duplicata_service.py',
-            'cartorio_verificacao_service.py',
-        ]
-        for nome in services_alvo:
-            files_to_check.append(os.path.join(services_dir, nome))
+        # P2 (#132): varrer TODOS os services (não mais hardcoded)
+        for filename in os.listdir(services_dir):
+            if filename.endswith('.py'):
+                files_to_check.append(os.path.join(services_dir, filename))
         
         for filepath in files_to_check:
             if not os.path.exists(filepath):
@@ -53,6 +49,10 @@ class VarreduraEstaticaTest(TestCase):
                     stripped = line.lstrip()
                     # Ignorar linhas de comentário
                     if stripped.startswith('#'):
+                        continue
+                    # P2 (#132): print() vai para stdout/log, não para resposta
+                    # HTTP — não é vetor de vazamento para o usuário.
+                    if stripped.startswith('print('):
                         continue
                     if regex.search(line):
                         # Check allowlist

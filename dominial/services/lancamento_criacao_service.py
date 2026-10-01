@@ -259,7 +259,7 @@ class LancamentoCriacaoService:
             # automático, mas a view precisa comunicar isso).
             motivo = (
                 '; '.join(m.rstrip('.') for m in e.messages)
-                if hasattr(e, 'messages') else str(e).rstrip('.')
+                if hasattr(e, 'messages') else 'erro de validação'
             )
             # BLOCKER (Opus review): o atomic desfaz o banco, mas a instância
             # ``documento_ativo`` passada pelo caller continua com livro/folha
@@ -463,7 +463,7 @@ class LancamentoCriacaoService:
             # frase final nasceria com ponto duplo ("origem 2.. Nenhuma…").
             motivo = (
                 '; '.join(m.rstrip('.') for m in e.messages)
-                if hasattr(e, 'messages') else str(e).rstrip('.')
+                if hasattr(e, 'messages') else 'erro de validação'
             )
             return False, (
                 f'Atualização cancelada: {motivo}. Nenhuma alteração foi salva.'

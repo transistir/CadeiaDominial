@@ -3,11 +3,15 @@ Service consolidado para operações de hierarquia
 Consolida funcionalidades de múltiplos services de hierarquia em um único service coeso
 """
 
+import logging
+
 from ..utils.hierarquia_utils import identificar_tronco_principal, identificar_troncos_secundarios
 from .hierarquia_arvore_service import HierarquiaArvoreService
 from .hierarquia_origem_service import HierarquiaOrigemService
 from ..managers import documentos_for_user
 from ..models import Documento
+
+logger = logging.getLogger(__name__)
 
 
 class HierarquiaService:
@@ -150,10 +154,11 @@ class HierarquiaService:
                 'troncos_secundarios': len(troncos_secundarios)
             }
             
-        except Exception as e:
+        except Exception:
+            logger.exception('Erro ao validar hierarquia')
             return {
                 'valida': False,
-                'erro': str(e),
+                'erro': 'Erro ao validar hierarquia.',
                 'documentos_orfaos': [],
                 'tronco_principal': 0,
                 'troncos_secundarios': 0

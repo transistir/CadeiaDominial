@@ -10,7 +10,7 @@ from ..forms import TIsForm, ImovelForm
 from django.db.models import Count, F, Max, Q
 from django.db.models.functions import Coalesce
 from django.http import Http404
-from ..managers import tis_for_user, usuario_ve_tudo
+from ..managers import tis_for_user, usuario_ve_tudo, usuario_tem_ti_inteira
 from ..utils.permissoes_utils import usuario_pode_criar_ti
 from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 
@@ -124,7 +124,8 @@ def tis_detail(request, tis_id):
     return render(request, 'dominial/tis_detail.html', {
         'tis': tis,
         'imoveis': imoveis_ordenados,
-        'status': status
+        'status': status,
+        'pode_criar_imovel': usuario_tem_ti_inteira(request.user, tis.id),
     })
 
 @login_required

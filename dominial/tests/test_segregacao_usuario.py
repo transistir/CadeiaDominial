@@ -2426,6 +2426,27 @@ class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
         response = self.client.get(url_criacao)
         self.assertEqual(response.status_code, 404)
 
+    def test_tis_detail_esconde_botao_criar_para_userimovel_legado(self):
+        """P1-D: tis_detail esconde botão 'Cadastrar Novo Imóvel' sem TI inteira."""
+        self.client.force_login(self.dono)
+        url_detail = reverse('tis_detail', kwargs={'tis_id': self.tis_a.id})
+        response = self.client.get(url_detail)
+        self.assertEqual(response.status_code, 200)
+        href_cadastro = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
+        self.assertNotIn(href_cadastro.encode(), response.content)
+
+    def test_tis_detail_mostra_botao_criar_para_userti(self):
+        """P1-D: tis_detail mostra botão 'Cadastrar Novo Imóvel' com UserTI."""
+        UserTI.objects.create(
+            user=self.dono, tis=self.tis_a, atribuido_por=self.superuser
+        )
+        self.client.force_login(self.dono)
+        url_detail = reverse('tis_detail', kwargs={'tis_id': self.tis_a.id})
+        response = self.client.get(url_detail)
+        self.assertEqual(response.status_code, 200)
+        href_cadastro = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
+        self.assertIn(href_cadastro.encode(), response.content)
+
 
 class BlockersRound3Test(SegregacaoBaseTestCase):
     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""

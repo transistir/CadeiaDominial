@@ -135,9 +135,11 @@
     </div>
     {% endif %}
 
+    {% if pode_criar_imovel %}
     <div style="text-align: center;">
         <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
     </div>
+    {% endif %}
 </div>
 
 <script>
