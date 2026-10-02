@@ -146,8 +146,20 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    + cadeia única, renderer compartilhado) → item 4 acima já atendido
    automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
 
-## R3 — Integridade de documentos/cartórios I (~1,5–2 semanas)
+## R3 — Integridade de documentos/cartórios I — 🧊 NA GELADEIRA (decisão Hiure 02/10/2026)
 
+> 🧊 **GELADEIRA 02/10/2026 (decisão do Hiure, grupo Transistir_CadDomDev):**
+> "o R3 precisa ser revisto pq muita coisa foi feita manualmente na correção
+> dos cartorios e nao entrou nos commits e nem no servidor de testes, muito
+> fix foi feito direto no servidor de prod (um erro, mas foi feito isso).
+> vamos deixar o R3 na 'geladeira' por agora pois não é um problema urgente."
+> **Critérios de destravar** (detalhe em `PLANO_ESTRATEGICO_POS_V110.md`):
+> (1) dump fresco de produção restaurado no test server (reaproximar os
+> dados); (2) revisão item a item contra os dados reais — o que ainda
+> reproduz, o que os fixes manuais já resolveram; (3) reordenação aprovada
+> pelo Hiure. ⚠️ Ressalva registrada: #238 (data-loss de observações) e
+> #223 (500 criar documento) podem ser puxados caso a caso se virarem
+> problema real de uso (regra da EXCEÇÃO R9).
 > ⚠️ **REVALIDAR CONTRA O CÓDIGO ATUAL ANTES DE INICIAR** (pedido Hiure
 > 11/09): export/cartórios mudaram muito no R2 (#166/#172/#179, renderer
 > compartilhado, helper de origem) — conferir se cada bug ainda reproduz e
@@ -156,7 +168,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > com dados reais envolvidos (desde 13/08).
 > **Reordenado 23/09 (aprovação do Hiure): bugs de produção primeiro** —
 > #218 → #144 → #219 → #212, depois os itens já planejados. Estimativa
-> revista de ~1–1,5 para ~1,5–2 semanas.
+> revista de ~1–1,5 para ~1,5–2 semanas *(superada pela geladeira 02/10)*.
 
 1. **#218** ✅ P1 produção: Livro↔Folha invertidos — **CONCLUÍDO 26/09**
    (PR #224, squash `b3e9026f` em develop; Opus 5.5 ×2 APPROVE + Greptile 5/5;
@@ -262,14 +274,17 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    normal) — aprovação caso a caso do Hiure, mesma regra da EXCEÇÃO R9.
 14. **#240** teste C2 do #230 promete ordem da exportação mas só verifica
    a árvore — cobrir `CadeiaCompletaService.get_cadeia_completa`
-   (P2 do Greptile no PR #239). Fazer junto do #251 (R10), que mexe no
-   mesmo service.
+   (P2 do Greptile no PR #239). **Segue na geladeira do R3 (02/10)** — a
+   afinidade com o #251 (R10, mesmo service) NÃO é exceção aprovada; se o
+   Hiure quiser antecipá-la junto do #251, registrar a aprovação aqui
+   (achado P2 convergente Codex+Greptile no PR #256). O TDD do #251 cobre
+   `get_cadeia_completa` por conta própria.
 15. **#248** hardening(admin): `DocumentoAdmin` ainda permite editar
    identidade (tipo/número/cartório) — última rota de "documento
    fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
    (sincronização de identidade).
 
-## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); restante depois do R3
+## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); 🧊 GELADEIRA junto do R3 (decisão Hiure 02/10)
 
 > **Bug de produção ativo** reportado pelo Maurício (12/09): ao escolher a origem
 > de uma **transcrição compartilhada** com origem dupla (caso real: imóvel 384,
@@ -507,6 +522,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > P1 de produção do R3 (#230, #223) podem furar a fila **caso a caso, com
 > aprovação explícita do Hiure registrada aqui**. Mesma lógica da EXCEÇÃO
 > #215 (não segurar blocos por pendência externa).
+> **ATUALIZAÇÃO 02/10 (decisão do Hiure): a pausa virou GELADEIRA
+> INDEFINIDA** — R3 e R3.5 não retomam automaticamente após a v1.1.0;
+> destravam só pelos critérios da seção R3 (dump fresco + revalidação
+> item a item + reordenação aprovada). A fila pós-v1.1.0 passa a ser
+> R4 → R5 → R6 → R7 (gateado) → R8 → R10 (plano estratégico, D1).
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
    - **PR zumbi #133 AVALIADO (30/09)**: revisão de compatibilidade do
@@ -619,6 +639,12 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > consome o texto livre do "Outra") → #253 → #254; #253 depende do #232
 > (R3) para não propagar falso-negativo do filtro CRI. Todas são P/M,
 > mesmo domínio de código (fim de cadeia / autocomplete / badge da lista).
+> **Plano estratégico 02/10 (pedido do Hiure) — DECIDIDO:** a fila
+> pós-v1.1.0 é **R4 → R5 → R6 → R7 (se o gate abrir) → R8 → R10**
+> (decisão D1 do Hiure em 02/10: "pode ser primeiro do R4 ao R8"). O R10
+> portanto executa por ÚLTIMO entre os blocos planejados; a ordem interna
+> daqui (#252 → #251 → #253; #254 independente) segue valendo. Detalhes
+> (waves, releases sugeridas, riscos): `docs/produto-3/PLANO_ESTRATEGICO_POS_V110.md`.
 
 1. **#252** feat(fim-cadeia): opção "Outra" com texto livre na lista de
    Estados do destacamento do patrimônio público — casos que não são
@@ -628,8 +654,9 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 2. **#251** feat(export): incluir fim de cadeia como elemento da cadeia
    nas exportações (PDF/XLS) — hoje `get_cadeia_completa` pula os nós
    sintéticos `is_fim_cadeia` (issue #146) e eles nunca saem nos exports.
-   *(Consome o texto livre do #252; casa com #240 — mesma área,
-   `CadeiaCompletaService`.)*
+   *(Consome o texto livre do #252. O TDD do #251 cobre
+   `get_cadeia_completa` — o #240, que é da mesma área, segue NA
+   GELADEIRA do R3 e não entra aqui sem exceção aprovada — ver R3 item 14.)*
 3. **#253** feat(lançamento): campo Cartório da transmissão — excluir CRI
    das sugestões/busca (na prática nunca é CRI, só tabelionato etc.) e
    sugerir os últimos cartórios usados nesse campo (histórico, como o
@@ -692,8 +719,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 - #252 → #251 (R10: o export do fim de cadeia consome o texto livre do "Outra")
 - #232 (R3) → #253 (R10): corrigir os falso-negativos de `q_nome_cri()`
   antes de usá-lo como exclusão no campo de transmissão
-- #240 (R3) fazer junto do #251 (R10) — mesma área (`CadeiaCompletaService`)
 - #243 + #249 (R8) — mesma área (duplicata/criação atômica de lançamento)
+- **#240 (R3) fica na GELADEIRA** — NÃO vai junto do #251 (R10) apesar da
+  mesma área; o TDD do #251 cobre `get_cadeia_completa` (achado P2 do
+  PR #256). Exceção só com aprovação registrada no R3 item 14.
 
 ## Cronograma (sprints ~1 semana; replanejar ao fim de cada uma)
 
@@ -758,7 +787,17 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 02/10/2026 — ampliação da fila aprovada a pedido do
+*Última atualização: 02/10/2026 (tarde) — **plano estratégico pós-v1.1.0
+aprovado na direção pelo Hiure** (`PLANO_ESTRATEGICO_POS_V110.md`, PR
+docs/roadmap-plano-estrategico): (D1) fila pós-release = **R4 → R5 → R6 →
+R7 (gateado) → R8 → R10**; (D2) **R3 na GELADEIRA** — correções manuais de
+cartórios feitas direto em produção sem entrar em commits/teste exigem
+revalidação item a item contra dump fresco antes de o bloco voltar à fila
+(R3.5 junto, confirmado pelo Hiure); (D3) **dump prod → test server** antes da
+validação da v1.1.0 (serve também ao T9). Waves e releases sugeridas
+(v1.2.0 R4 · v1.3.0 R5/R6 · v1.4.0 R8/R7 · v1.5.0 R10) no plano.*
+
+*02/10/2026 — ampliação da fila aprovada a pedido do
 Hiure: 4 novas funcionalidades (#251 exportar fim de cadeia, #252 opção
 "Outra" nos Estados do destacamento, #253 cartório da transmissão sem CRI
 + histórico, #254 badge "Parcialmente sem Origem") no bloco novo R10
