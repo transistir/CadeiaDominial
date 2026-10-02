@@ -619,6 +619,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > consome o texto livre do "Outra") → #253 → #254; #253 depende do #232
 > (R3) para não propagar falso-negativo do filtro CRI. Todas são P/M,
 > mesmo domínio de código (fim de cadeia / autocomplete / badge da lista).
+> **Plano estratégico 02/10 (pedido do Hiure):** execução detalhada em
+> `docs/produto-3/PLANO_ESTRATEGICO_R10.md` — waves pós-v1.1.0 (Wave 1:
+> P1s #238/#223/#232 · Wave 2: #252+#254 · Wave 3: #251+#240 · Wave 4:
+> #253) com decisões D1–D4 **pendentes de aprovação do Hiure**; a ordem
+> deste bloco vale até a aprovação registrar mudança aqui.
 
 1. **#252** feat(fim-cadeia): opção "Outra" com texto livre na lista de
    Estados do destacamento do patrimônio público — casos que não são
