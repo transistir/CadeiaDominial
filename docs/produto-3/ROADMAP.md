@@ -7,6 +7,12 @@
 > (PR #133) passa a ser o próximo bloco de execução, com meta de release
 > **v1.1.0**. R4–R8 deslizam para depois do R9; **R3/R3.5 ficam PAUSADOS
 > até a v1.1.0** (exceção de fila registrada na seção R9). Ver seção R9.
+> **Ampliação 02/10/2026 (pedido do Hiure):** 4 novas funcionalidades
+> criadas e mapeadas (**#251–#254**, novo bloco **R10** — pós-v1.1.0);
+> 8 issues abertas em 29–30/09 que estavam fora dos blocos numerados
+> foram incorporadas (**#232, #238, #240, #248** → R3; **#234, #235,
+> #243, #249** → R8). Testes da v1.1.0 seguem em andamento — escopo da
+> release congelado.
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -50,13 +56,24 @@ GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)**.
 na v1.0.11 (20/09)**; Fases 1–3 de saneamento (#202) **aguardando redefinição
 via PRD** (tabela × exportações); #206 (origens homônimas) a revalidar. Veja **R3.5**.
 
-**Fila Django (snapshot 23/09/2026, pós-housekeeping): 47 issues abertas no
-GitHub — 34 Django** (excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
+**Fila Django (snapshot 02/10/2026): 59 issues abertas no GitHub — 46
+Django** (excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
 - Cinco pendências de implementação que estavam fora dos blocos numerados
-  foram incorporadas nesta reordenação: **#218, #219, #212** (R3), **#206**
+  foram incorporadas na reordenação 23/09: **#218, #219, #212** (R3), **#206**
   (R3.5), **#215** (R4).
 - Mergeadas na v1.0.11: **#168, #201, #204, #210** — ✅ fechadas no GitHub
   em 23/09 (comentários apontam PR/release).
+- **Incorporação 02/10/2026 (pedido do Hiure — "organize o que estiver fora
+  do roadmap"):** as 8 issues abertas em 29–30/09 entram nos blocos —
+  **#232** (filtro CRI falso-negativos), **#238** (observações apagadas na
+  edição), **#240** (cobertura export #230), **#248** (hardening admin
+  identidade) → **R3**; **#234** (importar-cartorios sem auth), **#235**
+  (listener órfão + XSS imovel_form), **#243** (cobertura rollback #241),
+  **#249** (mensagem de erro descartada em duplicata) → **R8**.
+- **Novas funcionalidades 02/10/2026 (pedido do Hiure):** **#251** exportar
+  fim de cadeia · **#252** opção "Outra" (texto livre) nos Estados do
+  destacamento · **#253** cartório da transmissão sem CRI + histórico ·
+  **#254** badge "Parcialmente sem Origem" — bloco novo **R10** (pós-v1.1.0).
 
 **Reordenação da fila aprovada pelo Hiure em 23/09/2026** (revisão Codex
 gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
@@ -231,6 +248,26 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    service e desempacota tupla que ele não retorna. Débito derivado do
    #218 (tela de criar documento do fluxo de lançamento quebrada); posição
    registrada a pedido da revisão Codex no PR #225.
+12. **#232** filtro CRI do autocomplete deixa de fora ~169 cartórios
+   legítimos tipo "Nº Ofício de X" (falso-negativos de `q_nome_cri()`,
+   medidos em produção 29/09: 4.666 cartórios, 3.469 pegos pelo filtro).
+   Follow-up do #227. **Atenção cruzada:** o #253 (R10) vai EXCLUIR CRI do
+   campo de transmissão usando o mesmo helper — falso-negativo aqui vira
+   falso-positivo lá; fazer antes ou junto do #253.
+13. **#238** 🐛 data-loss silencioso: edição de documento abre campo
+   Observações VAZIO e o save apaga o valor existente
+   (`_observacoes_form.html` lê `lancamento.observacoes` em vez de
+   `documento.observacoes`). Achado no co-review do plano do #230.
+   Candidato a furar fila como P1 de produção (perda de dado em uso
+   normal) — aprovação caso a caso do Hiure, mesma regra da EXCEÇÃO R9.
+14. **#240** teste C2 do #230 promete ordem da exportação mas só verifica
+   a árvore — cobrir `CadeiaCompletaService.get_cadeia_completa`
+   (P2 do Greptile no PR #239). Fazer junto do #251 (R10), que mexe no
+   mesmo service.
+15. **#248** hardening(admin): `DocumentoAdmin` ainda permite editar
+   identidade (tipo/número/cartório) — última rota de "documento
+   fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
+   (sincronização de identidade).
 
 ## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); restante depois do R3
 
@@ -436,6 +473,20 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 8. **#199** notificação Telegram de deploy falhado *(novo 12/09; #197+#199
    juntos fecham o ciclo do incidente de 12/09 — candidatos a fast-track
    se o time quiser)*
+9. **#234** 🔒 Segurança: `verificar_cartorios_estado`/`importar_cartorios_estado`
+   sem autenticação (qualquer anônimo dispara importação em massa + serviço
+   externo) + criação automática de cartório por nome sem sanitização.
+   Achado nos reviews do PR #233 (#227). **Único item de segurança da fila
+   — candidato a fast-track junto do #196 (XSS)** se o time quiser antecipar.
+10. **#235** JS: listener de clique órfão pós-clone fecha dropdown do
+    autocomplete (fix de 1 linha) + XSS em `imovel_form.js` — casa com o
+    #196 (mesmo arquivo/domínio: innerHTML sem escape).
+11. **#243** test(#241): cobrir rollback de falha TARDIA (adquirentes) em
+    `criar_lancamento_completo` + mensagem do `importar_duplicata`
+    (P2 do Greptile/GLM no PR #242). Fazer junto do #249 (mesma área).
+12. **#249** 🐛 mensagem de erro real é descartada quando criação falha
+    após importação (`duplicata_views.py:92` mostra aviso genérico).
+    Achado na revisão de release do bundle v1.0.12; pré-existente.
 
 ## R9 — Segregação por usuário (a maior feature, ~2 semanas) — 🔥 ANTECIPADO (reordenação 30/09, aprovada pelo Hiure)
 
@@ -451,7 +502,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > **EXCEÇÃO DE FILA R3/R3.5 (decorrente da reordenação aprovada pelo Hiure
 > em 30/09 — a proposta partiu dele):** R3 e R3.5 ficam **PAUSADOS** até
 > a release v1.1.0 (R9 antecipado). Itens abertos (#230/2b, #219, #212,
-> #114, #141, #149, #110, #223, #206, housekeeping R1) não bloqueiam o R9.
+> #114, #141, #149, #110, #223, #206, e os incorporados em 02/10 — #232,
+> #238, #240, #248, housekeeping R1) não bloqueiam o R9.
 > P1 de produção do R3 (#230, #223) podem furar a fila **caso a caso, com
 > aprovação explícita do Hiure registrada aqui**. Mesma lógica da EXCEÇÃO
 > #215 (não segurar blocos por pendência externa).
@@ -555,6 +607,40 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    - Release: ao fim dos commits C1–C9 + Fase 4 + Fase 5 + validação no
      test server (incl. T9: migrar 0056→0061 sobre dump de produção), PR
      develop → main + tag **v1.1.0** com GATE-LUANDRO.
+   - **Status 02/10/2026 (confirmação do Hiure):** testes da v1.1.0
+     **ainda não terminaram** — o bloco segue aberto; nada do R10 entra
+     no escopo da tag.
+
+## R10 — Novas funcionalidades de fim de cadeia + UX (pedido Hiure 02/10/2026) — pós-v1.1.0
+
+> Bloco criado em 02/10/2026 com 4 funcionalidades novas pedidas pelo Hiure
+> no grupo Transistir_CadDomDev. **Não entra na v1.1.0** (escopo da tag
+> congelado, testes em andamento). Ordem sugerida: #252 → #251 (o export
+> consome o texto livre do "Outra") → #253 → #254; #253 depende do #232
+> (R3) para não propagar falso-negativo do filtro CRI. Todas são P/M,
+> mesmo domínio de código (fim de cadeia / autocomplete / badge da lista).
+
+1. **#252** feat(fim-cadeia): opção "Outra" com texto livre na lista de
+   Estados do destacamento do patrimônio público — casos que não são
+   nenhum estado nem as opções cadastradas (coroa etc.). O campo
+   `sigla_patrimonio_publico` já aceita texto livre; falta a opção fixa
+   no select + validação + reexibição. *(Fazer antes do #251.)*
+2. **#251** feat(export): incluir fim de cadeia como elemento da cadeia
+   nas exportações (PDF/XLS) — hoje `get_cadeia_completa` pula os nós
+   sintéticos `is_fim_cadeia` (issue #146) e eles nunca saem nos exports.
+   *(Consome o texto livre do #252; casa com #240 — mesma área,
+   `CadeiaCompletaService`.)*
+3. **#253** feat(lançamento): campo Cartório da transmissão — excluir CRI
+   das sugestões/busca (na prática nunca é CRI, só tabelionato etc.) e
+   sugerir os últimos cartórios usados nesse campo (histórico, como o
+   campo de origem já faz). *(Depende do #232/R3 — falso-negativo de
+   `q_nome_cri()` viraria falso-positivo aqui; não regressar o #227 nos
+   campos de origem.)*
+4. **#254** feat(ui): badge "Parcialmente sem Origem" na lista de imóveis
+   — origens mistas (`sem_origem` + `origem_lidima` coexistindo na árvore
+   do imóvel). Hoje `StatusCadeiaService` (#174) exibe a pior classificação
+   ("Sem Origem") no caso misto. *(Estender #174 sem mudar os badges
+   existentes; respeitar escopo por usuário do #132.)*
 
 ---
 
@@ -603,6 +689,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 - #215: inventário somente leitura (R1) → validação do cliente → reparo (R4)
 - PR zumbi #136 → #110 (R3); PR zumbi #133 → #132 (R9)
 - #202 F1–F3 (R3.5) ← PRD que distinga tabela × exportações
+- #252 → #251 (R10: o export do fim de cadeia consome o texto livre do "Outra")
+- #232 (R3) → #253 (R10): corrigir os falso-negativos de `q_nome_cri()`
+  antes de usá-lo como exclusão no campo de transmissão
+- #240 (R3) fazer junto do #251 (R10) — mesma área (`CadeiaCompletaService`)
+- #243 + #249 (R8) — mesma área (duplicata/criação atômica de lançamento)
 
 ## Cronograma (sprints ~1 semana; replanejar ao fim de cada uma)
 
@@ -620,6 +711,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > 30/09 (~35–50h de agente; C1+C2 commitados em 01/10). R3/R3.5 PAUSADOS
 > (ver EXCEÇÃO DE FILA na seção R9). R4–R8 deslizam para depois da v1.1.0;
 > replanejar datas ao fim da release.
+>
+> **Atualizado 02/10 (ampliação da fila):** 4 novas funcionalidades
+> (#251–#254) criam o bloco **R10**, executado depois da v1.1.0 (testes
+> da release ainda em andamento — confirmação do Hiure em 02/10); 8
+> issues órfãs de 29–30/09 incorporadas a R3 (#232, #238, #240, #248) e
+> R8 (#234, #235, #243, #249). Estimativa do R10: ~1 sprint (4 itens
+> P/M), a confirmar no replanejamento pós-release.
 
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
@@ -660,7 +758,14 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 30/09/2026 — reordenação aprovada pelo Hiure: R9
+*Última atualização: 02/10/2026 — ampliação da fila aprovada a pedido do
+Hiure: 4 novas funcionalidades (#251 exportar fim de cadeia, #252 opção
+"Outra" nos Estados do destacamento, #253 cartório da transmissão sem CRI
++ histórico, #254 badge "Parcialmente sem Origem") no bloco novo R10
+(pós-v1.1.0); 8 issues de 29–30/09 incorporadas a R3/R8. Testes da
+v1.1.0 seguem em andamento — R9 aberto até a validação terminar.*
+
+*30/09/2026 — reordenação aprovada pelo Hiure: R9
 antecipado, PR #133 avaliado e reaproveitado (relatório Opus 5.5), meta
 v1.1.0.*
 
