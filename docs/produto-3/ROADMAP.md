@@ -274,8 +274,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    normal) — aprovação caso a caso do Hiure, mesma regra da EXCEÇÃO R9.
 14. **#240** teste C2 do #230 promete ordem da exportação mas só verifica
    a árvore — cobrir `CadeiaCompletaService.get_cadeia_completa`
-   (P2 do Greptile no PR #239). Fazer junto do #251 (R10), que mexe no
-   mesmo service.
+   (P2 do Greptile no PR #239). **Segue na geladeira do R3 (02/10)** — a
+   afinidade com o #251 (R10, mesmo service) NÃO é exceção aprovada; se o
+   Hiure quiser antecipá-la junto do #251, registrar a aprovação aqui
+   (achado P2 convergente Codex+Greptile no PR #256). O TDD do #251 cobre
+   `get_cadeia_completa` por conta própria.
 15. **#248** hardening(admin): `DocumentoAdmin` ainda permite editar
    identidade (tipo/número/cartório) — última rota de "documento
    fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
@@ -651,8 +654,9 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 2. **#251** feat(export): incluir fim de cadeia como elemento da cadeia
    nas exportações (PDF/XLS) — hoje `get_cadeia_completa` pula os nós
    sintéticos `is_fim_cadeia` (issue #146) e eles nunca saem nos exports.
-   *(Consome o texto livre do #252; casa com #240 — mesma área,
-   `CadeiaCompletaService`.)*
+   *(Consome o texto livre do #252. O TDD do #251 cobre
+   `get_cadeia_completa` — o #240, que é da mesma área, segue NA
+   GELADEIRA do R3 e não entra aqui sem exceção aprovada — ver R3 item 14.)*
 3. **#253** feat(lançamento): campo Cartório da transmissão — excluir CRI
    das sugestões/busca (na prática nunca é CRI, só tabelionato etc.) e
    sugerir os últimos cartórios usados nesse campo (histórico, como o
@@ -715,8 +719,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 - #252 → #251 (R10: o export do fim de cadeia consome o texto livre do "Outra")
 - #232 (R3) → #253 (R10): corrigir os falso-negativos de `q_nome_cri()`
   antes de usá-lo como exclusão no campo de transmissão
-- #240 (R3) fazer junto do #251 (R10) — mesma área (`CadeiaCompletaService`)
 - #243 + #249 (R8) — mesma área (duplicata/criação atômica de lançamento)
+- **#240 (R3) fica na GELADEIRA** — NÃO vai junto do #251 (R10) apesar da
+  mesma área; o TDD do #251 cobre `get_cadeia_completa` (achado P2 do
+  PR #256). Exceção só com aprovação registrada no R3 item 14.
 
 ## Cronograma (sprints ~1 semana; replanejar ao fim de cada uma)
 

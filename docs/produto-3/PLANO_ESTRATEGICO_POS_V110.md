@@ -37,6 +37,16 @@
   26/09 intacta: **nunca alterar dados de produção** — o fluxo é só prod →
   teste. Skills de referência: `database-data-transfer`,
   `sync-cadeiadominial-test-to-prod` (direção inversa — adaptar).
+  - 🔒 **SANITIZAÇÃO OBRIGATÓRIA (P1 do review Codex no PR #256):** dump
+    sem filtro copia `auth_user` com os **hashes de senha de produção**
+    para o test server (acessível pela internet) — as senhas reais
+    passariam a valer lá, e um comprometimento do teste exporia os hashes.
+    Antes de colocar o ambiente restaurado no ar: **excluir/scrub** as
+    tabelas de autenticação, sessão e tokens (`auth_user` + relacionadas,
+    `django_session`, tokens/API keys se houver) e **semear contas
+    somente de teste** (superuser de teste + usuários D1–D6 com senhas de
+    teste) para a validação do #132. Read-only na origem NÃO mitiga esse
+    risco — a sanitização é no destino, e é gate do Wave 0.
 
 ## Princípios de priorização
 
@@ -55,8 +65,10 @@
 ## Sequência de execução
 
 ```
-Wave 0 (agora)        v1.1.0: dump prod→teste (D3) + validação test server
-                      + T9 + casos D1–D6 → PR develop→main + tag (GATE-LUANDRO)
+Wave 0 (agora)        v1.1.0: dump prod→teste (D3, COM sanitização de
+                      auth/sessão/tokens + contas de teste) + validação
+                      test server + T9 + casos D1–D6 → PR develop→main
+                      + tag (GATE-LUANDRO)
       │
 Wave 1 (~1 sprint)    R4 rapid wins: #170 · #164 · #169 · #173 (decidir c/ #213)
       │
@@ -65,20 +77,23 @@ Wave 2 (~1–2 sprints) R4 pesado: #213 fases 2–3 · #165 (desenhar c/ #150)
       │
 Wave 3 (~0,5–1)       R5: #113 → #135   ·   R6: #155 · #175 → #176
       │
-Wave 4 (~0,5–1)       R8 parte 1 — segurança/infra: #234 · #196+#235 (XSS,
-      │               mesma área) · #197 · #198 · #199
+Wave 4 (🚦 condicional)  SE o GATE-CLIENTE respondeu até o fim do R6:
+      │               R7 PRIMEIRO: #150 plano → #151 (ordem D1: R7 antes
+      │               do R8 quando o gate abre). SENÃO: R8 parte 1 —
+      │               segurança/infra: #234 · #196+#235 (XSS, mesma área)
+      │               · #197 · #198 · #199
       │
-Wave 5                R7 (🚦 só se GATE-CLIENTE responder): #150 plano →
-      │               #151. Sem resposta → pular (regra do roadmap) e
-      │               antecipar R8 parte 2.
+Wave 5 (~0,5–1)       R8 parte 1 (se não executada na Wave 4): #234 ·
+      │               #196+#235 · #197 · #198 · #199
       │
 Wave 6 (~1)           R8 parte 2: #105 · #116 · #139 · #123 · #243+#249
       │               (mesma área duplicata)
       │
 Wave 7 (~1 sprint)    R10 bloco A: #252 ("Outra") · #254 (badge parcial)
       │
-Wave 8 (~1 sprint)    R10 bloco B: #251 (export fim de cadeia) + #240
-      │               (mesma área CadeiaCompletaService; ver ressalva #232)
+Wave 8 (~1 sprint)    R10 bloco B: #251 (export fim de cadeia)
+      │               (#240 NÃO entra aqui — segue na geladeira do R3;
+      │               ver ressalva no Wave 8 detalhado)
       │
 Wave 9 (~1 sprint)    R10 bloco C: #253 (transmissão sem CRI + histórico)
       │
@@ -88,7 +103,9 @@ GELADEIRA (D2)        R3 + R3.5 (confirmado 02/10): destrava após (a) dump D3
 ```
 
 ### Wave 0 — v1.1.0 (bloqueia tudo)
-1. **Dump prod → teste (D3)** — read-only na prod; restaurar no teste.
+1. **Dump prod → teste (D3)** — read-only na prod; restaurar no teste
+   **com sanitização obrigatória** (ver D3: excluir/scrub auth/sessão/
+   tokens + semear contas de teste ANTES de o ambiente voltar ao ar).
 2. Validação do #132 no test server: deploy develop, **T9** (migrar
    0056→0061 sobre o dump fresco), casos **D1–D6**.
 3. PR develop → main + tag **v1.1.0** (GATE-LUANDRO); #132 fecha na tag.
@@ -114,13 +131,19 @@ GELADEIRA (D2)        R3 + R3.5 (confirmado 02/10): destrava após (a) dump D3
   do #110 para junto do dump D3 (não é "correção", é inventário); (b) deixar
   #113 esperar o destravar do R3.
 
-### Waves 4–6 — R8 (partido em 2) + R7 (gateado)
+### Waves 4–6 — R7 (gateado, tem precedência quando abre) + R8 (partido em 2)
+- **Regra de precedência (P2 do review Codex no PR #256):** se o
+  GATE-CLIENTE (#150/#151) estiver respondido até o fim do R6, **R7
+  executa ANTES de qualquer parte do R8** (ordem D1 do Hiure: R7 antes do
+  R8 quando o gate abre — mesma regra do roadmap: "sem resposta até o fim
+  do R6 → R8 entra antes do R7"). Se o gate seguir fechado, R8 parte 1
+  entra no lugar.
+- R7 (se o gate abrir): #150 é PLANEJAMENTO — plano aprovado (luandro/
+  Hiure) antes de qualquer implementação; #151 depende do plano.
 - R8 parte 1 (segurança/infra — itens com risco real em produção):
   **#234** (importar-cartorios sem auth) · **#196+#235** (XSS autocompletes,
   mesma área) · **#197** (disco) · **#198** (cache estáticos) · **#199**
   (alerta deploy).
-- R7: só se o GATE-CLIENTE responder (#150 é PLANEJAMENTO — plano aprovado
-  antes de qualquer implementação; #151 depende do plano).
 - R8 parte 2 (débitos): #105 · #116 · #139 · #123 · **#243+#249** (duplicata,
   mesma área — fazer juntos).
 
@@ -128,9 +151,15 @@ GELADEIRA (D2)        R3 + R3.5 (confirmado 02/10): destrava após (a) dump D3
 - **Bloco A** (~1 sprint): #252 opção "Outra" (texto livre) + #254 badge
   "Parcialmente sem Origem" — independentes entre si, paralelizáveis.
 - **Bloco B** (~1 sprint): #251 export do fim de cadeia (PDF único/completo,
-  XLS único/consolidado — renderer compartilhado) + #240 (cobertura do
-  `get_cadeia_completa`, mesma área). Gate de regressão: testes golden
-  #179/#204 verdes + validação no test server antes da tag.
+  XLS único/consolidado — renderer compartilhado). Gate de regressão:
+  testes golden #179/#204 verdes + validação no test server antes da tag.
+  **#240 NÃO entra neste wave** (P2 convergente Codex+Greptile no PR #256):
+  a issue pertence ao R3 congelado e só volta à fila pelos critérios de
+  destravar da geladeira (revisão item a item + reordenação aprovada pelo
+  Hiure). O TDD do #251 deverá cobrir `get_cadeia_completa` por conta
+  própria; se o Hiure quiser antecipar o #240 como exceção explícita
+  (mesma área, barata), registrar a aprovação no roadmap — até lá, fica
+  na geladeira.
 - **Bloco C** (~1 sprint): #253 transmissão sem CRI + histórico.
   **Ressalva #232 (geladeira):** a exclusão de CRI usa `q_nome_cri()`, que
   tem ~169 falso-negativos (#232). Opções na ocasião: (a) embutir a correção
