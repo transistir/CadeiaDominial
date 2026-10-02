@@ -1,4 +1,4 @@
-# Plano Estratégico — fila pós-v1.1.0 (R4–R8 → R10; R3 na geladeira)
+# Plano Estratégico — fila pós-v1.1.0 (R4–R8 → R10; R3/R3.5 na geladeira)
 
 > **Status: APROVADO na direção geral pelo Hiure em 02/10/2026** (grupo
 > Transistir_CadDomDev): "pode ser primeiro do R4 ao R8" · "vamos deixar o
@@ -21,11 +21,10 @@
   **revalidados contra os dados reais de produção** antes de voltar à fila —
   diagnósticos antigos podem não reproduzir mais. R3 não é urgente (Hiure,
   literal: "vamos deixar o R3 na 'geladeira' por agora").
-  - **R3.5 (extrapolação do orquestrador, confirmar):** #206 (homônimas) e
-    #202 (fases 1–3) também dependem de dados reais para revalidação — o
-    critério de saída do R3.5 (revisão Codex 24/09) exige validação no test
-    server. Proposta: entra na mesma revisão do destravar. Se o Hiure
-    discordar, R3.5 volta à posição original (depois do R3).
+  - **R3.5 junto na geladeira — CONFIRMADO pelo Hiure em 02/10 ("sim"):**
+    #206 (homônimas) e #202 (fases 1–3) também dependem de dados reais para
+    revalidação — o critério de saída do R3.5 (revisão Codex 24/09) exige
+    validação no test server. Entram na mesma revisão do destravar.
   - ⚠️ **Ressalva registrada (não bloqueia a decisão):** #238 é data-loss
     silencioso em uso normal (editar documento apaga observações) e #223 é
     500 na tela de criar documento. Se algum usuário topar com eles, podem
@@ -83,7 +82,7 @@ Wave 8 (~1 sprint)    R10 bloco B: #251 (export fim de cadeia) + #240
       │
 Wave 9 (~1 sprint)    R10 bloco C: #253 (transmissão sem CRI + histórico)
       │
-GELADEIRA (D2)        R3 (+ R3.5 a confirmar): destrava após (a) dump D3
+GELADEIRA (D2)        R3 + R3.5 (confirmado 02/10): destrava após (a) dump D3
                       rodado + (b) revisão item a item contra produção real.
                       Sem data.
 ```

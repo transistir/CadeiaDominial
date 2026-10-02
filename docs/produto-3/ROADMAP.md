@@ -281,7 +281,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
    (sincronização de identidade).
 
-## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); 🧊 geladeira a confirmar (ver R3, decisão Hiure 02/10)
+## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); 🧊 GELADEIRA junto do R3 (decisão Hiure 02/10)
 
 > **Bug de produção ativo** reportado pelo Maurício (12/09): ao escolher a origem
 > de uma **transcrição compartilhada** com origem dupla (caso real: imóvel 384,
@@ -519,6 +519,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > P1 de produção do R3 (#230, #223) podem furar a fila **caso a caso, com
 > aprovação explícita do Hiure registrada aqui**. Mesma lógica da EXCEÇÃO
 > #215 (não segurar blocos por pendência externa).
+> **ATUALIZAÇÃO 02/10 (decisão do Hiure): a pausa virou GELADEIRA
+> INDEFINIDA** — R3 e R3.5 não retomam automaticamente após a v1.1.0;
+> destravam só pelos critérios da seção R3 (dump fresco + revalidação
+> item a item + reordenação aprovada). A fila pós-v1.1.0 passa a ser
+> R4 → R5 → R6 → R7 (gateado) → R8 → R10 (plano estratégico, D1).
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
    - **PR zumbi #133 AVALIADO (30/09)**: revisão de compatibilidade do
@@ -782,7 +787,7 @@ docs/roadmap-plano-estrategico): (D1) fila pós-release = **R4 → R5 → R6 →
 R7 (gateado) → R8 → R10**; (D2) **R3 na GELADEIRA** — correções manuais de
 cartórios feitas direto em produção sem entrar em commits/teste exigem
 revalidação item a item contra dump fresco antes de o bloco voltar à fila
-(R3.5 junto, a confirmar); (D3) **dump prod → test server** antes da
+(R3.5 junto, confirmado pelo Hiure); (D3) **dump prod → test server** antes da
 validação da v1.1.0 (serve também ao T9). Waves e releases sugeridas
 (v1.2.0 R4 · v1.3.0 R5/R6 · v1.4.0 R8/R7 · v1.5.0 R10) no plano.*
 
