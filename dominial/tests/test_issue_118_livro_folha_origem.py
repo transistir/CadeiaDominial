@@ -45,6 +45,10 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
             nome="CRI #118", cns="118118", cidade="Cidade", estado="SP"
         )
         self.tipo_matricula = DocumentoTipo.objects.create(tipo="matricula")
+        # #138: matrículas não têm folha (FLS irrelevante) — os caminhos de
+        # folha exercidos nesta classe só existem para tipos não-matrícula,
+        # por isso os testes de livro/folha aplicado usam uma transcrição.
+        self.tipo_transcricao = DocumentoTipo.objects.create(tipo="transcricao")
         self.tipo_inicio = LancamentoTipo.objects.create(tipo="inicio_matricula")
         self.imovel = Imovel.objects.create(
             terra_indigena_id=self.tis,
@@ -101,6 +105,23 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
     # ------------------------------------------------------------------
     # Vetor 2: _aplicar_campos_documento — remover fallback de herança
     # ------------------------------------------------------------------
+    def _criar_documento_transcricao(self, livro="", folha=""):
+        """Documento não-matrícula para exercer os caminhos de folha.
+
+        Desde o #138 (FLS em matrícula é irrelevante), folha é
+        ignorada/apagada para documentos tipo 'matricula' — aplicar e
+        preservar folha só faz sentido em tipos como 'transcricao'.
+        """
+        return Documento.objects.create(
+            imovel=self.imovel,
+            tipo=self.tipo_transcricao,
+            numero="200",
+            data=timezone.now().date(),
+            cartorio=self.cri,
+            livro=livro,
+            folha=folha,
+        )
+
     def test_aplicar_campos_documento_nao_herda_livro_origem(self):
         """BUG #118: o documento atual recebia livro/folha da origem."""
         lancamento = Lancamento.objects.create(
@@ -131,8 +152,11 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
 
     def test_aplicar_campos_documento_usa_livro_documento_quando_fornecido(self):
         """Quando ``livro_documento`` vem preenchido, ele é aplicado."""
+        # Transcrição: em matrícula o #138 ignora folha, e este teste cobre
+        # a aplicação de livro E folha explícitos do formulário.
+        documento_t = self._criar_documento_transcricao()
         lancamento = Lancamento.objects.create(
-            documento=self.documento_a,
+            documento=documento_t,
             tipo=self.tipo_inicio,
             data=timezone.now().date(),
             cartorio_origem=self.cri,
@@ -146,9 +170,9 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
 
         LancamentoCriacaoService._aplicar_campos_documento(lancamento, dados)
 
-        self.documento_a.refresh_from_db()
-        self.assertEqual(self.documento_a.livro, "7")
-        self.assertEqual(self.documento_a.folha, "8")
+        documento_t.refresh_from_db()
+        self.assertEqual(documento_t.livro, "7")
+        self.assertEqual(documento_t.folha, "8")
 
     # ------------------------------------------------------------------
     # Vetor 3: RegraPetreaService — não usar lancamento.livro_origem
@@ -178,8 +202,11 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
 
     def test_regra_petrea_usa_livro_transacao_para_documento_atual(self):
         """A regra pétrea ainda pode usar ``livro_transacao`` (campo correto)."""
+        # Transcrição: desde o #138 a regra pétrea ignora folha_transacao em
+        # matrículas, e é justamente o caminho de folha que este teste cobre.
+        documento_t = self._criar_documento_transcricao()
         lancamento = Lancamento.objects.create(
-            documento=self.documento_a,
+            documento=documento_t,
             tipo=self.tipo_inicio,
             data=timezone.now().date(),
             cartorio_origem=self.cri,
@@ -191,18 +218,18 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
 
         RegraPetreaService._definir_livro_folha_documento(lancamento)
 
-        self.documento_a.refresh_from_db()
-        self.assertEqual(self.documento_a.livro, "7")
-        self.assertEqual(self.documento_a.folha, "8")
+        documento_t.refresh_from_db()
+        self.assertEqual(documento_t.livro, "7")
+        self.assertEqual(documento_t.folha, "8")
 
     def test_regra_petrea_preserva_livro_ja_no_documento(self):
         """Se o documento já tem livro (via form service), a regra pétrea preserva."""
-        self.documento_a.livro = "9"
-        self.documento_a.folha = "11"
-        self.documento_a.save()
+        # Transcrição: em matrícula o #138 zera a folha, então "preservar o
+        # que já estava no documento" só é exercível num tipo com folha.
+        documento_t = self._criar_documento_transcricao(livro="9", folha="11")
 
         lancamento = Lancamento.objects.create(
-            documento=self.documento_a,
+            documento=documento_t,
             tipo=self.tipo_inicio,
             data=timezone.now().date(),
             cartorio_origem=self.cri,
@@ -212,10 +239,10 @@ class TestIssue118LivroFolhaOrigemNaoVaza(TestCase):
 
         RegraPetreaService._definir_livro_folha_documento(lancamento)
 
-        self.documento_a.refresh_from_db()
+        documento_t.refresh_from_db()
         # o documento preserva o livro que já tinha (9/11), não herda da origem
-        self.assertEqual(self.documento_a.livro, "9")
-        self.assertEqual(self.documento_a.folha, "11")
+        self.assertEqual(documento_t.livro, "9")
+        self.assertEqual(documento_t.folha, "11")
 
     # ------------------------------------------------------------------
     # Vetor 4 (review Codex): LancamentoHerancaService — herança não
