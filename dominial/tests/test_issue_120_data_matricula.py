@@ -19,7 +19,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from dominial.models import Cartorios, Documento, Imovel, Pessoas, TIs
+from dominial.models import Cartorios, Documento, Imovel, Pessoas, TIs, UserTI
 from dominial.services.lancamento_documento_service import LancamentoDocumentoService
 
 
@@ -115,6 +115,10 @@ class ImovelFormCriaMatriculaComDataRealTest(Issue120Fixture, TestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.user = User.objects.create_user(username="issue120", password="issue120pass")
+        # Segregação (#132): cadastrar imóvel exige a TI inteira atribuída ao
+        # usuário (guard usuario_tem_ti_inteira em imovel_form — UserImovel
+        # legado não conta). Sem a UserTI a view responde 404.
+        cls.userti = UserTI.objects.create(user=cls.user, tis=cls.tis)
 
     def setUp(self):
         self.client.force_login(self.user)

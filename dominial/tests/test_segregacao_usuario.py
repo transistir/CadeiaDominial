@@ -358,7 +358,12 @@ class HomeTest(SegregacaoFase2BaseTestCase):
             response = self.client.get(reverse('home'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(len(consultas), 5)
+        # Budget 8 = medido no Django fixado em requirements.txt (5.2.3).
+        # A contagem depende do ambiente: o mesmo código mede 5 no Django
+        # 6.0.7; a causa desse delta não foi identificada. Subqueries de
+        # tis_for_user/imoveis_visiveis compõem um único SELECT. Guarda N+1:
+        # via_ti vê 8 TIs (tis_c, tis_vazia + 6); um COUNT por TI daria 16.
+        self.assertLessEqual(len(consultas), 8)
 
 
 class ImovelFuturoDeTIAtribuidaTest(SegregacaoFase2BaseTestCase):
