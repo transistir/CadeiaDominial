@@ -446,7 +446,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    maior do bloco; desenhar considerando #150 para minimizar retrabalho)*
 9. **#271** 🐛 UX (relato de usuário 09/10): regressão no autocomplete
    ("memória") dos campos **Forma e Título** do bloco Transmissão —
-   `f15612b0` (#157/PR #158, 01/09) adicionou `autocomplete="off"` e
+   `890fded7` (squash do PR #158, commit autoral `f15612b0`, fix #157,
+   01/09) adicionou `autocomplete="off"` e
    suprimiu o histórico do navegador; o `<datalist>` fixo de 7 opções
    também deixa de abrir em vários navegadores com esse atributo.
    Correção mínima: remover o `autocomplete="off"`; ideal: datalist
