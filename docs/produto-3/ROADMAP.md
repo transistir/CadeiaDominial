@@ -444,6 +444,15 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    acento (`João` × `Joao` → `Pessoas` duplicado).
 8. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
    maior do bloco; desenhar considerando #150 para minimizar retrabalho)*
+9. **#271** 🐛 UX (relato de usuário 09/10): regressão no autocomplete
+   ("memória") dos campos **Forma e Título** do bloco Transmissão —
+   `f15612b0` (#157/PR #158, 01/09) adicionou `autocomplete="off"` e
+   suprimiu o histórico do navegador; o `<datalist>` fixo de 7 opções
+   também deixa de abrir em vários navegadores com esse atributo.
+   Correção mínima: remover o `autocomplete="off"`; ideal: datalist
+   dinâmico por frequência de `Lancamento.forma` (mesmo padrão do
+   autocomplete de cartório, `sugestoes=true`). Critérios de aceite e
+   causa raiz no corpo da issue. **Enfileirada 09/10 (Hiure).**
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
 
@@ -786,6 +795,12 @@ ao fim de cada sprint (regra da seção).
 do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
+
+*Última atualização: 09/10/2026 — ajuste aprovado pelo Hiure: **#271**
+(regressão do autocomplete/"memória" de Forma e Título da transmissão,
+causada pelo `autocomplete="off"` do #157/PR #158) enfileirada no **R4
+item 9** — não é P1 de produção; entra na fila pós-v1.1.0 (R4 faz parte
+da sequência do plano estratégico D1: R4 → R5 → ... ).*
 
 *Última atualização: 02/10/2026 (tarde) — **plano estratégico pós-v1.1.0
 aprovado na direção pelo Hiure** (`PLANO_ESTRATEGICO_POS_V110.md`, PR
