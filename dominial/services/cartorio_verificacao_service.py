@@ -31,13 +31,13 @@ class CartorioVerificacaoService:
                 'total_cartorios': cartorios_count,
                 'estado': estado
             }
-        except Exception as e:
-            logger.error(f"Erro ao verificar cartórios para {estado}: {str(e)}")
+        except Exception:
+            logger.exception('Erro ao verificar cartórios para estado=%s', estado)
             return {
                 'existem_cartorios': False,
                 'total_cartorios': 0,
                 'estado': estado,
-                'erro': str(e)
+                'erro': 'Erro ao verificar cartórios'
             }
     
     @staticmethod
@@ -77,10 +77,10 @@ class CartorioVerificacaoService:
                     'cartorios_importados': cartorios_importados,
                     'estado': estado
                 }
-        except Exception as e:
-            logger.error(f"Erro ao importar cartórios para {estado}: {str(e)}")
+        except Exception:
+            logger.exception('Erro ao importar cartórios para estado=%s', estado)
             return {
                 'success': False,
-                'error': f'Erro ao importar cartórios: {str(e)}',
+                'error': 'Erro ao importar cartórios',
                 'estado': estado
             } 

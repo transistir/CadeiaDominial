@@ -1,0 +1,371 @@
+diff --git a/dominial/services/hierarquia_service.py b/dominial/services/hierarquia_service.py
+index f29a4132..877c2061 100644
+--- a/dominial/services/hierarquia_service.py
++++ b/dominial/services/hierarquia_service.py
+@@ -3,12 +3,16 @@ Service consolidado para operações de hierarquia
+ Consolida funcionalidades de múltiplos services de hierarquia em um único service coeso
+ """
+ 
++import logging
++
+ from ..utils.hierarquia_utils import identificar_tronco_principal, identificar_troncos_secundarios
+ from .hierarquia_arvore_service import HierarquiaArvoreService
+ from .hierarquia_origem_service import HierarquiaOrigemService
+ from ..managers import documentos_for_user
+ from ..models import Documento
+ 
++logger = logging.getLogger(__name__)
++
+ 
+ class HierarquiaService:
+     """
+@@ -150,10 +154,11 @@ class HierarquiaService:
+                 'troncos_secundarios': len(troncos_secundarios)
+             }
+             
+-        except Exception as e:
++        except Exception:
++            logger.exception('Erro ao validar hierarquia')
+             return {
+                 'valida': False,
+-                'erro': str(e),
++                'erro': 'Erro ao validar hierarquia.',
+                 'documentos_orfaos': [],
+                 'tronco_principal': 0,
+                 'troncos_secundarios': 0
+diff --git a/dominial/services/lancamento_criacao_service.py b/dominial/services/lancamento_criacao_service.py
+index ecba002e..bafd1947 100644
+--- a/dominial/services/lancamento_criacao_service.py
++++ b/dominial/services/lancamento_criacao_service.py
+@@ -259,7 +259,7 @@ class LancamentoCriacaoService:
+             # automático, mas a view precisa comunicar isso).
+             motivo = (
+                 '; '.join(m.rstrip('.') for m in e.messages)
+-                if hasattr(e, 'messages') else str(e).rstrip('.')
++                if hasattr(e, 'messages') else 'erro de validação'
+             )
+             # BLOCKER (Opus review): o atomic desfaz o banco, mas a instância
+             # ``documento_ativo`` passada pelo caller continua com livro/folha
+@@ -463,7 +463,7 @@ class LancamentoCriacaoService:
+             # frase final nasceria com ponto duplo ("origem 2.. Nenhuma…").
+             motivo = (
+                 '; '.join(m.rstrip('.') for m in e.messages)
+-                if hasattr(e, 'messages') else str(e).rstrip('.')
++                if hasattr(e, 'messages') else 'erro de validação'
+             )
+             return False, (
+                 f'Atualização cancelada: {motivo}. Nenhuma alteração foi salva.'
+diff --git a/dominial/services/lancamento_duplicata_service.py b/dominial/services/lancamento_duplicata_service.py
+index b18206c5..91deb1de 100644
+--- a/dominial/services/lancamento_duplicata_service.py
++++ b/dominial/services/lancamento_duplicata_service.py
+@@ -44,6 +44,8 @@ class LancamentoDuplicataService:
+             'Sem Origem:'
+         ]
+         
++        inacessivel = None
++        
+         for i, origem in enumerate(origens):
+             origem = origem.strip() if origem else ''
+             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
+@@ -84,11 +86,13 @@ class LancamentoDuplicataService:
+             if duplicata_info['tem_duplicata']:
+                 print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
+                 if not duplicata_info.get('acessivel', True):
+-                    return {
+-                        'tem_duplicata': True,
+-                        'acessivel': False,
+-                        'mensagem': duplicata_info['mensagem'],
+-                    }
++                    if inacessivel is None:
++                        inacessivel = {
++                            'tem_duplicata': True,
++                            'acessivel': False,
++                            'mensagem': duplicata_info['mensagem'],
++                        }
++                    continue
+                 return {
+                     'tem_duplicata': True,
+                     'acessivel': True,
+@@ -99,6 +103,10 @@ class LancamentoDuplicataService:
+                     'cadeia_dominial': duplicata_info['cadeia_dominial']
+                 }
+         
++        # Se encontrou duplicata inacessível (e nenhuma acessível), retorna D1
++        if inacessivel is not None:
++            return inacessivel
++        
+         # Se chegou até aqui, não há duplicatas
+         return {
+             'tem_duplicata': False,
+diff --git a/dominial/tests/test_p1e_duplicata_ordem.py b/dominial/tests/test_p1e_duplicata_ordem.py
+new file mode 100644
+index 00000000..7cade544
+--- /dev/null
++++ b/dominial/tests/test_p1e_duplicata_ordem.py
+@@ -0,0 +1,131 @@
++"""
++P1-E (#132): verificar_duplicata_antes_criacao — duplicata acessível tem
++prioridade sobre inacessível, independente da ordem das origens no POST.
++
++Usa mock de DuplicataVerificacaoService.verificar_duplicata_origem para
++controlar a sequência de respostas (inacessível + acessível).
++"""
++
++from types import SimpleNamespace
++from unittest.mock import patch, MagicMock
++
++from django.contrib.auth.models import User
++from django.test import RequestFactory, TestCase
++
++
++class DuplicataOrdemPrioridadeTest(TestCase):
++    """Acessível deve ter prioridade sobre inacessível nas duas ordens."""
++
++    def setUp(self):
++        self.user = User.objects.create_user(username='p1e_user', password='x')
++        self.factory = RequestFactory()
++        # Documento ativo fictício (imovel.id = 1)
++        self.doc_ativo = SimpleNamespace(imovel=SimpleNamespace(id=1))
++        # Documento "origem" acessível (usado no return do mock)
++        self.doc_origem = SimpleNamespace(
++            numero='M3000',
++            imovel=SimpleNamespace(nome='Imóvel C1'),
++            id=300,
++        )
++
++    def _resultado_inacessivel(self):
++        return {
++            'tem_duplicata': True,
++            'acessivel': False,
++            'mensagem': 'Duplicata encontrada em TI sem acesso',
++        }
++
++    def _resultado_acessivel(self):
++        return {
++            'tem_duplicata': True,
++            'acessivel': True,
++            'mensagem': 'Duplicata acessível',
++            'documento_origem': self.doc_origem,
++            'documentos_importaveis': [],
++            'cadeia_dominial': None,
++        }
++
++    def _call_service(self, side_effect):
++        from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
++
++        request = self.factory.post('/fake/', data={
++            'origem_completa[]': ['M2000', 'M3000'],
++            'cartorio_origem[]': ['10', '10'],
++        })
++        request.user = self.user
++
++        with patch(
++            'dominial.services.lancamento_duplicata_service.DuplicataVerificacaoService.verificar_duplicata_origem',
++            side_effect=side_effect,
++        ), patch(
++            'dominial.services.lancamento_duplicata_service.Cartorios.objects.get',
++            return_value=SimpleNamespace(id=10),
++        ):
++            return LancamentoDuplicataService.verificar_duplicata_antes_criacao(
++                request, self.doc_ativo
++            )
++
++    def test_ordem_inacessivel_primeiro_devolve_acessivel(self):
++        """[inacessível, acessível] → acessível tem prioridade."""
++        resultado = self._call_service([
++            self._resultado_inacessivel(),
++            self._resultado_acessivel(),
++        ])
++        self.assertTrue(resultado['tem_duplicata'])
++        self.assertTrue(resultado['acessivel'])
++        self.assertEqual(resultado['documento_origem'].numero, 'M3000')
++
++    def test_ordem_acessivel_primeiro_devolve_acessivel(self):
++        """[acessível, inacessível] → acessível tem prioridade (comportamento já ok)."""
++        resultado = self._call_service([
++            self._resultado_acessivel(),
++            self._resultado_inacessivel(),
++        ])
++        self.assertTrue(resultado['tem_duplicata'])
++        self.assertTrue(resultado['acessivel'])
++        self.assertEqual(resultado['documento_origem'].numero, 'M3000')
++
++    def test_so_inacessivel_devolve_inacessivel(self):
++        """Só origem inacessível → D1 (acessivel=False) continua funcionando."""
++        from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
++
++        request = self.factory.post('/fake/', data={
++            'origem_completa[]': ['M2000'],
++            'cartorio_origem[]': ['10'],
++        })
++        request.user = self.user
++
++        with patch(
++            'dominial.services.lancamento_duplicata_service.DuplicataVerificacaoService.verificar_duplicata_origem',
++            return_value=self._resultado_inacessivel(),
++        ), patch(
++            'dominial.services.lancamento_duplicata_service.Cartorios.objects.get',
++            return_value=SimpleNamespace(id=10),
++        ):
++            resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
++                request, self.doc_ativo
++            )
++        self.assertTrue(resultado['tem_duplicata'])
++        self.assertFalse(resultado['acessivel'])
++
++    def test_sem_duplicata_devolve_tem_duplicata_false(self):
++        """Sem duplicata em nenhuma origem → tem_duplicata=False."""
++        from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
++
++        request = self.factory.post('/fake/', data={
++            'origem_completa[]': ['M9999'],
++            'cartorio_origem[]': ['10'],
++        })
++        request.user = self.user
++
++        with patch(
++            'dominial.services.lancamento_duplicata_service.DuplicataVerificacaoService.verificar_duplicata_origem',
++            return_value={'tem_duplicata': False, 'acessivel': True, 'mensagem': ''},
++        ), patch(
++            'dominial.services.lancamento_duplicata_service.Cartorios.objects.get',
++            return_value=SimpleNamespace(id=10),
++        ):
++            resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
++                request, self.doc_ativo
++            )
++        self.assertFalse(resultado['tem_duplicata'])
+diff --git a/dominial/tests/test_s8_sem_str_e.py b/dominial/tests/test_s8_sem_str_e.py
+index 31bb4f89..e0ea0371 100644
+--- a/dominial/tests/test_s8_sem_str_e.py
++++ b/dominial/tests/test_s8_sem_str_e.py
+@@ -35,14 +35,10 @@ class VarreduraEstaticaTest(TestCase):
+                 files_to_check.append(os.path.join(views_dir, filename))
+         files_to_check.append(admin_file)
+         
+-        # P1-C: estender varredura S8 para services (pontos confirmados de str(e))
+-        services_alvo = [
+-            'importacao_cadeia_service.py',
+-            'lancamento_duplicata_service.py',
+-            'cartorio_verificacao_service.py',
+-        ]
+-        for nome in services_alvo:
+-            files_to_check.append(os.path.join(services_dir, nome))
++        # P2 (#132): varrer TODOS os services (não mais hardcoded)
++        for filename in os.listdir(services_dir):
++            if filename.endswith('.py'):
++                files_to_check.append(os.path.join(services_dir, filename))
+         
+         for filepath in files_to_check:
+             if not os.path.exists(filepath):
+@@ -54,6 +50,10 @@ class VarreduraEstaticaTest(TestCase):
+                     # Ignorar linhas de comentário
+                     if stripped.startswith('#'):
+                         continue
++                    # P2 (#132): print() vai para stdout/log, não para resposta
++                    # HTTP — não é vetor de vazamento para o usuário.
++                    if stripped.startswith('print('):
++                        continue
+                     if regex.search(line):
+                         # Check allowlist
+                         if filename in allowlist:
+diff --git a/dominial/tests/test_segregacao_usuario.py b/dominial/tests/test_segregacao_usuario.py
+index e8d13e5f..024c30f6 100644
+--- a/dominial/tests/test_segregacao_usuario.py
++++ b/dominial/tests/test_segregacao_usuario.py
+@@ -2410,6 +2410,43 @@ class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
+         response = self.client.get(self.url_alheia)
+         self.assertEqual(response.status_code, 200)
+ 
++    def test_usuario_com_userimovel_legado_get_200_na_edicao(self):
++        """P1-D: UserImovel legado permite editar (for_user inclui), mas não criar."""
++        # dono já tem UserImovel legado no imovel_a (setUpTestData)
++        self.client.force_login(self.dono)
++        url_edicao = reverse('imovel_editar', kwargs={'tis_id': self.tis_a.id, 'imovel_id': self.imovel_a.id})
++        response = self.client.get(url_edicao)
++        self.assertEqual(response.status_code, 200)
++
++    def test_usuario_com_userimovel_legado_404_na_criacao_da_mesma_ti(self):
++        """P1-D: UserImovel legado NÃO concede TI inteira para criação."""
++        # dono já tem UserImovel legado no imovel_a (setUpTestData), sem UserTI
++        self.client.force_login(self.dono)
++        url_criacao = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
++        response = self.client.get(url_criacao)
++        self.assertEqual(response.status_code, 404)
++
++    def test_tis_detail_esconde_botao_criar_para_userimovel_legado(self):
++        """P1-D: tis_detail esconde botão 'Cadastrar Novo Imóvel' sem TI inteira."""
++        self.client.force_login(self.dono)
++        url_detail = reverse('tis_detail', kwargs={'tis_id': self.tis_a.id})
++        response = self.client.get(url_detail)
++        self.assertEqual(response.status_code, 200)
++        href_cadastro = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
++        self.assertNotIn(href_cadastro.encode(), response.content)
++
++    def test_tis_detail_mostra_botao_criar_para_userti(self):
++        """P1-D: tis_detail mostra botão 'Cadastrar Novo Imóvel' com UserTI."""
++        UserTI.objects.create(
++            user=self.dono, tis=self.tis_a, atribuido_por=self.superuser
++        )
++        self.client.force_login(self.dono)
++        url_detail = reverse('tis_detail', kwargs={'tis_id': self.tis_a.id})
++        response = self.client.get(url_detail)
++        self.assertEqual(response.status_code, 200)
++        href_cadastro = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
++        self.assertIn(href_cadastro.encode(), response.content)
++
+ 
+ class BlockersRound3Test(SegregacaoBaseTestCase):
+     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""
+diff --git a/dominial/views/imovel_views.py b/dominial/views/imovel_views.py
+index e1e2d06a..53b30da9 100644
+--- a/dominial/views/imovel_views.py
++++ b/dominial/views/imovel_views.py
+@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
+ 
+ @login_required
+ def imovel_form(request, tis_id, imovel_id=None):
+-    if not usuario_tem_ti_inteira(request.user, tis_id):
++    if imovel_id is None and not usuario_tem_ti_inteira(request.user, tis_id):
+         raise Http404
+     tis = get_object_or_404(TIs, pk=tis_id)
+     imovel = None
+diff --git a/dominial/views/tis_views.py b/dominial/views/tis_views.py
+index 985e28d8..98e7cc30 100644
+--- a/dominial/views/tis_views.py
++++ b/dominial/views/tis_views.py
+@@ -10,7 +10,7 @@ from ..forms import TIsForm, ImovelForm
+ from django.db.models import Count, F, Max, Q
+ from django.db.models.functions import Coalesce
+ from django.http import Http404
+-from ..managers import tis_for_user, usuario_ve_tudo
++from ..managers import tis_for_user, usuario_ve_tudo, usuario_tem_ti_inteira
+ from ..utils.permissoes_utils import usuario_pode_criar_ti
+ from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
+ 
+@@ -124,7 +124,8 @@ def tis_detail(request, tis_id):
+     return render(request, 'dominial/tis_detail.html', {
+         'tis': tis,
+         'imoveis': imoveis_ordenados,
+-        'status': status
++        'status': status,
++        'pode_criar_imovel': usuario_tem_ti_inteira(request.user, tis.id),
+     })
+ 
+ @login_required
+diff --git a/templates/dominial/tis_detail.html b/templates/dominial/tis_detail.html
+index 2d5d837d..d0b5ad9a 100644
+--- a/templates/dominial/tis_detail.html
++++ b/templates/dominial/tis_detail.html
+@@ -135,9 +135,11 @@
+     </div>
+     {% endif %}
+ 
++    {% if pode_criar_imovel %}
+     <div style="text-align: center;">
+         <a href="{% url 'imovel_cadastro' tis_id=tis.id %}" class="add-imovel-button">{% trans 'Cadastrar Novo Imóvel' %}</a>
+     </div>
++    {% endif %}
+ </div>
+ 
+ <script>

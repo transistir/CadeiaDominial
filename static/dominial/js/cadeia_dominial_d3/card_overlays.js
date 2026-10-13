@@ -168,6 +168,7 @@ function renderizarCardOverlays(node) {
   // <title> filho é o que o SVG realmente exibe como tooltip nativo.
   avisoOrigens.append("title").text((d) => {
     const linhas = d.data.origens_nao_resolvidas.map((o) => {
+      if (o.status === "restrito") { return `• ${o.mensagem}`; }
       const motivo =
         o.status === "ambiguo"
           ? `ambígua (${(o.candidatos || []).length} documentos candidatos)`

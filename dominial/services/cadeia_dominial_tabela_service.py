@@ -10,11 +10,14 @@ from ..services.documento_identidade_service import DocumentoIdentidadeService
 from ..services.lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..services.keyword_alerta_service import buscar_keyword
 from ..utils.documento_identidade_utils import DocumentoIdentidade
+from ..managers import documentos_for_user
 from ..utils.hierarquia_utils import (
     _selecionar_origem_contextual,
+    contar_origens_restritas,
     obter_origens_resolvidas,
     serializar_identidade_origem,
 )
+from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ..utils.ordenacao_cadeia import chave_ordem_cadeia, chave_ordem_origem
 
 
@@ -39,8 +42,22 @@ class CadeiaDominialTabelaService:
        (`ordenar_cadeia`): isso tiraria documentos de baixo de quem os citou.
     """
     
-    def __init__(self):
+    def __init__(self, user=None, documentos_queryset=None):
+        from ..managers import escopo_documentos, _EscopoGlobal
+        self.documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
         self.hierarquia_service = HierarquiaService()
+        # Imoveis: só filtra por user quando é usuário real; ESCOPO_GLOBAL
+        # (em user ou em documentos_queryset) implica acesso global.
+        user_real = (
+            user is not None
+            and not isinstance(user, _EscopoGlobal)
+            and not isinstance(documentos_queryset, _EscopoGlobal)
+        )
+        self.imoveis_queryset = (
+            Imovel.objects.for_user(user) if user_real else Imovel.objects.all()
+        )
     
     @staticmethod
     def _extrair_numero_simples(numero_lancamento):
@@ -89,12 +106,21 @@ class CadeiaDominialTabelaService:
         ).order_by('id')
 
     @staticmethod
-    def _resolver_documento_por_codigo(codigo, cartorio):
+    def _resolver_documento_por_codigo(
+        codigo,
+        cartorio,
+        documentos_queryset=None,
+    ):
         """
         Resolve um documento de origem pela identidade completa (tipo, número
         normalizado e cartório), nunca por número isolado. Sem cartório, com
         tipo incompatível ou com identidade ambígua, não seleciona nenhum documento.
         """
+        if documentos_queryset is None:
+            raise TypeError(
+                'CadeiaDominialTabelaService._resolver_documento_por_codigo exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
         if not cartorio:
             return None
         tipo = CadeiaDominialTabelaService._tipo_do_codigo(codigo)
@@ -104,15 +130,22 @@ class CadeiaDominialTabelaService:
             identidade = DocumentoIdentidade(tipo, codigo, cartorio.pk)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade,
+            queryset=documentos_queryset,
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     def get_cadeia_dominial_tabela(self, tis_id, imovel_id, session=None, escolhas_origem_param=None):
         """
         Obtém dados da cadeia dominial em formato de tabela
         """
-        tis = get_object_or_404(TIs, id=tis_id)
-        imovel = get_object_or_404(Imovel, id=imovel_id)
+        imovel = get_object_or_404(
+            self.imoveis_queryset,
+            id=imovel_id,
+            terra_indigena_id_id=tis_id,
+        )
+        tis = imovel.terra_indigena_id
         
         # Extrair escolhas de origem da sessão ou usar as escolhas passadas
         escolhas_origem = {}
@@ -127,7 +160,11 @@ class CadeiaDominialTabelaService:
             escolhas_origem = escolhas_origem_param
         
         # Obter tronco principal considerando escolhas
-        tronco_principal = self.hierarquia_service.obter_tronco_principal(imovel, escolhas_origem)
+        tronco_principal = self.hierarquia_service.obter_tronco_principal(
+            imovel,
+            escolhas_origem,
+            documentos_queryset=self.documentos_queryset,
+        )
         
         # Linhas: só o tronco do galho escolhido, na ordem da caminhada (regra na
         # docstring da classe). Sem expandir as origens não seguidas
@@ -160,13 +197,20 @@ class CadeiaDominialTabelaService:
             # Verificar se documento é compartilhado (pertence a outro imóvel)
             is_compartilhado = documento.imovel != imovel
             
+            # D1 (#132): origens restritas (existe em outra TI)
+            origens_restritas, mensagem_origem_restrita = self._origens_restritas(
+                documento, lancamentos
+            )
+            
             cadeia_processada.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'origens_disponiveis': origens_formatadas,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'escolha_atual': escolha_atual,
-                'is_compartilhado': is_compartilhado
+                'is_compartilhado': is_compartilhado,
+                'origens_restritas': origens_restritas,
+                'mensagem_origem_restrita': mensagem_origem_restrita,
             })
         
         result = {
@@ -189,7 +233,7 @@ class CadeiaDominialTabelaService:
         """
         return [
             origem.codigo
-            for origem in obter_origens_resolvidas(documento, lancamentos)
+            for origem in obter_origens_resolvidas(documento, lancamentos, documentos_queryset=self.documentos_queryset)
         ]
 
     def _botoes_de_origem(self, documento, lancamentos, escolha_sessao=None):
@@ -204,7 +248,7 @@ class CadeiaDominialTabelaService:
         Returns:
             tuple: (origens formatadas para o template, escolha atual)
         """
-        origens = obter_origens_resolvidas(documento, lancamentos)
+        origens = obter_origens_resolvidas(documento, lancamentos, documentos_queryset=self.documentos_queryset)
         if not origens:
             return [], None
 
@@ -229,6 +273,13 @@ class CadeiaDominialTabelaService:
             for origem in origens
         ]
         return origens_formatadas, escolha_atual
+
+    def _origens_restritas(self, documento, lancamentos):
+        """D1 (#132): (contagem, mensagem) das origens em outra TI, sem dados delas."""
+        quantidade = contar_origens_restritas(
+            documento, lancamentos, documentos_queryset=self.documentos_queryset
+        )
+        return quantidade, (MENSAGEM_ORIGEM_RESTRITA if quantidade else '')
     
     def _extrair_origens(self, origem_string):
         """
@@ -294,7 +345,11 @@ class CadeiaDominialTabelaService:
         
         # Usar o HierarquiaService para obter apenas o TRONCO PRINCIPAL
         from .hierarquia_service import HierarquiaService
-        tronco_principal = HierarquiaService.obter_tronco_principal(imovel, escolhas_origem)
+        tronco_principal = HierarquiaService.obter_tronco_principal(
+            imovel,
+            escolhas_origem,
+            documentos_queryset=self.documentos_queryset,
+        )
 
         # Linhas: o tronco principal, na ordem da caminhada (regra na docstring
         # da classe), nunca reordenado. A lista pode ser o valor em cache do
@@ -321,23 +376,35 @@ class CadeiaDominialTabelaService:
                 documento, lancamentos, escolhas_origem.get(str(documento.id))
             )
             tem_multiplas_origens = len(origens_formatadas) > 1
-            
+
             # Verificar se documento é compartilhado (pertence a outro imóvel)
             is_compartilhado = documento.imovel != imovel
-            
+
+            # D1 (#132): origens restritas (existe em outra TI)
+            origens_restritas, mensagem_origem_restrita = self._origens_restritas(
+                documento, lancamentos
+            )
+
             cadeia_completa.append({
                 'documento': documento,
                 'lancamentos': lancamentos,
                 'tem_multiplas_origens': tem_multiplas_origens,
                 'origens_disponiveis': origens_formatadas,
                 'escolha_atual': escolha_atual,
-                'is_compartilhado': is_compartilhado
+                'is_compartilhado': is_compartilhado,
+                'origens_restritas': origens_restritas,
+                'mensagem_origem_restrita': mensagem_origem_restrita,
             })
         
         return cadeia_completa
 
     @staticmethod
-    def extrair_origens_disponiveis(origem_texto, imovel, cartorio_origem=None):
+    def extrair_origens_disponiveis(
+        origem_texto,
+        imovel,
+        cartorio_origem=None,
+        documentos_queryset=None,
+    ):
         """
         Extrai as origens disponíveis de um texto de origem
 
@@ -365,7 +432,9 @@ class CadeiaDominialTabelaService:
 
             for codigo in codigos:
                 doc_existente = CadeiaDominialTabelaService._resolver_documento_por_codigo(
-                    codigo, cartorio_origem
+                    codigo,
+                    cartorio_origem,
+                    documentos_queryset,
                 )
                 if doc_existente:
                     origens.append({
@@ -405,7 +474,9 @@ class CadeiaDominialTabelaService:
                     # Resolver o documento importado pela identidade completa
                     # (tipo, número normalizado e cartório do lançamento)
                     doc_importado = self._resolver_documento_por_codigo(
-                        origem.codigo, origem.cartorio
+                        origem.codigo,
+                        origem.cartorio,
+                        self.documentos_queryset,
                     )
 
                     if doc_importado and doc_importado.id not in documentos_processados:
@@ -461,7 +532,9 @@ class CadeiaDominialTabelaService:
                 if codigo_escolhido != origem.codigo:
                     continue
                 doc_origem = self._resolver_documento_por_codigo(
-                    origem.codigo, origem.cartorio
+                    origem.codigo,
+                    origem.cartorio,
+                    self.documentos_queryset,
                 )
                 if doc_origem:
                     return doc_origem
@@ -473,7 +546,7 @@ class CadeiaDominialTabelaService:
         entre as origens que resolvem para um documento real, a mesma destacada
         como padrão nos botões de origem
         """
-        origens = obter_origens_resolvidas(documento)
+        origens = obter_origens_resolvidas(documento, documentos_queryset=self.documentos_queryset)
         return origens[0].documento if origens else None
     
     def _expandir_cadeia_recursiva(self, documento, documentos_processados, escolhas_origem=None, profundidade=0):
@@ -494,7 +567,7 @@ class CadeiaDominialTabelaService:
         # do seu lançamento (homônimos de cartórios diferentes são origens
         # distintas), na ordem canônica: uma origem inexistente nunca é a
         # seguida, e a padrão é a destacada nos botões de origem
-        origens = obter_origens_resolvidas(documento)
+        origens = obter_origens_resolvidas(documento, documentos_queryset=self.documentos_queryset)
         
         if not origens:
             return cadeia_expandida
@@ -537,7 +610,9 @@ class CadeiaDominialTabelaService:
                 for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
                     # Resolver documento de origem pela identidade completa
                     doc_origem = self._resolver_documento_por_codigo(
-                        origem.codigo, origem.cartorio
+                        origem.codigo,
+                        origem.cartorio,
+                        self.documentos_queryset,
                     )
 
                     if doc_origem and doc_origem.id not in documentos_incluidos:

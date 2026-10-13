@@ -113,7 +113,8 @@ class _BaseCadeia145(TestCase):
         )
 
     def _contexto(self):
-        return CadeiaCompletaService().get_cadeia_completa(
+        from dominial.managers import ESCOPO_GLOBAL
+        return CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
 

@@ -61,6 +61,7 @@ from ..models import (
 )
 from ..services.lancamento_campos_service import LancamentoCamposService
 from ..services.lancamento_service import LancamentoService
+from ..tests.segregacao_fixtures import atribuir_tis
 
 
 class FormBugsBase(TestCase):
@@ -70,6 +71,7 @@ class FormBugsBase(TestCase):
         self.client.login(username="t159", password="t159pass")
 
         self.tis = TIs.objects.create(nome="TI 159", etnia="Teste", estado="SP")
+        atribuir_tis(self.user, self.tis)
         self.cartorio = Cartorios.objects.create(
             nome="Cartório 159", cns="CNS159159", cidade="São Paulo"
         )

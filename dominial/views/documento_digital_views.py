@@ -2,8 +2,9 @@ import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import FileResponse, Http404
+from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
+from django.utils.http import content_disposition_header
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
 
@@ -37,10 +38,10 @@ def _validar_magic_bytes(arquivo):
     return False
 
 
-def _get_contexto_documento(tis_id, imovel_id, documento_id):
+def _get_contexto_documento(request, tis_id, imovel_id, documento_id):
     """Helper: resolve TI, Imóvel e Documento com validação de hierarquia."""
     tis = get_object_or_404(TIs, id=tis_id)
-    imovel = get_object_or_404(Imovel, id=imovel_id, terra_indigena_id=tis)
+    imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     documento = get_object_or_404(Documento, id=documento_id, imovel=imovel)
     return tis, imovel, documento
 
@@ -49,7 +50,7 @@ def _get_contexto_documento(tis_id, imovel_id, documento_id):
 @require_http_methods(["GET", "POST"])
 def upload_documento_digital(request, tis_id, imovel_id, documento_id):
     """Upload de arquivo digital vinculado a um documento."""
-    tis, imovel, documento = _get_contexto_documento(tis_id, imovel_id, documento_id)
+    tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
 
     if request.method == 'POST':
         arquivo = request.FILES.get('arquivo')
@@ -98,27 +99,30 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
 
 @login_required
 def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_id):
-    """Serve o arquivo para download/visualização (NUNCA expõe URL pública)."""
-    tis, imovel, documento = _get_contexto_documento(tis_id, imovel_id, documento_id)
+    """Serve o arquivo via X-Accel-Redirect (nginx internal) — nunca expõe URL pública."""
+    tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
-    try:
-        response = FileResponse(
-            arquivo.arquivo.open('rb'),
-            content_type=arquivo.tipo_mime,
-        )
-        response['Content-Disposition'] = f'inline; filename="{arquivo.nome_original}"'
-        response['X-Content-Type-Options'] = 'nosniff'
-        return response
-    except FileNotFoundError:
+    if not arquivo.arquivo:
         raise Http404("Arquivo não encontrado no storage.")
+
+    response = HttpResponse()
+    response['X-Accel-Redirect'] = arquivo.arquivo.url
+    response['Content-Type'] = arquivo.tipo_mime
+    # `nome_original` vem do upload: interpolar direto deixa aspas e quebras de
+    # linha injetarem headers. O helper do Django faz o escaping/RFC 5987.
+    response['Content-Disposition'] = content_disposition_header(
+        as_attachment=False, filename=arquivo.nome_original
+    )
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 @login_required
 @require_POST
 def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_id):
     """Exclui um arquivo digital (POST apenas)."""
-    tis, imovel, documento = _get_contexto_documento(tis_id, imovel_id, documento_id)
+    tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
     nome = arquivo.nome_original

@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 from ..models import Pessoas, Cartorios, Imovel
 from django.db.models import Q
 from django.db import models
@@ -47,6 +48,7 @@ def _q_busca_insensivel(query):
     return q
 
 
+@login_required
 def pessoa_autocomplete(request):
     """View para autocomplete de pessoas"""
     query = request.GET.get('q', '').strip()
@@ -69,6 +71,7 @@ def pessoa_autocomplete(request):
     
     return JsonResponse({'results': results})
 
+@login_required
 def cartorio_autocomplete(request):
     """
     View para autocomplete de cartórios.
@@ -90,7 +93,7 @@ def cartorio_autocomplete(request):
     if sugestoes and not query and imovel_id:
         try:
             from ..models import Imovel, Lancamento
-            imovel = Imovel.objects.get(id=imovel_id)
+            imovel = Imovel.objects.for_user(request.user).get(id=imovel_id)
             
             # Buscar cartórios mais usados nos lançamentos deste imóvel
             cartorios_origem_qs = Lancamento.objects.filter(
@@ -146,6 +149,7 @@ def cartorio_autocomplete(request):
     
     return JsonResponse({'results': results})
 
+@login_required
 def cartorio_imoveis_autocomplete(request):
     """
     View para autocomplete de cartórios de imóveis (filtrados por CRI).
@@ -173,6 +177,7 @@ def cartorio_imoveis_autocomplete(request):
     
     return JsonResponse(results, safe=False)
 
+@login_required
 def imovel_autocomplete(request):
     """View para autocomplete de imóveis"""
     query = request.GET.get('q', '').strip()
@@ -182,7 +187,7 @@ def imovel_autocomplete(request):
         return JsonResponse([], safe=False)
     
     # Construir queryset base
-    imoveis = Imovel.objects.all()
+    imoveis = Imovel.objects.for_user(request.user)
     
     # Filtrar por TI se especificado
     if tis_id:

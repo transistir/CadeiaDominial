@@ -19,6 +19,7 @@ from dominial.models import (
     TIs, Imovel, DocumentoTipo, Cartorios, Documento, LancamentoTipo,
     Lancamento, LancamentoOrigem, OrigemFimCadeia, Pessoas,
 )
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.services.status_cadeia_service import StatusCadeiaService
 
 
@@ -94,7 +95,7 @@ class GreptileP1ReproductionTest(TestCase):
         )
 
     def test_m100_recebe_status_alcancavel_nao_desconectado(self):
-        result = StatusCadeiaService.status_por_imovel(self.ti.id)
+        result = StatusCadeiaService.status_por_imovel(self.ti.id, documentos_queryset=ESCOPO_GLOBAL)
         # Árvore do m100 alcança M200 (origem_lidima) — badge deve refletir isso.
         # O status do imóvel M100 deve ser 'origem_lidima' (alcançável via M200),
         # NÃO 'sem_origem' (que está em M999, doc desconectado).

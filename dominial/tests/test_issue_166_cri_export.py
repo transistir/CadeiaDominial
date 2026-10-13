@@ -28,7 +28,9 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.tests.segregacao_fixtures import usuario_com_tis
 from dominial.utils.formatacao_utils import abreviar_cartorio
 from dominial.views import cadeia_dominial_views
 
@@ -156,6 +158,7 @@ class ExportacaoUsaSiglaCRITest(TestCase):
         self.tis = TIs.objects.create(
             nome="TI Teste 166", codigo="TI166", etnia="Teste"
         )
+        self.user = usuario_com_tis('user166', self.tis)
         self.cartorio = Cartorios.objects.create(
             nome=self.NOME_CRI_IMOVEL,
             cns="166166",
@@ -206,7 +209,7 @@ class ExportacaoUsaSiglaCRITest(TestCase):
 
     def _request(self, path):
         request = self.factory.get(path)
-        request.user = SimpleNamespace(is_authenticated=True)
+        request.user = self.user
         return request
 
     # ------------------------------------------------------------------ Excel
@@ -266,7 +269,7 @@ class ExportacaoUsaSiglaCRITest(TestCase):
     # -------------------------------------------------------------------- PDF
 
     def _render_pdf(self):
-        contexto = CadeiaCompletaService().get_cadeia_completa(
+        contexto = CadeiaCompletaService(documentos_queryset=ESCOPO_GLOBAL).get_cadeia_completa(
             self.tis.id, self.imovel.id
         )
         return render_to_string("dominial/cadeia_completa_pdf.html", contexto)

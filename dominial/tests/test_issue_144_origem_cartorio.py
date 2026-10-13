@@ -47,6 +47,7 @@ from django.core.exceptions import ValidationError
 from django.test import Client, RequestFactory
 from django.urls import reverse
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -143,7 +144,7 @@ class T1CartorioPorOrigemTest(Issue144Base):
             ).exists()
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
         arestas = {(c["from"], c["to"]) for c in arvore["conexoes"]}
         self.assertIn((documento_atual.pk, t366_em_b.pk), arestas)
         self.assertNotIn((documento_atual.pk, t366_em_a.pk), arestas)
@@ -238,7 +239,7 @@ class T3OrigensNaoResolvidasTest(Issue144Base):
             cartorio=self.cartorio_b,
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
 
         no = self._no(arvore, documento)
         self.assertEqual(
@@ -279,19 +280,21 @@ class T3OrigensNaoResolvidasTest(Issue144Base):
         )
         original = DocumentoIdentidadeService.resolver
 
-        def resolver(identidade):
+        def resolver(identidade, queryset=None):
             if identidade.numero_normalizado == "777":
                 return ResultadoResolucaoDocumento(
                     status="ambiguo",
                     identidade=identidade,
                     candidatos=(cand_1, cand_2),
                 )
-            return original(identidade)
+            return original(identidade, queryset=queryset)
 
         with patch.object(
             DocumentoIdentidadeService, "resolver", side_effect=resolver
         ):
-            arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+            arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+                imovel, documentos_queryset=Documento.objects.all()
+            )
 
         no = self._no(arvore, documento)
         self.assertEqual(len(no["origens_nao_resolvidas"]), 1)
@@ -306,14 +309,14 @@ class T3OrigensNaoResolvidasTest(Issue144Base):
     def test_t3_sem_pendencias_o_campo_existe_e_vem_vazio(self):
         imovel, documento, _ = self.criar_cenario_atual("", None)
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
 
         self.assertEqual(self._no(arvore, documento)["origens_nao_resolvidas"], [])
 
     def test_t3_retrocompatibilidade_do_payload(self):
         imovel, documento, _ = self.criar_cenario_atual("", None)
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
 
         for chave in ("imovel", "documentos", "origens_identificadas", "conexoes"):
             self.assertIn(chave, arvore)
@@ -335,7 +338,7 @@ class T4RegressaoT585Test(Issue144Base):
             cartorio=self.cartorio_b,
         )
 
-        antes = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        antes = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(antes["conexoes"], [])
         no_antes = next(n for n in antes["documentos"] if n["id"] == documento.pk)
         self.assertEqual(
@@ -349,7 +352,7 @@ class T4RegressaoT585Test(Issue144Base):
             outro_imovel, self.tipo_transcricao, "T585", self.cartorio_b
         )
 
-        depois = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        depois = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel, documentos_queryset=ESCOPO_GLOBAL)
         self.assertEqual(
             {(c["from"], c["to"]) for c in depois["conexoes"]},
             {(documento.pk, t585.pk)},
@@ -392,7 +395,8 @@ class T6ResaveSemCacheTest(Issue144Rodada2Base):
         cache.clear()
 
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["M100", "T366"], imovel
+            lancamento, ["M100", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -407,9 +411,10 @@ class T6ResaveSemCacheTest(Issue144Rodada2Base):
 
 class T7FormEdicaoTest(Issue144Rodada2Base):
     def test_t7_form_de_edicao_traz_cartorio_de_cada_origem_sem_cache(self):
-        User.objects.create_user(username="t7", password="t7pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t7", self.ti)
         client = Client()
-        client.login(username="t7", password="t7pass")
+        client.force_login(user)
         imovel, _, lancamento = self.criar_cenario_atual(
             "M100; T366", self.cartorio_a
         )
@@ -442,9 +447,10 @@ class T7FormEdicaoTest(Issue144Rodada2Base):
         self.criar_origens_persistidas(lancamento)
         antes = self.estado_origens(lancamento)
         cache.clear()
-        User.objects.create_user(username="t7b", password="t7pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t7b", self.ti)
         client = Client()
-        client.login(username="t7b", password="t7pass")
+        client.force_login(user)
         url = reverse("editar_lancamento", kwargs={
             "tis_id": self.ti.id, "imovel_id": imovel.id,
             "lancamento_id": lancamento.pk,
@@ -460,7 +466,8 @@ class T7FormEdicaoTest(Issue144Rodada2Base):
         })
         LancamentoCamposService._processar_campos_inicio_matricula(request, lancamento)
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["M100", "T366"], imovel
+            lancamento, ["M100", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -488,7 +495,8 @@ class T8SemFonteDeCartorioTest(Issue144Rodada2Base):
 
         with self.assertRaises(ValidationError):
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["M100", "T400"], imovel
+                lancamento, ["M100", "T400"], imovel,
+            documentos_queryset=Documento.objects.all()
             )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -510,13 +518,13 @@ class T9SignalOrigemAmbiguaTest(Issue144Rodada2Base):
         )
         original = DocumentoIdentidadeService.resolver
 
-        def resolver(identidade):
+        def resolver(identidade, queryset=None):
             if identidade.numero_normalizado == "777":
                 return ResultadoResolucaoDocumento(
                     status="ambiguo", identidade=identidade,
                     candidatos=(cand_1, cand_2),
                 )
-            return original(identidade)
+            return original(identidade, queryset=queryset)
 
         with patch.object(
             DocumentoIdentidadeService, "resolver", side_effect=resolver
@@ -749,7 +757,8 @@ class T15EdicaoTrocaOrigemTest(Issue144Rodada3Base):
 
         with self.assertRaises(ValidationError):
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "M999"], imovel
+                lancamento, ["T366", "M999"], imovel,
+            documentos_queryset=Documento.objects.all()
             )
         self.assertEqual(self.estado_origens(lancamento), antes)
 
@@ -770,7 +779,8 @@ class T15EdicaoTrocaOrigemTest(Issue144Rodada3Base):
         # "T366; M999" virou "M999; T366": cada identidade leva seu cartório
         # para a nova posição.
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["M999", "T366"], imovel
+            lancamento, ["M999", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), [
@@ -788,9 +798,10 @@ class T16AtomicidadeEdicaoTest(Issue144Rodada3Base):
         self.criar_origens_persistidas(lancamento)
         antes_origens = self.estado_origens(lancamento)
         cache.clear()
-        User.objects.create_user(username="t16", password="t16pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t16", self.ti)
         client = Client()
-        client.login(username="t16", password="t16pass")
+        client.force_login(user)
 
         # Usuário trocou a 2ª origem para M999 sem cartório mapeado.
         response = client.post(reverse("editar_lancamento", kwargs={
@@ -834,7 +845,8 @@ class T17NaoDuplicataTest(Issue144Rodada3Base):
         # A chave de identidade inclui o cartório: não é "Origem documental
         # duplicada", e as duas linhas são reaproveitadas nas suas posições.
         LancamentoOrigemService._sincronizar_origens_estruturadas(
-            lancamento, ["T366", "T366"], imovel
+            lancamento, ["T366", "T366"], imovel,
+            documentos_queryset=Documento.objects.all()
         )
 
         self.assertEqual(self.estado_origens(lancamento), antes)
@@ -953,7 +965,8 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
 
         with self.assertRaises(ValidationError) as ctx:
             LancamentoOrigemService._sincronizar_origens_estruturadas(
-                lancamento, ["T366", "T366", "M100"], imovel
+                lancamento, ["T366", "T366", "M100"], imovel,
+            documentos_queryset=Documento.objects.all()
             )
         self.assertIn("Cartório obrigatório", str(ctx.exception))
         self.assertFalse(
@@ -1001,9 +1014,10 @@ class T19AmbiguidadeNuncaCaiNoFallbackDoPrimeiroCartorioTest(Issue144Rodada3Base
             ],
             timeout=3600,
         )
-        User.objects.create_user(username="t19b", password="t19pass")
+        from dominial.tests.segregacao_fixtures import usuario_com_tis
+        user = usuario_com_tis("t19b", self.ti)
         client = Client()
-        client.login(username="t19b", password="t19pass")
+        client.force_login(user)
         url = reverse("editar_lancamento", kwargs={
             "tis_id": self.ti.id, "imovel_id": imovel.id,
             "lancamento_id": lancamento.pk,

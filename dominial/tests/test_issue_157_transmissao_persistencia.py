@@ -29,6 +29,7 @@ from ..models import (
 )
 from ..services.lancamento_campos_service import LancamentoCamposService
 from ..services.lancamento_form_service import LancamentoFormService
+from ..tests.segregacao_fixtures import atribuir_tis
 
 
 class TransmissaoPersistenciaTest(TestCase):
@@ -38,6 +39,7 @@ class TransmissaoPersistenciaTest(TestCase):
         self.client.login(username="t157", password="t157pass")
 
         self.tis = TIs.objects.create(nome="TI 157", etnia="Teste", estado="SP")
+        atribuir_tis(self.user, self.tis)
         self.cartorio = Cartorios.objects.create(
             nome="Cartório 157", cns="CNS157157", cidade="São Paulo"
         )

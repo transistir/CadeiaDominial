@@ -2,9 +2,13 @@
 Service para integração da verificação de duplicatas com o processo de criação de lançamentos
 """
 
+import logging
+
 from .duplicata_verificacao_service import DuplicataVerificacaoService
 from .importacao_cadeia_service import ImportacaoCadeiaService
 from ..models import Cartorios
+
+logger = logging.getLogger(__name__)
 
 
 class LancamentoDuplicataService:
@@ -40,6 +44,8 @@ class LancamentoDuplicataService:
             'Sem Origem:'
         ]
         
+        inacessivel = None
+        
         for i, origem in enumerate(origens):
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
@@ -73,19 +79,33 @@ class LancamentoDuplicataService:
             duplicata_info = DuplicataVerificacaoService.verificar_duplicata_origem(
                 origem=origem,
                 cartorio_id=cartorio_origem.id,
-                imovel_atual_id=documento_ativo.imovel.id
+                imovel_atual_id=documento_ativo.imovel.id,
+                user=request.user,
             )
             
             if duplicata_info['tem_duplicata']:
                 print(f"DEBUG DUPLICATA: Duplicata encontrada na origem {i}: {origem}")
+                if not duplicata_info.get('acessivel', True):
+                    if inacessivel is None:
+                        inacessivel = {
+                            'tem_duplicata': True,
+                            'acessivel': False,
+                            'mensagem': duplicata_info['mensagem'],
+                        }
+                    continue
                 return {
                     'tem_duplicata': True,
+                    'acessivel': True,
                     'duplicata_info': duplicata_info,
                     'mensagem': f"Encontrada duplicata: {duplicata_info['documento_origem'].numero} - {duplicata_info['documento_origem'].imovel.nome}",
                     'documento_origem': duplicata_info['documento_origem'],
                     'documentos_importaveis': duplicata_info['documentos_importaveis'],
                     'cadeia_dominial': duplicata_info['cadeia_dominial']
                 }
+        
+        # Se encontrou duplicata inacessível (e nenhuma acessível), retorna D1
+        if inacessivel is not None:
+            return inacessivel
         
         # Se chegou até aqui, não há duplicatas
         return {
@@ -125,7 +145,11 @@ class LancamentoDuplicataService:
             }
 
         validacao = LancamentoDuplicataService._validar_identidade_duplicata(
-            request, documento_origem_id, documentos_importaveis_ids, documento_ativo.imovel_id
+            request,
+            documento_origem_id,
+            documentos_importaveis_ids,
+            documento_ativo.imovel_id,
+            usuario,
         )
         if not validacao['sucesso']:
             return validacao
@@ -163,17 +187,21 @@ class LancamentoDuplicataService:
                     'mensagem': erro_msg
                 }
                 
-        except Exception as e:
-            print(f"DEBUG IMPORTACAO: Exceção durante importação: {str(e)}")
-            import traceback
-            print(f"DEBUG IMPORTACAO: Traceback: {traceback.format_exc()}")
+        except Exception:
+            logger.exception('Erro durante importação')
             return {
                 'sucesso': False,
-                'mensagem': f'Erro durante importação: {str(e)}'
+                'mensagem': 'Erro durante importação'
             }
 
     @staticmethod
-    def _validar_identidade_duplicata(request, documento_origem_id, documentos_importaveis_ids, imovel_atual_id):
+    def _validar_identidade_duplicata(
+        request,
+        documento_origem_id,
+        documentos_importaveis_ids,
+        imovel_atual_id,
+        usuario,
+    ):
         """
         Confirma o `documento_origem_id` e os `documentos_importaveis[]` recebidos
         no POST contra uma duplicata recalculada no servidor (T26).
@@ -201,9 +229,13 @@ class LancamentoDuplicataService:
             duplicata_info = DuplicataVerificacaoService.verificar_duplicata_origem(
                 origem=origem,
                 cartorio_id=cartorio_origem.id,
-                imovel_atual_id=imovel_atual_id
+                imovel_atual_id=imovel_atual_id,
+                user=usuario,
             )
-            if not duplicata_info.get('tem_duplicata'):
+            if (
+                not duplicata_info.get('tem_duplicata')
+                or not duplicata_info.get('acessivel', True)
+            ):
                 continue
 
             documento_origem = duplicata_info['documento_origem']
@@ -266,6 +298,9 @@ class LancamentoDuplicataService:
             dict: Dados formatados para o template
         """
         if not duplicata_info.get('tem_duplicata'):
+            return None
+
+        if not duplicata_info.get('acessivel', True):
             return None
 
         documento_origem = duplicata_info['documento_origem']

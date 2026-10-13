@@ -4,7 +4,9 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from dominial.models import TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital
+from dominial.models import (
+    TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital, UserImovel
+)
 
 
 class DocumentoDigitalTestCase(TestCase):
@@ -27,6 +29,8 @@ class DocumentoDigitalTestCase(TestCase):
             data=date(2024, 1, 1), cartorio=cls.cartorio,
             livro='1', folha='1'
         )
+        # Segregação (#132): o usuário comum só enxerga imóveis atribuídos a ele.
+        UserImovel.objects.create(user=cls.user, imovel=cls.imovel)
 
     def setUp(self):
         self.client = Client()

@@ -22,6 +22,7 @@ from django.utils import timezone
 from dominial.views.documento_views import excluir_documento
 from dominial.models import (Cartorios, Documento, DocumentoTipo, Imovel,
                              Lancamento, LancamentoTipo, Pessoas, TIs)
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class _HiddenInputsDoFormImportacao(HTMLParser):
@@ -63,6 +64,9 @@ class Issue218Base(TestCase):
         cls.imovel = Imovel.objects.create(
             terra_indigena_id=cls.tis, nome='FAZENDA MADAMA', proprietario=cls.pessoa,
             matricula='T2789', tipo_documento_principal='transcricao', cartorio=cls.cri)
+        # Fase 4 (#132): segregação por UserTI — atribui todas as TIs que o
+        # teste toca ao user logado. Nunca superuser.
+        atribuir_tis(cls.user, cls.tis)
         cls.doc_t2789 = Documento.objects.create(
             imovel=cls.imovel, tipo=cls.tipo_transcricao, numero='T2789',
             data='2026-08-31', cartorio=cls.cri, livro='3H', folha='200')
@@ -443,6 +447,8 @@ class Issue218LinkImovelDonoTest(Issue218Base):
         lancamento_dono = self.criar_lancamento_existente()
 
         outra_ti = TIs.objects.create(nome='Outra TI #218', codigo='TI-218B', etnia='Teste')
+        # Fase 4 (#132): segregação — atribui TI adicional ao user logado.
+        atribuir_tis(self.user, outra_ti)
         importador = Imovel.objects.create(
             terra_indigena_id=outra_ti, nome='Importador', proprietario=self.pessoa,
             matricula='M999', tipo_documento_principal='matricula', cartorio=self.cri)

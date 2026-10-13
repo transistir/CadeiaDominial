@@ -225,7 +225,10 @@ class ImovelEditarSincronizaTest(_Issue210Fixture, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(username='user210', password='user210pass')
+        # D4 (#132, C7): edição de cartório exige superuser
+        self.user = User.objects.create_superuser(
+            username='user210', password='user210pass', email='user210@example.com'
+        )
         self.client.force_login(self.user)
 
     def test_imovel_editar_sincroniza_cartorio_do_documento_principal(self):
@@ -281,7 +284,10 @@ class ImovelDetailSincronizaTest(_Issue210Fixture, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(username='user210b', password='user210bpass')
+        # D4 (#132, C7): edição de cartório exige superuser
+        self.user = User.objects.create_superuser(
+            username='user210b', password='user210bpass', email='user210b@example.com'
+        )
         self.client.force_login(self.user)
 
     def test_imovel_detail_sincroniza_cartorio_do_documento_principal(self):
@@ -308,28 +314,46 @@ class CadeiaAposSincronizacaoTest(_Issue210Fixture, TestCase):
     """Regressão de campo: a matrícula principal precisa continuar na cadeia
     depois da troca de cartório (a causa raiz do bug #210)."""
 
+    def setUp(self):
+        super().setUp()
+        # D4 (#132, C7): chamadas diretas ao service exigem superuser
+        self.superuser = User.objects.create_superuser(
+            username='super210cadeia', password='super210cadeiapass',
+            email='super210cadeia@example.com'
+        )
+
     def test_cadeia_reconhece_o_documento_principal_apos_sincronizacao(self):
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
-        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+            self.imovel, user=self.superuser
+        )
 
         self.documento.refresh_from_db()
         self.imovel.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.imovel.cartorio_id)
 
-        tronco = HierarquiaService.obter_tronco_principal(self.imovel)
+        tronco = HierarquiaService.obter_tronco_principal(
+            self.imovel, documentos_queryset=Documento.objects.all()
+        )
         self.assertTrue(tronco)
         self.assertEqual(tronco[0].id, self.documento.id)
 
     def test_cache_desabilitado_reflete_novo_cartorio_imediatamente(self):
-        tronco_antes = HierarquiaService.obter_tronco_principal(self.imovel)
+        tronco_antes = HierarquiaService.obter_tronco_principal(
+            self.imovel, documentos_queryset=Documento.objects.all()
+        )
         self.assertEqual(tronco_antes[0].cartorio_id, self.cartorio_a.id)
 
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
-        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+            self.imovel, user=self.superuser
+        )
 
-        tronco_depois = HierarquiaService.obter_tronco_principal(self.imovel)
+        tronco_depois = HierarquiaService.obter_tronco_principal(
+            self.imovel, documentos_queryset=Documento.objects.all()
+        )
         self.assertEqual(tronco_depois[0].cartorio_id, self.cartorio_b.id)
 
 
@@ -384,6 +408,11 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
 
     def setUp(self):
         super().setUp()
+        # D4 (#132, C7): chamadas diretas ao service exigem superuser
+        self.superuser = User.objects.create_superuser(
+            username='super210mig', password='super210migpass',
+            email='super210mig@example.com'
+        )
         self.outro_imovel = Imovel.objects.create(
             terra_indigena_id=self.tis, nome='Descendente', proprietario=self.proprietario,
             matricula='222', tipo_documento_principal='matricula', cartorio=self.cartorio_a,
@@ -413,7 +442,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
 
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
-        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+            self.imovel, user=self.superuser
+        )
 
         origem_estruturada.refresh_from_db()
         self.assertEqual(origem_estruturada.cartorio_id, self.cartorio_b.id)
@@ -428,7 +459,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         self.imovel.save()
 
         with self.assertRaises(ValidationError):
-            ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                self.imovel, user=self.superuser
+            )
 
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
@@ -457,7 +490,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         imovel_m.save()
 
         with self.assertRaises(ValidationError):
-            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel_m)
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                imovel_m, user=self.superuser
+            )
 
         documento_m.refresh_from_db()
         self.assertEqual(documento_m.cartorio_id, self.cartorio_a.id)
@@ -483,7 +518,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         imovel_m.save()
 
         with self.assertRaises(ValidationError):
-            ImovelDocumentoService.sincronizar_cartorio_documento_principal(imovel_m)
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                imovel_m, user=self.superuser
+            )
 
         documento_m.refresh_from_db()
         self.assertEqual(documento_m.cartorio_id, self.cartorio_a.id)
@@ -505,7 +542,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
 
-        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+            self.imovel, user=self.superuser
+        )
 
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)
@@ -526,7 +565,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
         self.imovel.save()
 
         with self.assertRaises(ValidationError):
-            ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+            ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                self.imovel, user=self.superuser
+            )
 
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.cartorio_a.id)
@@ -542,7 +583,9 @@ class LancamentoOrigemMigracaoTest(_Issue210Fixture, TestCase):
 
         self.imovel.cartorio = self.cartorio_b
         self.imovel.save()
-        ImovelDocumentoService.sincronizar_cartorio_documento_principal(self.imovel)
+        ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+            self.imovel, user=self.superuser
+        )
 
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.cartorio_id, self.cartorio_b.id)

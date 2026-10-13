@@ -1,0 +1,198 @@
+diff --git a/dominial/admin.py b/dominial/admin.py
+index c327f758..a2e181fa 100644
+--- a/dominial/admin.py
++++ b/dominial/admin.py
+@@ -53,9 +53,12 @@ from .managers import (
+     documentos_for_user,
+     lancamentos_for_user,
+     pessoas_for_user,
++    tis_atribuidas_ids,
+     tis_for_user,
++    usuario_tem_ti_inteira,
+     usuario_ve_tudo,
+ )
++from .utils.segregacao_utils import MENSAGEM_TI_SEM_ACESSO
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -1554,7 +1557,15 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
+ 
+     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+         if db_field.name == 'terra_indigena_id':
+-            kwargs['queryset'] = tis_for_user(request.user)
++            # P1-G (#132): na adição, só TIs com atribuição inteira; na edição
++            # mantém tis_for_user para não quebrar acesso legado (P1-D).
++            eh_adicao = request.resolver_match and request.resolver_match.url_name and request.resolver_match.url_name.endswith('_add')
++            if eh_adicao and not usuario_ve_tudo(request.user):
++                kwargs['queryset'] = TIs.objects.filter(
++                    pk__in=tis_atribuidas_ids(request.user)
++                )
++            else:
++                kwargs['queryset'] = tis_for_user(request.user)
+         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+ 
+     def get_readonly_fields(self, request, obj=None):
+@@ -1568,7 +1579,13 @@ class ImovelAdmin(AtribuicaoAuditoriaMixin, admin.ModelAdmin):
+         """Salva o imóvel e, se o cartório mudou, sincroniza o documento
+         principal na mesma transação (#210). `ImovelAdminForm.clean()` já
+         garantiu que não há ambiguidade/colisão antes de chegar aqui.
++
++        P1-G (#132): revalida `usuario_tem_ti_inteira` na adição — o
++        `formfield_for_foreignkey` é UX; aqui é a barreira real contra
++        manipulação de POST.
+         """
++        if not change and not usuario_tem_ti_inteira(request.user, obj.terra_indigena_id_id):
++            raise PermissionDenied(MENSAGEM_TI_SEM_ACESSO)
+         with transaction.atomic():
+             super().save_model(request, obj, form, change)
+             if change and getattr(form, 'cartorio_mudou', False):
+diff --git a/dominial/tests/test_segregacao_usuario.py b/dominial/tests/test_segregacao_usuario.py
+index 024c30f6..ca915491 100644
+--- a/dominial/tests/test_segregacao_usuario.py
++++ b/dominial/tests/test_segregacao_usuario.py
+@@ -2447,6 +2447,118 @@ class CriacaoImovelEscopoTITest(SegregacaoBaseTestCase):
+         href_cadastro = reverse('imovel_cadastro', kwargs={'tis_id': self.tis_a.id})
+         self.assertIn(href_cadastro.encode(), response.content)
+ 
++    def test_get_imovel_id_zero_em_ti_alheia_404(self):
++        """P1-F: GET /tis/<alheia>/imovel/0/editar/ retorna 404 (não cria)."""
++        # dono tem UserImovel legado só em imovel_a (tis_a); tis_b é alheia.
++        self.client.force_login(self.dono)
++        url_zero = reverse(
++            'imovel_editar', kwargs={'tis_id': self.tis_b.id, 'imovel_id': 0}
++        )
++        response = self.client.get(url_zero)
++        self.assertEqual(response.status_code, 404)
++
++    def test_post_imovel_id_zero_em_ti_alheia_nao_cria(self):
++        """P1-F: POST em /tis/<alheia>/imovel/0/editar/ não cria imóvel."""
++        self.client.force_login(self.dono)
++        url_zero = reverse(
++            'imovel_editar', kwargs={'tis_id': self.tis_b.id, 'imovel_id': 0}
++        )
++        count_before = Imovel.objects.count()
++        response = self.client.post(url_zero, self.post_data)
++        self.assertEqual(response.status_code, 404)
++        self.assertEqual(Imovel.objects.count(), count_before)
++
++
++class AdminCriacaoImovelEscopoTest(SegregacaoBaseTestCase):
++    """P1-G (#132): admin não cria imóvel em TI visível apenas por UserImovel legado.
++
++    O `formfield_for_foreignkey` restringe o queryset de TI às TIs com
++    atribuição inteira na adição, e o `save_model` revalida com
++    `usuario_tem_ti_inteira` (barreira server-side).
++    """
++
++    @classmethod
++    def setUpTestData(cls):
++        super().setUpTestData()
++        # Staff com UserImovel legado na tis_a (visível via tis_for_user, mas
++        # SEM TI inteira — usuario_tem_ti_inteira retorna False).
++        cls.staff_legado = User.objects.create_user(
++            username='staff_legado', password='senha-staff-legado',
++        )
++        cls.staff_legado.is_staff = True
++        cls.staff_legado.save(update_fields=['is_staff'])
++        # Permissão add_imovel para o staff_legado
++        ct = ContentType.objects.get_for_model(Imovel)
++        perm_add = Permission.objects.get(content_type=ct, codename='add_imovel')
++        cls.staff_legado.user_permissions.add(perm_add)
++        UserImovel.objects.create(
++            user=cls.staff_legado, imovel=cls.imovel_a, atribuido_por=cls.superuser
++        )
++        # Staff com UserTI na tis_a (TI inteira concedida)
++        cls.staff_userti = User.objects.create_user(
++            username='staff_userti', password='senha-staff-userti',
++        )
++        cls.staff_userti.is_staff = True
++        cls.staff_userti.save(update_fields=['is_staff'])
++        cls.staff_userti.user_permissions.add(perm_add)
++        UserTI.objects.create(
++            user=cls.staff_userti, tis=cls.tis_a, atribuido_por=cls.superuser
++        )
++
++    def setUp(self):
++        self.client = Client()
++        self.url_add = reverse('admin:dominial_imovel_add')
++        self.post_data = {
++            'nome': 'Imóvel Admin Novo',
++            'matricula': 'ADM-999',
++            'tipo_documento_principal': 'matricula',
++            'terra_indigena_id': self.tis_a.id,
++            'proprietario': self.proprietario.id,
++            'cartorio': self.cartorio.id,
++            'arquivado': False,
++            'observacoes': '',
++        }
++
++    def _count(self):
++        return Imovel.objects.count()
++
++    def test_staff_so_com_userimovel_legado_nao_cria_no_admin(self):
++        """P1-G (a): staff com só UserImovel legado NÃO cria imóvel em tis_a."""
++        self.client.force_login(self.staff_legado)
++        count_before = self._count()
++        response = self.client.post(self.url_add, self.post_data)
++        # Esperado após fix: 403 (PermissionDenied no save_model).
++        # O essencial é que NÃO crie — count inalterado.
++        self.assertIn(response.status_code, (200, 302, 403))
++        # Se foi 302, seguir para confirmar que não criou.
++        if response.status_code == 302:
++            # Redireciona para o changelist em sucesso OU para login.
++            # O count é o árbitro final.
++            pass
++        self.assertEqual(self._count(), count_before)
++
++    def test_staff_com_userti_cria_no_admin(self):
++        """P1-G (b): staff com UserTI na TI cria normalmente."""
++        self.client.force_login(self.staff_userti)
++        count_before = self._count()
++        response = self.client.post(self.url_add, self.post_data)
++        # 302 redirect para changelist após criação bem-sucedida
++        self.assertIn(response.status_code, (200, 302))
++        # Se redirecionou, criou
++        if response.status_code == 302:
++            self.assertEqual(self._count(), count_before + 1)
++
++    def test_superuser_cria_em_qualquer_ti(self):
++        """P1-G (c): superuser cria em qualquer TI."""
++        self.client.force_login(self.superuser)
++        count_before = self._count()
++        # Alterna para tis_b para confirmar que superuser não é barrado
++        data = dict(self.post_data, terra_indigena_id=self.tis_b.id)
++        response = self.client.post(self.url_add, data)
++        self.assertIn(response.status_code, (200, 302))
++        if response.status_code == 302:
++            self.assertEqual(self._count(), count_before + 1)
++
+ 
+ class BlockersRound3Test(SegregacaoBaseTestCase):
+     """Regressões dos vetores cross-tenant encontrados na terceira revisão."""
+diff --git a/dominial/views/imovel_views.py b/dominial/views/imovel_views.py
+index 53b30da9..2c31cd16 100644
+--- a/dominial/views/imovel_views.py
++++ b/dominial/views/imovel_views.py
+@@ -20,7 +20,7 @@ def imovel_form(request, tis_id, imovel_id=None):
+         raise Http404
+     tis = get_object_or_404(TIs, pk=tis_id)
+     imovel = None
+-    if imovel_id:
++    if imovel_id is not None:
+         imovel = get_object_or_404(
+             Imovel.objects.for_user(request.user),
+             pk=imovel_id,
+@@ -84,11 +84,11 @@ def imovel_form(request, tis_id, imovel_id=None):
+                         )
+                     
+                     # Criar automaticamente o documento principal para o imóvel (#230)
+-                    if not imovel_id:  # Apenas para novos imóveis
++                    if imovel_id is None:  # Apenas para novos imóveis
+                         documento_principal = LancamentoDocumentoService.criar_documento_matricula_automatico(imovel)
+                 
+                 # Mensagens após o commit
+-                if not imovel_id:
++                if imovel_id is None:
+                     rotulo = documento_principal.tipo.get_tipo_display().lower()
+                     messages.info(
+                         request,

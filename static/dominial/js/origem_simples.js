@@ -218,7 +218,12 @@ function renderMAnterior(div, dados, numeroDigitado) {
         div.textContent = `M anterior: ${dados.matricula} (Imóvel: ${dados.imovel_nome})`;
     } else if (dados.encontrado && dados.outra_ti) {
         div.className = 'm-anterior-info m-anterior-other-ti';
-        div.textContent = `⚠ M anterior ${dados.matricula} está em outra TI (Imóvel: ${dados.imovel_nome})`;
+        // C6 (#132, D3): se restrito, não vaza matrícula/imóvel — usa mensagem genérica.
+        if (dados.restrito) {
+            div.textContent = dados.mensagem || '⚠ Documento em outra TI — sem acesso';
+        } else {
+            div.textContent = `⚠ M anterior ${dados.matricula} está em outra TI (Imóvel: ${dados.imovel_nome})`;
+        }
     } else {
         div.className = 'm-anterior-info m-anterior-missing';
         div.textContent = numeroDigitado

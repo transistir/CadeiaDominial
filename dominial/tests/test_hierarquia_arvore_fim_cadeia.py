@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     TIs, Pessoas, Imovel, Cartorios,
     DocumentoTipo, LancamentoTipo,
@@ -69,13 +70,17 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
 
     def test_arvore_inclui_no_fim_cadeia(self):
         """Árvore deve incluir nó com is_fim_cadeia=True quando há origem de fim de cadeia."""
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         nos_fim_cadeia = self._extrair_fim_cadeia(arvore)
         self.assertTrue(len(nos_fim_cadeia) > 0)
 
     def test_no_fim_cadeia_tem_classificacao(self):
         """Nó de fim de cadeia deve ter classificacao_fim_cadeia definida."""
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertIsNotNone(no_fc['classificacao_fim_cadeia'])
         self.assertIn(
@@ -85,7 +90,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
 
     def test_no_fim_cadeia_id_eh_string(self):
         """O ID do nó de fim de cadeia deve ser string para não colidir com IDs de documentos."""
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertIsInstance(no_fc['id'], str)
         self.assertEqual(no_fc['id'], f"fim_cadeia_{self.documento.id}_{self.lancamento.id}_{self.origem_fc.id}")
@@ -122,13 +129,17 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
             valor_transacao=50000.00,
             origem="",
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel_sem_fc)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel_sem_fc, documentos_queryset=ESCOPO_GLOBAL,
+        )
         nos_fc = self._extrair_fim_cadeia(arvore)
         self.assertEqual(len(nos_fc), 0)
 
     def test_conexao_fim_cadeia(self):
         """Deve haver conexão tipo 'fim_cadeia' entre documento e nó de fim de cadeia."""
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         conexoes_fc = [c for c in arvore['conexoes'] if c.get('tipo') == 'fim_cadeia']
         self.assertTrue(len(conexoes_fc) > 0)
         conexao = conexoes_fc[0]
@@ -141,7 +152,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         OrigemFimCadeia.objects.filter(lancamento=self.lancamento).update(
             classificacao_fim_cadeia=None
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['classificacao_fim_cadeia'], 'sem_origem')
 
@@ -155,7 +168,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
             tipo_fim_cadeia='sem_origem',
             classificacao_fim_cadeia='sem_origem',
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         nos_fc = self._extrair_fim_cadeia(arvore)
         self.assertEqual(len(nos_fc), 2)
         # IDs devem ser únicos
@@ -167,7 +182,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         Lancamento.objects.filter(id=self.lancamento.id).update(
             origem="FIM_CADEIA:M:1:Cartório:123:INCRA; FIM_CADEIA::outra:sem_origem:XYZ"
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'INCRA')
 
@@ -176,14 +193,18 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         Lancamento.objects.filter(id=self.lancamento.id).update(
             origem="FIM_CADEIA::destacamento_publico:origem_lidima:FUNAI"
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'FUNAI')
 
     def test_fim_cadeia_false_nao_gera_no(self):
         """Origem com fim_cadeia=False não deve gerar nó de fim de cadeia."""
         OrigemFimCadeia.objects.filter(lancamento=self.lancamento).update(fim_cadeia=False)
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         nos_fc = self._extrair_fim_cadeia(arvore)
         self.assertEqual(len(nos_fc), 0)
 
@@ -193,7 +214,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
         Lancamento.objects.filter(id=self.lancamento.id).update(
             origem="FIM_CADEIA:M:1:Cartório:123:INCRA"
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         no_fc = self._extrair_fim_cadeia(arvore)[0]
         self.assertEqual(no_fc['tipo_fim_cadeia'], 'destacamento_publico')
         self.assertEqual(no_fc['sigla_patrimonio_publico'], 'INCRA')
@@ -212,7 +235,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
             tipo_fim_cadeia='destacamento_publico',
             classificacao_fim_cadeia='origem_lidima',
         )
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         nos_fc = self._extrair_fim_cadeia(arvore)
         self.assertEqual(len(nos_fc), 2)
 
@@ -227,7 +252,9 @@ class HierarquiaArvoreFimCadeiaTest(TestCase):
 
     def test_nivel_fim_cadeia_eh_maximo_real_mais_um(self):
         """Nó de fim de cadeia deve ter nível = máximo dos documentos reais + 1."""
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(self.imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            self.imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
         docs_reais = [d for d in arvore['documentos'] if not d.get('is_fim_cadeia')]
         nos_fc = [d for d in arvore['documentos'] if d.get('is_fim_cadeia')]
         nivel_max_real = max(d['nivel'] for d in docs_reais)

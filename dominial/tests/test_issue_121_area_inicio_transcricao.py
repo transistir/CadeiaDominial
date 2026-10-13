@@ -13,6 +13,7 @@ from dominial.models import (
     LancamentoTipo,
     Pessoas,
     TIs,
+    UserImovel,
 )
 
 
@@ -72,6 +73,10 @@ class Issue121AreaInicioTranscricaoTest(TestCase):
             livro="2",
             folha="2",
         )
+
+        # Segregação (#132): o usuário comum só enxerga imóveis atribuídos a ele.
+        UserImovel.objects.create(user=cls.user, imovel=cls.imovel_transcricao)
+        UserImovel.objects.create(user=cls.user, imovel=cls.imovel_matricula)
 
     def setUp(self):
         self.client.force_login(self.user)

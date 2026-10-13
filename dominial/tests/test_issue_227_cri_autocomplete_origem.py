@@ -62,10 +62,12 @@ Fixtures (plano seção 5):
 import os
 import re
 
+from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
 from dominial.models import Cartorios, TIs, Pessoas, Imovel, Lancamento, LancamentoTipo, Documento
+from dominial.tests.segregacao_fixtures import usuario_com_tis
 
 
 class QNomeCRIHelperTest(TestCase):
@@ -130,6 +132,7 @@ class CartorioAutocompleteSomenteCriTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls._user = User.objects.create_user(username="u227_ac", password="p")
         cls.A = Cartorios.objects.create(
             nome="Registro de Imóveis de Guaíra", cns="227101",
             cidade="Guaíra", estado="PR",
@@ -171,6 +174,9 @@ class CartorioAutocompleteSomenteCriTest(TestCase):
             nome="Registro de Imóveis de Autazes", cns="227110",
             cidade="Autazes", estado="AM",
         )
+
+    def setUp(self):
+        self.client.force_login(self._user)
 
     # RED 1
     def test_somente_cri_exclui_tabelionato_notas_e_registro_civil(self):
@@ -288,6 +294,8 @@ class CartorioAutocompleteSomenteCriTest(TestCase):
         """?imovel_id=…&sugestoes=true ainda devolve tabelionato (sem filtro CRI)."""
         from datetime import date
         ti = TIs.objects.create(nome="TI 227", codigo="TI-227", etnia="Teste")
+        from dominial.tests.segregacao_fixtures import atribuir_tis
+        atribuir_tis(self._user, ti)
         pessoa = Pessoas.objects.create(nome="Pessoa 227", cpf="22722722727")
         imovel = Imovel.objects.create(
             terra_indigena_id=ti, nome="Imóvel 227", proprietario=pessoa,
@@ -324,6 +332,7 @@ class MesmoCriterioQueCartorioImoveisTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls._user = User.objects.create_user(username="u227_mc", password="p")
         Cartorios.objects.create(
             nome="Registro de Imóveis de Guaíra", cns="227201",
             cidade="Guaíra", estado="PR",
@@ -358,6 +367,9 @@ class MesmoCriterioQueCartorioImoveisTest(TestCase):
             cidade="Autazes", estado="AM",
         )
 
+    def setUp(self):
+        self.client.force_login(self._user)
+
     def test_mesmo_conjunto_e_ordem_que_cartorio_imoveis_autocomplete(self):
         """Para q em Guaíra, Registro e Autazes, os ids são iguais e na mesma ordem."""
         for q in ["Guaíra", "Registro", "Autazes"]:
@@ -389,6 +401,7 @@ class BuscaInsensivelAAcentoTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls._user = User.objects.create_user(username="u227_ba", password="p")
         cls.cri_acento = Cartorios.objects.create(
             nome="Registro de Imóveis de Guaíra", cns="227301",
             cidade="Guaíra", estado="PR",
@@ -397,6 +410,9 @@ class BuscaInsensivelAAcentoTest(TestCase):
             nome="Registro de Imoveis de Maringá", cns="227302",
             cidade="Maringá", estado="PR",
         )
+
+    def setUp(self):
+        self.client.force_login(self._user)
 
     def test_busca_com_acento_encontra_sem_acento(self):
         """q=Imóveis deve encontrar 'Registro de Imoveis' (sem acento)."""
@@ -539,10 +555,14 @@ class BuscaCedilhaTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls._user = User.objects.create_user(username="u227_bc", password="p")
         cls.cri_com_cedilha = Cartorios.objects.create(
             nome="Foz do Iguaçu - Serviço de Registro de Imóveis", cns="227401",
             cidade="Foz do Iguaçu", estado="PR",
         )
+
+    def setUp(self):
+        self.client.force_login(self._user)
 
     def test_busca_sem_cedilha_encontra_com_cedilha(self):
         """q=Iguacu deve encontrar 'Foz do Iguaçu'."""
@@ -559,10 +579,14 @@ class MetacaracteresRegexTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls._user = User.objects.create_user(username="u227_mr", password="p")
         Cartorios.objects.create(
             nome="Registro de Imóveis de Teste", cns="227501",
             cidade="Teste", estado="TE",
         )
+
+    def setUp(self):
+        self.client.force_login(self._user)
 
     def test_metacaracteres_nao_causam_erro_500(self):
         r"""q com metacaracteres regex (R(, [a, a\) deve retornar 200."""
@@ -736,6 +760,8 @@ class HistoricoFiltraCriNoBackendTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ti = TIs.objects.create(nome="TI 227-hist", codigo="TI-227-hist", etnia="Teste")
+        cls._user = usuario_com_tis('u227_hf', ti)
         cls.cri = Cartorios.objects.create(
             nome="Registro de Imóveis de Guaíra", cns="227601",
             cidade="Guaíra", estado="PR",
@@ -744,7 +770,6 @@ class HistoricoFiltraCriNoBackendTest(TestCase):
             nome="1º Tabelionato de Notas de Guaíra", cns="227602",
             cidade="Guaíra", estado="PR",
         )
-        ti = TIs.objects.create(nome="TI 227-hist", codigo="TI-227-hist", etnia="Teste")
         pessoa = Pessoas.objects.create(nome="Pessoa 227-hist", cpf="22722722799")
         cls.imovel = Imovel.objects.create(
             terra_indigena_id=ti, nome="Imóvel 227-hist", proprietario=pessoa,
@@ -767,6 +792,9 @@ class HistoricoFiltraCriNoBackendTest(TestCase):
             documento=doc, cartorio_origem=cls.cri,
             tipo=lt, numero_lancamento="L-227-hist-2", data=date(2026, 1, 2),
         )
+
+    def setUp(self):
+        self.client.force_login(self._user)
 
     def test_sugestoes_sem_somente_cri_retorna_tabelionato_e_cri(self):
         """Sem somente_cri, histórico continua amplo (tabelionato + CRI)."""

@@ -31,6 +31,7 @@ from dominial.models import (
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
+from dominial.tests.segregacao_fixtures import usuario_com_tis
 from dominial.tests.test_identidade_documento import IdentidadeDocumentoFixture
 
 
@@ -74,7 +75,7 @@ class Issue241Base(IdentidadeDocumentoFixture):
             "cartorio_origem_nome[]": list(cartorios_nomes),
             "livro_origem[]": [""] * total,
             "folha_origem[]": [""] * total,
-            "apos_importacao": "true",  # pula verificação de duplicata
+            "apos_importacao": "true",  # flag POST não é mais lida (#132); kwarg interno apos_importacao=True
             "transmitente_nome[]": [],
             "transmitente[]": [],
             "adquirente_nome[]": [],
@@ -96,6 +97,7 @@ class T1OrfaoCountTest(Issue241Base):
             sigla="M24101",
         )
         request = RequestFactory().post("/x/", post_data)
+        request.user = usuario_com_tis('t241', self.ti)
 
         lanc_count_before = Lancamento.objects.count()
         origem_count_before = LancamentoOrigem.objects.count()
@@ -156,11 +158,12 @@ class T2SucessoPreservadoTest(Issue241Base):
             sigla="M24102",
         )
         request = RequestFactory().post("/x/", post_data)
+        request.user = usuario_com_tis('t241', self.ti)
 
         lanc_count_before = Lancamento.objects.count()
 
         result, msg = LancamentoCriacaoService.criar_lancamento_completo(
-            request, self.ti, imovel, documento
+            request, self.ti, imovel, documento, apos_importacao=True
         )
 
         # Sucesso: lançamento criado
@@ -193,6 +196,7 @@ class T3RegressaoAtomicidadeTest(Issue241Base):
             sigla="M24103",
         )
         request = RequestFactory().post("/x/", post_data)
+        request.user = usuario_com_tis('t241', self.ti)
 
         lanc_count_before = Lancamento.objects.count()
 
@@ -207,7 +211,8 @@ class T3RegressaoAtomicidadeTest(Issue241Base):
 
         self.assertIsNone(result)
         self.assertIn("Criação cancelada", msg)
-        self.assertIn("falha simulada #241", msg)
+        # S8 (#132): erro interno não vaza para a mensagem do usuário
+        self.assertNotIn("falha simulada", msg)
         self.assertIn("Nenhum lançamento foi salvo", msg)
         self.assertEqual(
             Lancamento.objects.count(), lanc_count_before,
@@ -254,6 +259,7 @@ class T4DocumentoMemoriaRollbackTest(Issue241Base):
         post_data["livro_documento"] = "7"
         post_data["folha_documento"] = "42"
         request = RequestFactory().post("/x/", post_data)
+        request.user = usuario_com_tis('t241', self.ti)
 
         result, msg = LancamentoCriacaoService.criar_lancamento_completo(
             request, self.ti, imovel, documento

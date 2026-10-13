@@ -3,6 +3,16 @@
 > **Fila reordenada 04/09/2026 por sequência lógica de desenvolvimento;
 > nova reordenação aprovada pelo Hiure em 23/09/2026** (bugs de produção
 > primeiro no R3, a começar pelo #218 — ver "Status geral").
+> **Reordenação 30/09/2026 (aprovada pelo Hiure): R9 antecipado** — #132
+> (PR #133) passa a ser o próximo bloco de execução, com meta de release
+> **v1.1.0**. R4–R8 deslizam para depois do R9; **R3/R3.5 ficam PAUSADOS
+> até a v1.1.0** (exceção de fila registrada na seção R9). Ver seção R9.
+> **Ampliação 02/10/2026 (pedido do Hiure):** 4 novas funcionalidades
+> criadas e mapeadas (**#251–#254**, novo bloco **R10** — pós-v1.1.0);
+> 8 issues abertas em 29–30/09 que estavam fora dos blocos numerados
+> foram incorporadas (**#232, #238, #240, #248** → R3; **#234, #235,
+> #243, #249** → R8). Testes da v1.1.0 seguem em andamento — escopo da
+> release congelado.
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -25,8 +35,12 @@
    início do R4 para dar tempo de resposta até o R7.
 6. **Features grandes por último** — #123 (certificação) e #132
    (multi-usuário) só depois do solo estabilizado.
+   **Exceção 30/09 (aprovada pelo Hiure):** #132/R9 foi antecipado como
+   próximo bloco (meta v1.1.0) porque o PR #133 ficou zumbi e o solo já
+   está estabilizado desde a v1.0.12; R3/R3.5 pausados durante o R9 — ver
+   EXCEÇÃO DE FILA na seção R9. #123 segue por último.
 
-## Status geral (snapshot 23/09/2026)
+## Status geral (snapshot 23/09/2026 — ver reordenação 30/09 na seção R9)
 
 **✅ Entregue (mergeado em develop, PRs #177–#195):**
 #108 CI · #159–#162 form bugs · #166 CRI · #145 PDF averbações · #172 troncos ·
@@ -42,13 +56,24 @@ GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)**.
 na v1.0.11 (20/09)**; Fases 1–3 de saneamento (#202) **aguardando redefinição
 via PRD** (tabela × exportações); #206 (origens homônimas) a revalidar. Veja **R3.5**.
 
-**Fila Django (snapshot 23/09/2026, pós-housekeeping): 47 issues abertas no
-GitHub — 34 Django** (excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
+**Fila Django (snapshot 02/10/2026): 59 issues abertas no GitHub — 46
+Django** (excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
 - Cinco pendências de implementação que estavam fora dos blocos numerados
-  foram incorporadas nesta reordenação: **#218, #219, #212** (R3), **#206**
+  foram incorporadas na reordenação 23/09: **#218, #219, #212** (R3), **#206**
   (R3.5), **#215** (R4).
 - Mergeadas na v1.0.11: **#168, #201, #204, #210** — ✅ fechadas no GitHub
   em 23/09 (comentários apontam PR/release).
+- **Incorporação 02/10/2026 (pedido do Hiure — "organize o que estiver fora
+  do roadmap"):** as 8 issues abertas em 29–30/09 entram nos blocos —
+  **#232** (filtro CRI falso-negativos), **#238** (observações apagadas na
+  edição), **#240** (cobertura export #230), **#248** (hardening admin
+  identidade) → **R3**; **#234** (importar-cartorios sem auth), **#235**
+  (listener órfão + XSS imovel_form), **#243** (cobertura rollback #241),
+  **#249** (mensagem de erro descartada em duplicata) → **R8**.
+- **Novas funcionalidades 02/10/2026 (pedido do Hiure):** **#251** exportar
+  fim de cadeia · **#252** opção "Outra" (texto livre) nos Estados do
+  destacamento · **#253** cartório da transmissão sem CRI + histórico ·
+  **#254** badge "Parcialmente sem Origem" — bloco novo **R10** (pós-v1.1.0).
 
 **Reordenação da fila aprovada pelo Hiure em 23/09/2026** (revisão Codex
 gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
@@ -121,8 +146,20 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    + cadeia única, renderer compartilhado) → item 4 acima já atendido
    automaticamente. **Validado no test server (11/09): #13 e #179 FECHADAS.**
 
-## R3 — Integridade de documentos/cartórios I (~1,5–2 semanas)
+## R3 — Integridade de documentos/cartórios I — 🧊 NA GELADEIRA (decisão Hiure 02/10/2026)
 
+> 🧊 **GELADEIRA 02/10/2026 (decisão do Hiure, grupo Transistir_CadDomDev):**
+> "o R3 precisa ser revisto pq muita coisa foi feita manualmente na correção
+> dos cartorios e nao entrou nos commits e nem no servidor de testes, muito
+> fix foi feito direto no servidor de prod (um erro, mas foi feito isso).
+> vamos deixar o R3 na 'geladeira' por agora pois não é um problema urgente."
+> **Critérios de destravar** (detalhe em `PLANO_ESTRATEGICO_POS_V110.md`):
+> (1) dump fresco de produção restaurado no test server (reaproximar os
+> dados); (2) revisão item a item contra os dados reais — o que ainda
+> reproduz, o que os fixes manuais já resolveram; (3) reordenação aprovada
+> pelo Hiure. ⚠️ Ressalva registrada: #238 (data-loss de observações) e
+> #223 (500 criar documento) podem ser puxados caso a caso se virarem
+> problema real de uso (regra da EXCEÇÃO R9).
 > ⚠️ **REVALIDAR CONTRA O CÓDIGO ATUAL ANTES DE INICIAR** (pedido Hiure
 > 11/09): export/cartórios mudaram muito no R2 (#166/#172/#179, renderer
 > compartilhado, helper de origem) — conferir se cada bug ainda reproduz e
@@ -131,7 +168,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > com dados reais envolvidos (desde 13/08).
 > **Reordenado 23/09 (aprovação do Hiure): bugs de produção primeiro** —
 > #218 → #144 → #219 → #212, depois os itens já planejados. Estimativa
-> revista de ~1–1,5 para ~1,5–2 semanas.
+> revista de ~1–1,5 para ~1,5–2 semanas *(superada pela geladeira 02/10)*.
 
 1. **#218** ✅ P1 produção: Livro↔Folha invertidos — **CONCLUÍDO 26/09**
    (PR #224, squash `b3e9026f` em develop; Opus 5.5 ×2 APPROVE + Greptile 5/5;
@@ -223,8 +260,31 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    service e desempacota tupla que ele não retorna. Débito derivado do
    #218 (tela de criar documento do fluxo de lançamento quebrada); posição
    registrada a pedido da revisão Codex no PR #225.
+12. **#232** filtro CRI do autocomplete deixa de fora ~169 cartórios
+   legítimos tipo "Nº Ofício de X" (falso-negativos de `q_nome_cri()`,
+   medidos em produção 29/09: 4.666 cartórios, 3.469 pegos pelo filtro).
+   Follow-up do #227. **Atenção cruzada:** o #253 (R10) vai EXCLUIR CRI do
+   campo de transmissão usando o mesmo helper — falso-negativo aqui vira
+   falso-positivo lá; fazer antes ou junto do #253.
+13. **#238** 🐛 data-loss silencioso: edição de documento abre campo
+   Observações VAZIO e o save apaga o valor existente
+   (`_observacoes_form.html` lê `lancamento.observacoes` em vez de
+   `documento.observacoes`). Achado no co-review do plano do #230.
+   Candidato a furar fila como P1 de produção (perda de dado em uso
+   normal) — aprovação caso a caso do Hiure, mesma regra da EXCEÇÃO R9.
+14. **#240** teste C2 do #230 promete ordem da exportação mas só verifica
+   a árvore — cobrir `CadeiaCompletaService.get_cadeia_completa`
+   (P2 do Greptile no PR #239). **Segue na geladeira do R3 (02/10)** — a
+   afinidade com o #251 (R10, mesmo service) NÃO é exceção aprovada; se o
+   Hiure quiser antecipá-la junto do #251, registrar a aprovação aqui
+   (achado P2 convergente Codex+Greptile no PR #256). O TDD do #251 cobre
+   `get_cadeia_completa` por conta própria.
+15. **#248** hardening(admin): `DocumentoAdmin` ainda permite editar
+   identidade (tipo/número/cartório) — última rota de "documento
+   fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
+   (sincronização de identidade).
 
-## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); restante depois do R3
+## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); 🧊 GELADEIRA junto do R3 (decisão Hiure 02/10)
 
 > **Bug de produção ativo** reportado pelo Maurício (12/09): ao escolher a origem
 > de uma **transcrição compartilhada** com origem dupla (caso real: imóvel 384,
@@ -384,6 +444,16 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    acento (`João` × `Joao` → `Pessoas` duplicado).
 8. **#165** CRI obrigatório junto ao nº de M/T em todo o sistema *(M —
    maior do bloco; desenhar considerando #150 para minimizar retrabalho)*
+9. **#271** 🐛 UX (relato de usuário 09/10): regressão no autocomplete
+   ("memória") dos campos **Forma e Título** do bloco Transmissão —
+   `890fded7` (squash do PR #158, commit autoral `f15612b0`, fix #157,
+   01/09) adicionou `autocomplete="off"` e
+   suprimiu o histórico do navegador; o `<datalist>` fixo de 7 opções
+   também deixa de abrir em vários navegadores com esse atributo.
+   Correção mínima: remover o `autocomplete="off"`; ideal: datalist
+   dinâmico por frequência de `Lancamento.forma` (mesmo padrão do
+   autocomplete de cartório, `sugestoes=true`). Critérios de aceite e
+   causa raiz no corpo da issue. **Enfileirada 09/10 (Hiure).**
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
 
@@ -428,21 +498,186 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 8. **#199** notificação Telegram de deploy falhado *(novo 12/09; #197+#199
    juntos fecham o ciclo do incidente de 12/09 — candidatos a fast-track
    se o time quiser)*
+9. **#234** 🔒 Segurança: `verificar_cartorios_estado`/`importar_cartorios_estado`
+   sem autenticação (qualquer anônimo dispara importação em massa + serviço
+   externo) + criação automática de cartório por nome sem sanitização.
+   Achado nos reviews do PR #233 (#227). **Único item de segurança da fila
+   — candidato a fast-track junto do #196 (XSS)** se o time quiser antecipar.
+10. **#235** JS: listener de clique órfão pós-clone fecha dropdown do
+    autocomplete (fix de 1 linha) + XSS em `imovel_form.js` — casa com o
+    #196 (mesmo arquivo/domínio: innerHTML sem escape).
+11. **#243** test(#241): cobrir rollback de falha TARDIA (adquirentes) em
+    `criar_lancamento_completo` + mensagem do `importar_duplicata`
+    (P2 do Greptile/GLM no PR #242). Fazer junto do #249 (mesma área).
+12. **#249** 🐛 mensagem de erro real é descartada quando criação falha
+    após importação (`duplicata_views.py:92` mostra aviso genérico).
+    Achado na revisão de release do bundle v1.0.12; pré-existente.
 
-## R9 — Segregação por usuário (a maior feature, ~2 semanas)
+## R9 — Segregação por usuário (a maior feature, ~2 semanas) — 🔥 ANTECIPADO (reordenação 30/09, aprovada pelo Hiure)
+
+> **Reordenação 30/09/2026:** R9 vira o próximo bloco de execução (antes de
+> R4–R8, que deslizam na sequência). Meta: mergear o #132 no develop e
+> lançar **tag v1.1.0** (GATE-LUANDRO segue obrigatório para a tag).
+> Decisão do Hiure no grupo Transistir_CadDomDev em 30/09 ("vamos trabalhar
+> em uma nova versão do sistema e ir para uma tag v1.1.0 que vai ser
+> resolvendo o PR https://github.com/transistir/CadeiaDominial/pull/133...
+> chame o opus para fazer uma revisão de compatibilidade com o develop
+> atual"). Aprovação da fila C1–C9 pelo Hiure em 01/10 ("Ok seguir").
+>
+> **EXCEÇÃO DE FILA R3/R3.5 (decorrente da reordenação aprovada pelo Hiure
+> em 30/09 — a proposta partiu dele):** R3 e R3.5 ficam **PAUSADOS** até
+> a release v1.1.0 (R9 antecipado). Itens abertos (#230/2b, #219, #212,
+> #114, #141, #149, #110, #223, #206, e os incorporados em 02/10 — #232,
+> #238, #240, #248, housekeeping R1) não bloqueiam o R9.
+> P1 de produção do R3 (#230, #223) podem furar a fila **caso a caso, com
+> aprovação explícita do Hiure registrada aqui**. Mesma lógica da EXCEÇÃO
+> #215 (não segurar blocos por pendência externa).
+> **ATUALIZAÇÃO 02/10 (decisão do Hiure): a pausa virou GELADEIRA
+> INDEFINIDA** — R3 e R3.5 não retomam automaticamente após a v1.1.0;
+> destravam só pelos critérios da seção R3 (dump fresco + revalidação
+> item a item + reordenação aprovada). A fila pós-v1.1.0 passa a ser
+> R4 → R5 → R6 → R7 (gateado) → R8 → R10 (plano estratégico, D1).
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
+   - **PR zumbi #133 AVALIADO (30/09)**: revisão de compatibilidade do
+     Opus 5.5 contra o develop atual (62 commits / v1.0.9→v1.0.12 desde o
+     merge-base 0d95b54f). Veredito: **reaproveitar via merge develop →
+     branch de integração** (rebase e reimplementação rejeitados).
+     Relatório completo: o original `/tmp/pr133-opus-review.md` foi perdido
+     na limpeza do /tmp; os achados estão consolidados no contrato
+     executável, versionado em `docs/produto-3/contratos/c3-c9-contrato-v110.md`
+     (mesma branch deste roadmap; cópia de trabalho em
+     `.hermes/plans/c3-c9-contrato.md` no worktree de integração) e serão
+     resumidos no PR #133.
+   - Achados que viram escopo de trabalho obrigatório:
+     - **15 arquivos em conflito** (6 mecânicos, 9 com decisão de negócio);
+       pior caso: `lancamento_criacao_service.py` e
+       `lancamento_origem_service.py` (develop reescreveu ambos).
+     - **8 vazamentos silenciosos (S1–S8)**: código NOVO do develop pós
+       merge-base que o `for_user` do PR não cobre, em regiões
+       auto-mergeadas — S5/S6 CRÍTICOS (escrita cross-tenant via #152 e
+       vínculo de documento de outra TI via #144/#229), S1 alto (XLS por TI
+       #179 sem escopo). Mitigação: commits S1–S8 em TDD + testes T1–T9 +
+       inventário de rotas (T8).
+     - **Migrations sem colisão** (0057→0061 em linha reta após 0056), mas
+       **0058 e 0060 irreversíveis** → `pg_dump` obrigatório antes do
+       migrate; runbook de go-live: não-superusers ficam trancados até ter
+       TI atribuída; grupos preexistentes viram "equipe" (auditar antes).
+     - Armadilha nginx: o `403 /media/documentos_digitais/` do develop
+       precisa SAIR (o `internal` + X-Accel-Redirect do PR substitui) senão
+       download de documento quebra.
+   - Esforço estimado (Opus): **~35–50h de agente** — Fases 1–6 no plano
+     do relatório.
    - A issue é de **levantamento e planejamento**: entrega o "plano de
      comportamento esperado", que deve ser **aprovado por luandro antes de
      abrir issues filhas de implementação** (corpo da #132, checklist).
-   - Semana 1: design de schema + middleware/filtros (Opus 5 no design)
-     → produzir o plano e submetê-lo a luandro.
-   - Semana 2: implementação gradual + testes de isolamento — **só inicia
-     com o plano aprovado**; sem aprovação, a implementação fica bloqueada
-     e o cronograma é revisto (revisão Codex 24/09).
-   - **Kickoff com luandro** — decisões de produto obrigatórias antes.
-   - **Antes do kickoff: avaliar o PR zumbi #133** (→#132, parado desde
-     09/08 — reaproveitar ou fechar; ver R1 item 6).
+     **Com a reordenação 30/09, o plano efetivo é o relatório de
+     compatibilidade do PR #133** (estratégia (a) + Fases 1–6 + D1–D6).
+   - **GATE-PRODUTO — evento (1) kickoff: decisões D1–D6 TOMADAS pelo
+     Hiure em 30/09/2026** (grupo Transistir_CadDomDev):
+     - **D1 — Granularidade de acesso = TI inteira.** Se o usuário tem
+       acesso a um imóvel, tem acesso a todos da mesma TI. O `for_user` do
+       PR já implementa isso (`terra_indigena_id__in=tis_atribuidas_ids`).
+       *(Implementação derivada — recomendação Opus, não decisão literal do
+       owner: o caso residual, cadeia cruzando para outra TI, é tratado
+       como "origem restrita" sem expor dados.)*
+     - **D2 — Acesso ao documento ⇒ pode editar/excluir** o lançamento
+       vinculado (inclusive documento compartilhado, #152/S6).
+       **Definição operacional (resolve ambiguidade apontada pelo Opus):**
+       "acesso ao documento" = documento visível via `documentos_for_user(user)`
+       (o imóvel dono do documento está em TI atribuída ao usuário); caso
+       contrário → 404. O teste de autorização é por DOCUMENTO, não por
+       "dono do imóvel". **S6 mantém teste TDD de negação cross-TI**
+       (usuário sem acesso NÃO edita/exclui).
+     - **D3 — `buscar_m_anterior` (#167/S2):** se o documento existe em
+       outra TI, informar "existe em outra TI" e orientar pedir acesso ao
+       admin — SEM doc_id, matrícula ou nome do imóvel de outra TI.
+     - **D4 — Só superuser edita cartório** (#210/S7): remoção/sincronização
+       de cartório vira operação exclusiva de superuser. *(Implementação
+       derivada — recomendação Opus: gatear no form e no admin de imóvel.)*
+     - **D5 — XLS por TI (#179/S1): TI inteira.** Exportação exige a TI
+       atribuída. *(Implementação derivada — recomendação Opus: sem
+       atribuição, 404.)*
+     - **D6 — Go-live com atribuição FINA por TI** antes de abrir o
+       sistema: sem equipe global provisória; runbook deve atribuir todas
+       as TIs aos usuários/equipes ANTES do deploy (não-superuser sem TI
+       atribuída fica trancado).
+   - **GATE-PRODUTO — evento (2) aprovação do plano: CONCLUÍDO em
+     01/10/2026.** Plano aprovado pelo **Hiure** no grupo
+     Transistir_CadDomDev ("Ok seguir", após status com a fila
+     C1–C9). Mapeamento do plano efetivo (contrato executável do Opus,
+     versionado em `docs/produto-3/contratos/c3-c9-contrato-v110.md`):
+     Fases 1–2 do relatório = **C1** (merge `6306fcca`) · arquitetura de
+     escopo = **C2** (`b4163140`) + hotfixes **C2a/C2b** (achados A1/A2 da
+     revisão do contrato) · D1 leitura = **C3** · D1 escrita = **C4** ·
+     D2/#152 = **C5** · D3/#167 = **C6** · D4/#210 = **C7** · D5/S1/#179 =
+     **C8** · S8+badge = **C9** · Fase 4 = adaptação de fixtures dos testes
+     do develop · Fase 5 = reviews (Opus + kiro-cli gpt-5.6-sol substituindo
+     Codex + agy) · Fase 6 = release. **Compatibilidade da Fase 5 com o gate
+     do AGENTS.md (Greptile P1, PR #250):** o gate de 3 modelos do AGENTS.md
+     exige Codex como revisor de runtime/sandbox; na Fase 5 o Codex está
+     INDISPONÍVEL (usage limit semanal 100% até 03/10) e o Hiure autorizou
+     explicitamente os substitutos em 01/10 ("utilize o kiro-cli e agy como
+     modelos auxiliares na falta do codex" — registrado em harness-state.yaml,
+     bloco `auxiliary:`). Regra efetiva da Fase 5: Opus APPROVE obrigatório +
+     kiro-cli gpt-5.6-sol e agy no papel do Codex; **se o Codex voltar a ter
+     cota antes do fim da Fase 5, ele reassume o papel** (os auxiliares não o
+     aposentam). O pre-merge gate do AGENTS.md permanece: nenhum merge sem
+     autorização humana explícita, com ou sem os 3 APPROVEs. Registro de delegação (Hiure, 01/10):
+     pendências de push passam pelo Jev — push+PR automáticos se
+     quality≥3.5 ∧ readiness≥0.6 ∧ gov-conflict≤0.3; merge/tag seguem
+     humanos.
+     *Origem das duas últimas linhas (review Opus 01/10, notas 3–4): ambas
+     são decisões literais do Hiure em 01/10 no grupo Transistir_CadDomDev
+     — reforço de harnesses ("utilize o kiro-cli e agy como modelos
+     auxiliares na falta do codex") e delegação do push ("o que estiver
+     pendende de ok passe pelo jev antes" + "sim quando o jev aprovar").
+     Registradas também em `~/.hermes/harness-state.yaml` (bloco
+     `auxiliary:` e `push_delegation`), que é a fonte de verdade de rotas.*
+   - Release: ao fim dos commits C1–C9 + Fase 4 + Fase 5 + validação no
+     test server (incl. T9: migrar 0056→0061 sobre dump de produção), PR
+     develop → main + tag **v1.1.0** com GATE-LUANDRO.
+   - **Status 02/10/2026 (confirmação do Hiure):** testes da v1.1.0
+     **ainda não terminaram** — o bloco segue aberto; nada do R10 entra
+     no escopo da tag.
+
+## R10 — Novas funcionalidades de fim de cadeia + UX (pedido Hiure 02/10/2026) — pós-v1.1.0
+
+> Bloco criado em 02/10/2026 com 4 funcionalidades novas pedidas pelo Hiure
+> no grupo Transistir_CadDomDev. **Não entra na v1.1.0** (escopo da tag
+> congelado, testes em andamento). Ordem sugerida: #252 → #251 (o export
+> consome o texto livre do "Outra") → #253 → #254; #253 depende do #232
+> (R3) para não propagar falso-negativo do filtro CRI. Todas são P/M,
+> mesmo domínio de código (fim de cadeia / autocomplete / badge da lista).
+> **Plano estratégico 02/10 (pedido do Hiure) — DECIDIDO:** a fila
+> pós-v1.1.0 é **R4 → R5 → R6 → R7 (se o gate abrir) → R8 → R10**
+> (decisão D1 do Hiure em 02/10: "pode ser primeiro do R4 ao R8"). O R10
+> portanto executa por ÚLTIMO entre os blocos planejados; a ordem interna
+> daqui (#252 → #251 → #253; #254 independente) segue valendo. Detalhes
+> (waves, releases sugeridas, riscos): `docs/produto-3/PLANO_ESTRATEGICO_POS_V110.md`.
+
+1. **#252** feat(fim-cadeia): opção "Outra" com texto livre na lista de
+   Estados do destacamento do patrimônio público — casos que não são
+   nenhum estado nem as opções cadastradas (coroa etc.). O campo
+   `sigla_patrimonio_publico` já aceita texto livre; falta a opção fixa
+   no select + validação + reexibição. *(Fazer antes do #251.)*
+2. **#251** feat(export): incluir fim de cadeia como elemento da cadeia
+   nas exportações (PDF/XLS) — hoje `get_cadeia_completa` pula os nós
+   sintéticos `is_fim_cadeia` (issue #146) e eles nunca saem nos exports.
+   *(Consome o texto livre do #252. O TDD do #251 cobre
+   `get_cadeia_completa` — o #240, que é da mesma área, segue NA
+   GELADEIRA do R3 e não entra aqui sem exceção aprovada — ver R3 item 14.)*
+3. **#253** feat(lançamento): campo Cartório da transmissão — excluir CRI
+   das sugestões/busca (na prática nunca é CRI, só tabelionato etc.) e
+   sugerir os últimos cartórios usados nesse campo (histórico, como o
+   campo de origem já faz). *(Depende do #232/R3 — falso-negativo de
+   `q_nome_cri()` viraria falso-positivo aqui; não regressar o #227 nos
+   campos de origem.)*
+4. **#254** feat(ui): badge "Parcialmente sem Origem" na lista de imóveis
+   — origens mistas (`sem_origem` + `origem_lidima` coexistindo na árvore
+   do imóvel). Hoje `StatusCadeiaService` (#174) exibe a pior classificação
+   ("Sem Origem") no caso misto. *(Estender #174 sem mudar os badges
+   existentes; respeitar escopo por usuário do #132.)*
 
 ---
 
@@ -459,6 +694,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
   de produto para redigir o plano; (2) **aprovação do plano** = evento que
   autoriza abrir as issues filhas e iniciar a implementação. Sem o evento
   (2), a Semana 2 do R9 não começa (mesma lógica do #150 no R7).
+  **Prática corrente (registrar 01/10):** na ausência do luandro, o
+  **Hiure decide o gate** (mesmo arranjo do GATE-LUANDRO para releases);
+  evento (1) = D1–D6 em 30/09; evento (2) = aprovação do plano C1–C9 em
+  01/10 ("Ok seguir") — ambos na seção R9. Gate CONCLUÍDO para o v1.1.0.
 - **EXCEÇÃO #215 (aprovada pelo Hiure em 23/09/2026):** o reparo dos dados
   de `Pessoas` (#215, R4 item 6) é gateado na validação do cliente, mas
   **NÃO bloqueia o fechamento do R4 nem o avanço para o R5**. Se o gate não
@@ -487,6 +726,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 - #215: inventário somente leitura (R1) → validação do cliente → reparo (R4)
 - PR zumbi #136 → #110 (R3); PR zumbi #133 → #132 (R9)
 - #202 F1–F3 (R3.5) ← PRD que distinga tabela × exportações
+- #252 → #251 (R10: o export do fim de cadeia consome o texto livre do "Outra")
+- #232 (R3) → #253 (R10): corrigir os falso-negativos de `q_nome_cri()`
+  antes de usá-lo como exclusão no campo de transmissão
+- #243 + #249 (R8) — mesma área (duplicata/criação atômica de lançamento)
+- **#240 (R3) fica na GELADEIRA** — NÃO vai junto do #251 (R10) apesar da
+  mesma área; o TDD do #251 cobre `get_cadeia_completa` (achado P2 do
+  PR #256). Exceção só com aprovação registrada no R3 item 14.
 
 ## Cronograma (sprints ~1 semana; replanejar ao fim de cada uma)
 
@@ -499,6 +745,19 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > PRD (fora do cronograma), R4 com #215 gateado. A partir do R4 a fila
 > desloca ~1 semana (GATE-CLIENTE: 21–25/09 → ~29/09–03/10).
 
+> **Atualizado 30/09–01/10 (reordenação R9 antecipado — cronograma abaixo
+> SUPERADO a partir da semana 28/09–02/10):** R9/v1.1.0 em execução desde
+> 30/09 (~35–50h de agente; C1+C2 commitados em 01/10). R3/R3.5 PAUSADOS
+> (ver EXCEÇÃO DE FILA na seção R9). R4–R8 deslizam para depois da v1.1.0;
+> replanejar datas ao fim da release.
+>
+> **Atualizado 02/10 (ampliação da fila):** 4 novas funcionalidades
+> (#251–#254) criam o bloco **R10**, executado depois da v1.1.0 (testes
+> da release ainda em andamento — confirmação do Hiure em 02/10); 8
+> issues órfãs de 29–30/09 incorporadas a R3 (#232, #238, #240, #248) e
+> R8 (#234, #235, #243, #249). Estimativa do R10: ~1 sprint (4 itens
+> P/M), a confirmar no replanejamento pós-release.
+
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
                  milestone seguem no housekeeping) + R2 #13/#179 XLS consolidado ✅
@@ -508,16 +767,11 @@ Sem 14/09–18/09  R3.5 hotfix #201 Fases 0+0b + #204 ✅ (12–13/09) · R3 #21
 Sem 21/09–25/09  R1 housekeeping (#187, milestone, #168/#201/#204/#210 ✅
                  fechadas 23/09, PR zumbi #103; inventário #215 em paralelo)
                  → R3 #218 → #144
-Sem 28/09–02/10  R3 (cont.) #219 → #212 → #114/#141/#149/#110 → R3.5 #206
-                 (revalidar + estimar; saída do bloco só com correção
-                 validada OU encerramento com evidência — ver R3.5 item 2)
-                 → início do R4 ~29/09–03/10 (+ disparar GATE-CLIENTE)
-Sem 05/10–09/10  R4 (cont.; #215 só com validação do cliente) / R5 #113 + #135
-Sem 12/10–16/10  R5/R6 multi-cadeia/navegação
-Sem 19/10–23/10  R6/R7 (se gate respondido) — senão R8
-Sem 26/10–30/10  R7/R8 débitos + certificação
-Sem 02/11–06/11  R8/R9 kickoff #132 (avaliar PR zumbi #133 antes)
-Sem 09/11–13/11  R9 (reserva)
+Sem 28/09–02/10  ⚠️ SUPERADO: R9 antecipado (v1.1.0/#132) — avaliação do
+                 PR #133 (30/09), D1–D6, merge C1 + escopo C2 (01/10)
+Sem 05/10→       R9/v1.1.0 (cont., ~35–50h): C3–C9 + fixtures + reviews
+                 + release (GATE-LUANDRO na tag)
+                 → resto de R3/R3.5 → R4–R8 replanejados
 ```
 
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
@@ -543,7 +797,46 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
 
-*Última atualização: 24/09/2026 (rodada 2, PR #221) — P2s do Codex
+*Última atualização: 09/10/2026 — ajuste aprovado pelo Hiure: **#271**
+(regressão do autocomplete/"memória" de Forma e Título da transmissão,
+causada pelo `autocomplete="off"` do #157/PR #158) enfileirada no **R4
+item 9** — não é P1 de produção; entra na fila pós-v1.1.0 (R4 faz parte
+da sequência do plano estratégico D1: R4 → R5 → ... ).*
+
+*Última atualização: 02/10/2026 (tarde) — **plano estratégico pós-v1.1.0
+aprovado na direção pelo Hiure** (`PLANO_ESTRATEGICO_POS_V110.md`, PR
+docs/roadmap-plano-estrategico): (D1) fila pós-release = **R4 → R5 → R6 →
+R7 (gateado) → R8 → R10**; (D2) **R3 na GELADEIRA** — correções manuais de
+cartórios feitas direto em produção sem entrar em commits/teste exigem
+revalidação item a item contra dump fresco antes de o bloco voltar à fila
+(R3.5 junto, confirmado pelo Hiure); (D3) **dump prod → test server** antes da
+validação da v1.1.0 (serve também ao T9). Waves e releases sugeridas
+(v1.2.0 R4 · v1.3.0 R5/R6 · v1.4.0 R8/R7 · v1.5.0 R10) no plano.*
+
+*02/10/2026 — ampliação da fila aprovada a pedido do
+Hiure: 4 novas funcionalidades (#251 exportar fim de cadeia, #252 opção
+"Outra" nos Estados do destacamento, #253 cartório da transmissão sem CRI
++ histórico, #254 badge "Parcialmente sem Origem") no bloco novo R10
+(pós-v1.1.0); 8 issues de 29–30/09 incorporadas a R3/R8. Testes da
+v1.1.0 seguem em andamento — R9 aberto até a validação terminar.*
+
+*30/09/2026 — reordenação aprovada pelo Hiure: R9
+antecipado, PR #133 avaliado e reaproveitado (relatório Opus 5.5), meta
+v1.1.0.*
+
+*30/09/2026 — **reordenação da fila aprovada pelo Hiure** (grupo
+Transistir_CadDomDev): R9 (#132, PR #133) antecipado para próximo bloco de
+execução, com meta de release **v1.1.0**; R4–R8 deslizam na sequência.
+PR zumbi #133 avaliado via revisão de compatibilidade Opus 5.5 (develop
++62 commits desde o merge-base): estratégia (a) merge develop → branch de
+integração; 15 conflitos, 8 vazamentos silenciosos S1–S8, migrations
+0058/0060 irreversíveis; esforço ~35–50h. GATE-PRODUTO evento (1)
+CONCLUÍDO: decisões D1–D6 tomadas pelo Hiure em 30/09 (granularidade TI,
+D2 acesso ao documento ⇒ edita/exclui, D3 informar existência em outra TI
+sem dados, D4 cartório só superuser, D5 XLS exige TI inteira, D6 atribuição
+fina antes do go-live).*
+
+*24/09/2026 (rodada 2, PR #221) — P2s do Codex
 connector + Greptile incorporados: consumidores da chave canônica
 documentados no escopo da regra M>T (tronco inicial sem doc do imóvel +
 modal de sequência, `ordenacao_cadeia.py`); responsável do gate #215

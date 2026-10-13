@@ -25,6 +25,7 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class Issue171ArvoreModalTest(TestCase):
@@ -36,6 +37,7 @@ class Issue171ArvoreModalTest(TestCase):
         cls.tis = TIs.objects.create(
             nome="TI Issue 171", codigo="TI-171", etnia="Teste"
         )
+        atribuir_tis(cls.user, cls.tis)
         cls.pessoa = Pessoas.objects.create(nome="Pessoa Issue 171")
         cls.cartorio = Cartorios.objects.create(
             nome="Cartório Issue 171",

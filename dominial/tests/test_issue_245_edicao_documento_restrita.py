@@ -22,6 +22,7 @@ from dominial.models import (
     TIs,
 )
 from dominial.services.documento_service import DocumentoService
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class Issue245EdicaoDocumentoRestritaTest(TestCase):
@@ -41,6 +42,7 @@ class Issue245EdicaoDocumentoRestritaTest(TestCase):
         self.user = User.objects.create_user(
             username='issue245', password='issue245pass',
         )
+        atribuir_tis(self.user, self.tis)
         self.imovel = Imovel.objects.create(
             terra_indigena_id=self.tis,
             nome='Imóvel 245',

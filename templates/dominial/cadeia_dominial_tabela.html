@@ -299,6 +299,9 @@
                                             </div>
                                         </div>
                                     {% endif %}
+                                    {% if item.origens_restritas %}
+                                        <div class="origem-restrita" data-origens-restritas="{{ item.origens_restritas }}">🔒 {{ item.mensagem_origem_restrita }}</div>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

@@ -25,6 +25,7 @@ from dominial.models import (
     Pessoas,
     TIs,
 )
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class TestIssue168TabSigla(TestCase):
@@ -60,6 +61,7 @@ class TestIssue168TabSigla(TestCase):
         usuario = get_user_model().objects.create_user(
             username="tester168", password="senha-168"
         )
+        atribuir_tis(usuario, self.tis)
         self.client.force_login(usuario)
 
         url = reverse(

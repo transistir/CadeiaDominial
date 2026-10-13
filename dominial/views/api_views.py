@@ -5,9 +5,13 @@ from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.core.management import call_command
 from django.db.models import Q
+import logging
 from ..models import Cartorios, Pessoas, Alteracoes, Imovel, TIs, Documento, Lancamento, DocumentoTipo, LancamentoTipo
+from ..managers import documentos_for_user, lancamentos_for_user
 from ..utils import normalizar_texto_opcional
+from ..utils.segregacao_utils import require_imovel_atribuido, MENSAGEM_SEM_ACESSO
 from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
+from ..utils.mensagens_erro import ERRO_INTERNO
 from ..utils.hierarquia_utils import (
     _selecionar_origem_contextual,
     obter_origens_resolvidas,
@@ -16,6 +20,8 @@ from ..utils.hierarquia_utils import (
 from ..services.lancamento_consulta_service import LancamentoConsultaService
 from ..services.cartorio_verificacao_service import CartorioVerificacaoService
 from ..services.keyword_alerta_service import buscar_keyword
+
+logger = logging.getLogger(__name__)
 from django.views.decorators.csrf import csrf_exempt
 from .cadeia_dominial_views import cadeia_dominial_tabela
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
@@ -89,6 +95,7 @@ def buscar_cartorios(request):
     return JsonResponse(cartorios_list, safe=False)
 
 @require_POST
+@login_required
 def verificar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
@@ -103,6 +110,7 @@ def verificar_cartorios_estado(request):
     return JsonResponse(resultado)
 
 @require_POST
+@login_required
 def importar_cartorios_estado(request):
     estado = request.POST.get('estado')
     if not estado:
@@ -179,9 +187,10 @@ def criar_cartorio(request):
             'error': 'Dados inválidos.'
         }, status=400)
     except Exception as e:
+        logger.exception('Erro ao criar cartório')
         return JsonResponse({
             'success': False,
-            'error': f'Erro ao criar cartório: {str(e)}'
+            'error': 'Erro ao criar cartório.'
         }, status=500)
 
 @login_required
@@ -196,7 +205,7 @@ def pessoas(request):
 
 @login_required
 def alteracoes(request):
-    documentos = Documento.objects.all().order_by('-data', '-id')
+    documentos = documentos_for_user(request.user).order_by('-data', '-id')
     return render(request, 'dominial/alteracoes.html', {'documentos': documentos})
 
 @login_required
@@ -212,7 +221,8 @@ def lancamentos(request):
     resultado = LancamentoConsultaService.filtrar_lancamentos(
         filtros=filtros,
         pagina=request.GET.get('page'),
-        itens_por_pagina=10
+        itens_por_pagina=10,
+        queryset_base=lancamentos_for_user(request.user)
     )
     
     # Obter tipos para os filtros
@@ -253,14 +263,23 @@ def escolher_origem_documento(request):
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
 
-        documento = Documento.objects.filter(pk=documento_id).first()
+        # Guard: imóvel do usuário na TI correta
+        if not Imovel.objects.for_user(request.user).filter(
+            pk=imovel_id, terra_indigena_id=tis_id
+        ).exists():
+            return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
+
+        # Documento vem do escopo do usuário (sem filtro por imóvel — documento compartilhado)
+        documento = documentos_for_user(request.user).filter(pk=documento_id).first()
         if documento is None:
             return JsonResponse({
                 'success': False,
                 'error': 'Documento não encontrado',
-            }, status=400)
+            }, status=404)
 
-        origens_resolvidas = obter_origens_resolvidas(documento)
+        origens_resolvidas = obter_origens_resolvidas(
+            documento, documentos_queryset=documentos_for_user(request.user)
+        )
         documento_origem = _selecionar_origem_contextual(
             [origem.documento for origem in origens_resolvidas],
             escolha_origem,
@@ -272,7 +291,6 @@ def escolher_origem_documento(request):
             }, status=400)
 
         escolha_canonica = serializar_identidade_origem(documento_origem)
-        
         # Salvar escolha na sessão
         session_key = f'origem_documento_{documento_id}'
         request.session[session_key] = escolha_canonica
@@ -292,9 +310,10 @@ def escolher_origem_documento(request):
             'error': 'JSON inválido'
         }, status=400)
     except Exception as e:
+        logger.exception('Erro ao escolher origem do documento')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 
@@ -318,13 +337,20 @@ def escolher_origem_lancamento(request):
                 'success': False,
                 'error': 'Parâmetros obrigatórios não fornecidos'
             }, status=400)
-        
+
+        if not lancamentos_for_user(request.user).filter(
+            id=lancamento_id,
+            documento__imovel_id=imovel_id,
+            documento__imovel__terra_indigena_id_id=tis_id,
+        ).exists():
+            return JsonResponse({'success': False, 'error': MENSAGEM_SEM_ACESSO}, status=404)
+
         # Salvar escolha na sessão
         session_key = f'origem_lancamento_{lancamento_id}'
         request.session[session_key] = origem_numero
         
         # Recarregar dados da cadeia dominial com a nova escolha
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         cadeia_data = service.get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
         
         return JsonResponse({
@@ -339,19 +365,21 @@ def escolher_origem_lancamento(request):
             'error': 'JSON inválido'
         }, status=400)
     except Exception as e:
+        logger.exception('Erro ao escolher origem do lançamento')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 @login_required
+@require_imovel_atribuido
 @require_http_methods(["GET"])
 def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
     """
     API para obter cadeia dominial atualizada com escolhas da sessão
     """
     try:
-        service = CadeiaDominialTabelaService()
+        service = CadeiaDominialTabelaService(user=request.user)
         
         # Extrair escolhas de origem da sessão
         escolhas_origem = {}
@@ -366,7 +394,7 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         else:
             # Se não há escolhas, usar o método simples (tronco principal)
             from ..models import Imovel
-            imovel = Imovel.objects.get(id=imovel_id)
+            imovel = Imovel.objects.for_user(request.user).get(id=imovel_id)
             cadeia_simples = service.obter_cadeia_tabela(imovel, escolhas_origem)
             cadeia_data = {'cadeia': cadeia_simples}
         
@@ -454,7 +482,9 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
                 'escolha_atual': item.get('escolha_atual'),
                 'is_compartilhado': item.get('is_compartilhado', False),
                 'grupo_importacao': item.get('grupo_importacao'),
-                'is_primeiro_grupo': item.get('is_primeiro_grupo', False)
+                'is_primeiro_grupo': item.get('is_primeiro_grupo', False),
+                'origens_restritas': item.get('origens_restritas', 0),
+                'mensagem_origem_restrita': item.get('mensagem_origem_restrita', ''),
             }
             
             cadeia_serializada.append(item_serializado)
@@ -465,11 +495,10 @@ def get_cadeia_dominial_atualizada(request, tis_id, imovel_id):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception('Erro ao atualizar cadeia dominial')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)
 
 @login_required
@@ -498,9 +527,8 @@ def limpar_escolhas_origem(request):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception('Erro ao limpar escolhas de origem')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': ERRO_INTERNO
         }, status=500)

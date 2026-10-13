@@ -25,6 +25,7 @@ from django.test import Client
 from django.urls import reverse
 
 from dominial.models import DocumentoImportado, Lancamento, LancamentoTipo
+from dominial.tests.segregacao_fixtures import atribuir_tis
 from dominial.tests.test_identidade_documento import IdentidadeDocumentoFixture
 
 
@@ -39,6 +40,8 @@ class ExcluirLancamentoCompartilhadoTest(IdentidadeDocumentoFixture):
         super().setUp()
         self.client = Client()
         self.client.login(username="excluilanc", password="excluilancpass")
+        # C5 (#132): sem TI, o user bate no guard de segregação (404).
+        atribuir_tis(self.user, self.ti)
 
         # Documento "dono" (imóvel 494) e o lançamento que a issue tentava excluir.
         self.imovel_dono = self.criar_imovel("494", self.cartorio_a, nome="Dono")

@@ -3,6 +3,8 @@ from django.db import transaction
 from ..models import Imovel, Cartorios
 from ..services.imovel_documento_service import ImovelDocumentoService
 from ..utils.documento_identidade_utils import normalizar_numero_documento
+from ..utils.segregacao_utils import MENSAGEM_CARTORIO_SO_SUPERUSER
+from ..managers import usuario_ve_tudo
 
 
 class ImovelForm(forms.ModelForm):
@@ -107,6 +109,10 @@ class ImovelForm(forms.ModelForm):
         self.cartorio_mudou = False
         if self.instance and self.instance.pk and cartorio:
             cartorio_mudou = cartorio.pk != self.instance.cartorio_id
+            # D4 (#132, C7): alteração de cartório restrita ao superuser
+            if cartorio_mudou and not usuario_ve_tudo(self.user):
+                self.add_error('cartorio', MENSAGEM_CARTORIO_SO_SUPERUSER)
+                return cleaned_data
             matricula_mudou = matricula is not None and matricula != self.instance.matricula
             tipo_mudou = (
                 tipo_documento_principal is not None
@@ -136,11 +142,14 @@ class ImovelForm(forms.ModelForm):
                 instance.save()
                 if getattr(self, 'cartorio_mudou', False):
                     self.sincronizacao_aviso = (
-                        ImovelDocumentoService.sincronizar_cartorio_documento_principal(instance)
+                        ImovelDocumentoService.sincronizar_cartorio_documento_principal(
+                            instance, user=self.user
+                        )
                     )
         return instance
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, **kwargs)
         
         # Preencher campos customizados

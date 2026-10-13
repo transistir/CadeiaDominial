@@ -18,6 +18,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -31,6 +32,7 @@ from dominial.models import (
 )
 from dominial.services.hierarquia_arvore_service import HierarquiaArvoreService
 from dominial.services.lancamento_documento_service import LancamentoDocumentoService
+from dominial.tests.segregacao_fixtures import atribuir_tis
 
 
 class Issue230Fixture:
@@ -57,6 +59,7 @@ class Issue230Fixture:
         cls.user = User.objects.create_user(
             username='issue230', password='issue230pass',
         )
+        atribuir_tis(cls.user, cls.tis)
 
     def criar_imovel(self, numero, tipo='matricula'):
         return Imovel.objects.create(
@@ -344,7 +347,9 @@ class IdentificarDocumentoPrincipalTranscricaoTest(Issue230Fixture, TestCase):
             folha='0',
         )
 
-        principal = HierarquiaArvoreService._identificar_documento_principal(imovel)
+        principal = HierarquiaArvoreService._identificar_documento_principal(
+            imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
 
         self.assertEqual(principal.id, doc_auto.id)
         self.assertEqual(principal.tipo.tipo, 'transcricao')
@@ -384,7 +389,9 @@ class IdentificarDocumentoPrincipalTranscricaoTest(Issue230Fixture, TestCase):
             cartorio=self.cartorio,
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel)
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
+            imovel, documentos_queryset=ESCOPO_GLOBAL,
+        )
 
         # (a) Conexão from=auto → to=t3858
         conexoes = arvore['conexoes']

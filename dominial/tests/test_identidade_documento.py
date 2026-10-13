@@ -22,6 +22,7 @@ from dominial.models import (
     LancamentoTipo,
     Pessoas,
     TIs,
+    UserImovel,
 )
 from dominial.services.documento_identidade_service import DocumentoIdentidadeService
 from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
@@ -34,6 +35,7 @@ from dominial.utils.documento_identidade_utils import (
     DocumentoIdentidade,
     normalizar_numero_documento,
 )
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.utils.hierarquia_utils import (
     identificar_documentos_importados,
     identificar_tronco_principal,
@@ -141,6 +143,11 @@ class IdentidadeDocumentoFixture(TestCase):
             tipo_documento_principal=tipo,
             cartorio=cartorio,
         )
+
+    def atribuir_imovel(self, imovel, user):
+        """Torna o imóvel visível ao usuário sob a segregação da issue #132."""
+        UserImovel.objects.create(user=user, imovel=imovel)
+        return imovel
 
     def criar_documento(self, imovel, tipo, numero, cartorio):
         return Documento.objects.create(
@@ -631,6 +638,7 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
             "M123",
             imovel_b,
             cartorio_origem=self.cartorio_b,
+            documentos_queryset=Documento.objects.all(),
         )
 
         self.assertEqual(len(origens), 1)
@@ -645,6 +653,7 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
             "M123",
             imovel,
             cartorio_origem=None,
+            documentos_queryset=Documento.objects.all(),
         )
 
         self.assertEqual(origens, [])
@@ -670,6 +679,7 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
             "M123",
             imovel_a,
             cartorio_origem=self.cartorio_a,
+            documentos_queryset=Documento.objects.all(),
         )
 
         self.assertEqual(len(origens), 1)
@@ -683,6 +693,7 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
             "T123",
             imovel,
             cartorio_origem=self.cartorio_a,
+            documentos_queryset=Documento.objects.all(),
         )
 
         self.assertEqual(origens, [])
@@ -720,7 +731,7 @@ class OrigensDisponiveisTabelaTest(IdentidadeDocumentoFixture):
             )
         ])
 
-        cadeia = CadeiaDominialTabelaService()._expandir_tronco_com_importados(
+        cadeia = CadeiaDominialTabelaService(documentos_queryset=Documento.objects.all())._expandir_tronco_com_importados(
             imovel_atual,
             [documento_atual],
         )
@@ -741,8 +752,7 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.cartorio_a,
         )
 
-        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(
-            origem="M123",
+        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(documentos_queryset=Documento.objects.all(), origem="M123",
             cartorio_id=self.cartorio_b.pk,
             imovel_atual_id=imovel_atual.pk,
         )
@@ -759,8 +769,7 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.cartorio_a,
         )
 
-        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(
-            origem="M123",
+        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(documentos_queryset=Documento.objects.all(), origem="M123",
             cartorio_id=self.cartorio_a.pk,
             imovel_atual_id=imovel_atual.pk,
         )
@@ -769,8 +778,7 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
         self.assertEqual(resultado["documento_origem"].pk, documento.pk)
 
         resultado_transcricao = (
-            DuplicataVerificacaoService.verificar_duplicata_origem(
-                origem="T123",
+            DuplicataVerificacaoService.verificar_duplicata_origem(documentos_queryset=Documento.objects.all(), origem="T123",
                 cartorio_id=self.cartorio_a.pk,
                 imovel_atual_id=imovel_atual.pk,
             )
@@ -794,8 +802,7 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.cartorio_a,
         )
 
-        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(
-            origem="123",
+        resultado = DuplicataVerificacaoService.verificar_duplicata_origem(documentos_queryset=Documento.objects.all(), origem="123",
             cartorio_id=self.cartorio_a.pk,
             imovel_atual_id=imovel_atual.pk,
         )
@@ -838,6 +845,7 @@ class DuplicataIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
 
         documentos = DuplicataVerificacaoService.calcular_documentos_importaveis(
             documento_atual,
+            documentos_queryset=Documento.objects.all(),
         )
 
         self.assertIn(documento_b, documentos)
@@ -890,11 +898,7 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
             ],
         )
 
-        LancamentoOrigemService.processar_origens_automaticas(
-            lancamento,
-            lancamento.origem,
-            imovel,
-        )
+        LancamentoOrigemService.processar_origens_automaticas(lancamento, lancamento.origem, imovel, documentos_queryset=Documento.objects.all())
 
         documento_m = Documento.objects.get(
             tipo=self.tipo_matricula,
@@ -932,11 +936,7 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
             ],
         )
 
-        LancamentoOrigemService.processar_origens_automaticas(
-            lancamento,
-            lancamento.origem,
-            imovel,
-        )
+        LancamentoOrigemService.processar_origens_automaticas(lancamento, lancamento.origem, imovel, documentos_queryset=Documento.objects.all())
 
         documentos = Documento.objects.filter(
             numero_normalizado__in=("303", "404"),
@@ -971,11 +971,7 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
         )
         Lancamento.objects.bulk_create([lancamento])
 
-        LancamentoOrigemService.processar_origens_automaticas(
-            lancamento,
-            lancamento.origem,
-            imovel,
-        )
+        LancamentoOrigemService.processar_origens_automaticas(lancamento, lancamento.origem, imovel, documentos_queryset=Documento.objects.all())
 
         documento_a.refresh_from_db()
         documento_b = Documento.objects.get(
@@ -1011,11 +1007,7 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
         )
         Lancamento.objects.bulk_create([lancamento])
 
-        LancamentoOrigemService.processar_origens_automaticas(
-            lancamento,
-            lancamento.origem,
-            imovel,
-        )
+        LancamentoOrigemService.processar_origens_automaticas(lancamento, lancamento.origem, imovel, documentos_queryset=Documento.objects.all())
 
         candidatos = Documento.objects.filter(
             tipo=self.tipo_matricula,
@@ -1053,11 +1045,7 @@ class CriacaoAutomaticaOrigemTest(IdentidadeDocumentoFixture):
         )
         Lancamento.objects.bulk_create([lancamento])
 
-        LancamentoOrigemService.processar_origens_automaticas(
-            lancamento,
-            lancamento.origem,
-            imovel,
-        )
+        LancamentoOrigemService.processar_origens_automaticas(lancamento, lancamento.origem, imovel, documentos_queryset=Documento.objects.all())
 
         documento_a.refresh_from_db()
         self.assertEqual(documento_a.cartorio_id, self.cartorio_a.pk)
@@ -1101,11 +1089,7 @@ class HierarquiaOrigemIdentidadeTest(IdentidadeDocumentoFixture):
             cartorio_origem=self.cartorio_b,
         )
 
-        origem = HierarquiaOrigemService._processar_origem_individual(
-            imovel,
-            lancamento,
-            {"tipo": "matricula", "numero": "M123"},
-        )
+        origem = HierarquiaOrigemService._processar_origem_individual(imovel, lancamento, {"tipo": "matricula", "numero": "M123"}, documentos_queryset=Documento.objects.all())
 
         self.assertEqual(origem["documento_id"], documento_b.pk)
         self.assertNotEqual(origem["documento_id"], documento_a.pk)
@@ -1133,12 +1117,7 @@ class HierarquiaOrigemIdentidadeTest(IdentidadeDocumentoFixture):
             cartorio_origem=self.cartorio_b,
         )
 
-        origem = HierarquiaOrigemService._processar_origem_individual(
-            imovel,
-            lancamento,
-            {"tipo": "matricula", "numero": "M123"},
-            criar_documentos_automaticos=True,
-        )
+        origem = HierarquiaOrigemService._processar_origem_individual(imovel, lancamento, {"tipo": "matricula", "numero": "M123"}, criar_documentos_automaticos=True, documentos_queryset=Documento.objects.all())
 
         documento_a.refresh_from_db()
         documento_b = Documento.objects.get(pk=origem["documento_id"])
@@ -1233,6 +1212,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             documento_atual,
             imovel,
             criar_documentos_automaticos=False,
+            documentos_queryset=ESCOPO_GLOBAL,
         )
 
         self.assertIn(documento_b, pais)
@@ -1280,9 +1260,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             ]
         )
 
-        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(
-            imovel_atual,
-        )
+        arvore = HierarquiaArvoreService.construir_arvore_cadeia_dominial(imovel_atual, documentos_queryset=Documento.objects.all())
 
         self.assertEqual(
             {(conexao["from"], conexao["to"]) for conexao in arvore["conexoes"]},
@@ -1309,7 +1287,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.criar_cenario_homonimos()
         )
 
-        origens = CadeiaCompletaService()._expandir_todas_origens_documento(
+        origens = CadeiaCompletaService(documentos_queryset=Documento.objects.all())._expandir_todas_origens_documento(
             documento_atual,
         )
 
@@ -1319,7 +1297,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
     def test_ct18_documentos_importados_usam_identidade_e_id_processado(self):
         imovel, _, documento_a, documento_b = self.criar_cenario_homonimos()
 
-        importados = identificar_documentos_importados(imovel)
+        importados = identificar_documentos_importados(imovel, documentos_queryset=Documento.objects.all())
 
         self.assertIn(documento_b, importados)
         self.assertNotIn(documento_a, importados)
@@ -1329,7 +1307,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.criar_cenario_homonimos()
         )
 
-        tronco = identificar_tronco_principal(imovel)
+        tronco = identificar_tronco_principal(imovel, documentos_queryset=Documento.objects.all())
 
         self.assertEqual(tronco[0], documento_atual)
         self.assertIn(documento_b, tronco)
@@ -1340,7 +1318,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.criar_cenario_cr05(criar_origem_b_primeiro=False)
         )
 
-        tronco = identificar_tronco_principal(imovel)
+        tronco = identificar_tronco_principal(imovel, documentos_queryset=Documento.objects.all())
 
         self.assertEqual(tronco, [documento_atual, documento_b])
         self.assertNotIn(documento_a, tronco)
@@ -1350,10 +1328,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.criar_cenario_cr05(criar_origem_b_primeiro=True)
         )
 
-        tronco = identificar_tronco_principal(
-            imovel,
-            {str(documento_atual.pk): "M123"},
-        )
+        tronco = identificar_tronco_principal(imovel, {str(documento_atual.pk): "M123"}, documentos_queryset=Documento.objects.all())
 
         self.assertEqual(tronco, [documento_atual, documento_b])
         self.assertNotIn(documento_a, tronco)
@@ -1373,10 +1348,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             self.cartorio_a,
         )
 
-        tronco = identificar_tronco_principal(
-            imovel,
-            {str(documento_atual.pk): "M123"},
-        )
+        tronco = identificar_tronco_principal(imovel, {str(documento_atual.pk): "M123"}, documentos_queryset=Documento.objects.all())
 
         self.assertEqual(tronco, [documento_atual])
 
@@ -1413,9 +1385,7 @@ class ArvoreIdentidadeDocumentoTest(IdentidadeDocumentoFixture):
             )
         ])
 
-        cadeia = DuplicataVerificacaoService.obter_cadeia_dominial_origem(
-            documento_atual,
-        )
+        cadeia = DuplicataVerificacaoService.obter_cadeia_dominial_origem(documento_atual, documentos_queryset=Documento.objects.all())
         documentos = [item["documento"] for item in cadeia]
 
         self.assertIn(documento_atual, documentos)

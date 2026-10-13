@@ -354,6 +354,11 @@ function criarConteudoLancamentos(item) {
         `;
     }
     
+    // D1 (#132): origem em TI não atribuída — só o aviso, sem dados dela.
+    if (item.origens_restritas) {
+        lancamentosHtml += `<div class="origem-restrita" data-origens-restritas="${item.origens_restritas}">🔒 ${item.mensagem_origem_restrita}</div>`;
+    }
+    
     lancamentosHtml += `
         </div>
     `;

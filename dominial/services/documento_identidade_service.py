@@ -34,11 +34,17 @@ class DocumentoIdentidadeService:
     """Localiza documentos sem reduzir sua identidade ao número."""
 
     @staticmethod
-    def resolver(identidade: DocumentoIdentidade) -> ResultadoResolucaoDocumento:
+    def resolver(
+        identidade: DocumentoIdentidade,
+        queryset=None,
+    ) -> ResultadoResolucaoDocumento:
         if not isinstance(identidade, DocumentoIdentidade):
             raise TypeError('A resolução exige um DocumentoIdentidade completo.')
 
-        candidatos_banco = tuple(Documento.objects.filter(
+        if queryset is None:
+            queryset = Documento.objects
+
+        candidatos_banco = tuple(queryset.filter(
             tipo__tipo=identidade.tipo,
             cartorio_id=identidade.cartorio_id,
             numero_normalizado=identidade.numero_normalizado,
@@ -85,11 +91,17 @@ class DocumentoIdentidadeService:
         )
 
     @staticmethod
-    def resolver_por_dados(tipo, numero, cartorio_id) -> ResultadoResolucaoDocumento:
+    def resolver_por_dados(
+        tipo,
+        numero,
+        cartorio_id,
+        queryset=None,
+    ) -> ResultadoResolucaoDocumento:
         return DocumentoIdentidadeService.resolver(
             DocumentoIdentidade(
                 tipo=tipo,
                 numero_normalizado=numero,
                 cartorio_id=cartorio_id,
-            )
+            ),
+            queryset=queryset,
         )

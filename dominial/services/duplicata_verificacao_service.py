@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db.models import Q
 from typing import Dict, List, Optional, Any
 from ..models import Documento, DocumentoImportado, Lancamento
+from ..managers import documentos_for_user
 from .documento_identidade_service import DocumentoIdentidadeService
 from .lancamento_origem_leitura_service import LancamentoOrigemLeituraService
 from ..utils.documento_identidade_utils import DocumentoIdentidade
@@ -40,12 +41,17 @@ class DuplicataVerificacaoService:
         return None
 
     @staticmethod
-    def _resolver_documento(codigo, cartorio_id):
+    def _resolver_documento(codigo, cartorio_id, documentos_queryset=None):
         """
         Resolve um documento pela identidade completa (tipo, número normalizado
         e cartório), nunca por número isolado. Sem cartório, com tipo
         incompatível ou com identidade ambígua, não seleciona nenhum documento.
         """
+        if documentos_queryset is None:
+            raise TypeError(
+                'DuplicataVerificacaoService._resolver_documento exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
         if not codigo or not cartorio_id:
             return None
         tipo = DuplicataVerificacaoService._tipo_do_codigo(codigo)
@@ -55,11 +61,20 @@ class DuplicataVerificacaoService:
             identidade = DocumentoIdentidade(tipo, codigo, cartorio_id)
         except (TypeError, ValueError):
             return None
-        resultado = DocumentoIdentidadeService.resolver(identidade)
+        resultado = DocumentoIdentidadeService.resolver(
+            identidade,
+            queryset=documentos_queryset,
+        )
         return resultado.documento if resultado.status == 'encontrado' else None
 
     @staticmethod
-    def verificar_duplicata_origem(origem: str, cartorio_id: int, imovel_atual_id: int) -> Dict[str, Any]:
+    def verificar_duplicata_origem(
+        origem: str,
+        cartorio_id: int,
+        imovel_atual_id: int,
+        user=None,
+        documentos_queryset=None,
+    ) -> Dict[str, Any]:
         """
         Verifica se uma origem/cartório já existe em outras cadeias dominiais.
 
@@ -67,48 +82,96 @@ class DuplicataVerificacaoService:
             origem: Número da origem/documento
             cartorio_id: ID do cartório
             imovel_atual_id: ID do imóvel atual (para excluir da busca)
+            user: Usuário para escopo (opcional se documentos_queryset fornecido)
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
 
         Returns:
             Dict com informações sobre a duplicata encontrada ou None
         """
+        # C2: escopo obrigatório (verificado ANTES do feature flag para que a
+        # assinatura seja sempre respeitada)
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+
         if not getattr(settings, 'DUPLICATA_VERIFICACAO_ENABLED', False):
             return {'tem_duplicata': False}
 
-        # Resolver documento pela identidade completa (tipo, número e cartório)
-        documento_existente = DuplicataVerificacaoService._resolver_documento(origem, cartorio_id)
+        documentos_fora_do_imovel = documentos_queryset.exclude(
+            imovel_id=imovel_atual_id
+        )
 
-        if not documento_existente or documento_existente.imovel_id == imovel_atual_id:
+        # Resolver somente dentro do escopo visível do usuário. O imóvel atual
+        # é excluído antes da resolução para que sua própria identidade não
+        # mascare uma duplicata acessível.
+        documento_existente = DuplicataVerificacaoService._resolver_documento(
+            origem,
+            cartorio_id,
+            documentos_fora_do_imovel,
+        )
+
+        if not documento_existente:
+            # A existência global só é consultada para impedir que uma origem
+            # inacessível seja tratada como livre. Nenhum objeto, ID ou dado do
+            # outro imóvel é devolvido ao chamador.
+            conflito_global = DuplicataVerificacaoService._resolver_documento(
+                origem,
+                cartorio_id,
+                Documento.objects.exclude(imovel_id=imovel_atual_id),
+            )
+            if conflito_global:
+                return {
+                    'tem_duplicata': True,
+                    'acessivel': False,
+                    'mensagem': 'Origem e cartório já cadastrados, mas indisponíveis para este usuário.',
+                }
             return {'tem_duplicata': False}
 
         # Calcular documentos importáveis
         documentos_importaveis = DuplicataVerificacaoService.calcular_documentos_importaveis(
-            documento_existente
+            documento_existente,
+            documentos_queryset=documentos_queryset,
         )
         
         # Obter cadeia dominial
         cadeia_dominial = DuplicataVerificacaoService.obter_cadeia_dominial_origem(
-            documento_existente
+            documento_existente,
+            documentos_queryset=documentos_queryset,
         )
         
         return {
             'tem_duplicata': True,
+            'acessivel': True,
             'documento_origem': documento_existente,
             'documentos_importaveis': documentos_importaveis,
             'cadeia_dominial': cadeia_dominial
         }
     
     @staticmethod
-    def calcular_documentos_importaveis(documento_origem: Documento) -> List[Documento]:
+    def calcular_documentos_importaveis(
+        documento_origem: Documento,
+        user=None,
+        documentos_queryset=None,
+    ) -> List[Documento]:
         """
         Calcula quais documentos podem ser importados a partir de um documento origem.
         Busca recursivamente toda a cadeia dominial (documentos que são origem deste documento).
         
         Args:
             documento_origem: Documento de origem para calcular importáveis
+            user: Usuário para escopo (opcional se documentos_queryset fornecido)
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
             
         Returns:
             Lista de documentos que podem ser importados (incluindo toda a cadeia dominial)
         """
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+
         documentos_importaveis = []
         documentos_processados = set()  # Para evitar loops infinitos
         
@@ -127,7 +190,9 @@ class DuplicataVerificacaoService:
                     # Resolver documento de origem pela identidade completa
                     # (tipo, número normalizado e cartório de cada origem)
                     documento_anterior = DuplicataVerificacaoService._resolver_documento(
-                        origem.codigo, origem.cartorio_id
+                        origem.codigo,
+                        origem.cartorio_id,
+                        documentos_queryset,
                     )
 
                     if documento_anterior:
@@ -146,17 +211,29 @@ class DuplicataVerificacaoService:
         return documentos_importaveis
     
     @staticmethod
-    def obter_cadeia_dominial_origem(documento_origem: Documento) -> List[Dict[str, Any]]:
+    def obter_cadeia_dominial_origem(
+        documento_origem: Documento,
+        user=None,
+        documentos_queryset=None,
+    ) -> List[Dict[str, Any]]:
         """
         Obtém informações completas da cadeia dominial de um documento origem.
         Busca recursivamente todos os documentos da cadeia.
         
         Args:
             documento_origem: Documento de origem
+            user: Usuário para escopo (opcional se documentos_queryset fornecido)
+            documentos_queryset: QuerySet de documentos para escopo (obrigatório, C2)
             
         Returns:
             Lista com informações da cadeia dominial completa
         """
+        # C2: escopo obrigatório
+        from ..managers import escopo_documentos
+        documentos_queryset = escopo_documentos(
+            user=user, documentos_queryset=documentos_queryset
+        )
+
         cadeia = []
         documentos_processados = set()  # Para evitar loops infinitos
         
@@ -181,7 +258,9 @@ class DuplicataVerificacaoService:
                 for origem in LancamentoOrigemLeituraService.obter_origens(lancamento):
                     # Resolver documento de origem pela identidade completa
                     documento_anterior = DuplicataVerificacaoService._resolver_documento(
-                        origem.codigo, origem.cartorio_id
+                        origem.codigo,
+                        origem.cartorio_id,
+                        documentos_queryset,
                     )
 
                     if documento_anterior and documento_anterior.id not in documentos_processados:
@@ -194,7 +273,11 @@ class DuplicataVerificacaoService:
         return cadeia
     
     @staticmethod
-    def verificar_performance_consulta(origem: str, cartorio_id: int) -> Dict[str, Any]:
+    def verificar_performance_consulta(
+        origem: str,
+        cartorio_id: int,
+        user=None,
+    ) -> Dict[str, Any]:
         """
         Verifica a performance da consulta de duplicatas.
         Útil para monitoramento e otimização.
@@ -212,7 +295,7 @@ class DuplicataVerificacaoService:
         
         # Executar consulta
         resultado = DuplicataVerificacaoService.verificar_duplicata_origem(
-            origem, cartorio_id, 0  # imovel_id=0 para teste
+            origem, cartorio_id, 0, user=user  # imovel_id=0 para teste
         )
         
         tempo_execucao = time.time() - inicio
