@@ -219,9 +219,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    `tipo_documento_principal`. Efeitos: form de lançamento abre na matrícula
    errada, árvore não resolve o documento principal. Reparo do 691 é MANUAL
    pelo usuário (regra 26/09 — sem script em produção). Inclui #114 (FK
-   cartório não-nullable no mesmo método). **EM EXECUÇÃO 29/09** (worktree
-   `worktrees/issue-230-doc-auto-transcricao`; Opus 5.5 plan + qwen3.7-max
-   impl (rota nova Hiure 29/09) + Opus/Codex review).
+   cartório não-nullable no mesmo método). ✅ **CONCLUÍDO 30/09** — PR #239
+   (squash em develop; #230 e #114 fechadas no GitHub em 30/09). Evidência
+   histórica do estado "EM EXECUÇÃO 29/09": worktree
+   `worktrees/issue-230-doc-auto-transcricao` (Opus 5.5 plan + qwen3.7-max
+   impl + Opus/Codex review).
 3. **#219** 🐛 validação: início de matrícula aceita a própria matrícula/
    transcrição como origem (auto-loop). Ponto de correção:
    `_sincronizar_origens_estruturadas` (identidade tipo + número normalizado
@@ -232,7 +234,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    `Documento.numero`/`tipo` — mesma classe do #210; o padrão de correção
    já existe no `ImovelDocumentoService`. P2: edição administrativa rara (o
    precedente #210 era cartório, edição comum).
-5. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
+5. **#114** ✅ `criar_documento_matricula_automatico` permite cartório None —
+   **CONCLUÍDO 30/09** junto do #230 (PR #239).
 6. **#141** 🐛 tratar IntegrityError (duplicidade canônica) em criar/editar.
 7. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
 8. **#110** levantar cartórios fantasmas + plano de merge (data quality —

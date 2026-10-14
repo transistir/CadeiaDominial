@@ -98,7 +98,11 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 - **React Flow / v2** (outro contrato): #61–#72 — cliente aceitou o D3.
 - **Produto 4 — manutenção/infra:** #197 (disco/prune) · #198 (cache de estáticos) · #199 (alerta de deploy) · #257 (nginx do test server).
 - **Dados em produção (não é código):** #110 (levantamento de cartórios) · #135 · #215 (reparo de `Pessoas` — correção manual do usuário).
-- **Gate do cliente:** #150 e #151 (`pendente-analise-cliente`) — gate do R7.
+- **Gate do cliente — R7 (condicional, fora dos 40):** **#150** é *planejamento*
+  (pode gerar issues filhas de migração depois de aprovado) e **#151 é
+  implementação Django** (avisar/exigir arquivamento quando a origem referencia
+  documento de imóvel ativo). Os dois dependem do GATE-CLIENTE; se ele abrir,
+  viram **trabalho adicional** — ver seção 6.
 
 ## 5. Contagem (snapshot 14/10/2026)
 
@@ -126,7 +130,10 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
    fora do corte). Enquanto isso não for resolvido, decidir entre antecipar o
    levantamento **read-only** do #110 junto do dump do R3 ou postergar o
    #113/#135 — as duas opções estão no plano estratégico (Wave 3).
-3. **R7** — só se o GATE-CLIENTE (#150/#151) abrir; sem resposta, **R8 entra no lugar**.
+3. **R7 — condicional, fora dos 40** — só se o GATE-CLIENTE (#150/#151) abrir;
+   sem resposta, **R8 entra no lugar**. Se abrir: o **#151 é implementação
+   Django** e o **#150 pode gerar issues filhas** de migração — reservar **~1–2
+   sprints adicionais**, que **não** estão na estimativa abaixo.
 4. **R8 (9)** — 1–1,5 sprint (agrupar #196+#235 e #243+#249) → **v1.4.0**.
 5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**).
    ⚠️ **Condicional:** o **#253** depende do **#232**, que é item do **R3
