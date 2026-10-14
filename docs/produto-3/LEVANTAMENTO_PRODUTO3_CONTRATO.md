@@ -31,15 +31,18 @@ cronograma o produto está.
 
 ## 2. Feito — 31 issues fechadas de 01/09 a 13/10 (6 releases)
 
-> Além das 31 issues fechadas, entraram **fases** de issues que **continuam
-> abertas**: **#144** (fases 1–2) e **#213** (fase 1). Elas não entram na
-> contagem de fechadas — o restante está na seção 3 (R3/R4).
+> A tabela enumera **9 (cadeia) + 16 (lançamento) + 5 (export) + 1 (CI) + 1
+> (multi-usuário) = 31 issues fechadas** de 01/09 a 13/10. Além delas, entraram
+> **fases** de issues que **seguem abertas**: **#144** (fases 1–2) e **#213**
+> (fase 1) — nenhuma das duas é contada como fechada; o restante está na seção
+> 3 (R3/R4).
 
 | Área | Issues |
 |---|---|
 | Cadeia / árvore | #145 · #167 · #171 · #172 · #174 · #201 (Fases 0+0b) · #218 · #229 · #230 |
 | Lançamento / formulário | #114 · #152 · #157 · #159 · #160 · #161 · #162 · #168 · #187 · #210 · #213 (fase 1) · #227 · #241 · #244 · #245 · #246 |
 | Export PDF / XLS | #13 · #166 · #179 · #193 · #204 |
+| Infra / CI | #108 (deploy sincronizado com squash merge) |
 | Multi-usuário | #132 / PR #133 — segregação de dados por usuário (C1–C9, 154 arquivos, +24.339/−911, suíte 1109 testes) |
 
 - **Releases:** v1.0.8 (01/09) · v1.0.9 (10/09) · v1.0.10 (12/09) · v1.0.11 (20/09) · v1.0.12 (30/09) · **v1.1.0 (13/10, deploy de produção success; #132 fechada)**.
