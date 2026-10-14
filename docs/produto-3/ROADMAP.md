@@ -533,7 +533,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
     após importação (`duplicata_views.py:92` mostra aviso genérico).
     Achado na revisão de release do bundle v1.0.12; pré-existente.
 
-## R9 — Segregação por usuário (a maior feature, ~2 semanas) — 🔥 ANTECIPADO (reordenação 30/09, aprovada pelo Hiure)
+## R9 — Segregação por usuário (a maior feature, ~2 semanas) — ✅ CONCLUÍDO 13/10/2026 (v1.1.0 em produção)
 
 > **Reordenação 30/09/2026:** R9 vira o próximo bloco de execução (antes de
 > R4–R8, que deslizam na sequência). Meta: mergear o #132 no develop e
@@ -657,9 +657,14 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    - Release: ao fim dos commits C1–C9 + Fase 4 + Fase 5 + validação no
      test server (incl. T9: migrar 0056→0061 sobre dump de produção), PR
      develop → main + tag **v1.1.0** com GATE-LUANDRO.
-   - **Status 02/10/2026 (confirmação do Hiure):** testes da v1.1.0
-     **ainda não terminaram** — o bloco segue aberto; nada do R10 entra
-     no escopo da tag.
+   - **Status 13/10/2026 — BLOCO CONCLUÍDO:** a v1.1.0 está **em produção**
+     (PR #133 mergeado, tag `v1.1.0`, deploy de produção success em
+     13/10 20:42 UTC; **#132 fechada na tag**). Os testes do gate estreito
+     terminaram em 08/10 (PR #268) e o GATE-LUANDRO foi autorizado pelo
+     Hiure em 13/10. Nada do R10 entrou no escopo da tag (escopo
+     congelado) — **o R9 está encerrado e a fila segue para o R4** (plano
+     estratégico D1). *(Status anterior, 02/10: testes ainda em andamento,
+     bloco aberto — superado por esta atualização.)*
 
 ## R10 — Novas funcionalidades de fim de cadeia + UX (pedido Hiure 02/10/2026) — pós-v1.1.0
 
@@ -818,13 +823,16 @@ do Django estabilizar. #1 segue aberta como guarda-chuva.
 ---
 
 *Última atualização: 14/10/2026 — **levantamento do Produto 3 contra o
-contrato FADESP 019/2026** (`LEVANTAMENTO_PRODUTO3_CONTRATO.md`, PR docs):
-escopo delimitado a código Django/D3 (fora: FUNAPE Fase 3, React Flow/v2 —
-D3 aceito pelo cliente — e Produto 4/manutenção); 40 issues de código
-abertas, distribuídas em 5 sprints (v1.2.0 = bugs de produção + R4 + R10;
-v1.3.0 = R5/R6 + R8). Enfileiradas **#270** (R4 item 10), **#267** (R3 item
-16) e **#266** (R3 item 17). Registrado também o **v1.1.0 em produção
-(13/10)** e o fechamento do bloco R9.*
+contrato FADESP 019/2026** (`LEVANTAMENTO_PRODUTO3_CONTRATO.md`, PR #273):
+escopo delimitado pelo Hiure a código Django/D3 (fora: FUNAPE Fase 3,
+React Flow/v2 — D3 aceito pelo cliente — e Produto 4/manutenção); 40
+issues de código abertas, com o mapa por bloco e as condições de gate no
+documento. Enfileiradas **#270** (R4 item 10), **#267** (R3 item 16) e
+**#266** (R3 item 17) — autorização de 14/10. **A ordem aprovada da fila
+não muda** (R4 → R5 → R6 → R7 → R8 → R10 — plano estratégico D1); o
+documento não reordena blocos nem antecipa releases. Registrado também o
+**v1.1.0 em produção (13/10)** e o fechamento do bloco R9 (status
+atualizado na seção R9).*
 
 *Última atualização: 09/10/2026 — ajuste aprovado pelo Hiure: **#271**
 (regressão do autocomplete/"memória" de Forma e Título da transmissão,

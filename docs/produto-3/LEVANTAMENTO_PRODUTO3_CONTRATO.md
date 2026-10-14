@@ -4,6 +4,9 @@
 > **código Django/D3 do Produto 3** deste contrato. Ficam de fora:
 > **FUNAPE Fase 3** (outro contrato), **React Flow / v2** (outro contrato — o
 > cliente aceitou o D3) e o **Produto 4** (manutenção/suporte).
+> **A fila aprovada não muda com este documento:** a ordem vigente é
+> **R4 → R5 → R6 → R7 → R8 → R10** (`PLANO_ESTRATEGICO_POS_V110.md`, decisão D1
+> do Hiure em 02/10) e os blocos abaixo são os mesmos do `ROADMAP.md`.
 > Fonte da fila: `docs/produto-3/ROADMAP.md`. Contrato e proposta conferidos em
 > `contrato/fase2/` (fora do repo).
 
@@ -18,6 +21,10 @@
 - **Obrigações (cl. 4.2):** corrigir falhas/vulnerabilidades sem ônus; código
   organizado e apto à manutenção por terceiros (cl. 8.4); LGPD (cl. 9).
 
+**Nota sobre o React Flow (Etapa 2):** o cliente aceitou a entrega com **D3**
+(decisão comunicada pelo Hiure em 14/10/2026); a implementação em React Flow sai
+deste contrato. Fecha-se aqui como **atendido com D3**.
+
 ⚠️ **Pendência de conferência:** a data de assinatura está em branco no PDF
 ("Belém/PA, de ___ de 2026") — sem ela não é possível dizer em que mês do
 cronograma o produto está.
@@ -29,43 +36,48 @@ cronograma o produto está.
 | Cadeia / árvore | #145 · #167 · #171 · #172 · #174 · #201 (Fases 0+0b) · #218 · #229 · #230 · #144 (fases 1–2) |
 | Lançamento / formulário | #114 · #152 · #157 · #159 · #160 · #161 · #162 · #168 · #187 · #210 · #213-f1 · #227 · #241 · #244 · #245 · #246 |
 | Export PDF / XLS | #13 · #166 · #179 · #193 · #204 |
-| Multi-usuário | #132 / PR #133 — segregação por dados por usuário (C1–C9, 154 arquivos, +24.339/−911, suíte 1109 testes) |
+| Multi-usuário | #132 / PR #133 — segregação de dados por usuário (C1–C9, 154 arquivos, +24.339/−911, suíte 1109 testes) |
 
 - **Releases:** v1.0.8 (01/09) · v1.0.9 (10/09) · v1.0.10 (12/09) · v1.0.11 (20/09) · v1.0.12 (30/09) · **v1.1.0 (13/10, deploy de produção success; #132 fechada)**.
 - Produto 2 encerrado em 04/09 (milestone 5/5) — base sobre a qual o Produto 3 trabalha.
 
-## 3. Falta — 40 issues de código Django/D3
+## 3. Falta — 40 issues de código Django/D3, pelos blocos do ROADMAP
 
-### A. Bugs de produção abertos (5) — hoje na geladeira do R3
-- **#238** edição de documento abre Observações vazio e o save **apaga o valor** (perda de dado).
-- **#223** `novo_documento` estoura **500** (assinatura incompatível).
-- **#269** origem removida no form de edição não apaga `lancamento.origem` — origem fantasma quebra a cadeia.
-- **#219** início de matrícula aceita a própria matrícula/transcrição como origem (auto-loop).
-- **#144** fases 1–2 já entregues — issue segue aberta para revalidar/fechar.
+### R3 + R3.5 — 🧊 geladeira (14 + 2 itens, condicionados ao destrave)
+> Estes itens **não têm data**: só entram na execução pelos critérios de
+> destravar do R3 (dump fresco de produção → test server **sanitizado**,
+> revalidação item a item contra os dados reais e reordenação aprovada pelo
+> Hiure). **Única exceção já registrada** (regra da EXCEÇÃO R9): **#238** e
+> **#223** podem furar a fila caso a caso, com aprovação do Hiure.
 
-### B. R4 — UX Umbelino + CRI (7)
+- Bugs de produção: **#238** (edição apaga Observações — perda de dado) · **#223** (`novo_documento` 500) · **#219** (início de matrícula aceita a própria matrícula) · **#144** (fases 1–2 entregues; revalidar/fechar).
+- Integridade / identidade de documento: #141 · #149 · #212 · #228 · #232 · #237 · #240 · #248.
+- Enfileiradas em 14/10 (autorização do Hiure): #266 · #267.
+- **R3.5 (congelado junto):** #206 · #202 — exigem a mesma revalidação.
+- **Fora da fila, aguardando posição:** **#269** (origem removida no form de edição não apaga `lancamento.origem`) — é bug de produção da mesma área do #270, mas **não foi enfileirado**.
+
+### R4 — 8 itens (primeiro bloco executável)
 #271 autocomplete Forma/Título · #169 janela de fim de cadeia não fecha ·
 #170 botão Adicionar Lançamento · #164 quadro M/T em 1 linha ·
 #173 proprietário 255→500 · #165 CRI obrigatório com M/T ·
-#213 fases 2–3 (nomes compostos + multi-proprietário).
+#213 fases 2–3 (nomes compostos + multi-proprietário) ·
+#270 ocultar campos de origem em registro/averbação *(enfileirada 14/10)*.
 
-### C. R5 / R6 (6)
-#113 constraint de identidade · #139 transação→transmissão · #123 campos de
-certificação fundiária · #155 documento compartilhado · #175 · #176 navegação.
+### R5 + R6 — 4 itens
+R5: #113 constraint de identidade. R6: #155 documento compartilhado · #175 ·
+#176 navegação.
 
-### D. R8 — débitos e segurança em Django/JS (15)
-#105 · #116 · #141 · #149 · #196 (XSS autocompletes) · #212 · #228 · #232 ·
-#234 (importar-cartorios sem auth) · #235 · #237 · #240 · #243 · #248 (admin) ·
-#249.
+### R8 — 9 itens (débitos e segurança em Django/JS)
+#105 · #116 · #123 · #139 · #196 (XSS autocompletes) · #234
+(importar-cartorios sem auth) · #235 · #243 · #249.
 
-### E. R10 — features de fim de cadeia (4)
-#252 "Outra" (texto livre) → #251 export inclui fim de cadeia → #253 cartório da
-transmissão sem CRI · #254 badge "Parcialmente sem Origem".
+### R10 — 4 itens (último bloco da ordem aprovada)
+#252 "Outra" (texto livre) → #251 export inclui fim de cadeia → #253 cartório
+da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 
-### F. Fora da fila — criadas em 08/10/2026 (3) — enfileiradas em 14/10
-#270 ocultar campos de origem em registro/averbação (→ R4 item 10) ·
-#267 avisar homônimo cross-type (→ R3 item 16) ·
-#266 ação de reparo para origens não resolvidas na árvore (→ R3 item 17).
+> **Dependência:** o **#232 (R8)** corrige os falso-negativos do filtro CRI e
+> tem de estar pronto **antes ou junto do #253 (R10)**. A ordem aprovada
+> (R8 → R10) já garante isso.
 
 ## 4. Fora do Produto 3 (não entram neste levantamento)
 
@@ -73,10 +85,7 @@ transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 - **React Flow / v2** (outro contrato): #61–#72 — cliente aceitou o D3.
 - **Produto 4 — manutenção/infra:** #197 (disco/prune) · #198 (cache de estáticos) · #199 (alerta de deploy) · #257 (nginx do test server).
 - **Dados em produção (não é código):** #110 (levantamento de cartórios) · #135 · #215 (reparo de `Pessoas` — correção manual do usuário).
-- **Gate do cliente:** #150 e #151 (`pendente-analise-cliente`).
-- **Congeladas:** #202 (exige PRD) · #206 (exige revalidação).
-- **Fora da fila, aguardando posição:** #257 e — atenção — **#269**, que é bug de
-  produção da mesma área do #270 mas não foi enfileirado.
+- **Gate do cliente:** #150 e #151 (`pendente-analise-cliente`) — gate do R7.
 
 ## 5. Contagem (snapshot 14/10/2026)
 
@@ -88,21 +97,26 @@ transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 | Infra/manutenção (Produto 4) | 4 |
 | Dados em produção | 3 |
 | Gate do cliente | 2 |
-| Congeladas (geladeira R3/R3.5) | 2 |
+| Congeladas (R3.5: #202, #206) | 2 |
 | Guarda-chuva (#1) | 1 |
 | Fase 3 — FUNAPE (outro contrato) | 8 |
 | v2 (outro contrato) | 12 |
 
-## 6. Caminho para finalizar o Produto 3
+## 6. Caminho para finalizar o Produto 3 (ordem aprovada, sem reordenar a fila)
 
-1. **A (5)** — puxar da geladeira caso a caso (a fila já prevê a exceção); ~1 semana.
-2. **B (7)** — 1 sprint, rapid wins primeiro (#271, #169, #170, #164).
-3. **E (4)** — 1 sprint (#252 → #251 → #253; #254 paralelo).
-4. **D (15)** — 1–1,5 sprint (agrupar #196+#235 e #243+#249).
-5. **C (6)** — 1 sprint.
-- **Releases sugeridas:** v1.2.0 (A+B+E) e v1.3.0 (C+D).
-- **Estimativa:** ~5 sprints / 5–7 semanas com o pipeline atual (1 issue = 1
-  branch = 1 PR → develop, TDD + review de 3 modelos, tag só com autorização).
+1. **R4 (8)** — 1–1,5 sprint (rapid wins primeiro: #271, #169, #170, #164) → **v1.2.0**.
+2. **R5 + R6 (4)** — ~0,5–1 sprint → **v1.3.0**.
+3. **R7** — só se o GATE-CLIENTE (#150/#151) abrir; sem resposta, **R8 entra no lugar**.
+4. **R8 (9)** — 1–1,5 sprint (agrupar #196+#235 e #243+#249) → **v1.4.0**.
+5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**); #232 (R8) já terá sido corrigido antes do #253.
+
+- **R3 + R3.5 (14 + 2)** — sem data: dependem do destrave da geladeira (dump
+  sanitizado + revalidação item a item + reordenação aprovada pelo Hiure).
+  Inclui as duas recém-enfileiradas (#266, #267). Exceção: #238 e #223.
+- **#269** — fora da fila; precisa de posição aprovada antes de entrar.
+- **Resumo:** **25 issues** têm sprint na ordem aprovada hoje (~**4 sprints /
+  4–6 semanas**); **14 + 2** ficam atrás do gate do R3; **1** está fora da fila.
+  Total = 40 de código Django/D3.
 
 ### Pendência para fechar o produto
 O contrato exige **entrega técnica** na Etapa 3 (cl. 8.4: código organizado e
