@@ -31,11 +31,11 @@ cronograma o produto está.
 
 ## 2. Feito — 31 issues fechadas de 01/09 a 13/10 (6 releases)
 
-> A tabela enumera **9 (cadeia) + 16 (lançamento) + 5 (export) + 1 (CI) + 1
-> (multi-usuário) = 31 issues fechadas** de 01/09 a 13/10. Além delas, entraram
-> **fases** de issues que **seguem abertas**: **#144** (fases 1–2) e **#213**
-> (fase 1) — nenhuma das duas é contada como fechada; o restante está na seção
-> 3 (R3/R4).
+> A tabela tem **32 entradas**: **31 issues fechadas** de 01/09 a 13/10
+> (**9 cadeia + 15 lançamento + 5 export + 1 CI + 1 multi-usuário**) e **1 fase**
+> — o **#213** (fase 1), que aparece na linha de lançamento mas **não** é issue
+> fechada. Além dela, entraram as fases 1–2 do **#144** (issue também aberta);
+> o restante das duas está na seção 3 (R3/R4).
 
 | Área | Issues |
 |---|---|
@@ -118,11 +118,14 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 ## 6. Caminho para finalizar o Produto 3 (ordem aprovada, sem reordenar a fila)
 
 1. **R4 (8)** — 1–1,5 sprint (rapid wins primeiro: #271, #169, #170, #164) → **v1.2.0**.
-2. **R5 + R6 (4)** — ~0,5–1 sprint → **v1.3.0**. ⚠️ **Pré-requisito em aberto:** o
-   **#113** depende da saída do **#110** (levantamento de cartórios, hoje fora
-   deste documento por não ser código). Enquanto isso não for resolvido, decidir
-   entre antecipar o levantamento **read-only** do #110 junto do dump do R3 ou
-   postergar o #113/#135 — as duas opções estão no plano estratégico (Wave 3).
+2. **R5 + R6** — ~0,5–1 sprint → **v1.3.0**. O bloco R5 do roadmap é **#113 →
+   #135**: o **#113** é código (está nos 40); o **#135** é data-quality (fora do
+   corte deste documento, como o #110/#215) e **precisa ser executado junto do
+   #113 para o R5 fechar** — não é exceção de fila. ⚠️ **Pré-requisito em aberto:**
+   o **#113** depende da saída do **#110** (levantamento de cartórios, também
+   fora do corte). Enquanto isso não for resolvido, decidir entre antecipar o
+   levantamento **read-only** do #110 junto do dump do R3 ou postergar o
+   #113/#135 — as duas opções estão no plano estratégico (Wave 3).
 3. **R7** — só se o GATE-CLIENTE (#150/#151) abrir; sem resposta, **R8 entra no lugar**.
 4. **R8 (9)** — 1–1,5 sprint (agrupar #196+#235 e #243+#249) → **v1.4.0**.
 5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**).
@@ -137,8 +140,9 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
   R3 e contados à parte no snapshot (seção 5).
 - **#269** — fora da fila; precisa de posição aprovada antes de entrar.
 - **Resumo (fecha em 40):** **25** com sprint na ordem aprovada + **14** sob o
-  gate do R3 + **1** fora da fila = **40 issues de código Django/D3**. Os 2 do
-  R3.5 são adicionais e não entram nesta conta.
+  gate do R3 + **1** fora da fila = **40 issues de código Django/D3**. Ficam
+  fora desta conta os 2 itens do R3.5 (#202/#206) e os itens de **data-quality**
+  que acompanham os blocos (#135 no R5, #110 como pré-requisito do #113).
 - **Estimativa:** ~**4 sprints / 4–6 semanas** para os blocos executáveis, com
   duas condicionais explícitas: (a) o **#113 (R5)** espera a decisão sobre o
   **#110**; (b) o **#253 (R10)** depende do **#232**, que está atrás do gate do
