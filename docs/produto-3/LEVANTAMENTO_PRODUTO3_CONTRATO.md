@@ -43,7 +43,7 @@ cronograma o produto está.
 
 ## 3. Falta — 40 issues de código Django/D3, pelos blocos do ROADMAP
 
-### R3 + R3.5 — 🧊 geladeira (14 + 2 itens, condicionados ao destrave)
+### R3 (14 dos 40) + R3.5 (2 adicionais) — 🧊 geladeira (condicionados ao destrave)
 > Estes itens **não têm data**: só entram na execução pelos critérios de
 > destravar do R3 (dump fresco de produção → test server **sanitizado**,
 > revalidação item a item contra os dados reais e reordenação aprovada pelo
@@ -75,9 +75,12 @@ R5: #113 constraint de identidade. R6: #155 documento compartilhado · #175 ·
 #252 "Outra" (texto livre) → #251 export inclui fim de cadeia → #253 cartório
 da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 
-> **Dependência:** o **#232 (R8)** corrige os falso-negativos do filtro CRI e
-> tem de estar pronto **antes ou junto do #253 (R10)**. A ordem aprovada
-> (R8 → R10) já garante isso.
+> **Dependência:** o **#232** corrige os falso-negativos do filtro CRI e tem de
+> estar pronto **antes ou junto do #253**. Atenção ao gate: o **#232 é item do
+> R3 (geladeira)** — sob a ordem aprovada (R4 → R5 → R6 → R7 → R8 → R10) o R8
+> vem antes do R10, mas isso **não libera** o #232: ele continua atrás do
+> destrave do R3 (dump + revalidação + reordenação aprovada) ou de uma exceção
+> registrada. O **#253 (R10) não deve começar** antes disso.
 
 ## 4. Fora do Produto 3 (não entram neste levantamento)
 
@@ -108,15 +111,17 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 2. **R5 + R6 (4)** — ~0,5–1 sprint → **v1.3.0**.
 3. **R7** — só se o GATE-CLIENTE (#150/#151) abrir; sem resposta, **R8 entra no lugar**.
 4. **R8 (9)** — 1–1,5 sprint (agrupar #196+#235 e #243+#249) → **v1.4.0**.
-5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**); #232 (R8) já terá sido corrigido antes do #253.
+5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**); antes do #253 confirmar o estado do **#232 (R3 — geladeira)**, que é pré-requisito do filtro CRI.
 
-- **R3 + R3.5 (14 + 2)** — sem data: dependem do destrave da geladeira (dump
-  sanitizado + revalidação item a item + reordenação aprovada pelo Hiure).
-  Inclui as duas recém-enfileiradas (#266, #267). Exceção: #238 e #223.
+- **R3 (14)** — sem data: dependem do destrave da geladeira (dump sanitizado +
+  revalidação item a item + reordenação aprovada pelo Hiure). Inclui as duas
+  recém-enfileiradas (#266, #267). Exceção: #238 e #223.
+- **R3.5 (#202, #206) — 2 itens adicionais, fora dos 40:** congelados junto do
+  R3 e contados à parte no snapshot (seção 5).
 - **#269** — fora da fila; precisa de posição aprovada antes de entrar.
-- **Resumo:** **25 issues** têm sprint na ordem aprovada hoje (~**4 sprints /
-  4–6 semanas**); **14 + 2** ficam atrás do gate do R3; **1** está fora da fila.
-  Total = 40 de código Django/D3.
+- **Resumo (fecha em 40):** **25** com sprint na ordem aprovada (~**4 sprints /
+  4–6 semanas**) + **14** sob o gate do R3 + **1** fora da fila = **40 issues
+  de código Django/D3**. Os 2 do R3.5 são adicionais e não entram nesta conta.
 
 ### Pendência para fechar o produto
 O contrato exige **entrega técnica** na Etapa 3 (cl. 8.4: código organizado e

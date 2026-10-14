@@ -12,7 +12,8 @@
 > 8 issues abertas em 29–30/09 que estavam fora dos blocos numerados
 > foram incorporadas (**#232, #238, #240, #248** → R3; **#234, #235,
 > #243, #249** → R8). Testes da v1.1.0 seguem em andamento — escopo da
-> release congelado.
+> release congelado. *(Superado: a v1.1.0 saiu em produção em 13/10/2026 e o
+> bloco R9 está encerrado — ver seção R9.)*
 > **Enfileiramento 14/10/2026 (autorizado pelo Hiure):** três issues criadas
 > em 08/10 e fora dos blocos numerados entram na fila — **#270** → R4 item 10;
 > **#267** → R3 item 16; **#266** → R3 item 17. Origem: levantamento do
