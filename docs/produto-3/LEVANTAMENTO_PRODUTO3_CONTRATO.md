@@ -33,10 +33,13 @@ cronograma o produto está.
 
 | Área | Issues |
 |---|---|
-| Cadeia / árvore | #145 · #167 · #171 · #172 · #174 · #201 (Fases 0+0b) · #218 · #229 · #230 · #144 (fases 1–2) |
+| Cadeia / árvore | #145 · #167 · #171 · #172 · #174 · #201 (Fases 0+0b) · #218 · #229 · #230 |
 | Lançamento / formulário | #114 · #152 · #157 · #159 · #160 · #161 · #162 · #168 · #187 · #210 · #213-f1 · #227 · #241 · #244 · #245 · #246 |
 | Export PDF / XLS | #13 · #166 · #179 · #193 · #204 |
 | Multi-usuário | #132 / PR #133 — segregação de dados por usuário (C1–C9, 154 arquivos, +24.339/−911, suíte 1109 testes) |
+
+> **#144** não entra nesta tabela: as fases 1–2 foram mergeadas, mas a **issue
+> continua aberta** (revalidar/fechar) e por isso aparece na seção 3 (R3).
 
 - **Releases:** v1.0.8 (01/09) · v1.0.9 (10/09) · v1.0.10 (12/09) · v1.0.11 (20/09) · v1.0.12 (30/09) · **v1.1.0 (13/10, deploy de produção success; #132 fechada)**.
 - Produto 2 encerrado em 04/09 (milestone 5/5) — base sobre a qual o Produto 3 trabalha.
@@ -53,7 +56,10 @@ cronograma o produto está.
 - Bugs de produção: **#238** (edição apaga Observações — perda de dado) · **#223** (`novo_documento` 500) · **#219** (início de matrícula aceita a própria matrícula) · **#144** (fases 1–2 entregues; revalidar/fechar).
 - Integridade / identidade de documento: #141 · #149 · #212 · #228 · #232 · #237 · #240 · #248.
 - Enfileiradas em 14/10 (autorização do Hiure): #266 · #267.
-- **R3.5 (congelado junto):** #206 · #202 — exigem a mesma revalidação.
+- **R3.5 (congelado junto):** **#206** — destrava com a revalidação contra os
+  dados reais. **#202** — exige, **além da revalidação, o PRD** que distinga
+  tabela × exportações; segue fora da sequência até o PRD existir (o destrave
+  do R3 sozinho **não** o libera).
 - **Fora da fila, aguardando posição:** **#269** (origem removida no form de edição não apaga `lancamento.origem`) — é bug de produção da mesma área do #270, mas **não foi enfileirado**.
 
 ### R4 — 8 itens (primeiro bloco executável)
@@ -108,10 +114,17 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 ## 6. Caminho para finalizar o Produto 3 (ordem aprovada, sem reordenar a fila)
 
 1. **R4 (8)** — 1–1,5 sprint (rapid wins primeiro: #271, #169, #170, #164) → **v1.2.0**.
-2. **R5 + R6 (4)** — ~0,5–1 sprint → **v1.3.0**.
+2. **R5 + R6 (4)** — ~0,5–1 sprint → **v1.3.0**. ⚠️ **Pré-requisito em aberto:** o
+   **#113** depende da saída do **#110** (levantamento de cartórios, hoje fora
+   deste documento por não ser código). Enquanto isso não for resolvido, decidir
+   entre antecipar o levantamento **read-only** do #110 junto do dump do R3 ou
+   postergar o #113/#135 — as duas opções estão no plano estratégico (Wave 3).
 3. **R7** — só se o GATE-CLIENTE (#150/#151) abrir; sem resposta, **R8 entra no lugar**.
 4. **R8 (9)** — 1–1,5 sprint (agrupar #196+#235 e #243+#249) → **v1.4.0**.
-5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**); antes do #253 confirmar o estado do **#232 (R3 — geladeira)**, que é pré-requisito do filtro CRI.
+5. **R10 (4)** — 1 sprint, por último (o plano estratégico reserva o **v1.5.0**).
+   ⚠️ **Condicional:** o **#253** depende do **#232**, que é item do **R3
+   (geladeira)**. Se a geladeira continuar travada quando a fila chegar ao R10,
+   **só 3 dos 4 itens** executam e o #253 escorrega para depois do destrave.
 
 - **R3 (14)** — sem data: dependem do destrave da geladeira (dump sanitizado +
   revalidação item a item + reordenação aprovada pelo Hiure). Inclui as duas
@@ -119,9 +132,14 @@ da transmissão sem CRI · #254 badge "Parcialmente sem Origem".
 - **R3.5 (#202, #206) — 2 itens adicionais, fora dos 40:** congelados junto do
   R3 e contados à parte no snapshot (seção 5).
 - **#269** — fora da fila; precisa de posição aprovada antes de entrar.
-- **Resumo (fecha em 40):** **25** com sprint na ordem aprovada (~**4 sprints /
-  4–6 semanas**) + **14** sob o gate do R3 + **1** fora da fila = **40 issues
-  de código Django/D3**. Os 2 do R3.5 são adicionais e não entram nesta conta.
+- **Resumo (fecha em 40):** **25** com sprint na ordem aprovada + **14** sob o
+  gate do R3 + **1** fora da fila = **40 issues de código Django/D3**. Os 2 do
+  R3.5 são adicionais e não entram nesta conta.
+- **Estimativa:** ~**4 sprints / 4–6 semanas** para os blocos executáveis, com
+  duas condicionais explícitas: (a) o **#113 (R5)** espera a decisão sobre o
+  **#110**; (b) o **#253 (R10)** depende do **#232**, que está atrás do gate do
+  R3 — se a geladeira seguir travada, o R10 executa com **3 dos 4** itens e o
+  #253 escorrega.
 
 ### Pendência para fechar o produto
 O contrato exige **entrega técnica** na Etapa 3 (cl. 8.4: código organizado e
