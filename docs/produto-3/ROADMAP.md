@@ -12,7 +12,14 @@
 > 8 issues abertas em 29–30/09 que estavam fora dos blocos numerados
 > foram incorporadas (**#232, #238, #240, #248** → R3; **#234, #235,
 > #243, #249** → R8). Testes da v1.1.0 seguem em andamento — escopo da
-> release congelado.
+> release congelado. *(Superado: a v1.1.0 saiu em produção em 13/10/2026 e o
+> bloco R9 está encerrado — ver seção R9.)*
+> **Enfileiramento 14/10/2026 (autorizado pelo Hiure):** três issues criadas
+> em 08/10 e fora dos blocos numerados entram na fila — **#270** → R4 item 10;
+> **#267** → R3 item 16; **#266** → R3 item 17. Origem: levantamento do
+> Produto 3 contra o contrato FADESP 019/2026
+> (`docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md`), que também delimita o
+> escopo (só código Django/D3 — fora: FUNAPE Fase 3, React Flow/v2 e Produto 4).
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -50,7 +57,9 @@
 **Releases:** v1.0.8 (01/09) · v1.0.9 (10/09, PR #190) ·
 **v1.0.10 (12/09, PR #200 — #13/#179/#193, validada em produção)** ·
 **v1.0.11 (20/09, PR #217 — #201 Fases 0+0b, #204, #210, #213 fase 1, #168;
-GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)**.
+GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)** ·
+**v1.0.12 (30/09)** · **v1.1.0 (13/10, PR #133 — #132 segregação de dados
+por usuário; deploy de produção OK; #132 fechada na tag)**.
 
 **🔥 Bug de produção (12/09):** #201/#202 — hotfix Fases 0+0b **em produção
 na v1.0.11 (20/09)**; Fases 1–3 de saneamento (#202) **aguardando redefinição
@@ -210,9 +219,11 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    `tipo_documento_principal`. Efeitos: form de lançamento abre na matrícula
    errada, árvore não resolve o documento principal. Reparo do 691 é MANUAL
    pelo usuário (regra 26/09 — sem script em produção). Inclui #114 (FK
-   cartório não-nullable no mesmo método). **EM EXECUÇÃO 29/09** (worktree
-   `worktrees/issue-230-doc-auto-transcricao`; Opus 5.5 plan + qwen3.7-max
-   impl (rota nova Hiure 29/09) + Opus/Codex review).
+   cartório não-nullable no mesmo método). ✅ **CONCLUÍDO 30/09** — PR #239
+   (squash em develop; #230 e #114 fechadas no GitHub em 30/09). Evidência
+   histórica do estado "EM EXECUÇÃO 29/09": worktree
+   `worktrees/issue-230-doc-auto-transcricao` (Opus 5.5 plan + qwen3.7-max
+   impl + Opus/Codex review).
 3. **#219** 🐛 validação: início de matrícula aceita a própria matrícula/
    transcrição como origem (auto-loop). Ponto de correção:
    `_sincronizar_origens_estruturadas` (identidade tipo + número normalizado
@@ -223,7 +234,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    `Documento.numero`/`tipo` — mesma classe do #210; o padrão de correção
    já existe no `ImovelDocumentoService`. P2: edição administrativa rara (o
    precedente #210 era cartório, edição comum).
-5. **#114** 🐛 `criar_documento_matricula_automatico` permite cartório None.
+5. **#114** ✅ `criar_documento_matricula_automatico` permite cartório None —
+   **CONCLUÍDO 30/09** junto do #230 (PR #239).
 6. **#141** 🐛 tratar IntegrityError (duplicidade canônica) em criar/editar.
 7. **#149** ⚠️ avisar doc de mesmo tipo+número em cartório diferente.
 8. **#110** levantar cartórios fantasmas + plano de merge (data quality —
@@ -283,6 +295,14 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    identidade (tipo/número/cartório) — última rota de "documento
    fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
    (sincronização de identidade).
+16. **#267** feat(origem): avisar homônimo **cross-type** — a origem
+   declarada (tipo, nº) não existe no cartório, mas outro tipo com o
+   **mesmo número** existe lá. Mesma família do #149/#206 (identidade
+   registral ambígua). **Enfileirada 14/10 (Hiure).**
+17. **#266** feat(árvore): ação de reparo para origens não resolvidas —
+   criar o documento como declarado (tipo + número + cartório da
+   origem), fechando o ciclo da pendência na própria árvore.
+   **Enfileirada 14/10 (Hiure).**
 
 ## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); 🧊 GELADEIRA junto do R3 (decisão Hiure 02/10)
 
@@ -454,6 +474,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    dinâmico por frequência de `Lancamento.forma` (mesmo padrão do
    autocomplete de cartório, `sugestoes=true`). Critérios de aceite e
    causa raiz no corpo da issue. **Enfileirada 09/10 (Hiure).**
+10. **#270** feat(lançamento): ocultar campos de origem por padrão em
+    **registro/averbação** — origem obrigatória só no início de matrícula.
+    Ajuste de usabilidade do formulário de lançamento, mesma área do #271.
+    **Enfileirada 14/10 (Hiure).**
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
 
@@ -513,7 +537,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
     após importação (`duplicata_views.py:92` mostra aviso genérico).
     Achado na revisão de release do bundle v1.0.12; pré-existente.
 
-## R9 — Segregação por usuário (a maior feature, ~2 semanas) — 🔥 ANTECIPADO (reordenação 30/09, aprovada pelo Hiure)
+## R9 — Segregação por usuário (a maior feature, ~2 semanas) — ✅ CONCLUÍDO 13/10/2026 (v1.1.0 em produção)
 
 > **Reordenação 30/09/2026:** R9 vira o próximo bloco de execução (antes de
 > R4–R8, que deslizam na sequência). Meta: mergear o #132 no develop e
@@ -637,9 +661,14 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    - Release: ao fim dos commits C1–C9 + Fase 4 + Fase 5 + validação no
      test server (incl. T9: migrar 0056→0061 sobre dump de produção), PR
      develop → main + tag **v1.1.0** com GATE-LUANDRO.
-   - **Status 02/10/2026 (confirmação do Hiure):** testes da v1.1.0
-     **ainda não terminaram** — o bloco segue aberto; nada do R10 entra
-     no escopo da tag.
+   - **Status 13/10/2026 — BLOCO CONCLUÍDO:** a v1.1.0 está **em produção**
+     (PR #133 mergeado, tag `v1.1.0`, deploy de produção success em
+     13/10 20:42 UTC; **#132 fechada na tag**). Os testes do gate estreito
+     terminaram em 08/10 (PR #268) e o GATE-LUANDRO foi autorizado pelo
+     Hiure em 13/10. Nada do R10 entrou no escopo da tag (escopo
+     congelado) — **o R9 está encerrado e a fila segue para o R4** (plano
+     estratégico D1). *(Status anterior, 02/10: testes ainda em andamento,
+     bloco aberto — superado por esta atualização.)*
 
 ## R10 — Novas funcionalidades de fim de cadeia + UX (pedido Hiure 02/10/2026) — pós-v1.1.0
 
@@ -796,6 +825,18 @@ ao fim de cada sprint (regra da seção).
 do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
+
+*Última atualização: 14/10/2026 — **levantamento do Produto 3 contra o
+contrato FADESP 019/2026** (`LEVANTAMENTO_PRODUTO3_CONTRATO.md`, PR #273):
+escopo delimitado pelo Hiure a código Django/D3 (fora: FUNAPE Fase 3,
+React Flow/v2 — D3 aceito pelo cliente — e Produto 4/manutenção); 40
+issues de código abertas, com o mapa por bloco e as condições de gate no
+documento. Enfileiradas **#270** (R4 item 10), **#267** (R3 item 16) e
+**#266** (R3 item 17) — autorização de 14/10. **A ordem aprovada da fila
+não muda** (R4 → R5 → R6 → R7 → R8 → R10 — plano estratégico D1); o
+documento não reordena blocos nem antecipa releases. Registrado também o
+**v1.1.0 em produção (13/10)** e o fechamento do bloco R9 (status
+atualizado na seção R9).*
 
 *Última atualização: 09/10/2026 — ajuste aprovado pelo Hiure: **#271**
 (regressão do autocomplete/"memória" de Forma e Título da transmissão,
