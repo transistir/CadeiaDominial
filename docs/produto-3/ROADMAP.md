@@ -13,6 +13,12 @@
 > foram incorporadas (**#232, #238, #240, #248** → R3; **#234, #235,
 > #243, #249** → R8). Testes da v1.1.0 seguem em andamento — escopo da
 > release congelado.
+> **Enfileiramento 14/10/2026 (autorizado pelo Hiure):** três issues criadas
+> em 08/10 e fora dos blocos numerados entram na fila — **#270** → R4 item 10;
+> **#267** → R3 item 16; **#266** → R3 item 17. Origem: levantamento do
+> Produto 3 contra o contrato FADESP 019/2026
+> (`docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md`), que também delimita o
+> escopo (só código Django/D3 — fora: FUNAPE Fase 3, React Flow/v2 e Produto 4).
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -50,7 +56,9 @@
 **Releases:** v1.0.8 (01/09) · v1.0.9 (10/09, PR #190) ·
 **v1.0.10 (12/09, PR #200 — #13/#179/#193, validada em produção)** ·
 **v1.0.11 (20/09, PR #217 — #201 Fases 0+0b, #204, #210, #213 fase 1, #168;
-GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)**.
+GATE-LUANDRO autorizado pelo Hiure, deploy prod OK 18:45 UTC)** ·
+**v1.0.12 (30/09)** · **v1.1.0 (13/10, PR #133 — #132 segregação de dados
+por usuário; deploy de produção OK; #132 fechada na tag)**.
 
 **🔥 Bug de produção (12/09):** #201/#202 — hotfix Fases 0+0b **em produção
 na v1.0.11 (20/09)**; Fases 1–3 de saneamento (#202) **aguardando redefinição
@@ -283,6 +291,14 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    identidade (tipo/número/cartório) — última rota de "documento
    fantasma" após o #245 fechar a UI. Mesmo domínio do #212/#210
    (sincronização de identidade).
+16. **#267** feat(origem): avisar homônimo **cross-type** — a origem
+   declarada (tipo, nº) não existe no cartório, mas outro tipo com o
+   **mesmo número** existe lá. Mesma família do #149/#206 (identidade
+   registral ambígua). **Enfileirada 14/10 (Hiure).**
+17. **#266** feat(árvore): ação de reparo para origens não resolvidas —
+   criar o documento como declarado (tipo + número + cartório da
+   origem), fechando o ciclo da pendência na própria árvore.
+   **Enfileirada 14/10 (Hiure).**
 
 ## R3.5 — Fluxo de origens na cadeia (#201/#202/#206) — hotfix ✅ em produção (v1.0.11); 🧊 GELADEIRA junto do R3 (decisão Hiure 02/10)
 
@@ -454,6 +470,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    dinâmico por frequência de `Lancamento.forma` (mesmo padrão do
    autocomplete de cartório, `sugestoes=true`). Critérios de aceite e
    causa raiz no corpo da issue. **Enfileirada 09/10 (Hiure).**
+10. **#270** feat(lançamento): ocultar campos de origem por padrão em
+    **registro/averbação** — origem obrigatória só no início de matrícula.
+    Ajuste de usabilidade do formulário de lançamento, mesma área do #271.
+    **Enfileirada 14/10 (Hiure).**
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
 
@@ -796,6 +816,15 @@ ao fim de cada sprint (regra da seção).
 do Django estabilizar. #1 segue aberta como guarda-chuva.
 
 ---
+
+*Última atualização: 14/10/2026 — **levantamento do Produto 3 contra o
+contrato FADESP 019/2026** (`LEVANTAMENTO_PRODUTO3_CONTRATO.md`, PR docs):
+escopo delimitado a código Django/D3 (fora: FUNAPE Fase 3, React Flow/v2 —
+D3 aceito pelo cliente — e Produto 4/manutenção); 40 issues de código
+abertas, distribuídas em 5 sprints (v1.2.0 = bugs de produção + R4 + R10;
+v1.3.0 = R5/R6 + R8). Enfileiradas **#270** (R4 item 10), **#267** (R3 item
+16) e **#266** (R3 item 17). Registrado também o **v1.1.0 em produção
+(13/10)** e o fechamento do bloco R9.*
 
 *Última atualização: 09/10/2026 — ajuste aprovado pelo Hiure: **#271**
 (regressão do autocomplete/"memória" de Forma e Título da transmissão,
