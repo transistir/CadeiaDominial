@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -11,6 +12,8 @@ from urllib.parse import quote
 import requests
 
 from ia_ocr.backends import OcrBackendError, OrcamentoEsgotado
+
+logger = logging.getLogger(__name__)
 
 
 CODIGOS_CONTRATO = frozenset(
@@ -133,6 +136,12 @@ class OcrServiceClient:
 
     TAMANHO_CHUNK_RESPOSTA = 4 * 1024
     MAX_BYTES_RESPOSTA = 52_428_800
+    # Evidência de aceite (2) do #259: os NOMES dos três cabeçalhos por
+    # requisição — valores (token/credenciais) nunca entram no log.
+    _MENSAGEM_CABECALHOS = (
+        'servico OCR: cabecalhos de autenticacao aplicados: '
+        'cf-access-client-id, cf-access-client-secret, x-internal-token'
+    )
 
     def __init__(
         self,
@@ -161,6 +170,7 @@ class OcrServiceClient:
         self.reserva_retry_s = reserva_retry_s
         self.poll_interval_s = poll_interval_s
         self.sessao = sessao or requests.Session()
+        self._primeira_requisicao = True
 
     def enviar_job(self, caminho_pdf, job_id, prazo, **params):
         timeout_informado = params.pop('timeout_seconds', None)
@@ -241,6 +251,8 @@ class OcrServiceClient:
                     'X-Internal-Token': self.token,
                 }
             )
+            self._log_cabecalhos_aplicados()
+
             argumentos = dict(kw)
             argumentos['headers'] = cabecalhos
             argumentos['allow_redirects'] = False
@@ -329,6 +341,19 @@ class OcrServiceClient:
                     raise OcrBackendError(ultimo_codigo, ultima_mensagem)
             numero_retry += 1
             self._aguardar_retry(numero_retry, prazo)
+
+    def _log_cabecalhos_aplicados(self):
+        """Uma linha por requisição com os nomes dos três cabeçalhos
+        (evidência de aceite 2 do #259). A primeira requisição de cada
+        instância sai em INFO; as seguintes (polls, retries) em DEBUG,
+        para não poluir. Valores, nome de arquivo e texto do documento
+        nunca aparecem — a mensagem é uma constante fixa.
+        """
+        if self._primeira_requisicao:
+            self._primeira_requisicao = False
+            logger.info('%s', self._MENSAGEM_CABECALHOS)
+        else:
+            logger.debug('%s', self._MENSAGEM_CABECALHOS)
 
     def _ler_resposta(self, resposta, prazo):
         partes = []
