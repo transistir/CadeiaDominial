@@ -41,6 +41,10 @@ class OcrBackendError(Exception):
         super().__init__(f'{codigo}: {mensagem}')
 
 
+class OrcamentoEsgotado(Exception):
+    """O prazo monotônico compartilhado da operação foi consumido."""
+
+
 class OcrBackend(ABC):
     @abstractmethod
     def processar(self, job) -> ResultadoOcr:

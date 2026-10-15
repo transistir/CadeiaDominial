@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 import requests
 
-from ia_ocr.backends import OcrBackendError
+from ia_ocr.backends import OcrBackendError, OrcamentoEsgotado
 
 
 CODIGOS_CONTRATO = frozenset(
@@ -34,10 +34,6 @@ CODIGOS_CONTRATO = frozenset(
         'INFERENCE_FAILED',
     }
 )
-
-
-class OrcamentoEsgotado(Exception):
-    """O prazo monotônico compartilhado da operação foi consumido."""
 
 
 class _MultipartEncoder:
