@@ -4,16 +4,19 @@ import hashlib
 import io
 import os
 import tempfile
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
+from django.utils import timezone
 from pypdf import PdfWriter
 
 from ia_ocr import estados
 from ia_ocr.backends import OcrServiceBackend, ResultadoOcr
+from ia_ocr.management.commands.ocr_smoke import Command
 from ia_ocr.models import OcrJob
 from ia_ocr.services import claim_proximo_job, criar_job, finalizar
 from ia_ocr.tests.factories import criar_documento_digital
@@ -282,6 +285,22 @@ class OcrSmokeDocumentoDigitalTests(TestCase):
         self.assertIn('TESTES', mensagem)
         self.assertIn('--confirmar', mensagem)
         self.assertEqual(OcrJob.objects.count(), 0)
+
+    def test_job_em_execucao_com_lease_vencido_e_reapado_antes_do_claim(self):
+        documento = criar_documento_digital()
+        job, _ = criar_job(documento)
+        claimado = claim_proximo_job()
+        OcrJob.objects.filter(pk=claimado.pk).update(
+            lease_expira_em=timezone.now() - timedelta(seconds=1)
+        )
+
+        smoke = Command()._garantir_job_claimado(documento)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'WORKER_TIMEOUT')
+        self.assertNotEqual(smoke.pk, job.pk)
+        self.assertEqual(smoke.status, estados.EM_EXECUCAO)
 
     def test_com_confirmar_processa_com_backend_real_e_finaliza_o_job(self):
         buffer = io.BytesIO()

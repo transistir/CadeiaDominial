@@ -326,6 +326,7 @@ class Command(BaseCommand):
         servidor de testes pode ser de outro documento. Aqui o CAS é
         dirigido a este job, com a mesma auditoria de transição do worker.
         """
+        services.reap_jobs_expirados()
         agora = timezone.now()
         lease_expira_em = agora + timedelta(
             seconds=settings.OCR_JOB_TIMEOUT_SECONDS

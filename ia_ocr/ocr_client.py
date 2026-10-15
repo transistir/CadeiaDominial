@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
+import threading
 import time
 import uuid
 from urllib.parse import quote
 
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from ia_ocr.backends import OcrBackendError, OrcamentoEsgotado
 
@@ -132,6 +137,129 @@ class _MultipartEncoder:
             raise OrcamentoEsgotado('Prazo do job esgotado durante o upload.')
 
 
+_contexto_prazo = threading.local()
+
+
+def _interromper_socket(sock):
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+
+
+class _PrazoAbsoluto:
+    # shutdown (e não close) é o que acorda um recv bloqueado em outra thread.
+
+    def __init__(self, prazo):
+        self._lock = threading.Lock()
+        self._sock = None
+        self._ativo = True
+        self.estourou = False
+        self._timer = threading.Timer(
+            max(0.0, prazo - time.monotonic()), self._estourar
+        )
+        self._timer.daemon = True
+        self._timer.start()
+
+    def registrar(self, sock):
+        with self._lock:
+            if not self._ativo:
+                return
+            self._sock = sock
+            if self.estourou:
+                _interromper_socket(sock)
+
+    def soltar(self):
+        with self._lock:
+            self._sock = None
+
+    def encerrar(self):
+        with self._lock:
+            self._ativo = False
+            self._sock = None
+        self._timer.cancel()
+        self._timer.join()
+
+    def _estourar(self):
+        with self._lock:
+            if not self._ativo:
+                return
+            self.estourou = True
+            if self._sock is not None:
+                _interromper_socket(self._sock)
+
+
+class _ConexaoComPrazo:
+    # Conexão do pool só fica registrada na guarda da requisição que a pegou;
+    # ao voltar ao pool o socket é solto para não derrubar a próxima requisição.
+    _guarda = None
+
+    def acompanhar(self, guarda):
+        self._guarda = guarda
+        if guarda is not None and self.sock is not None:
+            guarda.registrar(self.sock)
+
+    def connect(self):
+        super().connect()
+        if self._guarda is not None:
+            self._guarda.registrar(self.sock)
+
+    def soltar_prazo(self):
+        if self._guarda is not None:
+            self._guarda.soltar()
+            self._guarda = None
+
+
+class _ConexaoHttpComPrazo(_ConexaoComPrazo, HTTPConnection):
+    pass
+
+
+class _ConexaoHttpsComPrazo(_ConexaoComPrazo, HTTPSConnection):
+    pass
+
+
+class _PoolComPrazo:
+    def _get_conn(self, *args, **kwargs):
+        conexao = super()._get_conn(*args, **kwargs)
+        conexao.acompanhar(getattr(_contexto_prazo, 'guarda', None))
+        return conexao
+
+    def _put_conn(self, conexao):
+        if isinstance(conexao, _ConexaoComPrazo):
+            conexao.soltar_prazo()
+        super()._put_conn(conexao)
+
+
+class _PoolHttpComPrazo(_PoolComPrazo, HTTPConnectionPool):
+    ConnectionCls = _ConexaoHttpComPrazo
+
+
+class _PoolHttpsComPrazo(_PoolComPrazo, HTTPSConnectionPool):
+    ConnectionCls = _ConexaoHttpsComPrazo
+
+
+_POOLS_COM_PRAZO = {'http': _PoolHttpComPrazo, 'https': _PoolHttpsComPrazo}
+
+
+class _AdaptadorComPrazo(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = _POOLS_COM_PRAZO
+
+    def proxy_manager_for(self, *args, **kwargs):
+        gerenciador = super().proxy_manager_for(*args, **kwargs)
+        gerenciador.pool_classes_by_scheme = _POOLS_COM_PRAZO
+        return gerenciador
+
+
+def _sessao_com_prazo():
+    sessao = requests.Session()
+    adaptador = _AdaptadorComPrazo()
+    sessao.mount('http://', adaptador)
+    sessao.mount('https://', adaptador)
+    return sessao
+
+
 class OcrServiceClient:
     """Cliente sem estado de negócio para os três endpoints OCR."""
 
@@ -170,7 +298,7 @@ class OcrServiceClient:
         self.backoff_max_s = backoff_max_s
         self.reserva_retry_s = reserva_retry_s
         self.poll_interval_s = poll_interval_s
-        self.sessao = sessao or requests.Session()
+        self.sessao = sessao or _sessao_com_prazo()
         self._primeira_requisicao = True
 
     def enviar_job(self, caminho_pdf, job_id, prazo, **params):
@@ -246,7 +374,7 @@ class OcrServiceClient:
             if hasattr(dados, 'reset'):
                 dados.reset()
 
-            cabecalhos = dict(kw.get('headers', {}))
+            cabecalhos = {'Accept-Encoding': 'identity', **kw.get('headers', {})}
             cabecalhos.update(
                 {
                     'CF-Access-Client-Id': self.access_client_id,
@@ -262,25 +390,40 @@ class OcrServiceClient:
             argumentos['stream'] = True
             argumentos['timeout'] = min(self.timeout_s, restante)
 
+            guarda = _PrazoAbsoluto(prazo)
             try:
-                resposta = self.sessao.request(metodo, url, **argumentos)
                 try:
-                    corpo_bruto = self._ler_resposta(resposta, prazo)
-                finally:
-                    resposta.close()
-            except OrcamentoEsgotado:
-                raise
-            except requests.RequestException:
-                ultimo_codigo = 'SERVICE_UNAVAILABLE'
-                ultima_mensagem = 'Falha de transporte ao acessar o serviço OCR.'
-                tentativas_limitadas += 1
-                if tentativas_limitadas >= self.max_tentativas:
-                    raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
-                numero_retry += 1
-                self._aguardar_retry(
-                    numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
-                )
-                continue
+                    _contexto_prazo.guarda = guarda
+                    try:
+                        resposta = self.sessao.request(metodo, url, **argumentos)
+                    finally:
+                        _contexto_prazo.guarda = None
+                    try:
+                        corpo_bruto = self._ler_resposta(resposta, prazo)
+                    finally:
+                        guarda.encerrar()
+                        resposta.close()
+                except OrcamentoEsgotado:
+                    raise
+                except Exception as excecao:
+                    if guarda.estourou:
+                        raise OrcamentoEsgotado(
+                            'Prazo do job OCR esgotado durante a resposta.'
+                        ) from excecao
+                    if not isinstance(excecao, requests.RequestException):
+                        raise
+                    ultimo_codigo = 'SERVICE_UNAVAILABLE'
+                    ultima_mensagem = 'Falha de transporte ao acessar o serviço OCR.'
+                    tentativas_limitadas += 1
+                    if tentativas_limitadas >= self.max_tentativas:
+                        raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
+                    numero_retry += 1
+                    self._aguardar_retry(
+                        numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
+                    )
+                    continue
+            finally:
+                guarda.encerrar()
 
             corpo = self._json(corpo_bruto)
             status = resposta.status_code
