@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.http import content_disposition_header
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
+from ia_ocr.services import registrar_pendencia_limpeza
 
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,11 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
         try:
             arquivo.arquivo.delete(save=False)
         except Exception:
+            registrar_pendencia_limpeza(
+                documento_digital_id=arquivo_id,
+                documento_id=documento_id,
+                caminho_storage=caminho,
+            )
             logger.warning(
                 'Falha na limpeza física do storage; arquivo_id=%s', arquivo_id
             )

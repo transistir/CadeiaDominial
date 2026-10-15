@@ -15,7 +15,10 @@ from django.utils import timezone
 from . import estados
 from .backends import OcrBackendError, ResultadoOcr
 from .estados import TransicaoConcorrente
-from .models import ORIGEM_CHOICES, OcrJob, OcrJobTransicao, PaginaOcr
+from .models import (
+    ORIGEM_CHOICES, OcrJob, OcrJobTransicao, PaginaOcr,
+    PendenciaLimpezaArquivo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +120,21 @@ def _mensagem_erro_segura(codigo):
 
 class JobIdConflitante(Exception):
     """job_id já existe vinculado a outro documento digital."""
+
+
+def registrar_pendencia_limpeza(
+    documento_digital_id, caminho_storage, documento_id=None
+):
+    """Registra uma limpeza de storage que falhou para retomada pelo suporte.
+
+    Só o caminho fica no banco, nunca em log: ele permite localizar o objeto
+    órfão sem expor o nome do arquivo para fora do sistema.
+    """
+    return PendenciaLimpezaArquivo.objects.create(
+        documento_digital_id=documento_digital_id,
+        documento_id=documento_id,
+        caminho_storage=caminho_storage,
+    )
 
 
 def criar_job(documento_digital, job_id=None, criado_por=None, origem='ocr'):

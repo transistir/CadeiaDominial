@@ -284,3 +284,22 @@ class OcrJobTransicao(models.Model):
 
     def __str__(self):
         return f'{self.de_status} → {self.para_status} (job {self.ocr_job_id})'
+
+
+class PendenciaLimpezaArquivo(models.Model):
+    # Sem FK: o DocumentoDigital referenciado já foi excluído quando a pendência
+    # é criada (a falha acontece depois do delete do registro).
+    documento_digital_id = models.PositiveBigIntegerField()
+    documento_id = models.PositiveBigIntegerField(null=True, blank=True)
+    caminho_storage = models.CharField(max_length=500)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    resolvido_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Pendência de limpeza de arquivo'
+        verbose_name_plural = 'Pendências de limpeza de arquivo'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        # O caminho e o nome do arquivo podem conter PII e não entram no repr.
+        return f'Pendência {self.pk} (documento_digital {self.documento_digital_id})'
