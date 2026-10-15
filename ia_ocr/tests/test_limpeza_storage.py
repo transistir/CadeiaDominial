@@ -1,5 +1,5 @@
 import tempfile
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
 from django.contrib.messages import get_messages
@@ -68,16 +68,16 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
             self.assertTrue(default_storage.exists(caminho))
             self.client.raise_request_exception = False
 
-            with patch(
-                'django.db.models.fields.files.FieldFile.delete',
-                side_effect=OSError(detalhe_erro),
-            ), self.assertLogs(
+            excluir_fisico = Mock(side_effect=OSError(detalhe_erro))
+            with patch.object(default_storage, 'delete', excluir_fisico), self.assertLogs(
                 'dominial.views.documento_digital_views', level='WARNING'
             ) as logs:
                 response = self.client.post(self._url(documento_digital))
 
+            excluir_fisico.assert_called_once_with(caminho)
             self.assertEqual(response.status_code, 302)
             self.assertFalse(DocumentoDigital.objects.filter(id=arquivo_id).exists())
+            self.assertEqual(PendenciaLimpezaArquivo.objects.count(), 1)
             pendencia = PendenciaLimpezaArquivo.objects.get()
             self.assertEqual(pendencia.documento_digital_id, arquivo_id)
             self.assertEqual(pendencia.documento_id, documento_id)
@@ -86,6 +86,10 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
                 default_storage.exists(pendencia.caminho_storage),
                 'A pendência não localiza o objeto órfão no storage.',
             )
+            with default_storage.open(pendencia.caminho_storage, 'rb') as arquivo_orfao:
+                self.assertEqual(
+                    arquivo_orfao.read(), b'%PDF-1.4 conteudo sintetico'
+                )
 
             log = '\n'.join(logs.output)
             self.assertIn(f'arquivo_id={arquivo_id}', log)
@@ -109,14 +113,13 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
             caminho = documento_digital.arquivo.name
             self.client.raise_request_exception = False
 
-            with patch(
-                'django.db.models.fields.files.FieldFile.delete',
-                side_effect=OSError(detalhe_erro),
-            ), self.assertLogs(
+            excluir_fisico = Mock(side_effect=OSError(detalhe_erro))
+            with patch.object(default_storage, 'delete', excluir_fisico), self.assertLogs(
                 'dominial.views.documento_digital_views', level='WARNING'
             ) as logs:
                 response = self.client.post(self._url(documento_digital))
 
+            excluir_fisico.assert_called_once_with(caminho)
             self.assertEqual(response.status_code, 302)
             pendencia = PendenciaLimpezaArquivo.objects.get()
             log = '\n'.join(logs.output)
@@ -152,9 +155,9 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
             self.assertTrue(default_storage.exists(caminho))
             self.client.raise_request_exception = False
 
-            with patch(
-                'django.db.models.fields.files.FieldFile.delete',
-                side_effect=OSError('storage indisponível'),
+            excluir_fisico = Mock(side_effect=OSError('storage indisponível'))
+            with patch.object(
+                default_storage, 'delete', excluir_fisico
             ), patch(
                 'dominial.views.documento_digital_views.registrar_pendencia_limpeza',
                 side_effect=DatabaseError(detalhe_erro),
@@ -163,6 +166,7 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
             ) as log_warning:
                 response = self.client.post(self._url(documento_digital))
 
+            excluir_fisico.assert_not_called()
             self.assertEqual(response.status_code, 302)
             self.assertTrue(DocumentoDigital.objects.filter(id=arquivo_id).exists())
             self.assertTrue(default_storage.exists(caminho))

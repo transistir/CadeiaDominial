@@ -287,8 +287,10 @@ class OcrJobTransicao(models.Model):
 
 
 class PendenciaLimpezaArquivo(models.Model):
-    # Sem FK: o DocumentoDigital referenciado já foi excluído quando a pendência
-    # é criada (a falha acontece depois do delete do registro).
+    # Sem FK: a intenção é gravada na mesma transação que exclui o
+    # DocumentoDigital, antes da remoção física. Ela é removida quando a limpeza
+    # conclui e permanece para o suporte somente se a limpeza falhar; nesse
+    # momento, o DocumentoDigital já foi excluído.
     documento_digital_id = models.PositiveBigIntegerField()
     documento_id = models.PositiveBigIntegerField(null=True, blank=True)
     caminho_storage = models.CharField(max_length=500)

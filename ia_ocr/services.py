@@ -125,10 +125,12 @@ class JobIdConflitante(Exception):
 def registrar_pendencia_limpeza(
     documento_digital_id, caminho_storage, documento_id=None
 ):
-    """Registra uma limpeza de storage que falhou para retomada pelo suporte.
+    """Registra a intenção de limpeza antes da remoção física do arquivo.
 
-    Só o caminho fica no banco, nunca em log: ele permite localizar o objeto
-    órfão sem expor o nome do arquivo para fora do sistema.
+    A intenção é gravada na mesma transação que exclui o DocumentoDigital.
+    Ela é removida quando a limpeza física conclui e permanece, para retomada
+    pelo suporte, somente quando essa limpeza falha. Só o caminho fica no banco,
+    nunca em log, para não expor o nome do arquivo fora do sistema.
     """
     return PendenciaLimpezaArquivo.objects.create(
         documento_digital_id=documento_digital_id,
