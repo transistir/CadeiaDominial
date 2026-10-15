@@ -254,6 +254,7 @@ class ComandoProcessOcrQueueTest(TestCase):
         claim_proximo_job()  # worker fantasma claima e morre sem finalizar
 
         sonos = []
+        relogio = [0]
 
         def fake_sleep(_):
             sonos.append(1)
@@ -262,6 +263,7 @@ class ComandoProcessOcrQueueTest(TestCase):
                 OcrJob.objects.filter(pk=job.pk).update(
                     atualizado_em=timezone.now() - timedelta(seconds=7201)
                 )
+                relogio[0] += 1
             else:
                 raise _Pare
 
@@ -270,6 +272,8 @@ class ComandoProcessOcrQueueTest(TestCase):
         # o close real é objeto do teste anterior (ordem), este é do reap.
         with mock.patch(
             'ia_ocr.management.commands.process_ocr_queue.close_old_connections',
+        ), mock.patch(
+            'time.monotonic', side_effect=lambda: relogio[0],
         ), mock.patch('time.sleep', side_effect=fake_sleep):
             with self.assertRaises(_Pare):
                 call_command(
@@ -281,9 +285,9 @@ class ComandoProcessOcrQueueTest(TestCase):
         self.assertEqual(job.status, estados.FALHOU)
         self.assertEqual(job.erro_codigo, 'WORKER_TIMEOUT')
 
-    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendPaginaDuplicada')
+    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendSucesso')
     def test_erro_de_persistencia_na_finalizacao_nao_derruba_o_comando(self):
-        """IntegrityError ao gravar páginas: job vira falhou/ERRO_INTERNO e o
+        """Erro de banco ao gravar páginas: job vira falhou/ERRO_INTERNO e o
         worker segue para o próximo job no mesmo ciclo."""
         alvo, _ = criar_job(
             criar_documento_digital(
@@ -291,8 +295,21 @@ class ComandoProcessOcrQueueTest(TestCase):
             )
         )
         normal, _ = criar_job(self.documento)
+        bulk_create_original = PaginaOcr.objects.bulk_create
+        primeira_chamada = True
 
-        call_command('process_ocr_queue', '--once', verbosity=0)  # não pode explodir
+        def falhar_primeira_persistencia(objetos, *args, **kwargs):
+            nonlocal primeira_chamada
+            if primeira_chamada:
+                primeira_chamada = False
+                raise DatabaseError('boom sintético')
+            return bulk_create_original(objetos, *args, **kwargs)
+
+        with mock.patch.object(
+            PaginaOcr.objects, 'bulk_create',
+            side_effect=falhar_primeira_persistencia,
+        ):
+            call_command('process_ocr_queue', '--once', verbosity=0)
 
         alvo.refresh_from_db()
         self.assertEqual(alvo.status, estados.FALHOU)
@@ -303,17 +320,15 @@ class ComandoProcessOcrQueueTest(TestCase):
         self.assertEqual(normal.status, estados.CONCLUIDO)
         self.assertEqual(normal.paginas.count(), 2)
 
-    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendPaginaDuplicada')
+    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendSucesso')
     def test_falha_dupla_na_persistencia_nao_derruba_o_comando(self):
         """Se até marcar falhou falhar, o comando sobrevive: o job fica
         em_execucao e o reap do próximo ciclo é a rede de segurança."""
-        alvo, _ = criar_job(
-            criar_documento_digital(
-                upload_por=self.usuario, nome=BackendPaginaDuplicada.ALVO
-            )
-        )
+        alvo, _ = criar_job(self.documento)
 
         with mock.patch.object(
+            PaginaOcr.objects, 'bulk_create', side_effect=DatabaseError('boom'),
+        ), mock.patch.object(
             services, 'marcar_falha_interna', side_effect=DatabaseError('boom'),
         ):
             call_command('process_ocr_queue', '--once', verbosity=0)
@@ -663,3 +678,125 @@ class FinalizacaoTardiaTest(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, estados.CONCLUIDO)
         self.assertEqual(job.paginas.count(), 2)
+
+
+class CadenciaReapCommandTest(TestCase):
+    def setUp(self):
+        self.usuario = criar_usuario()
+        self.documento = criar_documento_digital(upload_por=self.usuario)
+
+    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendSucesso')
+    def test_max_jobs_reapa_lease_expirado_sem_drenar_backlog(self):
+        expirado, _ = criar_job(self.documento)
+        self.assertIsNotNone(claim_proximo_job())
+        OcrJob.objects.filter(pk=expirado.pk).update(
+            atualizado_em=timezone.now() - timedelta(seconds=7200)
+        )
+        pendentes = [criar_job(self.documento)[0] for _ in range(3)]
+
+        call_command(
+            'process_ocr_queue', '--max-jobs', '2', '--interval', '0',
+            '--timeout', '3600', '--no-reap-stale', verbosity=0,
+        )
+
+        expirado.refresh_from_db()
+        self.assertEqual(expirado.status, estados.FALHOU)
+        self.assertEqual(expirado.erro_codigo, 'WORKER_TIMEOUT')
+        self.assertEqual(
+            OcrJob.objects.filter(
+                pk__in=[job.pk for job in pendentes], status=estados.PENDENTE,
+            ).count(),
+            1,
+        )
+        expirado.retry(motivo='reap periódico')
+        self.assertEqual(expirado.status, estados.PENDENTE)
+
+    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendSucesso')
+    def test_once_reapa_somente_no_inicio(self):
+        criar_job(self.documento)
+        criar_job(self.documento)
+
+        with mock.patch.object(
+            services, 'reap_jobs_expirados', wraps=services.reap_jobs_expirados,
+        ) as reap:
+            call_command('process_ocr_queue', '--once', '--interval', '0', verbosity=0)
+
+        reap.assert_called_once()
+
+
+class ValidacaoResultadoOcrTest(TestCase):
+    def setUp(self):
+        self.usuario = criar_usuario()
+        self.documento = criar_documento_digital(upload_por=self.usuario)
+
+    def _finalizar(self, paginas, page_count):
+        job, _ = criar_job(self.documento)
+        claimado = claim_proximo_job()
+        resultado = ResultadoOcr(
+            paginas=paginas,
+            sha256_pdf='b' * 64,
+            page_count=page_count,
+            timings_ms={'total': 10},
+            origem='ocr',
+        )
+        finalizar(claimado, resultado, tentativa=claimado.tentativa)
+        job.refresh_from_db()
+        return job
+
+    def test_paginas_faltantes_falham_sem_persistir_e_aceitam_retry(self):
+        job = self._finalizar(
+            [{'numero_pagina': 1, 'texto': 'página 1', 'blocos': None}],
+            page_count=2,
+        )
+
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'INVALID_OCR_RESULT')
+        self.assertEqual(job.paginas.count(), 0)
+        self.assertEqual(
+            job.transicoes.filter(para_status=estados.CONCLUIDO).count(), 0
+        )
+        job.retry(motivo='resultado contratualmente inválido')
+        self.assertEqual(job.status, estados.PENDENTE)
+
+    def test_resultado_sem_paginas_falha(self):
+        job = self._finalizar([], page_count=2)
+
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'INVALID_OCR_RESULT')
+        self.assertEqual(job.paginas.count(), 0)
+
+    def test_paginas_duplicadas_falham_sem_persistir(self):
+        job = self._finalizar(
+            [
+                {'numero_pagina': 1, 'texto': 'página 1', 'blocos': None},
+                {'numero_pagina': 1, 'texto': 'página 1 repetida', 'blocos': None},
+            ],
+            page_count=2,
+        )
+
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'INVALID_OCR_RESULT')
+        self.assertEqual(job.paginas.count(), 0)
+
+    def test_pagina_fora_da_faixa_falha_sem_persistir(self):
+        job = self._finalizar(
+            [{'numero_pagina': 2, 'texto': 'página 2', 'blocos': None}],
+            page_count=1,
+        )
+
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'INVALID_OCR_RESULT')
+        self.assertEqual(job.paginas.count(), 0)
+
+    def test_resultado_completo_conclui(self):
+        job = self._finalizar(
+            [
+                {'numero_pagina': 1, 'texto': 'página 1', 'blocos': None},
+                {'numero_pagina': 2, 'texto': 'página 2', 'blocos': None},
+            ],
+            page_count=2,
+        )
+
+        self.assertEqual(job.status, estados.CONCLUIDO)
+        self.assertEqual(job.page_count, 2)
+        self.assertEqual(list(job.paginas.values_list('numero_pagina', flat=True)), [1, 2])

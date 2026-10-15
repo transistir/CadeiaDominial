@@ -58,49 +58,57 @@ class Command(BaseCommand):
             timeout = getattr(settings, 'OCR_JOB_TIMEOUT_SECONDS', 3600.0)
 
         if options['reap_stale']:
-            reapados = services.reap_jobs_expirados(timeout)
-            if reapados:
-                logger.info(
-                    'reap: %s job(s) expirados → falhou/WORKER_TIMEOUT', reapados
-                )
+            self._reap_expirados(timeout)
 
         backend = get_backend()
         processados = 0
+        proximo_reap = time.monotonic() + intervalo
         while True:
             while (options['max_jobs'] is None
                    or processados < options['max_jobs']):
                 if not self._processar_um_job(backend):
                     break  # fila vazia
                 processados += 1
+                # --once preserva a semântica original: reap somente no início.
+                if (
+                    not options['once']
+                    and time.monotonic() >= proximo_reap
+                ):
+                    self._reap_expirados(timeout)
+                    proximo_reap = time.monotonic() + intervalo
             if options['once'] or (
                 options['max_jobs'] is not None
                 and processados >= options['max_jobs']
             ):
                 break
-            # Só no modo contínuo, entre iterações: reap de leases que
-            # expiraram DEPOIS da partida (job de worker morto não fica
-            # preso em em_execucao para sempre) e higiene de conexões ANTES
-            # de dormir. Nunca no topo do laço: ali fecharia a conexão antes
-            # do claim do caminho --once e, em Postgres (CONN_MAX_AGE=0 /
-            # TestCase), o claim explode com `connection already closed`.
-            reapados = services.reap_jobs_expirados(timeout)
-            if reapados:
-                logger.info(
-                    'reap: %s job(s) expirados → falhou/WORKER_TIMEOUT', reapados
-                )
+            # No modo contínuo, a cadência também é conferida com fila vazia.
+            # A higiene de conexões continua somente ANTES de dormir. Nunca no
+            # topo do laço: ali fecharia a conexão antes do claim do caminho
+            # --once e, em Postgres (CONN_MAX_AGE=0 / TestCase), o claim
+            # explode com `connection already closed`.
+            if time.monotonic() >= proximo_reap:
+                self._reap_expirados(timeout)
+                proximo_reap = time.monotonic() + intervalo
             close_old_connections()
             time.sleep(intervalo)
 
         logger.info('encerrando: jobs processados=%s', processados)
 
+    @staticmethod
+    def _reap_expirados(timeout):
+        reapados = services.reap_jobs_expirados(timeout)
+        if reapados:
+            logger.info(
+                'reap: %s job(s) expirados → falhou/WORKER_TIMEOUT', reapados
+            )
+
     def _processar_um_job(self, backend):
         """Claim + processa um job. False se a fila está vazia.
 
         Nenhuma exceção derruba o worker: falha do backend E falha da
-        persistência da finalização (ex.: IntegrityError de página
-        duplicada no bulk_create) deixam o job em `falhou`/ERRO_INTERNO; se
-        até isso falhar (banco fora), o reap do próximo ciclo é a rede de
-        segurança.
+        persistência da finalização (ex.: DatabaseError no bulk_create)
+        deixam o job em `falhou`/ERRO_INTERNO; se até isso falhar (banco
+        fora), o reap do próximo ciclo é a rede de segurança.
         """
         job = services.claim_proximo_job()
         if job is None:

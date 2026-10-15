@@ -57,6 +57,16 @@ class OcrJob(models.Model):
         verbose_name = 'Job de OCR'
         verbose_name_plural = 'Jobs de OCR'
         ordering = ['-criado_em']
+        indexes = [
+            models.Index(
+                fields=['status', 'criado_em', 'id'],
+                name='iaocr_job_claim_idx',
+            ),
+            models.Index(
+                fields=['status', 'atualizado_em'],
+                name='iaocr_job_reap_idx',
+            ),
+        ]
 
     def __str__(self):
         # Nunca o documento/nome do arquivo: __str__ entra em tracebacks

@@ -239,6 +239,37 @@ def finalizar(job, resultado_ou_erro, tentativa):
     Retorna True se a finalização foi aplicada.
     """
     agora = timezone.now()
+    if isinstance(resultado_ou_erro, ResultadoOcr):
+        resultado = resultado_ou_erro
+        try:
+            numeros_paginas = [
+                pagina['numero_pagina'] for pagina in resultado.paginas
+            ]
+        except (KeyError, TypeError):
+            numeros_paginas = []
+        page_count_valido = (
+            isinstance(resultado.page_count, int)
+            and not isinstance(resultado.page_count, bool)
+            and resultado.page_count >= 1
+        )
+        paginas_validas = (
+            page_count_valido
+            and len(numeros_paginas) == resultado.page_count
+            and all(
+                isinstance(numero, int)
+                and not isinstance(numero, bool)
+                and 1 <= numero <= resultado.page_count
+                for numero in numeros_paginas
+            )
+            and len(set(numeros_paginas)) == len(numeros_paginas)
+        )
+        if not paginas_validas:
+            # O contrato exige uma entrada por página, numerada em 1..N.
+            # Converte a violação no caminho de erro contratual já sanitizado.
+            resultado_ou_erro = OcrBackendError(
+                'INVALID_OCR_RESULT', 'páginas do resultado OCR inválidas'
+            )
+
     with transaction.atomic():
         if (
             isinstance(resultado_ou_erro, ResultadoOcr)
@@ -323,8 +354,8 @@ def finalizar(job, resultado_ou_erro, tentativa):
 
 
 def marcar_falha_interna(job, tentativa):
-    """Último recurso quando a própria finalização falhou (ex.: IntegrityError
-    de página duplicada): marca o job falhou/ERRO_INTERNO numa NOVA transação
+    """Último recurso quando a própria finalização falhou (ex.: DatabaseError
+    ao persistir páginas): marca o job falhou/ERRO_INTERNO numa NOVA transação
     (a anterior já sofreu rollback), condicionada ao mesmo lease.
 
     Levanta se não conseguir — quem chama decide (log + reap como rede de
