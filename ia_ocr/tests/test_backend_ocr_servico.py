@@ -6,7 +6,8 @@ import tempfile
 from datetime import timedelta
 
 from django.core.files.base import ContentFile
-from django.test import TestCase, TransactionTestCase
+from django.core.management import call_command
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
@@ -698,6 +699,80 @@ class OcrServiceBackendTests(TestCase):
             ).count(),
             0,
         )
+
+    @override_settings(OCR_BACKEND='ia_ocr.backends.OcrServiceBackend')
+    def test_worker_ponta_a_ponta_conclui_e_persiste_paginas(self):
+        """Etapa 14 do plano #259: process_ocr_queue --max-jobs 1 com o
+        backend REAL apontando ao stub, documento real e PDF sintético."""
+        pdf = self._pdf(textos=[None, None])
+        job = self._job_pendente(pdf, forcar_ocr=True)
+        sha256 = hashlib.sha256(pdf).hexdigest()
+        stub = self._stub(
+            [
+                (202, {'job_id': str(job.job_id), 'status': 'queued'}, {}),
+                (
+                    200,
+                    {'job_id': str(job.job_id), 'status': 'succeeded'},
+                    {},
+                ),
+                (200, self._resultado_servico(job.job_id, sha256), {}),
+            ]
+        )
+
+        with self.settings(OCR_SERVICE_URL=stub.base_url):
+            call_command('process_ocr_queue', '--max-jobs', '1', verbosity=0)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.CONCLUIDO)
+        self.assertEqual(job.origem, 'ocr')
+        self.assertEqual(job.sha256_pdf, sha256)
+        self.assertEqual(job.page_count, 2)
+        paginas = list(job.paginas.order_by('numero_pagina'))
+        self.assertEqual(
+            [pagina.numero_pagina for pagina in paginas], [1, 2]
+        )
+        self.assertIn('texto OCR sensivel pagina 1', paginas[0].texto_ocr)
+        self.assertIn('texto OCR sensivel pagina 2', paginas[1].texto_ocr)
+        # A geometria viaja junto no JSONField opaco de blocos.
+        self.assertEqual(paginas[0].blocos['dpi'], 200)
+        self.assertTrue(paginas[0].blocos['blocos'][0]['bbox'])
+        self.assertEqual(
+            job.transicoes.filter(
+                para_status=estados.CONCLUIDO,
+                motivo='processado com sucesso',
+            ).count(),
+            1,
+        )
+
+    @override_settings(OCR_BACKEND='ia_ocr.backends.OcrServiceBackend')
+    def test_worker_falha_de_servico_deixa_job_falhou_e_nao_derruba_o_comando(self):
+        pdf = self._pdf(textos=[None])
+        job = self._job_pendente(pdf, forcar_ocr=True)
+        stub = self._stub(
+            [
+                (
+                    200,
+                    {
+                        'job_id': str(job.job_id),
+                        'status': 'failed',
+                        'error': {
+                            'code': 'INFERENCE_FAILED',
+                            'message': 'falha sintética do serviço',
+                        },
+                    },
+                    {},
+                )
+            ]
+        )
+
+        # Sem exceção: o worker engole a falha do serviço e termina (exit 0).
+        with self.settings(OCR_SERVICE_URL=stub.base_url):
+            call_command('process_ocr_queue', '--max-jobs', '1', verbosity=0)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'INFERENCE_FAILED')
+        self.assertEqual(job.paginas.count(), 0)
 
 
 class ReapFinalizarRaceTests(TransactionTestCase):

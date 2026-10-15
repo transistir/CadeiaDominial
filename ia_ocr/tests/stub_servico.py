@@ -15,11 +15,21 @@ from urllib.parse import parse_qs, urlsplit
 class StubServicoOcr:
     """Stub roteirizado do serviço OCR, restrito à interface loopback."""
 
-    def __init__(self, respostas, *, tamanho_chunk_resposta=None, pausa_s=0):
+    def __init__(
+        self,
+        respostas,
+        *,
+        tamanho_chunk_resposta=None,
+        pausa_s=0,
+        token_esperado=None,
+    ):
         self._respostas = deque(respostas)
         self._lock = threading.Lock()
         self.tamanho_chunk_resposta = tamanho_chunk_resposta
         self.pausa_s = pausa_s
+        # None mantém a checagem de presença (comportamento da I-1); um valor
+        # concreto exige OUTRO token — o caminho do 401/UNAUTHORIZED do #259.
+        self.token_esperado = token_esperado
         self.recebidas = []
         self.jobs_aceitos = set()
         self._servidor = None
@@ -120,14 +130,19 @@ class StubServicoOcr:
                         {},
                     )
                     return
-                if not self.headers.get('X-Internal-Token'):
+                token_recebido = self.headers.get('X-Internal-Token')
+                token_invalido = not token_recebido or (
+                    stub.token_esperado is not None
+                    and token_recebido != stub.token_esperado
+                )
+                if token_invalido:
                     self._responder(
                         401,
                         {
                             'ok': False,
                             'error': {
                                 'code': 'UNAUTHORIZED',
-                                'message': 'Token interno ausente.',
+                                'message': 'Token interno ausente ou divergente.',
                             },
                         },
                         {},
