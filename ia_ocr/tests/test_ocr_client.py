@@ -971,11 +971,9 @@ class PrazoAbsolutoTlsTests(SimpleTestCase):
         cls.contexto_servidor = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         cls.contexto_servidor.load_cert_chain(cls.certificado, chave)
 
-    def _assert_aborta_no_prazo_tls(self, resposta):
+    def _assert_aborta_no_prazo_tls(self, pedacos):
         servidor = _ServidorTlsFluxoGotejante(
-            [bytes([byte]) for byte in resposta],
-            self.PAUSA_BYTE_S,
-            self.contexto_servidor,
+            pedacos, self.PAUSA_BYTE_S, self.contexto_servidor,
         )
         servidor.iniciar()
         self.addCleanup(servidor.encerrar)
@@ -993,11 +991,12 @@ class PrazoAbsolutoTlsTests(SimpleTestCase):
         self.assertLess(time.monotonic() - inicio, self.PRAZO_S + self.MARGEM_S)
 
     def test_https_cabecalhos_gotejantes_estouram_no_prazo_real(self):
-        self._assert_aborta_no_prazo_tls(
+        resposta = (
             b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n'
             b'X-Lenta: ' + b'a' * 60 + b'\r\nContent-Length: 100\r\n\r\n'
             + b'x' * 100
         )
+        self._assert_aborta_no_prazo_tls([bytes([byte]) for byte in resposta])
 
     def test_handshake_tls_gotejante_estoura_no_prazo_real(self):
         registro = b'\x16\x03\x03\x3f\xff' + b'\x00' * 150
@@ -1021,11 +1020,42 @@ class PrazoAbsolutoTlsTests(SimpleTestCase):
 
     def test_https_corpo_gotejante_estoura_no_prazo_real(self):
         corpo = json.dumps({'job_id': 'job-tls', 'status': 'processing'}).encode()
-        self._assert_aborta_no_prazo_tls(
+        cabecalhos = (
             b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n'
             b'Content-Length: ' + str(len(corpo) + 100).encode() + b'\r\n'
-            b'Connection: close\r\n\r\n' + corpo + b'x' * 100
+            b'Connection: close\r\n\r\n'
         )
+        self._assert_aborta_no_prazo_tls(
+            [cabecalhos] + [bytes([byte]) for byte in corpo + b'x' * 100]
+        )
+
+    def test_connect_do_proxy_https_gotejante_estoura_no_prazo_real(self):
+        resposta = (
+            b'HTTP/1.1 200 Connection established\r\n'
+            b'X-Lenta: ' + b'a' * 60 + b'\r\n\r\n'
+        )
+        proxy = _ServidorTlsFluxoGotejante(
+            [bytes([byte]) for byte in resposta],
+            self.PAUSA_BYTE_S,
+            self.contexto_servidor,
+        )
+        proxy.iniciar()
+        self.addCleanup(proxy.encerrar)
+        cliente = OcrServiceClient(
+            'https://servico.invalido', 'token', 'access-id', 'access-secret',
+            timeout_s=1, backoff_base_s=0,
+        )
+        cliente.sessao.trust_env = False
+        cliente.sessao.verify = str(self.certificado)
+        cliente.sessao.proxies = {
+            'https': proxy.base_url.replace('http://', 'https://')
+        }
+
+        inicio = time.monotonic()
+        with self.assertRaises(OrcamentoEsgotado):
+            cliente.consultar_job('job-connect-tls', inicio + self.PRAZO_S)
+
+        self.assertLess(time.monotonic() - inicio, self.PRAZO_S + self.MARGEM_S)
 
 
 class AdaptadorComPrazoProxyTests(SimpleTestCase):

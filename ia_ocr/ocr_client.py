@@ -229,7 +229,12 @@ class _ConexaoHttpComPrazo(_ConexaoComPrazo, HTTPConnection):
 
 
 class _ConexaoHttpsComPrazo(_ConexaoComPrazo, HTTPSConnection):
-    pass
+    # urllib3 troca o socket TCP por um SSLSocket aqui; o TCP registrado em _new_conn fica com fd=-1.
+    def _connect_tls_proxy(self, hostname, sock):
+        ssl_sock = super()._connect_tls_proxy(hostname, sock)
+        if self._guarda is not None:
+            self._guarda.registrar(ssl_sock)
+        return ssl_sock
 
 
 class _PoolComPrazo:
