@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.messages import get_messages
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db import DatabaseError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -58,6 +59,7 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
         ]
 
     def test_falha_no_storage_cria_pendencia_que_localiza_arquivo_orfao(self):
+        detalhe_erro = 'permissão negada em /storage/dado-pessoal.pdf'
         with tempfile.TemporaryDirectory() as midia, override_settings(MEDIA_ROOT=midia):
             documento_digital = self._criar_arquivo()
             arquivo_id = documento_digital.id
@@ -68,8 +70,10 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
 
             with patch(
                 'django.db.models.fields.files.FieldFile.delete',
-                side_effect=OSError('falha sintética de storage'),
-            ):
+                side_effect=OSError(detalhe_erro),
+            ), self.assertLogs(
+                'dominial.views.documento_digital_views', level='WARNING'
+            ) as logs:
                 response = self.client.post(self._url(documento_digital))
 
             self.assertEqual(response.status_code, 302)
@@ -82,11 +86,20 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
                 default_storage.exists(pendencia.caminho_storage),
                 'A pendência não localiza o objeto órfão no storage.',
             )
+
+            log = '\n'.join(logs.output)
+            self.assertIn(f'arquivo_id={arquivo_id}', log)
+            self.assertNotIn(caminho, log)
+            self.assertNotIn(self.NOME_SENSIVEL, log)
+            self.assertNotIn(detalhe_erro, log)
+
             mensagens = self._mensagens(response)
-            self.assertTrue(
-                any(tags == 'warning' and 'suporte' in texto for tags, texto in mensagens),
-                mensagens,
-            )
+            avisos = [texto for tags, texto in mensagens if tags == 'warning']
+            self.assertEqual(avisos, [
+                'O arquivo físico não pôde ser removido do armazenamento. '
+                'Avise o suporte para concluir a limpeza.'
+            ])
+            self.assertNotIn(self.NOME_SENSIVEL, avisos[0])
 
     def test_log_e_str_da_pendencia_nao_expoem_caminho_ou_nome(self):
         detalhe_erro = 'permissão negada em /storage/dado-pessoal.pdf'
@@ -130,6 +143,43 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
             self.assertFalse(default_storage.exists(caminho))
             self.assertFalse(PendenciaLimpezaArquivo.objects.exists())
 
+    def test_falha_ao_criar_pendencia_reverte_exclusao_sem_500(self):
+        detalhe_erro = 'banco indisponível para /storage/dado-pessoal.pdf'
+        with tempfile.TemporaryDirectory() as midia, override_settings(MEDIA_ROOT=midia):
+            documento_digital = self._criar_arquivo()
+            arquivo_id = documento_digital.id
+            caminho = documento_digital.arquivo.name
+            self.assertTrue(default_storage.exists(caminho))
+            self.client.raise_request_exception = False
+
+            with patch(
+                'django.db.models.fields.files.FieldFile.delete',
+                side_effect=OSError('storage indisponível'),
+            ), patch(
+                'dominial.views.documento_digital_views.registrar_pendencia_limpeza',
+                side_effect=DatabaseError(detalhe_erro),
+            ), patch(
+                'dominial.views.documento_digital_views.logger.warning'
+            ) as log_warning:
+                response = self.client.post(self._url(documento_digital))
+
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(DocumentoDigital.objects.filter(id=arquivo_id).exists())
+            self.assertTrue(default_storage.exists(caminho))
+            self.assertFalse(PendenciaLimpezaArquivo.objects.exists())
+
+            log_warning.assert_called_once_with(
+                'Falha ao excluir o arquivo digital; arquivo_id=%s', arquivo_id
+            )
+            log = repr(log_warning.call_args_list)
+            self.assertNotIn(caminho, log)
+            self.assertNotIn(self.NOME_SENSIVEL, log)
+            self.assertNotIn(detalhe_erro, log)
+            self.assertIn(
+                ('error', 'Não foi possível excluir o arquivo digital. Tente novamente.'),
+                self._mensagens(response),
+            )
+
     def test_job_ocr_bloqueia_exclusao_sem_criar_pendencia(self):
         with tempfile.TemporaryDirectory() as midia, override_settings(MEDIA_ROOT=midia):
             documento_digital = self._criar_arquivo()
@@ -148,3 +198,17 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
                 any(tags == 'error' and 'OCR' in texto for tags, texto in mensagens),
                 mensagens,
             )
+
+    def test_sem_arquivo_fisico_exclui_registro_sem_criar_pendencia(self):
+        documento_digital = criar_documento_digital(
+            upload_por=self.usuario,
+            nome=self.NOME_SENSIVEL,
+        )
+        arquivo_id = documento_digital.id
+        self.assertFalse(documento_digital.arquivo)
+
+        response = self.client.post(self._url(documento_digital))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(DocumentoDigital.objects.filter(id=arquivo_id).exists())
+        self.assertFalse(PendenciaLimpezaArquivo.objects.exists())

@@ -3,6 +3,7 @@ import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import DatabaseError, transaction
 from django.db.models import ProtectedError
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
@@ -132,12 +133,21 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
     nome = arquivo.nome_original
-    # Registro primeiro, arquivo depois: com a FK PROTECT de OcrJob (#258),
-    # apagar o arquivo antes do registro deixaria o PDF perdido no storage
-    # e o pedido terminaria em 500 com o registro preso.
+    # Registro e intenção de limpeza formam uma unidade: se a pendência não
+    # puder ser persistida, o DocumentoDigital continua disponível.
     caminho = arquivo.arquivo.name if arquivo.arquivo else None
     try:
-        arquivo.delete()
+        with transaction.atomic():
+            arquivo.delete()
+            pendencia = (
+                registrar_pendencia_limpeza(
+                    documento_digital_id=arquivo_id,
+                    documento_id=documento_id,
+                    caminho_storage=caminho,
+                )
+                if caminho
+                else None
+            )
     except ProtectedError:
         messages.error(
             request,
@@ -145,28 +155,40 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
             'excluído. Remova o processamento de OCR antes de excluir o arquivo.'
         )
         return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
+    except DatabaseError:
+        logger.warning(
+            'Falha ao excluir o arquivo digital; arquivo_id=%s', arquivo_id
+        )
+        messages.error(
+            request, 'Não foi possível excluir o arquivo digital. Tente novamente.'
+        )
+        return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
 
-    # O registro saiu: agora sim o arquivo do storage pode ser apagado.
+    # A intenção já está durável; falhas físicas deixam a pendência para retry.
     falha_limpeza_fisica = False
     if caminho:
         try:
             arquivo.arquivo.delete(save=False)
         except Exception:
-            registrar_pendencia_limpeza(
-                documento_digital_id=arquivo_id,
-                documento_id=documento_id,
-                caminho_storage=caminho,
-            )
             logger.warning(
                 'Falha na limpeza física do storage; arquivo_id=%s', arquivo_id
             )
             falha_limpeza_fisica = True
+        else:
+            try:
+                pendencia.delete()
+            except Exception:
+                # A pendência órfã é segura e pode ser removida posteriormente.
+                logger.warning(
+                    'Falha ao remover pendência de limpeza; arquivo_id=%s',
+                    arquivo_id,
+                )
 
     messages.success(request, f'Arquivo "{nome}" excluído com sucesso.')
     if falha_limpeza_fisica:
         messages.warning(
             request,
-            f'O arquivo físico "{nome}" não pôde ser removido do armazenamento. '
+            'O arquivo físico não pôde ser removido do armazenamento. '
             'Avise o suporte para concluir a limpeza.'
         )
     return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
