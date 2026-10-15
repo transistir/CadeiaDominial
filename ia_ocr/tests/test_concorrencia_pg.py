@@ -22,7 +22,7 @@ def _resultado():
         paginas=[{'numero_pagina': 1, 'texto': 'texto sintético', 'blocos': None}],
         sha256_pdf='b' * 64,
         page_count=1,
-        timings_ms={'total_ms': 10},
+        timings_ms={'total': 10},
         origem='ocr',
     )
 

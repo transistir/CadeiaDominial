@@ -29,17 +29,41 @@ from .factories import criar_documento_digital
 NOME_SENSIVEL = 'matricula-sensivel-999.pdf'
 MARCADOR_PII = 'CPF-SINTETICO-999.888.777-66'
 MARCADOR_CODIGO = 'CPF_SINTETICO_99988877766'
+MARCADOR_CHAVE_TIMING = 'cpf_sintetico_99988877766'
+
+
+def _resultado_com_timings(timings_ms):
+    return ResultadoOcr(
+        paginas=[{'numero_pagina': 1, 'texto': 'sintético', 'blocos': None}],
+        sha256_pdf='1' * 64,
+        page_count=1,
+        timings_ms=timings_ms,
+        origem='ocr',
+    )
 
 
 class BackendTimingComChavePii(OcrBackend):
     def processar(self, job):
-        return ResultadoOcr(
-            paginas=[{'numero_pagina': 1, 'texto': 'sintético', 'blocos': None}],
-            sha256_pdf='1' * 64,
-            page_count=1,
-            timings_ms={MARCADOR_PII: 42, 'total_ms': 10},
-            origem='ocr',
-        )
+        return _resultado_com_timings({MARCADOR_CHAVE_TIMING: 42, 'total': 10})
+
+
+class BackendTimingComChaveDesconhecida(OcrBackend):
+    def processar(self, job):
+        return _resultado_com_timings({'stage_ms': 7})
+
+
+class BackendTimingsContratuais(OcrBackend):
+    def processar(self, job):
+        return _resultado_com_timings({
+            'download_and_validation': 10,
+            'inference': 20,
+            'total': 30,
+        })
+
+
+class BackendTimingComValorTextual(OcrBackend):
+    def processar(self, job):
+        return _resultado_com_timings({'total': MARCADOR_PII})
 
 
 class BackendMensagemComPii(OcrBackend):
@@ -55,6 +79,11 @@ class BackendCodigoForjadoComPii(OcrBackend):
 class BackendCodigoContratual(OcrBackend):
     def processar(self, job):
         raise OcrBackendError('TOO_MANY_PAGES', MARCADOR_PII)
+
+
+class BackendExcecaoInesperada(OcrBackend):
+    def processar(self, job):
+        raise RuntimeError(MARCADOR_PII)
 
 
 class _CapturadorDeLogs(logging.Handler):
@@ -73,15 +102,18 @@ class SanitizacaoDePiiDoBackendTest(TestCase):
     def _executar_backend(self, backend):
         job, _ = criar_job(self.documento)
         capturador = _CapturadorDeLogs()
-        raiz = logging.getLogger()
-        raiz.addHandler(capturador)
+        logger_ia_ocr = logging.getLogger('ia_ocr')
+        nivel_anterior = logger_ia_ocr.level
+        logger_ia_ocr.setLevel(logging.DEBUG)
+        logger_ia_ocr.addHandler(capturador)
         stdout, stderr = io.StringIO(), io.StringIO()
         try:
             with override_settings(OCR_BACKEND=backend):
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     call_command('process_ocr_queue', '--once', verbosity=3)
         finally:
-            raiz.removeHandler(capturador)
+            logger_ia_ocr.removeHandler(capturador)
+            logger_ia_ocr.setLevel(nivel_anterior)
 
         job.refresh_from_db()
         formatador = logging.Formatter()
@@ -90,7 +122,14 @@ class SanitizacaoDePiiDoBackendTest(TestCase):
             'erro_mensagem': job.erro_mensagem,
             'timings_ms': repr(job.timings_ms),
             'auditoria': repr(list(job.transicoes.values_list('motivo', flat=True))),
-            'caplog': '\n'.join(formatador.format(record) for record in capturador.records),
+            'caplog': '\n'.join(
+                formatador.format(record) for record in capturador.records
+            ),
+            'caplog_warning': '\n'.join(
+                formatador.format(record)
+                for record in capturador.records
+                if record.levelno == logging.WARNING
+            ),
             'stdout': stdout.getvalue(),
             'stderr': stderr.getvalue(),
         }
@@ -107,7 +146,38 @@ class SanitizacaoDePiiDoBackendTest(TestCase):
             'ia_ocr.tests.test_pii.BackendTimingComChavePii'
         )
 
-        self.assertEqual(job.timings_ms, {'total_ms': 10})
+        self.assertEqual(job.timings_ms, {'total': 10})
+        self.assertIn(
+            f'job_id={job.job_id} status=concluido page_count=1 total_ms=10',
+            superficies['caplog'],
+        )
+        self._assert_marcadores_ausentes(superficies, MARCADOR_CHAVE_TIMING)
+
+    def test_chave_de_timing_desconhecida_e_descartada(self):
+        job, superficies = self._executar_backend(
+            'ia_ocr.tests.test_pii.BackendTimingComChaveDesconhecida'
+        )
+
+        self.assertEqual(job.timings_ms, {})
+        self._assert_marcadores_ausentes(superficies, 'stage_ms')
+
+    def test_chaves_de_timing_do_contrato_sao_preservadas(self):
+        job, _superficies = self._executar_backend(
+            'ia_ocr.tests.test_pii.BackendTimingsContratuais'
+        )
+
+        self.assertEqual(job.timings_ms, {
+            'download_and_validation': 10,
+            'inference': 20,
+            'total': 30,
+        })
+
+    def test_valor_textual_em_chave_de_timing_valida_e_descartado(self):
+        job, superficies = self._executar_backend(
+            'ia_ocr.tests.test_pii.BackendTimingComValorTextual'
+        )
+
+        self.assertEqual(job.timings_ms, {})
         self._assert_marcadores_ausentes(superficies, MARCADOR_PII)
 
     def test_mensagem_externa_com_pii_nunca_e_persistida_ou_logada(self):
@@ -140,6 +210,18 @@ class SanitizacaoDePiiDoBackendTest(TestCase):
             superficies, MARCADOR_CODIGO, MARCADOR_PII
         )
 
+    def test_excecao_inesperada_loga_apenas_job_id_e_tipo_em_warning(self):
+        job, superficies = self._executar_backend(
+            'ia_ocr.tests.test_pii.BackendExcecaoInesperada'
+        )
+
+        self.assertEqual(job.erro_codigo, 'ERRO_INTERNO')
+        self.assertIn(
+            f'job_id={job.job_id} excecao_inesperada=RuntimeError',
+            superficies['caplog_warning'].splitlines(),
+        )
+        self._assert_marcadores_ausentes(superficies, MARCADOR_PII)
+
     def test_codigo_valido_persiste_com_mensagem_local(self):
         job, superficies = self._executar_backend(
             'ia_ocr.tests.test_pii.BackendCodigoContratual'
@@ -154,6 +236,7 @@ class SanitizacaoDePiiDoBackendTest(TestCase):
             job.transicoes.filter(para_status='falhou').get().motivo,
             'TOO_MANY_PAGES',
         )
+        self.assertNotIn('excecao_inesperada', superficies['caplog_warning'])
         self._assert_marcadores_ausentes(superficies, MARCADOR_PII)
 
 

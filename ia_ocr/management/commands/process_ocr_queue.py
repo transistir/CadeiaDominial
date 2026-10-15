@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 
 from ia_ocr import services
-from ia_ocr.backends import get_backend
+from ia_ocr.backends import OcrBackendError, get_backend
 
 logger = logging.getLogger('ia_ocr.process_ocr_queue')
 
@@ -109,6 +109,11 @@ class Command(BaseCommand):
         try:
             resultado = backend.processar(job)
         except Exception as excecao:
+            if not isinstance(excecao, OcrBackendError):
+                logger.warning(
+                    'job_id=%s excecao_inesperada=%s',
+                    job.job_id, type(excecao).__name__,
+                )
             resultado_ou_erro = excecao
         else:
             resultado_ou_erro = resultado

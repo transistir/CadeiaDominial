@@ -38,7 +38,7 @@ def _resultado():
         ],
         sha256_pdf='a' * 64,
         page_count=2,
-        timings_ms={'total_ms': 1234},
+        timings_ms={'total': 1234},
         origem='ocr',
     )
 
@@ -78,7 +78,7 @@ class BackendSemOrigem(OcrBackend):
             paginas=[{'numero_pagina': 1, 'texto': 'texto sintético', 'blocos': None}],
             sha256_pdf='e' * 64,
             page_count=1,
-            timings_ms={'total_ms': 10},
+            timings_ms={'total': 10},
         )
 
 
@@ -111,7 +111,7 @@ class BackendPaginaDuplicada(OcrBackend):
                 ],
                 sha256_pdf='f' * 64,
                 page_count=2,
-                timings_ms={'total_ms': 5},
+                timings_ms={'total': 5},
             )
         return _resultado()
 
@@ -125,7 +125,7 @@ class BackendTimingsSuspeitos(OcrBackend):
             sha256_pdf='g' * 64,
             page_count=1,
             timings_ms={
-                'total_ms': 4321,
+                'total': 4321,
                 'arquivo': f'{MARCADOR_PII_NOME}.pdf',
                 'aceito': True,
                 'lista': [1, 2],
@@ -160,7 +160,7 @@ class ComandoProcessOcrQueueTest(TestCase):
         self.assertEqual(job.status, estados.CONCLUIDO)
         self.assertEqual(job.sha256_pdf, 'a' * 64)
         self.assertEqual(job.page_count, 2)
-        self.assertEqual(job.timings_ms, {'total_ms': 1234})
+        self.assertEqual(job.timings_ms, {'total': 1234})
         self.assertEqual(job.origem, 'ocr')
 
         paginas = list(job.paginas.all())
@@ -380,7 +380,7 @@ class ComandoProcessOcrQueueTest(TestCase):
             call_command('process_ocr_queue', '--once', verbosity=0)
 
         job.refresh_from_db()
-        self.assertEqual(job.timings_ms, {'total_ms': 4321})
+        self.assertEqual(job.timings_ms, {'total': 4321})
         for mensagem in logs.output:
             self.assertNotIn(MARCADOR_PII_NOME, mensagem)
             self.assertNotIn('arquivo', mensagem)

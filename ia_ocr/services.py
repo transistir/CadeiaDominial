@@ -6,7 +6,6 @@ job_id, status, tentativa e códigos de erro estáveis. O que vem de fora
 """
 
 import logging
-import re
 import uuid
 from datetime import timedelta
 
@@ -21,7 +20,14 @@ from .models import ORIGEM_CHOICES, OcrJob, OcrJobTransicao, PaginaOcr
 logger = logging.getLogger(__name__)
 
 LIMITE_TIMINGS_CHAVES = 20
-_RE_CHAVE_TIMING = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
+# GET /v1/ocr/jobs/{jobId} e .../result em
+# ocr-service/contracts/ocr-api.openapi.yaml. Chaves novas exigem atualização
+# conjunta do contrato e desta allowlist.
+CHAVES_TIMING_PERMITIDAS = frozenset({
+    'download_and_validation',
+    'inference',
+    'total',
+})
 
 CODIGOS_ERRO_PERMITIDOS = frozenset({
     # Contrato do serviço OCR (ocr-api.openapi.yaml).
@@ -79,7 +85,7 @@ _ORIGENS_VALIDAS = frozenset(valor for valor, _rotulo in ORIGEM_CHOICES)
 
 
 def _sanitizar_timings(timings_ms):
-    """Mantém apenas métricas numéricas com nomes seguros, no máximo 20."""
+    """Mantém apenas métricas contratuais numéricas, no máximo 20."""
     if not isinstance(timings_ms, dict):
         return None
     sanitizado = {}
@@ -87,8 +93,7 @@ def _sanitizar_timings(timings_ms):
         if len(sanitizado) >= LIMITE_TIMINGS_CHAVES:
             break
         if (
-            isinstance(chave, str)
-            and _RE_CHAVE_TIMING.fullmatch(chave)
+            chave in CHAVES_TIMING_PERMITIDAS
             and isinstance(valor, (int, float))
             and not isinstance(valor, bool)
         ):
@@ -256,10 +261,10 @@ def finalizar(job, resultado_ou_erro, tentativa):
                 motivo='processado com sucesso',
             )
             timings = campos['timings_ms'] or {}
-            if 'total_ms' in timings:
+            if 'total' in timings:
                 logger.info(
                     'job_id=%s status=concluido page_count=%s total_ms=%s',
-                    job.job_id, resultado.page_count, timings['total_ms'],
+                    job.job_id, resultado.page_count, timings['total'],
                 )
             else:
                 logger.info(
