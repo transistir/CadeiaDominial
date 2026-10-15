@@ -49,25 +49,61 @@ class StubServicoOcr:
 
             def _atender(self):
                 tamanho = int(self.headers.get('Content-Length', '0'))
-                corpo = self.rfile.read(tamanho)
                 partes = urlsplit(self.path)
-                campos, arquivo = stub._decodificar_multipart(
-                    self.headers.get('Content-Type'), corpo
-                )
+                corpo_em_progresso = bytearray()
                 recebida = {
                     'metodo': self.command,
                     'caminho': partes.path,
                     'query': parse_qs(partes.query, keep_blank_values=True),
                     'query_bruta': partes.query,
                     'cabecalhos': dict(self.headers.items()),
-                    'corpo_bruto': corpo,
-                    'campos': campos,
-                    'arquivo_bytes': arquivo,
+                    'content_length': tamanho,
+                    'corpo_bruto': corpo_em_progresso,
+                    'upload_completo': tamanho == 0,
+                    'campos': {},
+                    'arquivo_bytes': None,
                 }
                 with stub._lock:
                     stub.recebidas.append(recebida)
+
+                restante = tamanho
+                tamanho_chunk_upload = getattr(
+                    stub, 'tamanho_chunk_upload', 64 * 1024
+                )
+                while restante > 0:
+                    dados = self.rfile.read(min(restante, tamanho_chunk_upload))
+                    if not dados:
+                        break
+                    with stub._lock:
+                        corpo_em_progresso.extend(dados)
+                    restante -= len(dados)
+                    pausa_upload_s = getattr(stub, 'pausa_upload_s', 0)
+                    if pausa_upload_s:
+                        time.sleep(pausa_upload_s)
+
+                corpo = bytes(corpo_em_progresso)
+                upload_completo = len(corpo) == tamanho
+                if upload_completo:
+                    campos, arquivo = stub._decodificar_multipart(
+                        self.headers.get('Content-Type'), corpo
+                    )
+                else:
+                    campos, arquivo = {}, None
+                with stub._lock:
+                    recebida.update(
+                        {
+                            'corpo_bruto': corpo,
+                            'upload_completo': upload_completo,
+                            'campos': campos,
+                            'arquivo_bytes': arquivo,
+                        }
+                    )
                     if self.command == 'POST' and campos.get('job_id'):
                         stub.jobs_aceitos.add(campos['job_id'])
+
+                if not upload_completo:
+                    self.close_connection = True
+                    return
 
                 if not self.headers.get('CF-Access-Client-Id') or not self.headers.get(
                     'CF-Access-Client-Secret'

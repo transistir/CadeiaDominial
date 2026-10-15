@@ -135,7 +135,7 @@ class _MultipartEncoder:
 class OcrServiceClient:
     """Cliente sem estado de negócio para os três endpoints OCR."""
 
-    TAMANHO_CHUNK_RESPOSTA = 64 * 1024
+    TAMANHO_CHUNK_RESPOSTA = 4 * 1024
     MAX_BYTES_RESPOSTA = 52_428_800
 
     def __init__(
@@ -147,6 +147,8 @@ class OcrServiceClient:
         timeout_s=30,
         max_tentativas=3,
         backoff_base_s=0.5,
+        backoff_max_s=30,
+        reserva_retry_s=0,
         poll_interval_s=5,
         sessao=None,
     ):
@@ -159,6 +161,8 @@ class OcrServiceClient:
         self.timeout_s = timeout_s
         self.max_tentativas = max_tentativas
         self.backoff_base_s = backoff_base_s
+        self.backoff_max_s = backoff_max_s
+        self.reserva_retry_s = reserva_retry_s
         self.poll_interval_s = poll_interval_s
         self.sessao = sessao or requests.Session()
 
@@ -225,8 +229,10 @@ class OcrServiceClient:
         dados = kw.get('data')
         ultimo_codigo = 'SERVICE_UNAVAILABLE'
         ultima_mensagem = 'Serviço OCR indisponível.'
+        tentativas_limitadas = 0
+        numero_retry = 0
 
-        for tentativa in range(1, self.max_tentativas + 1):
+        while True:
             restante = self._restante(prazo)
             if hasattr(dados, 'reset'):
                 dados.reset()
@@ -256,9 +262,11 @@ class OcrServiceClient:
             except requests.RequestException:
                 ultimo_codigo = 'SERVICE_UNAVAILABLE'
                 ultima_mensagem = 'Falha de transporte ao acessar o serviço OCR.'
-                if tentativa == self.max_tentativas:
+                tentativas_limitadas += 1
+                if tentativas_limitadas >= self.max_tentativas:
                     raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
-                self._aguardar_retry(tentativa, prazo)
+                numero_retry += 1
+                self._aguardar_retry(numero_retry, prazo)
                 continue
 
             corpo = self._json(corpo_bruto)
@@ -292,6 +300,7 @@ class OcrServiceClient:
                 codigo, mensagem = self._erro_do_corpo(corpo, padrao)
                 raise OcrBackendError(codigo, mensagem)
 
+            retry_ate_prazo = False
             if status == 503:
                 codigo, mensagem = self._erro_do_corpo(
                     corpo, 'SERVICE_UNAVAILABLE'
@@ -301,10 +310,15 @@ class OcrServiceClient:
                 if codigo == 'QUEUE_FULL':
                     ultimo_codigo = codigo
                     ultima_mensagem = mensagem
+                    retry_ate_prazo = True
                 else:
                     ultimo_codigo = 'SERVICE_UNAVAILABLE'
                     ultima_mensagem = 'Serviço OCR indisponível.'
-            elif status == 429 or 500 <= status < 600:
+            elif status == 429:
+                ultimo_codigo = 'SERVICE_UNAVAILABLE'
+                ultima_mensagem = 'Serviço OCR indisponível.'
+                retry_ate_prazo = True
+            elif 500 <= status < 600:
                 ultimo_codigo = 'SERVICE_UNAVAILABLE'
                 ultima_mensagem = 'Serviço OCR indisponível.'
             else:
@@ -313,11 +327,12 @@ class OcrServiceClient:
                     f'Resposta HTTP inesperada do serviço OCR: {status}.',
                 )
 
-            if tentativa == self.max_tentativas:
-                raise OcrBackendError(ultimo_codigo, ultima_mensagem)
-            self._aguardar_retry(tentativa, prazo)
-
-        raise OcrBackendError(ultimo_codigo, ultima_mensagem)
+            if not retry_ate_prazo:
+                tentativas_limitadas += 1
+                if tentativas_limitadas >= self.max_tentativas:
+                    raise OcrBackendError(ultimo_codigo, ultima_mensagem)
+            numero_retry += 1
+            self._aguardar_retry(numero_retry, prazo)
 
     def _ler_resposta(self, resposta, prazo):
         partes = []
@@ -336,13 +351,20 @@ class OcrServiceClient:
         return b''.join(partes)
 
     def _aguardar_retry(self, tentativa, prazo):
-        atraso = self.backoff_base_s * (2 ** (tentativa - 1))
+        atraso = min(
+            self.backoff_base_s * (2 ** (tentativa - 1)),
+            self.backoff_max_s,
+        )
         restante = self._restante(prazo)
-        if atraso >= restante:
+        if restante <= self.reserva_retry_s:
+            raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
+        if atraso >= restante - self.reserva_retry_s:
             raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
         if atraso > 0:
             time.sleep(atraso)
-        self._restante(prazo)
+        restante = self._restante(prazo)
+        if restante <= self.reserva_retry_s:
+            raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
 
     @staticmethod
     def _json(corpo):
