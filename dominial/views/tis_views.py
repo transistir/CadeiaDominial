@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import ProtectedError
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
 from django.db.models import Count, F, Max, Q
@@ -144,6 +145,17 @@ def tis_delete(request, tis_id):
             tis.delete()
             messages.success(request, f'Terra Indígena "{nome}" excluída com sucesso!')
             return redirect('home')
+        except ProtectedError:
+            # FK PROTECT de OcrJob (#258): log SEM corpo/traceback — a
+            # exceção carrega o repr dos objetos protegidos e o __str__ dos
+            # modelos envolvidos pode citar o arquivo do documento (PII).
+            logger.warning('exclusao bloqueada por OcrJob: tis id=%s', tis.id)
+            messages.error(
+                request,
+                'Há arquivo digital com processamento de OCR vinculado a esta '
+                'Terra Indígena e ela não pode ser excluída. Remova o '
+                'processamento de OCR antes de excluir.',
+            )
         except Exception:
             logger.exception('Erro ao excluir Terra Indígena id=%s', tis.id)
             messages.error(request, 'Erro ao excluir Terra Indígena.')
@@ -200,6 +212,17 @@ def imovel_delete(request, tis_id, imovel_id):
             imovel.delete()
             messages.success(request, f'Imóvel "{matricula}" excluído com sucesso!')
             return redirect('tis_detail', tis_id=tis.id)
+        except ProtectedError:
+            # FK PROTECT de OcrJob (#258): log SEM corpo/traceback — a
+            # exceção carrega o repr dos objetos protegidos e o __str__ dos
+            # modelos envolvidos pode citar o arquivo do documento (PII).
+            logger.warning('exclusao bloqueada por OcrJob: imovel id=%s', imovel_id)
+            messages.error(
+                request,
+                'Imóvel possui arquivo digital com processamento de OCR '
+                'vinculado e não pode ser excluído. Remova o processamento de '
+                'OCR antes de excluir o imóvel.',
+            )
         except Exception:
             logger.exception('Erro ao excluir imóvel id=%s', imovel_id)
             messages.error(request, 'Erro ao excluir imóvel.')

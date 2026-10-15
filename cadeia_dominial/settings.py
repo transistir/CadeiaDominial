@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'cadeia_dominial',
     'django_extensions',
     'dominial',
+    'ia_ocr',
     'dal',
     'dal_select2',
 ]
@@ -169,3 +170,14 @@ DUPLICATA_VERIFICACAO_ENABLED = True
 # ─── Modo de Manutenção ───────────────────────────────────────────
 # Arquivo de flag para o modo de manutenção (deve estar em volume persistente)
 MANUTENCAO_FILE_PATH = os.environ.get('MANUTENCAO_FILE_PATH', os.path.join(BASE_DIR, 'maintenance', '.maintenance.json'))
+
+# ─── IA/OCR (issue #258 / I-1) ─────────────────────────────────────
+# Backend de processamento (dotted path); o cliente HTTP real chega na I-2.
+OCR_BACKEND = os.environ.get('OCR_BACKEND', 'ia_ocr.backends.StubBackend')
+# Lease do worker: 3600 s cobre ~97 páginas a ~37 s/página (medição I-1) —
+# ABAIXO do máximo contratual do serviço. O default fixo é provisório: a I-2
+# deve vincular o lease ao page_count/deadline de cada job em vez de depender
+# deste valor (reap usa `atualizado_em < now - OCR_JOB_TIMEOUT_SECONDS`).
+OCR_JOB_TIMEOUT_SECONDS = int(os.environ.get('OCR_JOB_TIMEOUT_SECONDS', '3600'))
+# Intervalo do loop contínuo do process_ocr_queue.
+OCR_QUEUE_INTERVAL_SECONDS = float(os.environ.get('OCR_QUEUE_INTERVAL_SECONDS', '30'))

@@ -2,6 +2,7 @@ import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db.models import ProtectedError
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.http import content_disposition_header
@@ -126,10 +127,23 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
     nome = arquivo.nome_original
-    # Deletar o arquivo do storage antes de deletar o registro
-    if arquivo.arquivo:
+    # Registro primeiro, arquivo depois: com a FK PROTECT de OcrJob (#258),
+    # apagar o arquivo antes do registro deixaria o PDF perdido no storage
+    # e o pedido terminaria em 500 com o registro preso.
+    caminho = arquivo.arquivo.name if arquivo.arquivo else None
+    try:
+        arquivo.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f'Arquivo "{nome}" possui processamento de OCR vinculado e não pode ser '
+            'excluído. Remova o processamento de OCR antes de excluir o arquivo.'
+        )
+        return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
+
+    # O registro saiu: agora sim o arquivo do storage pode ser apagado.
+    if caminho:
         arquivo.arquivo.delete(save=False)
-    arquivo.delete()
 
     messages.success(request, f'Arquivo "{nome}" excluído com sucesso.')
     return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)

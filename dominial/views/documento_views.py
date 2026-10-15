@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
+from django.db.models import ProtectedError
 from ..models import Documento, DocumentoTipo, Imovel, TIs, Cartorios, Lancamento
 from ..managers import documentos_for_user
 from ..forms import ImovelForm
@@ -138,6 +139,17 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
             CacheService.invalidate_documentos_imovel(imovel.id)
             CacheService.invalidate_tronco_principal(imovel.id)
             return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
+        except ProtectedError:
+            # FK PROTECT de OcrJob (#258): log SEM corpo/traceback — a
+            # exceção carrega o repr dos objetos protegidos e o __str__ dos
+            # modelos envolvidos pode citar o arquivo do documento (PII).
+            logger.warning('exclusao bloqueada por OcrJob: documento id=%s', documento_id)
+            messages.error(
+                request,
+                'Documento possui arquivo digital com processamento de OCR '
+                'vinculado e não pode ser excluído. Remova o processamento de '
+                'OCR antes de excluir o documento.',
+            )
         except Exception:
             logger.exception('Erro ao excluir documento id=%s', documento_id)
             messages.error(request, 'Erro ao excluir documento.')

@@ -1,0 +1,339 @@
+"""Serviços da fila de OCR: criação idempotente, claim, reap e finalização.
+
+Nenhum log aqui carrega texto de documento ou dados do PDF (PII): apenas
+job_id, status, tentativa e códigos de erro estáveis. O que vem de fora
+(backend) é sanitizado antes de virar log ou coluna.
+"""
+
+import logging
+import re
+import uuid
+from datetime import timedelta
+
+from django.db import transaction
+from django.utils import timezone
+
+from . import estados
+from .backends import OcrBackendError, ResultadoOcr
+from .estados import TransicaoConcorrente
+from .models import ORIGEM_CHOICES, OcrJob, OcrJobTransicao, PaginaOcr
+
+logger = logging.getLogger(__name__)
+
+LIMITE_TIMINGS_CHAVES = 20
+_RE_CHAVE_TIMING = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
+
+CODIGOS_ERRO_PERMITIDOS = frozenset({
+    # Contrato do serviço OCR (ocr-api.openapi.yaml).
+    'INVALID_INPUT',
+    'INVALID_FILE_URL',
+    'SOURCE_HOST_NOT_ALLOWED',
+    'DOWNLOAD_TIMEOUT',
+    'DOWNLOAD_FAILED',
+    'TOO_MANY_REDIRECTS',
+    'FILE_TOO_LARGE',
+    'EMPTY_FILE',
+    'INVALID_PDF',
+    'ENCRYPTED_PDF',
+    'TOO_MANY_PAGES',
+    'PDF_PAGE_TOO_LARGE',
+    'INVALID_OCR_RESULT',
+    'EMPTY_OCR_RESULT',
+    'OUTPUT_TOO_LARGE',
+    'JOB_NOT_FOUND',
+    'INFERENCE_FAILED',
+    # Códigos internos/estáveis usados pela fila e pelo gateway.
+    'QUEUE_FULL',
+    'SERVICE_UNAVAILABLE',
+    'WORKER_TIMEOUT',
+    'BACKEND_NAO_IMPLEMENTADO',
+    'ERRO_INTERNO',
+})
+
+MENSAGENS_ERRO_SEGURAS = {
+    'INVALID_INPUT': 'entrada inválida para processamento OCR',
+    'INVALID_FILE_URL': 'URL de arquivo inválida',
+    'SOURCE_HOST_NOT_ALLOWED': 'origem do arquivo não permitida',
+    'DOWNLOAD_TIMEOUT': 'tempo limite excedido ao baixar arquivo',
+    'DOWNLOAD_FAILED': 'falha ao baixar arquivo para OCR',
+    'TOO_MANY_REDIRECTS': 'redirecionamentos excessivos ao baixar arquivo',
+    'FILE_TOO_LARGE': 'arquivo excede o limite de tamanho do serviço',
+    'EMPTY_FILE': 'arquivo vazio',
+    'INVALID_PDF': 'PDF inválido',
+    'ENCRYPTED_PDF': 'PDF criptografado não suportado',
+    'TOO_MANY_PAGES': 'documento excede o limite de páginas do serviço',
+    'PDF_PAGE_TOO_LARGE': 'página do PDF excede o limite do serviço',
+    'INVALID_OCR_RESULT': 'resultado OCR inválido',
+    'EMPTY_OCR_RESULT': 'resultado OCR vazio',
+    'OUTPUT_TOO_LARGE': 'resultado OCR excede o limite do serviço',
+    'JOB_NOT_FOUND': 'job OCR não encontrado',
+    'INFERENCE_FAILED': 'falha na inferência OCR',
+    'QUEUE_FULL': 'fila do serviço OCR cheia',
+    'SERVICE_UNAVAILABLE': 'serviço OCR indisponível',
+    'WORKER_TIMEOUT': 'worker OCR excedeu o tempo limite',
+    'BACKEND_NAO_IMPLEMENTADO': 'backend OCR não implementado',
+    'ERRO_INTERNO': 'falha interna no processamento do job',
+}
+
+_ORIGENS_VALIDAS = frozenset(valor for valor, _rotulo in ORIGEM_CHOICES)
+
+
+def _sanitizar_timings(timings_ms):
+    """Mantém apenas métricas numéricas com nomes seguros, no máximo 20."""
+    if not isinstance(timings_ms, dict):
+        return None
+    sanitizado = {}
+    for chave, valor in timings_ms.items():
+        if len(sanitizado) >= LIMITE_TIMINGS_CHAVES:
+            break
+        if (
+            isinstance(chave, str)
+            and _RE_CHAVE_TIMING.fullmatch(chave)
+            and isinstance(valor, (int, float))
+            and not isinstance(valor, bool)
+        ):
+            sanitizado[chave] = valor
+    return sanitizado
+
+
+def _sanitizar_erro_codigo(codigo):
+    """Aceita somente códigos estáveis explicitamente allowlisted."""
+    if isinstance(codigo, str) and codigo in CODIGOS_ERRO_PERMITIDOS:
+        return codigo
+    return 'ERRO_INTERNO'
+
+
+def _mensagem_erro_segura(codigo):
+    """Retorna texto local fixo; nunca usa mensagem fornecida pelo backend."""
+    return MENSAGENS_ERRO_SEGURAS.get(
+        codigo, MENSAGENS_ERRO_SEGURAS['ERRO_INTERNO']
+    )
+
+
+class JobIdConflitante(Exception):
+    """job_id já existe vinculado a outro documento digital."""
+
+
+def criar_job(documento_digital, job_id=None, criado_por=None, origem='ocr'):
+    """Cria (ou recupera) um job de OCR de forma idempotente por job_id.
+
+    O lookup é somente por job_id; os metadados vão em `defaults` — filtro
+    divergente no get_or_create causaria IntegrityError na segunda chamada.
+    """
+    if job_id is None:
+        job_id = uuid.uuid4()
+    job, criado = OcrJob.objects.get_or_create(
+        job_id=job_id,
+        defaults={
+            'documento_digital': documento_digital,
+            'criado_por': criado_por,
+            'origem': origem,
+            'status': estados.PENDENTE,
+        },
+    )
+    if not criado and job.documento_digital_id != documento_digital.pk:
+        raise JobIdConflitante(
+            f'job_id {job_id} já existe para outro documento digital.'
+        )
+    return job, criado
+
+
+def claim_proximo_job(timeout_s=None):
+    """Reivindica (CAS) o job `pendente` mais antigo e o marca `em_execucao`.
+
+    Transação curta: o lock (quando o banco suporta SKIP LOCKED) e a
+    auditoria são liberados ao comitar, ANTES do processamento demorado.
+    A correção sob concorrência vem do CAS em `status`, não do lock —
+    em sqlite o select_for_update é ignorado em silêncio e tudo ainda
+    funciona por causa disso.
+
+    `timeout_s` é reservado para a I-2 (deadlines de lease por job).
+    """
+    agora = timezone.now()
+    with transaction.atomic():
+        tentados = set()
+        while True:
+            candidato = (
+                OcrJob.objects.select_for_update(skip_locked=True)
+                .filter(status=estados.PENDENTE)
+                .exclude(pk__in=tentados)
+                .order_by('criado_em', 'pk')
+                .first()
+            )
+            # Sem próximo candidato legítimo, ou seletor devolvendo sempre o
+            # mesmo (disputa): não há mais nada a reivindicar.
+            if candidato is None or candidato.pk in tentados:
+                return None
+            tentados.add(candidato.pk)
+            rowcount = (
+                OcrJob.objects
+                .filter(pk=candidato.pk, status=estados.PENDENTE)
+                .update(status=estados.EM_EXECUCAO, atualizado_em=agora)
+            )
+            if rowcount == 1:
+                OcrJobTransicao.objects.create(
+                    ocr_job_id=candidato.pk,
+                    de_status=estados.PENDENTE,
+                    para_status=estados.EM_EXECUCAO,
+                    motivo='claim do worker',
+                )
+                return OcrJob.objects.get(pk=candidato.pk)
+
+
+def reap_jobs_expirados(timeout_s):
+    """Marca `falhou`/WORKER_TIMEOUT cada job `em_execucao` com lease expirado.
+
+    CAS por job (pk, status, tentativa) — nunca update() em massa — para não
+    atropelar um worker que finalize no mesmo instante.
+    """
+    limite = timezone.now() - timedelta(seconds=timeout_s)
+    reapados = 0
+    expirados = OcrJob.objects.filter(
+        status=estados.EM_EXECUCAO, atualizado_em__lt=limite
+    )
+    for job in expirados:
+        try:
+            job.transicionar(
+                estados.FALHOU,
+                motivo='WORKER_TIMEOUT',
+                tentativa=job.tentativa,
+                erro_codigo='WORKER_TIMEOUT',
+                erro_mensagem=_mensagem_erro_segura('WORKER_TIMEOUT'),
+            )
+        except TransicaoConcorrente:
+            continue  # outro ator mudou o estado antes: nada a fazer
+        reapados += 1
+    return reapados
+
+
+def finalizar(job, resultado_ou_erro, tentativa):
+    """Finaliza um job claimado, condicionada ao lease (status + tentativa).
+
+    Se o lease mudou (reap/retry no meio do processamento), o resultado do
+    worker antigo é DESCARTADO: nada é gravado, só log com job_id/tentativa.
+    Retorna True se a finalização foi aplicada.
+    """
+    agora = timezone.now()
+    with transaction.atomic():
+        if (
+            isinstance(resultado_ou_erro, ResultadoOcr)
+            and (
+                resultado_ou_erro.origem is None
+                or resultado_ou_erro.origem in _ORIGENS_VALIDAS
+            )
+        ):
+            resultado = resultado_ou_erro
+            campos = {
+                'status': estados.CONCLUIDO,
+                'atualizado_em': agora,
+                'sha256_pdf': resultado.sha256_pdf,
+                'page_count': resultado.page_count,
+                'timings_ms': _sanitizar_timings(resultado.timings_ms),
+            }
+            if resultado.origem is not None:
+                # Sem origem no resultado: a origem definida no criar_job
+                # (ex.: texto_embutido da I-2) permanece.
+                campos['origem'] = resultado.origem
+            rowcount = OcrJob.objects.filter(
+                pk=job.pk, status=estados.EM_EXECUCAO, tentativa=tentativa,
+            ).update(**campos)
+            if rowcount == 0:
+                _logar_finalizacao_descartada(job, tentativa)
+                return False
+            PaginaOcr.objects.bulk_create(
+                PaginaOcr(
+                    ocr_job_id=job.pk,
+                    numero_pagina=pagina['numero_pagina'],
+                    texto_ocr=pagina.get('texto', ''),
+                    blocos=pagina.get('blocos'),
+                )
+                for pagina in resultado.paginas
+            )
+            OcrJobTransicao.objects.create(
+                ocr_job_id=job.pk,
+                de_status=estados.EM_EXECUCAO,
+                para_status=estados.CONCLUIDO,
+                motivo='processado com sucesso',
+            )
+            timings = campos['timings_ms'] or {}
+            if 'total_ms' in timings:
+                logger.info(
+                    'job_id=%s status=concluido page_count=%s total_ms=%s',
+                    job.job_id, resultado.page_count, timings['total_ms'],
+                )
+            else:
+                logger.info(
+                    'job_id=%s status=concluido page_count=%s',
+                    job.job_id, resultado.page_count,
+                )
+            return True
+
+        excecao = resultado_ou_erro
+        if isinstance(excecao, OcrBackendError):
+            codigo = _sanitizar_erro_codigo(excecao.codigo)
+        else:
+            # Resultado com origem inválida e exceções inesperadas usam o
+            # mesmo erro local. Nem o valor inválido nem str(exc) são usados.
+            codigo = 'ERRO_INTERNO'
+        mensagem = _mensagem_erro_segura(codigo)
+        rowcount = OcrJob.objects.filter(
+            pk=job.pk, status=estados.EM_EXECUCAO, tentativa=tentativa,
+        ).update(
+            status=estados.FALHOU,
+            atualizado_em=agora,
+            erro_codigo=codigo,
+            erro_mensagem=mensagem,
+        )
+        if rowcount == 0:
+            _logar_finalizacao_descartada(job, tentativa)
+            return False
+        OcrJobTransicao.objects.create(
+            ocr_job_id=job.pk,
+            de_status=estados.EM_EXECUCAO,
+            para_status=estados.FALHOU,
+            motivo=codigo,
+        )
+        logger.warning('job_id=%s status=falhou erro_codigo=%s', job.job_id, codigo)
+        return True
+
+
+def marcar_falha_interna(job, tentativa):
+    """Último recurso quando a própria finalização falhou (ex.: IntegrityError
+    de página duplicada): marca o job falhou/ERRO_INTERNO numa NOVA transação
+    (a anterior já sofreu rollback), condicionada ao mesmo lease.
+
+    Levanta se não conseguir — quem chama decide (log + reap como rede de
+    segurança). Retorna True se marcou, False se o lease já não é nosso.
+    """
+    agora = timezone.now()
+    with transaction.atomic():
+        rowcount = OcrJob.objects.filter(
+            pk=job.pk, status=estados.EM_EXECUCAO, tentativa=tentativa,
+        ).update(
+            status=estados.FALHOU,
+            atualizado_em=agora,
+            erro_codigo='ERRO_INTERNO',
+            erro_mensagem=_mensagem_erro_segura('ERRO_INTERNO'),
+        )
+        if rowcount == 0:
+            _logar_finalizacao_descartada(job, tentativa)
+            return False
+        OcrJobTransicao.objects.create(
+            ocr_job_id=job.pk,
+            de_status=estados.EM_EXECUCAO,
+            para_status=estados.FALHOU,
+            motivo='ERRO_INTERNO',
+        )
+        logger.warning(
+            'job_id=%s status=falhou erro_codigo=ERRO_INTERNO '
+            '(finalizacao original falhou ao persistir)',
+            job.job_id,
+        )
+        return True
+
+
+def _logar_finalizacao_descartada(job, tentativa):
+    logger.warning(
+        'job_id=%s finalizacao descartada: lease mudou (tentativa=%s)',
+        job.job_id, tentativa,
+    )
