@@ -40,6 +40,9 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@cadeiadominial.com.br}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - OCR_BACKEND=${OCR_BACKEND:-ia_ocr.backends.StubBackend}
+      - OCR_JOB_TIMEOUT_SECONDS=${OCR_JOB_TIMEOUT_SECONDS:-3600}
+      - OCR_QUEUE_INTERVAL_SECONDS=${OCR_QUEUE_INTERVAL_SECONDS:-30}
     volumes:
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media

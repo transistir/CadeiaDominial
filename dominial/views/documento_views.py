@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
+from django.db.models import ProtectedError
 from ..models import Documento, DocumentoTipo, Imovel, TIs, Cartorios, Lancamento
 from ..managers import documentos_for_user
 from ..forms import ImovelForm
@@ -138,6 +139,38 @@ def excluir_documento(request, tis_id, imovel_id, documento_id):
             CacheService.invalidate_documentos_imovel(imovel.id)
             CacheService.invalidate_tronco_principal(imovel.id)
             return redirect('cadeia_dominial', tis_id=tis.id, imovel_id=imovel.id)
+        except ProtectedError as e:
+            # Use apenas metadados dos models: objetos/exceção podem carregar PII
+            # em suas representações textuais.
+            protected_objects = list(e.protected_objects)
+            tipos = sorted({
+                str(obj._meta.verbose_name_plural)
+                for obj in protected_objects
+            }, key=str.casefold)
+            tipos_log = ', '.join(tipos) or 'desconhecido'
+            tem_ocr = any(
+                obj._meta.label_lower == 'ia_ocr.ocrjob'
+                for obj in protected_objects
+            )
+            logger.warning(
+                'exclusao bloqueada por PROTECT: documento id=%s tipos=%s',
+                documento_id,
+                tipos_log,
+            )
+            if tem_ocr:
+                messages.error(
+                    request,
+                    'Documento possui arquivo digital com processamento de OCR '
+                    'vinculado e não pode ser excluído. Remova o processamento de '
+                    'OCR antes de excluir o documento.',
+                )
+            else:
+                detalhe_tipos = f' ({tipos_log.lower()})' if tipos else ''
+                messages.error(
+                    request,
+                    'Documento possui vínculos que impedem a exclusão'
+                    f'{detalhe_tipos}. Remova esses vínculos antes de excluir.',
+                )
         except Exception:
             logger.exception('Erro ao excluir documento id=%s', documento_id)
             messages.error(request, 'Erro ao excluir documento.')

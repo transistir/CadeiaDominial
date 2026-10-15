@@ -1,12 +1,18 @@
 import io
-from django.test import TestCase, Client
+import tempfile
+from datetime import date
+
 from django.contrib.auth.models import User
+from django.contrib.messages import get_messages
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 
 from dominial.models import (
-    TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital, UserImovel
+    TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital, Pessoas, UserImovel
 )
+from ia_ocr.models import OcrJob
 
 
 class DocumentoDigitalTestCase(TestCase):
@@ -180,3 +186,145 @@ class DocumentoDigitalTestCase(TestCase):
         self.assertFalse(DocumentoDigital.objects.filter(
             documento=self.documento, nome_original='fake.pdf'
         ).exists())
+
+
+class ExcluirDocumentoDigitalComOcrTest(TestCase):
+    """Regressão #258: FK PROTECT de OcrJob não pode perder o arquivo do storage.
+
+    A ordem correta é excluir o registro primeiro; o arquivo do storage só sai
+    se o registro sair. Com job de OCR vinculado, nada é apagado.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='testuser_ocr', password='testpass123')
+        cls.ti = TIs.objects.create(nome='TI Teste OCR')
+        cls.cartorio = Cartorios.objects.create(nome='CRI Teste OCR', estado='SP')
+        cls.proprietario = Pessoas.objects.create(nome='Proprietario Teste OCR')
+        cls.tipo = DocumentoTipo.objects.create(tipo='transcricao_ocr')
+        cls.imovel = Imovel.objects.create(
+            nome='Imovel Teste OCR', matricula='99001',
+            terra_indigena_id=cls.ti, proprietario=cls.proprietario,
+            cartorio=cls.cartorio
+        )
+        cls.documento = Documento.objects.create(
+            imovel=cls.imovel, tipo=cls.tipo, numero='R9',
+            data=date(2024, 1, 1), cartorio=cls.cartorio,
+            livro='9', folha='9'
+        )
+        UserImovel.objects.create(user=cls.user, imovel=cls.imovel)
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(username='testuser_ocr', password='testpass123')
+
+    def _criar_arquivo(self, nome='matricula-sintetica.pdf'):
+        conteudo = b'%PDF-1.4 conteudo sintetico'
+        pdf_file = SimpleUploadedFile(nome, conteudo, content_type='application/pdf')
+        return DocumentoDigital.objects.create(
+            documento=self.documento,
+            arquivo=pdf_file,
+            nome_original=nome,
+            tipo_mime='application/pdf',
+            tamanho_bytes=len(conteudo),
+            upload_por=self.user,
+        )
+
+    def _url(self, arquivo_id):
+        return reverse('excluir_documento_digital', kwargs={
+            'tis_id': self.ti.id, 'imovel_id': self.imovel.id,
+            'documento_id': self.documento.id, 'arquivo_id': arquivo_id,
+        })
+
+    def test_excluir_bloqueado_por_job_ocr_preserva_registro_e_arquivo(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                self.assertTrue(default_storage.exists(caminho))
+                OcrJob.objects.create(documento_digital=dd)
+
+                response = self.client.post(self._url(dd.id), follow=True)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists(),
+                    'O registro foi apagado mesmo com job de OCR vinculado (PROTECT).',
+                )
+                self.assertTrue(
+                    default_storage.exists(caminho),
+                    'O arquivo foi apagado do storage antes do registro (bug #258).',
+                )
+                mensagens = [str(m) for m in get_messages(response.wsgi_request)]
+                self.assertTrue(
+                    any('OCR' in mensagem for mensagem in mensagens),
+                    mensagens,
+                )
+
+    def test_excluir_sem_job_ocr_apaga_registro_e_arquivo(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                self.assertTrue(default_storage.exists(caminho))
+
+                response = self.client.post(self._url(dd.id))
+
+                self.assertEqual(response.status_code, 302)
+                self.assertFalse(DocumentoDigital.objects.filter(id=dd.id).exists())
+                self.assertFalse(
+                    default_storage.exists(caminho),
+                    'O arquivo permaneceu no storage após excluir o registro.',
+                )
+
+    def test_excluir_com_falha_no_storage_remove_registro_e_avisa_sem_pii_no_log(self):
+        from unittest.mock import patch
+
+        nome = 'matricula-pessoa-sensivel.pdf'
+        detalhe_erro = 'permissão negada em /storage/dado-pessoal.pdf'
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo(nome)
+                arquivo_id = dd.id
+                caminho = dd.arquivo.name
+                self.assertTrue(default_storage.exists(caminho))
+                self.client.raise_request_exception = False
+
+                with patch(
+                    'django.db.models.fields.files.FieldFile.delete',
+                    side_effect=OSError(detalhe_erro),
+                ), self.assertLogs(
+                    'dominial.views.documento_digital_views', level='WARNING'
+                ) as logs:
+                    response = self.client.post(self._url(arquivo_id))
+                    self.assertEqual(response.status_code, 302)
+
+                self.assertFalse(DocumentoDigital.objects.filter(id=arquivo_id).exists())
+                self.assertTrue(
+                    default_storage.exists(caminho),
+                    'O mock deveria preservar o arquivo órfão no storage.',
+                )
+                mensagens = [
+                    (mensagem.tags, str(mensagem))
+                    for mensagem in get_messages(response.wsgi_request)
+                ]
+                self.assertTrue(
+                    any(tags == 'success' and nome in texto for tags, texto in mensagens),
+                    mensagens,
+                )
+                self.assertTrue(
+                    any(
+                        tags == 'warning'
+                        and 'arquivo físico' in texto
+                        and 'suporte' in texto
+                        for tags, texto in mensagens
+                    ),
+                    mensagens,
+                )
+
+                log = '\n'.join(logs.output)
+                self.assertIn(f'arquivo_id={arquivo_id}', log)
+                self.assertIn('limpeza física', log)
+                self.assertNotIn(nome, log)
+                self.assertNotIn(caminho, log)
+                self.assertNotIn(detalhe_erro, log)
