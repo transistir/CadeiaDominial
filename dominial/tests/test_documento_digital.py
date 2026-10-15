@@ -276,3 +276,55 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                     default_storage.exists(caminho),
                     'O arquivo permaneceu no storage após excluir o registro.',
                 )
+
+    def test_excluir_com_falha_no_storage_remove_registro_e_avisa_sem_pii_no_log(self):
+        from unittest.mock import patch
+
+        nome = 'matricula-pessoa-sensivel.pdf'
+        detalhe_erro = 'permissão negada em /storage/dado-pessoal.pdf'
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo(nome)
+                arquivo_id = dd.id
+                caminho = dd.arquivo.name
+                self.assertTrue(default_storage.exists(caminho))
+                self.client.raise_request_exception = False
+
+                with patch(
+                    'django.db.models.fields.files.FieldFile.delete',
+                    side_effect=OSError(detalhe_erro),
+                ), self.assertLogs(
+                    'dominial.views.documento_digital_views', level='WARNING'
+                ) as logs:
+                    response = self.client.post(self._url(arquivo_id))
+                    self.assertEqual(response.status_code, 302)
+
+                self.assertFalse(DocumentoDigital.objects.filter(id=arquivo_id).exists())
+                self.assertTrue(
+                    default_storage.exists(caminho),
+                    'O mock deveria preservar o arquivo órfão no storage.',
+                )
+                mensagens = [
+                    (mensagem.tags, str(mensagem))
+                    for mensagem in get_messages(response.wsgi_request)
+                ]
+                self.assertTrue(
+                    any(tags == 'success' and nome in texto for tags, texto in mensagens),
+                    mensagens,
+                )
+                self.assertTrue(
+                    any(
+                        tags == 'warning'
+                        and 'arquivo físico' in texto
+                        and 'suporte' in texto
+                        for tags, texto in mensagens
+                    ),
+                    mensagens,
+                )
+
+                log = '\n'.join(logs.output)
+                self.assertIn(f'arquivo_id={arquivo_id}', log)
+                self.assertIn('limpeza física', log)
+                self.assertNotIn(nome, log)
+                self.assertNotIn(caminho, log)
+                self.assertNotIn(detalhe_erro, log)

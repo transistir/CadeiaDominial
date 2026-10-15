@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -8,6 +9,9 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.http import content_disposition_header
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
+
+
+logger = logging.getLogger(__name__)
 
 
 TIPOS_PERMITIDOS = {
@@ -142,8 +146,21 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
         return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
 
     # O registro saiu: agora sim o arquivo do storage pode ser apagado.
+    falha_limpeza_fisica = False
     if caminho:
-        arquivo.arquivo.delete(save=False)
+        try:
+            arquivo.arquivo.delete(save=False)
+        except Exception:
+            logger.warning(
+                'Falha na limpeza física do storage; arquivo_id=%s', arquivo_id
+            )
+            falha_limpeza_fisica = True
 
     messages.success(request, f'Arquivo "{nome}" excluído com sucesso.')
+    if falha_limpeza_fisica:
+        messages.warning(
+            request,
+            f'O arquivo físico "{nome}" não pôde ser removido do armazenamento. '
+            'Avise o suporte para concluir a limpeza.'
+        )
     return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
