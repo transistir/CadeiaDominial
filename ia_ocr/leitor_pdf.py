@@ -74,6 +74,7 @@ def inspecionar_pdf(
     max_bytes,
     max_paginas,
     ler_texto=False,
+    min_chars_pagina=MIN_CHARS_TEXTO_EMBUTIDO,
 ):
     """Valida um PDF local e, opcionalmente, tenta ler sua camada de texto."""
     try:
@@ -174,7 +175,7 @@ def inspecionar_pdf(
                         break
                     texto = texto.strip() if isinstance(texto, str) else ''
                     extraidos.append(texto)
-                    if len(texto) < MIN_CHARS_TEXTO_EMBUTIDO:
+                    if len(texto) < min_chars_pagina:
                         break
                 textos = tuple(extraidos)
 
@@ -202,6 +203,15 @@ def paginas_texto_embutido(texto_por_pagina, *, min_chars_pagina=200):
     ):
         return None
     return [
-        {'numero_pagina': numero, 'texto': texto, 'blocos': []}
+        {
+            'numero_pagina': numero,
+            'texto': texto,
+            'blocos': {
+                'dpi': None,
+                'width_px': None,
+                'height_px': None,
+                'blocos': [],
+            },
+        }
         for numero, texto in enumerate(texto_por_pagina, start=1)
     ]

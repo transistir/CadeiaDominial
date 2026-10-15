@@ -178,9 +178,13 @@ class OcrServiceClientTests(SimpleTestCase):
             [0.02, 0.03, 0.03],
         )
 
-    def test_queue_full_para_na_reserva_sem_dormir_nem_nova_tentativa(self):
+    def test_queue_full_no_fim_do_orcamento_termina_queue_full_sem_dormir(self):
+        """QUEUE_FULL/429 que esgota o orçamento termina com o código
+        QUEUE_FULL (não vira WORKER_TIMEOUT no backend) — e sem dormir nem
+        gastar uma nova tentativa."""
         from unittest.mock import patch
-        from ia_ocr.ocr_client import OrcamentoEsgotado
+
+        from ia_ocr.backends import OcrBackendError
 
         stub = self._stub([(503, self._corpo_erro('QUEUE_FULL'), {})])
         cliente = OcrServiceClient(
@@ -196,12 +200,91 @@ class OcrServiceClientTests(SimpleTestCase):
         inicio = time.monotonic()
 
         with patch('ia_ocr.ocr_client.time.sleep') as dormir:
-            with self.assertRaises(OrcamentoEsgotado):
+            with self.assertRaises(OcrBackendError) as contexto:
                 cliente.consultar_job('job-reserva', inicio + 0.1)
 
+        self.assertEqual(contexto.exception.codigo, 'QUEUE_FULL')
         self.assertLess(time.monotonic() - inicio, 0.15)
         self.assertEqual(len(stub.recebidas), 1)
         dormir.assert_not_called()
+
+    def test_429_no_fim_do_orcamento_termina_queue_full(self):
+        stub = self._stub(
+            [(429, '<html>rate limited</html>', {}) for _ in range(2)]
+        )
+        cliente = OcrServiceClient(
+            stub.base_url,
+            'token-interno',
+            'access-id',
+            'access-secret',
+            max_tentativas=1,
+            backoff_base_s=0.08,
+            backoff_max_s=0.08,
+        )
+        inicio = time.monotonic()
+
+        erro = self._capturar_erro(
+            lambda: cliente.consultar_job('job-429-fim', inicio + 0.15)
+        )
+
+        self.assertEqual(erro.codigo, 'QUEUE_FULL')
+        self.assertEqual(len(stub.recebidas), 2)
+
+    def test_5xx_passageiro_em_get_no_fim_do_orcamento_tenta_de_novo(self):
+        """A reserva de retry vale para reenviar job (POST); um GET barato
+        tenta até o fim do prazo — um 5xx passageiro no fim do orçamento não
+        pode derrubar o job."""
+        stub = self._stub(
+            [
+                (500, self._corpo_erro('INFERENCE_FAILED'), {}),
+                (200, {'job_id': 'job-get', 'status': 'succeeded'}, {}),
+            ]
+        )
+        cliente = OcrServiceClient(
+            stub.base_url,
+            'token-interno',
+            'access-id',
+            'access-secret',
+            max_tentativas=2,
+            backoff_base_s=0,
+            reserva_retry_s=30,
+        )
+
+        resultado = cliente.consultar_job('job-get', time.monotonic() + 10)
+
+        self.assertEqual(resultado['status'], 'succeeded')
+        self.assertEqual(len(stub.recebidas), 2)
+
+    def test_reserva_de_retry_segura_o_reenvio_post_ate_o_fim_do_prazo(self):
+        """No (re)envio de job a reserva segue valendo: sem orçamento para
+        um upload que valha a pena, o job termina QUEUE_FULL em vez de
+        queimar o prazo num POST fadado ao 503."""
+        stub = self._stub(
+            [(503, self._corpo_erro('QUEUE_FULL', 'fila cheia sintética'), {})]
+        )
+        cliente = OcrServiceClient(
+            stub.base_url,
+            'token-interno',
+            'access-id',
+            'access-secret',
+            max_tentativas=1,
+            backoff_base_s=0,
+            reserva_retry_s=30,
+        )
+
+        erro = self._capturar_erro(
+            lambda: cliente.enviar_job(
+                self.pdf,
+                'job-post',
+                time.monotonic() + 10,
+                dpi=200,
+                timeout_seconds=5,
+                max_pages=25,
+            )
+        )
+
+        self.assertEqual(erro.codigo, 'QUEUE_FULL')
+        self.assertEqual(len(stub.recebidas), 1)
 
     def test_503_unauthorized_json_falha_sem_retry(self):
         stub = self._stub(

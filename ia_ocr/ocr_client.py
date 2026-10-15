@@ -233,6 +233,8 @@ class OcrServiceClient:
         """Executa, lê e classifica toda chamada HTTP feita pelo cliente."""
         url = f'{self.base_url}/{caminho.lstrip("/")}'
         dados = kw.get('data')
+        # A reserva protege o reenvio do job (POST); um GET barato usa o prazo inteiro.
+        reserva_s = self.reserva_retry_s if metodo.upper() == 'POST' else 0
         ultimo_codigo = 'SERVICE_UNAVAILABLE'
         ultima_mensagem = 'Serviço OCR indisponível.'
         tentativas_limitadas = 0
@@ -274,7 +276,9 @@ class OcrServiceClient:
                 if tentativas_limitadas >= self.max_tentativas:
                     raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
                 numero_retry += 1
-                self._aguardar_retry(numero_retry, prazo)
+                self._aguardar_retry(
+                    numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
+                )
                 continue
 
             corpo = self._json(corpo_bruto)
@@ -323,8 +327,8 @@ class OcrServiceClient:
                     ultimo_codigo = 'SERVICE_UNAVAILABLE'
                     ultima_mensagem = 'Serviço OCR indisponível.'
             elif status == 429:
-                ultimo_codigo = 'SERVICE_UNAVAILABLE'
-                ultima_mensagem = 'Serviço OCR indisponível.'
+                ultimo_codigo = 'QUEUE_FULL'
+                ultima_mensagem = 'Serviço OCR com fila cheia (429).'
                 retry_ate_prazo = True
             elif 500 <= status < 600:
                 ultimo_codigo = 'SERVICE_UNAVAILABLE'
@@ -340,7 +344,9 @@ class OcrServiceClient:
                 if tentativas_limitadas >= self.max_tentativas:
                     raise OcrBackendError(ultimo_codigo, ultima_mensagem)
             numero_retry += 1
-            self._aguardar_retry(numero_retry, prazo)
+            self._aguardar_retry(
+                numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
+            )
 
     def _log_cabecalhos_aplicados(self):
         """Uma linha por requisição com os nomes dos três cabeçalhos
@@ -371,20 +377,28 @@ class OcrServiceClient:
         self._restante(prazo)
         return b''.join(partes)
 
-    def _aguardar_retry(self, tentativa, prazo):
+    def _aguardar_retry(self, tentativa, prazo, reserva_s, codigo, mensagem):
+        try:
+            self._aguardar_backoff(tentativa, prazo, reserva_s)
+        except OrcamentoEsgotado:
+            if codigo == 'QUEUE_FULL':
+                raise OcrBackendError(codigo, mensagem) from None
+            raise
+
+    def _aguardar_backoff(self, tentativa, prazo, reserva_s):
         atraso = min(
             self.backoff_base_s * (2 ** (tentativa - 1)),
             self.backoff_max_s,
         )
         restante = self._restante(prazo)
-        if restante <= self.reserva_retry_s:
+        if restante <= reserva_s:
             raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
-        if atraso >= restante - self.reserva_retry_s:
+        if atraso >= restante - reserva_s:
             raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
         if atraso > 0:
             time.sleep(atraso)
         restante = self._restante(prazo)
-        if restante <= self.reserva_retry_s:
+        if restante <= reserva_s:
             raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
 
     @staticmethod

@@ -161,6 +161,24 @@ class ComandoProcessOcrQueueTest(TestCase):
             ],
         )
 
+    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendSucesso')
+    def test_timeout_da_flag_e_persistido_no_lease_do_claim(self):
+        """O --timeout do worker é o lease gravado no claim: sem isso, o
+        lease sairia sempre de OCR_JOB_TIMEOUT_SECONDS e a checagem de
+        viabilidade validaria um número que nunca chegou ao banco."""
+        antes = timezone.now()
+        criar_job(self.documento)
+
+        call_command(
+            'process_ocr_queue', '--once', '--timeout', '654', verbosity=0
+        )
+
+        job = OcrJob.objects.get(documento_digital=self.documento)
+        self.assertEqual(job.status, estados.CONCLUIDO)
+        delta = (job.lease_expira_em - antes).total_seconds()
+        self.assertGreaterEqual(delta, 653)  # ≈ agora + 654
+        self.assertLess(delta, 660)
+
     @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendFalhaContratual')
     def test_backend_error_falha_com_codigo_do_servico(self):
         job, _ = criar_job(self.documento)
@@ -216,7 +234,9 @@ class ComandoProcessOcrQueueTest(TestCase):
             side_effect=lambda: ordem.append('close'),
         ), mock.patch.object(
             services, 'claim_proximo_job',
-            side_effect=lambda: ordem.append('claim') or None,
+            # O worker agora repassa o timeout efetivo ao claim (item 1 da
+            # r1 do #259); o mock só registra a ordem — aceita qualquer args.
+            side_effect=lambda *args, **kwargs: ordem.append('claim') or None,
         ), mock.patch('time.sleep', side_effect=fake_sleep):
             with self.assertRaises(_Pare):
                 call_command('process_ocr_queue', interval=1, verbosity=0)

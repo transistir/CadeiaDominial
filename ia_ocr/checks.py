@@ -102,8 +102,7 @@ def conferir_configuracao_ocr(app_configs=None, **kwargs):
             'OCR_FOLGA_FILA_SECONDS + OCR_MARGEM_PERSISTENCIA_SECONDS = '
             f'{conta_do_orcamento()}. O reap encerraria o job mais pesado '
             'antes de ele concluir e persistir.',
-            hint=f'Use OCR_JOB_TIMEOUT_SECONDS >= {minimo} s (ou um '
-                 '--timeout equivalente no worker).',
+            hint=f'Use OCR_JOB_TIMEOUT_SECONDS >= {minimo}.',
             id='ia_ocr.E007',
         ))
 

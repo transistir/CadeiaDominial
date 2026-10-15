@@ -118,6 +118,16 @@ class ConferirConfiguracaoOcrTests(SimpleTestCase):
                 'ia_ocr.E007', _ids(_check(OCR_JOB_TIMEOUT_SECONDS=1360))
             )
 
+    def test_dica_do_e007_nao_aponta_para_flag_que_o_check_nao_ve(self):
+        """O check roda sem --timeout (deploy/`manage.py check`): a dica não
+        pode sugerir um caminho que não resolve o check. A flag vale para o
+        worker (o claim a persiste), mas o ajuste do check é o settings."""
+        problemas = _check(OCR_JOB_TIMEOUT_SECONDS=1359)
+        dica = next(p.hint for p in problemas if p.id == 'ia_ocr.E007')
+
+        self.assertIn('OCR_JOB_TIMEOUT_SECONDS', dica)
+        self.assertNotIn('--timeout', dica)
+
     def test_max_paginas_acima_do_teto_do_servico_e_erro(self):
         with self.subTest(max_paginas=101):
             self.assertIn('ia_ocr.E008', _ids(_check(OCR_MAX_PAGINAS=101)))

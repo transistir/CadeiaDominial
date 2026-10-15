@@ -71,7 +71,7 @@ class Command(BaseCommand):
         while True:
             while (options['max_jobs'] is None
                    or processados < options['max_jobs']):
-                if not self._processar_um_job(backend):
+                if not self._processar_um_job(backend, timeout):
                     break  # fila vazia
                 processados += 1
                 # --once preserva a semântica original: reap somente no início.
@@ -127,7 +127,7 @@ class Command(BaseCommand):
                 'reap: %s job(s) expirados → falhou/WORKER_TIMEOUT', reapados
             )
 
-    def _processar_um_job(self, backend):
+    def _processar_um_job(self, backend, timeout=None):
         """Claim + processa um job. False se a fila está vazia.
 
         Nenhuma exceção derruba o worker: falha do backend E falha da
@@ -135,7 +135,7 @@ class Command(BaseCommand):
         deixam o job em `falhou`/ERRO_INTERNO; se até isso falhar (banco
         fora), o reap do próximo ciclo é a rede de segurança.
         """
-        job = services.claim_proximo_job()
+        job = services.claim_proximo_job(timeout_s=timeout)
         if job is None:
             return False
         tentativa = job.tentativa

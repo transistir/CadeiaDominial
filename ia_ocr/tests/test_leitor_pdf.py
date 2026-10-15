@@ -185,8 +185,59 @@ class LeitorPdfTests(SimpleTestCase):
         self.assertEqual(
             paginas,
             [
-                {'numero_pagina': 1, 'texto': textos[0], 'blocos': []},
-                {'numero_pagina': 2, 'texto': textos[1], 'blocos': []},
+                {
+                    'numero_pagina': 1,
+                    'texto': textos[0],
+                    'blocos': {
+                        'dpi': None,
+                        'width_px': None,
+                        'height_px': None,
+                        'blocos': [],
+                    },
+                },
+                {
+                    'numero_pagina': 2,
+                    'texto': textos[1],
+                    'blocos': {
+                        'dpi': None,
+                        'width_px': None,
+                        'height_px': None,
+                        'blocos': [],
+                    },
+                },
+            ],
+        )
+
+    def test_limiar_configurado_abaixo_de_200_le_todas_as_paginas(self):
+        """A saída antecipada da extração usa o limiar CONFIGURADO: com
+        limiar 150, uma página de 160 chars no MEIO não pode truncar a
+        tupla (o default 200 da constante faria o resultado virar
+        INVALID_OCR_RESULT na finalização)."""
+        textos = ['a' * 220, 'b' * 160, 'c' * 220]
+        resultado = self._inspecionar(
+            self._gravar(self._pdf(paginas=3, textos=textos)),
+            ler_texto=True,
+            min_chars_pagina=150,
+        )
+
+        self.assertEqual(len(resultado.texto_por_pagina), 3)
+        paginas = paginas_texto_embutido(
+            resultado.texto_por_pagina, min_chars_pagina=150
+        )
+        self.assertEqual(
+            paginas,
+            [
+                {
+                    'numero_pagina': numero,
+                    'texto': texto,
+                    'blocos': {
+                        'dpi': None,
+                        'width_px': None,
+                        'height_px': None,
+                        'blocos': [],
+                    },
+                }
+                for numero, texto in enumerate(textos, start=1)
             ],
         )
 

@@ -114,6 +114,7 @@ class OcrServiceBackend(OcrBackend):
                 max_bytes=settings.OCR_MAX_BYTES,
                 max_paginas=settings.OCR_MAX_PAGINAS,
                 ler_texto=not job.forcar_ocr,
+                min_chars_pagina=settings.OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA,
             )
 
             if not job.forcar_ocr:
@@ -194,9 +195,12 @@ class OcrServiceBackend(OcrBackend):
             poll_interval_s=settings.OCR_POLL_INTERVAL_SECONDS,
         )
         job_id_servico = self._job_id_servico(job)
-        max_pages = (
-            25 if page_count is None else min(100, max(page_count, 25))
-        )
+        if page_count is None:
+            max_pages = settings.OCR_MAX_PAGINAS
+        else:
+            max_pages = min(
+                100, max(page_count, settings.OCR_MAX_PAGINAS)
+            )
         reenvios = 0
         estado = self._enviar(
             cliente, caminho_pdf, job_id_servico, max_pages, prazo
