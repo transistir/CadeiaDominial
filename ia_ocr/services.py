@@ -9,8 +9,12 @@ import logging
 import uuid
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
+
+from dominial.models import DocumentoDigital
 
 from . import estados
 from .backends import OcrBackendError, ResultadoOcr
@@ -33,7 +37,7 @@ CHAVES_TIMING_PERMITIDAS = frozenset({
 })
 
 CODIGOS_ERRO_PERMITIDOS = frozenset({
-    # Contrato do serviço OCR (ocr-api.openapi.yaml).
+    # Contrato OCR v1.0.1 (ocr-service/contracts/ocr-api.openapi.yaml).
     'INVALID_INPUT',
     'INVALID_FILE_URL',
     'SOURCE_HOST_NOT_ALLOWED',
@@ -50,6 +54,10 @@ CODIGOS_ERRO_PERMITIDOS = frozenset({
     'EMPTY_OCR_RESULT',
     'OUTPUT_TOO_LARGE',
     'JOB_NOT_FOUND',
+    'JOB_ID_CONFLICT',
+    'JOB_TIMEOUT',
+    'UNSUPPORTED_MEDIA_TYPE',
+    'UNAUTHORIZED',
     'INFERENCE_FAILED',
     # Códigos internos/estáveis usados pela fila e pelo gateway.
     'QUEUE_FULL',
@@ -76,6 +84,10 @@ MENSAGENS_ERRO_SEGURAS = {
     'EMPTY_OCR_RESULT': 'resultado OCR vazio',
     'OUTPUT_TOO_LARGE': 'resultado OCR excede o limite do serviço',
     'JOB_NOT_FOUND': 'job OCR não encontrado',
+    'JOB_ID_CONFLICT': 'identificador do job já vinculado a outro arquivo',
+    'JOB_TIMEOUT': 'serviço OCR excedeu o tempo limite do job',
+    'UNSUPPORTED_MEDIA_TYPE': 'tipo de arquivo não suportado pelo serviço OCR',
+    'UNAUTHORIZED': 'acesso ao serviço OCR não autorizado',
     'INFERENCE_FAILED': 'falha na inferência OCR',
     'QUEUE_FULL': 'fila do serviço OCR cheia',
     'SERVICE_UNAVAILABLE': 'serviço OCR indisponível',
@@ -122,6 +134,10 @@ class JobIdConflitante(Exception):
     """job_id já existe vinculado a outro documento digital."""
 
 
+class JobEmExecucao(Exception):
+    codigo = 'JOB_EM_EXECUCAO'
+
+
 def registrar_pendencia_limpeza(
     documento_digital_id, caminho_storage, documento_id=None
 ):
@@ -163,18 +179,61 @@ def criar_job(documento_digital, job_id=None, criado_por=None, origem='ocr'):
     return job, criado
 
 
+def reprocessar(job, usuario=None, forcar_ocr=True):
+    """Cria um novo job de OCR para o documento do job recebido.
+
+    O job anterior permanece INTOCADO: páginas (inclusive confirmadas) e
+    auditoria não são reescritas — reprocessar nunca altera histórico. Se o
+    próprio job ainda está pendente/em_execucao, recusa com ``JobEmExecucao``
+    em vez de criar um sucessor reivindicável. Se já existe OUTRO job do
+    documento em pendente/em_execucao, nada é criado e o job vigente é
+    devolvido com ``False`` (mesmo estilo de ``criar_job``).
+    A checagem e a criação são serializadas por ``select_for_update`` no
+    DocumentoDigital: sem constraint parcial, que quebraria a fila da I-1
+    (vários pendentes legítimos para o mesmo documento).
+    """
+    documento_id = job.documento_digital_id
+    with transaction.atomic():
+        DocumentoDigital.objects.select_for_update().get(pk=documento_id)
+        origem_ativa = OcrJob.objects.filter(
+            pk=job.pk,
+            status__in=[estados.PENDENTE, estados.EM_EXECUCAO],
+        ).exists()
+        if origem_ativa:
+            raise JobEmExecucao(
+                'O job de origem ainda está pendente ou em execução.'
+            )
+        vigente = (
+            OcrJob.objects
+            .filter(
+                documento_digital_id=documento_id,
+                status__in=[estados.PENDENTE, estados.EM_EXECUCAO],
+            )
+            .first()
+        )
+        if vigente is not None:
+            return vigente, False
+        novo = OcrJob.objects.create(
+            documento_digital_id=documento_id,
+            criado_por=usuario,
+            origem='ocr',
+            forcar_ocr=forcar_ocr,
+            status=estados.PENDENTE,
+        )
+        return novo, True
+
+
 def claim_proximo_job(timeout_s=None):
-    """Reivindica (CAS) o job `pendente` mais antigo e o marca `em_execucao`.
+    """Reivindica (CAS) o job mais antigo e persiste seu prazo de lease.
 
-    Transação curta: o lock (quando o banco suporta SKIP LOCKED) e a
-    auditoria são liberados ao comitar, ANTES do processamento demorado.
-    A correção sob concorrência vem do CAS em `status`, não do lock —
-    em sqlite o select_for_update é ignorado em silêncio e tudo ainda
-    funciona por causa disso.
-
-    `timeout_s` é reservado para a I-2 (deadlines de lease por job).
+    O ``lease_expira_em`` é gravado no mesmo CAS que muda o status; portanto,
+    todo claim novo possui prazo explícito mesmo quando o timeout default é
+    usado. O lock apenas reduz disputa: a correção continua vindo do CAS.
     """
     agora = timezone.now()
+    if timeout_s is None:
+        timeout_s = settings.OCR_JOB_TIMEOUT_SECONDS
+    lease_expira_em = agora + timedelta(seconds=timeout_s)
     with transaction.atomic():
         tentados = set()
         while True:
@@ -185,15 +244,17 @@ def claim_proximo_job(timeout_s=None):
                 .order_by('criado_em', 'pk')
                 .first()
             )
-            # Sem próximo candidato legítimo, ou seletor devolvendo sempre o
-            # mesmo (disputa): não há mais nada a reivindicar.
             if candidato is None or candidato.pk in tentados:
                 return None
             tentados.add(candidato.pk)
             rowcount = (
                 OcrJob.objects
                 .filter(pk=candidato.pk, status=estados.PENDENTE)
-                .update(status=estados.EM_EXECUCAO, atualizado_em=agora)
+                .update(
+                    status=estados.EM_EXECUCAO,
+                    atualizado_em=agora,
+                    lease_expira_em=lease_expira_em,
+                )
             )
             if rowcount == 1:
                 OcrJobTransicao.objects.create(
@@ -205,16 +266,21 @@ def claim_proximo_job(timeout_s=None):
                 return OcrJob.objects.get(pk=candidato.pk)
 
 
-def reap_jobs_expirados(timeout_s):
-    """Marca `falhou`/WORKER_TIMEOUT cada job `em_execucao` com lease expirado.
+def reap_jobs_expirados(timeout_s=None):
+    """Reapa leases explícitos vencidos e jobs legados pelo timestamp.
 
-    CAS por job (pk, status, tentativa) — nunca update() em massa — para não
-    atropelar um worker que finalize no mesmo instante.
+    O fallback ``atualizado_em + timeout_s`` vale somente para linhas criadas
+    antes da migração, cujo ``lease_expira_em`` ainda é NULL. Cada candidato
+    mantém a transição CAS individual da I-1.
     """
-    limite = timezone.now() - timedelta(seconds=timeout_s)
+    agora = timezone.now()
+    if timeout_s is None:
+        timeout_s = settings.OCR_JOB_TIMEOUT_SECONDS
+    limite_legado = agora - timedelta(seconds=timeout_s)
     reapados = 0
-    expirados = OcrJob.objects.filter(
-        status=estados.EM_EXECUCAO, atualizado_em__lt=limite
+    expirados = OcrJob.objects.filter(status=estados.EM_EXECUCAO).filter(
+        Q(lease_expira_em__lt=agora)
+        | Q(lease_expira_em__isnull=True, atualizado_em__lt=limite_legado)
     )
     for job in expirados:
         try:
@@ -226,7 +292,7 @@ def reap_jobs_expirados(timeout_s):
                 erro_mensagem=_mensagem_erro_segura('WORKER_TIMEOUT'),
             )
         except TransicaoConcorrente:
-            continue  # outro ator mudou o estado antes: nada a fazer
+            continue
         reapados += 1
     return reapados
 

@@ -161,6 +161,24 @@ class ComandoProcessOcrQueueTest(TestCase):
             ],
         )
 
+    @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendSucesso')
+    def test_timeout_da_flag_e_persistido_no_lease_do_claim(self):
+        """O --timeout do worker é o lease gravado no claim: sem isso, o
+        lease sairia sempre de OCR_JOB_TIMEOUT_SECONDS e a checagem de
+        viabilidade validaria um número que nunca chegou ao banco."""
+        antes = timezone.now()
+        criar_job(self.documento)
+
+        call_command(
+            'process_ocr_queue', '--once', '--timeout', '654', verbosity=0
+        )
+
+        job = OcrJob.objects.get(documento_digital=self.documento)
+        self.assertEqual(job.status, estados.CONCLUIDO)
+        delta = (job.lease_expira_em - antes).total_seconds()
+        self.assertGreaterEqual(delta, 653)  # ≈ agora + 654
+        self.assertLess(delta, 660)
+
     @override_settings(OCR_BACKEND='ia_ocr.tests.test_fila.BackendFalhaContratual')
     def test_backend_error_falha_com_codigo_do_servico(self):
         job, _ = criar_job(self.documento)
@@ -216,7 +234,9 @@ class ComandoProcessOcrQueueTest(TestCase):
             side_effect=lambda: ordem.append('close'),
         ), mock.patch.object(
             services, 'claim_proximo_job',
-            side_effect=lambda: ordem.append('claim') or None,
+            # O worker agora repassa o timeout efetivo ao claim (item 1 da
+            # r1 do #259); o mock só registra a ordem — aceita qualquer args.
+            side_effect=lambda *args, **kwargs: ordem.append('claim') or None,
         ), mock.patch('time.sleep', side_effect=fake_sleep):
             with self.assertRaises(_Pare):
                 call_command('process_ocr_queue', interval=1, verbosity=0)
@@ -244,7 +264,7 @@ class ComandoProcessOcrQueueTest(TestCase):
             if len(sonos) == 1:
                 # O lease expira durante o primeiro sono (depois da partida).
                 OcrJob.objects.filter(pk=job.pk).update(
-                    atualizado_em=timezone.now() - timedelta(seconds=7201)
+                    lease_expira_em=timezone.now() - timedelta(seconds=1)
                 )
                 relogio[0] += 1
             else:
@@ -504,6 +524,16 @@ class ClaimProximoJobTest(TestCase):
         )
         self.assertIsNone(claim_proximo_job())  # fila drenada
 
+    def test_claim_com_timeout_grava_lease_expira_em_no_futuro(self):
+        job, _ = criar_job(self.documento)
+
+        claimado = claim_proximo_job(timeout_s=3600)
+
+        self.assertIsNotNone(claimado)
+        self.assertEqual(claimado.pk, job.pk)
+        self.assertIsNotNone(claimado.lease_expira_em)
+        self.assertGreater(claimado.lease_expira_em, timezone.now())
+
     def test_claim_respeita_ordem_de_criacao(self):
         antigo, _ = criar_job(self.documento)
         novo, _ = criar_job(self.documento)
@@ -550,6 +580,107 @@ class ClaimProximoJobTest(TestCase):
         )
 
 
+class ReprocessarTest(TestCase):
+    """reprocessar: job novo com forcar_ocr, histórico intacto, guarda de vigente."""
+
+    def setUp(self):
+        self.usuario = criar_usuario()
+        self.documento = criar_documento_digital(upload_por=self.usuario)
+        self.job, _ = criar_job(self.documento)
+
+    def _concluir_e_confirmar(self):
+        """Leva o job até texto_confirmado, com páginas confirmadas."""
+        claimado = claim_proximo_job()
+        self.assertIsNotNone(claimado)
+        finalizar(claimado, _resultado(), tentativa=claimado.tentativa)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+        for pagina in self.job.paginas.all():
+            pagina.confirmado_por = self.usuario
+            pagina.confirmado_em = timezone.now()
+            pagina.texto_confirmado = pagina.texto_ocr
+            pagina.save()
+        self.job.transicionar(estados.TEXTO_CONFIRMADO, usuario=self.usuario)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
+
+    def test_cria_job_novo_com_uuid_diferente_e_deixa_o_antigo_intacto(self):
+        self._concluir_e_confirmar()
+        pks_paginas_antes = list(
+            self.job.paginas.values_list('pk', flat=True)
+        )
+        pks_transicoes_antes = list(
+            self.job.transicoes.values_list('pk', flat=True)
+        )
+
+        novo, criado = services.reprocessar(self.job, usuario=self.usuario)
+
+        self.assertTrue(criado)
+        self.assertNotEqual(novo.job_id, self.job.job_id)  # UUID novo
+        self.assertEqual(novo.documento_digital_id, self.documento.pk)
+        self.assertEqual(novo.status, estados.PENDENTE)
+        self.assertTrue(novo.forcar_ocr)
+        self.assertEqual(novo.origem, 'ocr')
+        self.assertEqual(novo.criado_por, self.usuario)
+        # Job antigo intacto: mesmo status, mesmas páginas confirmadas
+        # (mesmos pks) e mesma auditoria — nada migrou para o novo.
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
+        self.assertEqual(
+            list(self.job.paginas.values_list('pk', flat=True)),
+            pks_paginas_antes,
+        )
+        pagina = self.job.paginas.get(numero_pagina=1)
+        self.assertIsNotNone(pagina.confirmado_em)
+        self.assertIsNotNone(pagina.confirmado_por)
+        self.assertEqual(pagina.texto_confirmado, pagina.texto_ocr)
+        self.assertEqual(
+            list(self.job.transicoes.values_list('pk', flat=True)),
+            pks_transicoes_antes,
+        )
+        self.assertEqual(novo.paginas.count(), 0)
+        self.assertEqual(novo.transicoes.count(), 0)
+
+    def test_com_job_vigente_devolve_o_vigente_e_nao_cria_segundo(self):
+        self._concluir_e_confirmar()
+        for status_desejado in (estados.PENDENTE, estados.EM_EXECUCAO):
+            with self.subTest(status_desejado=status_desejado):
+                vigente, _ = criar_job(self.documento)
+                if status_desejado == estados.EM_EXECUCAO:
+                    vigente.transicionar(estados.EM_EXECUCAO)
+                total_antes = OcrJob.objects.count()
+
+                devolvido, criado = services.reprocessar(
+                    self.job, usuario=self.usuario
+                )
+
+                self.assertFalse(criado)
+                self.assertEqual(devolvido.pk, vigente.pk)
+                self.assertEqual(OcrJob.objects.count(), total_antes)
+                vigente.delete()
+
+    def test_job_de_origem_nao_terminal_recusa_sem_criar_job_reivindicavel(self):
+        for status_desejado in (estados.PENDENTE, estados.EM_EXECUCAO):
+            with self.subTest(status_desejado=status_desejado):
+                origem, _ = criar_job(
+                    criar_documento_digital(upload_por=self.usuario)
+                )
+                if status_desejado == estados.EM_EXECUCAO:
+                    origem.transicionar(estados.EM_EXECUCAO)
+                total_antes = OcrJob.objects.count()
+
+                with self.assertRaises(services.JobEmExecucao) as contexto:
+                    services.reprocessar(origem, usuario=self.usuario)
+
+                self.assertEqual(contexto.exception.codigo, 'JOB_EM_EXECUCAO')
+                self.assertEqual(OcrJob.objects.count(), total_antes)
+                self.assertFalse(
+                    OcrJob.objects.filter(
+                        documento_digital_id=origem.documento_digital_id
+                    ).exclude(pk=origem.pk).exists()
+                )
+
+
 class ReapJobsExpiradosTest(TestCase):
     def setUp(self):
         self.usuario = criar_usuario()
@@ -570,9 +701,9 @@ class ReapJobsExpiradosTest(TestCase):
 
     def test_em_execucao_expirado_vira_falhou_worker_timeout(self):
         job = self._claimar()
-        # Envelhece o lease além do timeout.
+        # Expira o prazo explícito persistido pelo claim.
         OcrJob.objects.filter(pk=job.pk).update(
-            atualizado_em=timezone.now() - timedelta(seconds=7200)
+            lease_expira_em=timezone.now() - timedelta(seconds=1)
         )
         reapados = reap_jobs_expirados(timeout_s=3600)
 
@@ -587,16 +718,17 @@ class ReapJobsExpiradosTest(TestCase):
         )
 
     def test_borda_do_timeout_de_um_segundo(self):
-        """Dentro do timeout (3599 s de lease) não é reapado; fora (3601 s), é."""
+        """Lease com 1 s restante não é reapado; vencido há 1 s, é."""
         dentro = self._claimar()
         fora, _ = criar_job(self.documento)
         self.assertIsNotNone(claim_proximo_job())  # claima `fora`
 
+        agora = timezone.now()
         OcrJob.objects.filter(pk=dentro.pk).update(
-            atualizado_em=timezone.now() - timedelta(seconds=3599)
+            lease_expira_em=agora + timedelta(seconds=1)
         )
         OcrJob.objects.filter(pk=fora.pk).update(
-            atualizado_em=timezone.now() - timedelta(seconds=3601)
+            lease_expira_em=agora - timedelta(seconds=1)
         )
 
         reapados = reap_jobs_expirados(timeout_s=3600)
@@ -607,6 +739,63 @@ class ReapJobsExpiradosTest(TestCase):
         self.assertEqual(dentro.status, estados.EM_EXECUCAO)
         self.assertEqual(fora.status, estados.FALHOU)
         self.assertEqual(fora.erro_codigo, 'WORKER_TIMEOUT')
+
+    def test_job_legado_sem_lease_usa_atualizado_em_como_fallback(self):
+        job = self._claimar()
+        OcrJob.objects.filter(pk=job.pk).update(
+            lease_expira_em=None,
+            atualizado_em=timezone.now() - timedelta(seconds=7200),
+        )
+
+        reapados = reap_jobs_expirados(timeout_s=3600)
+
+        self.assertEqual(reapados, 1)
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'WORKER_TIMEOUT')
+        transicao = job.transicoes.latest('criado_em')
+        self.assertEqual(
+            (transicao.de_status, transicao.para_status),
+            (estados.EM_EXECUCAO, estados.FALHOU),
+        )
+
+    def test_lease_longo_nao_e_reapado_por_worker_com_timeout_curto(self):
+        job, _ = criar_job(self.documento)
+        claimado = claim_proximo_job(timeout_s=7200)
+        self.assertIsNotNone(claimado)
+        OcrJob.objects.filter(pk=job.pk).update(
+            atualizado_em=timezone.now() - timedelta(seconds=3600)
+        )
+
+        reapados = reap_jobs_expirados(timeout_s=1)
+
+        self.assertEqual(reapados, 0)
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.EM_EXECUCAO)
+
+    def test_lease_vencido_e_reapado_mesmo_com_timeout_longo(self):
+        job, _ = criar_job(self.documento)
+        claimado = claim_proximo_job(timeout_s=1)
+        self.assertIsNotNone(claimado)
+        OcrJob.objects.filter(pk=job.pk).update(
+            lease_expira_em=timezone.now() - timedelta(seconds=1),
+            atualizado_em=timezone.now(),
+        )
+
+        reapados = reap_jobs_expirados(timeout_s=7200)
+
+        self.assertEqual(reapados, 1)
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.FALHOU)
+        self.assertEqual(job.erro_codigo, 'WORKER_TIMEOUT')
+        self.assertEqual(
+            job.transicoes.filter(
+                de_status=estados.EM_EXECUCAO,
+                para_status=estados.FALHOU,
+                motivo='WORKER_TIMEOUT',
+            ).count(),
+            1,
+        )
 
 
 class FinalizacaoTardiaTest(TestCase):
@@ -622,7 +811,10 @@ class FinalizacaoTardiaTest(TestCase):
         claimado = claim_proximo_job()
         self.assertEqual(claimado.tentativa, 1)
 
-        reap_jobs_expirados(timeout_s=0)  # lease expira imediatamente
+        OcrJob.objects.filter(pk=job.pk).update(
+            lease_expira_em=timezone.now() - timedelta(seconds=1)
+        )
+        reap_jobs_expirados(timeout_s=0)  # reapa o lease já expirado
         job.refresh_from_db()
         self.assertEqual(job.status, estados.FALHOU)
 
@@ -673,7 +865,7 @@ class CadenciaReapCommandTest(TestCase):
         expirado, _ = criar_job(self.documento)
         self.assertIsNotNone(claim_proximo_job())
         OcrJob.objects.filter(pk=expirado.pk).update(
-            atualizado_em=timezone.now() - timedelta(seconds=7200)
+            lease_expira_em=timezone.now() - timedelta(seconds=1)
         )
         pendentes = [criar_job(self.documento)[0] for _ in range(3)]
 

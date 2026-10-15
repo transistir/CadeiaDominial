@@ -171,13 +171,31 @@ DUPLICATA_VERIFICACAO_ENABLED = True
 # Arquivo de flag para o modo de manutenção (deve estar em volume persistente)
 MANUTENCAO_FILE_PATH = os.environ.get('MANUTENCAO_FILE_PATH', os.path.join(BASE_DIR, 'maintenance', '.maintenance.json'))
 
-# ─── IA/OCR (issue #258 / I-1) ─────────────────────────────────────
-# Backend de processamento (dotted path); o cliente HTTP real chega na I-2.
+# ─── IA/OCR (issues #258 / I-1 e #259 / I-2) ───────────────────────
 OCR_BACKEND = os.environ.get('OCR_BACKEND', 'ia_ocr.backends.StubBackend')
-# Lease do worker: 3600 s cobre ~97 páginas a ~37 s/página (medição I-1) —
-# ABAIXO do máximo contratual do serviço. O default fixo é provisório: a I-2
-# deve vincular o lease ao page_count/deadline de cada job em vez de depender
-# deste valor (reap usa `atualizado_em < now - OCR_JOB_TIMEOUT_SECONDS`).
 OCR_JOB_TIMEOUT_SECONDS = int(os.environ.get('OCR_JOB_TIMEOUT_SECONDS', '3600'))
-# Intervalo do loop contínuo do process_ocr_queue.
 OCR_QUEUE_INTERVAL_SECONDS = float(os.environ.get('OCR_QUEUE_INTERVAL_SECONDS', '30'))
+
+OCR_SERVICE_URL = os.environ.get('OCR_SERVICE_URL', '')
+OCR_INTERNAL_TOKEN = os.environ.get('OCR_INTERNAL_TOKEN', '')
+OCR_ACCESS_CLIENT_ID = os.environ.get('OCR_ACCESS_CLIENT_ID', '')
+OCR_ACCESS_CLIENT_SECRET = os.environ.get('OCR_ACCESS_CLIENT_SECRET', '')
+OCR_HTTP_TIMEOUT_SECONDS = float(os.environ.get('OCR_HTTP_TIMEOUT_SECONDS', '30'))
+OCR_HTTP_MAX_TENTATIVAS = int(os.environ.get('OCR_HTTP_MAX_TENTATIVAS', '3'))
+OCR_HTTP_BACKOFF_BASE_SECONDS = float(
+    os.environ.get('OCR_HTTP_BACKOFF_BASE_SECONDS', '0.5')
+)
+OCR_BACKOFF_MAX_SECONDS = float(os.environ.get('OCR_BACKOFF_MAX_SECONDS', '30'))
+OCR_POLL_INTERVAL_SECONDS = float(os.environ.get('OCR_POLL_INTERVAL_SECONDS', '5'))
+OCR_FOLGA_FILA_SECONDS = int(os.environ.get('OCR_FOLGA_FILA_SECONDS', '300'))
+OCR_MARGEM_PERSISTENCIA_SECONDS = int(
+    os.environ.get('OCR_MARGEM_PERSISTENCIA_SECONDS', '60')
+)
+OCR_SEGUNDOS_POR_PAGINA = int(os.environ.get('OCR_SEGUNDOS_POR_PAGINA', '40'))
+OCR_MAX_PAGINAS = int(os.environ.get('OCR_MAX_PAGINAS', '25'))
+OCR_MAX_BYTES = int(os.environ.get('OCR_MAX_BYTES', '52428800'))
+OCR_MAX_REENVIOS_LOST = int(os.environ.get('OCR_MAX_REENVIOS_LOST', '2'))
+OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA = int(
+    os.environ.get('OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA', '200')
+)
+OCR_DPI = int(os.environ.get('OCR_DPI', '200'))

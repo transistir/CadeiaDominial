@@ -3,6 +3,7 @@ Django==5.2.3
 django-autocomplete-light==3.12.1
 django-extensions==4.1
 requests==2.31.0
+urllib3>=2.6
 sqlparse==0.5.3
 psycopg2-binary==2.9.9
 gunicorn==21.2.0

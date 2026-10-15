@@ -1,0 +1,606 @@
+"""Cliente HTTP de baixo nível para o serviço OCR v1.0.1."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import socket
+import threading
+import time
+import uuid
+from urllib.parse import quote
+
+import requests
+import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+
+from ia_ocr.backends import OcrBackendError, OrcamentoEsgotado
+
+logger = logging.getLogger(__name__)
+
+
+CODIGOS_CONTRATO = frozenset(
+    {
+        'INVALID_INPUT',
+        'UNSUPPORTED_MEDIA_TYPE',
+        'FILE_TOO_LARGE',
+        'EMPTY_FILE',
+        'INVALID_PDF',
+        'ENCRYPTED_PDF',
+        'TOO_MANY_PAGES',
+        'PDF_PAGE_TOO_LARGE',
+        'INVALID_OCR_RESULT',
+        'EMPTY_OCR_RESULT',
+        'OUTPUT_TOO_LARGE',
+        'JOB_NOT_FOUND',
+        'JOB_TIMEOUT',
+        'JOB_ID_CONFLICT',
+        'QUEUE_FULL',
+        'UNAUTHORIZED',
+        'INFERENCE_FAILED',
+    }
+)
+
+
+class _MultipartEncoder:
+    """Corpo multipart reabrível, lido em blocos sob o mesmo prazo."""
+
+    TAMANHO_CHUNK = 64 * 1024
+
+    def __init__(self, caminho_pdf, campos, boundary, prazo):
+        self.caminho_pdf = os.fspath(caminho_pdf)
+        self.prazo = prazo
+        self.boundary = boundary
+        self._preambulo = self._montar_preambulo(campos)
+        self._epilogo = f'\r\n--{boundary}--\r\n'.encode('ascii')
+        self._tamanho_arquivo = os.path.getsize(self.caminho_pdf)
+        self._arquivo = None
+        self._pos_preambulo = 0
+        self._pos_epilogo = 0
+        self._arquivo_concluido = False
+
+    def __len__(self):
+        return len(self._preambulo) + self._tamanho_arquivo + len(self._epilogo)
+
+    def reset(self):
+        self.close()
+        self._pos_preambulo = 0
+        self._pos_epilogo = 0
+        self._arquivo_concluido = False
+
+    def close(self):
+        if self._arquivo is not None:
+            self._arquivo.close()
+            self._arquivo = None
+
+    def read(self, amt=None):
+        self._conferir_prazo()
+        limite = amt if amt is not None and amt >= 0 else self.TAMANHO_CHUNK
+        if limite == 0:
+            return b''
+
+        saida = bytearray()
+        while len(saida) < limite:
+            restante = limite - len(saida)
+            if self._pos_preambulo < len(self._preambulo):
+                fim = min(len(self._preambulo), self._pos_preambulo + restante)
+                saida.extend(self._preambulo[self._pos_preambulo : fim])
+                self._pos_preambulo = fim
+                continue
+
+            if not self._arquivo_concluido:
+                self._conferir_prazo()
+                if self._arquivo is None:
+                    self._arquivo = open(self.caminho_pdf, 'rb')
+                dados = self._arquivo.read(min(restante, self.TAMANHO_CHUNK))
+                self._conferir_prazo()
+                if dados:
+                    saida.extend(dados)
+                    continue
+                self.close()
+                self._arquivo_concluido = True
+                continue
+
+            if self._pos_epilogo < len(self._epilogo):
+                fim = min(len(self._epilogo), self._pos_epilogo + restante)
+                saida.extend(self._epilogo[self._pos_epilogo : fim])
+                self._pos_epilogo = fim
+                continue
+            break
+        return bytes(saida)
+
+    def _montar_preambulo(self, campos):
+        partes = []
+        for nome, valor in campos:
+            partes.extend(
+                [
+                    f'--{self.boundary}\r\n',
+                    f'Content-Disposition: form-data; name="{nome}"\r\n\r\n',
+                    f'{valor}\r\n',
+                ]
+            )
+        partes.extend(
+            [
+                f'--{self.boundary}\r\n',
+                'Content-Disposition: form-data; name="file"; '
+                'filename="documento.pdf"\r\n',
+                'Content-Type: application/pdf\r\n\r\n',
+            ]
+        )
+        return ''.join(partes).encode('utf-8')
+
+    def _conferir_prazo(self):
+        if time.monotonic() >= self.prazo:
+            raise OrcamentoEsgotado('Prazo do job esgotado durante o upload.')
+
+
+_contexto_prazo = threading.local()
+
+
+def _interromper_socket(sock):
+    # SSLTransport (TLS sobre túnel de proxy) não tem shutdown: o socket real fica em .socket.
+    shutdown = getattr(sock, 'shutdown', None)
+    if shutdown is None:
+        socket_de_baixo = getattr(sock, 'socket', None)
+        if socket_de_baixo is not None:
+            _interromper_socket(socket_de_baixo)
+        return
+    try:
+        shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+
+
+class _PrazoAbsoluto:
+    # shutdown (e não close) é o que acorda um recv bloqueado em outra thread.
+
+    def __init__(self, prazo):
+        self._lock = threading.Lock()
+        self._sock = None
+        self._ativo = True
+        self.estourou = False
+        self._timer = threading.Timer(
+            max(0.0, prazo - time.monotonic()), self._estourar
+        )
+        self._timer.daemon = True
+        self._timer.start()
+
+    def registrar(self, sock):
+        with self._lock:
+            if not self._ativo:
+                return
+            self._sock = sock
+            if self.estourou:
+                _interromper_socket(sock)
+
+    def soltar(self):
+        with self._lock:
+            self._sock = None
+
+    def encerrar(self):
+        with self._lock:
+            self._ativo = False
+            self._sock = None
+        self._timer.cancel()
+        self._timer.join()
+
+    def _estourar(self):
+        with self._lock:
+            if not self._ativo:
+                return
+            self.estourou = True
+            if self._sock is not None:
+                _interromper_socket(self._sock)
+
+
+class _ConexaoComPrazo:
+    # Conexão do pool só fica registrada na guarda da requisição que a pegou;
+    # ao voltar ao pool o socket é solto para não derrubar a próxima requisição.
+    _guarda = None
+
+    def acompanhar(self, guarda):
+        self._guarda = guarda
+        if guarda is not None and self.sock is not None:
+            guarda.registrar(self.sock)
+
+    def _new_conn(self):
+        # Registra antes do túnel de CONNECT, cujas respostas são lidas dentro de connect().
+        sock = super()._new_conn()
+        if self._guarda is not None:
+            self._guarda.registrar(sock)
+        return sock
+
+    def connect(self):
+        super().connect()
+        if self._guarda is not None:
+            self._guarda.registrar(self.sock)
+
+    def soltar_prazo(self):
+        if self._guarda is not None:
+            self._guarda.soltar()
+            self._guarda = None
+
+
+class _ConexaoHttpComPrazo(_ConexaoComPrazo, HTTPConnection):
+    pass
+
+
+class _ConexaoHttpsComPrazo(_ConexaoComPrazo, HTTPSConnection):
+    # urllib3 troca o socket TCP por um SSLSocket aqui; o TCP registrado em _new_conn fica com fd=-1.
+    def _connect_tls_proxy(self, hostname, sock):
+        ssl_sock = super()._connect_tls_proxy(hostname, sock)
+        if self._guarda is not None:
+            self._guarda.registrar(ssl_sock)
+        return ssl_sock
+
+
+class _PoolComPrazo:
+    def _get_conn(self, *args, **kwargs):
+        conexao = super()._get_conn(*args, **kwargs)
+        conexao.acompanhar(getattr(_contexto_prazo, 'guarda', None))
+        return conexao
+
+    def _put_conn(self, conexao):
+        if isinstance(conexao, _ConexaoComPrazo):
+            conexao.soltar_prazo()
+        super()._put_conn(conexao)
+
+
+class _PoolHttpComPrazo(_PoolComPrazo, HTTPConnectionPool):
+    ConnectionCls = _ConexaoHttpComPrazo
+
+
+class _PoolHttpsComPrazo(_PoolComPrazo, HTTPSConnectionPool):
+    ConnectionCls = _ConexaoHttpsComPrazo
+
+
+_POOLS_COM_PRAZO = {'http': _PoolHttpComPrazo, 'https': _PoolHttpsComPrazo}
+
+
+class _AdaptadorComPrazo(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = _POOLS_COM_PRAZO
+
+    def proxy_manager_for(self, *args, **kwargs):
+        gerenciador = super().proxy_manager_for(*args, **kwargs)
+        classes = dict(gerenciador.pool_classes_by_scheme)
+        for esquema, padrao in (
+            ('http', HTTPConnectionPool),
+            ('https', HTTPSConnectionPool),
+        ):
+            if classes.get(esquema) is padrao:
+                classes[esquema] = _POOLS_COM_PRAZO[esquema]
+        gerenciador.pool_classes_by_scheme = classes
+        return gerenciador
+
+
+def _sessao_com_prazo():
+    sessao = requests.Session()
+    adaptador = _AdaptadorComPrazo()
+    sessao.mount('http://', adaptador)
+    sessao.mount('https://', adaptador)
+    return sessao
+
+
+class OcrServiceClient:
+    """Cliente sem estado de negócio para os três endpoints OCR."""
+
+    TAMANHO_CHUNK_RESPOSTA = 4 * 1024
+    MAX_BYTES_RESPOSTA = 52_428_800
+    # Evidência de aceite (2) do #259: os NOMES dos três cabeçalhos por
+    # requisição — valores (token/credenciais) nunca entram no log.
+    _MENSAGEM_CABECALHOS = (
+        'servico OCR: cabecalhos de autenticacao aplicados: '
+        'cf-access-client-id, cf-access-client-secret, x-internal-token'
+    )
+
+    def __init__(
+        self,
+        base_url,
+        token,
+        access_client_id,
+        access_client_secret,
+        timeout_s=30,
+        max_tentativas=3,
+        backoff_base_s=0.5,
+        backoff_max_s=30,
+        reserva_retry_s=0,
+        poll_interval_s=5,
+        sessao=None,
+    ):
+        if max_tentativas < 1:
+            raise ValueError('max_tentativas deve ser pelo menos 1.')
+        self.base_url = base_url.rstrip('/')
+        self.token = token
+        self.access_client_id = access_client_id
+        self.access_client_secret = access_client_secret
+        self.timeout_s = timeout_s
+        self.max_tentativas = max_tentativas
+        self.backoff_base_s = backoff_base_s
+        self.backoff_max_s = backoff_max_s
+        self.reserva_retry_s = reserva_retry_s
+        self.poll_interval_s = poll_interval_s
+        self.sessao = sessao or _sessao_com_prazo()
+        self._primeira_requisicao = True
+
+    def enviar_job(self, caminho_pdf, job_id, prazo, **params):
+        timeout_informado = params.pop('timeout_seconds', None)
+        restante = self._restante(prazo)
+        timeout_seconds = int(
+            restante if timeout_informado is None else timeout_informado
+        )
+        timeout_seconds = max(1, min(86_400, timeout_seconds))
+
+        campos = [
+            ('job_id', job_id),
+            ('dpi', params.pop('dpi', 200)),
+            ('timeout_seconds', timeout_seconds),
+            ('max_pages', params.pop('max_pages', 25)),
+        ]
+        lang = params.pop('lang', None)
+        layout_detection = params.pop('layout_detection', None)
+        if params:
+            desconhecidos = ', '.join(sorted(params))
+            raise TypeError(f'Parâmetros OCR desconhecidos: {desconhecidos}.')
+        if lang is not None:
+            campos.append(('lang', lang))
+        if layout_detection is not None:
+            campos.append(
+                (
+                    'layout_detection',
+                    'true' if layout_detection else 'false',
+                )
+            )
+
+        boundary = f'ocr-{uuid.uuid4().hex}'
+        encoder = _MultipartEncoder(caminho_pdf, campos, boundary, prazo)
+        try:
+            return self._requisicao(
+                'POST',
+                '/v1/ocr/jobs',
+                prazo,
+                data=encoder,
+                headers={
+                    'Content-Type': f'multipart/form-data; boundary={boundary}'
+                },
+            )
+        finally:
+            encoder.close()
+
+    def consultar_job(self, job_id, prazo):
+        job_id_url = quote(str(job_id), safe='')
+        return self._requisicao('GET', f'/v1/ocr/jobs/{job_id_url}', prazo)
+
+    def obter_resultado(self, job_id, prazo, formato='full'):
+        job_id_url = quote(str(job_id), safe='')
+        return self._requisicao(
+            'GET',
+            f'/v1/ocr/jobs/{job_id_url}/result',
+            prazo,
+            params={'format': formato},
+        )
+
+    def _requisicao(self, metodo, caminho, prazo, **kw):
+        """Executa, lê e classifica toda chamada HTTP feita pelo cliente."""
+        url = f'{self.base_url}/{caminho.lstrip("/")}'
+        dados = kw.get('data')
+        # A reserva protege o reenvio do job (POST); um GET barato usa o prazo inteiro.
+        reserva_s = self.reserva_retry_s if metodo.upper() == 'POST' else 0
+        ultimo_codigo = 'SERVICE_UNAVAILABLE'
+        ultima_mensagem = 'Serviço OCR indisponível.'
+        tentativas_limitadas = 0
+        numero_retry = 0
+
+        while True:
+            restante = self._restante(prazo)
+            if hasattr(dados, 'reset'):
+                dados.reset()
+
+            cabecalhos = {'Accept-Encoding': 'identity', **kw.get('headers', {})}
+            cabecalhos.update(
+                {
+                    'CF-Access-Client-Id': self.access_client_id,
+                    'CF-Access-Client-Secret': self.access_client_secret,
+                    'X-Internal-Token': self.token,
+                }
+            )
+            self._log_cabecalhos_aplicados()
+
+            argumentos = dict(kw)
+            argumentos['headers'] = cabecalhos
+            argumentos['allow_redirects'] = False
+            argumentos['stream'] = True
+            argumentos['timeout'] = min(self.timeout_s, restante)
+
+            guarda = _PrazoAbsoluto(prazo)
+            try:
+                try:
+                    _contexto_prazo.guarda = guarda
+                    try:
+                        resposta = self.sessao.request(metodo, url, **argumentos)
+                    finally:
+                        _contexto_prazo.guarda = None
+                    try:
+                        corpo_bruto = self._ler_resposta(resposta, prazo)
+                    finally:
+                        guarda.encerrar()
+                        resposta.close()
+                except OrcamentoEsgotado:
+                    raise
+                except Exception as excecao:
+                    if guarda.estourou:
+                        raise OrcamentoEsgotado(
+                            'Prazo do job OCR esgotado durante a resposta.'
+                        ) from excecao
+                    if not isinstance(excecao, requests.RequestException):
+                        raise
+                    ultimo_codigo = 'SERVICE_UNAVAILABLE'
+                    ultima_mensagem = 'Falha de transporte ao acessar o serviço OCR.'
+                    tentativas_limitadas += 1
+                    if tentativas_limitadas >= self.max_tentativas:
+                        raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
+                    numero_retry += 1
+                    self._aguardar_retry(
+                        numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
+                    )
+                    continue
+            finally:
+                guarda.encerrar()
+
+            corpo = self._json(corpo_bruto)
+            status = resposta.status_code
+            if status in (200, 202):
+                if isinstance(corpo, dict):
+                    return corpo
+                raise OcrBackendError(
+                    'INVALID_OCR_RESULT', 'Resposta JSON inválida do serviço OCR.'
+                )
+            if status in (401, 403) or 300 <= status < 400:
+                raise OcrBackendError('UNAUTHORIZED', 'Acesso ao serviço OCR negado.')
+            if status == 404:
+                raise OcrBackendError('JOB_NOT_FOUND', 'Job OCR não encontrado.')
+            if status == 409:
+                if metodo.upper() == 'POST' and caminho.rstrip('/') == '/v1/ocr/jobs':
+                    raise OcrBackendError(
+                        'JOB_ID_CONFLICT', 'O job_id já identifica outro arquivo.'
+                    )
+                if isinstance(corpo, dict):
+                    return corpo
+                raise OcrBackendError(
+                    'INVALID_OCR_RESULT', 'Estado de job inválido na resposta 409.'
+                )
+            if status in (400, 413, 415):
+                padrao = {
+                    400: 'INVALID_INPUT',
+                    413: 'FILE_TOO_LARGE',
+                    415: 'UNSUPPORTED_MEDIA_TYPE',
+                }[status]
+                codigo, mensagem = self._erro_do_corpo(corpo, padrao)
+                raise OcrBackendError(codigo, mensagem)
+
+            retry_ate_prazo = False
+            if status == 503:
+                codigo, mensagem = self._erro_do_corpo(
+                    corpo, 'SERVICE_UNAVAILABLE'
+                )
+                if codigo == 'UNAUTHORIZED':
+                    raise OcrBackendError(codigo, mensagem)
+                if codigo == 'QUEUE_FULL':
+                    ultimo_codigo = codigo
+                    ultima_mensagem = mensagem
+                    retry_ate_prazo = True
+                else:
+                    ultimo_codigo = 'SERVICE_UNAVAILABLE'
+                    ultima_mensagem = 'Serviço OCR indisponível.'
+            elif status == 429:
+                ultimo_codigo = 'QUEUE_FULL'
+                ultima_mensagem = 'Serviço OCR com fila cheia (429).'
+                retry_ate_prazo = True
+            elif 500 <= status < 600:
+                ultimo_codigo = 'SERVICE_UNAVAILABLE'
+                ultima_mensagem = 'Serviço OCR indisponível.'
+            else:
+                raise OcrBackendError(
+                    'SERVICE_UNAVAILABLE',
+                    f'Resposta HTTP inesperada do serviço OCR: {status}.',
+                )
+
+            if not retry_ate_prazo:
+                tentativas_limitadas += 1
+                if tentativas_limitadas >= self.max_tentativas:
+                    raise OcrBackendError(ultimo_codigo, ultima_mensagem)
+            numero_retry += 1
+            self._aguardar_retry(
+                numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
+            )
+
+    def _log_cabecalhos_aplicados(self):
+        """Uma linha por requisição com os nomes dos três cabeçalhos
+        (evidência de aceite 2 do #259). A primeira requisição de cada
+        instância sai em INFO; as seguintes (polls, retries) em DEBUG,
+        para não poluir. Valores, nome de arquivo e texto do documento
+        nunca aparecem — a mensagem é uma constante fixa.
+        """
+        if self._primeira_requisicao:
+            self._primeira_requisicao = False
+            logger.info('%s', self._MENSAGEM_CABECALHOS)
+        else:
+            logger.debug('%s', self._MENSAGEM_CABECALHOS)
+
+    def _ler_resposta(self, resposta, prazo):
+        partes = []
+        total = 0
+        while True:
+            self._restante(prazo)
+            chunk = self._ler_bloco(resposta, self.TAMANHO_CHUNK_RESPOSTA)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > self.MAX_BYTES_RESPOSTA:
+                raise OcrBackendError(
+                    'OUTPUT_TOO_LARGE', 'Resposta do serviço OCR excede o limite.'
+                )
+            partes.append(chunk)
+        self._restante(prazo)
+        return b''.join(partes)
+
+    @staticmethod
+    def _ler_bloco(resposta, tamanho):
+        # read1 volta a cada recv: iter_content esperaria o bloco inteiro e ignoraria o prazo.
+        try:
+            return resposta.raw.read1(tamanho, decode_content=True)
+        except urllib3.exceptions.HTTPError as exc:
+            raise requests.exceptions.ConnectionError(exc) from None
+
+    def _aguardar_retry(self, tentativa, prazo, reserva_s, codigo, mensagem):
+        try:
+            self._aguardar_backoff(tentativa, prazo, reserva_s)
+        except OrcamentoEsgotado:
+            if codigo == 'QUEUE_FULL':
+                raise OcrBackendError(codigo, mensagem) from None
+            raise
+
+    def _aguardar_backoff(self, tentativa, prazo, reserva_s):
+        atraso = min(
+            self.backoff_base_s * (2 ** (tentativa - 1)),
+            self.backoff_max_s,
+        )
+        restante = self._restante(prazo)
+        if restante <= reserva_s:
+            raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
+        if atraso >= restante - reserva_s:
+            raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
+        if atraso > 0:
+            time.sleep(atraso)
+        restante = self._restante(prazo)
+        if restante <= reserva_s:
+            raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
+
+    @staticmethod
+    def _json(corpo):
+        try:
+            return json.loads(corpo.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    @staticmethod
+    def _erro_do_corpo(corpo, padrao):
+        erro = corpo.get('error', {}) if isinstance(corpo, dict) else {}
+        codigo = erro.get('code')
+        if codigo not in CODIGOS_CONTRATO and codigo != 'SERVICE_UNAVAILABLE':
+            codigo = padrao
+        mensagem = erro.get('message')
+        if not isinstance(mensagem, str) or not mensagem:
+            mensagem = f'Erro do serviço OCR: {codigo}.'
+        return codigo, mensagem
+
+    @staticmethod
+    def _restante(prazo):
+        restante = prazo - time.monotonic()
+        if restante <= 0:
+            raise OrcamentoEsgotado('Prazo do job OCR esgotado.')
+        return restante

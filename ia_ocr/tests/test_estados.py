@@ -1,5 +1,6 @@
 """Máquina de estados do OcrJob: transições, CAS, gating de confirmação."""
 
+from datetime import timedelta
 from unittest import mock
 
 from django.test import TestCase
@@ -276,6 +277,38 @@ class RetryTest(TestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.tentativa, 2)  # incrementado uma única vez
 
+    def test_retry_recusado_com_outro_job_em_execucao_do_documento(self):
+        vizinho = OcrJob.objects.create(
+            documento_digital_id=self.job.documento_digital_id
+        )
+        vizinho.transicionar(estados.EM_EXECUCAO)
+        with self.assertRaises(TransicaoInvalida):
+            self.job.retry(usuario=self.usuario, motivo='reprocessar o antigo')
+
+        # Nada mudou: CAS/tentativa preservados e sem auditoria nova.
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.FALHOU)
+        self.assertEqual(self.job.tentativa, 1)
+        self.assertEqual(self.job.erro_codigo, 'SERVICO_INDISPONIVEL')
+        self.assertEqual(
+            self.job.transicoes.filter(para_status=estados.PENDENTE).count(), 0
+        )
+
+    def test_retry_passa_com_outro_job_apenas_pendente(self):
+        """Controle positivo da guarda estreita: retry é recuperação e não
+        pode ficar preso em falhou só porque existe backlog do documento."""
+        vizinho = OcrJob.objects.create(
+            documento_digital_id=self.job.documento_digital_id
+        )
+
+        self.job.retry(motivo='reap periódico')
+
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.PENDENTE)
+        self.assertEqual(self.job.tentativa, 2)
+        vizinho.refresh_from_db()
+        self.assertEqual(vizinho.status, estados.PENDENTE)
+
 
 class CasSemTentativaExplicitaTest(TestCase):
     """transicionar sem `tentativa` usa self.tentativa no CAS: o lease é
@@ -291,8 +324,12 @@ class CasSemTentativaExplicitaTest(TestCase):
         """claim(1) → reap → retry → claim(2); devolve objetos antigo e novo."""
         antigo = claim_proximo_job()
         self.assertIsNotNone(antigo)
+        OcrJob.objects.filter(pk=self.job.pk).update(
+            lease_expira_em=timezone.now() - timedelta(seconds=1)
+        )
         reap_jobs_expirados(timeout_s=0)
         self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.FALHOU)
         self.job.retry()
         novo = claim_proximo_job()
         self.assertIsNotNone(novo)

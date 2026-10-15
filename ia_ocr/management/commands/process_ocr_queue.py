@@ -9,11 +9,14 @@ import logging
 import time
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections
 
 from ia_ocr import services
 from ia_ocr.backends import OcrBackendError, get_backend
+from ia_ocr.checks import (
+    backend_real, conta_do_orcamento, lease_minimo_seconds,
+)
 
 logger = logging.getLogger('ia_ocr.process_ocr_queue')
 
@@ -57,6 +60,8 @@ class Command(BaseCommand):
         if timeout is None:
             timeout = getattr(settings, 'OCR_JOB_TIMEOUT_SECONDS', 3600.0)
 
+        self._conferir_viabilidade_do_lease(timeout)
+
         if options['reap_stale']:
             self._reap_expirados(timeout)
 
@@ -66,7 +71,7 @@ class Command(BaseCommand):
         while True:
             while (options['max_jobs'] is None
                    or processados < options['max_jobs']):
-                if not self._processar_um_job(backend):
+                if not self._processar_um_job(backend, timeout):
                     break  # fila vazia
                 processados += 1
                 # --once preserva a semântica original: reap somente no início.
@@ -95,6 +100,26 @@ class Command(BaseCommand):
         logger.info('encerrando: jobs processados=%s', processados)
 
     @staticmethod
+    def _conferir_viabilidade_do_lease(timeout):
+        """Falha rápida com backend real: lease abaixo do orçamento máximo
+        de um job faria o reap encerrar o job antes de ele concluir e
+        persistir — queimaria a tentativa em vez de processar. Com
+        StubBackend nada é validado (a I-1 não fala com serviço nenhum).
+        """
+        if not backend_real():
+            return
+        minimo = lease_minimo_seconds()
+        if timeout < minimo:
+            raise CommandError(
+                f'Lease insuficiente: timeout ({timeout:g} s, '
+                '--timeout/OCR_JOB_TIMEOUT_SECONDS) não cobre o orçamento '
+                'máximo de um job: OCR_MAX_PAGINAS × OCR_SEGUNDOS_POR_PAGINA '
+                '+ OCR_FOLGA_FILA_SECONDS + OCR_MARGEM_PERSISTENCIA_SECONDS '
+                f'= {conta_do_orcamento()}. Aumente o lease antes de '
+                'processar a fila.'
+            )
+
+    @staticmethod
     def _reap_expirados(timeout):
         reapados = services.reap_jobs_expirados(timeout)
         if reapados:
@@ -102,7 +127,7 @@ class Command(BaseCommand):
                 'reap: %s job(s) expirados → falhou/WORKER_TIMEOUT', reapados
             )
 
-    def _processar_um_job(self, backend):
+    def _processar_um_job(self, backend, timeout=None):
         """Claim + processa um job. False se a fila está vazia.
 
         Nenhuma exceção derruba o worker: falha do backend E falha da
@@ -110,7 +135,7 @@ class Command(BaseCommand):
         deixam o job em `falhou`/ERRO_INTERNO; se até isso falhar (banco
         fora), o reap do próximo ciclo é a rede de segurança.
         """
-        job = services.claim_proximo_job()
+        job = services.claim_proximo_job(timeout_s=timeout)
         if job is None:
             return False
         tentativa = job.tentativa
