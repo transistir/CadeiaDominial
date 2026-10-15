@@ -145,17 +145,38 @@ def tis_delete(request, tis_id):
             tis.delete()
             messages.success(request, f'Terra Indígena "{nome}" excluída com sucesso!')
             return redirect('home')
-        except ProtectedError:
-            # FK PROTECT de OcrJob (#258): log SEM corpo/traceback — a
-            # exceção carrega o repr dos objetos protegidos e o __str__ dos
-            # modelos envolvidos pode citar o arquivo do documento (PII).
-            logger.warning('exclusao bloqueada por OcrJob: tis id=%s', tis.id)
-            messages.error(
-                request,
-                'Há arquivo digital com processamento de OCR vinculado a esta '
-                'Terra Indígena e ela não pode ser excluída. Remova o '
-                'processamento de OCR antes de excluir.',
+        except ProtectedError as e:
+            # Use apenas metadados dos models: objetos/exceção podem carregar PII
+            # em suas representações textuais.
+            protected_objects = list(e.protected_objects)
+            tipos = sorted({
+                str(obj._meta.verbose_name_plural)
+                for obj in protected_objects
+            }, key=str.casefold)
+            tipos_log = ', '.join(tipos) or 'desconhecido'
+            tem_ocr = any(
+                obj._meta.label_lower == 'ia_ocr.ocrjob'
+                for obj in protected_objects
             )
+            logger.warning(
+                'exclusao bloqueada por PROTECT: tis id=%s tipos=%s',
+                tis.id,
+                tipos_log,
+            )
+            if tem_ocr:
+                messages.error(
+                    request,
+                    'Há arquivo digital com processamento de OCR vinculado a esta '
+                    'Terra Indígena e ela não pode ser excluída. Remova o '
+                    'processamento de OCR antes de excluir.',
+                )
+            else:
+                detalhe_tipos = f' ({tipos_log.lower()})' if tipos else ''
+                messages.error(
+                    request,
+                    'Terra Indígena possui vínculos que impedem a exclusão'
+                    f'{detalhe_tipos}. Remova esses vínculos antes de excluir.',
+                )
         except Exception:
             logger.exception('Erro ao excluir Terra Indígena id=%s', tis.id)
             messages.error(request, 'Erro ao excluir Terra Indígena.')
@@ -212,17 +233,38 @@ def imovel_delete(request, tis_id, imovel_id):
             imovel.delete()
             messages.success(request, f'Imóvel "{matricula}" excluído com sucesso!')
             return redirect('tis_detail', tis_id=tis.id)
-        except ProtectedError:
-            # FK PROTECT de OcrJob (#258): log SEM corpo/traceback — a
-            # exceção carrega o repr dos objetos protegidos e o __str__ dos
-            # modelos envolvidos pode citar o arquivo do documento (PII).
-            logger.warning('exclusao bloqueada por OcrJob: imovel id=%s', imovel_id)
-            messages.error(
-                request,
-                'Imóvel possui arquivo digital com processamento de OCR '
-                'vinculado e não pode ser excluído. Remova o processamento de '
-                'OCR antes de excluir o imóvel.',
+        except ProtectedError as e:
+            # Use apenas metadados dos models: objetos/exceção podem carregar PII
+            # em suas representações textuais.
+            protected_objects = list(e.protected_objects)
+            tipos = sorted({
+                str(obj._meta.verbose_name_plural)
+                for obj in protected_objects
+            }, key=str.casefold)
+            tipos_log = ', '.join(tipos) or 'desconhecido'
+            tem_ocr = any(
+                obj._meta.label_lower == 'ia_ocr.ocrjob'
+                for obj in protected_objects
             )
+            logger.warning(
+                'exclusao bloqueada por PROTECT: imovel id=%s tipos=%s',
+                imovel_id,
+                tipos_log,
+            )
+            if tem_ocr:
+                messages.error(
+                    request,
+                    'Imóvel possui arquivo digital com processamento de OCR '
+                    'vinculado e não pode ser excluído. Remova o processamento de '
+                    'OCR antes de excluir o imóvel.',
+                )
+            else:
+                detalhe_tipos = f' ({tipos_log.lower()})' if tipos else ''
+                messages.error(
+                    request,
+                    'Imóvel possui vínculos que impedem a exclusão'
+                    f'{detalhe_tipos}. Remova esses vínculos antes de excluir.',
+                )
         except Exception:
             logger.exception('Erro ao excluir imóvel id=%s', imovel_id)
             messages.error(request, 'Erro ao excluir imóvel.')
