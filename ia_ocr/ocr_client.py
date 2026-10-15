@@ -141,8 +141,15 @@ _contexto_prazo = threading.local()
 
 
 def _interromper_socket(sock):
+    # SSLTransport (TLS sobre túnel de proxy) não tem shutdown: o socket real fica em .socket.
+    shutdown = getattr(sock, 'shutdown', None)
+    if shutdown is None:
+        socket_de_baixo = getattr(sock, 'socket', None)
+        if socket_de_baixo is not None:
+            _interromper_socket(socket_de_baixo)
+        return
     try:
-        sock.shutdown(socket.SHUT_RDWR)
+        shutdown(socket.SHUT_RDWR)
     except OSError:
         pass
 
@@ -199,6 +206,13 @@ class _ConexaoComPrazo:
         if guarda is not None and self.sock is not None:
             guarda.registrar(self.sock)
 
+    def _new_conn(self):
+        # Registra antes do túnel de CONNECT, cujas respostas são lidas dentro de connect().
+        sock = super()._new_conn()
+        if self._guarda is not None:
+            self._guarda.registrar(sock)
+        return sock
+
     def connect(self):
         super().connect()
         if self._guarda is not None:
@@ -248,7 +262,14 @@ class _AdaptadorComPrazo(HTTPAdapter):
 
     def proxy_manager_for(self, *args, **kwargs):
         gerenciador = super().proxy_manager_for(*args, **kwargs)
-        gerenciador.pool_classes_by_scheme = _POOLS_COM_PRAZO
+        classes = dict(gerenciador.pool_classes_by_scheme)
+        for esquema, padrao in (
+            ('http', HTTPConnectionPool),
+            ('https', HTTPSConnectionPool),
+        ):
+            if classes.get(esquema) is padrao:
+                classes[esquema] = _POOLS_COM_PRAZO[esquema]
+        gerenciador.pool_classes_by_scheme = classes
         return gerenciador
 
 

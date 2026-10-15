@@ -1,16 +1,30 @@
 import json
 import logging
+import shutil
 import socket
+import ssl
 import struct
+import subprocess
 import tempfile
 import threading
 import time
+import unittest
 import zlib
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
+from urllib3.connectionpool import HTTPConnectionPool
 
-from ia_ocr.ocr_client import OcrServiceClient, OrcamentoEsgotado
+from ia_ocr.ocr_client import (
+    OcrServiceClient,
+    OrcamentoEsgotado,
+    _AdaptadorComPrazo,
+    _PoolHttpComPrazo,
+    _PoolHttpsComPrazo,
+    _PrazoAbsoluto,
+)
 from ia_ocr.tests.stub_servico import StubServicoOcr
 
 
@@ -607,6 +621,13 @@ class OcrServiceClientTests(SimpleTestCase):
         )
 
 
+class _TransporteSemShutdown:
+    """Imita o SSLTransport do urllib3: embrulha o socket real em ``.socket``, sem ``shutdown``."""
+
+    def __init__(self, socket_real):
+        self.socket = socket_real
+
+
 def _gzip_com_nome(dados, nome):
     compressor = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
     deflate = compressor.compress(dados) + compressor.flush()
@@ -811,6 +832,45 @@ class PrazoAbsolutoTests(SimpleTestCase):
             corpo,
         )
 
+    def test_connect_do_proxy_gotejante_estoura_no_prazo_real(self):
+        resposta = (
+            b'HTTP/1.1 200 Connection established\r\n'
+            b'X-Lenta: ' + b'a' * 60 + b'\r\n\r\n'
+        )
+        proxy = _ServidorFluxoGotejante(
+            self._um_byte_por_vez(resposta), self.PAUSA_BYTE_S
+        )
+        proxy.iniciar()
+        self.addCleanup(proxy.encerrar)
+        cliente = OcrServiceClient(
+            'https://servico.invalido', 'token', 'access-id', 'access-secret',
+            timeout_s=1, backoff_base_s=0,
+        )
+        cliente.sessao.trust_env = False
+        cliente.sessao.proxies = {'https': proxy.base_url}
+
+        inicio = time.monotonic()
+        with self.assertRaises(OrcamentoEsgotado):
+            cliente.consultar_job('job-connect', inicio + self.PRAZO_S)
+
+        self.assertLess(time.monotonic() - inicio, self.PRAZO_S + 0.25)
+
+    def test_transporte_sem_shutdown_e_interrompido_pelo_socket_de_baixo(self):
+        real, outro = socket.socketpair()
+        self.addCleanup(real.close)
+        self.addCleanup(outro.close)
+        real.settimeout(2)
+        guarda = _PrazoAbsoluto(time.monotonic() + 0.05)
+        self.addCleanup(guarda.encerrar)
+        guarda.registrar(_TransporteSemShutdown(real))
+
+        inicio = time.monotonic()
+        dados = real.recv(1)
+
+        self.assertEqual(dados, b'')
+        self.assertTrue(guarda.estourou)
+        self.assertLess(time.monotonic() - inicio, 1)
+
     def test_cliente_pede_corpo_sem_compressao(self):
         stub = StubServicoOcr([(200, {'job_id': 'job-id', 'status': 'processing'}, {})]).iniciar()
         self.addCleanup(stub.encerrar)
@@ -853,7 +913,150 @@ class PrazoAbsolutoTests(SimpleTestCase):
     def test_requirements_declara_urllib3_com_read1(self):
         requisitos = (Path(__file__).resolve().parents[2] / 'requirements.txt').read_text()
 
-        self.assertRegex(requisitos, r'(?m)^urllib3>=2\.3\b')
+        self.assertRegex(requisitos, r'(?m)^urllib3>=2\.6\b')
+
+
+class _ServidorHandshakeGotejante(_ServidorFluxoGotejante):
+    """Responde sem esperar requisição HTTP, como um servidor TLS que goteja o ServerHello."""
+
+    def _atender(self, conexao):
+        with conexao:
+            try:
+                self._responder(conexao)
+            except OSError:
+                return
+
+
+class _ServidorTlsFluxoGotejante(_ServidorFluxoGotejante):
+    def __init__(self, pedacos, pausa_s, contexto):
+        super().__init__(pedacos, pausa_s)
+        self._contexto = contexto
+
+    def _atender(self, conexao):
+        try:
+            conexao = self._contexto.wrap_socket(conexao, server_side=True)
+        except OSError:
+            conexao.close()
+            return
+        super()._atender(conexao)
+
+
+@unittest.skipUnless(
+    shutil.which('openssl'), 'openssl indisponível para gerar o certificado de teste'
+)
+class PrazoAbsolutoTlsTests(SimpleTestCase):
+    PAUSA_BYTE_S = 0.02
+    PRAZO_S = 0.1
+    MARGEM_S = 0.5
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        diretorio = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(diretorio.cleanup)
+        caminho = Path(diretorio.name)
+        cls.certificado = caminho / 'cert.pem'
+        chave = caminho / 'chave.pem'
+        subprocess.run(
+            [
+                'openssl', 'req', '-x509', '-newkey', 'ec',
+                '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes',
+                '-keyout', str(chave), '-out', str(cls.certificado),
+                '-days', '1', '-subj', '/CN=localhost',
+                '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
+            ],
+            check=True,
+            capture_output=True,
+        )
+        cls.contexto_servidor = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        cls.contexto_servidor.load_cert_chain(cls.certificado, chave)
+
+    def _assert_aborta_no_prazo_tls(self, resposta):
+        servidor = _ServidorTlsFluxoGotejante(
+            [bytes([byte]) for byte in resposta],
+            self.PAUSA_BYTE_S,
+            self.contexto_servidor,
+        )
+        servidor.iniciar()
+        self.addCleanup(servidor.encerrar)
+        cliente = OcrServiceClient(
+            servidor.base_url.replace('http://', 'https://'),
+            'token', 'access-id', 'access-secret',
+            timeout_s=1, backoff_base_s=0,
+        )
+        cliente.sessao.verify = str(self.certificado)
+
+        inicio = time.monotonic()
+        with self.assertRaises(OrcamentoEsgotado):
+            cliente.consultar_job('job-tls', inicio + self.PRAZO_S)
+
+        self.assertLess(time.monotonic() - inicio, self.PRAZO_S + self.MARGEM_S)
+
+    def test_https_cabecalhos_gotejantes_estouram_no_prazo_real(self):
+        self._assert_aborta_no_prazo_tls(
+            b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n'
+            b'X-Lenta: ' + b'a' * 60 + b'\r\nContent-Length: 100\r\n\r\n'
+            + b'x' * 100
+        )
+
+    def test_handshake_tls_gotejante_estoura_no_prazo_real(self):
+        registro = b'\x16\x03\x03\x3f\xff' + b'\x00' * 150
+        servidor = _ServidorHandshakeGotejante(
+            [bytes([byte]) for byte in registro], self.PAUSA_BYTE_S
+        )
+        servidor.iniciar()
+        self.addCleanup(servidor.encerrar)
+        cliente = OcrServiceClient(
+            servidor.base_url.replace('http://', 'https://'),
+            'token', 'access-id', 'access-secret',
+            timeout_s=1, backoff_base_s=0,
+        )
+        cliente.sessao.verify = str(self.certificado)
+
+        inicio = time.monotonic()
+        with self.assertRaises(OrcamentoEsgotado):
+            cliente.consultar_job('job-handshake', inicio + self.PRAZO_S)
+
+        self.assertLess(time.monotonic() - inicio, self.PRAZO_S + self.MARGEM_S)
+
+    def test_https_corpo_gotejante_estoura_no_prazo_real(self):
+        corpo = json.dumps({'job_id': 'job-tls', 'status': 'processing'}).encode()
+        self._assert_aborta_no_prazo_tls(
+            b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n'
+            b'Content-Length: ' + str(len(corpo) + 100).encode() + b'\r\n'
+            b'Connection: close\r\n\r\n' + corpo + b'x' * 100
+        )
+
+
+class AdaptadorComPrazoProxyTests(SimpleTestCase):
+    def test_proxy_http_usa_classes_de_pool_com_prazo(self):
+        gerenciador = _AdaptadorComPrazo().proxy_manager_for('http://127.0.0.1:1')
+
+        self.assertIs(
+            gerenciador.pool_classes_by_scheme['http'], _PoolHttpComPrazo
+        )
+        self.assertIs(
+            gerenciador.pool_classes_by_scheme['https'], _PoolHttpsComPrazo
+        )
+
+    def test_proxy_socks_mantem_classes_de_pool_proprias(self):
+        class PoolSocks(HTTPConnectionPool):
+            pass
+
+        gerenciador_socks = SimpleNamespace(
+            pool_classes_by_scheme={'http': PoolSocks, 'https': PoolSocks}
+        )
+        with patch(
+            'requests.adapters.HTTPAdapter.proxy_manager_for',
+            return_value=gerenciador_socks,
+        ):
+            resultado = _AdaptadorComPrazo().proxy_manager_for(
+                'socks5h://127.0.0.1:1080'
+            )
+
+        self.assertEqual(
+            resultado.pool_classes_by_scheme, {'http': PoolSocks, 'https': PoolSocks}
+        )
 
 
 class LogDeCabecalhosTests(SimpleTestCase):
