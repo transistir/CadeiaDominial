@@ -7,6 +7,7 @@ código estável do contrato.
 
 import dataclasses
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 
 from django.conf import settings
 from django.utils.module_loading import import_string
@@ -16,11 +17,13 @@ from django.utils.module_loading import import_string
 class ResultadoOcr:
     """Saída de um backend de OCR para um job.
 
-    `paginas`: lista de dicts com `numero_pagina`, `texto` e `blocos`
-    (bbox/confiança por bloco, quando o serviço fornecer).
+    `paginas` é um iterável de dicts com `numero_pagina`, `texto` e `blocos`
+    (bbox/confiança por bloco, quando o serviço fornecer). O contrato exige
+    exatamente uma entrada por página, numerada de 1 a `page_count`, sem
+    duplicatas.
     """
 
-    paginas: list
+    paginas: Iterable[dict]
     sha256_pdf: str
     page_count: int
     timings_ms: dict

@@ -236,16 +236,19 @@ def finalizar(job, resultado_ou_erro, tentativa):
 
     Se o lease mudou (reap/retry no meio do processamento), o resultado do
     worker antigo é DESCARTADO: nada é gravado, só log com job_id/tentativa.
+    Um resultado válido contém exatamente uma entrada para cada página,
+    numerada de 1 a ``page_count``, sem duplicatas. ``paginas`` é materializado
+    uma única vez para que iteráveis consumíveis, como geradores, sejam seguros.
     Retorna True se a finalização foi aplicada.
     """
     agora = timezone.now()
     if isinstance(resultado_ou_erro, ResultadoOcr):
         resultado = resultado_ou_erro
         try:
-            numeros_paginas = [
-                pagina['numero_pagina'] for pagina in resultado.paginas
-            ]
+            paginas = list(resultado.paginas)
+            numeros_paginas = [pagina['numero_pagina'] for pagina in paginas]
         except (KeyError, TypeError):
+            paginas = []
             numeros_paginas = []
         page_count_valido = (
             isinstance(resultado.page_count, int)
@@ -303,7 +306,7 @@ def finalizar(job, resultado_ou_erro, tentativa):
                     texto_ocr=pagina.get('texto', ''),
                     blocos=pagina.get('blocos'),
                 )
-                for pagina in resultado.paginas
+                for pagina in paginas
             )
             OcrJobTransicao.objects.create(
                 ocr_job_id=job.pk,
