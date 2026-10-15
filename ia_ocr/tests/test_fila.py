@@ -659,6 +659,27 @@ class ReprocessarTest(TestCase):
                 self.assertEqual(OcrJob.objects.count(), total_antes)
                 vigente.delete()
 
+    def test_job_de_origem_nao_terminal_recusa_sem_criar_job_reivindicavel(self):
+        for status_desejado in (estados.PENDENTE, estados.EM_EXECUCAO):
+            with self.subTest(status_desejado=status_desejado):
+                origem, _ = criar_job(
+                    criar_documento_digital(upload_por=self.usuario)
+                )
+                if status_desejado == estados.EM_EXECUCAO:
+                    origem.transicionar(estados.EM_EXECUCAO)
+                total_antes = OcrJob.objects.count()
+
+                with self.assertRaises(services.JobEmExecucao) as contexto:
+                    services.reprocessar(origem, usuario=self.usuario)
+
+                self.assertEqual(contexto.exception.codigo, 'JOB_EM_EXECUCAO')
+                self.assertEqual(OcrJob.objects.count(), total_antes)
+                self.assertFalse(
+                    OcrJob.objects.filter(
+                        documento_digital_id=origem.documento_digital_id
+                    ).exclude(pk=origem.pk).exists()
+                )
+
 
 class ReapJobsExpiradosTest(TestCase):
     def setUp(self):

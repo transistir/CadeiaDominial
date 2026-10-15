@@ -10,6 +10,7 @@ import uuid
 from urllib.parse import quote
 
 import requests
+import urllib3
 
 from ia_ocr.backends import OcrBackendError, OrcamentoEsgotado
 
@@ -364,10 +365,11 @@ class OcrServiceClient:
     def _ler_resposta(self, resposta, prazo):
         partes = []
         total = 0
-        for chunk in resposta.iter_content(chunk_size=self.TAMANHO_CHUNK_RESPOSTA):
+        while True:
             self._restante(prazo)
+            chunk = self._ler_bloco(resposta, self.TAMANHO_CHUNK_RESPOSTA)
             if not chunk:
-                continue
+                break
             total += len(chunk)
             if total > self.MAX_BYTES_RESPOSTA:
                 raise OcrBackendError(
@@ -376,6 +378,14 @@ class OcrServiceClient:
             partes.append(chunk)
         self._restante(prazo)
         return b''.join(partes)
+
+    @staticmethod
+    def _ler_bloco(resposta, tamanho):
+        # read1 volta a cada recv: iter_content esperaria o bloco inteiro e ignoraria o prazo.
+        try:
+            return resposta.raw.read1(tamanho, decode_content=True)
+        except urllib3.exceptions.HTTPError as exc:
+            raise requests.exceptions.ConnectionError(exc) from None
 
     def _aguardar_retry(self, tentativa, prazo, reserva_s, codigo, mensagem):
         try:

@@ -134,6 +134,10 @@ class JobIdConflitante(Exception):
     """job_id já existe vinculado a outro documento digital."""
 
 
+class JobEmExecucao(Exception):
+    codigo = 'JOB_EM_EXECUCAO'
+
+
 def registrar_pendencia_limpeza(
     documento_digital_id, caminho_storage, documento_id=None
 ):
@@ -179,9 +183,11 @@ def reprocessar(job, usuario=None, forcar_ocr=True):
     """Cria um novo job de OCR para o documento do job recebido.
 
     O job anterior permanece INTOCADO: páginas (inclusive confirmadas) e
-    auditoria não são reescritas — reprocessar nunca altera histórico. Se já
-    existe OUTRO job do documento em pendente/em_execucao, nada é criado e o
-    job vigente é devolvido com ``False`` (mesmo estilo de ``criar_job``).
+    auditoria não são reescritas — reprocessar nunca altera histórico. Se o
+    próprio job ainda está pendente/em_execucao, recusa com ``JobEmExecucao``
+    em vez de criar um sucessor reivindicável. Se já existe OUTRO job do
+    documento em pendente/em_execucao, nada é criado e o job vigente é
+    devolvido com ``False`` (mesmo estilo de ``criar_job``).
     A checagem e a criação são serializadas por ``select_for_update`` no
     DocumentoDigital: sem constraint parcial, que quebraria a fila da I-1
     (vários pendentes legítimos para o mesmo documento).
@@ -189,13 +195,20 @@ def reprocessar(job, usuario=None, forcar_ocr=True):
     documento_id = job.documento_digital_id
     with transaction.atomic():
         DocumentoDigital.objects.select_for_update().get(pk=documento_id)
+        origem_ativa = OcrJob.objects.filter(
+            pk=job.pk,
+            status__in=[estados.PENDENTE, estados.EM_EXECUCAO],
+        ).exists()
+        if origem_ativa:
+            raise JobEmExecucao(
+                'O job de origem ainda está pendente ou em execução.'
+            )
         vigente = (
             OcrJob.objects
             .filter(
                 documento_digital_id=documento_id,
                 status__in=[estados.PENDENTE, estados.EM_EXECUCAO],
             )
-            .exclude(pk=job.pk)
             .first()
         )
         if vigente is not None:

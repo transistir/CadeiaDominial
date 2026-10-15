@@ -9,6 +9,49 @@ from ia_ocr.ocr_client import OcrServiceClient
 from ia_ocr.tests.stub_servico import StubServicoOcr
 
 
+class _RelogioFalso:
+    """Substitui o módulo ``time`` do cliente: só avança quando ele dorme."""
+
+    def __init__(self):
+        self.agora = 1000.0
+        self.dormido = 0.0
+
+    def monotonic(self):
+        return self.agora
+
+    def sleep(self, segundos):
+        self.agora += segundos
+        self.dormido += segundos
+
+
+class _CorpoFalso:
+    def __init__(self, dados):
+        self._dados = dados
+
+    def read1(self, amt=None, decode_content=None):
+        dados, self._dados = self._dados, b''
+        return dados
+
+
+class _RespostaFalsa:
+    def __init__(self, status):
+        self.status_code = status
+        self.raw = _CorpoFalso(b'<html>rate limited</html>')
+
+    def close(self):
+        pass
+
+
+class _SessaoFalsa:
+    def __init__(self, status_codes):
+        self._status_codes = list(status_codes)
+        self.chamadas = 0
+
+    def request(self, metodo, url, **kw):
+        self.chamadas += 1
+        return _RespostaFalsa(self._status_codes.pop(0))
+
+
 class OcrServiceClientTests(SimpleTestCase):
     def setUp(self):
         self.diretorio = tempfile.TemporaryDirectory()
@@ -209,26 +252,31 @@ class OcrServiceClientTests(SimpleTestCase):
         dormir.assert_not_called()
 
     def test_429_no_fim_do_orcamento_termina_queue_full(self):
-        stub = self._stub(
-            [(429, '<html>rate limited</html>', {}) for _ in range(2)]
-        )
+        from unittest.mock import patch
+
+        relogio = _RelogioFalso()
+        sessao = _SessaoFalsa([429, 429])
         cliente = OcrServiceClient(
-            stub.base_url,
+            'http://ocr.invalido',
             'token-interno',
             'access-id',
             'access-secret',
             max_tentativas=1,
             backoff_base_s=0.08,
             backoff_max_s=0.08,
+            sessao=sessao,
         )
-        inicio = time.monotonic()
 
-        erro = self._capturar_erro(
-            lambda: cliente.consultar_job('job-429-fim', inicio + 0.15)
-        )
+        with patch('ia_ocr.ocr_client.time', relogio):
+            erro = self._capturar_erro(
+                lambda: cliente.consultar_job(
+                    'job-429-fim', relogio.monotonic() + 0.15
+                )
+            )
 
         self.assertEqual(erro.codigo, 'QUEUE_FULL')
-        self.assertEqual(len(stub.recebidas), 2)
+        self.assertEqual(sessao.chamadas, 2)
+        self.assertLessEqual(relogio.dormido, 0.15)
 
     def test_5xx_passageiro_em_get_no_fim_do_orcamento_tenta_de_novo(self):
         """A reserva de retry vale para reenviar job (POST); um GET barato
@@ -494,6 +542,27 @@ class OcrServiceClientTests(SimpleTestCase):
             )
 
         self.assertLess(time.monotonic() - inicio, prazo_s + 0.08)
+        self.assertEqual(len(stub.recebidas), 1)
+
+    def test_resposta_gotejante_um_byte_por_vez_corta_no_meio_do_bloco(self):
+        from ia_ocr.ocr_client import OrcamentoEsgotado
+
+        corpo = {'job_id': 'job-byte', 'status': 'processing', 'padding': 'x' * 150}
+        stub = StubServicoOcr(
+            [(200, corpo, {})],
+            tamanho_chunk_resposta=1,
+            pausa_s=0.02,
+        ).iniciar()
+        self.addCleanup(stub.encerrar)
+        prazo_s = 0.3
+        inicio = time.monotonic()
+
+        with self.assertRaises(OrcamentoEsgotado):
+            self._cliente(stub, timeout_s=1).consultar_job(
+                'job-byte', inicio + prazo_s
+            )
+
+        self.assertLess(time.monotonic() - inicio, prazo_s + 0.5)
         self.assertEqual(len(stub.recebidas), 1)
 
     def test_upload_e_interrompido_antes_de_enviar_todos_os_bytes(self):

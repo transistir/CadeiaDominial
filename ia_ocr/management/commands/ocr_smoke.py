@@ -42,6 +42,11 @@ MENSAGEM_RECUSA_DOCUMENTO_DIGITAL = (
     'explicitamente com --confirmar.'
 )
 
+MENSAGEM_JOB_EM_EXECUCAO = (
+    'O documento já tem job OCR em execução por um worker. Aguarde a '
+    'conclusão ou o reap do lease antes de rodar o smoke.'
+)
+
 TETO_PAGINAS_SERVICO = 100
 MIN_PAGINAS_SERVICO = 25
 
@@ -312,7 +317,10 @@ class Command(BaseCommand):
             )
 
     def _garantir_job_claimado(self, documento):
-        """Cria/reaproveita o job vigente do documento e toma o lease dele.
+        """Cria o job vigente do documento ou toma o claim de um pendente.
+
+        Um job em_execucao pertence ao worker que o claimou: o smoke não o
+        assume, porque o worker finalizaria por cima do resultado do smoke.
 
         O claim do services pega o job mais antigo da fila INTEIRA — no
         servidor de testes pode ser de outro documento. Aqui o CAS é
@@ -340,6 +348,8 @@ class Command(BaseCommand):
                     forcar_ocr=True,
                     status=estados.PENDENTE,
                 )
+            elif job.status == estados.EM_EXECUCAO:
+                raise CommandError(MENSAGEM_JOB_EM_EXECUCAO)
             claim = OcrJob.objects.filter(
                 pk=job.pk, status=estados.PENDENTE
             ).update(
@@ -348,20 +358,14 @@ class Command(BaseCommand):
                 lease_expira_em=lease_expira_em,
                 forcar_ocr=True,
             )
-            if claim:
-                OcrJobTransicao.objects.create(
-                    ocr_job_id=job.pk,
-                    de_status=estados.PENDENTE,
-                    para_status=estados.EM_EXECUCAO,
-                    motivo='claim do ocr_smoke',
-                )
-            else:
-                # Job em_execucao reaproveitado: renova o lease para este run.
-                OcrJob.objects.filter(pk=job.pk).update(
-                    atualizado_em=agora,
-                    lease_expira_em=lease_expira_em,
-                    forcar_ocr=True,
-                )
+            if not claim:
+                raise CommandError(MENSAGEM_JOB_EM_EXECUCAO)
+            OcrJobTransicao.objects.create(
+                ocr_job_id=job.pk,
+                de_status=estados.PENDENTE,
+                para_status=estados.EM_EXECUCAO,
+                motivo='claim do ocr_smoke',
+            )
             return OcrJob.objects.get(pk=job.pk)
 
     def _imprimir_job(self, job):

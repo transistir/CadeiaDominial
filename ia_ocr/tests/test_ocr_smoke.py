@@ -4,6 +4,7 @@ import hashlib
 import io
 import os
 import tempfile
+from unittest.mock import patch
 
 from django.core.files.base import ContentFile
 from django.core.management import call_command
@@ -12,7 +13,9 @@ from django.test import TestCase
 from pypdf import PdfWriter
 
 from ia_ocr import estados
+from ia_ocr.backends import OcrServiceBackend, ResultadoOcr
 from ia_ocr.models import OcrJob
+from ia_ocr.services import claim_proximo_job, criar_job, finalizar
 from ia_ocr.tests.factories import criar_documento_digital
 from ia_ocr.tests.stub_servico import StubServicoOcr
 
@@ -345,3 +348,41 @@ class OcrSmokeDocumentoDigitalTests(TestCase):
         self.assertIn('paginas_persistidas=2', texto_saida)
         self.assertNotIn(TEXTO_MARCADOR, texto_saida)
         self.assertNotIn('documento-smoke', texto_saida)
+
+    def test_worker_com_lease_ativo_faz_o_smoke_recusar_e_preserva_o_resultado_do_worker(self):
+        documento = criar_documento_digital()
+        job, _ = criar_job(documento)
+        claimado = claim_proximo_job()
+        self.assertEqual(claimado.pk, job.pk)
+        tentativa = claimado.tentativa
+        lease_antes = claimado.lease_expira_em
+        saida = io.StringIO()
+
+        with patch.object(OcrServiceBackend, 'processar') as processar:
+            with self.assertRaises(CommandError) as contexto:
+                call_command(
+                    'ocr_smoke', '--documento-digital', str(documento.pk),
+                    '--confirmar', stdout=saida,
+                )
+
+        processar.assert_not_called()
+        self.assertIn('worker', str(contexto.exception))
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.EM_EXECUCAO)
+        self.assertEqual(job.tentativa, tentativa)
+        self.assertEqual(job.lease_expira_em, lease_antes)
+
+        resultado_worker = ResultadoOcr(
+            paginas=[
+                {'numero_pagina': 1, 'texto': 'texto do worker', 'blocos': None},
+                {'numero_pagina': 2, 'texto': 'texto do worker', 'blocos': None},
+            ],
+            sha256_pdf='b' * 64,
+            page_count=2,
+            timings_ms={'total': 10},
+            origem='ocr',
+        )
+        self.assertTrue(finalizar(claimado, resultado_worker, tentativa))
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.CONCLUIDO)
+        self.assertEqual(job.sha256_pdf, 'b' * 64)
