@@ -7,7 +7,7 @@ from django.db import models
 from django.utils import timezone
 
 from .estados import (
-    CONCLUIDO, FALHOU, PENDENTE, STATUS_CHOICES, TEXTO_CONFIRMADO,
+    CONCLUIDO, EM_EXECUCAO, FALHOU, PENDENTE, STATUS_CHOICES, TEXTO_CONFIRMADO,
     TRANSICOES_VALIDAS, TransicaoConcorrente, TransicaoInvalida,
 )
 
@@ -141,14 +141,45 @@ class OcrJob(models.Model):
         A tentativa é o token do lease do worker: incrementá-la invalida
         finalizações tardias de workers antigos. Páginas existentes são
         preservadas (a política de sobrescrita é da issue I-2).
+
+        Recusa com `TransicaoInvalida` apenas quando existe OUTRO job do
+        mesmo documento em em_execucao (o próprio job não conta): retry é
+        o caminho de RECUPERAÇÃO (reap/suporte) e bloquear por um vizinho
+        apenas pendente deixaria o job preso em falhou para sempre — a
+        guarda completa (pendente OU em_execucao) é do caminho de usuário,
+        `services.reprocessar`. Mesma trava deste (transação +
+        `select_for_update` no DocumentoDigital): dois retries concorrentes
+        do mesmo documento não executam em duplicata.
         """
         if self.status != FALHOU:
             raise TransicaoInvalida(
                 f'retry só é permitido a partir de {FALHOU} (status atual: {self.status}).',
                 code='transicao_invalida',
             )
+        # Import local: models.py carrega durante o setup dos apps e não pode
+        # importar dominial.models no topo (ordem de INSTALLED_APPS).
+        from dominial.models import DocumentoDigital
+
         agora = timezone.now()
         with transaction.atomic():
+            DocumentoDigital.objects.select_for_update().get(
+                pk=self.documento_digital_id
+            )
+            em_execucao = (
+                type(self).objects
+                .filter(
+                    documento_digital_id=self.documento_digital_id,
+                    status=EM_EXECUCAO,
+                )
+                .exclude(pk=self.pk)
+                .exists()
+            )
+            if em_execucao:
+                raise TransicaoInvalida(
+                    'Existe outro job em_execucao para o documento: '
+                    'execução concorrente duplicada.',
+                    code='job_vigente_existente',
+                )
             rowcount = type(self).objects.filter(
                 pk=self.pk, status=FALHOU, tentativa=self.tentativa,
             ).update(

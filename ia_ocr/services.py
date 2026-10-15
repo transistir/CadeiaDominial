@@ -14,6 +14,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from dominial.models import DocumentoDigital
+
 from . import estados
 from .backends import OcrBackendError, ResultadoOcr
 from .estados import TransicaoConcorrente
@@ -171,6 +173,41 @@ def criar_job(documento_digital, job_id=None, criado_por=None, origem='ocr'):
             f'job_id {job_id} já existe para outro documento digital.'
         )
     return job, criado
+
+
+def reprocessar(job, usuario=None, forcar_ocr=True):
+    """Cria um novo job de OCR para o documento do job recebido.
+
+    O job anterior permanece INTOCADO: páginas (inclusive confirmadas) e
+    auditoria não são reescritas — reprocessar nunca altera histórico. Se já
+    existe OUTRO job do documento em pendente/em_execucao, nada é criado e o
+    job vigente é devolvido com ``False`` (mesmo estilo de ``criar_job``).
+    A checagem e a criação são serializadas por ``select_for_update`` no
+    DocumentoDigital: sem constraint parcial, que quebraria a fila da I-1
+    (vários pendentes legítimos para o mesmo documento).
+    """
+    documento_id = job.documento_digital_id
+    with transaction.atomic():
+        DocumentoDigital.objects.select_for_update().get(pk=documento_id)
+        vigente = (
+            OcrJob.objects
+            .filter(
+                documento_digital_id=documento_id,
+                status__in=[estados.PENDENTE, estados.EM_EXECUCAO],
+            )
+            .exclude(pk=job.pk)
+            .first()
+        )
+        if vigente is not None:
+            return vigente, False
+        novo = OcrJob.objects.create(
+            documento_digital_id=documento_id,
+            criado_por=usuario,
+            origem='ocr',
+            forcar_ocr=forcar_ocr,
+            status=estados.PENDENTE,
+        )
+        return novo, True
 
 
 def claim_proximo_job(timeout_s=None):
