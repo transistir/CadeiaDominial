@@ -36,6 +36,8 @@ class OcrJob(models.Model):
         max_length=20, choices=STATUS_CHOICES, default=PENDENTE
     )
     tentativa = models.PositiveIntegerField(default=1)
+    forcar_ocr = models.BooleanField(default=False)
+    lease_expira_em = models.DateTimeField(null=True, blank=True, db_index=True)
     erro_codigo = models.CharField(max_length=100, blank=True)
     erro_mensagem = models.TextField(blank=True)
     sha256_pdf = models.CharField(max_length=64, blank=True)

@@ -1,5 +1,6 @@
 """Máquina de estados do OcrJob: transições, CAS, gating de confirmação."""
 
+from datetime import timedelta
 from unittest import mock
 
 from django.test import TestCase
@@ -291,8 +292,12 @@ class CasSemTentativaExplicitaTest(TestCase):
         """claim(1) → reap → retry → claim(2); devolve objetos antigo e novo."""
         antigo = claim_proximo_job()
         self.assertIsNotNone(antigo)
+        OcrJob.objects.filter(pk=self.job.pk).update(
+            lease_expira_em=timezone.now() - timedelta(seconds=1)
+        )
         reap_jobs_expirados(timeout_s=0)
         self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.FALHOU)
         self.job.retry()
         novo = claim_proximo_job()
         self.assertIsNotNone(novo)
