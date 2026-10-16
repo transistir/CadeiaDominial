@@ -569,6 +569,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > destravam só pelos critérios da seção R3 (dump fresco + revalidação
 > item a item + reordenação aprovada). A fila pós-v1.1.0 passa a ser
 > R4 → R5 → R6 → R7 (gateado) → R8 → R10 (plano estratégico, D1).
+> *(Desvio registrado em 16/10: antes do R4 executa a **trilha F3** — Fase 3 do
+> contrato FUNAPE, outro contrato; ver seção F3 e a decisão de fila de 16/10.)*
 
 1. **#132** multi-tenancy leve: cada usuário vê só seus imóveis
    - **PR zumbi #133 AVALIADO (30/09)**: revisão de compatibilidade do
@@ -674,8 +676,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
      13/10 20:42 UTC; **#132 fechada na tag**). Os testes do gate estreito
      terminaram em 08/10 (PR #268) e o GATE-LUANDRO foi autorizado pelo
      Hiure em 13/10. Nada do R10 entrou no escopo da tag (escopo
-     congelado) — **o R9 está encerrado e a fila segue para o R4** (plano
-     estratégico D1). *(Status anterior, 02/10: testes ainda em andamento,
+     congelado) — **o R9 está encerrado**; pela decisão de fila de 16/10
+     (ver seção **F3**), a fila segue primeiro para a **trilha F3** (Fase 3 do
+     contrato FUNAPE — I-3 → I-8, em execução) e, encerrado esse bloco, para o
+     **R4** (plano estratégico D1). *(Status anterior, 02/10: testes ainda em andamento,
      bloco aberto — superado por esta atualização.)*
 
 ## R10 — Novas funcionalidades de fim de cadeia + UX (pedido Hiure 02/10/2026) — pós-v1.1.0
@@ -723,8 +727,10 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > (FADESP 019/2026), cuja sequência aprovada segue R4 → R5 → R6 → R7 → R8 → R10.
 > Escopo oficial do Produto 3/FADESP conforme
 > `docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md` § 4 ("Fase 3 — FUNAPE:
-> outro contrato"). Plano geral da trilha (5 produtos, 5 etapas):
-> `~/dev/ocr-cadeia-dominial/PLANO-FASE3.md` — **prazo final 31/10/2026**.
+> outro contrato"). O plano geral da trilha (5 produtos, 5 etapas) é mantido no
+> diretório de trabalho do contrato FUNAPE, **fora deste repositório** (não
+> versionado aqui) — **prazo final 31/10/2026**; o acompanhamento dentro deste
+> repo é pelas issues da série `fase3-ia-ocr` (#258–#265) e por esta seção.
 > Entregues: **Produto 1** (arquitetura/UX + contrato OpenAPI + schema de
 > extração, aceite 06/10/2026) e **Produto 2** (serviço OCR auto-hospedado em
 > homologação — evidência de aceite na #277, 16/10/2026, `ocr-teste.transistir.com`).
@@ -856,8 +862,9 @@ Sem 21/09–25/09  R1 housekeeping (#187, milestone, #168/#201/#204/#210 ✅
 Sem 28/09–02/10  ⚠️ SUPERADO: R9 antecipado (v1.1.0/#132) — avaliação do
                  PR #133 (30/09), D1–D6, merge C1 + escopo C2 (01/10)
 Sem 05/10→       R9/v1.1.0 (cont., ~35–50h): C3–C9 + fixtures + reviews
-                 + release (GATE-LUANDRO na tag)
-                 → resto de R3/R3.5 → R4–R8 replanejados
+                 + release (GATE-LUANDRO na tag) ✅ 13/10
+                 → **trilha F3** (Fase 3 FUNAPE: I-3 → I-8, seção F3)
+                 → R4–R8 replanejados (R4 é o próximo bloco do Produto 3)
 ```
 
 **Reserva de capacidade:** ~20% por sprint para novos relatos de
