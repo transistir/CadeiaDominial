@@ -1,3 +1,4 @@
+import json
 import logging
 import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
@@ -10,7 +11,13 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 from django.utils.http import content_disposition_header
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
-from ia_ocr.estados import EM_EXECUCAO, FALHOU, PENDENTE
+from ia_ocr.estados import (
+    EM_EXECUCAO,
+    FALHOU,
+    PENDENTE,
+    STATUS_ATIVOS,
+    STATUS_COM_TEXTO,
+)
 from ia_ocr.models import OcrJob
 from ia_ocr.services import criar_job, registrar_pendencia_limpeza
 
@@ -85,7 +92,7 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
             return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
 
         # Criar o registro
-        DocumentoDigital.objects.create(
+        registro = DocumentoDigital.objects.create(
             documento=documento,
             arquivo=arquivo,
             nome_original=arquivo.name,
@@ -95,6 +102,11 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
         )
 
         messages.success(request, f'Arquivo "{arquivo.name}" anexado com sucesso.')
+        if registro.is_pdf:
+            # Fluxo tela 1 do protótipo (#260): PDF volta para o próprio
+            # upload, onde fica o card "Extrair texto com IA". Imagens seguem
+            # para o detalhado, que não tem o card.
+            return redirect('upload_documento_digital', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
         return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
 
     # GET: renderiza formulário simples
@@ -104,6 +116,12 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
         'documento': documento,
         # Card de OCR (I-3): só PDFs oferecem extração de texto.
         'arquivos_pdf': documento.arquivos_digitais.filter(tipo_mime='application/pdf'),
+        # Fonte única dos estados do card (review #260-F): o template consulta
+        # as listas e as expõe ao JS via data-* em JSON no container do card.
+        'status_ativos': STATUS_ATIVOS,
+        'status_com_texto': STATUS_COM_TEXTO,
+        'status_ativos_json': json.dumps(STATUS_ATIVOS),
+        'status_com_texto_json': json.dumps(STATUS_COM_TEXTO),
     }
     return render(request, 'dominial/upload_documento_digital.html', context)
 
@@ -156,7 +174,7 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
         messages.error(
             request,
             f'Arquivo "{nome}" possui processamento de OCR vinculado e não pode ser '
-            'excluído. Remova o processamento de OCR antes de excluir o arquivo.'
+            'excluído. Fale com o suporte.'
         )
         return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
     except DatabaseError:
@@ -207,18 +225,23 @@ def criar_job_ocr(request, tis_id, imovel_id, documento_id, arquivo_id):
     job ativo (pendente/em_execucao) existente → 409 em vez de um segundo job.
     """
     tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
-    arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
-
-    if not arquivo.is_pdf:
-        return JsonResponse(
-            {'error': 'OCR disponível apenas para arquivos PDF.'},
-            status=400,
-        )
 
     # A guarda e a criação são serializadas pelo mesmo lock de
     # services.reprocessar: duas requisições concorrentes não criam dois jobs.
+    # A leitura com lock acontece dentro do atomic: se o arquivo for excluído
+    # no meio do caminho, a ausência vira 404 (e não DoesNotExist → 500).
     with transaction.atomic():
-        DocumentoDigital.objects.select_for_update().get(pk=arquivo.pk)
+        arquivo = get_object_or_404(
+            DocumentoDigital.objects.select_for_update(),
+            id=arquivo_id, documento=documento,
+        )
+
+        if not arquivo.is_pdf:
+            return JsonResponse(
+                {'error': 'OCR disponível apenas para arquivos PDF.'},
+                status=400,
+            )
+
         job_ativo = (
             OcrJob.objects
             .filter(documento_digital=arquivo, status__in=[PENDENTE, EM_EXECUCAO])

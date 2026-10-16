@@ -114,6 +114,25 @@ class OcrJobsEndpointsTestCase(TestCase):
 
         self.assertEqual(resposta.status_code, 405)
 
+    def test_criar_job_para_arquivo_inexistente_retorna_404(self):
+        """Arquivo apagado/inexistente → 404, nunca 500 (review #260, item H).
+
+        A leitura com lock dentro do transaction.atomic transforma a ausência
+        em Http404.
+        """
+        self.client.force_login(self.dono)
+
+        url = reverse('criar_job_ocr', kwargs={
+            'tis_id': self.ti.pk,
+            'imovel_id': self.imovel.pk,
+            'documento_id': self.documento.pk,
+            'arquivo_id': 999999,
+        })
+        resposta = self.client.post(url)
+
+        self.assertEqual(resposta.status_code, 404)
+        self.assertEqual(OcrJob.objects.count(), 0)
+
     # --- GET .../ocr-jobs/<job_id>/status/ ----------------------------------
 
     def test_status_job_inexistente_retorna_404(self):

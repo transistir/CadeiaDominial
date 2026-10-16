@@ -3,6 +3,15 @@
 
 {% block title %}Anexar Arquivo - {{ documento.numero }}{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Bootstrap e base.css definem display próprio em .btn/.d-block, o que
+       vence o [hidden] do user-agent dentro do card; esta regra escopada
+       devolve o efeito do atributo hidden (review #260-A). */
+    [data-ocr-card] [hidden] { display: none !important; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="cadeia-header">
@@ -39,7 +48,7 @@
     {% if arquivos_pdf %}
     <div class="card" style="max-width: 600px; margin: 0 auto 2rem;">
         <div class="card-body">
-            <h2 class="h5 mb-1">▶ Extrair texto com IA</h2>
+            <h2 class="h5 mb-1"><span aria-hidden="true">▶</span> Extrair texto com IA</h2>
             <p class="text-muted small mb-3">
                 Se o PDF já tiver texto embutido, o usaremos direto — sem chamar o serviço de OCR.
             </p>
@@ -48,6 +57,8 @@
             <div class="border rounded p-2 mb-2"
                  data-ocr-card
                  data-arquivo-id="{{ arquivo.pk }}"
+                 data-status-ativos="{{ status_ativos_json }}"
+                 data-status-com-texto="{{ status_com_texto_json }}"
                  data-criar-url="{% url 'criar_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk %}"
                  {% if job %}data-status-url="{% url 'status_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk job_id=job.job_id %}" data-ocr-status="{{ job.status }}"{% endif %}>
                 <div class="d-flex justify-content-between align-items-start gap-2">
@@ -56,16 +67,20 @@
                         <small class="text-muted d-block">PDF · {{ arquivo.tamanho_formatado }}</small>
                     </div>
                     {% if job %}
-                    <span class="badge {% if job.status == 'falhou' %}bg-danger{% elif job.status == 'pendente' or job.status == 'em_execucao' %}bg-warning text-dark{% else %}bg-success{% endif %}" data-ocr-badge>{{ job.get_status_display }}</span>
+                    <span class="badge {% if job.status == 'falhou' %}bg-danger{% elif job.status == 'pendente' or job.status == 'em_execucao' %}bg-warning text-dark{% else %}bg-success{% endif %}" data-ocr-badge role="status" aria-live="polite">{{ job.get_status_display }}</span>
                     {% else %}
-                    <span class="badge bg-light text-dark" data-ocr-badge>OCR não iniciado</span>
+                    <span class="badge bg-light text-dark" data-ocr-badge role="status" aria-live="polite">OCR não iniciado</span>
                     {% endif %}
                 </div>
-                <small class="text-danger d-block mt-1" data-ocr-erro{% if not job or job.status != 'falhou' %} hidden{% endif %}>{% if job and job.status == 'falhou' %}{{ job.erro_mensagem|default:job.erro_codigo }}{% endif %}</small>
+                <small class="text-danger d-block mt-1" data-ocr-erro role="status" aria-live="polite"{% if not job or job.status != 'falhou' %} hidden{% endif %}>{% if job and job.status == 'falhou' %}{{ job.erro_mensagem|default:job.erro_codigo }}{% endif %}</small>
                 <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
-                    <button type="button" class="btn btn-primary btn-sm" data-ocr-disparo{% if job %}{% if job.status == 'pendente' or job.status == 'em_execucao' %} disabled{% else %} hidden{% endif %}{% endif %}>▶ Extrair texto com IA</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-ocr-disparo{% if not job %}{% elif job.status in status_ativos %} disabled{% else %} hidden{% endif %}><span aria-hidden="true">▶</span> Extrair texto com IA</button>
                     <button type="button" class="btn btn-outline-danger btn-sm" data-ocr-retry{% if not job or job.status != 'falhou' %} hidden{% endif %}>Tentar novamente</button>
-                    <button type="button" class="btn btn-success btn-sm" data-ocr-revisar disabled title="Disponível na I-4"{% if not job or job.status not in 'concluido texto_confirmado extraido revisado importado' %} hidden{% endif %}>Revisar texto</button>
+                    <button type="button" class="btn btn-success btn-sm" data-ocr-revisar disabled aria-describedby="ocr-revisar-motivo-{{ arquivo.pk }}"{% if not job or job.status not in status_com_texto %} hidden{% endif %}>Revisar texto</button>
+                    {# Retoma o polling quando o corte de falhas desistiu (#260-C). #}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-ocr-atualizar hidden>Atualizar status</button>
+                    {# Motivo do revisar desabilitado, percebível por teclado/leitores de tela (#260-D). #}
+                    <small class="text-muted" id="ocr-revisar-motivo-{{ arquivo.pk }}" data-ocr-revisar-motivo{% if not job or job.status not in status_com_texto %} hidden{% endif %}>Disponível na I-4</small>
                 </div>
             </div>
             {% endwith %}
@@ -82,8 +97,25 @@
     'use strict';
     var INTERVALO_MS = 3000;
     var MAX_FALHAS_SEGUIDAS = 5;
-    var STATUS_ATIVOS = ['pendente', 'em_execucao'];
-    var STATUS_COM_TEXTO = ['concluido', 'texto_confirmado', 'extraido', 'revisado', 'importado'];
+
+    // Fonte única dos estados: ia_ocr.estados, injetado pela view em
+    // data-* em JSON no container do card (review #260-F).
+    function listaDeEstados(card, atributo) {
+        try {
+            var lista = JSON.parse(card.getAttribute(atributo));
+            return lista instanceof Array ? lista : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function statusAtivos(card) {
+        return listaDeEstados(card, 'data-status-ativos');
+    }
+
+    function statusComTexto(card) {
+        return listaDeEstados(card, 'data-status-com-texto');
+    }
 
     function emLista(status, lista) {
         return lista.indexOf(status) !== -1;
@@ -94,14 +126,14 @@
         return input ? input.value : '';
     }
 
-    function classeBadge(status) {
+    function classeBadge(card, status) {
         if (status === 'falhou') {
             return 'badge bg-danger';
         }
-        if (emLista(status, STATUS_ATIVOS)) {
+        if (emLista(status, statusAtivos(card))) {
             return 'badge bg-warning text-dark';
         }
-        if (emLista(status, STATUS_COM_TEXTO)) {
+        if (emLista(status, statusComTexto(card))) {
             return 'badge bg-success';
         }
         return 'badge bg-secondary';
@@ -114,8 +146,9 @@
         var disparo = card.querySelector('[data-ocr-disparo]');
         var retry = card.querySelector('[data-ocr-retry]');
         var revisar = card.querySelector('[data-ocr-revisar]');
+        var motivo = card.querySelector('[data-ocr-revisar-motivo]');
 
-        badge.className = classeBadge(data.status);
+        badge.className = classeBadge(card, data.status);
         badge.textContent = data.progresso
             ? data.status_display + ' — ' + data.progresso.texto
             : data.status_display;
@@ -127,10 +160,12 @@
 
         // Com job em andamento o disparo fica visível e desabilitado; nos
         // estados terminais ele sai e entra a ação correspondente.
-        disparo.hidden = !emLista(data.status, STATUS_ATIVOS);
-        disparo.disabled = emLista(data.status, STATUS_ATIVOS);
+        disparo.hidden = !emLista(data.status, statusAtivos(card));
+        disparo.disabled = emLista(data.status, statusAtivos(card));
         retry.hidden = data.status !== 'falhou';
-        revisar.hidden = !emLista(data.status, STATUS_COM_TEXTO);
+        revisar.hidden = !emLista(data.status, statusComTexto(card));
+        // O motivo do revisar desabilitado acompanha o botão.
+        if (motivo) motivo.hidden = revisar.hidden;
     }
 
     function consultar(card, statusUrl, falhas) {
@@ -140,18 +175,23 @@
                 return response.json();
             })
             .then(function (data) {
+                var atualizar = card.querySelector('[data-ocr-atualizar]');
+                if (atualizar) atualizar.hidden = true;
                 pintar(card, data);
-                if (emLista(data.status, STATUS_ATIVOS)) {
+                if (emLista(data.status, statusAtivos(card))) {
                     window.setTimeout(function () { consultar(card, statusUrl, 0); }, INTERVALO_MS);
                 }
             })
             .catch(function () {
                 // Erro de rede/serviço é tratado como transiente; após várias
-                // falhas seguidas, desiste e devolve o controle ao usuário.
+                // falhas seguidas, desiste e devolve o controle ao usuário —
+                // que pode retomar pelo botão "Atualizar status" (#260-C).
                 if (falhas + 1 >= MAX_FALHAS_SEGUIDAS) {
                     var erro = card.querySelector('[data-ocr-erro]');
                     erro.hidden = false;
                     erro.textContent = 'Não foi possível consultar o status do OCR.';
+                    var atualizar = card.querySelector('[data-ocr-atualizar]');
+                    if (atualizar) atualizar.hidden = false;
                     return;
                 }
                 window.setTimeout(function () { consultar(card, statusUrl, falhas + 1); }, INTERVALO_MS);
@@ -194,15 +234,24 @@
         Array.prototype.forEach.call(
             document.querySelectorAll('[data-ocr-card]'),
             function (card) {
+                var statusUrl = card.getAttribute('data-status-url');
                 var disparo = card.querySelector('[data-ocr-disparo]');
                 var retry = card.querySelector('[data-ocr-retry]');
+                var atualizar = card.querySelector('[data-ocr-atualizar]');
                 var aoClicar = function () { disparar(card); };
                 if (disparo) disparo.addEventListener('click', aoClicar);
                 if (retry) retry.addEventListener('click', aoClicar);
+                // Retoma o polling do mesmo job quando o corte de falhas
+                // desistiu; esconde-se ao ser usado (#260-C).
+                if (atualizar) {
+                    atualizar.addEventListener('click', function () {
+                        atualizar.hidden = true;
+                        if (statusUrl) consultar(card, statusUrl, 0);
+                    });
+                }
 
-                var statusUrl = card.getAttribute('data-status-url');
                 var status = card.getAttribute('data-ocr-status');
-                if (statusUrl && emLista(status, STATUS_ATIVOS)) {
+                if (statusUrl && emLista(status, statusAtivos(card))) {
                     consultar(card, statusUrl, 0);
                 }
             }
