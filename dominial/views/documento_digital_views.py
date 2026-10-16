@@ -5,12 +5,14 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import DatabaseError, transaction
 from django.db.models import ProtectedError
-from django.http import HttpResponse, Http404
-from django.views.decorators.http import require_POST, require_http_methods
+from django.http import HttpResponse, Http404, JsonResponse
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.utils.http import content_disposition_header
 
 from ..models import DocumentoDigital, Documento, Imovel, TIs
-from ia_ocr.services import registrar_pendencia_limpeza
+from ia_ocr.estados import EM_EXECUCAO, FALHOU, PENDENTE
+from ia_ocr.models import OcrJob
+from ia_ocr.services import criar_job, registrar_pendencia_limpeza
 
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,8 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
         'tis': tis,
         'imovel': imovel,
         'documento': documento,
+        # Card de OCR (I-3): só PDFs oferecem extração de texto.
+        'arquivos_pdf': documento.arquivos_digitais.filter(tipo_mime='application/pdf'),
     }
     return render(request, 'dominial/upload_documento_digital.html', context)
 
@@ -192,3 +196,83 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
             'Avise o suporte para concluir a limpeza.'
         )
     return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
+
+
+@login_required
+@require_POST
+def criar_job_ocr(request, tis_id, imovel_id, documento_id, arquivo_id):
+    """Cria e enfileira um job de OCR para o arquivo digital (JSON).
+
+    Mesma política do upload: login + hierarquia TI→Imóvel→Documento. Só PDF;
+    job ativo (pendente/em_execucao) existente → 409 em vez de um segundo job.
+    """
+    tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
+    arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
+
+    if not arquivo.is_pdf:
+        return JsonResponse(
+            {'error': 'OCR disponível apenas para arquivos PDF.'},
+            status=400,
+        )
+
+    # A guarda e a criação são serializadas pelo mesmo lock de
+    # services.reprocessar: duas requisições concorrentes não criam dois jobs.
+    with transaction.atomic():
+        DocumentoDigital.objects.select_for_update().get(pk=arquivo.pk)
+        job_ativo = (
+            OcrJob.objects
+            .filter(documento_digital=arquivo, status__in=[PENDENTE, EM_EXECUCAO])
+            .first()
+        )
+        if job_ativo is not None:
+            return JsonResponse(
+                {
+                    'error': 'Já existe um job de OCR ativo para este arquivo.',
+                    'job_id': str(job_ativo.job_id),
+                    'status': job_ativo.status,
+                },
+                status=409,
+            )
+        job, _criado = criar_job(arquivo, criado_por=request.user)
+
+    return JsonResponse(
+        {
+            'job_id': str(job.job_id),
+            'status': job.status,
+            'tentativa': job.tentativa,
+        },
+        status=201,
+    )
+
+
+@login_required
+@require_GET
+def status_job_ocr(request, tis_id, imovel_id, documento_id, arquivo_id, job_id):
+    """Estado atual do job de OCR (JSON): progresso e motivo de falha."""
+    tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)
+    arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
+    job = get_object_or_404(OcrJob, job_id=job_id, documento_digital=arquivo)
+
+    payload = {
+        'job_id': str(job.job_id),
+        'status': job.status,
+        'status_display': job.get_status_display(),
+        'tentativa': job.tentativa,
+        'criado_em': job.criado_em.isoformat(),
+        'atualizado_em': job.atualizado_em.isoformat(),
+        'progresso': None,
+        'erro': None,
+    }
+    if job.page_count is not None:
+        processadas = job.paginas.count()
+        payload['progresso'] = {
+            'pagina': processadas,
+            'total': job.page_count,
+            'texto': f'página {processadas} de {job.page_count}',
+        }
+    if job.status == FALHOU:
+        payload['erro'] = {
+            'codigo': job.erro_codigo,
+            'mensagem': job.erro_mensagem,
+        }
+    return JsonResponse(payload)

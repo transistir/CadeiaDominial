@@ -35,5 +35,179 @@
             <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">← Cancelar</a>
         </div>
     </form>
+
+    {% if arquivos_pdf %}
+    <div class="card" style="max-width: 600px; margin: 0 auto 2rem;">
+        <div class="card-body">
+            <h2 class="h5 mb-1">▶ Extrair texto com IA</h2>
+            <p class="text-muted small mb-3">
+                Se o PDF já tiver texto embutido, o usaremos direto — sem chamar o serviço de OCR.
+            </p>
+            {% for arquivo in arquivos_pdf %}
+            {% with job=arquivo.ocr_jobs.all|first %}
+            <div class="border rounded p-2 mb-2"
+                 data-ocr-card
+                 data-arquivo-id="{{ arquivo.pk }}"
+                 data-criar-url="{% url 'criar_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk %}"
+                 {% if job %}data-status-url="{% url 'status_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk job_id=job.job_id %}" data-ocr-status="{{ job.status }}"{% endif %}>
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <strong>{{ arquivo.nome_original }}</strong>
+                        <small class="text-muted d-block">PDF · {{ arquivo.tamanho_formatado }}</small>
+                    </div>
+                    {% if job %}
+                    <span class="badge {% if job.status == 'falhou' %}bg-danger{% elif job.status == 'pendente' or job.status == 'em_execucao' %}bg-warning text-dark{% else %}bg-success{% endif %}" data-ocr-badge>{{ job.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge bg-light text-dark" data-ocr-badge>OCR não iniciado</span>
+                    {% endif %}
+                </div>
+                <small class="text-danger d-block mt-1" data-ocr-erro{% if not job or job.status != 'falhou' %} hidden{% endif %}>{% if job and job.status == 'falhou' %}{{ job.erro_mensagem|default:job.erro_codigo }}{% endif %}</small>
+                <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
+                    <button type="button" class="btn btn-primary btn-sm" data-ocr-disparo{% if job %}{% if job.status == 'pendente' or job.status == 'em_execucao' %} disabled{% else %} hidden{% endif %}{% endif %}>▶ Extrair texto com IA</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-ocr-retry{% if not job or job.status != 'falhou' %} hidden{% endif %}>Tentar novamente</button>
+                    <button type="button" class="btn btn-success btn-sm" data-ocr-revisar disabled title="Disponível na I-4"{% if not job or job.status not in 'concluido texto_confirmado extraido revisado importado' %} hidden{% endif %}>Revisar texto</button>
+                </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var INTERVALO_MS = 3000;
+    var MAX_FALHAS_SEGUIDAS = 5;
+    var STATUS_ATIVOS = ['pendente', 'em_execucao'];
+    var STATUS_COM_TEXTO = ['concluido', 'texto_confirmado', 'extraido', 'revisado', 'importado'];
+
+    function emLista(status, lista) {
+        return lista.indexOf(status) !== -1;
+    }
+
+    function csrfToken() {
+        var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        return input ? input.value : '';
+    }
+
+    function classeBadge(status) {
+        if (status === 'falhou') {
+            return 'badge bg-danger';
+        }
+        if (emLista(status, STATUS_ATIVOS)) {
+            return 'badge bg-warning text-dark';
+        }
+        if (emLista(status, STATUS_COM_TEXTO)) {
+            return 'badge bg-success';
+        }
+        return 'badge bg-secondary';
+    }
+
+    // Repinta o card a partir do payload de status_job_ocr.
+    function pintar(card, data) {
+        var badge = card.querySelector('[data-ocr-badge]');
+        var erro = card.querySelector('[data-ocr-erro]');
+        var disparo = card.querySelector('[data-ocr-disparo]');
+        var retry = card.querySelector('[data-ocr-retry]');
+        var revisar = card.querySelector('[data-ocr-revisar]');
+
+        badge.className = classeBadge(data.status);
+        badge.textContent = data.progresso
+            ? data.status_display + ' — ' + data.progresso.texto
+            : data.status_display;
+
+        erro.hidden = data.status !== 'falhou';
+        if (data.status === 'falhou') {
+            erro.textContent = (data.erro && data.erro.mensagem) || 'Falha no processamento OCR.';
+        }
+
+        // Com job em andamento o disparo fica visível e desabilitado; nos
+        // estados terminais ele sai e entra a ação correspondente.
+        disparo.hidden = !emLista(data.status, STATUS_ATIVOS);
+        disparo.disabled = emLista(data.status, STATUS_ATIVOS);
+        retry.hidden = data.status !== 'falhou';
+        revisar.hidden = !emLista(data.status, STATUS_COM_TEXTO);
+    }
+
+    function consultar(card, statusUrl, falhas) {
+        fetch(statusUrl, { credentials: 'same-origin' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('status ' + response.status);
+                return response.json();
+            })
+            .then(function (data) {
+                pintar(card, data);
+                if (emLista(data.status, STATUS_ATIVOS)) {
+                    window.setTimeout(function () { consultar(card, statusUrl, 0); }, INTERVALO_MS);
+                }
+            })
+            .catch(function () {
+                // Erro de rede/serviço é tratado como transiente; após várias
+                // falhas seguidas, desiste e devolve o controle ao usuário.
+                if (falhas + 1 >= MAX_FALHAS_SEGUIDAS) {
+                    var erro = card.querySelector('[data-ocr-erro]');
+                    erro.hidden = false;
+                    erro.textContent = 'Não foi possível consultar o status do OCR.';
+                    return;
+                }
+                window.setTimeout(function () { consultar(card, statusUrl, falhas + 1); }, INTERVALO_MS);
+            });
+    }
+
+    // 201 (criado) e 409 (job ativo): recarrega para o servidor redesenhar o
+    // card já em polling — o job está persistido. Demais respostas: mensagem
+    // inline no próprio card.
+    function disparar(card) {
+        var disparo = card.querySelector('[data-ocr-disparo]');
+        var erro = card.querySelector('[data-ocr-erro]');
+
+        disparo.disabled = true;
+        erro.hidden = true;
+        fetch(card.getAttribute('data-criar-url'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRFToken': csrfToken() }
+        })
+            .then(function (response) {
+                if (response.status === 201 || response.status === 409) {
+                    window.location.reload();
+                    return null;
+                }
+                return response.json().then(function (data) {
+                    erro.hidden = false;
+                    erro.textContent = data.error || 'Não foi possível iniciar o OCR.';
+                    disparo.disabled = false;
+                });
+            })
+            .catch(function () {
+                erro.hidden = false;
+                erro.textContent = 'Não foi possível iniciar o OCR.';
+                disparo.disabled = false;
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        Array.prototype.forEach.call(
+            document.querySelectorAll('[data-ocr-card]'),
+            function (card) {
+                var disparo = card.querySelector('[data-ocr-disparo]');
+                var retry = card.querySelector('[data-ocr-retry]');
+                var aoClicar = function () { disparar(card); };
+                if (disparo) disparo.addEventListener('click', aoClicar);
+                if (retry) retry.addEventListener('click', aoClicar);
+
+                var statusUrl = card.getAttribute('data-status-url');
+                var status = card.getAttribute('data-ocr-status');
+                if (statusUrl && emLista(status, STATUS_ATIVOS)) {
+                    consultar(card, statusUrl, 0);
+                }
+            }
+        );
+    });
+})();
+</script>
 {% endblock %}
