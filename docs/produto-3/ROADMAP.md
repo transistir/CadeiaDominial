@@ -20,6 +20,14 @@
 > Produto 3 contra o contrato FADESP 019/2026
 > (`docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md`), que também delimita o
 > escopo (só código Django/D3 — fora: FUNAPE Fase 3, React Flow/v2 e Produto 4).
+> **Registro 16/10/2026 (decisão do Hiure no grupo Transistir_CadDomDev,
+> opção (a) do status da fila):** a **Fase 3 (contrato FUNAPE — IA/OCR)** ganha
+> seção própria neste roadmap (**F3**) como **trilha paralela** — é outro
+> contrato, não disputa posição com R1–R10 e **não reordena** o Produto 3
+> (FADESP 019/2026). Ordem decidida: **concluir I-3 → I-8 da trilha F3 e só
+> então retomar o R4** (próximo bloco do Produto 3, meta v1.2.0). Registrado
+> porque até 15/10 o roadmap dizia "próximo = R4" enquanto o trabalho real em
+> curso era a trilha IA/OCR — estado ambíguo que esta seção resolve.
 > Este arquivo é o **source of truth da fila**. O `docs/PLANO_SPRINTS.md`
 > (plano geral de 02/09) passa a ser **histórico** — não planejar por ele.
 >
@@ -708,6 +716,48 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    ("Sem Origem") no caso misto. *(Estender #174 sem mudar os badges
    existentes; respeitar escopo por usuário do #132.)*
 
+## F3 — Fase 3 (contrato FUNAPE, prazo 31/10/2026): IA/OCR e importação assistida — 🟡 EM EXECUÇÃO (trilha paralela)
+
+> **Outro contrato** (FUNAPE/Umbelino), registrado aqui para a fila não ficar
+> ambígua; **não** disputa posição com R1–R10 e **não** reordena o Produto 3
+> (FADESP 019/2026), cuja sequência aprovada segue R4 → R5 → R6 → R7 → R8 → R10.
+> Escopo oficial do Produto 3/FADESP conforme
+> `docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md` § 4 ("Fase 3 — FUNAPE:
+> outro contrato"). Plano geral da trilha (5 produtos, 5 etapas):
+> `~/dev/ocr-cadeia-dominial/PLANO-FASE3.md` — **prazo final 31/10/2026**.
+> Entregues: **Produto 1** (arquitetura/UX + contrato OpenAPI + schema de
+> extração, aceite 06/10/2026) e **Produto 2** (serviço OCR auto-hospedado em
+> homologação — evidência de aceite na #277, 16/10/2026, `ocr-teste.transistir.com`).
+> **Decisão de fila 16/10/2026 (Hiure, opção (a)):** terminar **I-3 → I-8** e
+> só depois retomar o **R4**. Ao fechar o bloco, o R4 volta a ser o próximo
+> item executável deste roadmap.
+
+1. **I-1 ✅** #258 — app `ia_ocr` (models `OcrJob`/`PaginaOcr`/`ExtracaoSugerida`/
+   `CampoSugerido`, máquina de estados, fila Postgres `SKIP LOCKED`).
+   PR #274 mergeado 15/10 (squash `b5ef5eaf`).
+2. **I-2 ✅** #259 — cliente HTTP do serviço OCR + worker da fila (backend
+   real, atalho de texto embutido, reprocessamento). PRs #275 (squash
+   `9538da46`) e #276 (`e8ba4f19`, compose com o serviço
+   `cadeia_dominial_ocr_worker`), mergeados 15–16/10.
+3. **I-3 🟡 PRÓXIMO** #260 — UI passo 1: card "Extrair texto com IA" na página
+   `upload-digital` + status do job (badge/polling), ações por estado
+   (reprocessar / revisar texto) e 1 job ativo por `DocumentoDigital`.
+4. **I-4** #261 — UI passo 2: tela de confirmação do texto OCR (PDF × texto
+   editável, diff, confirmação por página com auditoria).
+5. **I-5** #262 — extração estruturada por schema + tela de revisão de campos
+   (lançamento pré-preenchido, evidência clicável, confiança) — Produto 3 do
+   contrato FUNAPE.
+6. **I-6** #263 — importação assistida: gravação transacional de
+   Lançamento/Pessoas com prevenção de duplicidade e vínculo ao PDF — Produto 4.
+7. **I-7** #264 — admin de acompanhamento dos processamentos + logs de
+   auditoria mínimos (sem PII), exportáveis.
+8. **I-8** #265 — regressão dos fluxos existentes + smoke ponta a ponta com
+   stubs — núcleo do Produto 5 (testes/documentação/entrega).
+
+> **Pendência de housekeeping:** as issues **#258 (I-1)** e **#259 (I-2)**
+> seguem ABERTAS apesar dos PRs mergeados — fechar **na validação do bloco**
+> (padrão do #132, que fechou na tag), não no merge. Nada a fazer agora.
+
 ---
 
 ## Gates de decisão
@@ -786,6 +836,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > issues órfãs de 29–30/09 incorporadas a R3 (#232, #238, #240, #248) e
 > R8 (#234, #235, #243, #249). Estimativa do R10: ~1 sprint (4 itens
 > P/M), a confirmar no replanejamento pós-release.
+>
+> **Atualizado 16/10 (trilha F3 em execução):** a sprint corrente é da
+> **Fase 3 (FUNAPE — IA/OCR)** — seção **F3**: I-3 → I-8 (#260–#265), com o
+> prazo do contrato em 31/10/2026. O **R4** (primeiro bloco executável do
+> Produto 3/FADESP) começa **depois** do fechamento do bloco F3 (decisão do
+> Hiure, 16/10, opção (a)); as datas do R4 em diante devem ser replanejadas
+> nesse momento — R4 estimado em 1–1,5 sprint → **v1.2.0**.
 
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
@@ -822,9 +879,24 @@ revalidação do #206, das fases 2–3 do #213 e do plano do R7; replanejar
 ao fim de cada sprint (regra da seção).
 
 **Fora do escopo:** backlog v2 #61–#72 (TypeScript/Cloudflare) — só depois
-do Django estabilizar. #1 segue aberta como guarda-chuva.
+do Django estabilizar. #1 segue aberta como guarda-chuva. **Fase 3 (FUNAPE)
+#258–#265:** trilha paralela **em execução**, registrada na seção **F3** —
+não é escopo do Produto 3/FADESP (decisão do Hiure, 14/10).
 
 ---
+
+*Última atualização: 16/10/2026 — **Fase 3 (contrato FUNAPE) registrada como
+trilha paralela — nova seção F3.** Motivo: o roadmap dizia "próximo = R4"
+(R9/v1.1.0 encerrado em 13/10) enquanto o trabalho real em curso era a série
+`fase3-ia-ocr` (#258–#265): I-1 (#258/PR #274) e I-2 (#259/PRs #275+#276)
+mergeados em 15–16/10, worker `cadeia_dominial_ocr_worker` de pé contra
+`ocr-teste.transistir.com` e evidência de aceite do Produto 2 fechada na #277
+(16/10). **Decisão de fila do Hiure em 16/10 (opção (a) do status):** concluir
+I-3 → I-8 da trilha F3 e só então retomar o **R4** (próximo bloco executável do
+Produto 3, meta v1.2.0). A ordem aprovada do Produto 3 (R4 → R5 → R6 → R7 → R8
+→ R10) **não muda**. Pendências do levantamento seguem abertas e não bloqueiam:
+artefato de entrega técnica (contrato Etapa 3, cl. 8.4), data de assinatura do
+contrato e posição do **#269** (fora da fila).*
 
 *Última atualização: 14/10/2026 — **levantamento do Produto 3 contra o
 contrato FADESP 019/2026** (`LEVANTAMENTO_PRODUTO3_CONTRATO.md`, PR #273):
