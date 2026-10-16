@@ -5,7 +5,8 @@ Python puro, mas qualquer operação AES levanta `DependencyError`.
 `sem_provider_aes()` reproduz esse ambiente dentro do processo de teste usando
 o próprio `_fallback` do pypdf, então o erro nasce no mesmo ponto de uma
 instalação sem a dependência. Gere o PDF FORA do bloco: o writer também
-precisa do provider real.
+precisa do provider real. `erro_dependencia_aes()` devolve o mesmo erro, para
+os testes que o injetam à mão sem copiar o texto do pypdf.
 """
 
 import io
@@ -13,6 +14,7 @@ from unittest.mock import patch
 
 from pypdf import PdfWriter
 from pypdf._crypt_providers import _fallback
+from pypdf.errors import DependencyError
 from pypdf.generic import NameObject, TextStringObject
 
 # Nomes que `pypdf._encryption` importa do provider ativo e usa para AES.
@@ -59,4 +61,15 @@ def sem_provider_aes():
     return patch.multiple(
         'pypdf._encryption',
         **{nome: getattr(_fallback, nome) for nome in _NOMES_AES},
+    )
+
+
+def erro_dependencia_aes():
+    """O DependencyError que o pypdf levanta de fato sem provider AES."""
+    try:
+        _fallback.aes_ecb_decrypt(b'', b'')
+    except DependencyError as erro:
+        return erro
+    raise AssertionError(
+        'o _fallback do pypdf deveria levantar DependencyError no AES'
     )

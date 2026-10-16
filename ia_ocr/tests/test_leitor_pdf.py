@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pypdf._crypt_providers import crypt_provider
 from pypdf.errors import DependencyError
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
@@ -18,7 +18,11 @@ from ia_ocr.leitor_pdf import (
     paginas_texto_embutido,
 )
 from ia_ocr.ocr_client import OrcamentoEsgotado
-from ia_ocr.tests.pdf_cifrado import gerar_pdf_aes, sem_provider_aes
+from ia_ocr.tests.pdf_cifrado import (
+    erro_dependencia_aes,
+    gerar_pdf_aes,
+    sem_provider_aes,
+)
 
 ALGORITMOS_AES = ('AES-128', 'AES-256-R5', 'AES-256')
 
@@ -78,6 +82,53 @@ class LeitorPdfTests(SimpleTestCase):
         buffer = io.BytesIO()
         writer.write(buffer)
         return buffer.getvalue()
+
+    @staticmethod
+    def _pdf_objstm_jbig2_corrompido():
+        """PDF 1.5 SEM /Encrypt cujo catálogo vive num /ObjStm com
+        /Filter /JBIG2Decode (dados inválidos). Abrir o arquivo funciona;
+        resolver o catálogo exige decodificar o JBIG2."""
+        cabecalho = b'%PDF-1.5\n'
+        lixo = b'dados-jbig2-corrompidos'
+        objstm = (
+            b'1 0 obj\n'
+            + (
+                '<< /Type /ObjStm /N 1 /First 4 /Filter /JBIG2Decode '
+                f'/Length {len(lixo)} >>\n'
+            ).encode()
+            + b'stream\n'
+            + lixo
+            + b'\nendstream\nendobj\n'
+        )
+        offset_objstm = len(cabecalho)
+        offset_xref = offset_objstm + len(objstm)
+        # /W [1 2 1]: tipo, offset (ou nº do ObjStm), geração (ou índice).
+        entradas = [
+            (0, 0, 255),  # objeto 0: livre
+            (1, offset_objstm, 0),  # objeto 1: o /ObjStm
+            (1, offset_xref, 0),  # objeto 2: o próprio xref stream
+            (2, 1, 0),  # objeto 3 (catálogo): índice 0 do ObjStm 1
+        ]
+        tabela = b''.join(
+            bytes([tipo]) + campo.to_bytes(2, 'big') + bytes([extra])
+            for tipo, campo, extra in entradas
+        )
+        xref = (
+            b'2 0 obj\n'
+            + (
+                '<< /Type /XRef /Size 4 /W [1 2 1] /Root 3 0 R '
+                f'/Length {len(tabela)} >>\n'
+            ).encode()
+            + b'stream\n'
+            + tabela
+            + b'\nendstream\nendobj\n'
+        )
+        return (
+            cabecalho
+            + objstm
+            + xref
+            + f'startxref\n{offset_xref}\n%%EOF\n'.encode()
+        )
 
     def _inspecionar(self, caminho, **kwargs):
         parametros = {'max_bytes': 50 * 1024 * 1024, 'max_paginas': 25}
@@ -143,7 +194,7 @@ class LeitorPdfTests(SimpleTestCase):
 
         with patch(
             'ia_ocr.leitor_pdf.PdfReader.decrypt',
-            side_effect=DependencyError('backend criptografico ausente'),
+            side_effect=erro_dependencia_aes(),
         ):
             resultado = self._inspecionar(caminho)
 
@@ -151,13 +202,13 @@ class LeitorPdfTests(SimpleTestCase):
         self.assertTrue(resultado.criptografado)
 
     def test_pypdf_usa_o_cryptography_como_provider_de_aes(self):
-        """O pin de `cryptography` no requirements.txt existe para isto: sem
+        """O piso de `cryptography` no requirements.txt existe para isto: sem
         um provider AES utilizável o pypdf cai no `_fallback` e todo PDF AES
         vira DependencyError (issue #280)."""
         self.assertEqual(
             crypt_provider[0],
             'cryptography',
-            'provider AES do pypdf indisponível: confira o pin de '
+            'provider AES do pypdf indisponível: confira o piso de '
             'cryptography no requirements.txt',
         )
 
@@ -260,6 +311,24 @@ class LeitorPdfTests(SimpleTestCase):
 
                 with sem_provider_aes():
                     self._assert_codigo('INVALID_PDF', caminho)
+
+    def test_pdf_corrompido_com_jbig2_sem_jbig2dec_continua_invalid_pdf(self):
+        """O atalho do DependencyError é só do provider AES. O pypdf também o
+        levanta fora de criptografia: PDF corrompido, SEM /Encrypt, com
+        /ObjStm em /JBIG2Decode e sem `jbig2dec`. Isso é PDF inválido, não um
+        "cifrado que o serviço decide"."""
+        caminho = self._gravar(self._pdf_objstm_jbig2_corrompido())
+
+        # Fixa o `jbig2dec` como ausente, haja ou não o binário na máquina.
+        with patch('pypdf.filters.JBIG2DEC_BINARY', None):
+            # A fixture tem de cair mesmo no DependencyError do pypdf; sem
+            # isto o INVALID_PDF abaixo passaria por outro motivo.
+            reader = PdfReader(str(caminho), strict=False)
+            self.assertFalse(reader.is_encrypted)
+            with self.assertRaises(DependencyError):
+                len(reader.pages)
+
+            self._assert_codigo('INVALID_PDF', caminho)
 
     def test_pdf_corrompido_truncado_retorna_invalid_pdf(self):
         caminho = self._gravar(b'%PDF-1.4\nconteudo truncado e sensivel')

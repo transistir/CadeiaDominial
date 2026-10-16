@@ -61,6 +61,25 @@ def _inspecao_inconclusiva(tamanho_bytes):
     )
 
 
+# O pypdf não tem exceção própria para "provider AES ausente": reaproveita
+# DependencyError, que ele também levanta fora de criptografia (ex.: `jbig2dec`
+# ausente ao decodificar /JBIG2Decode, mesmo em PDF sem /Encrypt). Como não há
+# constante pública, reconhecemos o trecho da mensagem do `_fallback`
+# (pypdf/_crypt_providers/_fallback.py: "cryptography>=3.1 is required for AES
+# algorithm"). Só o trecho sobre AES: o nome e a versão da lib já mudaram entre
+# releases. Se um upgrade do pypdf mudar o texto, os testes com
+# `sem_provider_aes()` quebram, pois usam o erro do próprio pypdf.
+_TRECHO_ERRO_PROVIDER_AES = 'is required for AES algorithm'
+
+
+def _dependencia_de_criptografia(exc):
+    """True só para o DependencyError de provider AES ausente do pypdf."""
+    return (
+        isinstance(exc, DependencyError)
+        and _TRECHO_ERRO_PROVIDER_AES in str(exc)
+    )
+
+
 def _conferir_prazo(prazo):
     if prazo is not None and time.monotonic() >= prazo:
         raise OrcamentoEsgotado('Prazo esgotado durante a inspeção do PDF.')
@@ -193,14 +212,15 @@ def inspecionar_pdf(
         )
     except (OcrBackendError, OrcamentoEsgotado):
         raise
-    except DependencyError:
-        # Neste fluxo, DependencyError = provider AES local indisponível
-        # (cryptography ausente ou incompatível). O pypdf o levanta ao abrir
-        # o arquivo (ele já tenta a senha vazia no construtor), no decrypt ou
-        # só ao decifrar as páginas; por isso o tratamento é aqui, não apenas
-        # em volta de `decrypt`. O PDF é cifrado e o serviço pode abri-lo.
-        return _inspecao_inconclusiva(tamanho_bytes)
     except Exception as exc:
+        if _dependencia_de_criptografia(exc):
+            # Provider AES local indisponível (cryptography ausente ou
+            # incompatível). O pypdf o levanta ao abrir o arquivo (ele já
+            # tenta a senha vazia no construtor), no decrypt ou só ao
+            # decifrar as páginas; por isso o tratamento é aqui, não apenas
+            # em volta de `decrypt`. O PDF é cifrado e o serviço pode abri-lo.
+            # Qualquer outro DependencyError segue como PDF inválido.
+            return _inspecao_inconclusiva(tamanho_bytes)
         raise _erro(
             'INVALID_PDF', 'O PDF não pôde ser interpretado.'
         ) from exc
