@@ -7,12 +7,20 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 from pypdf import PdfWriter
+from pypdf._crypt_providers import crypt_provider
 from pypdf.errors import DependencyError
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from ia_ocr.backends import OcrBackendError
-from ia_ocr.leitor_pdf import inspecionar_pdf, paginas_texto_embutido
+from ia_ocr.leitor_pdf import (
+    InspecaoPdf,
+    inspecionar_pdf,
+    paginas_texto_embutido,
+)
 from ia_ocr.ocr_client import OrcamentoEsgotado
+from ia_ocr.tests.pdf_cifrado import gerar_pdf_aes, sem_provider_aes
+
+ALGORITMOS_AES = ('AES-128', 'AES-256-R5', 'AES-256')
 
 
 class LeitorPdfTests(SimpleTestCase):
@@ -141,6 +149,117 @@ class LeitorPdfTests(SimpleTestCase):
 
         self.assertIsNone(resultado.page_count)
         self.assertTrue(resultado.criptografado)
+
+    def test_pypdf_usa_o_cryptography_como_provider_de_aes(self):
+        """O pin de `cryptography` no requirements.txt existe para isto: sem
+        um provider AES utilizável o pypdf cai no `_fallback` e todo PDF AES
+        vira DependencyError (issue #280)."""
+        self.assertEqual(
+            crypt_provider[0],
+            'cryptography',
+            'provider AES do pypdf indisponível: confira o pin de '
+            'cryptography no requirements.txt',
+        )
+
+    def test_pdf_aes_sem_senha_de_usuario_e_aceito_e_conta_as_paginas(self):
+        for algoritmo in ALGORITMOS_AES:
+            with self.subTest(algoritmo=algoritmo):
+                caminho = self._gravar(
+                    gerar_pdf_aes(algoritmo=algoritmo, paginas=3),
+                    nome=f'{algoritmo}.pdf',
+                )
+
+                resultado = self._inspecionar(caminho)
+
+                self.assertEqual(resultado.page_count, 3)
+                self.assertEqual(
+                    resultado.tamanho_bytes, caminho.stat().st_size
+                )
+                self.assertTrue(resultado.criptografado)
+                self.assertIsNone(resultado.texto_por_pagina)
+
+    def test_pdf_aes_com_senha_de_usuario_retorna_encrypted_pdf(self):
+        for algoritmo in ALGORITMOS_AES:
+            with self.subTest(algoritmo=algoritmo):
+                caminho = self._gravar(
+                    gerar_pdf_aes(
+                        algoritmo=algoritmo, senha_usuario='segredo-do-teste'
+                    ),
+                    nome=f'{algoritmo}.pdf',
+                )
+
+                with self.assertRaises(OcrBackendError) as contexto:
+                    self._inspecionar(caminho)
+
+                self.assertEqual(contexto.exception.codigo, 'ENCRYPTED_PDF')
+                self.assertEqual(
+                    contexto.exception.mensagem,
+                    'O PDF exige senha de usuário para ser aberto.',
+                )
+
+    def test_aes_256_sem_provider_local_falha_ao_abrir_e_e_inconclusivo(self):
+        """Sem `cryptography` o pypdf levanta DependencyError no próprio
+        construtor (ele já tenta a senha vazia ao abrir). Não é PDF inválido
+        nem dá para afirmar que exige senha: o serviço decide."""
+        for senha_usuario in ('', 'segredo-do-teste'):
+            with self.subTest(com_senha_de_usuario=bool(senha_usuario)):
+                caminho = self._gravar(
+                    gerar_pdf_aes(
+                        algoritmo='AES-256', senha_usuario=senha_usuario
+                    )
+                )
+
+                with sem_provider_aes():
+                    resultado = self._inspecionar(caminho)
+
+                self.assertEqual(
+                    resultado,
+                    InspecaoPdf(
+                        page_count=None,
+                        tamanho_bytes=caminho.stat().st_size,
+                        criptografado=True,
+                        texto_por_pagina=None,
+                    ),
+                )
+
+    def test_aes_128_sem_provider_local_falha_ao_ler_paginas_e_e_inconclusivo(
+        self,
+    ):
+        """No AES-128 o construtor passa (a verificação usa RC4/MD5); o
+        DependencyError só aparece ao decifrar o dicionário das páginas, bem
+        depois da abertura."""
+        caminho = self._gravar(
+            gerar_pdf_aes(
+                algoritmo='AES-128', paginas=2, string_na_pagina=True
+            )
+        )
+
+        with sem_provider_aes():
+            resultado = self._inspecionar(caminho, ler_texto=True)
+
+        self.assertEqual(
+            resultado,
+            InspecaoPdf(
+                page_count=None,
+                tamanho_bytes=caminho.stat().st_size,
+                criptografado=True,
+                texto_por_pagina=None,
+            ),
+        )
+
+    def test_pdf_invalido_continua_invalid_pdf_sem_provider_local(self):
+        """O atalho do DependencyError não pode engolir PDF realmente
+        inválido: lixo e PDF truncado seguem como INVALID_PDF."""
+        conteudos = {
+            'bytes arbitrários': b'nao e um pdf',
+            'pdf truncado': b'%PDF-1.4\nconteudo truncado e sensivel',
+        }
+        for descricao, conteudo in conteudos.items():
+            with self.subTest(descricao):
+                caminho = self._gravar(conteudo)
+
+                with sem_provider_aes():
+                    self._assert_codigo('INVALID_PDF', caminho)
 
     def test_pdf_corrompido_truncado_retorna_invalid_pdf(self):
         caminho = self._gravar(b'%PDF-1.4\nconteudo truncado e sensivel')

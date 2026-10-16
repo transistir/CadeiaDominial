@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from pypdf import PdfReader
+from pypdf.errors import DependencyError
 
 from ia_ocr.backends import OcrBackendError, OrcamentoEsgotado
 
@@ -48,6 +49,16 @@ def _silenciar_logger_pypdf():
 
 def _erro(codigo, mensagem):
     return OcrBackendError(codigo, mensagem)
+
+
+def _inspecao_inconclusiva(tamanho_bytes):
+    """PDF cifrado que o provider local não consegue abrir: o serviço decide."""
+    return InspecaoPdf(
+        page_count=None,
+        tamanho_bytes=tamanho_bytes,
+        criptografado=True,
+        texto_por_pagina=None,
+    )
 
 
 def _conferir_prazo(prazo):
@@ -107,12 +118,7 @@ def inspecionar_pdf(
                 except Exception:
                     # Sem o backend criptográfico local não é possível decidir.
                     # O serviço pode conseguir abrir o documento; não o barre.
-                    return InspecaoPdf(
-                        page_count=None,
-                        tamanho_bytes=tamanho_bytes,
-                        criptografado=True,
-                        texto_por_pagina=None,
-                    )
+                    return _inspecao_inconclusiva(tamanho_bytes)
                 if not desbloqueado:
                     raise _erro(
                         'ENCRYPTED_PDF',
@@ -187,6 +193,13 @@ def inspecionar_pdf(
         )
     except (OcrBackendError, OrcamentoEsgotado):
         raise
+    except DependencyError:
+        # Neste fluxo, DependencyError = provider AES local indisponível
+        # (cryptography ausente ou incompatível). O pypdf o levanta ao abrir
+        # o arquivo (ele já tenta a senha vazia no construtor), no decrypt ou
+        # só ao decifrar as páginas; por isso o tratamento é aqui, não apenas
+        # em volta de `decrypt`. O PDF é cifrado e o serviço pode abri-lo.
+        return _inspecao_inconclusiva(tamanho_bytes)
     except Exception as exc:
         raise _erro(
             'INVALID_PDF', 'O PDF não pôde ser interpretado.'
