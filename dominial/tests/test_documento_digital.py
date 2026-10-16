@@ -54,9 +54,37 @@ class DocumentoDigitalTestCase(TestCase):
         })
         response = self.client.post(url, {'arquivo': pdf_file})
         self.assertEqual(response.status_code, 302)
+        # PDF volta para a própria página de upload, onde fica o card
+        # "Extrair texto com IA" (fluxo tela 1 do protótipo, issue #260).
+        self.assertEqual(response.url, reverse('upload_documento_digital', kwargs={
+            'tis_id': self.ti.id, 'imovel_id': self.imovel.id,
+            'documento_id': self.documento.id
+        }))
         self.assertTrue(DocumentoDigital.objects.filter(
             documento=self.documento, nome_original='test.pdf'
         ).exists())
+
+    def test_upload_pdf_fluxo_termina_no_card_ocr(self):
+        """Fluxo tela 1 (#260): upload de PDF → card de OCR com o arquivo.
+
+        Seguindo os redirects do POST, a página final é o próprio upload e
+        traz o card "Extrair texto com IA" listando o PDF recém-anexado,
+        além da mensagem de sucesso preservada.
+        """
+        pdf_content = b'%PDF-1.4 fluxo card'
+        pdf_file = SimpleUploadedFile(
+            'fluxo-card.pdf', pdf_content, content_type='application/pdf'
+        )
+        url = reverse('upload_documento_digital', kwargs={
+            'tis_id': self.ti.id, 'imovel_id': self.imovel.id,
+            'documento_id': self.documento.id
+        })
+        response = self.client.post(url, {'arquivo': pdf_file}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Extrair texto com IA')
+        self.assertContains(response, 'fluxo-card.pdf')
+        self.assertContains(response, 'anexado com sucesso')
 
     def test_upload_imagem(self):
         """Usuário autenticado consegue fazer upload de imagem PNG."""
@@ -70,6 +98,11 @@ class DocumentoDigitalTestCase(TestCase):
         })
         response = self.client.post(url, {'arquivo': png_file})
         self.assertEqual(response.status_code, 302)
+        # Imagem não tem card de OCR: segue para o detalhado como antes.
+        self.assertEqual(response.url, reverse('documento_detalhado', kwargs={
+            'tis_id': self.ti.id, 'imovel_id': self.imovel.id,
+            'documento_id': self.documento.id
+        }))
         self.assertTrue(DocumentoDigital.objects.filter(
             documento=self.documento
         ).exists())
@@ -257,7 +290,16 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                 )
                 mensagens = [str(m) for m in get_messages(response.wsgi_request)]
                 self.assertTrue(
-                    any('OCR' in mensagem for mensagem in mensagens),
+                    any(
+                        'OCR' in mensagem and 'suporte' in mensagem
+                        for mensagem in mensagens
+                    ),
+                    mensagens,
+                )
+                # A mensagem não pode mandar o usuário remover o processamento:
+                # não existe tela para isso (review #260, item E).
+                self.assertFalse(
+                    any('Remova o processamento' in mensagem for mensagem in mensagens),
                     mensagens,
                 )
 

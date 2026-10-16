@@ -10,7 +10,7 @@ from .views.documento_views import novo_documento, documento_lancamentos, seleci
 from .views.lancamento_views import novo_lancamento, editar_lancamento, excluir_lancamento, lancamento_detail, lancamento_resumo_partial, buscar_m_anterior
 from .views.duplicata_views import verificar_duplicata_ajax, importar_duplicata, cancelar_importacao_duplicata
 from .views.cadeia_dominial_views import cadeia_dominial_arvore, tronco_principal, cadeia_dominial_tabela, cadeia_dominial_d3, documento_detalhado, exportar_cadeia_completa_pdf, exportar_cadeia_dominial_pdf, exportar_cadeia_dominial_excel, exportar_cadeia_dominial_excel_tis, obter_arvore_cadeia_dominial
-from .views.documento_digital_views import upload_documento_digital, servir_documento_digital, excluir_documento_digital
+from .views.documento_digital_views import upload_documento_digital, servir_documento_digital, excluir_documento_digital, criar_job_ocr, status_job_ocr
 from .views.api_views import buscar_cidades, buscar_cartorios, verificar_cartorios_estado, importar_cartorios_estado, criar_cartorio, cartorios, pessoas, alteracoes, lancamentos, escolher_origem_documento, escolher_origem_lancamento, get_cadeia_dominial_atualizada, limpar_escolhas_origem
 from .views.autocomplete_views import pessoa_autocomplete, cartorio_autocomplete, cartorio_imoveis_autocomplete
 
@@ -46,6 +46,8 @@ urlpatterns = [
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/upload-digital/', upload_documento_digital, name='upload_documento_digital'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/arquivo/<int:arquivo_id>/', servir_documento_digital, name='servir_documento_digital'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/arquivo/<int:arquivo_id>/excluir/', excluir_documento_digital, name='excluir_documento_digital'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/arquivo/<int:arquivo_id>/ocr-jobs/', criar_job_ocr, name='criar_job_ocr'),
+    path('tis/<int:tis_id>/imovel/<int:imovel_id>/documento/<int:documento_id>/arquivo/<int:arquivo_id>/ocr-jobs/<uuid:job_id>/status/', status_job_ocr, name='status_job_ocr'),
 
     path('cadeia-dominial/<int:tis_id>/<int:imovel_id>/arvore/', cadeia_dominial_arvore, name='cadeia_dominial_arvore'),
     path('tis/<int:tis_id>/imovel/<int:imovel_id>/cadeia-dominial-d3/', views.cadeia_dominial_d3, name='cadeia_dominial_d3'),

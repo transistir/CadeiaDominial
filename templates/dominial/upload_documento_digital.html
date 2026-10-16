@@ -3,6 +3,15 @@
 
 {% block title %}Anexar Arquivo - {{ documento.numero }}{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Bootstrap e base.css definem display próprio em .btn/.d-block, o que
+       vence o [hidden] do user-agent dentro do card; esta regra escopada
+       devolve o efeito do atributo hidden (review #260-A). */
+    [data-ocr-card] [hidden] { display: none !important; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="cadeia-header">
@@ -35,5 +44,54 @@
             <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">← Cancelar</a>
         </div>
     </form>
+
+    {% if arquivos_pdf %}
+    <div class="card" style="max-width: 600px; margin: 0 auto 2rem;">
+        <div class="card-body">
+            <h2 class="h5 mb-1"><span aria-hidden="true">▶</span> Extrair texto com IA</h2>
+            <p class="text-muted small mb-3">
+                Se o PDF já tiver texto embutido, o usaremos direto — sem chamar o serviço de OCR.
+            </p>
+            {% for arquivo in arquivos_pdf %}
+            {% with job=arquivo.ocr_jobs.all|first %}
+            <div class="border rounded p-2 mb-2"
+                 data-ocr-card
+                 data-arquivo-id="{{ arquivo.pk }}"
+                 data-status-ativos="{{ status_ativos_json }}"
+                 data-status-com-texto="{{ status_com_texto_json }}"
+                 data-criar-url="{% url 'criar_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk %}"
+                 {% if job %}data-status-url="{% url 'status_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk job_id=job.job_id %}" data-ocr-status="{{ job.status }}"{% endif %}>
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <strong>{{ arquivo.nome_original }}</strong>
+                        <small class="text-muted d-block">PDF · {{ arquivo.tamanho_formatado }}</small>
+                    </div>
+                    {% if job %}
+                    <span class="badge {% if job.status == 'falhou' %}bg-danger{% elif job.status in status_ativos %}bg-warning text-dark{% elif job.status in status_com_texto %}bg-success{% else %}bg-secondary{% endif %}" data-ocr-badge role="status" aria-live="polite">{{ job.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge bg-light text-dark" data-ocr-badge role="status" aria-live="polite">OCR não iniciado</span>
+                    {% endif %}
+                </div>
+                <small class="text-danger d-block mt-1" data-ocr-erro role="status" aria-live="polite"{% if not job or job.status != 'falhou' %} hidden{% endif %}>{% if job and job.status == 'falhou' %}{{ job.erro_mensagem|default:job.erro_codigo }}{% endif %}</small>
+                <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
+                    <button type="button" class="btn btn-primary btn-sm" data-ocr-disparo{% if not job %}{% elif job.status in status_ativos %} disabled{% else %} hidden{% endif %}><span aria-hidden="true">▶</span> Extrair texto com IA</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-ocr-retry{% if not job or job.status != 'falhou' %} hidden{% endif %}>Tentar novamente</button>
+                    <button type="button" class="btn btn-success btn-sm" data-ocr-revisar disabled aria-describedby="ocr-revisar-motivo-{{ arquivo.pk }}"{% if not job or job.status not in status_com_texto %} hidden{% endif %}>Revisar texto</button>
+                    {# Retoma o polling quando o corte de falhas desistiu (#260-C). #}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-ocr-atualizar hidden>Atualizar status</button>
+                    {# Motivo do revisar desabilitado, percebível por teclado/leitores de tela (#260-D). #}
+                    <small class="text-muted" id="ocr-revisar-motivo-{{ arquivo.pk }}" data-ocr-revisar-motivo{% if not job or job.status not in status_com_texto %} hidden{% endif %}>Disponível na I-4</small>
+                </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{# JS do card versionado em estático, com testes em ia_ocr/tests/js/ (PR #279). #}
+<script src="{% static 'dominial/js/ocr_card.js' %}"></script>
 {% endblock %}

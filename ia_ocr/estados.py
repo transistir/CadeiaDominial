@@ -42,6 +42,11 @@ TRANSICOES_VALIDAS = {
     REVISADO: {IMPORTADO},
 }
 
+# Agrupamentos usados pelo card "Extrair texto com IA" (issue #260): fonte
+# única — a view injeta no template, que expõe ao JS via data-* em JSON.
+STATUS_ATIVOS = [PENDENTE, EM_EXECUCAO]
+STATUS_COM_TEXTO = [CONCLUIDO, TEXTO_CONFIRMADO, EXTRAIDO, REVISADO, IMPORTADO]
+
 
 class TransicaoInvalida(ValidationError):
     """Transição não permitida pelo mapa de estados (ou pré-condição descumprida)."""
