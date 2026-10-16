@@ -67,7 +67,7 @@
                         <small class="text-muted d-block">PDF · {{ arquivo.tamanho_formatado }}</small>
                     </div>
                     {% if job %}
-                    <span class="badge {% if job.status == 'falhou' %}bg-danger{% elif job.status == 'pendente' or job.status == 'em_execucao' %}bg-warning text-dark{% else %}bg-success{% endif %}" data-ocr-badge role="status" aria-live="polite">{{ job.get_status_display }}</span>
+                    <span class="badge {% if job.status == 'falhou' %}bg-danger{% elif job.status in status_ativos %}bg-warning text-dark{% elif job.status in status_com_texto %}bg-success{% else %}bg-secondary{% endif %}" data-ocr-badge role="status" aria-live="polite">{{ job.get_status_display }}</span>
                     {% else %}
                     <span class="badge bg-light text-dark" data-ocr-badge role="status" aria-live="polite">OCR não iniciado</span>
                     {% endif %}
@@ -139,6 +139,13 @@
         return 'badge bg-secondary';
     }
 
+    // Escreve texto só quando muda: reatribuir o textContent de um
+    // role="status" sem alteração faz alguns leitores de tela re-anunciarem
+    // o estado a cada consulta (review #260-D).
+    function definirTexto(elemento, texto) {
+        if (elemento.textContent !== texto) elemento.textContent = texto;
+    }
+
     // Repinta o card a partir do payload de status_job_ocr.
     function pintar(card, data) {
         var badge = card.querySelector('[data-ocr-badge]');
@@ -149,13 +156,13 @@
         var motivo = card.querySelector('[data-ocr-revisar-motivo]');
 
         badge.className = classeBadge(card, data.status);
-        badge.textContent = data.progresso
+        definirTexto(badge, data.progresso
             ? data.status_display + ' — ' + data.progresso.texto
-            : data.status_display;
+            : data.status_display);
 
         erro.hidden = data.status !== 'falhou';
         if (data.status === 'falhou') {
-            erro.textContent = (data.erro && data.erro.mensagem) || 'Falha no processamento OCR.';
+            definirTexto(erro, (data.erro && data.erro.mensagem) || 'Falha no processamento OCR.');
         }
 
         // Com job em andamento o disparo fica visível e desabilitado; nos

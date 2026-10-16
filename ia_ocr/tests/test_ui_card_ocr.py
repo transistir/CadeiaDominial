@@ -10,6 +10,8 @@ Asserções de atributo usam parse de HTML (``django.test.html``) — a ordem do
 atributos no template não quebra o teste (review #260, item I).
 """
 
+import json
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.test.html import Element, parse_html
@@ -173,9 +175,23 @@ class CardOcrUploadTestCase(TestCase):
         # ...e listas duplicadas no JS.
         self.assertNotContains(resposta, 'STATUS_ATIVOS')
         self.assertNotContains(resposta, 'STATUS_COM_TEXTO')
-        # Listas chegando ao JS via data-* em JSON no container do card.
-        self.assertContains(resposta, 'data-status-ativos="[')
-        self.assertContains(resposta, 'data-status-com-texto="[')
+        # Listas chegando ao JS via data-* em JSON no container do card,
+        # parseáveis e iguais às da view (review #260, item I).
+        cards = _elementos(
+            conteudo,
+            'div',
+            presentes=('data-ocr-card', 'data-status-ativos', 'data-status-com-texto'),
+        )
+        self.assertEqual(len(cards), 1)
+        atributos = _atributos(cards[0])
+        self.assertEqual(
+            json.loads(atributos['data-status-ativos']),
+            resposta.context['status_ativos'],
+        )
+        self.assertEqual(
+            json.loads(atributos['data-status-com-texto']),
+            resposta.context['status_com_texto'],
+        )
 
     # Item I — asserções tolerantes à ordem de atributos ------------------------
 
