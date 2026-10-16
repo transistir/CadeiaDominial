@@ -745,9 +745,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    real, atalho de texto embutido, reprocessamento). PRs #275 (squash
    `9538da46`) e #276 (`e8ba4f19`, compose com o serviço
    `cadeia_dominial_ocr_worker`), mergeados 15–16/10.
-3. **I-3 🟡 PRÓXIMO** #260 — UI passo 1: card "Extrair texto com IA" na página
+3. **I-3 🟡 EM VALIDAÇÃO** #260 — UI passo 1: card "Extrair texto com IA" na página
    `upload-digital` + status do job (badge/polling), ações por estado
    (reprocessar / revisar texto) e 1 job ativo por `DocumentoDigital`.
+   **PR #279 aberto** (base `develop`, head `2f92e722`) — Greptile 4/5 com 2 P2
+   não-bloqueantes, ambos fechados no head atual (guarda de duplo clique no
+   disparo/retry + extração do JS para `static/dominial/js/ocr_card.js` com teste
+   em Node e mutation check). Suíte: 524 testes OK.
 4. **I-4** #261 — UI passo 2: tela de confirmação do texto OCR (PDF × texto
    editável, diff, confirmação por página com auditoria).
 5. **I-5** #262 — extração estruturada por schema + tela de revisão de campos
@@ -759,6 +763,27 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    auditoria mínimos (sem PII), exportáveis.
 8. **I-8** #265 — regressão dos fluxos existentes + smoke ponta a ponta com
    stubs — núcleo do Produto 5 (testes/documentação/entrega).
+
+> **Achados da validação do I-3 no ambiente dev (16/10/2026 — Hiure):**
+> - **#280 (bug, afeta prod):** PDF com criptografia AES morre em `INVALID_PDF` porque
+>   `cryptography` não está no `requirements.txt` (só `pypdf==6.16.2`). O serviço OCR
+>   processa o mesmo arquivo (`status=succeeded`, 5 páginas) — quem barra é o pré-check
+>   local do `leitor_pdf`. Versão compatível testada: `cryptography==44.0.3`
+>   (a 50.x quebra o provider AES do pypdf, que continua caindo no fallback).
+> - **#281 (produto):** anexar o PDF agora e extrair com IA depois — upload
+>   independente do disparo, com retomada em outro momento.
+> - **#282 (I-7 #264):** remover o PDF é bloqueado pelo `PROTECT` do `OcrJob`
+>   ("possui processamento de OCR vinculado e não pode ser excluído") — exige política:
+>   soft delete do job/arquivo ou bloqueio com caminho de suporte explícito.
+> - **#283 (I-7 #264 / I-4 #261):** o estado do OCR só existe na página `upload-digital`;
+>   `documento_detalhado` não mostra nada e não há retomada fora da tela.
+>
+> **Decisão de ambiente 16/10/2026 (Hiure):** o servidor **dev**
+> (`dev.cadeiadominial.com.br`) é para **UI/UX** — sem worker de OCR durável; a validação
+> ponta a ponta da fila/OCR acontece no **servidor de testes**. Consequência aceita: no dev
+> o badge pode ficar em `pendente`. Serviço montado: `cd-test-260.service` (worktree
+> `issue-260-ia-ocr-ui1`, porta 8020, banco `cd_test_201_db`, migração `ia_ocr.0004`
+> aplicada), substituindo o `cd-test-210` (mergeado na v1.0.11).
 
 > **Pendência de housekeeping:** as issues **#258 (I-1)** e **#259 (I-2)**
 > seguem ABERTAS apesar dos PRs mergeados — fechar **na validação do bloco**
