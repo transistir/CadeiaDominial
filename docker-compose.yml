@@ -26,23 +26,23 @@ services:
   # Aplicação Django
   web:
     build: .
+    image: cadeiadominial_web:latest
     container_name: cadeia_dominial_web
-    environment:
-      - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY}
-      - DB_NAME=${DB_NAME:-cadeia_dominial}
-      - DB_USER=${DB_USER:-cadeia_user}
-      - DB_PASSWORD=${DB_PASSWORD:-sua_senha_segura_aqui}
-      - DB_HOST=db
-      - DB_PORT=5432
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      - DJANGO_SETTINGS_MODULE=cadeia_dominial.settings_prod
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@cadeiadominial.com.br}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - OCR_BACKEND=${OCR_BACKEND:-ia_ocr.backends.StubBackend}
-      - OCR_JOB_TIMEOUT_SECONDS=${OCR_JOB_TIMEOUT_SECONDS:-3600}
-      - OCR_QUEUE_INTERVAL_SECONDS=${OCR_QUEUE_INTERVAL_SECONDS:-30}
+    environment: &app-environment
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: ${DB_NAME:-cadeia_dominial}
+      DB_USER: ${DB_USER:-cadeia_user}
+      DB_PASSWORD: ${DB_PASSWORD:-sua_senha_segura_aqui}
+      DB_HOST: db
+      DB_PORT: 5432
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_SETTINGS_MODULE: cadeia_dominial.settings_prod
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@cadeiadominial.com.br}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OCR_JOB_TIMEOUT_SECONDS: ${OCR_JOB_TIMEOUT_SECONDS:-3600}
+      OCR_QUEUE_INTERVAL_SECONDS: ${OCR_QUEUE_INTERVAL_SECONDS:-30}
     volumes:
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
@@ -59,6 +59,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Consumidor da fila `ia_ocr` (process_ocr_queue). Usa a mesma imagem do web,
+  # mas sem migrate/collectstatic (quem faz isso é o web no start). Depende de
+  # OCR_BACKEND real e das OCR_* no .env para processar jobs de verdade; com o
+  # StubBackend os jobs falham com BACKEND_NAO_IMPLEMENTADO. Lê PDFs de /app/media.
+  worker:
+    image: cadeiadominial_web:latest
+    container_name: cadeia_dominial_ocr_worker
+    user: appuser
+    init: true
+    entrypoint: ["python", "manage.py", "process_ocr_queue"]
+    environment:
+      <<: *app-environment
+      OCR_BACKEND: ${OCR_BACKEND:-ia_ocr.backends.StubBackend}
+      OCR_SERVICE_URL: ${OCR_SERVICE_URL:-}
+      OCR_INTERNAL_TOKEN: ${OCR_INTERNAL_TOKEN:-}
+      OCR_ACCESS_CLIENT_ID: ${OCR_ACCESS_CLIENT_ID:-}
+      OCR_ACCESS_CLIENT_SECRET: ${OCR_ACCESS_CLIENT_SECRET:-}
+    volumes:
+      - ./media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - cadeia_network
+    restart: unless-stopped
 
   # Nginx com SSL automático plug-and-play
   nginx:
