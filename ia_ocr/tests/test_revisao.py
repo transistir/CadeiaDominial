@@ -6,11 +6,15 @@ em revisão e evidência (página inexistente / trecho ausente). As linhas
 voltam sem pk e ``desnormalizar`` não toca o banco (assertNumQueries(0)).
 """
 
-from django.test import TestCase
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
-from ia_ocr.revisao import desnormalizar
+from ia_ocr.revisao import aplicar_linha, desnormalizar
 
 from .factories import criar_documento_digital
 from .payloads_extracao import (
@@ -20,6 +24,102 @@ from .payloads_extracao import (
     payload_com_closure,
     payload_registro,
 )
+
+
+class AplicarLinhaTest(SimpleTestCase):
+    def setUp(self):
+        job = OcrJob()
+        extracao = ExtracaoSugerida(ocr_job=job)
+        pagina = PaginaOcr(
+            ocr_job=job, numero_pagina=1, texto_ocr=TEXTO_PAGINA_1
+        )
+        self.linhas = {
+            linha.chave: linha
+            for linha in desnormalizar(
+                extracao, payload_registro(job.job_id), [pagina]
+            )
+        }
+        self.usuario = get_user_model()(username='revisor')
+        self.agora = timezone.now()
+
+    def test_descartar_apos_editar_preserva_valor_final(self):
+        campo = self.linhas['/document/data']
+        aplicar_linha(campo, incluir=True, valor='2020-01-11')
+        self.assertEqual(campo.status_revisao, 'editado')
+        self.assertEqual(campo.valor_final, '2020-01-11')
+
+        resultado = aplicar_linha(
+            campo, incluir=False, valor='ignorado no descarte',
+            usuario=self.usuario, agora=self.agora,
+        )
+
+        self.assertIs(resultado, campo)
+        self.assertIsNone(campo.pk)
+        self.assertEqual(campo.status_revisao, 'descartado')
+        self.assertEqual(campo.valor_final, '2020-01-11')
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+        aplicar_linha(
+            campo, incluir=False, agora=self.agora + timedelta(seconds=1)
+        )
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+    def test_reincluir_volta_a_editado(self):
+        for valor in ('2020-01-11', '', None):
+            with self.subTest(valor=valor):
+                campo = self.linhas['/document/data']
+                aplicar_linha(campo, incluir=True, valor=valor)
+                valor_final = campo.valor_final
+                aplicar_linha(campo, incluir=False)
+
+                aplicar_linha(campo, incluir=True)
+
+                self.assertEqual(
+                    campo.status_revisao,
+                    'sugerido' if valor_final is None else 'editado',
+                )
+                self.assertEqual(campo.valor_final, valor_final)
+
+    def test_aceitar_apos_editar_igual_ao_sugerido(self):
+        campo = self.linhas['/document/data']
+        aplicar_linha(campo, incluir=True, valor='2020-01-11')
+
+        aplicar_linha(
+            campo, incluir=True, valor='2020-01-10', conferido=True,
+            usuario=self.usuario, agora=self.agora,
+        )
+
+        self.assertEqual(campo.status_revisao, 'aceito')
+        self.assertIsNone(campo.valor_final)
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+        aplicar_linha(
+            campo, incluir=True, valor=campo.normalized, conferido=True,
+            agora=self.agora + timedelta(seconds=1),
+        )
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+    def test_requer_revisao_sem_conferido_nao_aceita(self):
+        campo = self.linhas['/document/data']
+        campo.requer_revisao = True
+        for valor, status in (
+            (None, 'sugerido'),
+            ('2020-01-10', 'sugerido'),
+            ('2020-01-11', 'editado'),
+        ):
+            with self.subTest(valor=valor):
+                campo.status_revisao = 'aceito'
+
+                aplicar_linha(campo, incluir=True, valor=valor)
+
+                self.assertEqual(campo.status_revisao, status)
+        aplicar_linha(campo, incluir=True, conferido=True)
+        self.assertEqual(campo.status_revisao, 'aceito')
+        self.assertIsNone(campo.valor_final)
 
 
 class DesnormalizarTest(TestCase):

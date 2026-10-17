@@ -34,6 +34,8 @@ import copy
 import re
 import unicodedata
 
+from django.utils import timezone
+
 from dominial.models import Cartorios, Pessoas
 
 from . import destinos, valores
@@ -55,6 +57,50 @@ _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
 _TIPOS_NORMALIZAVEIS = ('data', 'decimal', 'area')
 
 _AREA_DE_ATO = re.compile(r'/acts/\d+/area')
+
+
+def aplicar_linha(
+    campo, *, incluir, valor=None, conferido=False, escolha=None,
+    usuario=None, agora=None,
+):
+    """Aplica a revisão em memória e registra autoria só quando algo muda."""
+    campos_escolha = (
+        'pessoa_escolhida_id', 'cartorio_escolhido_id', 'criar_novo',
+    )
+    campos_revisao = ('status_revisao', 'valor_final', *campos_escolha)
+    antes = tuple(getattr(campo, nome) for nome in campos_revisao)
+
+    if not incluir:
+        campo.status_revisao = 'descartado'
+    else:
+        canonico = (
+            valores.do_formulario(
+                campo.tipo_valor, valor, destinos.destino_de(campo.chave)
+            )
+            if valor is not None else campo.normalized
+        )
+        if canonico != campo.normalized:
+            campo.status_revisao = 'editado'
+            campo.valor_final = canonico
+        elif campo.status_revisao == 'descartado' and valor is None:
+            # Reincluir sem novo valor recupera a edição preservada.
+            campo.status_revisao = (
+                'editado' if campo.valor_final is not None else 'sugerido'
+            )
+        else:
+            campo.valor_final = None
+            campo.status_revisao = 'aceito' if conferido else 'sugerido'
+
+    if escolha is not None:
+        for nome in campos_escolha:
+            if nome in escolha:
+                setattr(campo, nome, escolha[nome])
+
+    depois = tuple(getattr(campo, nome) for nome in campos_revisao)
+    if depois != antes:
+        campo.revisado_por = usuario
+        campo.revisado_em = agora if agora is not None else timezone.now()
+    return campo
 
 
 def desnormalizar(extracao, payload, paginas) -> list[CampoSugerido]:
