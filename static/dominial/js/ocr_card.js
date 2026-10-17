@@ -28,6 +28,11 @@
         return listaDeEstados(card, 'data-status-com-texto');
     }
 
+    // Estados em que o texto ainda pode ser revisado (tela da I-4, #261).
+    function statusRevisaveis(card) {
+        return listaDeEstados(card, 'data-status-revisaveis');
+    }
+
     function emLista(status, lista) {
         return lista.indexOf(status) !== -1;
     }
@@ -64,6 +69,7 @@
         var disparo = card.querySelector('[data-ocr-disparo]');
         var retry = card.querySelector('[data-ocr-retry]');
         var revisar = card.querySelector('[data-ocr-revisar]');
+        var linkRevisar = card.querySelector('[data-ocr-revisar-link]');
         var motivo = card.querySelector('[data-ocr-revisar-motivo]');
 
         badge.className = classeBadge(card, data.status);
@@ -81,7 +87,12 @@
         disparo.hidden = !emLista(data.status, statusAtivos(card));
         disparo.disabled = emLista(data.status, statusAtivos(card));
         retry.hidden = data.status !== 'falhou';
-        revisar.hidden = !emLista(data.status, statusComTexto(card));
+        // "Revisar texto": link para a tela de confirmação enquanto o texto é
+        // revisável; nos demais estados com texto (já confirmado), o botão
+        // desabilitado. Sem o link no card (renderizado sem job), cai para o botão.
+        var revisavel = !!linkRevisar && emLista(data.status, statusRevisaveis(card));
+        if (linkRevisar) linkRevisar.hidden = !revisavel;
+        revisar.hidden = !emLista(data.status, statusComTexto(card)) || revisavel;
         // O motivo do revisar desabilitado acompanha o botão.
         if (motivo) motivo.hidden = revisar.hidden;
     }

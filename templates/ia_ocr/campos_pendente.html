@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Revisão de campos - {{ documento.numero }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="cadeia-header">
+        <h1>Revisão de campos</h1>
+        <div class="imovel-info">
+            <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
+            <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
+        </div>
+    </div>
+
+    {# Placeholder da I-5 (#262): a tela de revisão de campos substitui este corpo. #}
+    <div class="alert alert-info" role="status">
+        O texto deste processamento já foi confirmado. A revisão de campos
+        (extração estruturada) ainda não está disponível nesta versão.
+    </div>
+    <a href="{{ url_texto }}" class="btn btn-secondary">← Voltar ao texto confirmado</a>
+</div>
+{% endblock %}

@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from dominial.models import DocumentoDigital
@@ -138,6 +138,16 @@ class JobEmExecucao(Exception):
     codigo = 'JOB_EM_EXECUCAO'
 
 
+class TextoNaoEditavel(Exception):
+    """O texto só aceita edição/confirmação com o job em `concluido`."""
+    codigo = 'TEXTO_NAO_EDITAVEL'
+
+
+class EdicaoPendente(Exception):
+    """Há página editada aguardando reconfirmação: o bulk não se aplica."""
+    codigo = 'EDICAO_PENDENTE'
+
+
 def registrar_pendencia_limpeza(
     documento_digital_id, caminho_storage, documento_id=None
 ):
@@ -221,6 +231,137 @@ def reprocessar(job, usuario=None, forcar_ocr=True):
             status=estados.PENDENTE,
         )
         return novo, True
+
+
+def _normalizar_quebras_de_linha(texto):
+    """CRLF/CR → LF: o textarea envia CRLF e o texto do OCR usa LF.
+
+    Sem isso, confirmar uma página sem tocar no texto a marcaria como
+    editada (e o diff acusaria toda quebra de linha).
+    """
+    return texto.replace('\r\n', '\n').replace('\r', '\n')
+
+
+def _travar_job_editavel(job):
+    """Trava a linha do job e exige `concluido`. Usar dentro de atomic().
+
+    Toda mutação de página (confirmar, editar, bulk) passa por esta trava, e a
+    transição para `texto_confirmado` também toma a linha do job no seu CAS:
+    o texto não muda depois de confirmado o job, e a transição valida páginas
+    já commitadas.
+    """
+    travado = OcrJob.objects.select_for_update().get(pk=job.pk)
+    if travado.status not in estados.STATUS_REVISAVEIS:
+        raise TextoNaoEditavel(
+            f'job {travado.job_id} está em {travado.status}: o texto não '
+            'aceita mais edição.'
+        )
+    return travado
+
+
+def confirmar_pagina(job, numero_pagina, usuario, texto=None):
+    """Confirma o texto de uma página: grava texto_confirmado + auditoria.
+
+    `texto` é o conteúdo do textarea; sem ele, confirma o texto vigente (o
+    rascunho salvo ou, na falta dele, o do OCR). Idempotente: reconfirmar o
+    mesmo texto mantém quem/quando da confirmação original. O texto do OCR
+    nunca é alterado. Exige job `concluido` (``TextoNaoEditavel``) e página
+    existente (``PaginaOcr.DoesNotExist``). Devolve ``(pagina, alterada)``.
+    """
+    with transaction.atomic():
+        travado = _travar_job_editavel(job)
+        pagina = PaginaOcr.objects.get(
+            ocr_job=travado, numero_pagina=numero_pagina,
+        )
+        texto_final = (
+            pagina.texto_exibido if texto is None
+            else _normalizar_quebras_de_linha(texto)
+        )
+        if pagina.confirmado_em is not None and pagina.texto_exibido == texto_final:
+            return pagina, False
+        pagina.texto_confirmado = texto_final
+        pagina.confirmado_por = usuario
+        pagina.confirmado_em = timezone.now()
+        pagina.save(update_fields=[
+            'texto_confirmado', 'confirmado_por', 'confirmado_em',
+        ])
+    logger.info('job_id=%s pagina=%s confirmada', job.job_id, numero_pagina)
+    return pagina, True
+
+
+def editar_pagina(job, numero_pagina, texto):
+    """Salva uma edição do texto e invalida a confirmação da página.
+
+    A página vira "editada": texto_confirmado guarda o rascunho e
+    confirmado_em/confirmado_por são zerados, então ela precisa ser
+    reconfirmada — sem isso o job não vai para `texto_confirmado`
+    (``OcrJob._validar_confirmacao_de_texto``). Texto igual ao vigente não é
+    edição: nada muda e a confirmação existente é mantida. Não há coluna para
+    o autor da edição; quem responde pelo texto é quem o confirma.
+    Devolve ``(pagina, alterada)``.
+    """
+    with transaction.atomic():
+        travado = _travar_job_editavel(job)
+        pagina = PaginaOcr.objects.get(
+            ocr_job=travado, numero_pagina=numero_pagina,
+        )
+        texto_final = _normalizar_quebras_de_linha(texto)
+        if pagina.texto_exibido == texto_final:
+            return pagina, False
+        pagina.texto_confirmado = texto_final
+        pagina.confirmado_por = None
+        pagina.confirmado_em = None
+        pagina.save(update_fields=[
+            'texto_confirmado', 'confirmado_por', 'confirmado_em',
+        ])
+    logger.info('job_id=%s pagina=%s editada', job.job_id, numero_pagina)
+    return pagina, True
+
+
+def confirmar_todas_paginas(job, usuario):
+    """Bulk: confirma, como estão no OCR, as páginas ainda não confirmadas.
+
+    Só vale quando o usuário não editou nada: com alguma página "editada"
+    (rascunho aguardando reconfirmação) recusa com ``EdicaoPendente`` e nada é
+    gravado — as editadas se confirmam uma a uma. Páginas já confirmadas, com
+    ou sem edição, não são tocadas: texto e auditoria delas permanecem. Não
+    transiciona o job. Devolve quantas páginas foram confirmadas agora.
+    """
+    with transaction.atomic():
+        travado = _travar_job_editavel(job)
+        pendentes = PaginaOcr.objects.filter(
+            ocr_job=travado, confirmado_em__isnull=True,
+        )
+        if pendentes.filter(texto_confirmado__isnull=False).exists():
+            raise EdicaoPendente(
+                f'job {travado.job_id} tem página editada aguardando confirmação.'
+            )
+        total = pendentes.update(
+            texto_confirmado=F('texto_ocr'),
+            confirmado_por=usuario,
+            confirmado_em=timezone.now(),
+        )
+    if total:
+        logger.info('job_id=%s paginas=%s confirmadas em lote', job.job_id, total)
+    return total
+
+
+def confirmar_texto(job, usuario):
+    """concluido → texto_confirmado ("Extrair campos →").
+
+    A pré-condição (todas as páginas com ``confirmado_em``) é validada por
+    ``OcrJob.transicionar`` dentro da transação do CAS: levanta
+    ``TransicaoInvalida`` (``paginas_nao_confirmadas`` / ``sem_paginas`` /
+    ``transicao_invalida``) e nada é gravado; ``TransicaoConcorrente`` se o job
+    mudou de estado no meio. A transição é auditada em ``OcrJobTransicao`` com
+    o usuário. A extração dos campos em si é da I-5.
+    """
+    job.transicionar(
+        estados.TEXTO_CONFIRMADO, usuario=usuario,
+        motivo='texto confirmado pelo usuário',
+    )
+    logger.info('job_id=%s status=texto_confirmado', job.job_id)
+    return job
 
 
 def claim_proximo_job(timeout_s=None):

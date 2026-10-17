@@ -3,8 +3,9 @@
 Cobertura de template/contexto: o card aparece só para PDFs, lista os
 arquivos digitais e reflete o estado inicial do job mais recente do arquivo
 (botão desabilitado com job ativo, "Tentar novamente" com falha, "Revisar
-texto" desabilitado quando concluído). O comportamento do polling em si é
-verificado manualmente (roteiro no relatório da fatia).
+texto" como link para a tela de confirmação quando concluído — I-4 / #261 — e
+desabilitado, com a explicação, nos estados já confirmados). O polling em si é
+coberto pelo harness Node (ia_ocr/tests/js/ocr_card.test.js).
 
 Asserções de atributo usam parse de HTML (``django.test.html``) — a ordem dos
 atributos no template não quebra o teste (review #260, item I).
@@ -163,6 +164,8 @@ class CardOcrUploadTestCase(TestCase):
             resposta.context['status_com_texto'],
             ['concluido', 'texto_confirmado', 'extraido', 'revisado', 'importado'],
         )
+        # Só `concluido` ainda aceita revisão do texto (tela da I-4).
+        self.assertEqual(resposta.context['status_revisaveis'], ['concluido'])
 
     def test_template_e_js_nao_repetem_listas_de_estado(self):
         """#260-F: nem if por substring no template, nem lista duplicada no
@@ -180,7 +183,10 @@ class CardOcrUploadTestCase(TestCase):
         cards = _elementos(
             conteudo,
             'div',
-            presentes=('data-ocr-card', 'data-status-ativos', 'data-status-com-texto'),
+            presentes=(
+                'data-ocr-card', 'data-status-ativos', 'data-status-com-texto',
+                'data-status-revisaveis',
+            ),
         )
         self.assertEqual(len(cards), 1)
         atributos = _atributos(cards[0])
@@ -191,6 +197,10 @@ class CardOcrUploadTestCase(TestCase):
         self.assertEqual(
             json.loads(atributos['data-status-com-texto']),
             resposta.context['status_com_texto'],
+        )
+        self.assertEqual(
+            json.loads(atributos['data-status-revisaveis']),
+            resposta.context['status_revisaveis'],
         )
 
     # Item I — asserções tolerantes à ordem de atributos ------------------------
@@ -226,6 +236,7 @@ class CardOcrUploadTestCase(TestCase):
         self.assertIn('hidden', _atributos(_elementos(conteudo, 'small', presentes=('data-ocr-erro',))[0]))
         self.assertIn('hidden', _atributos(_elementos(conteudo, 'button', presentes=('data-ocr-retry',))[0]))
         self.assertIn('hidden', _atributos(_elementos(conteudo, 'button', presentes=('data-ocr-revisar',))[0]))
+        self.assertIn('hidden', _atributos(_elementos(conteudo, 'a', presentes=('data-ocr-revisar-link',))[0]))
 
     def test_card_job_falhou_mostra_tentar_novamente_e_motivo(self):
         job, _criado = services.criar_job(self.arquivo, criado_por=self.dono)
@@ -248,7 +259,18 @@ class CardOcrUploadTestCase(TestCase):
         self.assertIn('hidden', _atributos(_elementos(conteudo, 'button', presentes=('data-ocr-disparo',))[0]))
         self.assertIn('hidden', _atributos(_elementos(conteudo, 'button', presentes=('data-ocr-revisar',))[0]))
 
-    def test_card_job_concluido_mostra_revisar_texto_desabilitado(self):
+    def url_texto(self, job):
+        return reverse('texto_job_ocr', kwargs={
+            'tis_id': self.ti.pk,
+            'imovel_id': self.imovel.pk,
+            'documento_id': self.documento.pk,
+            'job_id': job.job_id,
+        })
+
+    def test_card_job_concluido_habilita_revisar_texto_e_aponta_para_a_tela(self):
+        """I-4 (#261): com o OCR concluído, "Revisar texto" é um link ativo
+        para a tela de confirmação do texto do job; o botão desabilitado e o
+        motivo "Disponível na I-4" saem de cena."""
         job, _criado = services.criar_job(self.arquivo, criado_por=self.dono)
         from ia_ocr.models import OcrJob
         OcrJob.objects.filter(pk=job.pk).update(status='concluido')
@@ -256,10 +278,35 @@ class CardOcrUploadTestCase(TestCase):
         resposta = self.pagina()
         conteudo = resposta.content.decode()
 
+        links = _elementos(conteudo, 'a', presentes=('data-ocr-revisar-link',))
+        self.assertEqual(len(links), 1)
+        self.assertEqual(_atributos(links[0])['href'], self.url_texto(job))
+        self.assertNotIn('hidden', _atributos(links[0]))
+        self.assertIn('Revisar texto', _texto(links[0]))
         revisar = _elementos(conteudo, 'button', presentes=('data-ocr-revisar',))[0]
-        self.assertIn('disabled', _atributos(revisar))
-        self.assertNotIn('hidden', _atributos(revisar))
+        self.assertIn('hidden', _atributos(revisar))
+        motivo = _elementos(conteudo, 'small', presentes=('data-ocr-revisar-motivo',))[0]
+        self.assertIn('hidden', _atributos(motivo))
         self.assertIn('hidden', _atributos(_elementos(conteudo, 'button', presentes=('data-ocr-disparo',))[0]))
+        self.assertNotContains(resposta, 'Disponível na I-4')
+
+    def test_card_com_texto_ja_confirmado_mantem_revisar_desabilitado_com_explicacao(self):
+        from ia_ocr.models import OcrJob
+        job, _criado = services.criar_job(self.arquivo, criado_por=self.dono)
+        for status in ('texto_confirmado', 'extraido', 'revisado', 'importado'):
+            with self.subTest(status=status):
+                OcrJob.objects.filter(pk=job.pk).update(status=status)
+
+                conteudo = self.pagina().content.decode()
+
+                revisar = _elementos(conteudo, 'button', presentes=('data-ocr-revisar',))[0]
+                self.assertIn('disabled', _atributos(revisar))
+                self.assertNotIn('hidden', _atributos(revisar))
+                link = _elementos(conteudo, 'a', presentes=('data-ocr-revisar-link',))[0]
+                self.assertIn('hidden', _atributos(link))
+                motivo = _elementos(conteudo, 'small', presentes=('data-ocr-revisar-motivo',))[0]
+                self.assertNotIn('hidden', _atributos(motivo))
+                self.assertIn('Texto já confirmado', _texto(motivo))
 
     # Item C — retomada do polling depois de o corte de falhas desistir --------
 
@@ -303,10 +350,10 @@ class CardOcrUploadTestCase(TestCase):
     def test_motivo_do_revisar_desabilitado_e_percebivel(self):
         """#260-D: o motivo de "Revisar texto" estar desabilitado é texto
         visível, ligado ao botão por aria-describedby (title não é alcançável
-        por teclado)."""
+        por teclado). Desde a I-4 isso só vale após a confirmação do texto."""
         job, _criado = services.criar_job(self.arquivo, criado_por=self.dono)
         from ia_ocr.models import OcrJob
-        OcrJob.objects.filter(pk=job.pk).update(status='concluido')
+        OcrJob.objects.filter(pk=job.pk).update(status='texto_confirmado')
 
         resposta = self.pagina()
         conteudo = resposta.content.decode()
@@ -319,7 +366,7 @@ class CardOcrUploadTestCase(TestCase):
         self.assertEqual(len(motivos), 1)
         self.assertEqual(_atributos(motivos[0]).get('id'), descrito_por)
         self.assertNotIn('hidden', _atributos(motivos[0]))
-        self.assertIn('Disponível na I-4', _texto(motivos[0]))
+        self.assertIn('Texto já confirmado', _texto(motivos[0]))
 
         # Fora dos estados com texto, o motivo acompanha o botão e some.
         OcrJob.objects.filter(pk=job.pk).update(status='pendente')
