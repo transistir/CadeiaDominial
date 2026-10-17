@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Revisão de campos - {{ documento.numero }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/ocr_revisao.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container ocr-revisao" data-ocr-revisao data-url-salvar="{{ url_salvar }}">
+    <div class="cadeia-header">
+        <h1>Revisão de campos</h1>
+        <div class="imovel-info">
+            <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
+            <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
+            <div data-ocr-contador><strong>{{ pendencias|length }}</strong> pendência{{ pendencias|length|pluralize }} · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <a href="{{ url_texto }}" class="btn btn-secondary">← Voltar ao processamento</a>
+        <a href="{{ url_documento }}" class="btn btn-secondary">Ver documento</a>
+    </div>
+
+    {% if somente_leitura %}
+    <div class="alert alert-info" role="status" data-ocr-somente-leitura>
+        Esta extração já foi revisada. Os campos estão em modo somente leitura.
+    </div>
+    {% endif %}
+
+    {% if pendencias %}
+    <section class="revisao-bloco" aria-labelledby="ocr-pendencias-titulo" data-ocr-pendencias>
+        <h2 class="h6" id="ocr-pendencias-titulo">Pendências</h2>
+        <ul class="revisao-lista">
+            {% for item in pendencias %}
+            <li class="pendencia"><code>{{ item.chave }}</code> — {{ item.motivo }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if avisos %}
+    <section class="revisao-bloco" aria-labelledby="ocr-avisos-titulo" data-ocr-avisos>
+        <h2 class="h6" id="ocr-avisos-titulo">Avisos</h2>
+        <ul class="revisao-lista">
+            {% for item in avisos %}
+            <li class="aviso"><code>{{ item.chave }}</code> — {{ item.motivo }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <div id="revisao">
+        {% for destino, grupo in por_destino.items %}
+        <section class="revisao-destino" aria-labelledby="ocr-destino-{{ forloop.counter }}">
+            <h2 class="h5" id="ocr-destino-{{ forloop.counter }}">
+                {% if destino == 'SEM_DESTINO' %}Sem destino — só conferência{% else %}{{ destino|cut:'dominial.' }}{% endif %}
+            </h2>
+
+            {% for campo in grupo %}
+            <article class="campo{% if campo.status_revisao == 'descartado' %} descartado{% endif %}"
+                     data-chave="{{ campo.chave }}"
+                     data-versao="{{ versao }}"
+                     data-campo
+                     tabindex="-1">
+                <header class="campo-cabecalho">
+                    {# O JS troca o texto pelo último segmento da chave; a chave completa fica no title. #}
+                    <label class="campo-rotulo" for="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" title="{{ campo.chave }}" data-campo-rotulo>{{ campo.chave }}</label>
+
+                    {% if campo.confianca is None %}
+                    <span class="badge-confianca sem_confianca">Sem confiança</span>
+                    {% elif campo.confianca >= 0.95 %}
+                    <span class="badge-confianca alta">Confiança alta</span>
+                    {% elif campo.confianca >= 0.70 %}
+                    <span class="badge-confianca media">Confiança média</span>
+                    {% else %}
+                    <span class="badge-confianca baixa">Confiança baixa</span>
+                    {% endif %}
+
+                    {% for motivo in campo.motivos_revisao %}
+                    <span class="badge-motivo">{% if motivo == 'baixa_confianca' %}Baixa confiança{% elif motivo == 'normalizacao_invalida' %}Formato não reconhecido{% elif motivo == 'unidade_area' %}Converter unidade{% elif motivo == 'closure' %}Fim de cadeia{% elif motivo == 'evidencia_invalida' %}Evidência inválida{% elif motivo == 'trecho_ausente' %}Trecho não localizado{% elif motivo == 'match_invalidado' %}Vínculo invalidado{% else %}{{ motivo }}{% endif %}</span>
+                    {% endfor %}
+                </header>
+
+                <p class="campo-ocr">OCR: <span class="campo-raw">{{ campo.raw|default:"—" }}</span></p>
+
+                {% if campo.tipo_valor == 'texto' %}
+                <textarea id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
+                          class="form-control campo-valor" rows="3"
+                          data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>{% firstof campo.valor_final campo.normalized '' %}</textarea>
+                {% else %}
+                <input id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
+                       class="form-control campo-valor"
+                       type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
+                       value="{% firstof campo.valor_final campo.normalized '' %}"
+                       data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                {% endif %}
+
+                {% if campo.match_candidatos|length > 1 %}
+                {% if campo.chave|slice:':9' == '/document' or 'cartorio' in campo.chave %}
+                {% with escolhido=campo.cartorio_escolhido_id nome_escolha='cartorio_escolhido_id' %}
+                <label class="campo-sub">Cadastro correspondente
+                    <select class="form-select" data-campo-escolha="{{ nome_escolha }}"{% if somente_leitura %} disabled{% endif %}>
+                        <option value="">— escolher —</option>
+                        {% for candidato in campo.match_candidatos %}
+                        <option value="{{ candidato }}"{% if candidato == escolhido %} selected{% endif %}>Registro #{{ candidato }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endwith %}
+                {% else %}
+                {% with escolhido=campo.pessoa_escolhida_id nome_escolha='pessoa_escolhida_id' %}
+                <label class="campo-sub">Cadastro correspondente
+                    <select class="form-select" data-campo-escolha="{{ nome_escolha }}"{% if somente_leitura %} disabled{% endif %}>
+                        <option value="">— escolher —</option>
+                        {% for candidato in campo.match_candidatos %}
+                        <option value="{{ candidato }}"{% if candidato == escolhido %} selected{% endif %}>Registro #{{ candidato }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endwith %}
+                {% endif %}
+                {% endif %}
+
+                {# area_convertida: sem os campos, um novo salvamento do card desfaria a conversão. #}
+                {% if 'unidade_area' in campo.motivos_revisao or campo.area_convertida %}
+                <div class="campo-conversao">
+                    <label class="campo-sub">Área convertida (ha)
+                        <input class="form-control" type="text" inputmode="decimal" name="ha_convertido"
+                               value="{% if campo.area_convertida %}{{ campo.valor_final|default:'' }}{% endif %}"
+                               data-campo-ha{% if somente_leitura %} disabled{% endif %}>
+                    </label>
+                    <label class="campo-check">
+                        <input type="checkbox" name="confirmo_conversao" data-campo-confirmo{% if campo.area_convertida %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                        Confirmo a conversão para hectares
+                    </label>
+                </div>
+                {% endif %}
+
+                <div class="campo-acoes">
+                    <label class="campo-check">
+                        <input type="checkbox" data-campo-incluir{% if campo.status_revisao != 'descartado' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                        Incluir
+                    </label>
+                    <label class="campo-check">
+                        <input type="checkbox" data-campo-conferido{% if campo.status_revisao == 'aceito' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                        Conferido
+                    </label>
+                    <small class="campo-estado" data-campo-estado role="status" aria-live="polite"></small>
+                </div>
+                <p class="campo-erro" data-campo-erro role="alert" hidden></p>
+            </article>
+            {% endfor %}
+        </section>
+        {% endfor %}
+    </div>
+
+    <div class="revisao-toolbar" data-ocr-toolbar data-versao="{{ versao }}">
+        <form method="post" action="{{ url_finalizar }}" data-ocr-finalizar-form>
+            {% csrf_token %}
+            <input type="hidden" name="versao" value="{{ versao }}" data-ocr-versao>
+            <button type="submit" class="btn btn-primary" data-ocr-finalizar
+                    {% if somente_leitura %}disabled title="Esta extração já foi revisada."{% elif pendencias %}disabled title="Resolva as pendências antes de finalizar."{% endif %}>Finalizar revisão</button>
+            <small class="text-muted" data-ocr-finalizar-msg role="status" aria-live="polite"></small>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'dominial/js/ocr_revisao.js' %}"></script>
+{% endblock %}
