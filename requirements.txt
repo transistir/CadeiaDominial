@@ -13,3 +13,10 @@ weasyprint==62.2
 pydyf==0.10.0
 pypdf==6.16.2
 openpyxl==3.1.5
+# I-5 (#262): validação do payload de extração contra o schema vendorizado
+# (ia_ocr/schemas/) — versões instaladas/empregadas nos testes I-5.
+jsonschema==4.19.2
+attrs==25.3.0
+jsonschema-specifications==2023.12.1
+referencing==0.36.2
+rpds-py==0.21.0
