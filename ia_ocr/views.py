@@ -93,6 +93,15 @@ def _pagina_pedida(request, paginas):
     raise Http404('Página inexistente.')
 
 
+def _disponibilidade_extracao(job, paginas):
+    """(pode_extrair, motivo): após a #290 só depende do OCR, não da confirmação."""
+    if job.status != estados.CONCLUIDO:
+        return False, 'Aguardando o OCR terminar.'
+    if any(not pagina.texto_ocr for pagina in paginas):
+        return False, 'O OCR não devolveu texto para todas as páginas.'
+    return True, ''
+
+
 @login_required
 @require_GET
 def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
@@ -135,6 +144,7 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     nao_confirmadas = [p for p in paginas if p.estado == ESTADO_NAO_CONFIRMADA]
     editadas = [p for p in paginas if p.estado == ESTADO_EDITADA]
     confirmadas = len(paginas) - len(nao_confirmadas) - len(editadas)
+    pode_extrair, motivo_sem_extracao = _disponibilidade_extracao(job, paginas)
 
     return render(request, 'ia_ocr/confirmacao_texto.html', {
         'tis': tis,
@@ -155,6 +165,8 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'confirmadas': confirmadas,
         'faltam': len(nao_confirmadas) + len(editadas),
         'todas_confirmadas': confirmadas == len(paginas),
+        'pode_extrair': pode_extrair,
+        'motivo_sem_extracao': motivo_sem_extracao,
         # Bulk só quando há o que confirmar e o usuário não editou nada.
         'tem_editadas': bool(editadas),
         'pode_confirmar_todas': editavel and bool(nao_confirmadas) and not editadas,
