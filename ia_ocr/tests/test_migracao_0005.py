@@ -99,6 +99,48 @@ class ExtracaoRevisao0005Test(TransactionTestCase):
                 self.assertEqual(campo.motivos_revisao, ['legado'])
                 campo.full_clean()
 
+    def test_colunas_texto_corrigido_e_dpi(self):
+        """0005 acrescenta ocrjob.dpi, paginaocr.texto_corrigido e
+        paginaocr.corrigido_em, todos nullable (decisão #290/16-10)."""
+        job, _, _ = self._criar_job_com_extracao(self.apps_antes)
+        pagina_antes = self.apps_antes.get_model(
+            'ia_ocr', 'PaginaOcr'
+        ).objects.create(
+            ocr_job=job, numero_pagina=1, texto_ocr='texto do ocr',
+        )
+
+        apps_depois = self._migrar(self.migrate_to)
+        OcrJob = apps_depois.get_model('ia_ocr', 'OcrJob')
+        PaginaOcr = apps_depois.get_model('ia_ocr', 'PaginaOcr')
+
+        # Ler as colunas novas prova que existem; o SELECT seria recusado
+        # com OperationalError caso contrário.
+        job_depois = OcrJob.objects.get(pk=job.pk)
+        pagina_depois = PaginaOcr.objects.get(pk=pagina_antes.pk)
+        # Nenhum valor informado: NULL é aceito (nullable).
+        self.assertIsNone(job_depois.dpi)
+        self.assertIsNone(pagina_depois.texto_corrigido)
+        self.assertIsNone(pagina_depois.corrigido_em)
+
+    def test_texto_corrigido_distinto_de_texto_ocr(self):
+        """O texto devolvido pelo serviço (corrigido) convive com o texto
+        original do OCR: gravar um não apaga o outro."""
+        job, _, _ = self._criar_job_com_extracao(self.apps_antes)
+        pagina_antes = self.apps_antes.get_model(
+            'ia_ocr', 'PaginaOcr'
+        ).objects.create(
+            ocr_job=job, numero_pagina=1, texto_ocr='a',
+        )
+
+        apps_depois = self._migrar(self.migrate_to)
+        PaginaOcr = apps_depois.get_model('ia_ocr', 'PaginaOcr')
+        pagina = PaginaOcr.objects.get(pk=pagina_antes.pk)
+        pagina.texto_corrigido = 'b'
+        pagina.save(update_fields=['texto_corrigido'])
+        pagina.refresh_from_db()
+        self.assertEqual(pagina.texto_ocr, 'a')
+        self.assertEqual(pagina.texto_corrigido, 'b')
+
     def test_reversao_com_raw_normalized_null(self):
         self._criar_job_com_extracao(self.apps_antes)
         apps_0005 = self._migrar(self.migrate_to)

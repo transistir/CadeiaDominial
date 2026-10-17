@@ -236,6 +236,25 @@ class ConfirmacaoDeTextoTest(TestCase):
         )
 
 
+class PaginaCorrigidaTest(TestCase):
+    """Texto corrigido pelo serviço (I-5 / decisão #290/16-10) convive com
+    o texto original do OCR: corrigir não apaga o texto_ocr."""
+
+    def test_pagina_corrigida_nao_apaga_texto_ocr(self):
+        job = OcrJob.objects.create(documento_digital=criar_documento_digital())
+        pagina = PaginaOcr.objects.create(
+            ocr_job=job,
+            numero_pagina=1,
+            texto_ocr='texto do ocr',
+            texto_corrigido='texto corrigido',
+            corrigido_em=timezone.now(),
+        )
+        pagina.refresh_from_db()
+        self.assertEqual(pagina.texto_ocr, 'texto do ocr')
+        self.assertEqual(pagina.texto_corrigido, 'texto corrigido')
+        self.assertIsNotNone(pagina.corrigido_em)
+
+
 class PreCondicaoDeExtracaoTest(TestCase):
     """texto_confirmado → extraido exige uma ExtracaoSugerida no job."""
 

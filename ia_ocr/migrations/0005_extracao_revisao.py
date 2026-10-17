@@ -185,6 +185,25 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(marcar_campos_legado, noop),
         migrations.RunPython(checar_duplicatas_campo, noop),
+        # Decisão #290/16-10 (#262): o serviço devolve o texto CORRIGIDO —
+        # o usuário não confirma mais o texto do OCR. O texto corrigido é
+        # guardado separado do original e o job persiste o dpi do OCR
+        # (para converter bbox em coordenada de PDF).
+        migrations.AddField(
+            model_name='ocrjob',
+            name='dpi',
+            field=models.PositiveIntegerField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name='paginaocr',
+            name='texto_corrigido',
+            field=models.TextField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name='paginaocr',
+            name='corrigido_em',
+            field=models.DateTimeField(blank=True, null=True),
+        ),
         migrations.AlterField(
             model_name='extracaosugerida',
             name='payload_servico',

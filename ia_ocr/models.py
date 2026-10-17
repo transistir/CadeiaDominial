@@ -60,6 +60,10 @@ class OcrJob(models.Model):
     erro_mensagem = models.TextField(blank=True)
     sha256_pdf = models.CharField(max_length=64, blank=True)
     page_count = models.PositiveIntegerField(null=True, blank=True)
+    # dpi efetivo usado no OCR do job: o cliente manda `dpi` (default 200)
+    # sem que o serviço o persista (ocr_client.py ao montar os campos).
+    # Guardar aqui permite converter bbox em coordenada de PDF depois.
+    dpi = models.PositiveIntegerField(null=True, blank=True)
     timings_ms = models.JSONField(null=True, blank=True)
     origem = models.CharField(
         max_length=20, choices=ORIGEM_CHOICES, default='ocr'
@@ -264,6 +268,12 @@ class PaginaOcr(models.Model):
     )
     numero_pagina = models.PositiveIntegerField()
     texto_ocr = models.TextField()
+    # Texto devolvido pelo serviço de extração com as correções aplicadas
+    # (decisão #290/16-10: o usuário NÃO confirma mais o texto do OCR — o
+    # serviço devolve texto corrigido). Separado de texto_ocr para
+    # preservar o original; `corrigido_em` marca quando a correção chegou.
+    texto_corrigido = models.TextField(null=True, blank=True)
+    corrigido_em = models.DateTimeField(null=True, blank=True)
     texto_confirmado = models.TextField(null=True, blank=True)
     confirmado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
