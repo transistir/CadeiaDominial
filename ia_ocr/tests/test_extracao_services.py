@@ -6,12 +6,15 @@ from datetime import timedelta
 from unittest import mock
 
 from django.db import IntegrityError, connection
+from django.db.models import Max
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
+from dominial.models import Cartorios, Documento, Lancamento, LancamentoPessoa, Pessoas
 from ia_ocr import estados, services
 from ia_ocr.extracao_backends import ExtracaoBackendError, ResultadoExtracao
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
+from ia_ocr.revisao import pendencias
 
 from .factories import criar_job_concluido, criar_usuario
 from .payloads_extracao import PROVIDER, SCHEMA_VERSION, TEXTO_PAGINA_1, payload_registro
@@ -384,6 +387,62 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
                 self.job.refresh_from_db()
                 self.assertEqual(self.job.status, status)
                 self.assertFalse(self.job.transicoes.exists())
+
+
+@override_settings(**CONFIG_EXTRACAO)
+class ZeroEscritaTest(ExtracaoFixtureMixin, TestCase):
+    """Aceite da #262: extrair, revisar e finalizar não gravam no domínio."""
+
+    MODELOS = (Documento, Lancamento, LancamentoPessoa, Pessoas, Cartorios)
+
+    def _retrato(self):
+        contagens = {m.__name__: m.objects.count() for m in self.MODELOS}
+        maximos = {
+            m.__name__: m.objects.aggregate(maximo=Max('pk'))['maximo']
+            for m in (Documento, Lancamento)
+        }
+        return contagens, maximos
+
+    def assertRetratoIgual(self, antes, depois, etapa):
+        for tipo, (dict_antes, dict_depois) in zip(('count', 'Max(pk)'), zip(antes, depois)):
+            for nome, valor in dict_antes.items():
+                self.assertEqual(
+                    dict_depois[nome], valor,
+                    f'{nome}: {tipo} mudou de {valor} para {dict_depois[nome]} após {etapa}',
+                )
+
+    def test_zero_escrita_cinco_modelos(self):
+        antes = self._retrato()
+
+        extracao = services.solicitar_extracao(self.job, self.usuario)
+        self.assertRetratoIgual(antes, self._retrato(), 'solicitar_extracao')
+
+        services.salvar_bloco(
+            extracao, {'/document/numero': {'incluir': True, 'conferido': True}},
+            self.usuario, services.versao_bloco(extracao),
+        )
+        self.assertRetratoIgual(antes, self._retrato(), 'salvar_bloco')
+
+        if pendencias(extracao):
+            with self.assertRaises(services.RevisaoIncompleta):
+                services.finalizar_revisao(extracao, self.usuario)
+            self.assertRetratoIgual(antes, self._retrato(), 'finalizar_revisao recusada')
+            # Resolve tudo, inclusive `criar_novo` em cartório/partes, e finaliza.
+            decisoes = {}
+            for campo in extracao.campos.all():
+                decisao = {'incluir': True, 'conferido': True}
+                if campo.tipo_valor in ('cartorio', 'parte'):
+                    decisao['escolha'] = {'criar_novo': True}
+                decisoes[campo.chave] = decisao
+            services.salvar_bloco(
+                extracao, decisoes, self.usuario, services.versao_bloco(extracao),
+            )
+            self.assertEqual(pendencias(extracao), [])
+
+        finalizada = services.finalizar_revisao(extracao, self.usuario)
+
+        self.assertIsNotNone(finalizada.finalizada_em)
+        self.assertRetratoIgual(antes, self._retrato(), 'finalizar_revisao')
 
 
 @override_settings(**CONFIG_EXTRACAO)
