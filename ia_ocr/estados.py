@@ -2,8 +2,10 @@
 
 Estados (arquitetura.md §3 / fluxo.md §3):
 
-    pendente → em_execucao → concluido → texto_confirmado → extraido → revisado → importado
+    pendente → em_execucao → concluido → extraido → revisado → importado
                        └→ falhou → (retry manual) → pendente
+
+O caminho legado por texto_confirmado permanece válido fora do fluxo (#290).
 
 Toda transição é auditada em OcrJobTransicao, na mesma transação do UPDATE.
 """
@@ -36,7 +38,7 @@ TRANSICOES_VALIDAS = {
     PENDENTE: {EM_EXECUCAO},
     EM_EXECUCAO: {CONCLUIDO, FALHOU},
     FALHOU: {PENDENTE},
-    CONCLUIDO: {TEXTO_CONFIRMADO},
+    CONCLUIDO: {TEXTO_CONFIRMADO, EXTRAIDO},
     TEXTO_CONFIRMADO: {EXTRAIDO},
     EXTRAIDO: {REVISADO},
     REVISADO: {IMPORTADO},

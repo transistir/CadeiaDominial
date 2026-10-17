@@ -141,7 +141,7 @@ class OcrJob(models.Model):
                 # Pré-condição validada DEPOIS do CAS vencedor, dentro do
                 # atomic (sem TOCTOU): falha aqui → rollback do UPDATE.
                 self._validar_confirmacao_de_texto()
-            if de == TEXTO_CONFIRMADO and para == EXTRAIDO:
+            if de in {CONCLUIDO, TEXTO_CONFIRMADO} and para == EXTRAIDO:
                 self._validar_extracao()
             OcrJobTransicao.objects.create(
                 ocr_job_id=self.pk,
@@ -250,7 +250,7 @@ class OcrJob(models.Model):
 
 
     def _validar_extracao(self):
-        """texto_confirmado → extraido exige extração sugerida no job (I-5)."""
+        """Ambos os caminhos para extraido exigem extração sugerida no job."""
         if not self.extracoes.exists():
             raise TransicaoInvalida(
                 'Job sem extração sugerida: não há nada a revisar.',

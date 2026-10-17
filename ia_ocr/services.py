@@ -1,4 +1,4 @@
-"""Serviços da fila de OCR: criação idempotente, claim, reap e finalização.
+"""Serviços da fila de OCR e da extração estruturada.
 
 Nenhum log aqui carrega texto de documento ou dados do PDF (PII): apenas
 job_id, status, tentativa e códigos de erro estáveis. O que vem de fora
@@ -10,7 +10,7 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
@@ -19,9 +19,14 @@ from dominial.models import DocumentoDigital
 from . import estados
 from .backends import OcrBackendError, ResultadoOcr
 from .estados import TransicaoConcorrente
+from .extracao_backends import ResultadoExtracao, get_extracao_backend
+from .extracao_schema import validar_payload
 from .models import (
-    ORIGEM_CHOICES, OcrJob, OcrJobTransicao, PaginaOcr,
+    ORIGEM_CHOICES, CampoSugerido, ExtracaoSugerida, OcrJob, OcrJobTransicao, PaginaOcr,
     PendenciaLimpezaArquivo,
+)
+from .revisao import (
+    IndiceCartorios, IndicePessoas, desnormalizar, enriquecer_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,6 +151,178 @@ class TextoNaoEditavel(Exception):
 class EdicaoPendente(Exception):
     """Há página editada aguardando reconfirmação: o bulk não se aplica."""
     codigo = 'EDICAO_PENDENTE'
+
+
+class ExtracaoConcorrente(Exception):
+    """Reserva ocupada ou estado/extração vigente alterados (HTTP 409)."""
+
+    code = 'extracao_concorrente'
+
+
+class ExtracaoIndisponivel(Exception):
+    """Falha de processamento sem expor dados do serviço (HTTP 503)."""
+
+    code = 'extracao_indisponivel'
+
+
+class ExtracaoRecusada(Exception):
+    """Pré-condição local não satisfeita, identificada por código estável."""
+
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def _validar_solicitacao_extracao(job, extracao_id):
+    if job.status not in {estados.CONCLUIDO, estados.EXTRAIDO}:
+        raise ExtracaoRecusada('estado_invalido')
+    vigente = job.extracao_vigente()
+    vigente_id = vigente.pk if vigente is not None else None
+    if extracao_id is not None and str(extracao_id) != str(vigente_id):
+        raise ExtracaoConcorrente()
+    if (
+        job.extracao_reservada_ate is not None
+        and job.extracao_reservada_ate > timezone.now()
+    ):
+        raise ExtracaoConcorrente()
+    return vigente_id
+
+
+def _textos_corrigidos_extracao(envelope, numeros_paginas):
+    """Exige uma correção por página e DPI válido antes de persistir."""
+    if not isinstance(envelope, dict):
+        raise ExtracaoIndisponivel()
+    dpi = envelope.get('dpi')
+    if type(dpi) is not int or dpi <= 0:
+        raise ExtracaoIndisponivel()
+    paginas = envelope.get('paginas')
+    if not isinstance(paginas, list):
+        raise ExtracaoIndisponivel()
+    textos = {}
+    for pagina in paginas:
+        if not isinstance(pagina, dict):
+            raise ExtracaoIndisponivel()
+        numero = pagina.get('pagina')
+        texto = pagina.get('texto_corrigido')
+        if (
+            type(numero) is not int
+            or numero not in numeros_paginas
+            or numero in textos
+            or not isinstance(texto, str)
+        ):
+            raise ExtracaoIndisponivel()
+        textos[numero] = texto
+    if set(textos) != numeros_paginas:
+        raise ExtracaoIndisponivel()
+    return textos
+
+
+def solicitar_extracao(job, usuario, extracao_id=None) -> ExtracaoSugerida:
+    """Reserva → HTTP sem transação → persistência atômica da extração.
+
+    O chamador deve executar fora de uma transação abrangente. Reextrações
+    preservam as versões anteriores; a maior PK passa a ser a vigente.
+    """
+    atual = OcrJob.objects.get(pk=job.pk)
+    _validar_solicitacao_extracao(atual, extracao_id)
+    reserva = uuid.uuid4()
+    try:
+        # F1: relê as guardas sob trava e só mantém a reserva durante o HTTP.
+        with transaction.atomic():
+            travado = OcrJob.objects.select_for_update().get(pk=job.pk)
+            vigente_id = _validar_solicitacao_extracao(travado, extracao_id)
+            status_inicial = travado.status
+            paginas = list(travado.paginas.all())
+            if not paginas or any(pagina.texto_ocr is None for pagina in paginas):
+                raise ExtracaoRecusada('sem_texto_ocr')
+            documento = travado.documento_digital.documento
+            contexto = {
+                'cartorio': documento.cartorio.nome,
+                'municipio': documento.cartorio.cidade,
+                'dpi': travado.dpi or 200,
+            }
+            blocos = [
+                {'pagina': pagina.numero_pagina, 'blocks': pagina.blocos}
+                for pagina in paginas if pagina.blocos is not None
+            ]
+            if blocos:
+                contexto['blocos'] = blocos
+            requisicao = {
+                'schema_version': 'umbelino-extracao-matricula-v1',
+                'tipo_documento': documento.tipo.tipo,
+                'paginas': [
+                    {'pagina': pagina.numero_pagina, 'texto': pagina.texto_ocr}
+                    for pagina in paginas
+                ],
+                'contexto': contexto,
+            }
+            travado.extracao_reserva = reserva
+            travado.extracao_reservada_ate = timezone.now() + timedelta(
+                seconds=settings.EXTRACAO_HTTP_TIMEOUT_SECONDS + 30,
+            )
+            travado.save(update_fields=['extracao_reserva', 'extracao_reservada_ate'])
+
+        # F2: nenhuma transação aberta pelo serviço durante a chamada externa.
+        envelope = get_extracao_backend().extrair(requisicao)
+        if isinstance(envelope, ResultadoExtracao):
+            envelope = envelope.payload
+        numeros_paginas = {pagina.numero_pagina for pagina in paginas}
+        textos_corrigidos = _textos_corrigidos_extracao(envelope, numeros_paginas)
+        payload_servico = envelope['extracao']
+        validar_payload(payload_servico, travado.job_id, numeros_paginas)
+
+        # F3: respostas tardias não podem sobrescrever outra reserva/versão.
+        with transaction.atomic():
+            travado = OcrJob.objects.select_for_update().get(pk=job.pk)
+            vigente = travado.extracao_vigente()
+            if (
+                travado.extracao_reserva != reserva
+                or travado.status != status_inicial
+                or (vigente.pk if vigente is not None else None) != vigente_id
+            ):
+                raise ExtracaoConcorrente()
+            agora = timezone.now()
+            for pagina in paginas:
+                pagina.texto_corrigido = textos_corrigidos[pagina.numero_pagina]
+                pagina.corrigido_em = agora
+            PaginaOcr.objects.bulk_update(paginas, ['texto_corrigido', 'corrigido_em'])
+            payload = enriquecer_payload(
+                payload_servico, IndicePessoas(), IndiceCartorios(),
+            )
+            extracao = ExtracaoSugerida.objects.create(
+                ocr_job=travado,
+                payload_servico=payload_servico,
+                payload=payload,
+                schema_version=payload_servico['schema_version'],
+                provider=payload_servico['meta']['provider'],
+                solicitada_por=usuario,
+                finalizada_em=None,
+            )
+            CampoSugerido.objects.bulk_create(desnormalizar(extracao, payload, paginas))
+            travado.dpi = envelope['dpi']
+            travado.extracao_reserva = None
+            travado.extracao_reservada_ate = None
+            travado.save(update_fields=['dpi', 'extracao_reserva', 'extracao_reservada_ate'])
+            if status_inicial == estados.CONCLUIDO:
+                travado.transicionar(estados.EXTRAIDO, usuario=usuario)
+    except Exception as erro:
+        # Atomic separado: um rollback da F3 não deve restaurar a reserva.
+        with transaction.atomic():
+            OcrJob.objects.filter(pk=job.pk, extracao_reserva=reserva).update(
+                extracao_reserva=None, extracao_reservada_ate=None,
+            )
+        if isinstance(erro, (IntegrityError, TransicaoConcorrente)):
+            raise ExtracaoConcorrente() from None
+        if isinstance(erro, (ExtracaoRecusada, ExtracaoConcorrente, ExtracaoIndisponivel)):
+            raise
+        raise ExtracaoIndisponivel() from None
+
+    job.status = travado.status
+    job.dpi = travado.dpi
+    job.atualizado_em = travado.atualizado_em
+    job.extracao_reserva = None
+    job.extracao_reservada_ate = None
+    return extracao
 
 
 def registrar_pendencia_limpeza(
