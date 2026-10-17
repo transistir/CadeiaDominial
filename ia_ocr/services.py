@@ -5,6 +5,7 @@ job_id, status, tentativa e códigos de erro estáveis. O que vem de fora
 (backend) é sanitizado antes de virar log ou coluna.
 """
 
+import hashlib
 import logging
 import uuid
 from datetime import timedelta
@@ -26,7 +27,8 @@ from .models import (
     PendenciaLimpezaArquivo,
 )
 from .revisao import (
-    IndiceCartorios, IndicePessoas, desnormalizar, enriquecer_payload,
+    IndiceCartorios, IndicePessoas, aplicar_linha, desnormalizar,
+    enriquecer_payload, pendencias, versao_linha,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,6 +173,107 @@ class ExtracaoRecusada(Exception):
     def __init__(self, code):
         self.code = code
         super().__init__(code)
+
+
+class ConflitoVersao(Exception):
+    """O bloco mudou desde a leitura do cliente (HTTP 409)."""
+
+    code = 'conflito_versao'
+    chaves_afetadas: list[str]
+
+    def __init__(self, chaves_afetadas):
+        self.chaves_afetadas = list(chaves_afetadas)
+        super().__init__(self.code)
+
+
+class RevisaoIncompleta(Exception):
+    """Há pendências que impedem finalizar a revisão (HTTP 422)."""
+
+    code = 'revisao_incompleta'
+    pendencias: list[dict]
+
+    def __init__(self, pendencias):
+        self.pendencias = list(pendencias)
+        super().__init__(self.code)
+
+
+def versao_bloco(extracao) -> str:
+    """Hash das versões persistidas das linhas, ordenadas pela chave."""
+    versoes = ''.join(
+        versao_linha(campo) for campo in extracao.campos.order_by('chave')
+    )
+    return hashlib.sha256(versoes.encode('utf-8')).hexdigest()
+
+
+def _travar_extracao_revisao(extracao):
+    """Dentro de atomic, trava job antes da extração, como a reextração."""
+    job = OcrJob.objects.select_for_update().get(pk=extracao.ocr_job_id)
+    travada = ExtracaoSugerida.objects.select_for_update().get(
+        pk=extracao.pk, ocr_job=job,
+    )
+    vigente = job.extracao_vigente()
+    if vigente is None or vigente.pk != travada.pk:
+        raise ExtracaoRecusada('extracao_nao_vigente')
+    travada.ocr_job = job
+    return travada
+
+
+def salvar_bloco(extracao, decisoes, usuario, versao_cliente) -> ExtracaoSugerida:
+    """Persiste atomicamente decisões indexadas pela chave JSON Pointer."""
+    with transaction.atomic():
+        travada = _travar_extracao_revisao(extracao)
+        if travada.ocr_job.status != estados.EXTRAIDO:
+            raise ExtracaoRecusada('estado_invalido')
+        if travada.finalizada_em is not None:
+            raise ExtracaoRecusada('extracao_finalizada')
+
+        campos = {campo.chave: campo for campo in travada.campos.all()}
+        if any(chave not in campos for chave in decisoes):
+            raise ExtracaoRecusada('linha_inexistente')
+        if versao_cliente != versao_bloco(travada):
+            if all('versao' in decisao for decisao in decisoes.values()):
+                chaves = [
+                    chave for chave, decisao in decisoes.items()
+                    if versao_linha(campos[chave]) != decisao['versao']
+                ]
+            else:
+                chaves = list(decisoes)
+            raise ConflitoVersao(chaves)
+
+        for chave, decisao in decisoes.items():
+            campo = campos[chave]
+            argumentos = {
+                nome: decisao[nome] for nome in (
+                    'incluir', 'valor', 'conferido', 'escolha',
+                    'ha_convertido', 'confirmo_conversao',
+                ) if nome in decisao
+            }
+            aplicar_linha(campo, **argumentos, usuario=usuario, agora=timezone.now())
+            campo.save()
+    return travada
+
+
+def finalizar_revisao(extracao, usuario) -> ExtracaoSugerida:
+    """Finaliza a revisão vigente sem pendências e audita uma única transição."""
+    with transaction.atomic():
+        travada = _travar_extracao_revisao(extracao)
+        # Uma repetição chega com o job já revisado (ou importado).
+        if travada.finalizada_em is not None:
+            return travada
+        job = travada.ocr_job
+        if job.status != estados.EXTRAIDO:
+            raise ExtracaoRecusada('estado_invalido')
+        bloqueios = pendencias(travada)
+        if bloqueios:
+            raise RevisaoIncompleta(bloqueios)
+
+        travada.finalizada_em = timezone.now()
+        travada.finalizada_por = usuario
+        travada.save(update_fields=['finalizada_em', 'finalizada_por'])
+        job.transicionar(
+            estados.REVISADO, usuario=usuario, motivo='revisao_finalizada',
+        )
+    return travada
 
 
 def _validar_solicitacao_extracao(job, extracao_id):
