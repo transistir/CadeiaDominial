@@ -35,6 +35,9 @@ import hashlib
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 
 from django.utils import timezone
 
@@ -59,6 +62,193 @@ _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
 _TIPOS_NORMALIZAVEIS = ('data', 'decimal', 'area')
 
 _AREA_DE_ATO = re.compile(r'/acts/\d+/area')
+
+
+class RevisaoInvalidada(Exception):
+    """A extração não pode mais ser consumida como uma revisão concluída."""
+
+    code = 'revisao_invalida'
+
+
+@dataclass(frozen=True)
+class ParteRevisada:
+    papel: str
+    nome: str | None
+    cpf: str | None
+    rg: str | None
+    pessoa_id: int | None
+    criar_novo: bool
+
+
+@dataclass(frozen=True)
+class AtoRevisado:
+    ordem: int
+    tipo: str
+    numero_lancamento: str | None
+    data: date
+    valor: Decimal | None
+    moeda_historica: str | None
+    area: Decimal | None
+    titulo: str | None
+    forma: str | None
+    descricao: str | None
+    detalhes: str | None
+    observacoes: str | None
+    cartorio_origem_id: int | None
+    cartorio_transmissao_id: int | None
+    eh_inicio_matricula: bool | None
+    origem: dict | None
+    partes: tuple[ParteRevisada, ...]
+
+
+@dataclass(frozen=True)
+class DocumentoRevisado:
+    tipo: str
+    numero: str | None
+    data: date
+    cartorio_id: int | None
+    cri_atual_id: int | None
+    livro: str | None
+    folha: str | None
+
+
+@dataclass(frozen=True)
+class DadosRevisados:
+    documento: DocumentoRevisado
+    atos: tuple[AtoRevisado, ...]
+    conferencia: dict
+
+
+def dados_revisados(extracao) -> DadosRevisados:
+    """Lê a revisão vigente e finalizada, revalidando suas decisões atuais."""
+    job = extracao.ocr_job
+    if job.status != 'revisado':
+        raise RevisaoInvalidada('O job não está revisado.')
+    vigente = job.extracao_vigente()
+    if vigente is None or vigente.pk != extracao.pk:
+        raise RevisaoInvalidada('A extração não é a vigente.')
+    if extracao.finalizada_em is None:
+        raise RevisaoInvalidada('A extração não foi finalizada.')
+    if pendencias(extracao):
+        raise RevisaoInvalidada('A revisão possui pendências.')
+
+    linhas, atos = _contexto_revisao(extracao)
+
+    def valor(chave):
+        campo = linhas.get(chave)
+        if campo is None:
+            return None
+        return valores.para_python(campo.tipo_valor, _valor_efetivo(campo))
+
+    def cartorio_id(chave):
+        campo = linhas.get(chave)
+        if campo is None:
+            return None
+        if campo.cartorio_escolhido_id is not None:
+            return campo.cartorio_escolhido_id
+        if len(campo.match_candidatos) == 1:
+            return campo.match_candidatos[0]
+        return None
+
+    destinos_linhas = {}
+    conferencia = {}
+    for chave, campo in linhas.items():
+        contexto = [_valor_efetivo(campo)]
+        if chave.endswith('/documento_identificacao/valor'):
+            contexto.insert(0, valor(chave.rsplit('/', 1)[0] + '/tipo'))
+        destino = destinos.destino_de(chave, *contexto)
+        destinos_linhas[chave] = destino
+        if destino == destinos.SEM_DESTINO:
+            conferencia[chave] = _valor_efetivo(campo)
+
+    documento = DocumentoRevisado(
+        tipo=valor('/document/tipo'),
+        numero=valor('/document/numero'),
+        data=valor('/document/data'),
+        cartorio_id=cartorio_id('/document/cartorio'),
+        cri_atual_id=cartorio_id('/document/cri_atual'),
+        livro=valor('/document/livro'),
+        folha=valor('/document/folha'),
+    )
+
+    # Ordem e moeda são metadados do A3, sem linha editável própria.
+    payload = extracao.payload_servico or extracao.payload
+    atos_payload = payload.get('acts') or []
+    revisados = []
+    for ato in atos:
+        chave = ato.chave
+        indice = int(chave.rsplit('/', 1)[1])
+        metadados = atos_payload[indice] if indice < len(atos_payload) else {}
+        dinheiro = metadados.get('valor_transacao') or {}
+        origem_cartorio_id = cartorio_id(f'{chave}/origem/cartorio')
+        origem = None
+        if origem_cartorio_id is not None or any(
+            caminho.startswith(f'{chave}/origem/') for caminho in linhas
+        ):
+            origem = {
+                nome: valor(f'{chave}/origem/{nome}')
+                for nome in ('tipo_documento', 'numero', 'livro', 'folha', 'data')
+            }
+            origem['cartorio_id'] = origem_cartorio_id
+
+        partes = []
+        linhas_partes = sorted(
+            (campo for caminho, campo in linhas.items()
+             if re.fullmatch(rf'{chave}/partes/\d+', caminho)),
+            key=lambda campo: int(campo.chave.rsplit('/', 1)[1]),
+        )
+        for parte in linhas_partes:
+            papel = valor(parte.chave)
+            if papel not in destinos.PAPEIS_COM_DESTINO:
+                continue
+            identificacao = f'{parte.chave}/documento_identificacao/valor'
+            destino = destinos_linhas.get(identificacao)
+            partes.append(ParteRevisada(
+                papel=papel,
+                nome=valor(f'{parte.chave}/nome'),
+                cpf=(
+                    valor(identificacao)
+                    if destino and destino.campo == 'cpf' else None
+                ),
+                rg=(
+                    valor(identificacao)
+                    if destino and destino.campo == 'rg' else None
+                ),
+                pessoa_id=parte.pessoa_escolhida_id,
+                criar_novo=parte.criar_novo,
+            ))
+
+        revisado = AtoRevisado(
+            ordem=metadados.get('ordem', indice + 1),
+            tipo=valor(f'{chave}/tipo_sugerido'),
+            numero_lancamento=valor(f'{chave}/numero_lancamento'),
+            data=valor(f'{chave}/data'),
+            valor=valor(f'{chave}/valor_transacao'),
+            moeda_historica=(
+                dinheiro.get('moeda_historica')
+                if f'{chave}/valor_transacao' in linhas else None
+            ),
+            area=valor(f'{chave}/area'),
+            titulo=valor(f'{chave}/titulo'),
+            forma=valor(f'{chave}/forma'),
+            descricao=valor(f'{chave}/descricao'),
+            detalhes=valor(f'{chave}/detalhes'),
+            observacoes=valor(f'{chave}/observacoes'),
+            cartorio_origem_id=origem_cartorio_id,
+            cartorio_transmissao_id=cartorio_id(f'{chave}/cartorio_transmissao'),
+            eh_inicio_matricula=valor(f'{chave}/eh_inicio_matricula'),
+            origem=origem,
+            partes=tuple(partes),
+        )
+        revisados.append((revisado.ordem, indice, revisado))
+
+    return DadosRevisados(
+        documento=documento,
+        atos=tuple(
+            ato for _, _, ato in sorted(revisados, key=lambda item: item[:2])
+        ),
+        conferencia=conferencia,
+    )
 
 
 def versao_linha(campo) -> str:
