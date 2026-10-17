@@ -13,10 +13,13 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from dominial.models import Cartorios, LancamentoTipo, Pessoas
 from ia_ocr import valores
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
-from ia_ocr.revisao import aplicar_linha, desnormalizar, versao_linha
+from ia_ocr.revisao import (
+    aplicar_linha, avisos, desnormalizar, pendencias, versao_linha,
+)
 
 from .factories import criar_documento_digital
 from .payloads_extracao import (
@@ -268,6 +271,328 @@ class AplicarLinhaTest(SimpleTestCase):
         self.assertEqual(versao_linha(campo), esperado)
         self.assertEqual(versao_linha(campo), esperado)
         self.assertRegex(versao_linha(campo), r'^[0-9a-f]{16}$')
+
+
+class PendenciasEAvisosTest(TestCase):
+    def setUp(self):
+        self.job = OcrJob.objects.create(
+            documento_digital=criar_documento_digital()
+        )
+        self.pagina = PaginaOcr.objects.create(
+            ocr_job=self.job, numero_pagina=1, texto_ocr=TEXTO_PAGINA_1
+        )
+        self.registro = LancamentoTipo.objects.create(
+            tipo='registro', requer_titulo=True, requer_cartorio_origem=True,
+            requer_observacao=False,
+        )
+        self.averbacao = LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+        self.inicio = LancamentoTipo.objects.create(
+            tipo='inicio_matricula', requer_cartorio_origem=False,
+            requer_observacao=False,
+        )
+
+    def _persistir(self, payload):
+        self.extracao = ExtracaoSugerida.objects.create(
+            ocr_job=self.job, schema_version=SCHEMA_VERSION,
+            payload=payload, payload_servico=payload, provider='local-model',
+        )
+        linhas = desnormalizar(self.extracao, payload, [self.pagina])
+        for linha in linhas:
+            if linha.tipo_valor in ('parte', 'cartorio'):
+                linha.criar_novo = True
+        CampoSugerido.objects.bulk_create(linhas)
+        return {linha.chave: linha for linha in linhas}
+
+    def _registro_completo(self):
+        payload = payload_registro(self.job.job_id)
+        titulo = 'Escritura Pública de Compra e Venda'
+        payload['acts'][0]['titulo'] = {
+            'raw': titulo, 'normalized': titulo, 'confianca': 0.95,
+            'requer_revisao': False,
+            'evidencia': {'pagina': 1, 'trecho': titulo},
+        }
+        payload['acts'][0]['origem'] = {
+            'cartorio': payload['document']['cartorio'].copy(),
+        }
+        return payload
+
+    @staticmethod
+    def _obrigatorio(chave):
+        return {
+            'chave': chave, 'motivo': 'obrigatorio_ausente', 'bloqueante': True,
+        }
+
+    def test_obrigatorio_descartado_bloqueia(self):
+        linhas = self._persistir(self._registro_completo())
+        self.assertEqual(pendencias(self.extracao), [])
+        for chave in (
+            '/document/tipo', '/document/data', '/document/cartorio',
+            '/acts/0/tipo_sugerido', '/acts/0/data', '/acts/0/titulo',
+            '/acts/0/origem/cartorio',
+        ):
+            with self.subTest(chave=chave):
+                linha = linhas[chave]
+                linha.status_revisao = 'descartado'
+                linha.save()
+                self.assertEqual(
+                    pendencias(self.extracao), [self._obrigatorio(chave)]
+                )
+                linha.status_revisao = 'sugerido'
+                linha.save()
+
+    def test_data_nula_bloqueia(self):
+        for chave in ('/document/data', '/acts/0/data'):
+            with self.subTest(chave=chave):
+                payload = self._registro_completo()
+                ramo = payload['document'] if chave.startswith('/document') else (
+                    payload['acts'][0]
+                )
+                ramo['data']['normalized'] = None
+                linha = self._persistir(payload)[chave]
+                linha.status_revisao = 'aceito'
+                linha.save()
+                self.assertEqual(
+                    pendencias(self.extracao), [self._obrigatorio(chave)]
+                )
+
+                aplicar_linha(linha, incluir=True, valor='2020-01-11')
+                linha.save()
+                self.assertEqual(pendencias(self.extracao), [])
+
+                linha.valor_final = ''
+                linha.save()
+                self.assertIn(self._obrigatorio(chave), pendencias(self.extracao))
+
+                linha.normalized = '2020-01-11'
+                linha.valor_final = 'data inválida'
+                linha.save()
+                self.assertEqual(pendencias(self.extracao), [{
+                    'chave': chave, 'motivo': 'valor_incompativel_destino',
+                    'bloqueante': True,
+                }])
+
+    def test_registro_exige_titulo_e_cartorio_origem(self):
+        self._persistir(payload_registro(self.job.job_id))
+        self.assertCountEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/titulo'),
+            self._obrigatorio('/acts/0/origem/cartorio'),
+        ])
+        self._persistir(self._registro_completo())
+        self.assertEqual(pendencias(self.extracao), [])
+
+    def test_averbacao_exige_descricao(self):
+        for estado in ('ausente', 'vazio', 'descartado'):
+            with self.subTest(estado=estado):
+                payload = payload_averbacao(self.job.job_id)
+                if estado == 'ausente':
+                    del payload['acts'][0]['descricao']
+                elif estado == 'vazio':
+                    payload['acts'][0]['descricao']['normalized'] = ''
+                linhas = self._persistir(payload)
+                if estado == 'descartado':
+                    linha = linhas['/acts/0/descricao']
+                    linha.status_revisao = 'descartado'
+                    linha.save()
+                self.assertEqual(pendencias(self.extracao), [
+                    self._obrigatorio('/acts/0/descricao'),
+                ])
+
+    def test_inicio_matricula_exige_cartorio_origem(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['tipo_sugerido']['normalized'] = 'inicio_matricula'
+        self._persistir(payload)
+        for flag in (False, True):
+            with self.subTest(requer_cartorio_origem=flag):
+                self.inicio.requer_cartorio_origem = flag
+                self.inicio.save()
+                self.assertEqual(pendencias(self.extracao), [
+                    self._obrigatorio('/acts/0/origem/cartorio'),
+                ])
+        payload['acts'][0]['origem'] = {
+            'cartorio': payload['document']['cartorio'].copy(),
+        }
+        self._persistir(payload)
+        self.assertEqual(pendencias(self.extracao), [])
+
+    def test_tipo_editado_recalcula_obrigacoes(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['descricao'] = payload_averbacao(
+            self.job.job_id
+        )['acts'][0]['descricao']
+        linhas = self._persistir(payload)
+        self.assertCountEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/titulo'),
+            self._obrigatorio('/acts/0/origem/cartorio'),
+        ])
+        tipo = linhas['/acts/0/tipo_sugerido']
+        aplicar_linha(tipo, incluir=True, valor='averbacao')
+        tipo.save()
+        self.assertEqual(tipo.normalized, 'registro')
+        self.assertEqual(pendencias(self.extracao), [])
+
+        descricao = linhas['/acts/0/descricao']
+        aplicar_linha(descricao, incluir=True, valor='')
+        descricao.save()
+        self.assertEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/descricao'),
+        ])
+
+        aplicar_linha(tipo, incluir=True, valor='inicio_matricula')
+        tipo.save()
+        self.assertEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/origem/cartorio'),
+        ])
+
+    def test_requer_forma_e_observacao_sao_aviso_nao_bloqueio(self):
+        self.averbacao.requer_forma = True
+        self.averbacao.requer_observacao = True
+        self.averbacao.save()
+        payload = payload_averbacao(self.job.job_id)
+        self._persistir(payload)
+        esperados = [
+            {'chave': '/acts/0/forma', 'motivo': 'requer_forma',
+             'bloqueante': False},
+            {'chave': '/acts/0/observacoes', 'motivo': 'requer_observacao',
+             'bloqueante': False},
+        ]
+        self.assertCountEqual(avisos(self.extracao), esperados)
+        self.assertEqual(pendencias(self.extracao), [])
+
+        for flag, caminho in (
+            ('requer_detalhes', 'detalhes'),
+            ('requer_transmissao', 'partes'),
+            ('requer_livro_origem', 'origem/livro'),
+            ('requer_folha_origem', 'origem/folha'),
+            ('requer_data_origem', 'origem/data'),
+        ):
+            setattr(self.averbacao, flag, True)
+            esperados.append({
+                'chave': f'/acts/0/{caminho}', 'motivo': flag,
+                'bloqueante': False,
+            })
+        self.averbacao.save()
+        self.assertCountEqual(avisos(self.extracao), esperados)
+        self.assertEqual(pendencias(self.extracao), [])
+
+        ato = payload['acts'][0]
+        for campo in ('forma', 'detalhes', 'observacoes'):
+            ato[campo] = ato['descricao'].copy()
+        ato['origem'] = {
+            campo: payload['document'][campo].copy()
+            for campo in ('livro', 'folha', 'data')
+        }
+        ato['partes'] = payload_registro(self.job.job_id)['acts'][0]['partes']
+        linhas = self._persistir(payload)
+        self.assertEqual(avisos(self.extracao), [])
+        self.assertEqual(pendencias(self.extracao), [])
+
+        for papel in ('transmitente', 'adquirente'):
+            with self.subTest(papel=papel):
+                partes = self.extracao.campos.filter(
+                    tipo_valor='parte', normalized=papel,
+                )
+                partes.update(status_revisao='descartado')
+                self.assertEqual(avisos(self.extracao), [{
+                    'chave': '/acts/0/partes', 'motivo': 'requer_transmissao',
+                    'bloqueante': False,
+                }])
+                self.assertEqual(pendencias(self.extracao), [])
+                partes.update(status_revisao='sugerido')
+
+        forma = linhas['/acts/0/forma']
+        forma.status_revisao = 'descartado'
+        forma.save()
+        self.assertEqual(avisos(self.extracao), [esperados[0]])
+        tipo = linhas['/acts/0/tipo_sugerido']
+        aplicar_linha(tipo, incluir=True, valor='registro')
+        tipo.save()
+        self.assertEqual(avisos(self.extracao), [])
+
+    def test_ato_descartado_nao_gera_pendencias_filhas(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['data']['normalized'] = None
+        payload['acts'][0]['area']['unidade'] = 'm2'
+        payload['acts'].append(payload_averbacao(self.job.job_id)['acts'][0])
+        linhas = self._persistir(payload)
+        parte = linhas['/acts/0/partes/0']
+        parte.criar_novo = False
+        parte.requer_revisao = True
+        parte.motivos_revisao = ['match_invalidado']
+        parte.save()
+        nome = linhas['/acts/0/partes/0/nome']
+        nome.requer_revisao = True
+        nome.save()
+        for motivo in ('revisao_pendente', 'escolha_pendente', 'match_invalidado'):
+            self.assertIn({
+                'chave': parte.chave, 'motivo': motivo, 'bloqueante': True,
+            }, pendencias(self.extracao))
+        self.assertIn({
+            'chave': '/acts/0/area', 'motivo': 'unidade_area', 'bloqueante': True,
+        }, pendencias(self.extracao))
+
+        parte.status_revisao = 'descartado'
+        parte.save()
+        self.assertFalse(any(
+            item['chave'].startswith('/acts/0/partes/0')
+            for item in pendencias(self.extracao)
+        ))
+        ato = linhas['/acts/0']
+        ato.status_revisao = 'descartado'
+        ato.save()
+        self.registro.requer_forma = True
+        self.registro.save()
+        self.assertEqual(pendencias(self.extracao), [])
+        self.assertEqual(avisos(self.extracao), [])
+
+    def test_decisao_perdida_vira_pendencia(self):
+        for chave, atributo, registro in (
+            ('/acts/0/partes/0', 'pessoa_escolhida',
+             Pessoas.objects.create(nome='Pessoa sintética escolhida')),
+            ('/document/cartorio', 'cartorio_escolhido',
+             Cartorios.objects.create(
+                 nome='Cartório sintético escolhido', cns='CNS-escolhido',
+                 estado='SP',
+             )),
+        ):
+            with self.subTest(chave=chave):
+                linha = self._persistir(self._registro_completo())[chave]
+                linha.criar_novo = False
+                linha.save()
+                self.assertEqual(pendencias(self.extracao), [{
+                    'chave': chave, 'motivo': 'escolha_pendente',
+                    'bloqueante': True,
+                }])
+                setattr(linha, atributo, registro)
+                linha.status_revisao = 'aceito'
+                linha.save()
+                # Simula remoção concorrente após as linhas serem carregadas.
+                extracao = ExtracaoSugerida.objects.prefetch_related('campos').get(
+                    pk=self.extracao.pk
+                )
+                self.assertEqual(pendencias(extracao), [])
+                registro.delete()
+                self.assertEqual(pendencias(extracao), [{
+                    'chave': chave, 'motivo': 'decisao_perdida',
+                    'bloqueante': True,
+                }])
+
+    def test_nenhum_ato_incluido_bloqueia(self):
+        for sem_atos in (False, True):
+            with self.subTest(sem_atos=sem_atos):
+                payload = payload_registro(self.job.job_id)
+                if sem_atos:
+                    payload['acts'] = []
+                    payload['document'] = {}
+                self._persistir(payload)
+                self.extracao.campos.filter(tipo_valor='ato').update(
+                    status_revisao='descartado'
+                )
+                self.assertEqual(pendencias(self.extracao), [{
+                    'chave': '/acts', 'motivo': 'nenhum_ato', 'bloqueante': True,
+                }])
+                self.assertEqual(avisos(self.extracao), [])
 
 
 class DesnormalizarTest(TestCase):

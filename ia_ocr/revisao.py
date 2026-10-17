@@ -38,7 +38,7 @@ import unicodedata
 
 from django.utils import timezone
 
-from dominial.models import Cartorios, Pessoas
+from dominial.models import Cartorios, LancamentoTipo, Pessoas
 
 from . import destinos, valores
 from .models import CampoSugerido
@@ -152,6 +152,167 @@ def aplicar_linha(
         campo.revisado_por = usuario
         campo.revisado_em = agora if agora is not None else timezone.now()
     return campo
+
+
+def _valor_efetivo(campo):
+    return campo.valor_final if campo.valor_final is not None else campo.normalized
+
+
+def _contexto_revisao(extracao):
+    """Indexa as linhas incluídas, respeitando o descarte dos ancestrais."""
+    por_chave = {campo.chave: campo for campo in extracao.campos.all()}
+    incluidas = {}
+    for chave, campo in por_chave.items():
+        ancestral = chave
+        while ancestral:
+            linha = por_chave.get(ancestral)
+            if linha is not None and linha.status_revisao == 'descartado':
+                break
+            ancestral = ancestral.rsplit('/', 1)[0]
+        else:
+            incluidas[chave] = campo
+    atos = [campo for campo in incluidas.values() if campo.tipo_valor == 'ato']
+    return incluidas, atos
+
+
+def _campo_ausente(linhas, chave):
+    campo = linhas.get(chave)
+    if campo is None:
+        return True
+    valor = _valor_efetivo(campo)
+    return valor is None or (isinstance(valor, str) and not valor.strip())
+
+
+def _tipos_efetivos(linhas, atos):
+    tipos_por_ato = {
+        ato.chave: _valor_efetivo(linhas[f'{ato.chave}/tipo_sugerido'])
+        for ato in atos
+        if not _campo_ausente(linhas, f'{ato.chave}/tipo_sugerido')
+    }
+    configuracoes = {}
+    for tipo in LancamentoTipo.objects.filter(
+        tipo__in=set(tipos_por_ato.values())
+    ).order_by('pk'):
+        configuracoes.setdefault(tipo.tipo, tipo)
+    return tipos_por_ato, configuracoes
+
+
+def pendencias(extracao) -> list[dict]:
+    """Bloqueios das linhas incluídas e dos destinos obrigatórios ausentes."""
+    linhas, atos = _contexto_revisao(extracao)
+    if not atos:
+        return [{'chave': '/acts', 'motivo': 'nenhum_ato', 'bloqueante': True}]
+
+    resultado = []
+
+    def adicionar(chave, motivo):
+        resultado.append({'chave': chave, 'motivo': motivo, 'bloqueante': True})
+
+    escolhas = [
+        campo for campo in linhas.values()
+        if campo.tipo_valor in ('parte', 'cartorio')
+    ]
+    pessoas = set(Pessoas.objects.filter(
+        pk__in={campo.pessoa_escolhida_id for campo in escolhas
+                if campo.pessoa_escolhida_id}
+    ).values_list('pk', flat=True))
+    cartorios = set(Cartorios.objects.filter(
+        pk__in={campo.cartorio_escolhido_id for campo in escolhas
+                if campo.cartorio_escolhido_id}
+    ).values_list('pk', flat=True))
+
+    for campo in linhas.values():
+        if campo.requer_revisao and campo.status_revisao == 'sugerido':
+            adicionar(campo.chave, 'revisao_pendente')
+        if campo.tipo_valor in ('parte', 'cartorio'):
+            if not (
+                campo.pessoa_escolhida_id or campo.cartorio_escolhido_id
+                or campo.criar_novo
+            ):
+                adicionar(campo.chave, 'escolha_pendente')
+            elif (
+                campo.pessoa_escolhida_id
+                and campo.pessoa_escolhida_id not in pessoas
+            ) or (
+                campo.cartorio_escolhido_id
+                and campo.cartorio_escolhido_id not in cartorios
+            ):
+                adicionar(campo.chave, 'decisao_perdida')
+        if (
+            'match_invalidado' in campo.motivos_revisao
+            and campo.status_revisao == 'sugerido'
+        ):
+            adicionar(campo.chave, 'match_invalidado')
+        if (
+            campo.tipo_valor == 'area'
+            and _AREA_DE_ATO.fullmatch(campo.chave)
+            and MOTIVO_UNIDADE_AREA in campo.motivos_revisao
+            and not campo.area_convertida
+        ):
+            adicionar(campo.chave, MOTIVO_UNIDADE_AREA)
+        motivo = valores.validar_destino(
+            destinos.destino_de(campo.chave), _valor_efetivo(campo)
+        )
+        if motivo:
+            adicionar(campo.chave, motivo)
+
+    obrigatorios = [f'/document/{nome}' for nome in _OBRIGATORIOS_DOCUMENTO]
+    tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
+    for ato in atos:
+        obrigatorios.extend(f'{ato.chave}/{nome}' for nome in _OBRIGATORIOS_ATO)
+        tipo_efetivo = tipos_por_ato.get(ato.chave)
+        tipo = configuracoes.get(tipo_efetivo)
+        for flag, caminho in (
+            ('requer_titulo', 'titulo'),
+            ('requer_descricao', 'descricao'),
+        ):
+            if tipo is not None and getattr(tipo, flag):
+                obrigatorios.append(f'{ato.chave}/{caminho}')
+        if (
+            tipo_efetivo == 'inicio_matricula'
+            or (tipo is not None and tipo.requer_cartorio_origem)
+        ):
+            obrigatorios.append(f'{ato.chave}/origem/cartorio')
+    for chave in obrigatorios:
+        if _campo_ausente(linhas, chave):
+            adicionar(chave, 'obrigatorio_ausente')
+    return resultado
+
+
+def avisos(extracao) -> list[dict]:
+    """Campos recomendados pelo tipo efetivo; nunca impedem a revisão."""
+    linhas, atos = _contexto_revisao(extracao)
+    tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
+    resultado = []
+    for ato in atos:
+        tipo = configuracoes.get(tipos_por_ato.get(ato.chave))
+        if tipo is None:
+            continue
+        for flag, caminho in (
+            ('requer_forma', 'forma'),
+            ('requer_detalhes', 'detalhes'),
+            ('requer_observacao', 'observacoes'),
+            ('requer_livro_origem', 'origem/livro'),
+            ('requer_folha_origem', 'origem/folha'),
+            ('requer_data_origem', 'origem/data'),
+        ):
+            chave = f'{ato.chave}/{caminho}'
+            if getattr(tipo, flag) and _campo_ausente(linhas, chave):
+                resultado.append({
+                    'chave': chave, 'motivo': flag, 'bloqueante': False,
+                })
+        if tipo.requer_transmissao:
+            papeis = {
+                _valor_efetivo(campo) for campo in linhas.values()
+                if campo.tipo_valor == 'parte'
+                and campo.chave.startswith(f'{ato.chave}/partes/')
+            }
+            if not {'transmitente', 'adquirente'} <= papeis:
+                resultado.append({
+                    'chave': f'{ato.chave}/partes',
+                    'motivo': 'requer_transmissao', 'bloqueante': False,
+                })
+    return resultado
 
 
 def desnormalizar(extracao, payload, paginas) -> list[CampoSugerido]:
