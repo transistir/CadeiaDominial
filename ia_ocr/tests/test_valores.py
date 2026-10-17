@@ -13,12 +13,15 @@ from django.test import SimpleTestCase
 
 from dominial.models import Lancamento
 
+from ia_ocr.destinos import SEM_DESTINO, destino_de
 from ia_ocr.valores import (
+    MOTIVO_INCOMPATIVEL,
     ErroInterno,
     ValorInvalido,
     do_formulario,
     do_payload,
     para_python,
+    validar_destino,
 )
 
 # Destinos reais: DecimalField(max_digits=10, decimal_places=2)
@@ -140,3 +143,91 @@ class Tipos(SimpleTestCase):
         """Texto canônico do formulário relê como Decimal no alvo Django."""
         canonico = do_formulario('decimal', '99,99', VALOR_TRANSACAO)
         self.assertEqual(para_python('decimal', canonico), Decimal('99.99'))
+
+
+class PorDestino(SimpleTestCase):
+    """do_formulario recebe `Destino | SEM_DESTINO` (§2.A, item 5)."""
+
+    def test_area_do_destino(self):
+        """12,4 de Lancamento.area, resolvido por destino_de."""
+        destino = destino_de('/acts/0/area')
+        self.assertEqual(do_formulario('area', '1234,5678', destino),
+                         '1234.5678')
+        with self.assertRaises(ValorInvalido):
+            do_formulario('area', '1.99999', destino)  # 5 casas > 4
+        with self.assertRaises(ValorInvalido):
+            do_formulario('area', '999999999.9999', destino)  # 13 dígitos > 12
+
+    def test_area_sem_destino_20_4(self):
+        self.assertEqual(
+            do_formulario('area', '1.2345', SEM_DESTINO), '1.2345'
+        )
+        self.assertEqual(
+            do_formulario('area', '1' * 20, SEM_DESTINO), '1' * 20
+        )
+        with self.assertRaises(ValorInvalido):
+            do_formulario('area', '1' * 21, SEM_DESTINO)
+        with self.assertRaises(ValorInvalido):
+            do_formulario('area', '1.99999', SEM_DESTINO)
+
+    def test_sem_destino_texto_limite_10k(self):
+        self.assertEqual(
+            do_formulario('texto', 'x' * 10_000, SEM_DESTINO), 'x' * 10_000
+        )
+        with self.assertRaises(ValorInvalido):
+            do_formulario('texto', 'x' * 10_001, SEM_DESTINO)
+
+    def test_decimal_do_destino_valor_transacao(self):
+        destino = destino_de('/acts/0/valor_transacao')
+        self.assertEqual(
+            do_formulario('decimal', '99999999.99', destino), '99999999.99'
+        )
+        with self.assertRaises(ValorInvalido):
+            do_formulario('decimal', '999999999.99', destino)
+
+    def test_texto_do_destino_titulo(self):
+        destino = destino_de('/acts/0/titulo')
+        self.assertEqual(do_formulario('texto', 'x' * 255, destino), 'x' * 255)
+        with self.assertRaises(ValorInvalido):
+            do_formulario('texto', 'x' * 256, destino)
+
+
+class ValidarDestino(SimpleTestCase):
+    """Naturais incompatíveis com o destino → motivo (§18)."""
+
+    def test_validar_destino_data_em_campo_texto(self):
+        campo = destino_de('/acts/0/titulo')  # texto
+        self.assertEqual(
+            validar_destino(campo, datetime.date(2024, 1, 1)),
+            MOTIVO_INCOMPATIVEL,
+        )
+        self.assertEqual(
+            validar_destino(SEM_DESTINO, datetime.date(2024, 1, 1)),
+            MOTIVO_INCOMPATIVEL,
+        )
+
+    def test_compatibles_retornam_none(self):
+        campo = destino_de('/acts/0/titulo')
+        self.assertIsNone(validar_destino(campo, 'texto comum'))
+        self.assertIsNone(validar_destino(campo, None))
+
+        decimal_campo = destino_de('/acts/0/valor_transacao')
+        self.assertIsNone(validar_destino(decimal_campo, Decimal('1.5')))
+        self.assertIsNone(validar_destino(decimal_campo, Decimal('0')))
+
+        data_campo = destino_de('/acts/0/data')
+        self.assertIsNone(validar_destino(data_campo, '2024-02-29'))
+        self.assertEqual(
+            validar_destino(data_campo, '31/12/2024'), MOTIVO_INCOMPATIVEL
+        )
+        self.assertEqual(
+            validar_destino(data_campo, '2024-02-30'), MOTIVO_INCOMPATIVEL
+        )
+
+        booleano_campo = destino_de('/acts/0/eh_inicio_matricula')
+        self.assertIsNone(validar_destino(booleano_campo, 'true'))
+        self.assertIsNone(validar_destino(booleano_campo, 'false'))
+        self.assertIsNone(validar_destino(booleano_campo, True))
+        self.assertEqual(
+            validar_destino(booleano_campo, 'sim'), MOTIVO_INCOMPATIVEL
+        )

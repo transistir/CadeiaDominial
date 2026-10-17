@@ -18,6 +18,10 @@ from decimal import Decimal, InvalidOperation
 # Texto livre sem destino: o mesmo limite anti-lixo da validação de payload.
 LIMITE_TEXTO = 10_000
 
+# Motivo estável de pendência: tipo do valor não aceito pelo destino.
+MOTIVO_INCOMPATIVEL = 'valor_incompativel_destino'
+_INCOMPATIVEL = MOTIVO_INCOMPATIVEL
+
 _DATA_ESTRITA = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
@@ -51,11 +55,12 @@ def do_payload(tipo, valor):
 def do_formulario(tipo, texto, destino=None):
     """Texto digitado no formulário → texto canônico, ou ``ValorInvalido``.
 
-    ``destino`` é o Field Django alvo (ex.:
-    ``Lancamento._meta.get_field('valor_transacao')``) — de onde vêm
-    ``max_length`` (texto) e ``max_digits``/``decimal_places`` (decimal).
-    ``destino=None`` usa o limite de texto livre (10 000 chars) e não
-    restringe enum. Texto vazio/``None`` é o canônico de ``null``.
+    ``destino`` vem de ``destinos.destino_de()``: ``Destino`` (objetos
+    com ``max_length``/``max_digits``/``decimal_places`` como o Field
+    Django alvo) ou ``SEM_DESTINO`` — de onde vêm os limites.
+
+    ``tipo='area'`` é decimal (``Lancamento.area`` ≡ 12,4; SEM_DESTINO
+    ≡ 20,4). Texto vazio/``None`` é o canônico de ``null``.
     """
     if texto is None:
         return ''
@@ -68,7 +73,7 @@ def do_formulario(tipo, texto, destino=None):
 
     if tipo == 'data':
         _validar_data(texto)
-    elif tipo == 'decimal':
+    elif tipo in ('decimal', 'area'):
         return _texto_decimal(texto, destino)
     elif tipo == 'texto':
         limite = _max_length_do_destino(destino)
@@ -107,7 +112,7 @@ def para_python(tipo, texto):
     if tipo == 'data':
         _validar_data(texto)
         return datetime.date.fromisoformat(texto)
-    if tipo == 'decimal':
+    if tipo in ('decimal', 'area'):
         try:
             return Decimal(texto)
         except InvalidOperation:
@@ -123,6 +128,44 @@ def para_python(tipo, texto):
             "booleano gravado fora do canônico ('true'/'false')"
         )
     return texto
+
+
+def validar_destino(campo, valor_efetivo):
+    """O valor efetivo é compatível com o destino? Sinônimos: motivo.
+
+    ``campo`` é o destino da linha (``Destino``/``SEM_DESTINO`` ou o
+    Field Django alvo, ambos expondo ``tipo_valor`` e os limites).
+    Retorna ``'valor_incompativel_destino'`` quando o valor é de uma
+    natureza que o destino não aceita — a pendência independe de
+    "conferido" (§18) — ou ``None`` quando cabe.
+
+    Usado por ``desnormalizar`` e por ``pendencias``; limites (tamanho/
+    dígitos) NOT são alvo aqui — quem checa é ``do_formulario``.
+    """
+    if valor_efetivo is None:
+        return None
+    tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
+    if isinstance(valor_efetivo, bool):
+        return None if tipo_valor == 'booleano' else _INCOMPATIVEL
+    if isinstance(valor_efetivo, datetime.date):
+        return None if tipo_valor == 'data' else _INCOMPATIVEL
+    if isinstance(valor_efetivo, Decimal):
+        return None if tipo_valor in ('decimal', 'area') else _INCOMPATIVEL
+    if not isinstance(valor_efetivo, str):
+        return _INCOMPATIVEL
+
+    if tipo_valor == 'data':
+        try:
+            _validar_data(valor_efetivo)
+        except ValorInvalido:
+            return _INCOMPATIVEL
+        return None
+    if tipo_valor == 'booleano':
+        return None if valor_efetivo in ('true', 'false') else _INCOMPATIVEL
+    choices = getattr(campo, 'choices', None)
+    if choices and valor_efetivo not in {c[0] for c in choices}:
+        return _INCOMPATIVEL
+    return None
 
 
 def _validar_data(texto):
