@@ -127,18 +127,35 @@ def _placeholders_documento(extracao, document):
     ]
 
 
+def _valor_do_payload(tipo, valor):
+    """Valor do A3 → campo do modelo preservando ``None``.
+
+    ``valores.do_payload`` converte ``None`` em ``''``, o que perderia a
+    distinção entre "não normalizado" e "vazio" (``raw``/``normalized``
+    aceitam NULL no modelo): ``None`` permanece ``None`` e só
+    ``str``/``bool`` passam pelo codec.
+    """
+    if valor is None:
+        return None
+    return valores.do_payload(tipo, valor)
+
+
 def _de_campo(extracao, ponteiro, campo, texto_paginas):
     """Linha de uma folha editável, com tipos/motivos do §18."""
     tipo_valor = destinos.destino_de(ponteiro).tipo_valor
     motivos = []
 
-    normalized = valores.do_payload(tipo_valor, campo.get('normalized'))
+    normalized = _valor_do_payload(tipo_valor, campo.get('normalized'))
     if tipo_valor in _TIPOS_NORMALIZAVEIS:
-        try:
-            valores.para_python(tipo_valor, normalized)
-        except valores.ValorInvalido:
+        if normalized is None:
+            # Não normalizado (null) ≠ vazio: sem canônico, há pendência.
             motivos.append(MOTIVO_NORMALIZACAO_INVALIDA)
-            normalized = None
+        else:
+            try:
+                valores.para_python(tipo_valor, normalized)
+            except valores.ValorInvalido:
+                motivos.append(MOTIVO_NORMALIZACAO_INVALIDA)
+                normalized = None
     if _AREA_DE_ATO.fullmatch(ponteiro) and campo.get('unidade') != 'ha':
         motivos.append(MOTIVO_UNIDADE_AREA)
 
@@ -153,7 +170,7 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
     return CampoSugerido(
         extracao=extracao,
         chave=ponteiro,
-        raw=valores.do_payload(tipo_valor, campo.get('raw')),
+        raw=_valor_do_payload(tipo_valor, campo.get('raw')),
         normalized=normalized,
         tipo_valor=tipo_valor,
         confianca=confianca,
@@ -176,7 +193,7 @@ def _de_ato(extracao, ponteiro, ato, texto_paginas):
         extracao=extracao,
         chave=ponteiro,
         raw=None,
-        normalized=valores.do_payload('ato', rotulo.get('normalized')),
+        normalized=_valor_do_payload('ato', rotulo.get('normalized')),
         tipo_valor='ato',
         confianca=confianca,
         requer_revisao=bool(ato.get('requer_revisao')) or bool(motivos),

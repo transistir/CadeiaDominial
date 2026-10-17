@@ -231,3 +231,37 @@ class DesnormalizarTest(TestCase):
         self.assertEqual(nula.evidencia_trecho, '')
         self.assertNotIn('evidencia_invalida', nula.motivos_revisao)
         self.assertNotIn('trecho_ausente', nula.motivos_revisao)
+
+    def test_normalized_null_permanece_null(self):
+        payload = payload_registro(self.job.job_id)
+        payload['document']['data']['normalized'] = None
+
+        data = self._por_chave(self._linhas(payload))['/document/data']
+
+        # null ≠ vazio: o campo fica None, não '', e a pendência é explícita.
+        self.assertIsNone(data.normalized)
+        self.assertTrue(data.requer_revisao)
+        self.assertIn('normalizacao_invalida', data.motivos_revisao)
+        self.assertEqual(data.raw, '10 de janeiro de 2020')  # raw preservado
+
+    def test_unidade_area(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['area']['unidade'] = 'm2'
+
+        area = self._por_chave(self._linhas(payload))['/acts/0/area']
+
+        self.assertIn('unidade_area', area.motivos_revisao)
+        self.assertTrue(area.requer_revisao)
+        # O valor canônico permanece: converter unidade é decisão humana.
+        self.assertEqual(area.normalized, '12.50')
+
+    def test_normalizacao_invalida_em_decimal(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['valor_transacao']['normalized'] = 'abc'
+
+        valor = self._por_chave(self._linhas(payload))['/acts/0/valor_transacao']
+
+        self.assertIsNone(valor.normalized)
+        self.assertTrue(valor.requer_revisao)
+        self.assertIn('normalizacao_invalida', valor.motivos_revisao)
+        self.assertEqual(valor.raw, 'R$ 150.000,00')  # raw preservado
