@@ -255,7 +255,8 @@ class StrSemNomeDoArquivoTest(TestCase):
             ocr_job=job, numero_pagina=3, texto_ocr='texto sintético'
         )
         ExtracaoSugerida.objects.create(
-            ocr_job=job, schema_version='v1', payload={}, provider='sintetico'
+            ocr_job=job, schema_version='v1', payload={},
+            payload_servico={}, provider='sintetico',  # I-5: payload_servico NOT NULL
         )
         OcrJobTransicao.objects.create(
             ocr_job=job,

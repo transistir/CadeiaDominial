@@ -2,13 +2,15 @@ import uuid
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import transaction
 from django.db import models
+from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .estados import (
-    CONCLUIDO, EM_EXECUCAO, FALHOU, PENDENTE, STATUS_CHOICES, TEXTO_CONFIRMADO,
-    TRANSICOES_VALIDAS, TransicaoConcorrente, TransicaoInvalida,
+    CONCLUIDO, EM_EXECUCAO, EXTRAIDO, FALHOU, PENDENTE, STATUS_CHOICES,
+    TEXTO_CONFIRMADO, TRANSICOES_VALIDAS, TransicaoConcorrente,
+    TransicaoInvalida,
 )
 
 ORIGEM_CHOICES = [
@@ -50,6 +52,10 @@ class OcrJob(models.Model):
     tentativa = models.PositiveIntegerField(default=1)
     forcar_ocr = models.BooleanField(default=False)
     lease_expira_em = models.DateTimeField(null=True, blank=True, db_index=True)
+    # Reserva da fase de extração (I-5): o serviço de extração segura o job
+    # por um intervalo curto sem correr risco de dois extratores simultâneos.
+    extracao_reserva = models.UUIDField(null=True, blank=True)
+    extracao_reservada_ate = models.DateTimeField(null=True, blank=True)
     erro_codigo = models.CharField(max_length=100, blank=True)
     erro_mensagem = models.TextField(blank=True)
     sha256_pdf = models.CharField(max_length=64, blank=True)
@@ -131,6 +137,8 @@ class OcrJob(models.Model):
                 # Pré-condição validada DEPOIS do CAS vencedor, dentro do
                 # atomic (sem TOCTOU): falha aqui → rollback do UPDATE.
                 self._validar_confirmacao_de_texto()
+            if de == TEXTO_CONFIRMADO and para == EXTRAIDO:
+                self._validar_extracao()
             OcrJobTransicao.objects.create(
                 ocr_job_id=self.pk,
                 de_status=de,
@@ -237,6 +245,19 @@ class OcrJob(models.Model):
             )
 
 
+    def _validar_extracao(self):
+        """texto_confirmado → extraido exige extração sugerida no job (I-5)."""
+        if not self.extracoes.exists():
+            raise TransicaoInvalida(
+                'Job sem extração sugerida: não há nada a revisar.',
+                code='sem_extracao',
+            )
+
+    def extracao_vigente(self):
+        """A extração mais recente do job (nenhuma: None)."""
+        return self.extracoes.order_by('-id').first()
+
+
 class PaginaOcr(models.Model):
     ocr_job = models.ForeignKey(
         OcrJob, on_delete=models.CASCADE, related_name='paginas'
@@ -300,6 +321,19 @@ class PaginaOcr(models.Model):
         )
 
 
+TIPO_VALOR_CHOICES = [
+    ('texto', 'Texto'),
+    ('data', 'Data'),
+    ('decimal', 'Decimal'),
+    ('area', 'Área'),
+    ('booleano', 'Booleano'),
+    ('enum', 'Enum'),
+    ('cartorio', 'Cartório'),
+    ('parte', 'Parte'),
+    ('ato', 'Ato'),
+]
+
+
 class ExtracaoSugerida(models.Model):
     ocr_job = models.ForeignKey(
         OcrJob, on_delete=models.CASCADE, related_name='extracoes'
@@ -307,11 +341,34 @@ class ExtracaoSugerida(models.Model):
     schema_version = models.CharField(max_length=50)
     payload = models.JSONField()
     provider = models.CharField(max_length=100)
+    # Cópia do payload conforme devolvido pelo serviço de extração: o
+    # desdobramento em CampoSugerido parte dela, não do payload bruto.
+    payload_servico = models.JSONField()
+    solicitada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='+',
+    )
+    finalizada_em = models.DateTimeField(null=True, blank=True)
+    finalizada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='+',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = 'Extração sugerida'
         verbose_name_plural = 'Extrações sugeridas'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ocr_job'],
+                condition=Q(finalizada_em__isnull=False),
+                name='uniq_extracao_finalizada_por_job',
+            ),
+        ]
 
     def __str__(self):
         return f'Extração {self.schema_version} do job {self.ocr_job_id}'
@@ -322,13 +379,34 @@ class CampoSugerido(models.Model):
         ExtracaoSugerida, on_delete=models.CASCADE, related_name='campos'
     )
     chave = models.CharField(max_length=255)
-    raw = models.TextField()
-    normalized = models.TextField()
+    raw = models.TextField(null=True, blank=True)
+    normalized = models.TextField(null=True, blank=True)
+    tipo_valor = models.CharField(
+        max_length=20, choices=TIPO_VALOR_CHOICES, default='texto'
+    )
     confianca = models.FloatField(
         null=True, blank=True,
         validators=[MinValueValidator(0), MaxValueValidator(1)],
     )
     requer_revisao = models.BooleanField(default=False)
+    motivos_revisao = models.JSONField(default=list, blank=True)
+    match_candidatos = models.JSONField(default=list, blank=True)
+    pessoa_escolhida = models.ForeignKey(
+        'dominial.Pessoas',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    cartorio_escolhido = models.ForeignKey(
+        'dominial.Cartorios',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    criar_novo = models.BooleanField(default=False)
+    area_convertida = models.BooleanField(default=False)
     evidencia_pagina = models.PositiveIntegerField(null=True, blank=True)
     evidencia_trecho = models.TextField(blank=True)
     status_revisao = models.CharField(
@@ -347,6 +425,12 @@ class CampoSugerido(models.Model):
     class Meta:
         verbose_name = 'Campo sugerido'
         verbose_name_plural = 'Campos sugeridos'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['extracao', 'chave'],
+                name='uniq_campo_por_extracao_chave',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.chave} ({self.get_status_revisao_display()})"

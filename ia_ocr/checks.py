@@ -6,12 +6,23 @@ operando sem serviço configurado. O mesmo gatilho vale para a validação
 de lease do worker (`process_ocr_queue`), que reaproveita os helpers daqui.
 """
 
+import json
+
 from django.conf import settings
 from django.core import checks
 
+from ia_ocr.extracao_schema import SCHEMA_PATH
+
 CAMINHO_BACKEND_REAL = 'ia_ocr.backends.OcrServiceBackend'
+# Default de EXTRACAO_BACKEND (D3 cria o módulo): nunca opinar com ele.
+CAMINHO_BACKEND_STUB_EXTRACAO = 'ia_ocr.extracao_backends.StubExtracaoBackend'
 TETO_PAGINAS_SERVICO = 100
 TETO_BYTES_SERVICO = 52_428_800
+
+# Faixa viável de um timeout HTTP SÍNCRONO dentro do request web: o gunicorn
+# encerra o worker em 300 s — o chamada inteira tem de caber antes disso.
+MIN_TIMEOUT_EXTRACAO_SECONDS = 10
+MAX_TIMEOUT_EXTRACAO_SECONDS = 240
 
 
 def backend_real():
@@ -134,5 +145,96 @@ def conferir_configuracao_ocr(app_configs=None, **kwargs):
             hint='Use OCR_POLL_INTERVAL_SECONDS entre 5 e 10.',
             id='ia_ocr.W001',
         ))
+
+    return erros
+
+
+def backend_extracao_real():
+    """True quando EXTRACAO_BACKEND não é o stub (nada a validar aqui)."""
+    return (
+        getattr(settings, 'EXTRACAO_BACKEND', CAMINHO_BACKEND_STUB_EXTRACAO)
+        != CAMINHO_BACKEND_STUB_EXTRACAO
+    )
+
+
+def schema_vendorizado():
+    """O schema A3 do contrato de extração (ia_ocr/schemas/)."""
+    with open(SCHEMA_PATH, encoding='utf-8') as arquivo:
+        return json.load(arquivo)
+
+
+def conferir_configuracao_extracao(app_configs=None, **kwargs):
+    """Configuração da extração estruturada (I-5).
+
+    Só opina com backend real (não-stub): o stub é o default de
+    desenvolvimento e não fala com serviço nenhum.
+    """
+    if not backend_extracao_real():
+        return []
+
+    erros = []
+
+    if not settings.EXTRACAO_SERVICE_URL:
+        erros.append(checks.Error(
+            'EXTRACAO_SERVICE_URL não configurada: o backend configurado '
+            'em EXTRACAO_BACKEND exige a URL do serviço de extração.',
+            hint='Defina EXTRACAO_SERVICE_URL no ambiente do web.',
+            id='ia_ocr.E010',
+        ))
+
+    if not settings.EXTRACAO_INTERNAL_TOKEN:
+        erros.append(checks.Error(
+            'EXTRACAO_INTERNAL_TOKEN vazio: o serviço de extração responde '
+            '401 sem o cabeçalho X-Internal-Token.',
+            hint='Defina EXTRACAO_INTERNAL_TOKEN no ambiente do web.',
+            id='ia_ocr.E011',
+        ))
+
+    timeout = settings.EXTRACAO_HTTP_TIMEOUT_SECONDS
+    if not (
+        MIN_TIMEOUT_EXTRACAO_SECONDS
+        <= timeout
+        <= MAX_TIMEOUT_EXTRACAO_SECONDS
+    ):
+        erros.append(checks.Error(
+            f'EXTRACAO_HTTP_TIMEOUT_SECONDS ({timeout}) fora da faixa viável '
+            f'de {MIN_TIMEOUT_EXTRACAO_SECONDS} a '
+            f'{MAX_TIMEOUT_EXTRACAO_SECONDS} s: a chamada de extração é '
+            'síncrona dentro do request web e o gunicorn encerra o worker '
+            'em 300 s — com timeout acima, o request morre no worker antes '
+            'do próprio timeout do HTTP.',
+            hint=(
+                f'Use EXTRACAO_HTTP_TIMEOUT_SECONDS entre '
+                f'{MIN_TIMEOUT_EXTRACAO_SECONDS} e '
+                f'{MAX_TIMEOUT_EXTRACAO_SECONDS}.'
+            ),
+            id='ia_ocr.E012',
+        ))
+
+    try:
+        import jsonschema
+    except ImportError:
+        erros.append(checks.Error(
+            'jsonschema não está instalado: a validação do payload de '
+            'extração contra o schema A3 depende dele '
+            '(requirements.txt pina a versão)',
+            hint='Instale as dependências de requirements.txt.',
+            id='ia_ocr.E013',
+        ))
+    else:
+        try:
+            jsonschema.validators.validator_for(
+                schema_vendorizado()
+            ).check_schema(schema_vendorizado())
+        except jsonschema.exceptions.SchemaError as erro:
+            erros.append(checks.Error(
+                f'O schema vendorizado de extração ({SCHEMA_PATH.name}) '
+                f'violou o meta-schema: {erro.message}.',
+                hint=(
+                    'Não edite o schema à mão: ele é o contrato byte a '
+                    'byte com o serviço de extração.'
+                ),
+                id='ia_ocr.E014',
+            ))
 
     return erros

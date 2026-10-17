@@ -199,3 +199,23 @@ OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA = int(
     os.environ.get('OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA', '200')
 )
 OCR_DPI = int(os.environ.get('OCR_DPI', '200'))
+
+# ─── IA/Extração estruturada (issue #262 / I-5) ────────────────────
+# Chamada SÍNCRONA do web para o serviço de extração (os checks da ia_ocr
+# opinam só com um backend real — o default abaixo é o stub da D3).
+EXTRACAO_BACKEND = os.environ.get(
+    'EXTRACAO_BACKEND', 'ia_ocr.extracao_backends.StubExtracaoBackend'
+)
+EXTRACAO_SERVICE_URL = os.environ.get('EXTRACAO_SERVICE_URL', '')
+EXTRACAO_INTERNAL_TOKEN = os.environ.get('EXTRACAO_INTERNAL_TOKEN', '')
+EXTRACAO_ACCESS_CLIENT_ID = os.environ.get('EXTRACAO_ACCESS_CLIENT_ID', '')
+EXTRACAO_ACCESS_SECRET = os.environ.get('EXTRACAO_ACCESS_SECRET', '')
+EXTRACAO_HTTP_TIMEOUT_SECONDS = float(
+    os.environ.get('EXTRACAO_HTTP_TIMEOUT_SECONDS', '120')
+)
+EXTRACAO_MAX_BYTES_REQUISICAO = int(
+    os.environ.get('EXTRACAO_MAX_BYTES_REQUISICAO', str(2 * 1024 * 1024))
+)
+EXTRACAO_MAX_BYTES_RESPOSTA = int(
+    os.environ.get('EXTRACAO_MAX_BYTES_RESPOSTA', str(5 * 1024 * 1024))
+)

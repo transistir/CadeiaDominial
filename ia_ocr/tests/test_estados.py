@@ -10,7 +10,7 @@ from ia_ocr import estados
 from ia_ocr.estados import (
     TransicaoConcorrente, TransicaoInvalida, TRANSICOES_VALIDAS,
 )
-from ia_ocr.models import OcrJob, OcrJobTransicao, PaginaOcr
+from ia_ocr.models import ExtracaoSugerida, OcrJob, OcrJobTransicao, PaginaOcr
 from ia_ocr.services import claim_proximo_job, criar_job, reap_jobs_expirados
 
 from .factories import criar_documento_digital, criar_usuario
@@ -45,6 +45,15 @@ class TransicoesValidasTest(TestCase):
                         texto_ocr='texto sintético',
                         confirmado_por=self.usuario,
                         confirmado_em=timezone.now(),
+                    )
+                if para == estados.EXTRAIDO:
+                    # Pré-condição: extração sugerida registrada (I-5).
+                    ExtracaoSugerida.objects.create(
+                        ocr_job=self.job,
+                        schema_version='umbelino-extracao-matricula-v1',
+                        payload={},
+                        payload_servico={},
+                        provider='stub',
                     )
                 self.assertTrue(self.job.transicionar(para, usuario=self.usuario))
             self.job.refresh_from_db()
@@ -223,6 +232,38 @@ class ConfirmacaoDeTextoTest(TestCase):
         self.assertEqual(self.job.status, estados.CONCLUIDO)  # rollback do UPDATE
         self.assertEqual(
             self.job.transicoes.filter(para_status=estados.TEXTO_CONFIRMADO).count(),
+            0,
+        )
+
+
+class PreCondicaoDeExtracaoTest(TestCase):
+    """texto_confirmado → extraido exige uma ExtracaoSugerida no job."""
+
+    def setUp(self):
+        self.usuario = criar_usuario()
+        self.job = OcrJob.objects.create(
+            documento_digital=criar_documento_digital(),
+        )
+        self.job.transicionar(estados.EM_EXECUCAO)
+        self.job.transicionar(estados.CONCLUIDO)
+        PaginaOcr.objects.create(
+            ocr_job=self.job,
+            numero_pagina=1,
+            texto_ocr='texto sintético',
+            confirmado_por=self.usuario,
+            confirmado_em=timezone.now(),
+        )
+        self.job.transicionar(estados.TEXTO_CONFIRMADO)
+
+    def test_extraido_sem_extracao_recusado(self):
+        with self.assertRaises(TransicaoInvalida) as contexto:
+            self.job.transicionar(estados.EXTRAIDO)
+        self.assertEqual(contexto.exception.code, 'sem_extracao')
+        # Nada gravado: status volta e não há auditoria da transição.
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
+        self.assertEqual(
+            self.job.transicoes.filter(para_status=estados.EXTRAIDO).count(),
             0,
         )
 

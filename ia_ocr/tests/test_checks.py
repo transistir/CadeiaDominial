@@ -1,10 +1,17 @@
 """System checks de configuração/viabilidade (#259) e a validação de lease
 do worker: só opinam quando o backend configurado é o real — com
 `StubBackend` nenhum check dispara e o comando não valida nada.
+
+Os checks da extração (I-5 / #262) seguem o mesmo desenho: com o backend
+stub (default) nada dispara; com um backend real, exigem URL, token,
+timeout na faixa viável e jsonschema com o schema vendorizado válido.
 """
 
 import io
 import logging
+import sys
+from pathlib import Path
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError, SystemCheckError
@@ -42,6 +49,17 @@ CONFIG_STUB_TUDO_ERRADO = dict(
     OCR_MAX_PAGINAS=500,
     OCR_MAX_BYTES=99_999_999,
     OCR_POLL_INTERVAL_SECONDS=1,
+)
+
+
+# Extração (I-5): backend real de teste + credenciais preenchidas + timeout
+# dentro da faixa viável (10–240 s; gunicorn usa 300).
+CONFIG_EXTRACAO_OK = dict(
+    CONFIG_OK,
+    EXTRACAO_BACKEND='ia_ocr.extracao_backends.BackendExtracaoSinteticoTeste',
+    EXTRACAO_SERVICE_URL='https://extracao-teste.example',
+    EXTRACAO_INTERNAL_TOKEN='token-sintetico',
+    EXTRACAO_HTTP_TIMEOUT_SECONDS=120,
 )
 
 
@@ -163,6 +181,89 @@ class ConferirConfiguracaoOcrTests(SimpleTestCase):
                     'ia_ocr.W001',
                     _ids(_check(OCR_POLL_INTERVAL_SECONDS=intervalo)),
                 )
+
+
+class ConferirConfiguracaoExtracaoTests(SimpleTestCase):
+    """Checks da extração (I-5): só opinam com backend não-stub."""
+
+    def _check_extracao(self, **sobrescritas):
+        from ia_ocr.checks import conferir_configuracao_extracao
+
+        with override_settings(**{**CONFIG_EXTRACAO_OK, **sobrescritas}):
+            return conferir_configuracao_extracao()
+
+    def test_backend_stub_nao_dispara_nada(self):
+        with override_settings(**CONFIG_STUB_TUDO_ERRADO):
+            from ia_ocr.checks import conferir_configuracao_extracao
+
+            self.assertEqual(conferir_configuracao_extracao(), [])
+
+    def test_backend_stub_tudo_errado_nao_dispara(self):
+        with override_settings(
+            EXTRACAO_BACKEND='ia_ocr.extracao_backends.StubExtracaoBackend',
+            EXTRACAO_SERVICE_URL='',
+            EXTRACAO_INTERNAL_TOKEN='',
+            EXTRACAO_HTTP_TIMEOUT_SECONDS=1,
+        ):
+            from ia_ocr.checks import conferir_configuracao_extracao
+
+            self.assertEqual(conferir_configuracao_extracao(), [])
+
+    def test_backend_real_exige_url_token(self):
+        problemas = self._check_extracao(EXTRACAO_SERVICE_URL='')
+        self.assertIn('ia_ocr.E010', _ids(problemas))
+        problemas = self._check_extracao(EXTRACAO_INTERNAL_TOKEN='')
+        self.assertIn('ia_ocr.E011', _ids(problemas))
+
+    def test_timeout_fora_do_intervalo_e_erro(self):
+        for teto in (9, 0, -1):
+            with self.subTest(timeout=teto):
+                self.assertIn(
+                    'ia_ocr.E012',
+                    _ids(self._check_extracao(
+                        EXTRACAO_HTTP_TIMEOUT_SECONDS=teto
+                    )),
+                )
+        for teto in (241, 300, 600):
+            with self.subTest(timeout=teto):
+                self.assertIn(
+                    'ia_ocr.E012',
+                    _ids(self._check_extracao(
+                        EXTRACAO_HTTP_TIMEOUT_SECONDS=teto
+                    )),
+                )
+        # Extremos inclusos: nada reclama.
+        with self.subTest(timeout=10):
+            self.assertNotIn(
+                'ia_ocr.E012',
+                _ids(self._check_extracao(EXTRACAO_HTTP_TIMEOUT_SECONDS=10)),
+            )
+        with self.subTest(timeout=240):
+            self.assertNotIn(
+                'ia_ocr.E012',
+                _ids(self._check_extracao(EXTRACAO_HTTP_TIMEOUT_SECONDS=240)),
+            )
+
+    def test_configuracao_completa_do_backend_real_nao_dispara_nada(self):
+        self.assertEqual(self._check_extracao(), [])
+
+    def test_jsonschema_bloqueado_e_erro(self):
+        with mock.patch.dict(sys.modules, {'jsonschema': None}):
+            problemas = self._check_extracao()
+        self.assertIn('ia_ocr.E013', _ids(problemas))
+
+    def test_schema_vendorizado_invalido_e_erro(self):
+        def schema_quebrado():
+            return {'type': 123}
+
+        with mock.patch('ia_ocr.checks.schema_vendorizado', schema_quebrado):
+            problemas = self._check_extracao()
+        self.assertIn('ia_ocr.E014', _ids(problemas))
+
+    def test_requirements_pina_jsonschema(self):
+        raiz = Path(__file__).resolve().parents[2]
+        texto = (raiz / 'requirements.txt').read_text(encoding='utf-8')
+        self.assertRegex(texto, r'(?m)^jsonschema==')
 
 
 class RegistroDoCheckNoManageCheckTests(SimpleTestCase):
