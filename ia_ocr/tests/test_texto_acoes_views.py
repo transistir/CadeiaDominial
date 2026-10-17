@@ -288,67 +288,31 @@ class ExtrairCamposViewTest(TelaTextoBase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.CONCLUIDO)
 
-    def test_post_com_tudo_confirmado_transiciona_e_mostra_o_link_para_a_i5(self):
-        self._confirmar_todas()
-
-        resposta = self.client.post(self.url('extrair_campos_ocr'), {'pagina': '1'})
-
-        self.assertRedirects(
-            resposta, self.url_tela(pagina=1), fetch_redirect_response=False
-        )
-        self.job.refresh_from_db()
-        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
-        transicao = self.job.transicoes.get(para_status=estados.TEXTO_CONFIRMADO)
-        self.assertEqual(transicao.usuario, self.dono)
-        self.assertIn('success', [n for n, _m in self.mensagens(resposta)])
-
-        tela = self.client.get(self.url_tela(pagina=1))
-        conteudo = tela.content.decode()
-        self.assertFalse(tela.context['editavel'])
-        link = _elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))
-        self.assertEqual(len(link), 1)
-        self.assertEqual(_atributos(link[0])['href'], self.url('campos_job_ocr'))
-        faixa = _elementos(conteudo, 'p', presentes=('data-ocr-texto-confirmado',))
-        self.assertEqual(len(faixa), 1)
-        self.assertIn('dono-texto', _texto_completo(faixa[0]))
-        # Já confirmado: nenhuma ação de edição, bulk, reprocesso ou nova extração.
-        for atributo in (
-            'data-ocr-confirmar-pagina', 'data-ocr-salvar-edicao',
-            'data-ocr-confirmar-todas', 'data-ocr-reprocessar',
-            'data-ocr-extrair-campos',
-        ):
-            with self.subTest(botao=atributo):
-                self.assertIsNone(_botao(conteudo, atributo))
-
-    def test_segundo_post_nao_quebra_nem_transiciona_de_novo(self):
-        self._confirmar_todas()
-        self.client.post(self.url('extrair_campos_ocr'))
-
-        resposta = self.client.post(self.url('extrair_campos_ocr'))
-
-        self.assertEqual(resposta.status_code, 302)
-        erros = [m for n, m in self.mensagens(resposta) if n == 'error']
-        self.assertEqual(len(erros), 1)
-        # Mensagem neutra: este caminho também cobre job em outros estados.
-        self.assertIn('não está mais aguardando', erros[0])
-        self.assertEqual(
-            self.job.transicoes.filter(para_status=estados.TEXTO_CONFIRMADO).count(), 1
-        )
+    # Fluxo antigo (texto_confirmado → link da I-5) removido pela #290: o job
+    # vai de `concluido` direto a `extraido` e a extração é solicitada ao
+    # serviço. Os casos estão em `test_extracao_views.py`:
+    #   - sucesso/transição: test_extrair_sucesso_redireciona_e_transiciona
+    #   - nova extração sobre job já extraído: test_reextracao_*
 
 
 class CamposPendenteViewTest(TelaTextoBase):
     """Ponto de entrada reservado para a I-5 (#262): sem a tela de campos."""
 
-    def test_job_com_texto_confirmado_abre_a_pagina_de_espera(self):
+    def test_estado_legado_texto_confirmado_volta_para_a_tela(self):
+        """#290: `texto_confirmado` saiu do fluxo — só `concluido` extrai.
+
+        O caminho novo (POST em `concluido` → `extraido`) está em
+        `test_extracao_views.ExtrairCamposViewTest`; aqui só se garante que o
+        estado legado não abre a revisão de campos.
+        """
         services.confirmar_todas_paginas(self.job, self.dono)
         services.confirmar_texto(self.job, self.dono)
         self.client.force_login(self.dono)
 
         resposta = self.client.get(self.url('campos_job_ocr'))
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, 'revisão de campos')
-        self.assertContains(resposta, self.url_tela())
+        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertIn('info', [n for n, _m in self.mensagens(resposta)])
 
     def test_job_ainda_nao_confirmado_volta_para_a_tela_do_texto(self):
         self.client.force_login(self.dono)

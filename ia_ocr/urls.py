@@ -35,6 +35,10 @@ urlpatterns = [
         _BASE + 'texto/extrair-campos/',
         views.extrair_campos_ocr, name='extrair_campos_ocr',
     ),
-    # Ponto de entrada da revisão de campos (I-5 / #262): a tela vem na I-5.
     path(_BASE + 'campos/', views.campos_job_ocr, name='campos_job_ocr'),
+    path(_BASE + 'campos/salvar/', views.salvar_bloco_ocr, name='salvar_bloco_ocr'),
+    path(
+        _BASE + 'campos/finalizar/',
+        views.finalizar_revisao_ocr, name='finalizar_revisao_ocr',
+    ),
 ]

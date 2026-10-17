@@ -1,4 +1,4 @@
-"""Telas da app ia_ocr: confirmação do texto OCR (issue #261 / I-4).
+"""Telas da app ia_ocr: texto OCR e revisão da extração estruturada.
 
 Mesma política de acesso do upload digital: ``login_required`` + hierarquia
 TI→Imóvel→Documento (``_get_contexto_documento``); fora do escopo → 404, o
@@ -8,21 +8,27 @@ diretamente. Nenhum log daqui carrega texto de documento ou nome de arquivo
 (PII).
 """
 
+import json
 import re
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, HttpResponseBadRequest
+from django.http import Http404, HttpResponseBadRequest, JsonResponse
+from django.middleware.csrf import CsrfViewMiddleware
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.decorators import decorator_from_middleware
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 # Hierarquia TI→Imóvel→Documento: a mesma do upload digital (reuso, não cópia).
 from dominial.views.documento_digital_views import _get_contexto_documento
 
-from . import estados, services
+from . import destinos, estados, revisao, services, valores
 from .diff import segmentos_diff
 from .estados import TransicaoConcorrente, TransicaoInvalida
+from .extracao_backends import ExtracaoBackendError
 from .models import (
     ESTADO_CONFIRMADA, ESTADO_EDITADA, ESTADO_NAO_CONFIRMADA, OcrJob,
     OcrJobTransicao, PaginaOcr,
@@ -301,56 +307,258 @@ def reprocessar_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
 @login_required
 @require_POST
 def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
-    """Botão "Extrair campos →": concluido → texto_confirmado, só com tudo confirmado.
-
-    Nesta issue só a transição e o link para a revisão de campos; a extração
-    estruturada e a tela de campos são da I-5 (#262).
-    """
+    """Solicita a extração e encaminha para a revisão dos campos sugeridos."""
     tis, imovel, documento, job = _contexto_job(
         request, tis_id, imovel_id, documento_id, job_id
     )
-    destino = _destino(request, _kwargs_job(tis, imovel, documento, job))
+    kwargs_job = _kwargs_job(tis, imovel, documento, job)
     try:
-        services.confirmar_texto(job, request.user)
-    except TransicaoInvalida as exc:
-        if exc.code in ('paginas_nao_confirmadas', 'sem_paginas'):
-            messages.error(
-                request, 'Confirme todas as páginas antes de extrair os campos.'
-            )
-        else:
-            messages.error(
-                request, 'Este processamento não está mais aguardando a confirmação do texto.'
-            )
-    except TransicaoConcorrente:
+        services.solicitar_extracao(job, request.user)
+    except services.ExtracaoRecusada as exc:
+        mensagens = {
+            'sem_texto_ocr': 'O OCR ainda não devolveu texto para todas as páginas.',
+            'extracao_desatualizada': 'A extração mudou. Recarregue a tela.',
+        }
+        messages.error(request, mensagens.get(
+            exc.code, 'Este processamento não permite extrair campos no estado atual.',
+        ))
+    except services.ExtracaoConcorrente:
         messages.error(
-            request, 'O processamento mudou de estado enquanto você revisava. Recarregue a tela.'
+            request, 'Já existe uma extração em andamento para este documento.',
+        )
+    except (services.ExtracaoIndisponivel, ExtracaoBackendError):
+        messages.error(
+            request,
+            'O serviço de extração não respondeu. Tente novamente em instantes.',
+        )
+    except TransicaoInvalida:
+        messages.error(
+            request, 'Este processamento não permite extrair campos no estado atual.',
         )
     else:
-        messages.success(
-            request, 'Texto confirmado. O próximo passo é a revisão de campos.'
-        )
-    return redirect(destino)
+        messages.success(request, 'Extração concluída. Revise os campos.')
+        return redirect('campos_job_ocr', **kwargs_job)
+    return redirect(_destino(request, kwargs_job))
 
 
 @login_required
 @require_GET
 def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
-    """Ponto de entrada da revisão de campos (I-5 / #262), ainda sem a tela.
-
-    Existe para o link de "Extrair campos →" apontar para um destino estável
-    e com a mesma checagem de hierarquia; a I-5 troca o corpo desta view.
-    """
+    """Revisão da extração vigente; após finalizar, a tela é somente leitura."""
     tis, imovel, documento, job = _contexto_job(
         request, tis_id, imovel_id, documento_id, job_id
     )
     kwargs_job = _kwargs_job(tis, imovel, documento, job)
-    if job.status in estados.STATUS_REVISAVEIS or job.status not in estados.STATUS_COM_TEXTO:
-        messages.info(request, 'Confirme o texto antes de revisar os campos.')
+    if job.status not in (estados.EXTRAIDO, estados.REVISADO):
+        messages.info(request, 'Extraia os campos antes de revisá-los.')
         return redirect(_url_tela(kwargs_job))
-    return render(request, 'ia_ocr/campos_pendente.html', {
+    extracao = job.extracao_vigente()
+    if extracao is None:
+        raise Http404('Extração indisponível.')
+    campos = list(extracao.campos.order_by('chave'))
+    efetivos = {
+        campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
+        for campo in campos
+    }
+    por_destino = {}
+    for campo in campos:
+        contexto = [efetivos[campo.chave]]
+        if campo.chave.endswith('/documento_identificacao/valor'):
+            contexto.insert(0, efetivos.get(campo.chave.rsplit('/', 1)[0] + '/tipo'))
+        try:
+            destino = destinos.destino_de(campo.chave, *contexto)
+        except destinos.ChaveDesconhecida:
+            destino = destinos.SEM_DESTINO
+        por_destino.setdefault(destino.campo_modelo or 'SEM_DESTINO', []).append(campo)
+    return render(request, 'ia_ocr/revisao_campos.html', {
         'tis': tis,
         'imovel': imovel,
         'documento': documento,
+        'arquivo': job.documento_digital,
         'job': job,
+        'extracao': extracao,
+        'campos': campos,
+        'por_destino': por_destino,
+        'pendencias': revisao.pendencias(extracao),
+        'avisos': revisao.avisos(extracao),
+        'versao': services.versao_bloco(extracao),
+        'somente_leitura': job.status == estados.REVISADO,
+        'dpi': job.dpi or 200,
+        'url_salvar': reverse('salvar_bloco_ocr', kwargs=kwargs_job),
+        'url_finalizar': reverse('finalizar_revisao_ocr', kwargs=kwargs_job),
         'url_texto': _url_tela(kwargs_job),
+        'url_documento': reverse('documento_detalhado', kwargs={
+            'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
+        }),
+    })
+
+
+class _CsrfJsonMiddleware(CsrfViewMiddleware):
+    def _reject(self, request, reason):
+        return JsonResponse({'erro': 'csrf_invalido'}, status=403)
+
+
+def _respostas_json_ocr(view):
+    """Mantém 404, 405 e rejeições CSRF em JSON, sem mudar o login_required."""
+    protegida = decorator_from_middleware(_CsrfJsonMiddleware)(view)
+
+    # A checagem CSRF é feita pela middleware local acima, com a mesma
+    # proteção do Django. Evita apenas a resposta HTML da middleware global.
+    @csrf_exempt
+    @wraps(view)
+    def resposta_json(request, *args, **kwargs):
+        try:
+            resposta = protegida(request, *args, **kwargs)
+        except Http404:
+            return JsonResponse({'erro': 'nao_encontrado'}, status=404)
+        if resposta.status_code == 405:
+            erro = JsonResponse({'erro': 'metodo_nao_permitido'}, status=405)
+            erro['Allow'] = resposta['Allow']
+            return erro
+        return resposta
+
+    return resposta_json
+
+
+def _recusar_decisao(code, chave=None):
+    erro = services.ExtracaoRecusada(code)
+    erro.chave = chave
+    raise erro
+
+
+def _decisoes_bloco(dados):
+    """Valida o contrato JSON e indexa a lista pelo JSON Pointer de cada linha."""
+    if not isinstance(dados, dict):
+        _recusar_decisao('corpo_invalido')
+    if not isinstance(dados.get('versao'), str):
+        _recusar_decisao('versao_invalida')
+    if not isinstance(dados.get('decisoes'), list):
+        _recusar_decisao('decisoes_invalidas')
+    decisoes = {}
+    for decisao in dados['decisoes']:
+        if not isinstance(decisao, dict):
+            _recusar_decisao('decisao_invalida')
+        chave = decisao.get('chave')
+        if not isinstance(chave, str) or not chave:
+            _recusar_decisao('chave_invalida')
+        if chave in decisoes:
+            _recusar_decisao('chave_duplicada', chave)
+        if not isinstance(decisao.get('incluir'), bool):
+            _recusar_decisao('decisao_invalida', chave)
+        for nome in ('conferido', 'confirmo_conversao'):
+            if nome in decisao and not isinstance(decisao[nome], bool):
+                _recusar_decisao('decisao_invalida', chave)
+        for nome in ('valor', 'ha_convertido'):
+            if decisao.get(nome) is not None and not isinstance(decisao[nome], str):
+                _recusar_decisao('valor_invalido', chave)
+        if 'versao' in decisao and not isinstance(decisao['versao'], str):
+            _recusar_decisao('versao_invalida', chave)
+        escolha = decisao.get('escolha')
+        if escolha is not None:
+            if not isinstance(escolha, dict):
+                _recusar_decisao('escolha_invalida', chave)
+            for nome, valor in escolha.items():
+                if nome == 'criar_novo' and isinstance(valor, bool):
+                    continue
+                if nome in ('pessoa_escolhida_id', 'cartorio_escolhido_id'):
+                    if valor is None or (type(valor) is int and valor > 0):
+                        continue
+                _recusar_decisao('escolha_invalida', chave)
+        decisoes[chave] = {nome: valor for nome, valor in decisao.items() if nome != 'chave'}
+    return decisoes
+
+
+def _chave_valor_invalido(extracao, decisoes):
+    """Localiza a linha após rollback, reaplicando o motor só em memória.
+
+    ValorInvalido ainda não carrega a chave; não expomos seu texto ao cliente.
+    """
+    campos = {campo.chave: campo for campo in extracao.campos.all()}
+    for chave, decisao in decisoes.items():
+        argumentos = {
+            nome: decisao[nome] for nome in (
+                'incluir', 'valor', 'conferido', 'escolha',
+                'ha_convertido', 'confirmo_conversao',
+            ) if nome in decisao
+        }
+        try:
+            revisao.aplicar_linha(campos[chave], **argumentos)
+        except valores.ValorInvalido:
+            return chave
+    return None
+
+
+@_respostas_json_ocr
+@login_required
+@require_POST
+def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
+    """Salva decisões de revisão com controle otimista da versão do bloco."""
+    _tis, _imovel, _documento, job = _contexto_job(
+        request, tis_id, imovel_id, documento_id, job_id,
+    )
+    try:
+        dados = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({'erro': 'json_invalido'}, status=400)
+    try:
+        decisoes = _decisoes_bloco(dados)
+        extracao = job.extracao_vigente()
+        if extracao is None:
+            raise services.ExtracaoRecusada('sem_extracao')
+        salva = services.salvar_bloco(extracao, decisoes, request.user, dados['versao'])
+    except services.ConflitoVersao as exc:
+        return JsonResponse({
+            'erro': 'conflito_versao', 'chaves': exc.chaves_afetadas,
+        }, status=409)
+    except services.ExtracaoRecusada as exc:
+        return JsonResponse({
+            'erro': exc.code, 'chave': getattr(exc, 'chave', None),
+        }, status=422)
+    except valores.ValorInvalido:
+        return JsonResponse({
+            'erro': 'valor_invalido', 'chave': _chave_valor_invalido(extracao, decisoes),
+        }, status=422)
+    except TransicaoInvalida as exc:
+        return JsonResponse({'erro': exc.code or 'estado_invalido'}, status=409)
+    except TransicaoConcorrente:
+        return JsonResponse({'erro': 'transicao_concorrente'}, status=409)
+    return JsonResponse({'ok': True, 'versao': services.versao_bloco(salva)})
+
+
+@_respostas_json_ocr
+@login_required
+@require_POST
+def finalizar_revisao_ocr(request, tis_id, imovel_id, documento_id, job_id):
+    """Finaliza apenas uma revisão sem pendências e informa o destino da tela."""
+    tis, imovel, documento, job = _contexto_job(
+        request, tis_id, imovel_id, documento_id, job_id,
+    )
+    try:
+        dados = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({'erro': 'json_invalido'}, status=400)
+    if not isinstance(dados, dict):
+        return JsonResponse({'erro': 'corpo_invalido', 'chave': None}, status=422)
+    try:
+        extracao = job.extracao_vigente()
+        if extracao is None:
+            raise services.ExtracaoRecusada('sem_extracao')
+        services.finalizar_revisao(extracao, request.user)
+    except services.RevisaoIncompleta as exc:
+        return JsonResponse({
+            'erro': 'revisao_incompleta', 'pendencias': exc.pendencias,
+        }, status=422)
+    except services.ExtracaoRecusada as exc:
+        return JsonResponse({
+            'erro': exc.code, 'chave': getattr(exc, 'chave', None),
+        }, status=422)
+    except TransicaoInvalida as exc:
+        return JsonResponse({'erro': exc.code or 'estado_invalido'}, status=409)
+    except TransicaoConcorrente:
+        return JsonResponse({'erro': 'transicao_concorrente'}, status=409)
+    return JsonResponse({
+        'ok': True,
+        'redirect': reverse('documento_detalhado', kwargs={
+            'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
+        }),
     })
