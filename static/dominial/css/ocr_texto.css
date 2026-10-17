@@ -1,0 +1,76 @@
+/* Tela de confirmação do texto OCR (issue #261 / I-4): split-view PDF × texto. */
+
+/* .btn (base.css) e utilitários do Bootstrap definem display próprio, que
+   vence o [hidden] do user-agent; mesma regra escopada do card (#260-A). */
+[data-ocr-texto] [hidden] { display: none !important; }
+
+.ocr-texto .ocr-texto-pdf {
+    width: 100%;
+    height: 75vh;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    background: #f8f9fa;
+}
+
+.ocr-texto textarea[data-ocr-texto-area] {
+    min-height: 60vh;
+    resize: vertical;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+/* Abas por página. Classes próprias: o .nav/.nav-link do base.css (barra do topo)
+   conflita com o nav-tabs do Bootstrap. O estado também sai em texto
+   (visually-hidden) e no ícone, nunca só em cor. */
+.ocr-abas {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    border-bottom: 2px solid #dee2e6;
+}
+.ocr-aba {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: -2px;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid #dee2e6;
+    border-bottom: 2px solid #dee2e6;
+    border-radius: 0.25rem 0.25rem 0 0;
+    background: #f8f9fa;
+    color: #343a40;
+    text-decoration: none;
+}
+.ocr-aba:hover { background: #e9ecef; }
+.ocr-aba--atual,
+.ocr-aba--atual:hover {
+    background: #fff;
+    border-bottom-color: #fff;
+    font-weight: 600;
+}
+.ocr-aba .ocr-aba-icone::before { content: "\25CB"; }                                  /* ○ não confirmada */
+.ocr-aba--confirmada .ocr-aba-icone::before { content: "\2713"; color: #198754; }      /* ✓ confirmada */
+.ocr-aba--editada .ocr-aba-icone::before { content: "\270E"; color: #b35c00; }         /* ✎ editada */
+
+.ocr-estado--nao_confirmada { background-color: #6c757d; }
+.ocr-estado--confirmada { background-color: #198754; }
+.ocr-estado--editada { background-color: #b35c00; }
+
+/* Diff: remoção e acréscimo distinguíveis sem depender só de cor (riscado × sublinhado). */
+.ocr-diff {
+    max-height: 40vh;
+    overflow: auto;
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    background: #fff;
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.ocr-diff del { background: #f8d7da; color: #842029; text-decoration: line-through; }
+.ocr-diff ins { background: #d1e7dd; color: #0f5132; text-decoration: underline; }

@@ -46,6 +46,10 @@ TRANSICOES_VALIDAS = {
 # única — a view injeta no template, que expõe ao JS via data-* em JSON.
 STATUS_ATIVOS = [PENDENTE, EM_EXECUCAO]
 STATUS_COM_TEXTO = [CONCLUIDO, TEXTO_CONFIRMADO, EXTRAIDO, REVISADO, IMPORTADO]
+# Estados em que o texto das páginas ainda aceita edição/confirmação (tela de
+# confirmação, issue #261) e em que o card libera "Revisar texto". Depois de
+# texto_confirmado o texto vira somente leitura.
+STATUS_REVISAVEIS = [CONCLUIDO]
 
 
 class TransicaoInvalida(ValidationError):

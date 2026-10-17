@@ -12,6 +12,8 @@ from django.contrib.auth.models import User
 from dominial.models import (
     Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Pessoas, TIs,
 )
+from ia_ocr import estados
+from ia_ocr.models import OcrJob, PaginaOcr
 
 
 def criar_usuario():
@@ -46,3 +48,25 @@ def criar_documento_digital(upload_por=None, nome='matricula-sintetica.pdf'):
         tamanho_bytes=20,
         upload_por=upload_por,
     )
+
+
+def criar_job_concluido(documento_digital=None, textos=None, criado_por=None):
+    """Job `concluido` com uma PaginaOcr (não confirmada) por texto.
+
+    Os textos são sintéticos: nenhum dado de documento real entra nos testes.
+    """
+    documento_digital = documento_digital or criar_documento_digital()
+    textos = list(textos) if textos is not None else [
+        f'Texto sintético da página {n}' for n in (1, 2, 3)
+    ]
+    job = OcrJob.objects.create(
+        documento_digital=documento_digital,
+        status=estados.CONCLUIDO,
+        page_count=len(textos),
+        criado_por=criado_por,
+    )
+    PaginaOcr.objects.bulk_create(
+        PaginaOcr(ocr_job=job, numero_pagina=numero, texto_ocr=texto)
+        for numero, texto in enumerate(textos, start=1)
+    )
+    return job

@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', RedirectView.as_view(url='/dominial/', permanent=True)),  # Redirecionar raiz para /dominial/
     path('dominial/', include('dominial.urls')),  # Incluir todas as URLs de dominial com o prefixo dominial/
+    path('dominial/', include('ia_ocr.urls')),  # Telas de IA/OCR no mesmo prefixo (hierarquia TI→Imóvel→Documento)
     
     # URLs de autenticação
     path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),

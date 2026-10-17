@@ -59,6 +59,7 @@
                  data-arquivo-id="{{ arquivo.pk }}"
                  data-status-ativos="{{ status_ativos_json }}"
                  data-status-com-texto="{{ status_com_texto_json }}"
+                 data-status-revisaveis="{{ status_revisaveis_json }}"
                  data-criar-url="{% url 'criar_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk %}"
                  {% if job %}data-status-url="{% url 'status_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk job_id=job.job_id %}" data-ocr-status="{{ job.status }}"{% endif %}>
                 <div class="d-flex justify-content-between align-items-start gap-2">
@@ -76,11 +77,13 @@
                 <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
                     <button type="button" class="btn btn-primary btn-sm" data-ocr-disparo{% if not job %}{% elif job.status in status_ativos %} disabled{% else %} hidden{% endif %}><span aria-hidden="true">▶</span> Extrair texto com IA</button>
                     <button type="button" class="btn btn-outline-danger btn-sm" data-ocr-retry{% if not job or job.status != 'falhou' %} hidden{% endif %}>Tentar novamente</button>
-                    <button type="button" class="btn btn-success btn-sm" data-ocr-revisar disabled aria-describedby="ocr-revisar-motivo-{{ arquivo.pk }}"{% if not job or job.status not in status_com_texto %} hidden{% endif %}>Revisar texto</button>
+                    {# I-4 (#261): com o OCR concluído, "Revisar texto" é link para a tela de confirmação; nos demais estados com texto (já confirmado) fica desabilitado, com o motivo. #}
+                    {% if job %}<a href="{% url 'texto_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id job_id=job.job_id %}" class="btn btn-success btn-sm" data-ocr-revisar-link{% if job.status not in status_revisaveis %} hidden{% endif %}>Revisar texto</a>{% endif %}
+                    <button type="button" class="btn btn-success btn-sm" data-ocr-revisar disabled aria-describedby="ocr-revisar-motivo-{{ arquivo.pk }}"{% if not job or job.status not in status_com_texto or job.status in status_revisaveis %} hidden{% endif %}>Revisar texto</button>
                     {# Retoma o polling quando o corte de falhas desistiu (#260-C). #}
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-ocr-atualizar hidden>Atualizar status</button>
                     {# Motivo do revisar desabilitado, percebível por teclado/leitores de tela (#260-D). #}
-                    <small class="text-muted" id="ocr-revisar-motivo-{{ arquivo.pk }}" data-ocr-revisar-motivo{% if not job or job.status not in status_com_texto %} hidden{% endif %}>Disponível na I-4</small>
+                    <small class="text-muted" id="ocr-revisar-motivo-{{ arquivo.pk }}" data-ocr-revisar-motivo{% if not job or job.status not in status_com_texto or job.status in status_revisaveis %} hidden{% endif %}>Texto já confirmado: a revisão só fica disponível até a extração dos campos.</small>
                 </div>
             </div>
             {% endwith %}
