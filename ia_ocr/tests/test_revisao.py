@@ -1194,3 +1194,53 @@ class DesnormalizarTest(TestCase):
                 self.assertEqual(numero.evidencia_trecho, 'Nº 42.718')
                 self.assertEqual(numero.motivos_revisao, [])
                 self.assertFalse(numero.requer_revisao)
+
+    def test_select_ja_vem_com_um_candidato(self):
+        payload = payload_registro(self.job.job_id)
+        payload['document']['cartorio']['match_sugerido'] = {
+            'cartorio_id': 7, 'candidatos': [],
+        }
+        payload['document']['cri_atual']['match_sugerido'] = {
+            'cartorio_id': None, 'candidatos': [3, 4],
+        }
+        payload['acts'][0]['partes'][0]['match_pessoa_id'] = 11
+        payload['acts'][0]['partes'][1]['match_pessoa_id'] = None
+
+        por_chave = self._por_chave(self._linhas(payload, validar=False))
+
+        cartorio = por_chave['/document/cartorio']
+        self.assertEqual(cartorio.match_candidatos, [7])
+        self.assertEqual(cartorio.cartorio_escolhido_id, 7)
+        # Vários candidatos: o revisor escolhe; nada vem pré-escolhido.
+        cri_atual = por_chave['/document/cri_atual']
+        self.assertEqual(cri_atual.match_candidatos, [3, 4])
+        self.assertIsNone(cri_atual.cartorio_escolhido_id)
+        parte = por_chave['/acts/0/partes/0']
+        self.assertEqual(parte.match_candidatos, [11])
+        self.assertEqual(parte.pessoa_escolhida_id, 11)
+        self.assertIsNone(parte.cartorio_escolhido_id)
+        sem_match = por_chave['/acts/0/partes/1']
+        self.assertEqual(sem_match.match_candidatos, [])
+        self.assertIsNone(sem_match.pessoa_escolhida_id)
+        # Sem enriquecimento (PEDRO SANTOS): nenhum id inventado.
+        self.assertEqual(por_chave['/acts/0/partes/2'].match_candidatos, [])
+        self.assertIsNone(por_chave['/acts/0/partes/2'].pessoa_escolhida_id)
+
+    def test_criar_novo_marca_escolha(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['partes'][2]['match_pessoa_id'] = None
+
+        parte = self._por_chave(
+            self._linhas(payload, validar=False)
+        )['/acts/0/partes/2']
+        self.assertEqual(parte.match_candidatos, [])
+        self.assertFalse(parte.criar_novo)
+
+        aplicar_linha(
+            parte, incluir=True, conferido=True,
+            escolha={'pessoa_escolhida_id': None, 'criar_novo': True},
+        )
+
+        self.assertTrue(parte.criar_novo)
+        self.assertIsNone(parte.pessoa_escolhida_id)
+        self.assertEqual(parte.status_revisao, 'aceito')

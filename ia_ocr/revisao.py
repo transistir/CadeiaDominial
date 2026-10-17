@@ -628,6 +628,13 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
     pagina, trecho, bbox = _resolver_evidencia(
         campo.get('evidencia'), texto_paginas, motivos
     )
+    candidatos, escolhido = [], None
+    if tipo_valor == 'cartorio':
+        sugestao = campo.get('match_sugerido')
+        if isinstance(sugestao, dict):
+            candidatos, escolhido = _candidatos_do_match(
+                sugestao.get('cartorio_id'), sugestao.get('candidatos'),
+            )
 
     return CampoSugerido(
         extracao=extracao,
@@ -638,6 +645,8 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
         confianca=confianca,
         requer_revisao=bool(campo.get('requer_revisao')) or bool(motivos),
         motivos_revisao=motivos,
+        match_candidatos=candidatos,
+        cartorio_escolhido_id=escolhido,
         evidencia_pagina=pagina,
         evidencia_trecho=trecho,
         evidencia_bbox=bbox,
@@ -674,6 +683,8 @@ def _de_parte(extracao, ponteiro, parte, texto_paginas):
     pagina, trecho, bbox = _resolver_evidencia(
         parte.get('evidencia'), texto_paginas, motivos
     )
+    # O A3 só leva o match único da parte: homônimos chegam sem candidato.
+    candidatos, escolhido = _candidatos_do_match(parte.get('match_pessoa_id'))
     return CampoSugerido(
         extracao=extracao,
         chave=ponteiro,
@@ -683,10 +694,33 @@ def _de_parte(extracao, ponteiro, parte, texto_paginas):
         confianca=confianca,
         requer_revisao=bool(parte.get('requer_revisao')) or bool(motivos),
         motivos_revisao=motivos,
+        match_candidatos=candidatos,
+        pessoa_escolhida_id=escolhido,
         evidencia_pagina=pagina,
         evidencia_trecho=trecho,
         evidencia_bbox=bbox,
     )
+
+
+def _id_valido(valor):
+    return type(valor) is int and valor > 0
+
+
+def _candidatos_do_match(unico, candidatos=None):
+    """``(match_candidatos, escolhido_id|None)`` a partir do enriquecimento.
+
+    Só ids do payload enriquecido: único → ``([id], id)``; mais de um
+    candidato → ``(ids, None)`` (o revisor escolhe); nenhum → ``([], None)``.
+    """
+    if _id_valido(unico):
+        return [unico], unico
+    ids = []
+    for valor in candidatos if isinstance(candidatos, list) else []:
+        if _id_valido(valor) and valor not in ids:
+            ids.append(valor)
+    if len(ids) == 1:
+        return ids, ids[0]
+    return ids, None
 
 
 def _placeholder(extracao, chave):

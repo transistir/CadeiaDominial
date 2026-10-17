@@ -1,18 +1,24 @@
 """Tela de revisão de campos (I-5): render, escape, pendências e somente leitura."""
 
+import json
 import re
 
 from django.conf import settings
 from django.shortcuts import resolve_url
+from django.test.html import Element
 from django.utils import timezone
 
+from dominial.models import Cartorios, Pessoas
 from ia_ocr import estados, revisao
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
+from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
 
 from .base_texto import TelaTextoBase
 from .payloads_extracao import (
     PROVIDER, SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao,
+    payload_registro,
 )
+from .test_ui_card_ocr import _atributos, _elementos
 
 RAW_MALICIOSO = '<script>alert(1)</script>"><img onerror=1>'
 
@@ -135,3 +141,108 @@ class RevisaoTelaTest(TelaTextoBase):
 
         self.client.force_login(self.sem_acesso)
         self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_finaliza_usando_apenas_os_controles_renderizados(self):
+        # Cartório do documento: match único; cri_atual: dois homônimos;
+        # JOÃO por CPF; MARIA e PEDRO sem cadastro (único caminho: criar).
+        Cartorios.objects.create(nome='CRI de Guaíra', cns='E2E-1', estado='PR')
+        homonimos = [
+            Cartorios.objects.create(
+                nome='Cartório de Registro de Imóveis de Guaíra',
+                cns=f'E2E-{indice}', estado='PR',
+            )
+            for indice in (2, 3)
+        ]
+        Pessoas.objects.create(nome='JOÃO DA SILVA', cpf='12345678900')
+        payload = enriquecer_payload(
+            payload_registro(self.job.job_id), IndicePessoas(), IndiceCartorios(),
+        )
+        self._extracao(payload)
+
+        html = self._tela().content.decode()
+        toolbar = _elementos(html, 'div', presentes=('data-ocr-toolbar',))[0]
+        versao = _atributos(toolbar)['data-versao']
+        decisoes = [
+            decisao for card in _elementos(html, 'article', presentes=('data-campo',))
+            if (decisao := _decisao_do_card(card)) is not None
+        ]
+        escolhas = {d['chave']: d['escolha'] for d in decisoes if 'escolha' in d}
+        self.assertEqual(
+            escolhas['/document/cri_atual']['cartorio_id'], homonimos[0].pk,
+        )
+        self.assertTrue(escolhas['/acts/0/partes/2']['criar_novo'])
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({'versao': versao, 'decisoes': decisoes}),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+        self.assertIn('redirect', finalizar.json())
+
+
+def _descendentes(no, nome_tag, atributo):
+    """Elementos `nome_tag` com `atributo` na subárvore de `no`."""
+    achados = []
+    for filho in no.children:
+        if not isinstance(filho, Element):
+            continue
+        if filho.name == nome_tag and atributo in _atributos(filho):
+            achados.append(filho)
+        achados += _descendentes(filho, nome_tag, atributo)
+    return achados
+
+
+def _decisao_do_card(card):
+    """A decisão que o ocr_revisao.js mandaria com o card conferido.
+
+    Card sem valor fica de fora (nada a conferir); cards de parte/cartório
+    levam ``escolha`` com a opção selecionada, a primeira candidata quando
+    nenhuma vem selecionada, ou criar novo quando não há candidata.
+    """
+    valor = None
+    for tag in ('input', 'textarea'):
+        for elemento in _descendentes(card, tag, 'data-campo-valor'):
+            atributos = _atributos(elemento)
+            valor = atributos.get('value') if tag == 'input' else ''.join(
+                filho for filho in elemento.children if isinstance(filho, str)
+            )
+            tipo = atributos['data-tipo']
+    if not valor:
+        return None
+    decisao = {
+        'chave': _atributos(card)['data-chave'],
+        'incluir': True,
+        'conferido': True,
+    }
+    # Espelha TIPOS_SEM_VALOR do ocr_revisao.js: sem conversor de formulário.
+    if tipo not in ('parte', 'cartorio', 'ato'):
+        decisao['valor'] = valor
+    selects = _descendentes(card, 'select', 'data-ocr-escolha')
+    criar = _descendentes(card, 'input', 'data-ocr-criar-novo')
+    if selects or criar:
+        escolhido = None
+        alvo = None
+        if selects:
+            alvo = _atributos(selects[0])['data-ocr-escolha']
+            opcoes = [
+                opcao for opcao in _descendentes(selects[0], 'option', 'value')
+                if _atributos(opcao)['value']
+            ]
+            selecionadas = [o for o in opcoes if 'selected' in _atributos(o)]
+            escolhida = (selecionadas or opcoes or [None])[0]
+            if escolhida is not None:
+                escolhido = int(_atributos(escolhida)['value'])
+        decisao['escolha'] = {
+            'pessoa_id': escolhido if alvo == 'pessoa_id' else None,
+            'cartorio_id': escolhido if alvo == 'cartorio_id' else None,
+            'criar_novo': escolhido is None and bool(criar),
+        }
+    return decisao

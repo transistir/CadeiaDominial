@@ -438,6 +438,12 @@ def _recusar_decisao(code, chave=None):
     raise erro
 
 
+_ESCOLHA_DA_TELA = {
+    'pessoa_id': 'pessoa_escolhida_id',
+    'cartorio_id': 'cartorio_escolhido_id',
+}
+
+
 def _decisoes_bloco(dados):
     """Valida o contrato JSON e indexa a lista pelo JSON Pointer de cada linha."""
     if not isinstance(dados, dict):
@@ -469,6 +475,12 @@ def _decisoes_bloco(dados):
         if escolha is not None:
             if not isinstance(escolha, dict):
                 _recusar_decisao('escolha_invalida', chave)
+            # A tela manda pessoa_id/cartorio_id; o motor usa os nomes do modelo.
+            for curto, nome in _ESCOLHA_DA_TELA.items():
+                if curto in escolha:
+                    if nome in escolha:
+                        _recusar_decisao('escolha_invalida', chave)
+                    escolha[nome] = escolha.pop(curto)
             for nome, valor in escolha.items():
                 if nome == 'criar_novo' and isinstance(valor, bool):
                     continue

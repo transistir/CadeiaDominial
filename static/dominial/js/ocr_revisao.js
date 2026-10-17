@@ -18,7 +18,7 @@
 
     var ATRASO_MS = 300;
     // Tipos sem conversor de formulário no servidor: o valor não é editável.
-    var TIPOS_SEM_VALOR = ['parte', 'cartorio'];
+    var TIPOS_SEM_VALOR = ['parte', 'cartorio', 'ato'];
     var MENSAGENS_ERRO = {
         valor_invalido: 'Valor inválido para este campo.',
         conversao_incompleta: 'Informe a área em hectares e confirme a conversão.',
@@ -79,12 +79,17 @@
             if (valor && TIPOS_SEM_VALOR.indexOf(valor.getAttribute('data-tipo')) === -1) {
                 item.valor = valor.value;
             }
-            var escolha = card.querySelector('[data-campo-escolha]');
-            if (escolha) {
-                var obj = {};
-                obj[escolha.getAttribute('data-campo-escolha')] =
-                    escolha.value ? parseInt(escolha.value, 10) : null;
-                item.escolha = obj;
+            // Só cards de parte/cartório têm estes controles; texto/data não levam escolha.
+            var select = card.querySelector('[data-ocr-escolha]');
+            var criarNovo = card.querySelector('[data-ocr-criar-novo]');
+            if (select || criarNovo) {
+                var escolhido = select && select.value ? parseInt(select.value, 10) : null;
+                var alvo = select ? select.getAttribute('data-ocr-escolha') : null;
+                item.escolha = {
+                    pessoa_id: alvo === 'pessoa_id' ? escolhido : null,
+                    cartorio_id: alvo === 'cartorio_id' ? escolhido : null,
+                    criar_novo: !!(criarNovo && criarNovo.checked)
+                };
             }
             var ha = card.querySelector('[data-campo-ha]');
             if (ha) {

@@ -94,33 +94,32 @@
                        class="form-control campo-valor"
                        type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
                        value="{% firstof campo.valor_final campo.normalized '' %}"
-                       data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                       data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
                 {% endif %}
 
-                {% if campo.match_candidatos|length > 1 %}
-                {% if campo.chave|slice:':9' == '/document' or 'cartorio' in campo.chave %}
-                {% with escolhido=campo.cartorio_escolhido_id nome_escolha='cartorio_escolhido_id' %}
-                <label class="campo-sub">Cadastro correspondente
-                    <select class="form-select" data-campo-escolha="{{ nome_escolha }}"{% if somente_leitura %} disabled{% endif %}>
-                        <option value="">— escolher —</option>
-                        {% for candidato in campo.match_candidatos %}
-                        <option value="{{ candidato }}"{% if candidato == escolhido %} selected{% endif %}>Registro #{{ candidato }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
+                {% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' %}
+                {# Parte vincula pessoa; cartório vincula cartório. Único match já vem selecionado. #}
+                {% with escolhido=campo.pessoa_escolhida_id|default:campo.cartorio_escolhido_id %}
+                <div class="campo-escolha">
+                    {% if campo.match_candidatos or escolhido %}
+                    <label class="campo-sub">Cadastro correspondente
+                        <select class="form-select" data-ocr-escolha="{% if campo.tipo_valor == 'parte' %}pessoa_id{% else %}cartorio_id{% endif %}"{% if somente_leitura %} disabled{% endif %}>
+                            <option value="">— escolha —</option>
+                            {% for candidato in campo.match_candidatos %}
+                            <option value="{{ candidato }}"{% if candidato == escolhido %} selected{% endif %}>Registro #{{ candidato }}</option>
+                            {% endfor %}
+                            {% if escolhido and escolhido not in campo.match_candidatos %}
+                            <option value="{{ escolhido }}" selected>Registro #{{ escolhido }}</option>
+                            {% endif %}
+                        </select>
+                    </label>
+                    {% endif %}
+                    <label class="campo-check">
+                        <input type="checkbox" data-ocr-criar-novo{% if campo.criar_novo %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                        Criar novo cadastro
+                    </label>
+                </div>
                 {% endwith %}
-                {% else %}
-                {% with escolhido=campo.pessoa_escolhida_id nome_escolha='pessoa_escolhida_id' %}
-                <label class="campo-sub">Cadastro correspondente
-                    <select class="form-select" data-campo-escolha="{{ nome_escolha }}"{% if somente_leitura %} disabled{% endif %}>
-                        <option value="">— escolher —</option>
-                        {% for candidato in campo.match_candidatos %}
-                        <option value="{{ candidato }}"{% if candidato == escolhido %} selected{% endif %}>Registro #{{ candidato }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                {% endwith %}
-                {% endif %}
                 {% endif %}
 
                 {# area_convertida: sem os campos, um novo salvamento do card desfaria a conversão. #}
