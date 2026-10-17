@@ -31,6 +31,8 @@ numa CÓPIA do payload A3 — sem mutar o original e sem quebrar o schema.
 """
 
 import copy
+import hashlib
+import json
 import re
 import unicodedata
 
@@ -59,19 +61,69 @@ _TIPOS_NORMALIZAVEIS = ('data', 'decimal', 'area')
 _AREA_DE_ATO = re.compile(r'/acts/\d+/area')
 
 
+def versao_linha(campo) -> str:
+    """Versão estável do estado revisável da linha, incluindo a autoria temporal."""
+    estado = [
+        campo.status_revisao,
+        campo.valor_final,
+        campo.motivos_revisao,
+        campo.pessoa_escolhida_id,
+        campo.cartorio_escolhido_id,
+        campo.criar_novo,
+        campo.area_convertida,
+        campo.revisado_em.isoformat() if campo.revisado_em else None,
+    ]
+    canonico = json.dumps(
+        estado, sort_keys=True, separators=(',', ':'), ensure_ascii=False,
+    )
+    return hashlib.sha256(canonico.encode('utf-8')).hexdigest()[:16]
+
+
 def aplicar_linha(
     campo, *, incluir, valor=None, conferido=False, escolha=None,
-    usuario=None, agora=None,
+    ha_convertido=None, confirmo_conversao=False, usuario=None, agora=None,
 ):
     """Aplica a revisão em memória e registra autoria só quando algo muda."""
     campos_escolha = (
         'pessoa_escolhida_id', 'cartorio_escolhido_id', 'criar_novo',
     )
-    campos_revisao = ('status_revisao', 'valor_final', *campos_escolha)
-    antes = tuple(getattr(campo, nome) for nome in campos_revisao)
+    antes = versao_linha(campo)
 
     if not incluir:
         campo.status_revisao = 'descartado'
+    elif (
+        campo.tipo_valor == 'area'
+        and (
+            MOTIVO_UNIDADE_AREA in campo.motivos_revisao
+            or campo.area_convertida
+        )
+        and destinos.destino_de(campo.chave) != destinos.SEM_DESTINO
+    ):
+        if ha_convertido and confirmo_conversao:
+            canonico = valores.do_formulario(
+                'area', ha_convertido, destinos.destino_de(campo.chave)
+            )
+            campo.valor_final = canonico
+            campo.area_convertida = True
+            campo.status_revisao = (
+                'aceito' if conferido and canonico == campo.normalized
+                else 'editado'
+            )
+            campo.motivos_revisao = [
+                motivo for motivo in campo.motivos_revisao
+                if motivo != MOTIVO_UNIDADE_AREA
+            ]
+        elif ha_convertido is None and not confirmo_conversao:
+            campo.area_convertida = False
+            campo.valor_final = None
+            campo.status_revisao = 'sugerido'
+            # Uma conversão limpa volta a exigir decisão sobre a unidade.
+            if MOTIVO_UNIDADE_AREA not in campo.motivos_revisao:
+                campo.motivos_revisao = [
+                    *campo.motivos_revisao, MOTIVO_UNIDADE_AREA,
+                ]
+        else:
+            raise valores.ValorInvalido('conversao_incompleta')
     else:
         canonico = (
             valores.do_formulario(
@@ -96,8 +148,7 @@ def aplicar_linha(
             if nome in escolha:
                 setattr(campo, nome, escolha[nome])
 
-    depois = tuple(getattr(campo, nome) for nome in campos_revisao)
-    if depois != antes:
+    if versao_linha(campo) != antes:
         campo.revisado_por = usuario
         campo.revisado_em = agora if agora is not None else timezone.now()
     return campo

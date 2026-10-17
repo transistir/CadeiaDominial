@@ -7,14 +7,16 @@ voltam sem pk e ``desnormalizar`` não toca o banco (assertNumQueries(0)).
 """
 
 from datetime import timedelta
+from hashlib import sha256
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from ia_ocr import valores
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
-from ia_ocr.revisao import aplicar_linha, desnormalizar
+from ia_ocr.revisao import aplicar_linha, desnormalizar, versao_linha
 
 from .factories import criar_documento_digital
 from .payloads_extracao import (
@@ -33,11 +35,15 @@ class AplicarLinhaTest(SimpleTestCase):
         pagina = PaginaOcr(
             ocr_job=job, numero_pagina=1, texto_ocr=TEXTO_PAGINA_1
         )
+        payload = payload_registro(job.job_id)
+        for area in (payload['acts'][0]['area'], payload['document']['area']):
+            area.update(
+                normalized='120.00', raw='120,00 m2', unidade='m2',
+                evidencia={'pagina': 1, 'trecho': '120,00 m2'},
+            )
         self.linhas = {
             linha.chave: linha
-            for linha in desnormalizar(
-                extracao, payload_registro(job.job_id), [pagina]
-            )
+            for linha in desnormalizar(extracao, payload, [pagina])
         }
         self.usuario = get_user_model()(username='revisor')
         self.agora = timezone.now()
@@ -120,6 +126,148 @@ class AplicarLinhaTest(SimpleTestCase):
         aplicar_linha(campo, incluir=True, conferido=True)
         self.assertEqual(campo.status_revisao, 'aceito')
         self.assertIsNone(campo.valor_final)
+
+    def test_area_so_com_conversao_confirmada(self):
+        campo = self.linhas['/acts/0/area']
+        self.assertIn('unidade_area', campo.motivos_revisao)
+        campo.motivos_revisao.append('baixa_confianca')
+
+        aplicar_linha(campo, incluir=True, valor='0.0120', conferido=True)
+        self.assertFalse(campo.area_convertida)
+        self.assertIsNone(campo.valor_final)
+        self.assertIn('unidade_area', campo.motivos_revisao)
+
+        antes = versao_linha(campo)
+        for ha_convertido, confirmo_conversao in (
+            ('0.0120', False), (None, True), ('', True), ('', False),
+        ):
+            with self.subTest(ha=ha_convertido, confirmo=confirmo_conversao):
+                with self.assertRaisesMessage(
+                    valores.ValorInvalido, 'conversao_incompleta'
+                ):
+                    aplicar_linha(
+                        campo, incluir=True, ha_convertido=ha_convertido,
+                        confirmo_conversao=confirmo_conversao,
+                    )
+                self.assertEqual(versao_linha(campo), antes)
+
+        for ha_convertido in ('invalido', '-1', '0.00001', '123456789.0000'):
+            with self.subTest(ha=ha_convertido):
+                with self.assertRaises(valores.ValorInvalido):
+                    aplicar_linha(
+                        campo, incluir=True, ha_convertido=ha_convertido,
+                        confirmo_conversao=True,
+                    )
+                self.assertEqual(versao_linha(campo), antes)
+
+        aplicar_linha(
+            campo, incluir=True, ha_convertido='0,0120',
+            confirmo_conversao=True, usuario=self.usuario, agora=self.agora,
+        )
+        self.assertTrue(campo.area_convertida)
+        self.assertEqual(campo.valor_final, '0.0120')
+        self.assertEqual(campo.normalized, '120.00')
+        self.assertEqual(campo.status_revisao, 'editado')
+        self.assertEqual(campo.motivos_revisao, ['baixa_confianca'])
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+        aplicar_linha(
+            campo, incluir=True, ha_convertido='0.0120',
+            confirmo_conversao=True, agora=self.agora + timedelta(seconds=1),
+        )
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+        aplicar_linha(
+            campo, incluir=True, ha_convertido='120,00',
+            confirmo_conversao=True, conferido=True,
+        )
+        self.assertEqual(campo.status_revisao, 'aceito')
+        self.assertEqual(campo.valor_final, '120.00')
+        self.assertTrue(campo.area_convertida)
+
+    def test_area_limpar_conversao(self):
+        campo = self.linhas['/acts/0/area']
+        aplicar_linha(
+            campo, incluir=True, ha_convertido='0.0120',
+            confirmo_conversao=True,
+        )
+        self.assertNotIn('unidade_area', campo.motivos_revisao)
+
+        aplicar_linha(
+            campo, incluir=True, ha_convertido=None,
+            usuario=self.usuario, agora=self.agora,
+        )
+
+        self.assertFalse(campo.area_convertida)
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'sugerido')
+        self.assertEqual(campo.motivos_revisao, ['unidade_area'])
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+        aplicar_linha(
+            campo, incluir=True, agora=self.agora + timedelta(seconds=1)
+        )
+        self.assertEqual(campo.motivos_revisao, ['unidade_area'])
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+    def test_area_sem_destino_nao_converte(self):
+        campo = self.linhas['/document/area']
+        self.assertNotIn('unidade_area', campo.motivos_revisao)
+        for tipo_valor in ('texto', 'area'):
+            with self.subTest(tipo_valor=tipo_valor):
+                # Mesmo uma linha antiga com motivo de unidade é SEM_DESTINO.
+                campo.tipo_valor = tipo_valor
+                campo.motivos_revisao = (
+                    ['unidade_area'] if tipo_valor == 'area' else []
+                )
+                motivos = list(campo.motivos_revisao)
+                for ha, confirmo in (('invalido', True), ('0.0120', False)):
+                    aplicar_linha(
+                        campo, incluir=True, ha_convertido=ha,
+                        confirmo_conversao=confirmo, conferido=True,
+                    )
+                    self.assertFalse(campo.area_convertida)
+                    self.assertIsNone(campo.valor_final)
+                    self.assertEqual(campo.normalized, '120.00')
+                    self.assertEqual(campo.status_revisao, 'aceito')
+                    self.assertEqual(campo.motivos_revisao, motivos)
+
+    def test_versao_linha_muda_com_cada_campo(self):
+        campo = self.linhas['/document/data']
+        antes = versao_linha(campo)
+        alteracoes = {
+            'status_revisao': 'aceito',
+            'valor_final': '2020-01-11',
+            'motivos_revisao': ['baixa_confianca'],
+            'pessoa_escolhida_id': 1,
+            'cartorio_escolhido_id': 2,
+            'criar_novo': True,
+            'area_convertida': True,
+            'revisado_em': self.agora,
+        }
+        for nome, valor in alteracoes.items():
+            with self.subTest(campo=nome):
+                original = getattr(campo, nome)
+                setattr(campo, nome, valor)
+                self.assertNotEqual(versao_linha(campo), antes)
+                setattr(campo, nome, original)
+                self.assertEqual(versao_linha(campo), antes)
+
+    def test_versao_linha_estavel_sem_mudanca(self):
+        campo = self.linhas['/document/numero']
+        campo.valor_final = 'Área conferida'
+        esperado = sha256(
+            '["sugerido","Área conferida",[],null,null,false,false,null]'
+            .encode('utf-8')
+        ).hexdigest()[:16]
+
+        self.assertEqual(versao_linha(campo), esperado)
+        self.assertEqual(versao_linha(campo), esperado)
+        self.assertRegex(versao_linha(campo), r'^[0-9a-f]{16}$')
 
 
 class DesnormalizarTest(TestCase):
