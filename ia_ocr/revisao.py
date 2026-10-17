@@ -19,10 +19,22 @@ Toda pendência vira motivo estável em ``motivos_revisao`` com
 - ``closure`` — qualquer linha ``/closure/*`` (classificação de fim de
   cadeia é SEMPRE decisão humana);
 - ``evidencia_invalida`` — página da evidência fora das páginas do job;
-- ``trecho_ausente`` — trecho não é substring do ``texto_ocr`` da página.
+- ``trecho_ausente`` — trecho não é substring do texto vigente da página
+  (o ``texto_corrigido`` devolvido pelo serviço — decisão #290 — ou, na
+  falta dele, o ``texto_ocr`` puro como fallback).
+
+O módulo também hospeda o matching determinístico do I-5 (executado por
+esta camada Python, nunca pelo modelo): ``IndicePessoas`` e
+``IndiceCartorios`` (UMA query cada, matching em memória) e
+``enriquecer_payload``, que escreve ``match_sugerido``/``match_pessoa_id``
+numa CÓPIA do payload A3 — sem mutar o original e sem quebrar o schema.
 """
 
+import copy
 import re
+import unicodedata
+
+from dominial.models import Cartorios, Pessoas
 
 from . import destinos, valores
 from .models import CampoSugerido
@@ -50,10 +62,12 @@ def desnormalizar(extracao, payload, paginas) -> list[CampoSugerido]:
 
     ``paginas`` é a lista de ``PaginaOcr`` do job: a evidência só aponta
     para página que existe ali, e o trecho só é mantido se for substring
-    literal do ``texto_ocr`` daquela página.
+    literal do texto vigente daquela página — ``texto_corrigido`` (decisão
+    #290) ou, sem ele, o ``texto_ocr`` puro.
     """
     texto_paginas = {
-        pagina.numero_pagina: pagina.texto_ocr for pagina in paginas
+        pagina.numero_pagina: pagina.texto_corrigido or pagina.texto_ocr
+        for pagina in paginas
     }
     linhas = _folhas(extracao, '/document', payload.get('document'), texto_paginas)
     linhas += _placeholders_documento(extracao, payload.get('document'))
@@ -163,7 +177,7 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
     _checar_confianca(confianca, motivos)
     if ponteiro.startswith('/closure'):
         motivos.append(MOTIVO_CLOSURE)
-    pagina, trecho = _resolver_evidencia(
+    pagina, trecho, bbox = _resolver_evidencia(
         campo.get('evidencia'), texto_paginas, motivos
     )
 
@@ -178,6 +192,7 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
         motivos_revisao=motivos,
         evidencia_pagina=pagina,
         evidencia_trecho=trecho,
+        evidencia_bbox=bbox,
     )
 
 
@@ -185,7 +200,7 @@ def _de_ato(extracao, ponteiro, ato, texto_paginas):
     """Linha estrutural do ato: chave ``/acts/{i}``, normalized = rótulo."""
     motivos = []
     confianca = _checar_confianca(ato.get('confianca'), motivos)
-    pagina, trecho = _resolver_evidencia(
+    pagina, trecho, bbox = _resolver_evidencia(
         ato.get('evidencia'), texto_paginas, motivos
     )
     rotulo = ato.get('rotulo') if _eh_folha(ato.get('rotulo')) else {}
@@ -200,6 +215,7 @@ def _de_ato(extracao, ponteiro, ato, texto_paginas):
         motivos_revisao=motivos,
         evidencia_pagina=pagina,
         evidencia_trecho=trecho,
+        evidencia_bbox=bbox,
     )
 
 
@@ -207,7 +223,7 @@ def _de_parte(extracao, ponteiro, parte, texto_paginas):
     """Linha estrutural da parte: normalized = papel efetivo."""
     motivos = []
     confianca = _checar_confianca(parte.get('confianca'), motivos)
-    pagina, trecho = _resolver_evidencia(
+    pagina, trecho, bbox = _resolver_evidencia(
         parte.get('evidencia'), texto_paginas, motivos
     )
     return CampoSugerido(
@@ -221,6 +237,7 @@ def _de_parte(extracao, ponteiro, parte, texto_paginas):
         motivos_revisao=motivos,
         evidencia_pagina=pagina,
         evidencia_trecho=trecho,
+        evidencia_bbox=bbox,
     )
 
 
@@ -237,6 +254,7 @@ def _placeholder(extracao, chave):
         motivos_revisao=[],
         evidencia_pagina=None,
         evidencia_trecho='',
+        evidencia_bbox=None,
     )
 
 
@@ -247,17 +265,37 @@ def _checar_confianca(confianca, motivos):
     return confianca
 
 
+def _bbox_valido(bbox):
+    """bbox aproveitável: lista JSON de exatamente 4 números (bool excluído)."""
+    return (
+        isinstance(bbox, list)
+        and len(bbox) == 4
+        and all(
+            isinstance(valor, (int, float)) and not isinstance(valor, bool)
+            for valor in bbox
+        )
+    )
+
+
 def _resolver_evidencia(evidencia, texto_paginas, motivos):
-    """(pagina, trecho) confiáveis; acumula motivos quando não são.
+    """(pagina, trecho, bbox) confiáveis; acumula motivos quando não são.
 
     Página fora do job → ``evidencia_invalida`` (pagina vira ``None``).
-    Trecho que não é substring do ``texto_ocr`` da página — ou página
+    Trecho que não é substring do texto vigente da página — ou página
     inexistente, onde nada é verificável — → ``trecho_ausente`` (trecho
     vira ``''``). Sem evidência (``None``) não é pendência: o A3 a admite
     nula.
+
+    ``bbox`` (decisão #290/17-10, pixels do OCR) é preservado só quando é
+    lista de 4 números; fora disso vira ``None`` e NÃO é pendência — é
+    conveniência de template, e a conversão pixel→ponto de PDF (dpi do
+    job) não é desta camada.
     """
     if not isinstance(evidencia, dict):
-        return None, ''
+        return None, '', None
+    bbox = evidencia.get('bbox')
+    if not _bbox_valido(bbox):
+        bbox = None
     numero = evidencia.get('pagina')
     if numero in texto_paginas:
         pagina = numero
@@ -267,6 +305,207 @@ def _resolver_evidencia(evidencia, texto_paginas, motivos):
     trecho = evidencia.get('trecho')
     texto = texto_paginas.get(pagina) if pagina is not None else None
     if texto is not None and isinstance(trecho, str) and trecho in texto:
-        return pagina, trecho
+        return pagina, trecho, bbox
     motivos.append(MOTIVO_TRECHO_AUSENTE)
-    return pagina, ''
+    return pagina, '', bbox
+
+
+# ---------------------------------------------------------------------------
+# Matching determinístico (I-5, §2.A): camada Python, nunca do modelo.
+# ---------------------------------------------------------------------------
+
+_NAO_DIGITO = re.compile(r'\D')
+
+# Campos fieldCartorio do A3, por posição no payload (schema vendorizado):
+# cada um recebe ``match_sugerido`` no enriquecimento.
+_CARTORIOS_DO_DOCUMENTO = ('cartorio', 'cri_atual')
+_CARTORIOS_DO_ATO = ('cartorio_transmissao',)
+
+
+def _normalizar_nome(texto):
+    """Forma canônica para comparação: NFKD sem acentos, sem caixa,
+    espaços colapsados. Não-string (None, lixo) → ``''``."""
+    if not isinstance(texto, str):
+        return ''
+    decomposto = unicodedata.normalize('NFKD', texto)
+    sem_acentos = ''.join(
+        caractere for caractere in decomposto
+        if not unicodedata.combining(caractere)
+    )
+    return ' '.join(sem_acentos.casefold().split())
+
+
+def _so_digitos(texto):
+    if not isinstance(texto, str):
+        return ''
+    return _NAO_DIGITO.sub('', texto)
+
+
+def _cpf_utilizavel(documento_tipo, documento_valor):
+    """Dígitos do CPF quando o documento casa por documento; senão ``None``.
+
+    Só CPF com EXATAMENTE 11 dígitos casa por documento. CPF mascarado
+    (contém ``*``/``X``) ou com menos de 11 dígitos, e qualquer outro tipo
+    (CNPJ, CGC, RG, OUTRO), nunca casam por documento — documento
+    incompleto não é identidade (§party: nunca completar dígitos
+    mascarados).
+    """
+    if documento_tipo != 'CPF' or not isinstance(documento_valor, str):
+        return None
+    if '*' in documento_valor or 'x' in documento_valor.lower():
+        return None
+    digitos = _so_digitos(documento_valor)
+    return digitos if len(digitos) == 11 else None
+
+
+class IndicePessoas:
+    """Índice de ``Pessoas`` em memória: UMA query na construção.
+
+    ``values_list('id', 'nome', 'cpf')`` uma única vez; todo ``match`` é
+    puro, sem banco.
+    """
+
+    def __init__(self):
+        self._por_nome = {}
+        self._por_cpf = {}
+        for pessoa_id, nome, cpf in Pessoas.objects.values_list(
+            'id', 'nome', 'cpf'
+        ):
+            chave = _normalizar_nome(nome)
+            if chave:
+                self._por_nome.setdefault(chave, []).append(pessoa_id)
+            digitos = _so_digitos(cpf)
+            if len(digitos) == 11:
+                self._por_cpf.setdefault(digitos, []).append(pessoa_id)
+
+    def match(self, nome, documento_tipo=None, documento_valor=None):
+        """``(escolhido_id|None, candidatos)``: CPF exato primeiro, nome depois.
+
+        CPF utilizável (11 dígitos, sem máscara) casa por ``cpf`` exato:
+        único → escolhido; vários → candidatos (humano decide). CPF que não
+        casa ninguém — assim como CPF mascarado/incompleto ou
+        CNPJ/CGC/OUTRO — cai no nome normalizado: 1 → escolhido; >1 →
+        candidatos; 0 → ``(None, [])``. Matching sugere, nunca adivinha:
+        a escolha é do revisor.
+        """
+        digitos = _cpf_utilizavel(documento_tipo, documento_valor)
+        if digitos is not None:
+            ids = self._por_cpf.get(digitos, [])
+            if len(ids) == 1:
+                return ids[0], []
+            if ids:
+                return None, ids
+        chave = _normalizar_nome(nome)
+        if not chave:
+            return None, []
+        ids = self._por_nome.get(chave, [])
+        if len(ids) == 1:
+            return ids[0], []
+        return None, ids
+
+
+class IndiceCartorios:
+    """Índice de ``Cartorios`` em memória: UMA query na construção.
+
+    ``values_list('id', 'nome', 'cidade')`` uma única vez; todo ``match``
+    é puro, sem banco.
+    """
+
+    def __init__(self):
+        self._por_nome = {}
+        for cartorio_id, nome, cidade in Cartorios.objects.values_list(
+            'id', 'nome', 'cidade'
+        ):
+            chave = _normalizar_nome(nome)
+            if chave:
+                self._por_nome.setdefault(chave, []).append(
+                    (cartorio_id, _normalizar_nome(cidade))
+                )
+
+    def match(self, nome, cidade=None):
+        """``(escolhido_id|None, candidatos)`` por nome normalizado + cidade.
+
+        Cidade informada filtra: cidade divergente — ou cartório sem cidade
+        para confirmar — não casa (homônimo de outro município é outro
+        cartório). Sem cidade, vale só o nome. 1 → escolhido; >1 →
+        candidatos; 0 → ``(None, [])``.
+        """
+        chave = _normalizar_nome(nome)
+        if not chave:
+            return None, []
+        entradas = self._por_nome.get(chave, [])
+        cidade_chave = _normalizar_nome(cidade)
+        if cidade_chave:
+            entradas = [
+                entrada for entrada in entradas
+                if entrada[1] == cidade_chave
+            ]
+        ids = [cartorio_id for cartorio_id, _cidade in entradas]
+        if len(ids) == 1:
+            return ids[0], []
+        return None, ids
+
+
+def _normalized(no):
+    """``normalized`` de um campo A3; ``None`` se o nó não é dict."""
+    return no.get('normalized') if isinstance(no, dict) else None
+
+
+def enriquecer_payload(payload, indice_pessoas, indice_cartorios):
+    """Matching determinístico escrito numa CÓPIA do payload A3.
+
+    - todo fieldCartorio (``document.cartorio``/``cri_atual``,
+      ``acts[].cartorio_transmissao``, ``acts[].origem.cartorio``) recebe
+      ``match_sugerido`` = ``{cartorio_id: único|None, candidatos: [ids]}``;
+    - toda parte (``acts[].partes[]``) recebe ``match_pessoa_id``
+      (único|None) pelo nome + documento de identificação.
+
+    O original não é mutado e o resultado continua válido no A3
+    (``validar_payload``): as duas chaves são do schema vendorizado. Match
+    vindo do serviço, se houver, é sobrescrito — matching é decisão desta
+    camada, nunca do modelo.
+    """
+    enriquecido = copy.deepcopy(payload)
+    document = enriquecido.get('document')
+    if isinstance(document, dict):
+        for nome in _CARTORIOS_DO_DOCUMENTO:
+            _sugerir_cartorio(document.get(nome), indice_cartorios)
+    for ato in enriquecido.get('acts') or []:
+        if not isinstance(ato, dict):
+            continue
+        for nome in _CARTORIOS_DO_ATO:
+            _sugerir_cartorio(ato.get(nome), indice_cartorios)
+        origem = ato.get('origem')
+        if isinstance(origem, dict):
+            _sugerir_cartorio(origem.get('cartorio'), indice_cartorios)
+        for parte in ato.get('partes') or []:
+            _sugerir_pessoa(parte, indice_pessoas)
+    return enriquecido
+
+
+def _sugerir_cartorio(campo, indice_cartorios):
+    """``match_sugerido`` de um fieldCartorio (nó ausente/não-dict: nada)."""
+    if not isinstance(campo, dict):
+        return
+    escolhido, candidatos = indice_cartorios.match(
+        _normalized(campo), campo.get('municipio')
+    )
+    campo['match_sugerido'] = {
+        'cartorio_id': escolhido,
+        'candidatos': candidatos,
+    }
+
+
+def _sugerir_pessoa(parte, indice_pessoas):
+    """``match_pessoa_id`` de uma party: nome + documento de identificação."""
+    if not isinstance(parte, dict):
+        return
+    documento = parte.get('documento_identificacao')
+    if not isinstance(documento, dict):
+        documento = {}
+    escolhido, _candidatos = indice_pessoas.match(
+        _normalized(parte.get('nome')),
+        _normalized(documento.get('tipo')),
+        _normalized(documento.get('valor')),
+    )
+    parte['match_pessoa_id'] = escolhido

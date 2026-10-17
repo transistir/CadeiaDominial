@@ -419,6 +419,11 @@ class CampoSugerido(models.Model):
     area_convertida = models.BooleanField(default=False)
     evidencia_pagina = models.PositiveIntegerField(null=True, blank=True)
     evidencia_trecho = models.TextField(blank=True)
+    # bbox do trecho na página, em pixels do OCR (decisão #290/17-10):
+    # [x0, y0, x1, y1] quando o serviço fornece; NULL quando não fornece ou
+    # o formato não é reconhecível. A conversão pixel→ponto de PDF é do
+    # template (usa o dpi do job), não desta camada.
+    evidencia_bbox = models.JSONField(null=True, blank=True)
     status_revisao = models.CharField(
         max_length=20, choices=STATUS_REVISAO_CHOICES, default='sugerido'
     )

@@ -204,6 +204,14 @@ class Migration(migrations.Migration):
             name='corrigido_em',
             field=models.DateTimeField(blank=True, null=True),
         ),
+        # Decisão #290/17-10 (#262): a evidência guarda o bbox do trecho em
+        # pixels do OCR ([x0, y0, x1, y1] ou NULL); a conversão para ponto
+        # de PDF é do template (usa o dpi persistido no job).
+        migrations.AddField(
+            model_name='camposugerido',
+            name='evidencia_bbox',
+            field=models.JSONField(blank=True, null=True),
+        ),
         migrations.AlterField(
             model_name='extracaosugerida',
             name='payload_servico',

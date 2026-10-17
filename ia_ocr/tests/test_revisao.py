@@ -265,3 +265,103 @@ class DesnormalizarTest(TestCase):
         self.assertTrue(valor.requer_revisao)
         self.assertIn('normalizacao_invalida', valor.motivos_revisao)
         self.assertEqual(valor.raw, 'R$ 150.000,00')  # raw preservado
+
+    def test_evidencia_usa_texto_corrigido(self):
+        """Trecho é conferido contra o texto vigente: o corrigido (#290).
+
+        O OCR puro é só fallback (página sem ``texto_corrigido`` — coberto
+        pelos demais testes): com correção aplicada, trecho que só existe
+        no OCR original é ``trecho_ausente``.
+        """
+        self.pagina.texto_corrigido = (
+            'Texto revisado pelo serviço. MATRÍCULA Nº 42.718.'
+        )
+        self.pagina.save(update_fields=['texto_corrigido'])
+
+        payload = payload_registro(self.job.job_id)
+        # Só existe no texto corrigido → evidência íntegra.
+        payload['document']['tipo']['evidencia'] = {
+            'pagina': 1, 'trecho': 'Texto revisado pelo serviço.',
+        }
+        # Só existe no OCR puro → não vale mais contra o texto corrigido.
+        payload['document']['data']['evidencia'] = {
+            'pagina': 1, 'trecho': '10 de janeiro de 2020',
+        }
+
+        por_chave = self._por_chave(self._linhas(payload))
+
+        do_corrigido = por_chave['/document/tipo']
+        self.assertEqual(
+            do_corrigido.evidencia_trecho, 'Texto revisado pelo serviço.'
+        )
+        self.assertNotIn('trecho_ausente', do_corrigido.motivos_revisao)
+
+        so_do_ocr = por_chave['/document/data']
+        self.assertEqual(so_do_ocr.evidencia_trecho, '')
+        self.assertIn('trecho_ausente', so_do_ocr.motivos_revisao)
+        self.assertTrue(so_do_ocr.requer_revisao)
+
+    def test_bbox_guardado(self):
+        # bbox ainda não está no schema A3 vendorizado (o evidence tem
+        # additionalProperties: false) e desnormalizar não valida: os
+        # payloads aqui pulam o validar_payload.
+        payload = payload_registro(self.job.job_id)
+        payload['document']['numero']['evidencia'] = {
+            'pagina': 1, 'trecho': 'Nº 42.718', 'bbox': [10, 20, 300, 40],
+        }
+        payload['acts'][0]['evidencia'] = {
+            'pagina': 1, 'trecho': 'R-1/42.718', 'bbox': [1.5, 2, 3, 4.5],
+        }
+        payload['acts'][0]['partes'][0]['evidencia'] = {
+            'pagina': 1, 'trecho': 'JOÃO DA SILVA', 'bbox': [0, 0, 100, 20],
+        }
+
+        por_chave = self._por_chave(self._linhas(payload, validar=False))
+
+        campo = por_chave['/document/numero']
+        self.assertEqual(campo.evidencia_bbox, [10, 20, 300, 40])
+        self.assertEqual(campo.evidencia_trecho, 'Nº 42.718')
+        # bbox íntegro não é pendência: linha segue limpa.
+        self.assertEqual(campo.motivos_revisao, [])
+        self.assertFalse(campo.requer_revisao)
+
+        # Linhas estruturais (ato e parte) também carregam o bbox.
+        self.assertEqual(por_chave['/acts/0'].evidencia_bbox, [1.5, 2, 3, 4.5])
+        self.assertEqual(
+            por_chave['/acts/0/partes/0'].evidencia_bbox, [0, 0, 100, 20]
+        )
+
+        # Evidência sem bbox (e placeholder) → None, sem pendência.
+        self.assertIsNone(por_chave['/document/data'].evidencia_bbox)
+        self.assertNotIn(
+            'trecho_ausente', por_chave['/document/data'].motivos_revisao
+        )
+
+    def test_bbox_invalido_vira_none(self):
+        invalidos = (
+            [10, 20, 30],            # 3 números
+            [10, 20, 30, 40, 50],    # 5 números
+            [10, 20, '30', 40],      # string no meio
+            [True, 20, 30, 40],      # bool não é número
+            '10,20,30,40',           # não é lista
+            {'x0': 10},              # não é lista
+            None,                    # null explícito
+        )
+        for bbox in invalidos:
+            with self.subTest(bbox=bbox):
+                payload = payload_registro(self.job.job_id)
+                payload['document']['numero']['evidencia'] = {
+                    'pagina': 1, 'trecho': 'Nº 42.718', 'bbox': bbox,
+                }
+
+                numero = self._por_chave(
+                    self._linhas(payload, validar=False)
+                )['/document/numero']
+
+                self.assertIsNone(numero.evidencia_bbox)
+                # bbox malformado NÃO é pendência: página e trecho seguem
+                # íntegros e a linha não vai para revisão por causa dele.
+                self.assertEqual(numero.evidencia_pagina, 1)
+                self.assertEqual(numero.evidencia_trecho, 'Nº 42.718')
+                self.assertEqual(numero.motivos_revisao, [])
+                self.assertFalse(numero.requer_revisao)
