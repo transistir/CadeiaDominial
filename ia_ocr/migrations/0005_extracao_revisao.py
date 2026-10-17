@@ -60,6 +60,11 @@ def reverso_raw_normalized(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # Não-atômica: no Postgres, o RunPython de reversão (NULL->'') roda antes
+    # dos AlterField de volta para NOT NULL na mesma transação e provoca
+    # 'cannot ALTER TABLE ... because it has pending trigger events'.
+
+    atomic = False
 
     dependencies = [
         # Mesmo raciocínio de ia_ocr/migrations/0001_initial.py:14-23: as
