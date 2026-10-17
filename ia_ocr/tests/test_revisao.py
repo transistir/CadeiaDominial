@@ -1244,3 +1244,57 @@ class DesnormalizarTest(TestCase):
         self.assertTrue(parte.criar_novo)
         self.assertIsNone(parte.pessoa_escolhida_id)
         self.assertEqual(parte.status_revisao, 'aceito')
+
+    def test_parte_homonima_vem_com_candidatos(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['partes'][0]['match_pessoa_id'] = None
+        payload['acts'][0]['partes'][0]['match_pessoa_candidatos'] = [11, 12]
+
+        parte = self._por_chave(
+            self._linhas(payload, validar=False)
+        )['/acts/0/partes/0']
+
+        self.assertEqual(parte.match_candidatos, [11, 12])
+        self.assertIsNone(parte.pessoa_escolhida_id)
+
+    def test_escolha_e_criar_novo_sao_exclusivos(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['partes'][0]['match_pessoa_id'] = None
+        payload['acts'][0]['partes'][0]['match_pessoa_candidatos'] = [11, 12]
+        payload['document']['cri_atual']['match_sugerido'] = {
+            'cartorio_id': None, 'candidatos': [3, 4],
+        }
+        por_chave = self._por_chave(self._linhas(payload, validar=False))
+        parte = por_chave['/acts/0/partes/0']
+        cri_atual = por_chave['/document/cri_atual']
+
+        # Escolher depois de "criar novo" desmarca o "criar novo".
+        aplicar_linha(parte, incluir=True, escolha={'criar_novo': True})
+        aplicar_linha(parte, incluir=True, escolha={'pessoa_escolhida_id': 12})
+        self.assertEqual(parte.pessoa_escolhida_id, 12)
+        self.assertFalse(parte.criar_novo)
+
+        # "Criar novo" depois de escolher zera a escolha.
+        aplicar_linha(parte, incluir=True, escolha={'criar_novo': True})
+        self.assertTrue(parte.criar_novo)
+        self.assertIsNone(parte.pessoa_escolhida_id)
+
+        aplicar_linha(
+            cri_atual, incluir=True, escolha={'cartorio_escolhido_id': 4},
+        )
+        aplicar_linha(cri_atual, incluir=True, escolha={'criar_novo': True})
+        self.assertTrue(cri_atual.criar_novo)
+        self.assertIsNone(cri_atual.cartorio_escolhido_id)
+        aplicar_linha(
+            cri_atual, incluir=True, escolha={'cartorio_escolhido_id': 3},
+        )
+        self.assertEqual(cri_atual.cartorio_escolhido_id, 3)
+        self.assertFalse(cri_atual.criar_novo)
+
+        # As duas coisas na mesma escolha: "criar novo" vence.
+        aplicar_linha(
+            parte, incluir=True,
+            escolha={'pessoa_escolhida_id': 11, 'criar_novo': True},
+        )
+        self.assertTrue(parte.criar_novo)
+        self.assertIsNone(parte.pessoa_escolhida_id)

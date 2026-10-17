@@ -94,10 +94,14 @@ def _pagina_pedida(request, paginas):
 
 
 def _disponibilidade_extracao(job, paginas):
-    """(pode_extrair, motivo): após a #290 só depende do OCR, não da confirmação."""
+    """(pode_extrair, motivo): após a #290 só depende do OCR, não da confirmação.
+
+    Mesma regra de ``services.extrair_campos``: sem páginas ou com
+    ``texto_ocr`` nulo, recusa; verso em branco (``''``) é legítimo.
+    """
     if job.status != estados.CONCLUIDO:
         return False, 'Aguardando o OCR terminar.'
-    if any(not pagina.texto_ocr for pagina in paginas):
+    if not paginas or any(pagina.texto_ocr is None for pagina in paginas):
         return False, 'O OCR não devolveu texto para todas as páginas.'
     return True, ''
 

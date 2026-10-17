@@ -27,7 +27,8 @@ O módulo também hospeda o matching determinístico do I-5 (executado por
 esta camada Python, nunca pelo modelo): ``IndicePessoas`` e
 ``IndiceCartorios`` (UMA query cada, matching em memória) e
 ``enriquecer_payload``, que escreve ``match_sugerido``/``match_pessoa_id``
-numa CÓPIA do payload A3 — sem mutar o original e sem quebrar o schema.
+(do A3) e ``match_pessoa_candidatos`` (extensão local) numa CÓPIA do
+payload A3 — sem mutar o original.
 """
 
 import copy
@@ -337,6 +338,14 @@ def aplicar_linha(
         for nome in campos_escolha:
             if nome in escolha:
                 setattr(campo, nome, escolha[nome])
+        # Escolher um existente e "criar novo" se excluem: vence o que veio.
+        if escolha.get('criar_novo'):
+            campo.pessoa_escolhida_id = None
+            campo.cartorio_escolhido_id = None
+        elif escolha.get('pessoa_escolhida_id') or escolha.get(
+            'cartorio_escolhido_id'
+        ):
+            campo.criar_novo = False
 
     if versao_linha(campo) != antes:
         campo.revisado_por = usuario
@@ -683,8 +692,9 @@ def _de_parte(extracao, ponteiro, parte, texto_paginas):
     pagina, trecho, bbox = _resolver_evidencia(
         parte.get('evidencia'), texto_paginas, motivos
     )
-    # O A3 só leva o match único da parte: homônimos chegam sem candidato.
-    candidatos, escolhido = _candidatos_do_match(parte.get('match_pessoa_id'))
+    candidatos, escolhido = _candidatos_do_match(
+        parte.get('match_pessoa_id'), parte.get(MATCH_PESSOA_CANDIDATOS),
+    )
     return CampoSugerido(
         extracao=extracao,
         chave=ponteiro,
@@ -800,6 +810,8 @@ _NAO_DIGITO = re.compile(r'\D')
 
 # Campos fieldCartorio do A3, por posição no payload (schema vendorizado):
 # cada um recebe ``match_sugerido`` no enriquecimento.
+MATCH_PESSOA_CANDIDATOS = 'match_pessoa_candidatos'
+
 _CARTORIOS_DO_DOCUMENTO = ('cartorio', 'cri_atual')
 _CARTORIOS_DO_ATO = ('cartorio_transmissao',)
 
@@ -940,10 +952,13 @@ def enriquecer_payload(payload, indice_pessoas, indice_cartorios):
       ``acts[].cartorio_transmissao``, ``acts[].origem.cartorio``) recebe
       ``match_sugerido`` = ``{cartorio_id: único|None, candidatos: [ids]}``;
     - toda parte (``acts[].partes[]``) recebe ``match_pessoa_id``
-      (único|None) pelo nome + documento de identificação.
+      (único|None) e ``match_pessoa_candidatos`` (ids, vazia quando há
+      único) pelo nome + documento de identificação.
 
-    O original não é mutado e o resultado continua válido no A3
-    (``validar_payload``): as duas chaves são do schema vendorizado. Match
+    O original não é mutado. ``match_sugerido`` e ``match_pessoa_id`` são do
+    schema vendorizado; ``match_pessoa_candidatos`` é extensão LOCAL (o A3
+    da party não tem lista de candidatos) — o enriquecido só é válido no A3
+    sem ela, e só ``payload_servico`` passa por ``validar_payload``. Match
     vindo do serviço, se houver, é sobrescrito — matching é decisão desta
     camada, nunca do modelo.
     """
@@ -979,15 +994,21 @@ def _sugerir_cartorio(campo, indice_cartorios):
 
 
 def _sugerir_pessoa(parte, indice_pessoas):
-    """``match_pessoa_id`` de uma party: nome + documento de identificação."""
+    """``match_pessoa_id`` + ``match_pessoa_candidatos`` de uma party.
+
+    Nome + documento de identificação. Homônimos ficam em
+    ``match_pessoa_candidatos`` (ids em ordem de pk) com ``match_pessoa_id``
+    nulo: o revisor escolhe.
+    """
     if not isinstance(parte, dict):
         return
     documento = parte.get('documento_identificacao')
     if not isinstance(documento, dict):
         documento = {}
-    escolhido, _candidatos = indice_pessoas.match(
+    escolhido, candidatos = indice_pessoas.match(
         _normalized(parte.get('nome')),
         _normalized(documento.get('tipo')),
         _normalized(documento.get('valor')),
     )
     parte['match_pessoa_id'] = escolhido
+    parte[MATCH_PESSOA_CANDIDATOS] = sorted(candidatos)

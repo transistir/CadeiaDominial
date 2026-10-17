@@ -4,7 +4,8 @@
  *
  * Cada alteração num card (valor, incluir, conferido, escolha de cadastro,
  * conversão de área) agenda, com debounce de 300 ms, um POST só daquele card
- * para url_salvar. 200 atualiza a versão; 409 recarrega a página (outra aba
+ * para url_salvar. Os POSTs saem em fila, um por vez, cada um com a versão
+ * devolvida pelo anterior. 200 atualiza a versão; 409 recarrega a página (outra aba
  * ou usuário mudou a revisão); 422 mostra o erro no próprio card. O finalizar
  * também vai em JSON, porque o endpoint não aceita formulário.
  *
@@ -38,6 +39,8 @@
         var versaoAtual = toolbar ? toolbar.getAttribute('data-versao') : '';
         var cards = Array.prototype.slice.call(raiz.querySelectorAll('[data-campo]'));
         var timers = new Map();
+        var fila = Promise.resolve();
+        var emFila = 0;
         var recarregando = false;
 
         function rotular(card) {
@@ -107,9 +110,21 @@
             window.location.reload();
         }
 
+        // Um POST por vez: cada um sai com a versão devolvida pelo anterior,
+        // senão dois cards salvos juntos dão 409 contra a própria tela.
         function salvar(card) {
             timers.delete(card);
             marcarEstado(card, 'Salvando…');
+            emFila += 1;
+            fila = fila.then(function () {
+                return recarregando ? null : enviar(card);
+            }).then(function () {
+                emFila -= 1;
+            });
+            return fila;
+        }
+
+        function enviar(card) {
             return fetch(urlSalvar, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -177,6 +192,14 @@
             var card = cardDe(evento.target);
             var alvo = evento.target;
             if (card && (alvo.type === 'checkbox' || alvo.tagName === 'SELECT')) {
+                // Escolher um cadastro e "criar novo" se excluem.
+                var select = card.querySelector('[data-ocr-escolha]');
+                var criarNovo = card.querySelector('[data-ocr-criar-novo]');
+                if (alvo === criarNovo && criarNovo.checked && select) {
+                    select.value = '';
+                } else if (alvo === select && select.value && criarNovo) {
+                    criarNovo.checked = false;
+                }
                 card.classList.toggle('descartado', !(card.querySelector('[data-campo-incluir]') || {}).checked);
                 agendar(card);
             }
@@ -221,7 +244,7 @@
                 evento.preventDefault();
                 var botao = form.querySelector('[data-ocr-finalizar]');
                 if (botao && botao.disabled) return;
-                if (timers.size) {
+                if (timers.size || emFila) {
                     msgFinalizar.textContent = 'Aguarde o salvamento dos campos alterados.';
                     return;
                 }

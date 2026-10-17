@@ -251,14 +251,25 @@ class ExtrairCamposViewTest(TelaTextoBase):
             (False, 'Aguardando o OCR terminar.'),
         )
 
-    def test_botao_desabilitado_sem_texto_em_alguma_pagina(self):
+    def test_botao_habilitado_com_pagina_em_branco(self):
+        # Verso em branco é OCR legítimo: o serviço aceita, a tela também.
         self.job.paginas.filter(numero_pagina=2).update(texto_ocr='')
 
         resposta, atributos, motivo = self._estado_do_botao()
 
-        self.assertFalse(resposta.context['pode_extrair'])
-        self.assertIn('disabled', atributos)
-        self.assertEqual(motivo, ['O OCR não devolveu texto para todas as páginas.'])
+        self.assertTrue(resposta.context['pode_extrair'])
+        self.assertNotIn('disabled', atributos)
+        self.assertEqual(motivo, [])
+
+    def test_sem_texto_ocr_ou_sem_paginas_desabilita(self):
+        sem_texto = (False, 'O OCR não devolveu texto para todas as páginas.')
+        # Sem páginas: a tela dá 404 antes, mas a regra recusa como o serviço.
+        self.assertEqual(_disponibilidade_extracao(self.job, []), sem_texto)
+        # PaginaOcr.texto_ocr é NOT NULL: ``None`` não chega do banco, então
+        # o ramo (espelho do ``is None`` do serviço) é exercido em memória.
+        paginas = list(self.job.paginas.all())
+        paginas[1].texto_ocr = None
+        self.assertEqual(_disponibilidade_extracao(self.job, paginas), sem_texto)
 
     def test_confirmacao_de_pagina_nao_muda_o_botao(self):
         _resposta, antes, motivo_antes = self._estado_do_botao()

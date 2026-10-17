@@ -1,13 +1,16 @@
 """Orquestração da extração com backend falso, sem rede ou documentos reais."""
 
 import copy
+import re
 import uuid
+from contextlib import contextmanager
 from datetime import timedelta
 from unittest import mock
 
 from django.db import IntegrityError, connection
 from django.db.models import Max
 from django.test import TestCase, TransactionTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from dominial.models import Cartorios, Documento, Lancamento, LancamentoPessoa, Pessoas
@@ -28,6 +31,12 @@ class BackendExtracaoFalso:
 
     def extrair(self, requisicao):
         return self.envelope
+
+
+ESCRITA = re.compile(r'\s*(INSERT|UPDATE|DELETE)\b', re.IGNORECASE)
+ESCRITA_NO_DOMINIO = re.compile(
+    r'\s*(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+["`]?dominial_', re.IGNORECASE,
+)
 
 
 CONFIG_EXTRACAO = {
@@ -411,35 +420,63 @@ class ZeroEscritaTest(ExtracaoFixtureMixin, TestCase):
                     f'{nome}: {tipo} mudou de {valor} para {dict_depois[nome]} após {etapa}',
                 )
 
+    @contextmanager
+    def assertSemSqlNoDominio(self, etapa):
+        """Falha se a etapa emitir INSERT/UPDATE/DELETE em tabela ``dominial_``.
+
+        Olha a tabela-alvo da escrita, não qualquer menção: um UPDATE em
+        ``ia_ocr_*`` pode filtrar por subquery em ``dominial_*`` sem gravar lá.
+        """
+        with CaptureQueriesContext(connection) as capturadas:
+            yield capturadas
+        escritas = [
+            consulta['sql'] for consulta in capturadas.captured_queries
+            if ESCRITA_NO_DOMINIO.match(consulta['sql'])
+        ]
+        self.assertEqual(escritas, [], f'SQL de escrita no domínio após {etapa}')
+
     def test_zero_escrita_cinco_modelos(self):
         antes = self._retrato()
 
-        extracao = services.solicitar_extracao(self.job, self.usuario)
+        with self.assertSemSqlNoDominio('solicitar_extracao') as capturadas:
+            extracao = services.solicitar_extracao(self.job, self.usuario)
+        # A captura não é vazia: a extração grava, só que fora do domínio.
+        self.assertTrue(any(
+            ESCRITA.match(consulta['sql']) for consulta in capturadas.captured_queries
+        ))
         self.assertRetratoIgual(antes, self._retrato(), 'solicitar_extracao')
 
-        services.salvar_bloco(
-            extracao, {'/document/numero': {'incluir': True, 'conferido': True}},
-            self.usuario, services.versao_bloco(extracao),
-        )
+        with self.assertSemSqlNoDominio('salvar_bloco'):
+            services.salvar_bloco(
+                extracao, {'/document/numero': {'incluir': True, 'conferido': True}},
+                self.usuario, services.versao_bloco(extracao),
+            )
         self.assertRetratoIgual(antes, self._retrato(), 'salvar_bloco')
 
-        if pendencias(extracao):
+        # O cenário tem pendência (parte sem cadastro, linhas não conferidas):
+        # a recusa é sempre exercida.
+        self.assertNotEqual(pendencias(extracao), [])
+        with self.assertSemSqlNoDominio('finalizar_revisao recusada'):
             with self.assertRaises(services.RevisaoIncompleta):
                 services.finalizar_revisao(extracao, self.usuario)
-            self.assertRetratoIgual(antes, self._retrato(), 'finalizar_revisao recusada')
-            # Resolve tudo, inclusive `criar_novo` em cartório/partes, e finaliza.
-            decisoes = {}
-            for campo in extracao.campos.all():
-                decisao = {'incluir': True, 'conferido': True}
-                if campo.tipo_valor in ('cartorio', 'parte'):
-                    decisao['escolha'] = {'criar_novo': True}
-                decisoes[campo.chave] = decisao
+        self.assertRetratoIgual(antes, self._retrato(), 'finalizar_revisao recusada')
+
+        # Resolve tudo, inclusive `criar_novo` em cartório/partes, e finaliza.
+        decisoes = {}
+        for campo in extracao.campos.all():
+            decisao = {'incluir': True, 'conferido': True}
+            if campo.tipo_valor in ('cartorio', 'parte'):
+                decisao['escolha'] = {'criar_novo': True}
+            decisoes[campo.chave] = decisao
+        with self.assertSemSqlNoDominio('salvar_bloco completo'):
             services.salvar_bloco(
                 extracao, decisoes, self.usuario, services.versao_bloco(extracao),
             )
-            self.assertEqual(pendencias(extracao), [])
+        self.assertRetratoIgual(antes, self._retrato(), 'salvar_bloco completo')
+        self.assertEqual(pendencias(extracao), [])
 
-        finalizada = services.finalizar_revisao(extracao, self.usuario)
+        with self.assertSemSqlNoDominio('finalizar_revisao'):
+            finalizada = services.finalizar_revisao(extracao, self.usuario)
 
         self.assertIsNotNone(finalizada.finalizada_em)
         self.assertRetratoIgual(antes, self._retrato(), 'finalizar_revisao')

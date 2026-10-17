@@ -3,7 +3,8 @@
 Um teste por regra: nome único, homônimos, CPF completo, CPF mascarado,
 CNPJ (nunca casa por documento), cartório por nome+cidade, cidade
 divergente e múltiplos candidatos — mais o enriquecimento do payload
-(match do serviço sobrescrito, resultado válido no A3, original intacto)
+(match do serviço sobrescrito, homônimos como candidatos, resultado
+válido no A3 fora a extensão local, original intacto)
 e o custo dos índices: UMA query por índice, matching sem banco.
 
 Fixtures sintéticas: nenhum dado de documento/pessoa real.
@@ -17,7 +18,8 @@ from django.test import TestCase
 from dominial.models import Cartorios, Pessoas
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.revisao import (
-    IndiceCartorios, IndicePessoas, enriquecer_payload,
+    MATCH_PESSOA_CANDIDATOS, IndiceCartorios, IndicePessoas,
+    enriquecer_payload,
 )
 
 from .payloads_extracao import payload_registro
@@ -220,7 +222,12 @@ class EnriquecerPayloadTest(TestCase):
 
         enriquecido = self._enriquecer(payload)
 
-        validar_payload(enriquecido, self.job_id, [1])  # não levanta
+        # match_pessoa_candidatos é extensão local (a party do A3 não tem
+        # lista de candidatos): sem ela, o resto do enriquecido é A3 válido.
+        no_a3 = copy.deepcopy(enriquecido)
+        for parte in no_a3['acts'][0]['partes']:
+            self.assertEqual(parte.pop(MATCH_PESSOA_CANDIDATOS), [])
+        validar_payload(no_a3, self.job_id, [1])  # não levanta
         partes = enriquecido['acts'][0]['partes']
         self.assertEqual(partes[0]['match_pessoa_id'], self.joao.pk)  # por CPF
         self.assertEqual(partes[1]['match_pessoa_id'], self.maria.pk)  # por CPF
@@ -234,6 +241,25 @@ class EnriquecerPayloadTest(TestCase):
             enriquecido['document']['cri_atual']['match_sugerido'],
             {'cartorio_id': None, 'candidatos': []},
         )
+
+    def test_homonimos_viram_candidatos(self):
+        pedro_b = Pessoas.objects.create(nome='Pedro Santos')
+        pedro_a = Pessoas.objects.create(nome='PEDRO SANTOS')
+
+        enriquecido = enriquecer_payload(
+            payload_registro(self.job_id), IndicePessoas(), IndiceCartorios(),
+        )
+
+        # Homônimos: nenhum escolhido, todos candidatos em ordem de pk.
+        pedro = enriquecido['acts'][0]['partes'][2]
+        self.assertIsNone(pedro['match_pessoa_id'])
+        self.assertEqual(
+            pedro[MATCH_PESSOA_CANDIDATOS], sorted([pedro_a.pk, pedro_b.pk]),
+        )
+        # Match único: candidatos vazios, o id vai em match_pessoa_id.
+        joao = enriquecido['acts'][0]['partes'][0]
+        self.assertEqual(joao['match_pessoa_id'], self.joao.pk)
+        self.assertEqual(joao[MATCH_PESSOA_CANDIDATOS], [])
 
     def test_uma_query_por_indice(self):
         with self.assertNumQueries(2):
