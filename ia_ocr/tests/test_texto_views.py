@@ -112,18 +112,22 @@ class RenderTelaTextoTest(TelaTextoBase):
         super().setUp()
         self.client.force_login(self.dono)
 
-    def test_renderiza_o_pdf_e_o_texto_da_pagina_pedida(self):
+    def test_renderiza_o_texto_da_pagina_pedida_e_link_para_o_pdf(self):
         resposta = self.client.get(self.url_tela(pagina=2))
         conteudo = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        # PDF à esquerda: o mecanismo existente (servir_documento_digital),
-        # aberto na página pedida pelo parâmetro #page= do viewer do navegador.
-        iframes = _elementos(
-            conteudo, 'iframe', valores={'src': f'{self.url_pdf()}#page=2'}
+        # Sem PDF embutido: o viewer nativo abria o diálogo de impressão.
+        self.assertEqual(_elementos(conteudo, 'iframe'), [])
+        links = _elementos(
+            conteudo, 'a',
+            valores={'href': f'{self.url_pdf()}#page=2', 'target': '_blank'},
         )
-        self.assertEqual(len(iframes), 1)
-        # Texto à direita, no textarea monoespaçado.
+        self.assertEqual(len(links), 1)
+        self.assertNotIn(f'href="{self.url_pdf()}"', conteudo)
+        self.assertEqual(_atributos(links[0]).get('rel'), 'noopener')
+        self.assertIn('Abrir o PDF em nova aba', _texto_completo(links[0]))
+        # Texto em coluna única, no textarea monoespaçado.
         areas = _elementos(conteudo, 'textarea', presentes=('name',), valores={'name': 'texto'})
         self.assertEqual(len(areas), 1)
         self.assertIn('font-monospace', _atributos(areas[0]).get('class', ''))
@@ -132,6 +136,48 @@ class RenderTelaTextoTest(TelaTextoBase):
         self.assertContains(resposta, TEXTOS[1])
         self.assertNotContains(resposta, TEXTOS[0])
         self.assertNotContains(resposta, TEXTOS[2])
+
+    def test_instrucao_e_texto_vem_antes_do_cta_de_confirmar(self):
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        instrucao = conteudo.index('data-ocr-instrucao')
+        area = conteudo.index('data-ocr-texto-area')
+        confirmar = conteudo.index('data-ocr-confirmar-pagina')
+
+        self.assertLess(instrucao, area)
+        self.assertLess(area, confirmar)
+
+    def test_pagina_editada_avisa_acima_do_texto_e_destaca_o_confirmar(self):
+        services.editar_pagina(self.job, 1, 'primeira editada')
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        aviso = conteudo.index('data-ocr-aviso-editada')
+        area = conteudo.index('data-ocr-texto-area')
+        self.assertLess(aviso, area)
+        botoes = _elementos(conteudo, 'button', presentes=('data-ocr-confirmar-pagina',))
+        self.assertEqual(len(botoes), 1)
+        classes = _atributos(botoes[0]).get('class', '').split()
+        self.assertIn('btn-success', classes)
+        self.assertIn('btn-principal-destaque', classes)
+        self.assertNotIn('btn-lg', classes)
+
+    def test_pagina_limpa_nao_destaca_o_confirmar(self):
+        conteudo = self.client.get(self.url_tela(pagina=2)).content.decode()
+
+        botoes = _elementos(conteudo, 'button', presentes=('data-ocr-confirmar-pagina',))
+        self.assertEqual(len(botoes), 1)
+        classes = _atributos(botoes[0]).get('class', '').split()
+        self.assertIn('btn-success', classes)
+        self.assertNotIn('btn-principal-destaque', classes)
+
+    def test_salvar_edicao_usa_o_botao_secundario_do_projeto(self):
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        botoes = _elementos(conteudo, 'button', presentes=('data-ocr-salvar-edicao',))
+        self.assertEqual(len(botoes), 1)
+        classes = _atributos(botoes[0]).get('class', '').split()
+        self.assertIn('btn-secondary', classes)
+        self.assertNotIn('btn-outline-secondary', classes)
 
     def test_textarea_exibe_o_texto_confirmado_quando_existe(self):
         services.confirmar_pagina(self.job, 1, self.dono, texto='texto já corrigido')
@@ -339,6 +385,15 @@ class ContratoHtmlJsTest(TelaTextoBase):
             conteudo = arquivo.read()
         self.assertIn('[data-ocr-texto] [hidden]', conteudo)
         self.assertIn('display: none !important', conteudo)
+
+    def test_css_da_tela_tem_a_classe_de_destaque_do_confirmar(self):
+        css = finders.find('dominial/css/ocr_texto.css')
+
+        with open(css, encoding='utf-8') as arquivo:
+            conteudo = arquivo.read()
+        self.assertIn('.btn-principal-destaque', conteudo)
+        self.assertIn('font-size: 1.15em', conteudo)
+        self.assertIn('padding: 14px 28px', conteudo)
 
 
 class ConfirmarPaginaViewTest(TelaTextoBase):

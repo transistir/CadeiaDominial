@@ -1,23 +1,39 @@
-/* Tela de confirmação do texto OCR (issue #261 / I-4): split-view PDF × texto. */
+/* Tela de confirmação do texto OCR (issue #261 / I-4): texto em coluna única. */
 
 /* .btn (base.css) e utilitários do Bootstrap definem display próprio, que
    vence o [hidden] do user-agent; mesma regra escopada do card (#260-A). */
 [data-ocr-texto] [hidden] { display: none !important; }
 
-.ocr-texto .ocr-texto-pdf {
-    width: 100%;
-    height: 75vh;
-    border: 1px solid #ced4da;
-    border-radius: 0.25rem;
-    background: #f8f9fa;
+/* Largura de leitura confortável; o PDF abre em outra aba, não divide a tela. */
+.ocr-texto .ocr-texto-conteudo {
+    max-width: 60rem;
+    margin-inline: auto;
 }
 
 .ocr-texto textarea[data-ocr-texto-area] {
+    width: 100%;
     min-height: 60vh;
     resize: vertical;
     font-size: 0.875rem;
     line-height: 1.4;
     white-space: pre-wrap;
+}
+
+/* Barra de ações colada ao textarea, alinhada à esquerda. */
+.ocr-texto .ocr-texto-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+/* Destaque do confirmar quando a página tem edição salva. Classe própria
+   porque o base.css, carregado depois do Bootstrap, anula .btn-lg. */
+.ocr-texto-acoes .btn-principal-destaque {
+    font-size: 1.15em;
+    padding: 14px 28px;
+    font-weight: 600;
 }
 
 /* Abas por página. Classes próprias: o .nav/.nav-link do base.css (barra do topo)
