@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 # Hierarquia TI→Imóvel→Documento: a mesma do upload digital (reuso, não cópia).
+from dominial.models import Cartorios, Pessoas
 from dominial.views.documento_digital_views import _get_contexto_documento
 
 from . import destinos, estados, revisao, services, valores
@@ -390,6 +391,94 @@ def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
     return redirect(_destino(request, kwargs_job))
 
 
+def _mascarar_cpf(cpf):
+    digitos = re.sub(r'\D', '', cpf or '')
+    return f'CPF ***.***.***-{digitos[-2:]}' if len(digitos) >= 2 else 'CPF ***'
+
+
+def _mascarar_rg(rg):
+    digitos = re.sub(r'\D', '', rg or '')
+    return f'RG ***{digitos[-2:]}' if len(digitos) >= 2 else 'RG ***'
+
+
+def _rotulo_pessoa(pessoa):
+    if pessoa is None:
+        return 'Cadastro indisponível'
+    if pessoa.cpf:
+        documento = _mascarar_cpf(pessoa.cpf)
+    elif pessoa.rg:
+        documento = _mascarar_rg(pessoa.rg)
+    else:
+        documento = ''
+    return f'{pessoa.nome} — {documento}' if documento else pessoa.nome
+
+
+def _rotulo_cartorio(cartorio):
+    if cartorio is None:
+        return 'Cadastro indisponível'
+    rotulo = cartorio.nome
+    local = '/'.join(
+        parte for parte in (cartorio.cidade, cartorio.estado) if parte
+    )
+    if local:
+        rotulo = f'{rotulo} — {local}'
+    if cartorio.cns:
+        rotulo = f'{rotulo} — CNS {cartorio.cns}'
+    return rotulo
+
+
+def _anexar_opcoes_cadastro(campos):
+    """Rótulos dos candidatos, em uma query por tipo (pessoa/cartório).
+
+    Nunca consulta o banco no template e nunca expõe documento completo:
+    CPF/RG saem mascarados com os dois últimos dígitos.
+    """
+    ids_pessoas = set()
+    ids_cartorios = set()
+    for campo in campos:
+        if campo.tipo_valor == 'parte':
+            ids_pessoas.update(campo.match_candidatos or [])
+            if campo.pessoa_escolhida_id:
+                ids_pessoas.add(campo.pessoa_escolhida_id)
+        elif campo.tipo_valor == 'cartorio':
+            ids_cartorios.update(campo.match_candidatos or [])
+            if campo.cartorio_escolhido_id:
+                ids_cartorios.add(campo.cartorio_escolhido_id)
+    pessoas = {p.pk: p for p in Pessoas.objects.filter(pk__in=ids_pessoas)}
+    cartorios = {
+        c.pk: c for c in Cartorios.objects.filter(pk__in=ids_cartorios)
+    }
+
+    def opcoes(ids, escolhido, rotulos):
+        lista = list(ids or [])
+        if escolhido and escolhido not in lista:
+            lista.append(escolhido)
+        return [
+            {'id': pk, 'rotulo': rotulos.get(pk, 'Cadastro indisponível')}
+            for pk in lista
+        ]
+
+    rotulos_pessoas = {
+        pk: _rotulo_pessoa(pessoa) for pk, pessoa in pessoas.items()
+    }
+    rotulos_cartorios = {
+        pk: _rotulo_cartorio(cartorio) for pk, cartorio in cartorios.items()
+    }
+    for campo in campos:
+        if campo.tipo_valor == 'parte':
+            campo.opcoes_cadastro = opcoes(
+                campo.match_candidatos, campo.pessoa_escolhida_id,
+                rotulos_pessoas,
+            )
+        elif campo.tipo_valor == 'cartorio':
+            campo.opcoes_cadastro = opcoes(
+                campo.match_candidatos, campo.cartorio_escolhido_id,
+                rotulos_cartorios,
+            )
+        else:
+            campo.opcoes_cadastro = []
+
+
 @login_required
 @require_GET
 def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
@@ -405,6 +494,7 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     if extracao is None:
         raise Http404('Extração indisponível.')
     campos = list(extracao.campos.order_by('chave'))
+    _anexar_opcoes_cadastro(campos)
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
@@ -436,6 +526,12 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'url_salvar': reverse('salvar_bloco_ocr', kwargs=kwargs_job),
         'url_finalizar': reverse('finalizar_revisao_ocr', kwargs=kwargs_job),
         'url_texto': _url_tela(kwargs_job),
+        'url_arquivo': reverse('servir_documento_digital', kwargs={
+            'tis_id': tis.pk,
+            'imovel_id': imovel.pk,
+            'documento_id': documento.pk,
+            'arquivo_id': job.documento_digital_id,
+        }),
         'url_documento': reverse('documento_detalhado', kwargs={
             'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
         }),

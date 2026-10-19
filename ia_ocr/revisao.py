@@ -523,17 +523,25 @@ def pendencias(extracao) -> list[dict]:
         if campo.requer_revisao and campo.status_revisao == 'sugerido':
             adicionar(campo.chave, 'revisao_pendente')
         if campo.tipo_valor in ('parte', 'cartorio'):
-            if not (
+            # Papéis de contexto (cônjuge, representante) não viram destino
+            # em LancamentoPessoa; exigir escolha ali bloquearia sem uso.
+            exige_escolha = (
+                campo.tipo_valor == 'cartorio'
+                or _valor_efetivo(campo) in destinos.PAPEIS_COM_DESTINO
+            )
+            if exige_escolha and not (
                 campo.pessoa_escolhida_id or campo.cartorio_escolhido_id
                 or campo.criar_novo
             ):
                 adicionar(campo.chave, 'escolha_pendente')
-            elif (
-                campo.pessoa_escolhida_id
-                and campo.pessoa_escolhida_id not in pessoas
-            ) or (
-                campo.cartorio_escolhido_id
-                and campo.cartorio_escolhido_id not in cartorios
+            elif exige_escolha and (
+                (
+                    campo.pessoa_escolhida_id
+                    and campo.pessoa_escolhida_id not in pessoas
+                ) or (
+                    campo.cartorio_escolhido_id
+                    and campo.cartorio_escolhido_id not in cartorios
+                )
             ):
                 adicionar(campo.chave, 'decisao_perdida')
         if (

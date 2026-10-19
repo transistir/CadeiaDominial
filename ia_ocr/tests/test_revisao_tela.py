@@ -130,6 +130,47 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertNotIn('disabled', self._botao_finalizar(resposta))
         self.assertNotContains(resposta, 'data-ocr-somente-leitura')
 
+    def test_tela_mostra_rotulos_dos_candidatos(self):
+        candidatos = [
+            Pessoas.objects.create(nome='JOÃO DA SILVA', cpf='11111111111'),
+            Pessoas.objects.create(nome='JOÃO PEREIRA', cpf='22222222222'),
+        ]
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['partes'][0]['match_pessoa_candidatos'] = [
+            candidato.pk for candidato in candidatos
+        ]
+        self._extracao(payload)
+
+        resposta = self._tela()
+
+        self.assertContains(resposta, 'CPF ***.***.***-11')
+        self.assertContains(resposta, 'CPF ***.***.***-22')
+        self.assertContains(
+            resposta, f'<option value="{candidatos[0].pk}"',
+        )
+        self.assertContains(
+            resposta, f'<option value="{candidatos[1].pk}"',
+        )
+        self.assertNotContains(resposta, 'Registro #11')
+        self.assertNotContains(resposta, '11111111111')
+        self.assertNotContains(resposta, '22222222222')
+
+    def test_tela_mostra_evidencia_e_link_da_pagina(self):
+        self.job.paginas.filter(numero_pagina=2).update(
+            texto_ocr='Página dois Nº 42.718',
+        )
+        payload = payload_averbacao(self.job.job_id)
+        payload['document']['numero']['evidencia'] = {
+            'pagina': 2, 'trecho': 'Nº 42.718',
+        }
+        self._extracao(payload)
+
+        resposta = self._tela()
+
+        self.assertContains(resposta, 'Página 2')
+        self.assertContains(resposta, 'Nº 42.718')
+        self.assertContains(resposta, f'{self.url_pdf()}#page=2')
+
     def test_tela_somente_leitura_apos_revisado(self):
         extracao = self._extracao(resolver=True)
         ExtracaoSugerida.objects.filter(pk=extracao.pk).update(

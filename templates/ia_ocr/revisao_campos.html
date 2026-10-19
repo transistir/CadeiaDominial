@@ -85,6 +85,13 @@
 
                 <p class="campo-ocr">OCR: <span class="campo-raw">{{ campo.raw|default:"—" }}</span></p>
 
+                {% if campo.evidencia_pagina %}
+                <p class="campo-evidencia">
+                    <a href="{{ url_arquivo }}#page={{ campo.evidencia_pagina }}" target="_blank" rel="noopener">Página {{ campo.evidencia_pagina }}</a>
+                    {% if campo.evidencia_trecho %}<span class="campo-trecho" title="{{ campo.evidencia_trecho }}">{{ campo.evidencia_trecho|truncatechars:120 }}</span>{% endif %}
+                </p>
+                {% endif %}
+
                 {% if campo.tipo_valor == 'texto' %}
                 <textarea id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
                           class="form-control campo-valor" rows="3"
@@ -101,16 +108,13 @@
                 {# Parte vincula pessoa; cartório vincula cartório. Único match já vem selecionado. #}
                 {% with escolhido=campo.pessoa_escolhida_id|default:campo.cartorio_escolhido_id %}
                 <div class="campo-escolha">
-                    {% if campo.match_candidatos or escolhido %}
+                    {% if campo.opcoes_cadastro %}
                     <label class="campo-sub">Cadastro correspondente
                         <select class="form-select" data-ocr-escolha="{% if campo.tipo_valor == 'parte' %}pessoa_id{% else %}cartorio_id{% endif %}"{% if somente_leitura %} disabled{% endif %}>
                             <option value="">— escolha —</option>
-                            {% for candidato in campo.match_candidatos %}
-                            <option value="{{ candidato }}"{% if candidato == escolhido %} selected{% endif %}>Registro #{{ candidato }}</option>
+                            {% for opcao in campo.opcoes_cadastro %}
+                            <option value="{{ opcao.id }}"{% if opcao.id == escolhido %} selected{% endif %}>{{ opcao.rotulo }}</option>
                             {% endfor %}
-                            {% if escolhido and escolhido not in campo.match_candidatos %}
-                            <option value="{{ escolhido }}" selected>Registro #{{ escolhido }}</option>
-                            {% endif %}
                         </select>
                     </label>
                     {% endif %}

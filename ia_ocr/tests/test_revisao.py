@@ -7,6 +7,7 @@ voltam sem pk; ``desnormalizar`` faz uma query por payload para resolver os
 ``LancamentoTipo`` dos atos (assertNumQueries(2) para dois payloads).
 """
 
+from copy import deepcopy
 from datetime import date, timedelta
 from decimal import Decimal
 from hashlib import sha256
@@ -649,6 +650,35 @@ class PendenciasEAvisosTest(TestCase):
                     'chave': chave, 'motivo': 'decisao_perdida',
                     'bloqueante': True,
                 }])
+
+    def test_conjuge_sem_escolha_nao_gera_pendencia(self):
+        payload = self._registro_completo()
+        conjuge = deepcopy(payload['acts'][0]['partes'][0])
+        conjuge['papel'] = 'conjuge'
+        payload['acts'][0]['partes'].append(conjuge)
+        linhas = self._persistir(payload)
+        chave = '/acts/0/partes/3'
+        campo = linhas[chave]
+        campo.criar_novo = False
+        campo.pessoa_escolhida = None
+        campo.save()
+
+        self.assertFalse(any(
+            item['chave'] == chave and item['motivo'] == 'escolha_pendente'
+            for item in pendencias(self.extracao)
+        ))
+
+    def test_transmitente_sem_escolha_gera_pendencia(self):
+        linhas = self._persistir(self._registro_completo())
+        chave = '/acts/0/partes/0'
+        campo = linhas[chave]
+        campo.criar_novo = False
+        campo.pessoa_escolhida = None
+        campo.save()
+
+        self.assertIn({
+            'chave': chave, 'motivo': 'escolha_pendente', 'bloqueante': True,
+        }, pendencias(self.extracao))
 
     def test_nenhum_ato_incluido_bloqueia(self):
         for sem_atos in (False, True):
