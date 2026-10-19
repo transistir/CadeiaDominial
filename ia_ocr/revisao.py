@@ -103,6 +103,8 @@ class AtoRevisado:
     eh_inicio_matricula: bool | None
     origem: dict | None
     partes: tuple[ParteRevisada, ...]
+    cartorio_origem_nome: str | None = None
+    cartorio_transmissao_nome: str | None = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +118,8 @@ class DocumentoRevisado:
     cri_atual_criar_novo: bool
     livro: str | None
     folha: str | None
+    cartorio_nome: str | None = None
+    cri_atual_nome: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +190,8 @@ def dados_revisados(extracao) -> DadosRevisados:
         cri_atual_criar_novo=cartorio_criar_novo('/document/cri_atual'),
         livro=valor('/document/livro'),
         folha=valor('/document/folha'),
+        cartorio_nome=valor('/document/cartorio'),
+        cri_atual_nome=valor('/document/cri_atual'),
     )
 
     # Ordem e moeda são metadados do A3, sem linha editável própria.
@@ -208,6 +214,7 @@ def dados_revisados(extracao) -> DadosRevisados:
             }
             origem['cartorio_id'] = origem_cartorio_id
             origem['cartorio_criar_novo'] = cartorio_criar_novo(f'{chave}/origem/cartorio')
+            origem['cartorio_nome'] = valor(f'{chave}/origem/cartorio')
 
         partes = []
         linhas_partes = sorted(
@@ -261,6 +268,8 @@ def dados_revisados(extracao) -> DadosRevisados:
             eh_inicio_matricula=valor(f'{chave}/eh_inicio_matricula'),
             origem=origem,
             partes=tuple(partes),
+            cartorio_origem_nome=valor(f'{chave}/origem/cartorio'),
+            cartorio_transmissao_nome=valor(f'{chave}/cartorio_transmissao'),
         )
         revisados.append((revisado.ordem, indice, revisado))
 
@@ -337,12 +346,28 @@ def aplicar_linha(
         else:
             raise valores.ValorInvalido('conversao_incompleta')
     else:
-        canonico = (
-            valores.do_formulario(
-                campo.tipo_valor, valor, destinos.destino_de(campo.chave)
-            )
-            if valor is not None else campo.normalized
+        # Cartório digitado é texto; escolher um cadastro existente vence o
+        # texto (mesmo comportamento de antes: valor_final fica nulo).
+        escolha_existente = bool(
+            campo.tipo_valor == 'cartorio'
+            and escolha is not None
+            and not escolha.get('criar_novo')
+            and escolha.get('cartorio_escolhido_id')
         )
+        if campo.tipo_valor == 'cartorio':
+            canonico = (
+                campo.normalized if escolha_existente or valor is None else
+                valores.do_formulario(
+                    'texto', valor, destinos.destino_de(campo.chave)
+                )
+            )
+        else:
+            canonico = (
+                valores.do_formulario(
+                    campo.tipo_valor, valor, destinos.destino_de(campo.chave)
+                )
+                if valor is not None else campo.normalized
+            )
         if valor is None and campo.tipo_valor == 'enum':
             # Conferir/reincluir também valida o valor que será preservado.
             valores.do_formulario(
@@ -418,6 +443,9 @@ def _campo_ausente(linhas, chave):
     campo = linhas.get(chave)
     if campo is None:
         return True
+    # Escolher um cartório existente resolve a ausência de nome digitado.
+    if campo.tipo_valor == 'cartorio' and campo.cartorio_escolhido_id is not None:
+        return False
     valor = _valor_efetivo(campo)
     return valor is None or (isinstance(valor, str) and not valor.strip())
 

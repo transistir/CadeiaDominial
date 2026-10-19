@@ -785,6 +785,7 @@ class DadosRevisadosTest(TestCase):
             'tipo_documento': 'transcricao', 'numero': '99',
             'cartorio_id': self.cartorio.pk, 'livro': '3-A', 'folha': '12',
             'cartorio_criar_novo': False,
+            'cartorio_nome': 'Cartório de origem',
             'data': date(1990, 1, 2),
         })
         self.assertIsInstance(ato.partes, tuple)

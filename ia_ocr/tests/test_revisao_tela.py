@@ -184,6 +184,111 @@ class RevisaoTelaTest(TelaTextoBase):
         self.client.force_login(self.sem_acesso)
         self.assertEqual(self.client.get(url).status_code, 404)
 
+    def _extracao_com_cartorio_nulo(self, payload=None):
+        """Payload com cartório obrigatório sem nome; demais linhas resolvidas."""
+        payload = payload or payload_registro(self.job.job_id)
+        payload['document']['cartorio']['normalized'] = None
+        extracao = self._extracao(payload)
+        for campo in extracao.campos.all():
+            if campo.chave == '/document/cartorio':
+                continue
+            campo.status_revisao = 'aceito'
+            if campo.tipo_valor in ('parte', 'cartorio'):
+                campo.criar_novo = True
+            campo.save()
+        return extracao
+
+    def _salvar_cartorio(self, decisao):
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/document/cartorio', 'incluir': True, **decisao,
+                }],
+            }),
+            content_type='application/json',
+        )
+        return salvar
+
+    def test_salvar_cartorio_digitado_satisfaz_obrigatorio(self):
+        extracao = self._extracao_com_cartorio_nulo()
+
+        salvar = self._salvar_cartorio({
+            'valor': 'Cartório Novo', 'escolha': {'criar_novo': True},
+        })
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/document/cartorio')
+        self.assertEqual(campo.valor_final, 'Cartório Novo')
+        self.assertEqual(campo.status_revisao, 'editado')
+        self.assertFalse(any(
+            pendencia['chave'] == '/document/cartorio'
+            and pendencia['motivo'] == 'obrigatorio_ausente'
+            for pendencia in revisao.pendencias(extracao)
+        ))
+
+    def test_finalizar_com_cartorio_digitado(self):
+        extracao = self._extracao_com_cartorio_nulo()
+        salvar = self._salvar_cartorio({
+            'valor': 'Cartório Novo', 'escolha': {'criar_novo': True},
+        })
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+        extracao.refresh_from_db()
+        dados = revisao.dados_revisados(extracao)
+        self.assertEqual(dados.documento.cartorio_nome, 'Cartório Novo')
+        self.assertTrue(dados.documento.cartorio_criar_novo)
+
+    def test_escolher_cartorio_existente_zera_nome(self):
+        cartorio = Cartorios.objects.create(
+            nome='Cartório Existente', cns='E2E-novo', estado='PR',
+        )
+        extracao = self._extracao_com_cartorio_nulo()
+
+        salvar = self._salvar_cartorio({
+            'valor': 'Cartório Digitado',
+            'escolha': {'cartorio_id': cartorio.pk, 'criar_novo': False},
+        })
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/document/cartorio')
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.cartorio_escolhido_id, cartorio.pk)
+        self.assertFalse(any(
+            pendencia['chave'] == '/document/cartorio'
+            and pendencia['motivo'] == 'obrigatorio_ausente'
+            for pendencia in revisao.pendencias(extracao)
+        ))
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+        extracao.refresh_from_db()
+        dados = revisao.dados_revisados(extracao)
+        self.assertEqual(dados.documento.cartorio_id, cartorio.pk)
+
+    def test_cartorio_digitado_acima_do_limite_e_422(self):
+        self._extracao_com_cartorio_nulo()
+
+        salvar = self._salvar_cartorio({
+            'valor': 'x' * 10001, 'escolha': {'criar_novo': True},
+        })
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'valor_invalido')
+        self.assertEqual(salvar.json()['chave'], '/document/cartorio')
+
     def test_finaliza_usando_apenas_os_controles_renderizados(self):
         # Cartório do documento: match único; cri_atual: dois homônimos;
         # JOÃO por CPF; MARIA e PEDRO sem cadastro (único caminho: criar).
@@ -265,7 +370,7 @@ def _decisao_do_card(card):
         'conferido': True,
     }
     # Espelha TIPOS_SEM_VALOR do ocr_revisao.js: sem conversor de formulário.
-    if tipo not in ('parte', 'cartorio', 'ato'):
+    if tipo not in ('parte', 'ato'):
         decisao['valor'] = valor
     selects = _descendentes(card, 'select', 'data-ocr-escolha')
     criar = _descendentes(card, 'input', 'data-ocr-criar-novo')

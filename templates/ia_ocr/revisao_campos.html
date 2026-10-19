@@ -94,7 +94,7 @@
                        class="form-control campo-valor"
                        type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
                        value="{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}"
-                       data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                       data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
                 {% endif %}
 
                 {% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' %}

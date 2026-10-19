@@ -21,7 +21,8 @@
 
     var ATRASO_MS = 300;
     // Tipos sem conversor de formulário no servidor: o valor não é editável.
-    var TIPOS_SEM_VALOR = ['parte', 'cartorio', 'ato'];
+    // Cartório é texto (nome para criar cadastro) e por isso envia valor.
+    var TIPOS_SEM_VALOR = ['parte', 'ato'];
     var MENSAGENS_ERRO = {
         valor_invalido: 'Valor inválido para este campo.',
         conversao_incompleta: 'Informe a área em hectares e confirme a conversão.',
