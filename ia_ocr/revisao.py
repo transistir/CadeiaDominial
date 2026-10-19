@@ -83,6 +83,16 @@ class EscolhaIncompativel(Exception):
         super().__init__(self.code)
 
 
+class EscolhaInvalida(EscolhaIncompativel):
+    """O id escolhido não está entre os candidatos recomputados (HTTP 422).
+
+    A tela só oferece ``match_candidatos``; um id fora da lista veio de um
+    estado antigo (reload diferido) e não pode regravar a escolha.
+    """
+
+    code = 'escolha_invalida'
+
+
 @dataclass(frozen=True)
 class ParteRevisada:
     papel: str
@@ -330,6 +340,15 @@ def aplicar_linha(
             and escolha.get('pessoa_escolhida_id') is not None
         ):
             raise EscolhaIncompativel(campo.chave)
+        # A tela só oferece quem está em ``match_candidatos``. Um id de fora
+        # é estado antigo (identidade mudou e o reload ainda está diferido):
+        # aceitá-lo regravaria a pessoa/cartório que o servidor acabou de
+        # invalidar.
+        candidatos = campo.match_candidatos or []
+        for nome in ('pessoa_escolhida_id', 'cartorio_escolhido_id'):
+            escolhido = escolha.get(nome)
+            if escolhido is not None and escolhido not in candidatos:
+                raise EscolhaInvalida(campo.chave)
     antes = versao_linha(campo)
 
     if not incluir:

@@ -244,6 +244,111 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(sem_identidade.status_code, 200, sem_identidade.content)
         self.assertEqual(sem_identidade.json()['partes_invalidadas'], [])
 
+    def test_escolha_antiga_recusada_apos_identidade_mudar(self):
+        pessoa_a = Pessoas.objects.create(
+            nome='JOÃO DA SILVA', cpf='12345678900',
+        )
+        pessoa_b = Pessoas.objects.create(
+            nome='MARIA DA SILVA', cpf='98765432100',
+        )
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        chave = '/acts/0/partes/0'
+        parte = extracao.campos.get(chave=chave)
+        # O match único já vem escolhido: é a pessoa A que a tela exibe.
+        self.assertEqual(parte.pessoa_escolhida_id, pessoa_a.pk)
+        self.assertEqual(parte.match_candidatos, [pessoa_a.pk])
+
+        corrigida = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [
+                {
+                    'chave': f'{chave}/nome',
+                    'incluir': True, 'conferido': True,
+                    'valor': 'MARIA DA SILVA',
+                },
+                {
+                    'chave': f'{chave}/documento_identificacao/valor',
+                    'incluir': True, 'conferido': True,
+                    'valor': '98765432100',
+                },
+            ],
+        })
+
+        self.assertEqual(corrigida.status_code, 200, corrigida.content)
+        self.assertEqual(corrigida.json()['partes_invalidadas'], [chave])
+        parte.refresh_from_db()
+        self.assertIsNone(parte.pessoa_escolhida_id)
+        self.assertEqual(parte.match_candidatos, [pessoa_b.pk])
+
+        # Janela do reload diferido: o select ainda poderia mandar A, mas o
+        # servidor não pode regravar a escolha que ele mesmo invalidou.
+        antiga = self._post_json('salvar_bloco_ocr', {
+            'versao': corrigida.json()['versao'],
+            'decisoes': [{
+                'chave': chave, 'incluir': True, 'conferido': True,
+                'escolha': {
+                    'pessoa_id': pessoa_a.pk, 'criar_novo': False,
+                },
+            }],
+        })
+
+        self.assertEqual(antiga.status_code, 422, antiga.content)
+        self.assertEqual(antiga.json(), {
+            'erro': 'escolha_invalida', 'chave': chave,
+        })
+        parte.refresh_from_db()
+        self.assertIsNone(parte.pessoa_escolhida_id)
+
+    def test_duas_partes_invalidadas_no_mesmo_bloco(self):
+        pessoa_a = Pessoas.objects.create(
+            nome='JOÃO DA SILVA', cpf='12345678900',
+        )
+        pessoa_b = Pessoas.objects.create(
+            nome='MARIA DA SILVA', cpf='98765432100',
+        )
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        chave_0 = '/acts/0/partes/0'
+        chave_1 = '/acts/0/partes/1'
+        self.assertEqual(
+            extracao.campos.get(chave=chave_0).pessoa_escolhida_id,
+            pessoa_a.pk,
+        )
+        self.assertEqual(
+            extracao.campos.get(chave=chave_1).pessoa_escolhida_id,
+            pessoa_b.pk,
+        )
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [
+                {
+                    'chave': f'{chave_0}/nome',
+                    'incluir': True, 'conferido': True,
+                    'valor': 'MARIA DA SILVA',
+                },
+                {
+                    'chave': f'{chave_0}/documento_identificacao/valor',
+                    'incluir': True, 'conferido': True,
+                    'valor': '98765432100',
+                },
+                {
+                    'chave': f'{chave_1}/nome',
+                    'incluir': True, 'conferido': True,
+                    'valor': 'JOÃO DA SILVA',
+                },
+                {
+                    'chave': f'{chave_1}/documento_identificacao/valor',
+                    'incluir': True, 'conferido': True,
+                    'valor': '12345678900',
+                },
+            ],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertCountEqual(
+            resposta.json()['partes_invalidadas'], [chave_0, chave_1],
+        )
+
     def test_tipo_documento_invalido_e_recusado(self):
         extracao = self._extracao()
 

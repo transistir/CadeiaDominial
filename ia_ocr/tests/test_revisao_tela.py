@@ -335,6 +335,11 @@ class RevisaoTelaTest(TelaTextoBase):
             nome='Cartório Existente', cns='E2E-novo', estado='PR',
         )
         extracao = self._extracao_com_cartorio_nulo()
+        # A tela só oferece match_candidatos: o cartório foi criado depois da
+        # extração, então simula a lista recomputada que o select exibiria.
+        extracao.campos.filter(chave='/document/cartorio').update(
+            match_candidatos=[cartorio.pk],
+        )
 
         salvar = self._salvar_cartorio({
             'valor': 'Cartório Digitado',

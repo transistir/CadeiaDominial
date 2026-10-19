@@ -204,10 +204,12 @@ class RevisaoSemanticaTest(TestCase):
             ('documento_identificacao/tipo', 'RG', [self.maria.pk]),
         ):
             with self.subTest(sufixo=sufixo):
-                self._escolher(self.joao.pk)
+                # A tela só oferece quem está em match_candidatos: recomputar
+                # antes de escolher mantém o cenário do select real.
                 self.extracao.campos.filter(pk=self.parte.pk).update(
                     match_candidatos=[self.joao.pk],
                 )
+                self._escolher(self.joao.pk)
                 self._salvar({f'{self.parte.chave}/{sufixo}': {
                     'incluir': True, 'valor': valor,
                 }})

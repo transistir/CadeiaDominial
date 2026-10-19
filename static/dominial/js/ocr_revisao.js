@@ -31,7 +31,7 @@
         decisao_invalida: 'Decisão inválida para este campo.',
         sem_extracao: 'Extração indisponível.'
     };
-    var AVISO_RECARGA = 'Identidade alterada: a tela será atualizada quando você parar de digitar.';
+    var AVISO_RECARGA = 'Identidade alterada: a tela será atualizada quando você sair dos campos.';
 
     function iniciar(raiz) {
         var urlSalvar = raiz.getAttribute('data-url-salvar');
@@ -156,6 +156,29 @@
             return !!(ativo && ativo.closest && ativo.closest('[data-campo]'));
         }
 
+        function focoNaToolbar() {
+            var ativo = document.activeElement;
+            return !!(ativo && ativo.closest && ativo.closest('[data-ocr-toolbar]'));
+        }
+
+        // A identidade de uma parte mudou: o select e o "criar novo" do card
+        // guardam uma escolha que o servidor já descartou. Limpa e desabilita
+        // até o reload, senão o próximo save reenviaria o cadastro antigo.
+        function invalidarEscolha(chave) {
+            var card = cardDaChave(chave);
+            if (!card) return;
+            var select = card.querySelector('[data-ocr-escolha]');
+            var criarNovo = card.querySelector('[data-ocr-criar-novo]');
+            if (select) {
+                select.value = '';
+                select.disabled = true;
+            }
+            if (criarNovo) {
+                criarNovo.checked = false;
+                criarNovo.disabled = true;
+            }
+        }
+
         function avisarRecargaPendente() {
             if (msgFinalizar) msgFinalizar.textContent = AVISO_RECARGA;
         }
@@ -165,7 +188,10 @@
         // nem POST em fila, nem foco dentro de um card.
         function talvezRecarregar() {
             if (!recargaPendente || recarregando) return;
-            if (timers.size || emFila || focoDentroDeCard()) {
+            // Save falho também segura o reload: recarregar agora perderia a
+            // edição e o erro mostrado no card.
+            if (timers.size || emFila || falhas.size
+                    || focoDentroDeCard() || focoNaToolbar()) {
                 avisarRecargaPendente();
                 return;
             }
@@ -212,6 +238,7 @@
                         // quando não houver timer, fila nem foco em card.
                         if (Array.isArray(dados.partes_invalidadas)
                                 && dados.partes_invalidadas.length) {
+                            dados.partes_invalidadas.forEach(invalidarEscolha);
                             recargaPendente = true;
                             avisarRecargaPendente();
                         }
