@@ -125,9 +125,9 @@
                 <form class="col-md-4" method="post" action="{{ url_extrair_campos }}" data-ocr-form-global>
                     {% csrf_token %}
                     <input type="hidden" name="pagina" value="{{ pagina.numero_pagina }}">
-                    <button type="submit" class="btn btn-primary" data-ocr-extrair-campos data-ocr-acao-global{% if not todas_confirmadas %} disabled{% endif %}>Extrair campos →</button>
-                    {% if not todas_confirmadas %}
-                    <small class="text-muted d-block mt-1" data-ocr-extrair-campos-motivo>{% if faltam == 1 %}Falta 1 página{% else %}Faltam {{ faltam }} páginas{% endif %} para confirmar.</small>
+                    <button type="submit" class="btn btn-primary" data-ocr-extrair-campos data-ocr-acao-global{% if not pode_extrair %} disabled{% endif %}>Extrair campos →</button>
+                    {% if motivo_sem_extracao %}
+                    <small class="text-muted d-block mt-1" data-ocr-extrair-campos-motivo>{{ motivo_sem_extracao }}</small>
                     {% endif %}
                 </form>
             </div>
@@ -138,7 +138,19 @@
                 em {{ confirmacao_texto.criado_em|date:'d/m/Y H:i' }}{% endif %}.
                 O texto agora é somente leitura.
             </p>
-            <a href="{{ url_campos }}" class="btn btn-primary" data-ocr-campos-link>Revisar campos →</a>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <a href="{{ url_campos }}" class="btn btn-primary" data-ocr-campos-link>Revisar campos →</a>
+                {% if job.status == 'texto_confirmado' %}
+                <form method="post" action="{{ url_extrair_campos }}" data-ocr-form-global>
+                    {% csrf_token %}
+                    <input type="hidden" name="pagina" value="{{ pagina.numero_pagina }}">
+                    <button type="submit" class="btn btn-primary" data-ocr-extrair-campos data-ocr-acao-global{% if not pode_extrair %} disabled{% endif %}>Extrair campos →</button>
+                    {% if motivo_sem_extracao %}
+                    <small class="text-muted d-block mt-1" data-ocr-extrair-campos-motivo>{{ motivo_sem_extracao }}</small>
+                    {% endif %}
+                </form>
+                {% endif %}
+            </div>
             {% endif %}
         </div>
     </div>

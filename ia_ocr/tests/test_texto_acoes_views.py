@@ -8,6 +8,7 @@ GET  .../campos/                  → ponto de entrada da I-5 (#262), ainda sem 
 
 from ia_ocr import estados, services
 from ia_ocr.models import ESTADO_CONFIRMADA, ESTADO_EDITADA, OcrJob
+from ia_ocr.views import _disponibilidade_extracao
 
 from .base_texto import TEXTOS, TelaTextoBase, _texto_completo
 from .factories import criar_job_concluido
@@ -217,59 +218,117 @@ class ExtrairCamposViewTest(TelaTextoBase):
     def _confirmar_todas(self):
         services.confirmar_todas_paginas(self.job, self.dono)
 
-    def test_botao_desabilitado_enquanto_ha_pagina_nao_confirmada(self):
-        services.confirmar_pagina(self.job, 1, self.dono)
+    def _estado_do_botao(self, pagina=1):
+        resposta = self.client.get(self.url_tela(pagina=pagina))
+        conteudo = resposta.content.decode()
+        motivo = _elementos(conteudo, 'small', presentes=('data-ocr-extrair-campos-motivo',))
+        return (
+            resposta,
+            _atributos(_botao(conteudo, 'data-ocr-extrair-campos')),
+            [' '.join(_texto_completo(m).split()) for m in motivo],
+        )
+
+    def test_botao_habilitado_quando_ocr_concluiu(self):
+        """#290: a confirmação do texto não é mais pré-requisito da extração."""
+        resposta, atributos, motivo = self._estado_do_botao()
+
+        self.assertFalse(resposta.context['todas_confirmadas'])
+        self.assertTrue(resposta.context['pode_extrair'])
+        self.assertNotIn('disabled', atributos)
+        self.assertEqual(motivo, [])
+
+    def test_texto_confirmado_mostra_extrair(self):
+        services.confirmar_todas_paginas(self.job, self.dono)
+        services.confirmar_texto(self.job, self.dono)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
 
         resposta = self.client.get(self.url_tela(pagina=1))
         conteudo = resposta.content.decode()
 
-        self.assertFalse(resposta.context['todas_confirmadas'])
-        self.assertIn('disabled', _atributos(_botao(conteudo, 'data-ocr-extrair-campos')))
-        motivo = _elementos(conteudo, 'small', presentes=('data-ocr-extrair-campos-motivo',))
-        self.assertEqual(len(motivo), 1)
-        self.assertIn('2 páginas', ' '.join(_texto_completo(motivo[0]).split()))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.context['pode_extrair'])
+        botao = _botao(conteudo, 'data-ocr-extrair-campos')
+        self.assertIsNotNone(botao)
+        self.assertNotIn('disabled', _atributos(botao))
+        self.assertEqual(
+            _elementos(conteudo, 'button', presentes=('data-ocr-confirmar-todas',)),
+            [],
+        )
+        self.assertEqual(
+            _elementos(conteudo, 'button', presentes=('data-ocr-reprocessar',)),
+            [],
+        )
+        self.assertEqual(
+            len(_elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))),
+            1,
+        )
 
-    def test_motivo_concorda_com_o_numero_de_paginas_que_faltam(self):
-        """Achado na inspeção visual: "das 1 página pendente" / "Faltam 1 página"."""
-        services.confirmar_pagina(self.job, 1, self.dono)
-        services.confirmar_pagina(self.job, 2, self.dono)
+    def test_texto_extraido_nao_mostra_extrair(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.EXTRAIDO)
 
         conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
 
-        motivo = _elementos(conteudo, 'small', presentes=('data-ocr-extrair-campos-motivo',))
-        self.assertEqual(' '.join(_texto_completo(motivo[0]).split()), 'Falta 1 página para confirmar.')
-        ajuda = ' '.join(_texto_completo(_elementos(conteudo, 'form', presentes=('data-ocr-form-global',))[0]).split())
-        self.assertIn('o texto do OCR de 1 página pendente.', ajuda)
+        self.assertIsNone(_botao(conteudo, 'data-ocr-extrair-campos'))
+        self.assertEqual(
+            len(_elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))),
+            1,
+        )
 
-    def test_botao_habilitado_somente_com_todas_as_paginas_confirmadas(self):
-        self._confirmar_todas()
+    def test_texto_revisado_nao_mostra_extrair(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.REVISADO)
 
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        self.assertIsNone(_botao(conteudo, 'data-ocr-extrair-campos'))
+        self.assertEqual(
+            len(_elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))),
+            1,
+        )
+
+    def test_botao_desabilitado_enquanto_job_nao_concluiu(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.EM_EXECUCAO)
+        self.job.refresh_from_db()
+
+        # Fora de `concluido` sem texto a tela nem abre (volta ao upload);
+        # a regra do botão é verificada diretamente no cálculo da view.
         resposta = self.client.get(self.url_tela(pagina=1))
-
-        self.assertTrue(resposta.context['todas_confirmadas'])
-        botao = _botao(resposta.content.decode(), 'data-ocr-extrair-campos')
-        self.assertNotIn('disabled', _atributos(botao))
-
-    def test_editar_pagina_confirmada_desabilita_o_botao_ate_reconfirmar(self):
-        self._confirmar_todas()
-        self.client.post(
-            self.url('editar_pagina_ocr', numero=2),
-            {'texto': 'segunda mexida', 'versao': self.versao(2)},
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIsNone(_botao(resposta.content.decode(), 'data-ocr-extrair-campos'))
+        self.assertEqual(
+            _disponibilidade_extracao(self.job, list(self.job.paginas.all())),
+            (False, 'Aguardando o OCR terminar.'),
         )
 
-        tela = self.client.get(self.url_tela(pagina=2))
-        self.assertIn(
-            'disabled', _atributos(_botao(tela.content.decode(), 'data-ocr-extrair-campos'))
-        )
+    def test_botao_habilitado_com_pagina_em_branco(self):
+        # Verso em branco é OCR legítimo: o serviço aceita, a tela também.
+        self.job.paginas.filter(numero_pagina=2).update(texto_ocr='')
 
-        self.client.post(
-            self.url('confirmar_pagina_ocr', numero=2),
-            {'texto': 'segunda mexida', 'versao': self.versao(2)},
-        )
-        tela = self.client.get(self.url_tela(pagina=2))
-        self.assertNotIn(
-            'disabled', _atributos(_botao(tela.content.decode(), 'data-ocr-extrair-campos'))
-        )
+        resposta, atributos, motivo = self._estado_do_botao()
+
+        self.assertTrue(resposta.context['pode_extrair'])
+        self.assertNotIn('disabled', atributos)
+        self.assertEqual(motivo, [])
+
+    def test_sem_texto_ocr_ou_sem_paginas_desabilita(self):
+        sem_texto = (False, 'O OCR não devolveu texto para todas as páginas.')
+        # Sem páginas: a tela dá 404 antes, mas a regra recusa como o serviço.
+        self.assertEqual(_disponibilidade_extracao(self.job, []), sem_texto)
+        # PaginaOcr.texto_ocr é NOT NULL: ``None`` não chega do banco, então
+        # o ramo (espelho do ``is None`` do serviço) é exercido em memória.
+        paginas = list(self.job.paginas.all())
+        paginas[1].texto_ocr = None
+        self.assertEqual(_disponibilidade_extracao(self.job, paginas), sem_texto)
+
+    def test_confirmacao_de_pagina_nao_muda_o_botao(self):
+        _resposta, antes, motivo_antes = self._estado_do_botao()
+
+        services.confirmar_pagina(self.job, 1, self.dono)
+        _resposta, depois, motivo_depois = self._estado_do_botao()
+
+        self.assertNotIn('disabled', antes)
+        self.assertEqual(antes, depois)
+        self.assertEqual(motivo_antes, motivo_depois)
 
     def test_post_com_pagina_pendente_nao_transiciona(self):
         services.confirmar_pagina(self.job, 1, self.dono)
@@ -294,67 +353,31 @@ class ExtrairCamposViewTest(TelaTextoBase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.CONCLUIDO)
 
-    def test_post_com_tudo_confirmado_transiciona_e_mostra_o_link_para_a_i5(self):
-        self._confirmar_todas()
-
-        resposta = self.client.post(self.url('extrair_campos_ocr'), {'pagina': '1'})
-
-        self.assertRedirects(
-            resposta, self.url_tela(pagina=1), fetch_redirect_response=False
-        )
-        self.job.refresh_from_db()
-        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
-        transicao = self.job.transicoes.get(para_status=estados.TEXTO_CONFIRMADO)
-        self.assertEqual(transicao.usuario, self.dono)
-        self.assertIn('success', [n for n, _m in self.mensagens(resposta)])
-
-        tela = self.client.get(self.url_tela(pagina=1))
-        conteudo = tela.content.decode()
-        self.assertFalse(tela.context['editavel'])
-        link = _elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))
-        self.assertEqual(len(link), 1)
-        self.assertEqual(_atributos(link[0])['href'], self.url('campos_job_ocr'))
-        faixa = _elementos(conteudo, 'p', presentes=('data-ocr-texto-confirmado',))
-        self.assertEqual(len(faixa), 1)
-        self.assertIn('dono-texto', _texto_completo(faixa[0]))
-        # Já confirmado: nenhuma ação de edição, bulk, reprocesso ou nova extração.
-        for atributo in (
-            'data-ocr-confirmar-pagina', 'data-ocr-salvar-edicao',
-            'data-ocr-confirmar-todas', 'data-ocr-reprocessar',
-            'data-ocr-extrair-campos',
-        ):
-            with self.subTest(botao=atributo):
-                self.assertIsNone(_botao(conteudo, atributo))
-
-    def test_segundo_post_nao_quebra_nem_transiciona_de_novo(self):
-        self._confirmar_todas()
-        self.client.post(self.url('extrair_campos_ocr'))
-
-        resposta = self.client.post(self.url('extrair_campos_ocr'))
-
-        self.assertEqual(resposta.status_code, 302)
-        erros = [m for n, m in self.mensagens(resposta) if n == 'error']
-        self.assertEqual(len(erros), 1)
-        # Mensagem neutra: este caminho também cobre job em outros estados.
-        self.assertIn('não está mais aguardando', erros[0])
-        self.assertEqual(
-            self.job.transicoes.filter(para_status=estados.TEXTO_CONFIRMADO).count(), 1
-        )
+    # Fluxo antigo (texto_confirmado → link da I-5) removido pela #290: o job
+    # vai de `concluido` direto a `extraido` e a extração é solicitada ao
+    # serviço. Os casos estão em `test_extracao_views.py`:
+    #   - sucesso/transição: test_extrair_sucesso_redireciona_e_transiciona
+    #   - nova extração sobre job já extraído: test_reextracao_*
 
 
 class CamposPendenteViewTest(TelaTextoBase):
     """Ponto de entrada reservado para a I-5 (#262): sem a tela de campos."""
 
-    def test_job_com_texto_confirmado_abre_a_pagina_de_espera(self):
+    def test_estado_legado_texto_confirmado_volta_para_a_tela(self):
+        """#290: `texto_confirmado` saiu do fluxo — só `concluido` extrai.
+
+        O caminho novo (POST em `concluido` → `extraido`) está em
+        `test_extracao_views.ExtrairCamposViewTest`; aqui só se garante que o
+        estado legado não abre a revisão de campos.
+        """
         services.confirmar_todas_paginas(self.job, self.dono)
         services.confirmar_texto(self.job, self.dono)
         self.client.force_login(self.dono)
 
         resposta = self.client.get(self.url('campos_job_ocr'))
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, 'revisão de campos')
-        self.assertContains(resposta, self.url_tela())
+        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertIn('info', [n for n, _m in self.mensagens(resposta)])
 
     def test_job_ainda_nao_confirmado_volta_para_a_tela_do_texto(self):
         self.client.force_login(self.dono)

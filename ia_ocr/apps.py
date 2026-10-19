@@ -14,3 +14,6 @@ class IaOcrConfig(AppConfig):
         checks.register(
             checks_ocr.conferir_configuracao_ocr, tags=['settings']
         )
+        checks.register(
+            checks_ocr.conferir_configuracao_extracao, tags=['settings']
+        )

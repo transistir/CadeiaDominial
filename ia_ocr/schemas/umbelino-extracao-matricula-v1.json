@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "umbelino-extracao-matricula-v1",
+  "title": "Extração estruturada — Matrícula / Transcrição (Umbelino Fase 3)",
+  "description": "Contrato de saída da camada de extração orientada por schema. Padrão herdado de property-registry-record-v1 (PoC): todo campo carrega raw (exatamente como o OCR leu, preservando erros) e normalized (normalização determinística conservadora — nunca inventar dígitos), além de evidência (página + trecho) e confiança. O mapeamento dos campos-normalizados para os modelos Django do Umbelino está documentado em docs/produto1/arquitetura.md §2.3 e no plano de integração (A6).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document", "acts", "meta"],
+  "properties": {
+    "schema_version": {
+      "const": "umbelino-extracao-matricula-v1"
+    },
+    "document": {
+      "type": "object",
+      "description": "Cabeçalho do documento → modelo Documento (+DocumentoTipo)",
+      "additionalProperties": false,
+      "required": ["tipo", "numero", "cartorio"],
+      "properties": {
+        "tipo": {
+          "$ref": "#/$defs/fieldEnum",
+          "description": "matricula | transcricao — deve casar com DocumentoTipo.TIPO_CHOICES",
+          "properties": {
+            "normalized": {"enum": ["matricula", "transcricao", null]}
+          }
+        },
+        "numero": {
+          "$ref": "#/$defs/fieldString",
+          "description": "→ Documento.numero (a normalização canônica fica a cargo do GeneratedField numero_normalizado do Umbelino; aqui apenas dígitos/prefixo como lidos)"
+        },
+        "data": {
+          "$ref": "#/$defs/fieldDate",
+          "description": "→ Documento.data (ISO yyyy-mm-dd; se ilegível/ausente, normalized=null e requer_revisao=true — o sistema tem o conceito de data_presumida, decisão é do humano)"
+        },
+        "cartorio": {
+          "$ref": "#/$defs/fieldCartorio",
+          "description": "→ Documento.cartorio (FK Cartorios)"
+        },
+        "cri_atual": {
+          "$ref": "#/$defs/fieldCartorio",
+          "description": "→ Documento.cri_atual (FK Cartorios, null se não identificável)"
+        },
+        "livro": {
+          "$ref": "#/$defs/fieldString",
+          "description": "→ Documento.livro (relevante sobretudo para transcrição)"
+        },
+        "folha": {
+          "$ref": "#/$defs/fieldString",
+          "description": "→ Documento.folha"
+        },
+        "imovel_descricao": {
+          "$ref": "#/$defs/fieldString",
+          "description": "Descrição do imóvel como consta no documento (não substitui o cadastro do Imovel; serve de conferência)"
+        },
+        "area": {
+          "$ref": "#/$defs/fieldArea",
+          "description": "Área total do imóvel declarada no cabeçalho/descrição"
+        }
+      }
+    },
+    "acts": {
+      "type": "array",
+      "description": "Atos registrais na ordem cronológica do documento (R-n, Av-n, M-n) → cada item é um candidato a Lancamento",
+      "items": {"$ref": "#/$defs/act"}
+    },
+    "closure": {
+      "type": ["object", "null"],
+      "description": "Indícios de fim de cadeia (destacamento do patrimônio público, sem origem) → apoia OrigemFimCadeia/FimCadeia, SEMPRE com requer_revisao=true (classificação é decisão humana)",
+      "additionalProperties": false,
+      "properties": {
+        "indicio_fim_cadeia": {"$ref": "#/$defs/fieldBoolean"},
+        "origem_publica_sugerida": {
+          "$ref": "#/$defs/fieldString",
+          "description": "Ex.: 'União', 'Estado do Paraná', 'INCRA', 'Município de Guaíra'"
+        },
+        "classificacao_sugerida": {
+          "$ref": "#/$defs/fieldEnum",
+          "properties": {
+            "normalized": {"enum": ["origem_lidima", "sem_origem", "inconclusa", null]}
+          }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["job_id", "pages_used", "provider"],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {"type": "string"},
+        "provider": {"type": "string", "description": "local-model | api — qual adaptador produziu (ADR-004)"},
+        "model": {"type": "string"},
+        "pages_used": {"type": "array", "items": {"type": "integer"}},
+        "texto_confirmado_por": {"type": "string"},
+        "texto_confirmado_em": {"type": "string", "format": "date-time"}
+      }
+    }
+  },
+  "$defs": {
+    "evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["pagina", "trecho"],
+      "properties": {
+        "pagina": {"type": "integer", "minimum": 1},
+        "trecho": {"type": "string", "description": "Trecho literal do texto confirmado onde o valor foi lido (buscável na página)"}
+      }
+    },
+    "fieldBase": {
+      "type": "object",
+      "required": ["raw", "normalized", "confianca", "requer_revisao", "evidencia"],
+      "properties": {
+        "raw": {"type": ["string", "null"], "description": "Exatamente como o OCR/leitura produziu, preservando possíveis erros. null só se o campo não aparece no documento."},
+        "confianca": {"type": "number", "minimum": 0, "maximum": 1},
+        "requer_revisao": {"type": "boolean"},
+        "evidencia": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "fieldString": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"type": ["string", "null"], "description": "Whitespace-normalizado; sem inventar/corrigir conteúdo"}
+      }
+    },
+    "fieldEnum": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"description": "Valor do enum do domínio; null quando incerto"}
+      }
+    },
+    "fieldBoolean": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"type": ["boolean", "null"]}
+      }
+    },
+    "fieldDate": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"type": ["string", "null"], "format": "date", "description": "ISO yyyy-mm-dd. Datas por extenso ('doze de março de mil novecentos...') devem ser convertidas; se ambígua → null + requer_revisao"}
+      }
+    },
+    "fieldMoney": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"type": ["string", "null"], "description": "Decimal string com 2 casas (ex. '1234.56'), moeda BRL implícita. Nunca arredondar dígitos ilegíveis — null + requer_revisao"},
+        "moeda_historica": {"type": ["string", "null"], "description": "Cr$, Cruzeiros, URV, etc. — preserva o contexto; conversão NÃO é feita automaticamente"}
+      }
+    },
+    "fieldArea": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"type": ["string", "null"], "description": "Decimal string"},
+        "unidade": {"type": ["string", "null"], "enum": ["ha", "m2", "alqueires", "ares", null], "description": "→ Lancamento.area espera valor; conversão de unidade é decisão/exibição da UI, nunca silenciosa"}
+      }
+    },
+    "fieldCartorio": {
+      "allOf": [{"$ref": "#/$defs/fieldBase"}],
+      "properties": {
+        "normalized": {"type": ["string", "null"], "description": "Nome do cartório/CRI como lido"},
+        "municipio": {"type": ["string", "null"]},
+        "match_sugerido": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "cartorio_id": {"type": ["integer", "null"], "description": "FK Cartorios quando o matching determinístico (nome+município) achar candidato único"},
+            "candidatos": {"type": "array", "items": {"type": "integer"}, "description": "Mais de um candidato → humanos decidem"}
+          },
+          "description": "Matching executado pela camada Python (não pelo modelo), contra a base Cartorios do Umbelino"
+        }
+      }
+    },
+    "party": {
+      "type": "object",
+      "description": "→ LancamentoPessoa (+Pessoas). Múltiplas partes por ato.",
+      "required": ["papel", "nome", "confianca", "requer_revisao", "evidencia"],
+      "additionalProperties": false,
+      "properties": {
+        "papel": {"enum": ["transmitente", "adquirente", "conjuge", "representante"], "description": "transmitente/adquirente casam com LancamentoPessoa.TIPO_CHOICES; conjuge/representante são contexto para criação/merging de Pessoas"},
+        "nome": {"$ref": "#/$defs/fieldString"},
+        "documento_identificacao": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "tipo": {"$ref": "#/$defs/fieldEnum", "properties": {"normalized": {"enum": ["CPF", "CNPJ", "CGC", "RG", "OUTRO", null]}}},
+            "valor": {"$ref": "#/$defs/fieldString", "description": "Preservar pontuação no raw; normalized só remove espaço/máscara VISÍVEL no documento — nunca completar dígitos mascarados (***.231.628-**)"}
+          }
+        },
+        "match_pessoa_id": {"type": ["integer", "null"], "description": "FK Pessoas quando matching determinístico achar pessoa existente"},
+        "confianca": {"type": "number", "minimum": 0, "maximum": 1},
+        "requer_revisao": {"type": "boolean"},
+        "evidencia": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "act": {
+      "type": "object",
+      "description": "Um ato registral (R-1, Av-2, M-3...) → candidato a Lancamento",
+      "required": ["ordem", "rotulo", "tipo_sugerido", "data", "confianca", "requer_revisao", "evidencia"],
+      "additionalProperties": false,
+      "properties": {
+        "ordem": {"type": "integer", "minimum": 1, "description": "Posição cronológica no documento"},
+        "rotulo": {"$ref": "#/$defs/fieldString", "description": "Como impresso: 'R-1', 'Av-2', 'M-3-14511'"},
+        "tipo_sugerido": {
+          "$ref": "#/$defs/fieldEnum",
+          "description": "→ LancamentoTipo.tipo",
+          "properties": {
+            "normalized": {"enum": ["averbacao", "registro", "inicio_matricula", null]}
+          }
+        },
+        "numero_lancamento": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.numero_lancamento (o código/número do ato)"},
+        "data": {"$ref": "#/$defs/fieldDate", "description": "→ Lancamento.data"},
+        "partes": {"type": "array", "items": {"$ref": "#/$defs/party"}, "description": "transmitentes/adquirentes do ato"},
+        "valor_transacao": {"$ref": "#/$defs/fieldMoney", "description": "→ Lancamento.valor_transacao"},
+        "area": {"$ref": "#/$defs/fieldArea", "description": "→ Lancamento.area"},
+        "titulo": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.titulo (ex.: 'Escritura Pública de Compra e Venda') — requerido quando tipo=registro (LancamentoTipo.requer_titulo)"},
+        "forma": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.forma"},
+        "descricao": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.descricao — requerido para averbacao (requer_descricao)"},
+        "detalhes": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.detalhes"},
+        "observacoes": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.observacoes"},
+        "origem": {
+          "type": ["object", "null"],
+          "description": "Documento de origem referenciado pelo ato (ex.: matrícula anterior, transcrição) → Lancamento.livro_origem/folha_origem/data_origem + LancamentoOrigem",
+          "additionalProperties": false,
+          "properties": {
+            "tipo_documento": {"$ref": "#/$defs/fieldEnum", "properties": {"normalized": {"enum": ["matricula", "transcricao", null]}}},
+            "numero": {"$ref": "#/$defs/fieldString"},
+            "cartorio": {"$ref": "#/$defs/fieldCartorio"},
+            "livro": {"$ref": "#/$defs/fieldString", "description": "→ Lancamento.livro_origem / livro_transacao conforme o caso"},
+            "folha": {"$ref": "#/$defs/fieldString"},
+            "data": {"$ref": "#/$defs/fieldDate"}
+          }
+        },
+        "cartorio_transmissao": {"$ref": "#/$defs/fieldCartorio", "description": "→ Lancamento.cartorio_transmissao"},
+        "eh_inicio_matricula": {"$ref": "#/$defs/fieldBoolean", "description": "→ Lancamento.eh_inicio_matricula (primeiro ato de abertura)"},
+        "confianca": {"type": "number", "minimum": 0, "maximum": 1, "description": "Confiança agregada do ato (mínima dos campos críticos)"},
+        "requer_revisao": {"type": "boolean"},
+        "evidencia": {"$ref": "#/$defs/evidence"}
+      }
+    }
+  }
+}

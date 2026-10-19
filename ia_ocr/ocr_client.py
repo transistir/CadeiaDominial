@@ -286,10 +286,146 @@ def _sessao_com_prazo():
     return sessao
 
 
-class OcrServiceClient:
-    """Cliente sem estado de negócio para os três endpoints OCR."""
+class _ClienteHttpComPrazo:
+    """Sessão HTTP com prazo absoluto e leitura de resposta limitada.
+
+    O limite de resposta é obrigatório por instância (__init__) — a base
+    NÃO define MAX_BYTES_RESPOSTA como atributo de classe, para que o
+    limite de um cliente não vaze para outro por acidente (achado N8).
+    """
 
     TAMANHO_CHUNK_RESPOSTA = 4 * 1024
+    _MENSAGEM_CABECALHOS = ''
+    timeout_s: float
+    _MENSAGEM_PRAZO_RESPOSTA = 'Prazo esgotado durante a resposta.'
+
+    def __init__(
+        self,
+        base_url,
+        token,
+        access_client_id,
+        access_client_secret,
+        *,
+        max_bytes_resposta,
+        sessao=None,
+    ):
+        self.base_url = base_url.rstrip('/')
+        self.token = token
+        self.access_client_id = access_client_id
+        self.access_client_secret = access_client_secret
+        self.max_bytes_resposta = max_bytes_resposta
+        self.sessao = sessao or _sessao_com_prazo()
+        self._primeira_requisicao = True
+
+    def _executar_tentativa(self, metodo, url, prazo, **kw):
+        """Uma tentativa HTTP completa: envia, lê e fecha. Devolve
+        (status, corpo_bruto). Converte só o estouro do prazo absoluto em
+        OrcamentoEsgotado; todo o resto (TransportException inclusive)
+        sobe para a política de retry da subclasse."""
+        restante = self._restante(prazo)
+        dados = kw.get('data')
+        if hasattr(dados, 'reset'):
+            dados.reset()
+
+        cabecalhos = {'Accept-Encoding': 'identity', **kw.get('headers', {})}
+        cabecalhos.update(
+            {
+                'CF-Access-Client-Id': self.access_client_id,
+                'CF-Access-Client-Secret': self.access_client_secret,
+                'X-Internal-Token': self.token,
+            }
+        )
+        self._log_cabecalhos_aplicados()
+
+        argumentos = dict(kw)
+        argumentos['headers'] = cabecalhos
+        argumentos['allow_redirects'] = False
+        argumentos['stream'] = True
+        argumentos['timeout'] = min(self.timeout_s, restante)
+
+        guarda = _PrazoAbsoluto(prazo)
+        try:
+            try:
+                _contexto_prazo.guarda = guarda
+                try:
+                    resposta = self.sessao.request(metodo, url, **argumentos)
+                finally:
+                    _contexto_prazo.guarda = None
+                try:
+                    corpo_bruto = self._ler_resposta(resposta, prazo)
+                finally:
+                    guarda.encerrar()
+                    resposta.close()
+            except OrcamentoEsgotado:
+                raise
+            except Exception as excecao:
+                if guarda.estourou:
+                    raise OrcamentoEsgotado(
+                        self._MENSAGEM_PRAZO_RESPOSTA
+                    ) from excecao
+                raise
+        finally:
+            guarda.encerrar()
+
+        return resposta.status_code, corpo_bruto
+
+    def _log_cabecalhos_aplicados(self):
+        """Uma linha por requisição com os nomes dos cabeçalhos de
+        autenticação. A primeira requisição de cada instância sai em
+        INFO; as seguintes em DEBUG. Valores e corpo nunca aparecem —
+        a mensagem é uma constante fixa.
+        """
+        if self._primeira_requisicao:
+            self._primeira_requisicao = False
+            logger.info('%s', self._MENSAGEM_CABECALHOS)
+        else:
+            logger.debug('%s', self._MENSAGEM_CABECALHOS)
+
+    def _ler_resposta(self, resposta, prazo):
+        partes = []
+        total = 0
+        while True:
+            self._restante(prazo)
+            chunk = self._ler_bloco(resposta, self.TAMANHO_CHUNK_RESPOSTA)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > self.max_bytes_resposta:
+                raise self._erro_resposta_grande()
+            partes.append(chunk)
+        self._restante(prazo)
+        return b''.join(partes)
+
+    def _erro_resposta_grande(self):
+        """Erro do contrato da subclasse para resposta acima do limite."""
+        raise NotImplementedError
+
+    @staticmethod
+    def _ler_bloco(resposta, tamanho):
+        # read1 volta a cada recv: iter_content esperaria o bloco inteiro e ignoraria o prazo.
+        try:
+            return resposta.raw.read1(tamanho, decode_content=True)
+        except urllib3.exceptions.HTTPError as exc:
+            raise requests.exceptions.ConnectionError(exc) from None
+
+    @staticmethod
+    def _json(corpo):
+        try:
+            return json.loads(corpo.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    @staticmethod
+    def _restante(prazo):
+        restante = prazo - time.monotonic()
+        if restante <= 0:
+            raise OrcamentoEsgotado('Prazo do job esgotado.')
+        return restante
+
+
+class OcrServiceClient(_ClienteHttpComPrazo):
+    """Cliente sem estado de negócio para os três endpoints OCR."""
+
     MAX_BYTES_RESPOSTA = 52_428_800
     # Evidência de aceite (2) do #259: os NOMES dos três cabeçalhos por
     # requisição — valores (token/credenciais) nunca entram no log.
@@ -297,6 +433,7 @@ class OcrServiceClient:
         'servico OCR: cabecalhos de autenticacao aplicados: '
         'cf-access-client-id, cf-access-client-secret, x-internal-token'
     )
+    _MENSAGEM_PRAZO_RESPOSTA = 'Prazo do job OCR esgotado durante a resposta.'
 
     def __init__(
         self,
@@ -314,18 +451,20 @@ class OcrServiceClient:
     ):
         if max_tentativas < 1:
             raise ValueError('max_tentativas deve ser pelo menos 1.')
-        self.base_url = base_url.rstrip('/')
-        self.token = token
-        self.access_client_id = access_client_id
-        self.access_client_secret = access_client_secret
+        super().__init__(
+            base_url,
+            token,
+            access_client_id,
+            access_client_secret,
+            max_bytes_resposta=self.MAX_BYTES_RESPOSTA,
+            sessao=sessao,
+        )
         self.timeout_s = timeout_s
         self.max_tentativas = max_tentativas
         self.backoff_base_s = backoff_base_s
         self.backoff_max_s = backoff_max_s
         self.reserva_retry_s = reserva_retry_s
         self.poll_interval_s = poll_interval_s
-        self.sessao = sessao or _sessao_com_prazo()
-        self._primeira_requisicao = True
 
     def enviar_job(self, caminho_pdf, job_id, prazo, **params):
         timeout_informado = params.pop('timeout_seconds', None)
@@ -396,63 +535,27 @@ class OcrServiceClient:
         numero_retry = 0
 
         while True:
-            restante = self._restante(prazo)
-            if hasattr(dados, 'reset'):
-                dados.reset()
-
-            cabecalhos = {'Accept-Encoding': 'identity', **kw.get('headers', {})}
-            cabecalhos.update(
-                {
-                    'CF-Access-Client-Id': self.access_client_id,
-                    'CF-Access-Client-Secret': self.access_client_secret,
-                    'X-Internal-Token': self.token,
-                }
-            )
-            self._log_cabecalhos_aplicados()
-
-            argumentos = dict(kw)
-            argumentos['headers'] = cabecalhos
-            argumentos['allow_redirects'] = False
-            argumentos['stream'] = True
-            argumentos['timeout'] = min(self.timeout_s, restante)
-
-            guarda = _PrazoAbsoluto(prazo)
             try:
-                try:
-                    _contexto_prazo.guarda = guarda
-                    try:
-                        resposta = self.sessao.request(metodo, url, **argumentos)
-                    finally:
-                        _contexto_prazo.guarda = None
-                    try:
-                        corpo_bruto = self._ler_resposta(resposta, prazo)
-                    finally:
-                        guarda.encerrar()
-                        resposta.close()
-                except OrcamentoEsgotado:
+                status, corpo_bruto = self._executar_tentativa(
+                    metodo, url, prazo, **kw
+                )
+            except OrcamentoEsgotado:
+                raise
+            except Exception as excecao:
+                if not isinstance(excecao, requests.RequestException):
                     raise
-                except Exception as excecao:
-                    if guarda.estourou:
-                        raise OrcamentoEsgotado(
-                            'Prazo do job OCR esgotado durante a resposta.'
-                        ) from excecao
-                    if not isinstance(excecao, requests.RequestException):
-                        raise
-                    ultimo_codigo = 'SERVICE_UNAVAILABLE'
-                    ultima_mensagem = 'Falha de transporte ao acessar o serviço OCR.'
-                    tentativas_limitadas += 1
-                    if tentativas_limitadas >= self.max_tentativas:
-                        raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
-                    numero_retry += 1
-                    self._aguardar_retry(
-                        numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
-                    )
-                    continue
-            finally:
-                guarda.encerrar()
+                ultimo_codigo = 'SERVICE_UNAVAILABLE'
+                ultima_mensagem = 'Falha de transporte ao acessar o serviço OCR.'
+                tentativas_limitadas += 1
+                if tentativas_limitadas >= self.max_tentativas:
+                    raise OcrBackendError(ultimo_codigo, ultima_mensagem) from None
+                numero_retry += 1
+                self._aguardar_retry(
+                    numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
+                )
+                continue
 
             corpo = self._json(corpo_bruto)
-            status = resposta.status_code
             if status in (200, 202):
                 if isinstance(corpo, dict):
                     return corpo
@@ -518,43 +621,10 @@ class OcrServiceClient:
                 numero_retry, prazo, reserva_s, ultimo_codigo, ultima_mensagem
             )
 
-    def _log_cabecalhos_aplicados(self):
-        """Uma linha por requisição com os nomes dos três cabeçalhos
-        (evidência de aceite 2 do #259). A primeira requisição de cada
-        instância sai em INFO; as seguintes (polls, retries) em DEBUG,
-        para não poluir. Valores, nome de arquivo e texto do documento
-        nunca aparecem — a mensagem é uma constante fixa.
-        """
-        if self._primeira_requisicao:
-            self._primeira_requisicao = False
-            logger.info('%s', self._MENSAGEM_CABECALHOS)
-        else:
-            logger.debug('%s', self._MENSAGEM_CABECALHOS)
-
-    def _ler_resposta(self, resposta, prazo):
-        partes = []
-        total = 0
-        while True:
-            self._restante(prazo)
-            chunk = self._ler_bloco(resposta, self.TAMANHO_CHUNK_RESPOSTA)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > self.MAX_BYTES_RESPOSTA:
-                raise OcrBackendError(
-                    'OUTPUT_TOO_LARGE', 'Resposta do serviço OCR excede o limite.'
-                )
-            partes.append(chunk)
-        self._restante(prazo)
-        return b''.join(partes)
-
-    @staticmethod
-    def _ler_bloco(resposta, tamanho):
-        # read1 volta a cada recv: iter_content esperaria o bloco inteiro e ignoraria o prazo.
-        try:
-            return resposta.raw.read1(tamanho, decode_content=True)
-        except urllib3.exceptions.HTTPError as exc:
-            raise requests.exceptions.ConnectionError(exc) from None
+    def _erro_resposta_grande(self):
+        return OcrBackendError(
+            'OUTPUT_TOO_LARGE', 'Resposta do serviço OCR excede o limite.'
+        )
 
     def _aguardar_retry(self, tentativa, prazo, reserva_s, codigo, mensagem):
         try:
@@ -581,13 +651,6 @@ class OcrServiceClient:
             raise OrcamentoEsgotado('Prazo do job esgotado antes do retry.')
 
     @staticmethod
-    def _json(corpo):
-        try:
-            return json.loads(corpo.decode('utf-8'))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return None
-
-    @staticmethod
     def _erro_do_corpo(corpo, padrao):
         erro = corpo.get('error', {}) if isinstance(corpo, dict) else {}
         codigo = erro.get('code')
@@ -597,10 +660,3 @@ class OcrServiceClient:
         if not isinstance(mensagem, str) or not mensagem:
             mensagem = f'Erro do serviço OCR: {codigo}.'
         return codigo, mensagem
-
-    @staticmethod
-    def _restante(prazo):
-        restante = prazo - time.monotonic()
-        if restante <= 0:
-            raise OrcamentoEsgotado('Prazo do job OCR esgotado.')
-        return restante

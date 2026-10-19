@@ -1,0 +1,122 @@
+/* Tela de revisão de campos extraídos (issue #262 / I-5). Mobile-first. */
+
+/* .btn (base.css) e utilitários do Bootstrap vencem o [hidden] do user-agent. */
+[data-ocr-revisao] [hidden] { display: none !important; }
+
+.revisao-bloco {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+}
+.revisao-lista { margin: 0; padding-left: 1.25rem; }
+.pendencia { color: #842029; }
+.aviso { color: #664d03; }
+
+.revisao-destino { margin-bottom: 1rem; }
+.revisao-destino > h2 { word-break: break-word; }
+
+.campo {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    background: #fff;
+}
+.campo:focus,
+.campo:focus-within { outline: 2px solid #0d6efd; outline-offset: 2px; }
+.campo.alterado { border-color: #c9a227; }
+.campo.salvo { border-color: #198754; }
+.campo.descartado { opacity: 0.6; }
+
+.campo-cabecalho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+.campo-rotulo {
+    margin: 0 auto 0 0;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.campo-ocr {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+.campo-raw {
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #212529;
+}
+
+.badge-confianca,
+.badge-motivo {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+.badge-confianca.alta { background: #d1e7dd; color: #0f5132; }
+.badge-confianca.media { background: #fff3cd; color: #664d03; }
+.badge-confianca.baixa { background: #f8d7da; color: #842029; }
+.badge-confianca.sem_confianca { background: #e9ecef; color: #495057; }
+.badge-motivo { background: #e7f1ff; color: #084298; }
+
+.campo-sub { display: block; margin-top: 0.5rem; font-size: 0.875rem; }
+.campo-conversao { margin-top: 0.5rem; }
+.campo-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-right: 1rem;
+}
+.campo-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+.campo-estado { color: #6c757d; }
+.campo-erro { margin: 0.5rem 0 0; color: #842029; }
+
+.revisao-toolbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background: #fff;
+    padding: 0.5rem;
+    border-top: 1px solid #ddd;
+}
+.revisao-toolbar form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+@media (min-width: 1024px) {
+    #revisao {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+    .revisao-destino {
+        margin-bottom: 0;
+        padding: 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: #f8f9fa;
+    }
+}
+
+@media print {
+    .revisao-toolbar { display: none; }
+    .campo { break-inside: avoid; }
+}
