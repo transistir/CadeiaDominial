@@ -140,7 +140,7 @@ def para_python(tipo, texto):
     return texto
 
 
-def validar_limites(campo, valor_efetivo):
+def validar_limites(campo, valor_efetivo, campo_sugerido=None):
     """O valor efetivo cabe nos limites do destino? Devolve motivo ou None.
 
     A sugestão do payload pode nunca ter passado pelo formulário; por isso
@@ -150,12 +150,23 @@ def validar_limites(campo, valor_efetivo):
 
     Só tipos com conversor de formulário são checados; ``parte``/``cartorio``
     /``ato`` têm a natureza validada por ``validar_destino``.
+
+    ``campo_sugerido`` é a linha revisada (não o destino): com cartório
+    escolhido no cadastro e ``criar_novo`` falso, o nome do OCR não é usado
+    e não pode bloquear o save/finalização por tamanho.
     """
     if valor_efetivo is None:
         return None
     tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
     if tipo_valor not in (
         'texto', 'data', 'decimal', 'area', 'enum', 'booleano', 'cartorio',
+    ):
+        return None
+    if (
+        tipo_valor == 'cartorio'
+        and campo_sugerido is not None
+        and campo_sugerido.cartorio_escolhido_id is not None
+        and not campo_sugerido.criar_novo
     ):
         return None
 

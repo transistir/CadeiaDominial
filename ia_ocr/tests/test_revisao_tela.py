@@ -422,6 +422,63 @@ class RevisaoTelaTest(TelaTextoBase):
             finalizar.json()['pendencias'],
         )
 
+    def _extracao_com_cartorio_ocr_longo(self, cartorio_pk=None):
+        """OCR traz nome acima de 200; opcionalmente com candidato existente."""
+        extracao = self._extracao(resolver=True)
+        extracao.campos.filter(chave='/document/cartorio').update(
+            normalized='x' * 250,
+            match_candidatos=[cartorio_pk] if cartorio_pk else [],
+            status_revisao='sugerido',
+            criar_novo=False,
+        )
+        return extracao
+
+    def test_cartorio_existente_escolhido_aceita_nome_longo_do_ocr(self):
+        cartorio = Cartorios.objects.create(
+            nome='Cartório Existente', cns='E2E-longo', estado='PR',
+        )
+        extracao = self._extracao_com_cartorio_ocr_longo(cartorio.pk)
+
+        salvar = self._salvar_cartorio({
+            'escolha': {'cartorio_id': cartorio.pk, 'criar_novo': False},
+        })
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/document/cartorio')
+        self.assertEqual(campo.cartorio_escolhido_id, cartorio.pk)
+        self.assertFalse(any(
+            pendencia['chave'] == '/document/cartorio'
+            for pendencia in revisao.pendencias(extracao)
+        ))
+
+    def test_cartorio_existente_escolhido_finaliza_com_nome_longo_do_ocr(self):
+        cartorio = Cartorios.objects.create(
+            nome='Cartório Existente', cns='E2E-longo', estado='PR',
+        )
+        self._extracao_com_cartorio_ocr_longo(cartorio.pk)
+
+        salvar = self._salvar_cartorio({
+            'escolha': {'cartorio_id': cartorio.pk, 'criar_novo': False},
+        })
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+
+    def test_cartorio_nome_longo_do_ocr_sem_escolha_e_422(self):
+        self._extracao_com_cartorio_ocr_longo()
+
+        salvar = self._salvar_cartorio({'escolha': {'criar_novo': False}})
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'valor_invalido')
+        self.assertEqual(salvar.json()['chave'], '/document/cartorio')
+
     def test_evidencia_mascara_documentos_com_7_ou_mais_digitos(self):
         payload = payload_averbacao(self.job.job_id)
         payload['document']['numero']['evidencia'] = {
@@ -448,6 +505,21 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertEqual(
             mascarar('Trecho sem documento, com 123456 apenas.'),
             'Trecho sem documento, com 123456 apenas.',
+        )
+
+    def test_mascara_preserva_data_iso_valor_cns_e_processo(self):
+        mascarar = views._mascarar_evidencia
+        trecho = (
+            'Data 10/01/2020, ISO 2020-01-10, valor R$ 1.500.000,00, '
+            'CNS 123456789012345, processo 0001234-56.2020.8.16.0001.'
+        )
+        self.assertEqual(mascarar(trecho), trecho)
+
+    def test_mascara_cpf_e_rg_sem_apagar_seis_digitos(self):
+        mascarar = views._mascarar_evidencia
+        self.assertEqual(
+            mascarar('CPF 12345678900 e RG 1234567-X, matrícula 123456.'),
+            'CPF *** e RG ***, matrícula 123456.',
         )
 
     def test_descartar_campo_exigido_pelo_tipo_nao_estoura(self):

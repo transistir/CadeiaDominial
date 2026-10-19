@@ -630,7 +630,9 @@ def pendencias(extracao) -> list[dict]:
         if motivo:
             adicionar(campo.chave, motivo)
         else:
-            motivo_limite = valores.validar_limites(destino, valor_efetivo)
+            motivo_limite = valores.validar_limites(
+                destino, valor_efetivo, campo,
+            )
             if motivo_limite:
                 adicionar(campo.chave, motivo_limite)
 

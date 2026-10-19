@@ -399,14 +399,15 @@ def _mascarar_cpf(cpf):
     return f'CPF ***.***.***-{digitos[-2:]}' if len(digitos) >= 2 else 'CPF ***'
 
 
-_SEQUENCIA_LONGA = re.compile(r'\d(?:[.\-/]?\d){6,}')
+_CPF = re.compile(r'\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b')
+_RG = re.compile(r'\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx]\b')
 
 
 def _mascarar_evidencia(trecho):
-    """Esconde CPF/RG e outras sequências de 7+ dígitos no trecho exibido."""
+    """Esconde CPF/RG no trecho exibido; datas, valores e CNS ficam intactos."""
     if not trecho:
         return trecho
-    return _SEQUENCIA_LONGA.sub('***', trecho)
+    return _RG.sub('***', _CPF.sub('***', trecho))
 
 
 def _mascarar_rg(rg):
