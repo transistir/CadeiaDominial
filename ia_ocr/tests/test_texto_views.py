@@ -112,18 +112,20 @@ class RenderTelaTextoTest(TelaTextoBase):
         super().setUp()
         self.client.force_login(self.dono)
 
-    def test_renderiza_o_pdf_e_o_texto_da_pagina_pedida(self):
+    def test_renderiza_o_texto_da_pagina_pedida_e_link_para_o_pdf(self):
         resposta = self.client.get(self.url_tela(pagina=2))
         conteudo = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        # PDF à esquerda: o mecanismo existente (servir_documento_digital),
-        # aberto na página pedida pelo parâmetro #page= do viewer do navegador.
-        iframes = _elementos(
-            conteudo, 'iframe', valores={'src': f'{self.url_pdf()}#page=2'}
+        # Sem PDF embutido: o viewer nativo abria o diálogo de impressão.
+        self.assertEqual(_elementos(conteudo, 'iframe'), [])
+        links = _elementos(
+            conteudo, 'a', valores={'href': self.url_pdf(), 'target': '_blank'}
         )
-        self.assertEqual(len(iframes), 1)
-        # Texto à direita, no textarea monoespaçado.
+        self.assertEqual(len(links), 1)
+        self.assertEqual(_atributos(links[0]).get('rel'), 'noopener')
+        self.assertIn('Abrir o PDF em nova aba', _texto_completo(links[0]))
+        # Texto em coluna única, no textarea monoespaçado.
         areas = _elementos(conteudo, 'textarea', presentes=('name',), valores={'name': 'texto'})
         self.assertEqual(len(areas), 1)
         self.assertIn('font-monospace', _atributos(areas[0]).get('class', ''))
@@ -132,6 +134,28 @@ class RenderTelaTextoTest(TelaTextoBase):
         self.assertContains(resposta, TEXTOS[1])
         self.assertNotContains(resposta, TEXTOS[0])
         self.assertNotContains(resposta, TEXTOS[2])
+
+    def test_instrucao_e_texto_vem_antes_do_cta_de_confirmar(self):
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        instrucao = conteudo.index('data-ocr-instrucao')
+        area = conteudo.index('data-ocr-texto-area')
+        confirmar = conteudo.index('data-ocr-confirmar-pagina')
+
+        self.assertLess(instrucao, area)
+        self.assertLess(area, confirmar)
+
+    def test_pagina_editada_avisa_acima_do_texto_e_destaca_o_confirmar(self):
+        services.editar_pagina(self.job, 1, 'primeira editada')
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        aviso = conteudo.index('data-ocr-aviso-editada')
+        area = conteudo.index('data-ocr-texto-area')
+        self.assertLess(aviso, area)
+        botoes = _elementos(conteudo, 'button', presentes=('data-ocr-confirmar-pagina',))
+        self.assertEqual(len(botoes), 1)
+        self.assertIn('btn-success', _atributos(botoes[0]).get('class', ''))
+        self.assertIn('btn-lg', _atributos(botoes[0]).get('class', ''))
 
     def test_textarea_exibe_o_texto_confirmado_quando_existe(self):
         services.confirmar_pagina(self.job, 1, self.dono, texto='texto já corrigido')
