@@ -515,12 +515,28 @@ class RevisaoTelaTest(TelaTextoBase):
         )
         self.assertEqual(mascarar(trecho), trecho)
 
-    def test_mascara_cpf_e_rg_sem_apagar_seis_digitos(self):
+    def test_mascara_cpf_e_rg_com_pontuacao_final(self):
         mascarar = views._mascarar_evidencia
         self.assertEqual(
             mascarar('CPF 12345678900 e RG 1234567-X, matrícula 123456.'),
-            'CPF *** e RG ***, matrícula 123456.',
+            'CPF *** e RG ***, matrícula ***.',
         )
+
+    def test_mascara_rg_seguido_de_pontuacao(self):
+        mascarar = views._mascarar_evidencia
+        self.assertEqual(mascarar('RG 123456.'), 'RG ***.')
+        self.assertEqual(
+            mascarar('RG 123456, emitido pelo oficial'),
+            'RG ***, emitido pelo oficial',
+        )
+
+    def test_mascara_preserva_pontuacao_de_numero_maior(self):
+        mascarar = views._mascarar_evidencia
+        trecho = (
+            'Valor 1.500.000,00 e 1500000,00, datas 10/01/2020 e '
+            '2020-01-10, CNS 123456789012345'
+        )
+        self.assertEqual(mascarar(trecho), trecho)
 
     def test_mascara_cpf_com_espacos_contiguo_e_rg_curto(self):
         mascarar = views._mascarar_evidencia
@@ -614,6 +630,71 @@ class RevisaoTelaTest(TelaTextoBase):
             and pendencia['motivo'] == 'valor_incompativel_destino'
             for pendencia in finalizar.json()['pendencias']
         ))
+
+    def test_enum_obrigatorio_vazio_bloqueia_finalizacao(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['origem'] = {
+            'tipo_documento': dict(payload['document']['tipo']),
+        }
+        extracao = self._extracao(payload, resolver=True)
+        chave = '/acts/0/origem/tipo_documento'
+        self.assertFalse(any(
+            pendencia['chave'] == chave
+            for pendencia in revisao.pendencias(extracao)
+        ))
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': chave, 'incluir': True, 'valor': '',
+                }],
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        self.assertEqual(
+            extracao.campos.get(chave=chave).valor_final, '',
+        )
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 422, finalizar.content)
+        self.assertIn(
+            {
+                'chave': chave,
+                'motivo': 'valor_incompativel_destino',
+                'bloqueante': True,
+            },
+            finalizar.json()['pendencias'],
+        )
+
+    def test_decimal_so_espacos_salva_como_vazio(self):
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        for chave in ('/acts/0/valor_transacao', '/acts/0/area'):
+            with self.subTest(chave=chave):
+                salvar = self.client.post(
+                    self.url('salvar_bloco_ocr'),
+                    data=json.dumps({
+                        'versao': self._tela().context['versao'],
+                        'decisoes': [{
+                            'chave': chave, 'incluir': True, 'valor': '   ',
+                        }],
+                    }),
+                    content_type='application/json',
+                )
+
+                self.assertEqual(salvar.status_code, 200, salvar.content)
+                self.assertEqual(
+                    extracao.campos.get(chave=chave).valor_final, '',
+                )
 
     def test_descartar_campo_exigido_pelo_tipo_nao_estoura(self):
         LancamentoTipo.objects.create(

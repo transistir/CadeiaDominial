@@ -78,6 +78,8 @@ def do_formulario(tipo, texto, destino=None):
         raise ErroInterno(
             f'valor de tipo {tipo!r} do formulário não é str'
         )
+    if tipo in ('decimal', 'area'):
+        texto = texto.strip()
     if texto == '':
         return ''
 
@@ -162,9 +164,9 @@ def validar_limites(campo, valor_efetivo, campo_sugerido=None):
     escolhido no cadastro e ``criar_novo`` falso, o nome do OCR não é usado
     e não pode bloquear o save/finalização por tamanho.
     """
-    if _sem_valor(valor_efetivo):
-        return None
     tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
+    if _sem_valor(valor_efetivo) and tipo_valor not in ('enum', 'booleano'):
+        return None
     if tipo_valor not in (
         'texto', 'data', 'decimal', 'area', 'enum', 'booleano', 'cartorio',
     ):
@@ -212,9 +214,9 @@ def validar_destino(campo, valor_efetivo):
     Usado por ``desnormalizar`` e por ``pendencias``; limites (tamanho/
     dígitos) NOT são alvo aqui — quem checa é ``do_formulario``.
     """
-    if _sem_valor(valor_efetivo):
-        return None
     tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
+    if _sem_valor(valor_efetivo) and tipo_valor not in ('enum', 'booleano'):
+        return None
     if isinstance(valor_efetivo, bool):
         return None if tipo_valor == 'booleano' else _INCOMPATIVEL
     if isinstance(valor_efetivo, datetime.date):

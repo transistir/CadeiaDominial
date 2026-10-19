@@ -39,6 +39,12 @@ class DecimalLimites(SimpleTestCase):
         self.assertEqual(do_formulario('decimal', '1234.56', VALOR_TRANSACAO), '1234.56')
         self.assertEqual(do_formulario('decimal', '  1 ,5  ', None), '1.5')
 
+    def test_so_espacos_vira_vazio_sem_conversor(self):
+        self.assertEqual(do_formulario('decimal', '   ', VALOR_TRANSACAO), '')
+        self.assertEqual(
+            do_formulario('area', '   ', destino_de('/acts/0/area')), '',
+        )
+
     def test_rejeita_negativo_e_nao_numero(self):
         for texto in ('-1', '-0,01', 'abc', '1,2,3'):
             with self.subTest(texto=texto):
@@ -309,3 +315,18 @@ class ValidarDestino(SimpleTestCase):
         self.assertEqual(
             validar_destino(booleano_campo, 'sim'), MOTIVO_INCOMPATIVEL
         )
+
+    def test_enum_e_booleano_vazios_nao_sao_ausencia_legitima(self):
+        enum_campo = destino_de('/acts/0/origem/tipo_documento')
+        for valor in (None, '', '   '):
+            with self.subTest(tipo='enum', valor=valor):
+                self.assertEqual(
+                    validar_destino(enum_campo, valor), MOTIVO_INCOMPATIVEL,
+                )
+
+        booleano_campo = destino_de('/acts/0/eh_inicio_matricula')
+        for valor in (None, '', '   '):
+            with self.subTest(tipo='booleano', valor=valor):
+                self.assertEqual(
+                    validar_destino(booleano_campo, valor), MOTIVO_INCOMPATIVEL,
+                )

@@ -401,7 +401,7 @@ def _mascarar_cpf(cpf):
 
 _CPF = re.compile(r'\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}\b')
 _RG = re.compile(r'\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx]\b')
-_RG_CURTO = re.compile(r'(?<![\d.,-])\d{6,9}(?![\d.,-])')
+_RG_CURTO = re.compile(r'(?<![\d.,-])\d{6,9}(?!\d|[.,-]\d)')
 
 
 def _mascarar_evidencia(trecho):
