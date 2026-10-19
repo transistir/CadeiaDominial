@@ -490,6 +490,48 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                 )
                 self.assertTrue(default_storage.exists(caminho))
 
+    def test_job_criado_depois_do_render_invalida_confirmacao(self):
+        """P3: job novo entre o render e o POST re-renderiza com ele na lista."""
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                job_antigo = OcrJob.objects.create(documento_digital=dd)
+                assinatura_velha = self._assinatura(dd.id)
+
+                # Outro fluxo cria um job entre a confirmação e o POST.
+                job_novo = OcrJob.objects.create(documento_digital=dd)
+                PaginaOcr.objects.create(
+                    ocr_job=job_novo, numero_pagina=1, texto_ocr='nova'
+                )
+
+                response = self.client.post(
+                    self._url(dd.id),
+                    {'confirmar_ocr': '1', 'assinatura': assinatura_velha},
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertContains(
+                    response,
+                    'O processamento mudou desde que você abriu esta página.',
+                    status_code=409,
+                )
+                conteudo = response.content.decode()
+                self.assertEqual(
+                    conteudo.count('1 processamento de OCR'), 2,
+                    'A página não exibiu o job criado depois do render.',
+                )
+                self.assertIn('1 página', conteudo)
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(
+                    OcrJob.objects.filter(
+                        id__in=[job_antigo.id, job_novo.id]
+                    ).count() == 2
+                )
+                self.assertTrue(default_storage.exists(caminho))
+
     def test_confirmado_sem_assinatura_nao_apaga_nada(self):
         """Cliente antigo (aba velha) não tem assinatura: trata como divergente."""
         with tempfile.TemporaryDirectory() as midia:

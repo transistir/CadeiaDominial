@@ -157,7 +157,11 @@ def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_i
 
 
 def _resumo_jobs(jobs):
-    """Contagens exibidas na confirmação e usadas na assinatura."""
+    """Contagens exibidas na confirmação e usadas na assinatura.
+
+    Aceita lista ou queryset: a confirmação usa queryset e a exclusão usa a
+    lista já travada por `select_for_update`.
+    """
     return [
         {
             'job': job,
@@ -167,7 +171,7 @@ def _resumo_jobs(jobs):
             ).count(),
             'extracoes': job.extracoes.count(),
         }
-        for job in jobs.order_by('id')
+        for job in sorted(jobs, key=lambda job: job.id)
     ]
 
 
@@ -211,16 +215,6 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
     nome = arquivo.nome_original
-    jobs = OcrJob.objects.filter(documento_digital=arquivo)
-
-    # O OCR é apagado junto com o arquivo, mas o usuário precisa confirmar:
-    # páginas, texto confirmado e extrações vão embora sem volta.
-    if jobs.exists() and request.POST.get('confirmar_ocr') != '1':
-        return render(
-            request,
-            'dominial/confirmar_exclusao_ocr.html',
-            _contexto_confirmacao(tis, imovel, documento, arquivo, _resumo_jobs(jobs)),
-        )
 
     # Registro e intenção de limpeza formam uma unidade: se a pendência não
     # puder ser persistida, o DocumentoDigital continua disponível.
@@ -234,7 +228,30 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
                 id=arquivo_id, documento=documento,
             )
             caminho = arquivo.arquivo.name if arquivo.arquivo else None
-            jobs = OcrJob.objects.filter(documento_digital=arquivo)
+
+            # A decisão de pedir confirmação também acontece sob a trava:
+            # um job criado entre a checagem e a exclusão não pode escapar.
+            jobs_atuais = OcrJob.objects.filter(documento_digital=arquivo)
+            if (
+                jobs_atuais.exists()
+                and request.POST.get('confirmar_ocr') != '1'
+            ):
+                return render(
+                    request,
+                    'dominial/confirmar_exclusao_ocr.html',
+                    _contexto_confirmacao(
+                        tis, imovel, documento, arquivo,
+                        _resumo_jobs(jobs_atuais),
+                    ),
+                )
+
+            # Jobs travados na mesma ordem do DocumentoDigital: páginas e
+            # confirmações não podem mudar entre a assinatura e o delete.
+            jobs = list(
+                OcrJob.objects.select_for_update()
+                .filter(documento_digital=arquivo)
+                .order_by('id')
+            )
 
             if request.POST.get('confirmar_ocr') == '1':
                 resumo = _resumo_jobs(jobs)
@@ -250,14 +267,13 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
                         status=409,
                     )
 
-            quantidade_jobs = jobs.count()
             logger.info(
                 'Excluindo arquivo digital; arquivo_id=%s user_id=%s jobs=%s',
                 arquivo_id,
                 request.user.id,
-                quantidade_jobs,
+                len(jobs),
             )
-            jobs.delete()
+            OcrJob.objects.filter(id__in=[job.id for job in jobs]).delete()
             arquivo.delete()
             pendencia = (
                 registrar_pendencia_limpeza(
