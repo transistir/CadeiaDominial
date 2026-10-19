@@ -14,6 +14,7 @@ from django.utils import timezone
 from dominial.models import (
     TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital, Pessoas, UserImovel
 )
+from ia_ocr import estados, services
 from ia_ocr.models import (
     CampoSugerido,
     ExtracaoSugerida,
@@ -568,6 +569,66 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                 self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
                 extracao.refresh_from_db()
                 self.assertEqual(extracao.payload, {'campo': 'alterado'})
+                self.assertTrue(default_storage.exists(caminho))
+
+    def test_campo_revisado_depois_do_render_invalida_confirmacao(self):
+        """#303: revisão de campo não toca no job/extração, mas invalida a assinatura.
+
+        Usa `salvar_bloco()` — o serviço chamado pela view de revisão — em vez
+        do endpoint, que exigiria montar request/URL de revisão. É o mesmo
+        caminho que grava `CampoSugerido` sem tocar em `payload`,
+        `payload_servico`, `finalizada_em` ou `job.atualizado_em`.
+        """
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(
+                    documento_digital=dd, status=estados.EXTRAIDO,
+                    criado_por=self.user,
+                )
+                extracao = ExtracaoSugerida.objects.create(
+                    ocr_job=job, schema_version='v1', payload={'v': 1},
+                    provider='teste', payload_servico={'v': 1},
+                    solicitada_por=self.user,
+                )
+                campo = CampoSugerido.objects.create(
+                    extracao=extracao, chave='/document/numero',
+                    tipo_valor='texto',
+                )
+                assinatura_velha = self._assinatura(dd.id)
+
+                # Outro revisor edita o campo depois do render, sem mudar a
+                # contagem de jobs/páginas/extrações.
+                services.salvar_bloco(
+                    extracao,
+                    {'/document/numero': {
+                        'incluir': True, 'valor': 'valor revisado',
+                    }},
+                    self.user, services.versao_bloco(extracao),
+                )
+
+                response = self.client.post(
+                    self._url(dd.id),
+                    {'confirmar_ocr': '1', 'assinatura': assinatura_velha},
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertContains(
+                    response,
+                    'O processamento mudou desde que você abriu esta página.',
+                    status_code=409,
+                )
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
+                self.assertTrue(
+                    ExtracaoSugerida.objects.filter(id=extracao.id).exists()
+                )
+                campo.refresh_from_db()
+                self.assertEqual(campo.valor_final, 'valor revisado')
+                self.assertEqual(campo.status_revisao, 'editado')
                 self.assertTrue(default_storage.exists(caminho))
 
     def test_job_criado_depois_do_render_invalida_confirmacao(self):

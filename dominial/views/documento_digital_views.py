@@ -6,7 +6,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import DatabaseError, transaction
-from django.db.models import ProtectedError
+from django.db.models import Prefetch, ProtectedError
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
@@ -21,7 +21,7 @@ from ia_ocr.estados import (
     STATUS_COM_TEXTO,
     STATUS_REVISAVEIS,
 )
-from ia_ocr.models import OcrJob
+from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.services import criar_job, registrar_pendencia_limpeza
 
 
@@ -187,11 +187,59 @@ def _estado_paginas(paginas):
     ]
 
 
+def _jobs_com_estado(queryset):
+    """Carrega páginas, extrações e campos em três consultas, sem N+1.
+
+    `order_by()` no manager relacionado ignora o cache do `prefetch_related`;
+    por isso a ordem vai no `Prefetch` e o resumo lê com `.all()`.
+    """
+    return queryset.prefetch_related(
+        Prefetch(
+            'paginas',
+            queryset=PaginaOcr.objects.order_by('numero_pagina'),
+        ),
+        Prefetch(
+            'extracoes',
+            queryset=ExtracaoSugerida.objects.order_by('id').prefetch_related(
+                Prefetch(
+                    'campos',
+                    queryset=CampoSugerido.objects.order_by('id'),
+                ),
+            ),
+        ),
+    )
+
+
+def _estado_campos(campos):
+    """Estado revisável de cada campo sugerido.
+
+    `salvar_bloco` grava a revisão em `CampoSugerido` sem tocar em `payload`,
+    `payload_servico`, `finalizada_em` nem no job. Sem os campos na assinatura,
+    uma confirmação aberta antes da revisão apagaria o que foi revisado depois.
+    """
+    return [
+        (
+            campo.id,
+            campo.status_revisao,
+            campo.valor_final,
+            campo.pessoa_escolhida_id,
+            campo.cartorio_escolhido_id,
+            campo.criar_novo,
+            campo.area_convertida,
+            campo.revisado_por_id,
+            campo.revisado_em.isoformat() if campo.revisado_em else None,
+            _hash_json(campo.motivos_revisao),
+            _hash_json(campo.match_candidatos),
+        )
+        for campo in campos
+    ]
+
+
 def _estado_extracoes(extracoes):
     """Conteúdo das extrações, não só a contagem.
 
-    `ExtracaoSugerida` não tem `atualizado_em`: o id + hash dos campos
-    sugeridos detecta uma extração alterada no lugar.
+    `ExtracaoSugerida` não tem `atualizado_em`: o id + hash da extração e do
+    estado revisável dos campos sugeridos detecta alteração no lugar.
     """
     return [
         (
@@ -208,6 +256,7 @@ def _estado_extracoes(extracoes):
                         else None
                     ),
                     'finalizada_por_id': extracao.finalizada_por_id,
+                    'campos': _estado_campos(extracao.campos.all()),
                 }
             ),
         )
@@ -223,8 +272,8 @@ def _resumo_jobs(jobs):
     """
     resumo = []
     for job in sorted(jobs, key=lambda job: job.id):
-        paginas = list(job.paginas.order_by('numero_pagina'))
-        extracoes = list(job.extracoes.order_by('id'))
+        paginas = list(job.paginas.all())
+        extracoes = list(job.extracoes.all())
         resumo.append({
             'job': job,
             'paginas': len(paginas),
@@ -298,7 +347,9 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
 
             # A decisão de pedir confirmação também acontece sob a trava:
             # um job criado entre a checagem e a exclusão não pode escapar.
-            jobs_atuais = OcrJob.objects.filter(documento_digital=arquivo)
+            jobs_atuais = _jobs_com_estado(
+                OcrJob.objects.filter(documento_digital=arquivo)
+            )
             if (
                 jobs_atuais.exists()
                 and request.POST.get('confirmar_ocr') != '1'
@@ -314,11 +365,11 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
 
             # Jobs travados na mesma ordem do DocumentoDigital: páginas e
             # confirmações não podem mudar entre a assinatura e o delete.
-            jobs = list(
+            jobs = list(_jobs_com_estado(
                 OcrJob.objects.select_for_update()
                 .filter(documento_digital=arquivo)
                 .order_by('id')
-            )
+            ))
 
             if request.POST.get('confirmar_ocr') == '1':
                 resumo = _resumo_jobs(jobs)
