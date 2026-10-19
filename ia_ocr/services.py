@@ -271,13 +271,13 @@ def _validar_limites_bloco(extracao, decisoes):
 
 def salvar_bloco(
     extracao, decisoes, usuario, versao_cliente,
-) -> tuple[ExtracaoSugerida, str, bool]:
+) -> tuple[ExtracaoSugerida, str, list[str]]:
     """Persiste atomicamente decisões indexadas pela chave JSON Pointer.
 
     Devolve a extração, o token do bloco calculado ainda sob o lock (lido
     depois do commit, ele já poderia incluir a gravação de outro revisor) e
-    se alguma identidade de parte mudou — nesse caso a tela precisa recarregar
-    para não reenviar a escolha de cadastro já invalidada.
+    as chaves das partes cuja identidade mudou — nelas a escolha de cadastro
+    foi zerada e os candidatos precisam ser relidos do servidor.
     """
     with transaction.atomic():
         travada = _travar_extracao_revisao(extracao)
@@ -321,12 +321,12 @@ def salvar_bloco(
         # Só depois de aplicar o bloco inteiro: a escolha antiga enviada
         # junto da correção não pode sobreviver por causa da ordem das linhas.
         indice_pessoas = None
-        invalidou_partes = False
+        partes_invalidadas = []
         for chave, identidade_antes in identidades_antes.items():
             identidade = identidade_parte(chave, campos)
             if identidade == identidade_antes:
                 continue
-            invalidou_partes = True
+            partes_invalidadas.append(chave)
             if indice_pessoas is None:
                 indice_pessoas = IndicePessoas()
             escolhido, candidatos = indice_pessoas.match(*identidade)
@@ -344,7 +344,7 @@ def salvar_bloco(
                 'revisado_por', 'revisado_em',
             ])
         versao = versao_bloco(travada)
-    return travada, versao, invalidou_partes
+    return travada, versao, partes_invalidadas
 
 
 def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerida:

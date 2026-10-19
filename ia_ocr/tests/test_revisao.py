@@ -416,11 +416,19 @@ class PendenciasEAvisosTest(TestCase):
         self._persistir(payload_registro(self.job.job_id))
         self.assertCountEqual(pendencias(self.extracao), [
             self._obrigatorio('/acts/0/titulo'),
-            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
         self._persistir(self._registro_completo())
         self.assertEqual(pendencias(self.extracao), [])
+
+    def test_cartorio_obrigatorio_sem_nome_nao_duplica_pendencia(self):
+        self._persistir(payload_registro(self.job.job_id))
+        chave = '/acts/0/origem/cartorio'
+
+        self.assertEqual(
+            [item for item in pendencias(self.extracao) if item['chave'] == chave],
+            [self._obrigatorio(chave)],
+        )
 
     def test_desnormalizar_cria_linha_para_campo_exigido_ausente(self):
         linhas = self._persistir(payload_registro(self.job.job_id))
@@ -434,7 +442,6 @@ class PendenciasEAvisosTest(TestCase):
         # A ausência continua bloqueando, mas agora há controle para resolver.
         self.assertCountEqual(pendencias(self.extracao), [
             self._obrigatorio('/acts/0/titulo'),
-            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
 
@@ -460,7 +467,6 @@ class PendenciasEAvisosTest(TestCase):
 
         self.assertIn('/acts/0/origem/cartorio', linhas)
         self.assertEqual(pendencias(self.extracao), [
-            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
 
@@ -490,7 +496,6 @@ class PendenciasEAvisosTest(TestCase):
                 self.inicio.requer_cartorio_origem = flag
                 self.inicio.save()
                 self.assertEqual(pendencias(self.extracao), [
-                    self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
                     self._obrigatorio('/acts/0/origem/cartorio'),
                 ])
         payload['acts'][0]['origem'] = {
@@ -507,7 +512,6 @@ class PendenciasEAvisosTest(TestCase):
         linhas = self._persistir(payload)
         self.assertCountEqual(pendencias(self.extracao), [
             self._obrigatorio('/acts/0/titulo'),
-            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
         tipo = linhas['/acts/0/tipo_sugerido']
@@ -529,7 +533,6 @@ class PendenciasEAvisosTest(TestCase):
         aplicar_linha(tipo, incluir=True, valor='inicio_matricula')
         tipo.save()
         self.assertEqual(pendencias(self.extracao), [
-            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
 

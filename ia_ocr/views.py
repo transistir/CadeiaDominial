@@ -673,7 +673,7 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         extracao = job.extracao_vigente()
         if extracao is None:
             raise services.ExtracaoRecusada('sem_extracao')
-        _salva, versao, invalidou_partes = services.salvar_bloco(
+        _salva, versao, partes_invalidadas = services.salvar_bloco(
             extracao, decisoes, request.user, dados['versao'],
         )
     except revisao.EscolhaIncompativel as exc:
@@ -701,8 +701,9 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
     return JsonResponse({
         'ok': True,
         'versao': versao,
-        # A escolha de cadastro foi zerada: a tela precisa reler os candidatos.
-        'recarregar': invalidou_partes,
+        # A escolha de cadastro foi zerada nessas partes: a tela relê os
+        # candidatos recomputados pelo servidor quando puder recarregar.
+        'partes_invalidadas': partes_invalidadas,
         # Só chave/motivo: a tela reabilita o finalizar sem expor dados da revisão.
         'pendencias': [
             {'chave': item['chave'], 'motivo': item['motivo']}

@@ -27,9 +27,11 @@
         valor_invalido: 'Valor inválido para este campo.',
         conversao_incompleta: 'Informe a área em hectares e confirme a conversão.',
         escolha_invalida: 'Escolha de cadastro inválida.',
+        escolha_incompativel: 'Escolha de cadastro incompatível com este campo.',
         decisao_invalida: 'Decisão inválida para este campo.',
         sem_extracao: 'Extração indisponível.'
     };
+    var AVISO_RECARGA = 'Identidade alterada: a tela será atualizada quando você parar de digitar.';
 
     function iniciar(raiz) {
         var urlSalvar = raiz.getAttribute('data-url-salvar');
@@ -45,6 +47,7 @@
         var fila = Promise.resolve();
         var emFila = 0;
         var recarregando = false;
+        var recargaPendente = false;
         // Último envio de cada card falhou: finalizar não pode ignorá-los.
         var falhas = new Set();
 
@@ -104,7 +107,9 @@
                         : 'Resolva as pendências antes de finalizar.';
                 }
             }
-            if (msgFinalizar) msgFinalizar.textContent = '';
+            if (msgFinalizar) {
+                msgFinalizar.textContent = recargaPendente ? AVISO_RECARGA : '';
+            }
         }
 
         function decisao(card) {
@@ -146,6 +151,28 @@
             window.location.reload();
         }
 
+        function focoDentroDeCard() {
+            var ativo = document.activeElement;
+            return !!(ativo && ativo.closest && ativo.closest('[data-campo]'));
+        }
+
+        function avisarRecargaPendente() {
+            if (msgFinalizar) msgFinalizar.textContent = AVISO_RECARGA;
+        }
+
+        // Reload diferido: a identidade de uma parte mudou, mas o usuário
+        // pode estar digitando. Só recarrega quando não há timer de debounce,
+        // nem POST em fila, nem foco dentro de um card.
+        function talvezRecarregar() {
+            if (!recargaPendente || recarregando) return;
+            if (timers.size || emFila || focoDentroDeCard()) {
+                avisarRecargaPendente();
+                return;
+            }
+            recarregando = true;
+            window.location.reload();
+        }
+
         // Um POST por vez: cada um sai com a versão devolvida pelo anterior,
         // senão dois cards salvos juntos dão 409 contra a própria tela.
         function salvar(card) {
@@ -156,6 +183,7 @@
                 return recarregando ? null : enviar(card);
             }).then(function () {
                 emFila -= 1;
+                talvezRecarregar();
             });
             return fila;
         }
@@ -179,11 +207,15 @@
                             atualizarPendencias(dados.pendencias);
                         }
                         // A identidade de uma parte mudou e a escolha antiga
-                        // foi zerada no servidor: o select do card ainda tem
-                        // o valor velho, então só recarregar evita reenviá-lo.
-                        if (dados.recarregar) {
-                            recarregar('A identidade de uma parte foi corrigida; a tela será atualizada.');
+                        // foi zerada no servidor. Não recarrega no meio da
+                        // digitação: marca a pendência e deixa o reload para
+                        // quando não houver timer, fila nem foco em card.
+                        if (Array.isArray(dados.partes_invalidadas)
+                                && dados.partes_invalidadas.length) {
+                            recargaPendente = true;
+                            avisarRecargaPendente();
                         }
+                        talvezRecarregar();
                     } else if (resposta.status === 409) {
                         falhas.add(card);
                         recarregar();
@@ -262,6 +294,15 @@
                 card.classList.toggle('descartado', !(card.querySelector('[data-campo-incluir]') || {}).checked);
                 agendar(card);
             }
+        });
+        raiz.addEventListener('focusout', function (evento) {
+            var destino = evento && evento.relatedTarget;
+            if (destino && destino.closest && destino.closest('[data-campo]')) {
+                return;
+            }
+            // Espera o foco assentar: durante o focusout o activeElement
+            // ainda pode ser o body mesmo indo para outro card.
+            window.setTimeout(talvezRecarregar, 0);
         });
 
         document.addEventListener('keydown', function (evento) {

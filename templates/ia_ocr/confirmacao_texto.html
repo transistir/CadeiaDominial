@@ -140,6 +140,7 @@
             </p>
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <a href="{{ url_campos }}" class="btn btn-primary" data-ocr-campos-link>Revisar campos →</a>
+                {% if job.status == 'texto_confirmado' %}
                 <form method="post" action="{{ url_extrair_campos }}" data-ocr-form-global>
                     {% csrf_token %}
                     <input type="hidden" name="pagina" value="{{ pagina.numero_pagina }}">
@@ -148,6 +149,7 @@
                     <small class="text-muted d-block mt-1" data-ocr-extrair-campos-motivo>{{ motivo_sem_extracao }}</small>
                     {% endif %}
                 </form>
+                {% endif %}
             </div>
             {% endif %}
         </div>

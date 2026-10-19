@@ -541,6 +541,20 @@ def pendencias(extracao) -> list[dict]:
                 if campo.cartorio_escolhido_id}
     ).values_list('pk', flat=True))
 
+    obrigatorios = [f'/document/{nome}' for nome in _OBRIGATORIOS_DOCUMENTO]
+    tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
+    for ato in atos:
+        obrigatorios.extend(f'{ato.chave}/{nome}' for nome in _OBRIGATORIOS_ATO)
+        tipo_efetivo = tipos_por_ato.get(ato.chave)
+        tipo = configuracoes.get(tipo_efetivo)
+        obrigatorios.extend(
+            f'{ato.chave}/{caminho}'
+            for caminho in _caminhos_do_tipo(tipo_efetivo, tipo)
+        )
+    ausentes_obrigatorios = [
+        chave for chave in obrigatorios if _campo_ausente(linhas, chave)
+    ]
+
     for campo in linhas.values():
         if campo.requer_revisao and campo.status_revisao == 'sugerido':
             adicionar(campo.chave, 'revisao_pendente')
@@ -569,9 +583,11 @@ def pendencias(extracao) -> list[dict]:
         if campo.tipo_valor == 'cartorio' and campo.criar_novo:
             # "Criar novo" sem nome não aponta para cadastro nenhum; vale para
             # cartório obrigatório e opcional (o destino precisa do nome).
+            # Se a ausência já vira ``obrigatorio_ausente``, um card não ganha
+            # dois motivos.
             valor = _valor_efetivo(campo)
             if (
-                campo.status_revisao != 'descartado'
+                campo.chave not in ausentes_obrigatorios
                 and (valor is None or (
                     isinstance(valor, str) and not valor.strip()
                 ))
@@ -599,19 +615,8 @@ def pendencias(extracao) -> list[dict]:
             if motivo_limite:
                 adicionar(campo.chave, motivo_limite)
 
-    obrigatorios = [f'/document/{nome}' for nome in _OBRIGATORIOS_DOCUMENTO]
-    tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
-    for ato in atos:
-        obrigatorios.extend(f'{ato.chave}/{nome}' for nome in _OBRIGATORIOS_ATO)
-        tipo_efetivo = tipos_por_ato.get(ato.chave)
-        tipo = configuracoes.get(tipo_efetivo)
-        obrigatorios.extend(
-            f'{ato.chave}/{caminho}'
-            for caminho in _caminhos_do_tipo(tipo_efetivo, tipo)
-        )
-    for chave in obrigatorios:
-        if _campo_ausente(linhas, chave):
-            adicionar(chave, 'obrigatorio_ausente')
+    for chave in ausentes_obrigatorios:
+        adicionar(chave, 'obrigatorio_ausente')
     return resultado
 
 

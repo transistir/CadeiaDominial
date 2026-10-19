@@ -197,7 +197,7 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(resposta.json(), {
             'ok': True,
             'versao': services.versao_bloco(extracao),
-            'recarregar': False,
+            'partes_invalidadas': [],
             'pendencias': [
                 {'chave': item['chave'], 'motivo': item['motivo']}
                 for item in revisao.pendencias(extracao)
@@ -209,20 +209,30 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(campo.revisado_por, self.dono)
         self.assertIsNotNone(campo.revisado_em)
 
-    def test_identidade_corrigida_marca_recarregar(self):
+    def test_identidade_corrigida_devolve_partes_invalidadas(self):
         extracao = self._extracao(payload_registro(self.job.job_id))
+        chave_parte = '/acts/0/partes/0'
 
         corrigida = self._post_json('salvar_bloco_ocr', {
             'versao': services.versao_bloco(extracao),
-            'decisoes': [{
-                'chave': '/acts/0/partes/0/nome',
-                'incluir': True, 'conferido': True,
-                'valor': 'JOÃO DA SILVA CORRIGIDO',
-            }],
+            'decisoes': [
+                {
+                    'chave': f'{chave_parte}/nome',
+                    'incluir': True, 'conferido': True,
+                    'valor': 'JOÃO DA SILVA CORRIGIDO',
+                },
+                {
+                    'chave': f'{chave_parte}/documento_identificacao/valor',
+                    'incluir': True, 'conferido': True,
+                    'valor': '11122233344',
+                },
+            ],
         })
 
         self.assertEqual(corrigida.status_code, 200, corrigida.content)
-        self.assertIs(corrigida.json()['recarregar'], True)
+        self.assertEqual(
+            corrigida.json()['partes_invalidadas'], [chave_parte],
+        )
 
         sem_identidade = self._post_json('salvar_bloco_ocr', {
             'versao': corrigida.json()['versao'],
@@ -232,7 +242,7 @@ class ExtracaoViewsTest(TelaTextoBase):
         })
 
         self.assertEqual(sem_identidade.status_code, 200, sem_identidade.content)
-        self.assertIs(sem_identidade.json()['recarregar'], False)
+        self.assertEqual(sem_identidade.json()['partes_invalidadas'], [])
 
     def test_tipo_documento_invalido_e_recusado(self):
         extracao = self._extracao()

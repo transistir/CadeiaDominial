@@ -264,6 +264,28 @@ class ExtrairCamposViewTest(TelaTextoBase):
             1,
         )
 
+    def test_texto_extraido_nao_mostra_extrair(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.EXTRAIDO)
+
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        self.assertIsNone(_botao(conteudo, 'data-ocr-extrair-campos'))
+        self.assertEqual(
+            len(_elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))),
+            1,
+        )
+
+    def test_texto_revisado_nao_mostra_extrair(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.REVISADO)
+
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        self.assertIsNone(_botao(conteudo, 'data-ocr-extrair-campos'))
+        self.assertEqual(
+            len(_elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))),
+            1,
+        )
+
     def test_botao_desabilitado_enquanto_job_nao_concluiu(self):
         OcrJob.objects.filter(pk=self.job.pk).update(status=estados.EM_EXECUCAO)
         self.job.refresh_from_db()
