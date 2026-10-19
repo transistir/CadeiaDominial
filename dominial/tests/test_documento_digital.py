@@ -8,11 +8,12 @@ from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from dominial.models import (
     TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital, Pessoas, UserImovel
 )
-from ia_ocr.models import OcrJob
+from ia_ocr.models import OcrJob, PaginaOcr, PendenciaLimpezaArquivo
 
 
 class DocumentoDigitalTestCase(TestCase):
@@ -299,38 +300,119 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
             'documento_id': self.documento.id, 'arquivo_id': arquivo_id,
         })
 
-    def test_excluir_bloqueado_por_job_ocr_preserva_registro_e_arquivo(self):
+    def test_excluir_com_job_ocr_pede_confirmacao(self):
         with tempfile.TemporaryDirectory() as midia:
             with override_settings(MEDIA_ROOT=midia):
                 dd = self._criar_arquivo()
                 caminho = dd.arquivo.name
                 self.assertTrue(default_storage.exists(caminho))
-                OcrJob.objects.create(documento_digital=dd)
+                job = OcrJob.objects.create(documento_digital=dd)
 
-                response = self.client.post(self._url(dd.id), follow=True)
+                response = self.client.post(self._url(dd.id))
 
                 self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'Apagar arquivo e OCR')
+                self.assertContains(response, dd.nome_original)
                 self.assertTrue(
                     DocumentoDigital.objects.filter(id=dd.id).exists(),
-                    'O registro foi apagado mesmo com job de OCR vinculado (PROTECT).',
+                    'O registro foi apagado sem confirmação do OCR.',
+                )
+                self.assertTrue(
+                    OcrJob.objects.filter(id=job.id).exists(),
+                    'O job de OCR foi apagado sem confirmação.',
                 )
                 self.assertTrue(
                     default_storage.exists(caminho),
-                    'O arquivo foi apagado do storage antes do registro (bug #258).',
+                    'O arquivo foi apagado do storage antes da confirmação (bug #258).',
                 )
+
+    def test_excluir_confirmado_apaga_job_paginas_e_registra_pendencia(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                arquivo_id = dd.id
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(documento_digital=dd)
+                PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=1, texto_ocr='texto sintetico'
+                )
+
+                # Falha física deixa a pendência durável para retry (#258).
+                with patch(
+                    'django.db.models.fields.files.FieldFile.delete',
+                    side_effect=OSError('falha simulada'),
+                ):
+                    response = self.client.post(
+                        self._url(arquivo_id), {'confirmar_ocr': '1'}
+                    )
+
+                self.assertEqual(response.status_code, 302)
+                self.assertFalse(
+                    DocumentoDigital.objects.filter(id=arquivo_id).exists()
+                )
+                self.assertFalse(OcrJob.objects.filter(id=job.id).exists())
+                self.assertFalse(
+                    PaginaOcr.objects.filter(ocr_job_id=job.id).exists()
+                )
+                pendencia = PendenciaLimpezaArquivo.objects.get(
+                    documento_digital_id=arquivo_id
+                )
+                self.assertEqual(pendencia.caminho_storage, caminho)
                 mensagens = [str(m) for m in get_messages(response.wsgi_request)]
                 self.assertTrue(
-                    any(
-                        'OCR' in mensagem and 'suporte' in mensagem
-                        for mensagem in mensagens
-                    ),
+                    any('excluído com sucesso' in mensagem for mensagem in mensagens),
                     mensagens,
                 )
-                # A mensagem não pode mandar o usuário remover o processamento:
-                # não existe tela para isso (review #260, item E).
-                self.assertFalse(
-                    any('Remova o processamento' in mensagem for mensagem in mensagens),
-                    mensagens,
+
+    def test_confirmacao_mostra_contagens_de_paginas_e_extracoes(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                job = OcrJob.objects.create(documento_digital=dd)
+                PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=1, texto_ocr='pagina 1'
+                )
+                PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=2, texto_ocr='pagina 2',
+                    confirmado_em=timezone.now(),
+                )
+
+                response = self.client.post(self._url(dd.id))
+
+                self.assertEqual(response.status_code, 200)
+                content = response.content.decode()
+                self.assertIn('2 páginas', content)
+                self.assertIn('1 confirmada', content)
+                self.assertIn('0 extrações', content)
+                self.assertIn(
+                    'O texto confirmado deste arquivo será perdido. '
+                    'Esta ação não pode ser desfeita.',
+                    content,
+                )
+
+    def test_cancelar_confirmacao_nao_apaga_nada(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                job = OcrJob.objects.create(documento_digital=dd)
+
+                response = self.client.get(reverse(
+                    'documento_detalhado',
+                    kwargs={
+                        'tis_id': self.ti.id,
+                        'imovel_id': self.imovel.id,
+                        'documento_id': self.documento.id,
+                    },
+                ))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(
+                    OcrJob.objects.filter(id=job.id).exists()
                 )
 
     def test_excluir_sem_job_ocr_apaga_registro_e_arquivo(self):

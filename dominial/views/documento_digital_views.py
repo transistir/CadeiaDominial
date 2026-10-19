@@ -163,11 +163,40 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
     nome = arquivo.nome_original
+    jobs = OcrJob.objects.filter(documento_digital=arquivo)
+
+    # O OCR é apagado junto com o arquivo, mas o usuário precisa confirmar:
+    # páginas, texto confirmado e extrações vão embora sem volta.
+    if jobs.exists() and request.POST.get('confirmar_ocr') != '1':
+        jobs_resumo = [
+            {
+                'job': job,
+                'paginas': job.paginas.count(),
+                'confirmadas': job.paginas.filter(
+                    confirmado_em__isnull=False
+                ).count(),
+                'extracoes': job.extracoes.count(),
+            }
+            for job in jobs
+        ]
+        return render(
+            request,
+            'dominial/confirmar_exclusao_ocr.html',
+            {
+                'tis': tis,
+                'imovel': imovel,
+                'documento': documento,
+                'arquivo': arquivo,
+                'jobs': jobs_resumo,
+            },
+        )
+
     # Registro e intenção de limpeza formam uma unidade: se a pendência não
     # puder ser persistida, o DocumentoDigital continua disponível.
     caminho = arquivo.arquivo.name if arquivo.arquivo else None
     try:
         with transaction.atomic():
+            jobs.delete()
             arquivo.delete()
             pendencia = (
                 registrar_pendencia_limpeza(

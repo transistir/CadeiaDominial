@@ -184,7 +184,7 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
                 self._mensagens(response),
             )
 
-    def test_job_ocr_bloqueia_exclusao_sem_criar_pendencia(self):
+    def test_job_ocr_pede_confirmacao_sem_criar_pendencia(self):
         with tempfile.TemporaryDirectory() as midia, override_settings(MEDIA_ROOT=midia):
             documento_digital = self._criar_arquivo()
             arquivo_id = documento_digital.id
@@ -193,15 +193,12 @@ class ExclusaoDocumentoDigitalComPendenciaTest(TestCase):
 
             response = self.client.post(self._url(documento_digital))
 
-            self.assertEqual(response.status_code, 302)
+            # #301: com OCR vinculado o POST sem confirmação só pede confirmação.
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'Apagar arquivo e OCR')
             self.assertTrue(DocumentoDigital.objects.filter(id=arquivo_id).exists())
             self.assertTrue(default_storage.exists(caminho))
             self.assertFalse(PendenciaLimpezaArquivo.objects.exists())
-            mensagens = self._mensagens(response)
-            self.assertTrue(
-                any(tags == 'error' and 'OCR' in texto for tags, texto in mensagens),
-                mensagens,
-            )
 
     def test_sem_arquivo_fisico_exclui_registro_sem_criar_pendencia(self):
         documento_digital = criar_documento_digital(
