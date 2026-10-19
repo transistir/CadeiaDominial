@@ -8,15 +8,22 @@ evidência no CI (fecha o P2 "Polling lacks automated tests" do PR #279).
 
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 TESTE_JS = Path(__file__).resolve().parent / "js" / "ocr_card.test.js"
+AVISO_SEM_NODE = "AVISO: node ausente no PATH — teste de JS do card PULADO"
 
 
-@unittest.skipUnless(shutil.which("node"), "node não instalado")
 class TesteJsOcrCard(unittest.TestCase):
     def test_ocr_card_js_passa_no_harness_node(self):
+        if shutil.which("node") is None:
+            # #284: pulo explícito. O motivo vai para o relatório (-v 2) e o
+            # aviso em stderr aparece em qualquer verbosidade: sem node, a
+            # cobertura de JS do card não roda e ninguém deve achar que rodou.
+            print(AVISO_SEM_NODE, file=sys.stderr)
+            self.skipTest(AVISO_SEM_NODE)
         resultado = subprocess.run(
             ["node", str(TESTE_JS)],
             capture_output=True,

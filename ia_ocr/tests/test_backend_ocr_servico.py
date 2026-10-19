@@ -16,6 +16,7 @@ from ia_ocr import estados
 from ia_ocr.backends import OcrServiceBackend
 from ia_ocr.models import OcrJob
 from ia_ocr.tests.factories import criar_documento_digital
+from ia_ocr.tests.pdf_cifrado import gerar_pdf_aes, sem_provider_aes
 from ia_ocr.tests.stub_servico import StubServicoOcr
 
 
@@ -722,6 +723,59 @@ class OcrServiceBackendTests(TestCase):
 
         envio = self._posts(stub)[0]
         self.assertEqual(envio['campos']['max_pages'], '17')
+
+    def test_pdf_aes_sem_senha_de_usuario_chega_ao_servico(self):
+        """Issue #280: PDF AES com senha de usuário vazia abre localmente e o
+        job segue para o serviço (antes morria em INVALID_PDF)."""
+        pdf = gerar_pdf_aes(algoritmo='AES-256', paginas=2)
+        job = self._job(pdf)
+        sha256 = hashlib.sha256(pdf).hexdigest()
+        stub = self._stub(
+            [
+                (202, {'job_id': str(job.job_id), 'status': 'queued'}, {}),
+                (
+                    200,
+                    {'job_id': str(job.job_id), 'status': 'succeeded'},
+                    {},
+                ),
+                (200, self._resultado_servico(job.job_id, sha256), {}),
+            ]
+        )
+
+        resultado = self._processar(job, stub)
+
+        self.assertEqual(len(self._posts(stub)), 1)
+        self.assertEqual(self._posts(stub)[0]['campos']['max_pages'], '25')
+        self.assertEqual(resultado.origem, 'ocr')
+        self.assertEqual(resultado.page_count, 2)
+
+    def test_pdf_aes_sem_provider_local_chega_ao_servico_com_max_pages_do_setting(
+        self,
+    ):
+        """Sem provider AES local (cryptography ausente) a inspeção é
+        inconclusiva: o job não pode morrer em INVALID_PDF antes de falar com
+        o serviço, que decide. O envio usa o teto do setting."""
+        pdf = gerar_pdf_aes(algoritmo='AES-256', paginas=2)
+        job = self._job(pdf)
+        sha256 = hashlib.sha256(pdf).hexdigest()
+        stub = self._stub(
+            [
+                (202, {'job_id': str(job.job_id), 'status': 'queued'}, {}),
+                (
+                    200,
+                    {'job_id': str(job.job_id), 'status': 'succeeded'},
+                    {},
+                ),
+                (200, self._resultado_servico(job.job_id, sha256), {}),
+            ]
+        )
+
+        with sem_provider_aes(), self.settings(OCR_MAX_PAGINAS=17):
+            resultado = self._processar(job, stub)
+
+        self.assertEqual(len(self._posts(stub)), 1)
+        self.assertEqual(self._posts(stub)[0]['campos']['max_pages'], '17')
+        self.assertEqual(resultado.origem, 'ocr')
 
     def test_max_pages_conhecido_usa_min_do_teto_setting_e_page_count(self):
         pdf = self._pdf(textos=[None, None])

@@ -14,6 +14,7 @@ atributos no template não quebra o teste (review #260, item I).
 import json
 
 from django.contrib.auth.models import User
+from django.templatetags.static import static
 from django.test import TestCase
 from django.test.html import Element, parse_html
 from django.urls import reverse
@@ -375,3 +376,22 @@ class CardOcrUploadTestCase(TestCase):
         motivos = _elementos(conteudo, 'small', presentes=('data-ocr-revisar-motivo',))
         self.assertEqual(len(motivos), 1)
         self.assertIn('hidden', _atributos(motivos[0]))
+
+    # #284 — o JS do card é estático e a página precisa carregá-lo ----------------
+
+    def test_pagina_inclui_o_estatico_do_js_do_card(self):
+        """#284: o JS do card saiu do template para static/dominial/js/
+        ocr_card.js. Os testes de HTML olham só o HTML inicial e o teste Node
+        lê o arquivo direto do disco: sem esta asserção, apagar o <script src>
+        mataria o card com a suíte verde."""
+        resposta = self.pagina()
+
+        scripts = _elementos(
+            resposta.content.decode(),
+            'script',
+            valores={'src': static('dominial/js/ocr_card.js')},
+        )
+        self.assertEqual(
+            len(scripts), 1,
+            'a página precisa carregar dominial/js/ocr_card.js uma única vez',
+        )

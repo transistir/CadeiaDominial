@@ -12,6 +12,8 @@ whitenoise==6.6.0
 weasyprint==62.2
 pydyf==0.10.0
 pypdf==6.16.2
+# pypdf exige cryptography para AES (sem ele: DependencyError). Verificadas com pypdf==6.16.2: 44.0.3 e 50.0.2.
+cryptography>=44.0.3
 openpyxl==3.1.5
 # I-5 (#262): validação do payload de extração contra o schema vendorizado
 # (ia_ocr/schemas/) — versões instaladas/empregadas nos testes I-5.
