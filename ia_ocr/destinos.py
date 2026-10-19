@@ -249,11 +249,18 @@ def _do_campo(modelo, campo, tipo_valor):
             choices = tuple(
                 apps.get_model('dominial.LancamentoTipo').TIPO_CHOICES
             )
+    if tipo_valor == 'cartorio':
+        # A FK não expõe max_length: o texto revisado é o nome do cartório.
+        max_length = apps.get_model(
+            'dominial.Cartorios'
+        )._meta.get_field('nome').max_length
+    else:
+        max_length = getattr(field, 'max_length', None)
     return Destino(
         modelo=modelo,
         campo=campo,
         tipo_valor=tipo_valor,
-        max_length=getattr(field, 'max_length', None),
+        max_length=max_length,
         max_digits=getattr(field, 'max_digits', None),
         decimal_places=getattr(field, 'decimal_places', None),
         choices=choices,

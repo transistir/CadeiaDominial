@@ -399,6 +399,16 @@ def _mascarar_cpf(cpf):
     return f'CPF ***.***.***-{digitos[-2:]}' if len(digitos) >= 2 else 'CPF ***'
 
 
+_SEQUENCIA_LONGA = re.compile(r'\d(?:[.\-/]?\d){6,}')
+
+
+def _mascarar_evidencia(trecho):
+    """Esconde CPF/RG e outras sequências de 7+ dígitos no trecho exibido."""
+    if not trecho:
+        return trecho
+    return _SEQUENCIA_LONGA.sub('***', trecho)
+
+
 def _mascarar_rg(rg):
     digitos = re.sub(r'\D', '', rg or '')
     return f'RG ***{digitos[-2:]}' if len(digitos) >= 2 else 'RG ***'
@@ -504,6 +514,8 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         raise Http404('Extração indisponível.')
     campos = list(extracao.campos.order_by('chave'))
     _anexar_opcoes_cadastro(campos)
+    for campo in campos:
+        campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
@@ -673,7 +685,7 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         extracao = job.extracao_vigente()
         if extracao is None:
             raise services.ExtracaoRecusada('sem_extracao')
-        _salva, versao, partes_invalidadas = services.salvar_bloco(
+        _salva, versao, partes_invalidadas, campos_novos = services.salvar_bloco(
             extracao, decisoes, request.user, dados['versao'],
         )
     except revisao.EscolhaIncompativel as exc:
@@ -704,6 +716,9 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         # A escolha de cadastro foi zerada nessas partes: a tela relê os
         # candidatos recomputados pelo servidor quando puder recarregar.
         'partes_invalidadas': partes_invalidadas,
+        # Linhas obrigatórias criadas pelo novo tipo: sem card na tela atual,
+        # o cliente recarrega quando puder para exibi-las.
+        'campos_novos': campos_novos,
         # Só chave/motivo: a tela reabilita o finalizar sem expor dados da revisão.
         'pendencias': [
             {'chave': item['chave'], 'motivo': item['motivo']}

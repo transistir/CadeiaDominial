@@ -155,7 +155,7 @@ def validar_limites(campo, valor_efetivo):
         return None
     tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
     if tipo_valor not in (
-        'texto', 'data', 'decimal', 'area', 'enum', 'booleano',
+        'texto', 'data', 'decimal', 'area', 'enum', 'booleano', 'cartorio',
     ):
         return None
 
@@ -173,7 +173,10 @@ def validar_limites(campo, valor_efetivo):
         return None
 
     try:
-        do_formulario(tipo_valor, texto, campo)
+        do_formulario(
+            'texto' if tipo_valor == 'cartorio' else tipo_valor,
+            texto, campo,
+        )
     except (ValorInvalido, ErroInterno):
         return MOTIVO_LIMITE
     return None
@@ -260,7 +263,27 @@ def _texto_decimal(texto, destino):
         raise ValorInvalido(
             f'decimal acima dos {max_digits} dígitos do destino'
         )
+    if (
+        max_digits is not None
+        and decimal_places is not None
+        and _tem_destino_real(destino)
+        and digitos > max_digits - decimal_places
+    ):
+        raise ValorInvalido(
+            'decimal com mais de '
+            f'{max_digits - decimal_places} dígitos inteiros no destino'
+        )
     return format(numero, 'f')
+
+
+def _tem_destino_real(destino):
+    """``SEM_DESTINO`` (modelo nulo) aceita o total de 20 dígitos.
+
+    Alvos reais — Field Django ou ``Destino`` de um modelo — seguem o
+    ``DecimalField``: a parte inteira não pode passar de
+    ``max_digits - decimal_places``.
+    """
+    return getattr(destino, 'modelo', 'campo') is not None
 
 
 def _validar_decimal_canonico(numero):

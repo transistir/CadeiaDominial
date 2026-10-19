@@ -242,6 +242,13 @@
                             recargaPendente = true;
                             avisarRecargaPendente();
                         }
+                        // O novo tipo criou linhas obrigatórias que ainda não
+                        // têm card: recarrega quando a edição atual terminar.
+                        if (Array.isArray(dados.campos_novos)
+                                && dados.campos_novos.length) {
+                            recargaPendente = true;
+                            avisarRecargaPendente();
+                        }
                         talvezRecarregar();
                     } else if (resposta.status === 409) {
                         falhas.add(card);

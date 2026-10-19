@@ -10,7 +10,7 @@ from django.shortcuts import resolve_url
 from django.test import Client, override_settings
 from django.urls import reverse
 
-from dominial.models import Pessoas
+from dominial.models import LancamentoTipo, Pessoas
 from ia_ocr import estados, revisao, services
 from ia_ocr.estados import TransicaoInvalida
 from ia_ocr.extracao_backends import ExtracaoBackendError
@@ -198,6 +198,7 @@ class ExtracaoViewsTest(TelaTextoBase):
             'ok': True,
             'versao': services.versao_bloco(extracao),
             'partes_invalidadas': [],
+            'campos_novos': [],
             'pendencias': [
                 {'chave': item['chave'], 'motivo': item['motivo']}
                 for item in revisao.pendencias(extracao)
@@ -208,6 +209,41 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(campo.valor_final, '2020-01-11')
         self.assertEqual(campo.revisado_por, self.dono)
         self.assertIsNotNone(campo.revisado_em)
+
+    def test_mudar_tipo_devolve_campos_novos_sem_repetir_no_segundo_save(self):
+        LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+        LancamentoTipo.objects.create(
+            tipo='registro', requer_titulo=True,
+            requer_cartorio_origem=True, requer_observacao=False,
+        )
+        extracao = self._extracao(payload_averbacao(self.job.job_id))
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': '/acts/0/tipo_sugerido',
+                'incluir': True, 'valor': 'registro',
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(
+            sorted(resposta.json()['campos_novos']),
+            ['/acts/0/origem/cartorio', '/acts/0/titulo'],
+        )
+
+        repetido = self._post_json('salvar_bloco_ocr', {
+            'versao': resposta.json()['versao'],
+            'decisoes': [{
+                'chave': '/acts/0/tipo_sugerido',
+                'incluir': True, 'valor': 'registro',
+            }],
+        })
+
+        self.assertEqual(repetido.status_code, 200, repetido.content)
+        self.assertEqual(repetido.json()['campos_novos'], [])
 
     def test_identidade_corrigida_devolve_partes_invalidadas(self):
         extracao = self._extracao(payload_registro(self.job.job_id))

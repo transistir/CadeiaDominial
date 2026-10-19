@@ -271,13 +271,14 @@ def _validar_limites_bloco(extracao, decisoes):
 
 def salvar_bloco(
     extracao, decisoes, usuario, versao_cliente,
-) -> tuple[ExtracaoSugerida, str, list[str]]:
+) -> tuple[ExtracaoSugerida, str, list[str], list[str]]:
     """Persiste atomicamente decisões indexadas pela chave JSON Pointer.
 
     Devolve a extração, o token do bloco calculado ainda sob o lock (lido
-    depois do commit, ele já poderia incluir a gravação de outro revisor) e
+    depois do commit, ele já poderia incluir a gravação de outro revisor),
     as chaves das partes cuja identidade mudou — nelas a escolha de cadastro
-    foi zerada e os candidatos precisam ser relidos do servidor.
+    foi zerada e os candidatos precisam ser relidos do servidor — e as chaves
+    dos placeholders criados neste save, que ainda não têm card na tela.
     """
     with transaction.atomic():
         travada = _travar_extracao_revisao(extracao)
@@ -316,7 +317,9 @@ def salvar_bloco(
             campo.save()
         # O tipo efetivo pode ter mudado: o novo tipo passa a exigir linhas
         # que a extração original não trouxe (título, descrição, origem).
-        garantir_placeholders_obrigatorios(travada)
+        campos_novos = [
+            campo.chave for campo in garantir_placeholders_obrigatorios(travada)
+        ]
         _validar_limites_bloco(travada, decisoes)
         # Só depois de aplicar o bloco inteiro: a escolha antiga enviada
         # junto da correção não pode sobreviver por causa da ordem das linhas.
@@ -344,7 +347,7 @@ def salvar_bloco(
                 'revisado_por', 'revisado_em',
             ])
         versao = versao_bloco(travada)
-    return travada, versao, partes_invalidadas
+    return travada, versao, partes_invalidadas, campos_novos
 
 
 def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerida:

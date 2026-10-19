@@ -54,6 +54,9 @@ class DecimalLimites(SimpleTestCase):
         # 9 inteiros + 2 casas = 11 > max_digits=10
         with self.assertRaises(ValorInvalido):
             do_formulario('decimal', '999999999.99', VALOR_TRANSACAO)
+        # 9 inteiros sem casas: max_digits - decimal_places = 8 inteiros
+        with self.assertRaises(ValorInvalido):
+            do_formulario('decimal', '999999999', VALOR_TRANSACAO)
         # 3 casas > decimal_places=2
         with self.assertRaises(ValorInvalido):
             do_formulario('decimal', '1.234', VALOR_TRANSACAO)
@@ -101,6 +104,10 @@ class ValidarLimites(SimpleTestCase):
             valores.MOTIVO_LIMITE,
         )
         self.assertEqual(
+            valores.validar_limites(destino, '999999999'),
+            valores.MOTIVO_LIMITE,
+        )
+        self.assertEqual(
             valores.validar_limites(destino, '1.234'),
             valores.MOTIVO_LIMITE,
         )
@@ -108,8 +115,13 @@ class ValidarLimites(SimpleTestCase):
     def test_area_acima_do_destino(self):
         destino = destino_de('/acts/0/area')
         self.assertIsNone(valores.validar_limites(destino, '1234.5678'))
+        self.assertIsNone(valores.validar_limites(destino, '99999999.9999'))
         self.assertEqual(
             valores.validar_limites(destino, '1.99999'),
+            valores.MOTIVO_LIMITE,
+        )
+        self.assertEqual(
+            valores.validar_limites(destino, '999999999'),
             valores.MOTIVO_LIMITE,
         )
 

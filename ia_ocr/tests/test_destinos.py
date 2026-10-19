@@ -163,6 +163,15 @@ class LimitesVemDeMeta(SimpleTestCase):
         valor = destino_de('/acts/2/valor_transacao')
         self.assertEqual((valor.max_digits, valor.decimal_places), (10, 2))
 
+        for chave in (
+            '/document/cartorio',
+            '/document/cri_atual',
+            '/acts/0/origem/cartorio',
+            '/acts/0/cartorio_transmissao',
+        ):
+            with self.subTest(chave=chave):
+                self.assertEqual(destino_de(chave).max_length, 200)
+
     def test_texto_liberado_da_conferencia_tem_10_mil(self):
         for chave in ('/document/imovel_descricao', '/acts/9/rotulo'):
             with self.subTest(chave=chave):

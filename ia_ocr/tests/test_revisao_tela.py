@@ -9,7 +9,7 @@ from django.test.html import Element
 from django.utils import timezone
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
-from ia_ocr import estados, revisao
+from ia_ocr import estados, revisao, views
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
 
@@ -376,6 +376,79 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertEqual(salvar.status_code, 422, salvar.content)
         self.assertEqual(salvar.json()['erro'], 'valor_invalido')
         self.assertEqual(salvar.json()['chave'], '/document/cartorio')
+
+    def test_cartorio_nome_no_limite_de_200_e_aceito(self):
+        extracao = self._extracao_com_cartorio_nulo()
+
+        salvar = self._salvar_cartorio({
+            'valor': 'x' * 200, 'escolha': {'criar_novo': True},
+        })
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/document/cartorio')
+        self.assertEqual(campo.valor_final, 'x' * 200)
+
+    def test_cartorio_nome_acima_de_200_e_422(self):
+        self._extracao_com_cartorio_nulo()
+
+        salvar = self._salvar_cartorio({
+            'valor': 'x' * 201, 'escolha': {'criar_novo': True},
+        })
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'valor_invalido')
+        self.assertEqual(salvar.json()['chave'], '/document/cartorio')
+
+    def test_cartorio_nome_acima_de_200_bloqueia_finalizacao(self):
+        extracao = self._extracao_com_cartorio_nulo()
+        extracao.campos.filter(chave='/document/cartorio').update(
+            normalized='x' * 201, status_revisao='editado', criar_novo=True,
+        )
+        versao = self._tela().context['versao']
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': versao}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 422, finalizar.content)
+        self.assertIn(
+            {
+                'chave': '/document/cartorio',
+                'motivo': 'valor_acima_do_limite_destino',
+                'bloqueante': True,
+            },
+            finalizar.json()['pendencias'],
+        )
+
+    def test_evidencia_mascara_documentos_com_7_ou_mais_digitos(self):
+        payload = payload_averbacao(self.job.job_id)
+        payload['document']['numero']['evidencia'] = {
+            'pagina': 1,
+            'trecho': 'Transmitente: JOÃO DA SILVA (CPF 123.456.789-00).',
+        }
+        extracao = self._extracao(payload)
+
+        resposta = self._tela()
+
+        self.assertContains(resposta, 'CPF ***')
+        self.assertNotContains(resposta, '123.456.789-00')
+        self.assertEqual(
+            extracao.campos.get(chave='/document/numero').evidencia_trecho,
+            'Transmitente: JOÃO DA SILVA (CPF 123.456.789-00).',
+        )
+
+    def test_mascara_sequencias_longas_e_preserva_texto_sem_documento(self):
+        mascarar = views._mascarar_evidencia
+        self.assertEqual(
+            mascarar('CPF 123.456.789-00 e RG 12.345.678-9'),
+            'CPF *** e RG ***',
+        )
+        self.assertEqual(
+            mascarar('Trecho sem documento, com 123456 apenas.'),
+            'Trecho sem documento, com 123456 apenas.',
+        )
 
     def test_descartar_campo_exigido_pelo_tipo_nao_estoura(self):
         LancamentoTipo.objects.create(

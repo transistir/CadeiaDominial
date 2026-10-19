@@ -56,7 +56,7 @@ class RevisaoServicesTest(TestCase):
         versao = services.versao_bloco(carregada)
         antes = timezone.now()
 
-        resultado, versao_devolvida, _invalidou_partes = services.salvar_bloco(
+        resultado, versao_devolvida, _invalidou_partes, _campos_novos = services.salvar_bloco(
             carregada, {
                 '/document/data': {'incluir': True, 'valor': '2020-01-11'},
                 '/document/numero': {'incluir': True, 'conferido': True},
@@ -128,7 +128,7 @@ class RevisaoServicesTest(TestCase):
                 self.assertEqual(services.versao_bloco(self.extracao), versao_atual)
 
     def test_versao_devolvida_pelo_save_e_a_da_transacao(self):
-        salva, versao_salva, _invalidou_partes = services.salvar_bloco(
+        salva, versao_salva, _invalidou_partes, _campos_novos = services.salvar_bloco(
             self.extracao,
             {'/document/data': {'incluir': True, 'valor': '2020-01-11'}},
             self.usuario, services.versao_bloco(self.extracao),
@@ -139,7 +139,7 @@ class RevisaoServicesTest(TestCase):
 
         # Outro revisor grava logo depois: o token já devolvido segue sendo o
         # do estado que o primeiro save deixou e não serve mais para gravar.
-        _, versao_do_outro, _invalidou_outra = services.salvar_bloco(
+        _, versao_do_outro, _invalidou_outra, _campos_novos = services.salvar_bloco(
             self.extracao,
             {'/document/numero': {'incluir': True, 'conferido': True}},
             criar_usuario(), versao_salva,
@@ -180,10 +180,14 @@ class RevisaoServicesTest(TestCase):
         )
         versao = services.versao_bloco(self.extracao)
 
-        services.salvar_bloco(
+        _salva, _versao, _partes, campos_novos = services.salvar_bloco(
             self.extracao,
             {'/acts/0/tipo_sugerido': {'incluir': True, 'valor': 'registro'}},
             self.usuario, versao,
+        )
+        self.assertEqual(
+            sorted(campos_novos),
+            ['/acts/0/origem/cartorio', '/acts/0/titulo'],
         )
 
         campos = {campo.chave: campo for campo in self.extracao.campos.all()}
