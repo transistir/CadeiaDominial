@@ -13,6 +13,7 @@ from django.test import SimpleTestCase
 
 from dominial.models import Lancamento
 
+from ia_ocr import valores
 from ia_ocr.destinos import SEM_DESTINO, destino_de
 from ia_ocr.valores import (
     MOTIVO_INCOMPATIVEL,
@@ -59,6 +60,71 @@ class DecimalLimites(SimpleTestCase):
         # 5 casas > decimal_places=4 de Lancamento.area
         with self.assertRaises(ValorInvalido):
             do_formulario('decimal', '1.99999', Lancamento._meta.get_field('area'))
+
+
+class DecimalNaoFinito(SimpleTestCase):
+    """NaN/Infinity e expoentes absurdos nunca viram Decimal materializado."""
+
+    def test_rejeita_nao_finitos_e_expoentes_absurdos(self):
+        for texto in (
+            'NaN', 'nan', 'sNaN',
+            'Infinity', 'inf', '-Infinity', '-inf',
+            '1e999999', '1e-999999',
+        ):
+            with self.subTest(texto=texto):
+                with self.assertRaises(ValorInvalido):
+                    do_formulario('decimal', texto, VALOR_TRANSACAO)
+
+    def test_para_python_tambem_rejeita_nao_finito(self):
+        for texto in ('NaN', 'Infinity', '1e999999'):
+            with self.subTest(texto=texto):
+                with self.assertRaises(ValorInvalido):
+                    para_python('decimal', texto)
+
+
+class ValidarLimites(SimpleTestCase):
+    """Sugestão intocada precisa caber no destino (finalização e save)."""
+
+    def test_texto_acima_do_max_length(self):
+        destino = destino_de('/acts/0/titulo')
+        self.assertIsNone(valores.validar_limites(destino, 'x' * 255))
+        self.assertEqual(
+            valores.validar_limites(destino, 'x' * 256),
+            valores.MOTIVO_LIMITE,
+        )
+
+    def test_decimal_acima_de_digitos_e_casas(self):
+        destino = destino_de('/acts/0/valor_transacao')
+        self.assertIsNone(valores.validar_limites(destino, '99999999.99'))
+        self.assertEqual(
+            valores.validar_limites(destino, '999999999.99'),
+            valores.MOTIVO_LIMITE,
+        )
+        self.assertEqual(
+            valores.validar_limites(destino, '1.234'),
+            valores.MOTIVO_LIMITE,
+        )
+
+    def test_area_acima_do_destino(self):
+        destino = destino_de('/acts/0/area')
+        self.assertIsNone(valores.validar_limites(destino, '1234.5678'))
+        self.assertEqual(
+            valores.validar_limites(destino, '1.99999'),
+            valores.MOTIVO_LIMITE,
+        )
+
+    def test_valor_nulo_e_destinos_sem_conversor_nao_acusam(self):
+        self.assertIsNone(
+            valores.validar_limites(destino_de('/acts/0/titulo'), None)
+        )
+        self.assertIsNone(
+            valores.validar_limites(destino_de('/acts/0'), 'R-1')
+        )
+        self.assertIsNone(
+            valores.validar_limites(
+                destino_de('/acts/0/partes/0'), 'transmitente',
+            )
+        )
 
 
 class Tipos(SimpleTestCase):

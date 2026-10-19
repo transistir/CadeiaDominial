@@ -5,7 +5,8 @@ from hashlib import sha256
 from django.test import TestCase
 from django.utils import timezone
 
-from ia_ocr import estados, services
+from dominial.models import LancamentoTipo
+from ia_ocr import estados, services, valores
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import desnormalizar, pendencias, versao_linha
 
@@ -163,6 +164,135 @@ class RevisaoServicesTest(TestCase):
             )
         self.assertEqual(contexto.exception.code, 'linha_inexistente')
         self.assertEqual(services.versao_bloco(self.extracao), versao)
+
+    def test_mudar_tipo_cria_linhas_exigidas_e_salva_nelas(self):
+        LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+        LancamentoTipo.objects.create(
+            tipo='registro', requer_titulo=True,
+            requer_cartorio_origem=True, requer_observacao=False,
+        )
+        self.assertFalse(
+            self.extracao.campos.filter(
+                chave__in=['/acts/0/titulo', '/acts/0/origem/cartorio'],
+            ).exists()
+        )
+        versao = services.versao_bloco(self.extracao)
+
+        services.salvar_bloco(
+            self.extracao,
+            {'/acts/0/tipo_sugerido': {'incluir': True, 'valor': 'registro'}},
+            self.usuario, versao,
+        )
+
+        campos = {campo.chave: campo for campo in self.extracao.campos.all()}
+        for chave in ('/acts/0/titulo', '/acts/0/origem/cartorio'):
+            with self.subTest(chave=chave):
+                self.assertIn(chave, campos)
+                self.assertIsNone(campos[chave].normalized)
+                self.assertFalse(campos[chave].requer_revisao)
+
+        # As chaves novas existem: salvar nelas não devolve linha_inexistente.
+        versao = services.versao_bloco(self.extracao)
+        services.salvar_bloco(
+            self.extracao, {
+                '/acts/0/titulo': {
+                    'incluir': True, 'valor': 'Escritura Pública',
+                },
+                '/acts/0/origem/cartorio': {
+                    'incluir': True, 'conferido': True,
+                    'escolha': {'criar_novo': True},
+                },
+            }, self.usuario, versao,
+        )
+        campos = {campo.chave: campo for campo in self.extracao.campos.all()}
+        self.assertEqual(campos['/acts/0/titulo'].valor_final, 'Escritura Pública')
+        self.assertTrue(campos['/acts/0/origem/cartorio'].criar_novo)
+
+    def test_salvar_recusa_sugestao_acima_do_limite(self):
+        self._resolver_pendencias()
+        CampoSugerido.objects.create(
+            extracao=self.extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 999.999.999,99',
+            normalized='999999999.99',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+        )
+        versao = services.versao_bloco(self.extracao)
+
+        with self.assertRaises(valores.ValorInvalido) as contexto:
+            services.salvar_bloco(
+                self.extracao,
+                {'/document/numero': {'incluir': True, 'conferido': True}},
+                self.usuario, versao,
+            )
+
+        self.assertEqual(contexto.exception.chave, '/acts/0/valor_transacao')
+        self.assertEqual(services.versao_bloco(self.extracao), versao)
+
+    def test_linha_descartada_acima_do_limite_nao_bloqueia_save(self):
+        self.extracao.campos.filter(chave='/document/numero').update(
+            normalized='X' * 51, status_revisao='descartado',
+        )
+        versao = services.versao_bloco(self.extracao)
+
+        services.salvar_bloco(
+            self.extracao,
+            {'/document/data': {'incluir': True, 'valor': '2020-01-11'}},
+            self.usuario, versao,
+        )
+
+        campo = self.extracao.campos.get(chave='/document/numero')
+        self.assertEqual(campo.status_revisao, 'descartado')
+
+    def test_ato_descartado_com_filho_acima_do_limite_nao_bloqueia_save(self):
+        self.extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        CampoSugerido.objects.create(
+            extracao=self.extracao,
+            chave='/acts/0/numero_lancamento',
+            raw='X' * 51,
+            normalized='X' * 51,
+            tipo_valor='texto',
+            status_revisao='sugerido',
+        )
+        versao = services.versao_bloco(self.extracao)
+
+        services.salvar_bloco(
+            self.extracao,
+            {'/document/data': {'incluir': True, 'valor': '2020-01-11'}},
+            self.usuario, versao,
+        )
+
+        self.assertEqual(
+            self.extracao.campos.get(chave='/acts/0').status_revisao,
+            'descartado',
+        )
+
+    def test_finalizar_recusa_sugestao_acima_do_limite(self):
+        self._resolver_pendencias()
+        CampoSugerido.objects.create(
+            extracao=self.extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 999.999.999,99',
+            normalized='999999999.99',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+        )
+
+        with self.assertRaises(services.RevisaoIncompleta) as contexto:
+            services.finalizar_revisao(self.extracao, self.usuario)
+
+        self.assertEqual(contexto.exception.pendencias, [{
+            'chave': '/acts/0/valor_transacao',
+            'motivo': valores.MOTIVO_LIMITE,
+            'bloqueante': True,
+        }])
+        self.extracao.refresh_from_db()
+        self.assertIsNone(self.extracao.finalizada_em)
 
     def test_salvar_depois_de_finalizada_recusa(self):
         self._resolver_pendencias()

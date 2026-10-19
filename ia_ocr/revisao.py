@@ -1,11 +1,12 @@
 """Desnormalização do payload A3 em linhas de revisão (I-5, §18).
 
-``desnormalizar`` é pura: percorre o payload e devolve ``CampoSugerido``
-NÃO salvos — uma linha por folha editável (objeto com ``normalized``),
-mais as linhas estruturais de ato (``/acts/{i}``, normalized = rótulo) e
-de parte (``/acts/{i}/partes/{j}``, normalized = papel), mais
-placeholders dos destinos obrigatórios ausentes. Nenhuma query, nenhuma
-gravação: quem persiste é o chamador.
+``desnormalizar`` devolve ``CampoSugerido`` NÃO salvos — uma linha por
+folha editável (objeto com ``normalized``), mais as linhas estruturais de
+ato (``/acts/{i}``, normalized = rótulo) e de parte
+(``/acts/{i}/partes/{j}``, normalized = papel), mais placeholders dos
+destinos obrigatórios ausentes (inclusive os exigidos pelo tipo efetivo).
+Com a extração já salva, resolve as configurações de ``LancamentoTipo``
+numa única query; nenhuma gravação: quem persiste é o chamador.
 
 Toda pendência vira motivo estável em ``motivos_revisao`` com
 ``requer_revisao=True`` — nunca silêncio:
@@ -435,6 +436,37 @@ def _tipos_efetivos(linhas, atos):
     return tipos_por_ato, configuracoes
 
 
+def _caminhos_do_tipo(tipo_efetivo, configuracao):
+    """Campos que o tipo efetivo exige, pelos mesmos ``requer_*`` do modelo.
+
+    Só destinos criáveis: ``tipo_sugerido``/``data`` já são tratados por
+    ``_OBRIGATORIOS_ATO``. ``inicio_matricula`` exige cartório de origem
+    mesmo que a configuração desligue o flag (mesma regra de
+    ``Lancamento.clean`` e de ``pendencias``).
+    """
+    caminhos = []
+    if configuracao is not None:
+        if configuracao.requer_titulo:
+            caminhos.append('titulo')
+        if configuracao.requer_descricao:
+            caminhos.append('descricao')
+    if (
+        tipo_efetivo == 'inicio_matricula'
+        or (configuracao is not None and configuracao.requer_cartorio_origem)
+    ):
+        caminhos.append('origem/cartorio')
+    return tuple(caminhos)
+
+
+def _tem_folha(no, caminho):
+    """O caminho termina numa folha editável (objeto com ``normalized``)?"""
+    for parte in caminho.split('/'):
+        if not isinstance(no, dict):
+            return False
+        no = no.get(parte)
+    return _eh_folha(no)
+
+
 def pendencias(extracao) -> list[dict]:
     """Bloqueios das linhas incluídas e dos destinos obrigatórios ausentes."""
     linhas, atos = _contexto_revisao(extracao)
@@ -488,11 +520,15 @@ def pendencias(extracao) -> list[dict]:
             and not campo.area_convertida
         ):
             adicionar(campo.chave, MOTIVO_UNIDADE_AREA)
-        motivo = valores.validar_destino(
-            destinos.destino_de(campo.chave), _valor_efetivo(campo)
-        )
+        destino = destinos.destino_de(campo.chave)
+        valor_efetivo = _valor_efetivo(campo)
+        motivo = valores.validar_destino(destino, valor_efetivo)
         if motivo:
             adicionar(campo.chave, motivo)
+        else:
+            motivo_limite = valores.validar_limites(destino, valor_efetivo)
+            if motivo_limite:
+                adicionar(campo.chave, motivo_limite)
 
     obrigatorios = [f'/document/{nome}' for nome in _OBRIGATORIOS_DOCUMENTO]
     tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
@@ -500,17 +536,10 @@ def pendencias(extracao) -> list[dict]:
         obrigatorios.extend(f'{ato.chave}/{nome}' for nome in _OBRIGATORIOS_ATO)
         tipo_efetivo = tipos_por_ato.get(ato.chave)
         tipo = configuracoes.get(tipo_efetivo)
-        for flag, caminho in (
-            ('requer_titulo', 'titulo'),
-            ('requer_descricao', 'descricao'),
-        ):
-            if tipo is not None and getattr(tipo, flag):
-                obrigatorios.append(f'{ato.chave}/{caminho}')
-        if (
-            tipo_efetivo == 'inicio_matricula'
-            or (tipo is not None and tipo.requer_cartorio_origem)
-        ):
-            obrigatorios.append(f'{ato.chave}/origem/cartorio')
+        obrigatorios.extend(
+            f'{ato.chave}/{caminho}'
+            for caminho in _caminhos_do_tipo(tipo_efetivo, tipo)
+        )
     for chave in obrigatorios:
         if _campo_ausente(linhas, chave):
             adicionar(chave, 'obrigatorio_ausente')
@@ -560,17 +589,49 @@ def desnormalizar(extracao, payload, paginas) -> list[CampoSugerido]:
     para página que existe ali, e o trecho só é mantido se for substring
     literal do texto vigente daquela página — ``texto_corrigido`` (decisão
     #290) ou, sem ele, o ``texto_ocr`` puro.
+
+    Os campos exigidos pelo tipo efetivo (``LancamentoTipo.requer_*``)
+    ausentes no payload também viram placeholder editável: sem a linha, a
+    tela acusa pendência sem controle para resolvê-la. Uma query única
+    resolve as configurações dos tipos presentes no payload.
     """
     texto_paginas = {
         pagina.numero_pagina: pagina.texto_corrigido or pagina.texto_ocr
         for pagina in paginas
     }
+    # Sem pk não há como resolver ``LancamentoTipo`` sem tocar o banco; o
+    # fluxo real sempre desnormaliza com a extração já salva.
+    configuracoes = (
+        _configuracoes_do_payload(payload)
+        if extracao.pk is not None else {}
+    )
     linhas = _folhas(extracao, '/document', payload.get('document'), texto_paginas)
     linhas += _placeholders_documento(extracao, payload.get('document'))
     for indice, ato in enumerate(payload.get('acts') or []):
-        linhas += _ato(extracao, f'/acts/{indice}', ato, texto_paginas)
+        linhas += _ato(
+            extracao, f'/acts/{indice}', ato, texto_paginas, configuracoes,
+        )
     linhas += _folhas(extracao, '/closure', payload.get('closure'), texto_paginas)
     return linhas
+
+
+def _configuracoes_do_payload(payload):
+    """Tipos selecionados no payload → ``LancamentoTipo`` (uma query)."""
+    tipos = set()
+    for ato in payload.get('acts') or []:
+        if not isinstance(ato, dict):
+            continue
+        campo = ato.get('tipo_sugerido')
+        if _eh_folha(campo) and isinstance(campo.get('normalized'), str):
+            tipos.add(campo['normalized'])
+    if not tipos:
+        return {}
+    configuracoes = {}
+    for tipo in LancamentoTipo.objects.filter(
+        tipo__in=tipos,
+    ).order_by('pk'):
+        configuracoes.setdefault(tipo.tipo, tipo)
+    return configuracoes
 
 
 def _eh_folha(no):
@@ -599,12 +660,22 @@ def _folhas(extracao, ponteiro, no, texto_paginas):
     return []
 
 
-def _ato(extracao, ponteiro, ato, texto_paginas):
+def _ato(extracao, ponteiro, ato, texto_paginas, configuracoes=None):
     """Linha estrutural do ato + placeholders + folhas + partes."""
     linhas = [_de_ato(extracao, ponteiro, ato, texto_paginas)]
     for nome in _OBRIGATORIOS_ATO:
         if not _eh_folha(ato.get(nome)):
             linhas.append(_placeholder(extracao, f'{ponteiro}/{nome}'))
+    tipo_sugerido = ato.get('tipo_sugerido')
+    tipo_efetivo = (
+        tipo_sugerido.get('normalized')
+        if _eh_folha(tipo_sugerido) else None
+    )
+    configuracao = (configuracoes or {}).get(tipo_efetivo)
+    for caminho in _caminhos_do_tipo(tipo_efetivo, configuracao):
+        chave = f'{ponteiro}/{caminho}'
+        if not _tem_folha(ato, caminho):
+            linhas.append(_placeholder(extracao, chave, requer_revisao=False))
     for nome, valor in ato.items():
         if nome != 'partes':
             linhas += _folhas(
@@ -772,8 +843,8 @@ def _candidatos_do_match(unico, candidatos=None):
     return ids, None
 
 
-def _placeholder(extracao, chave):
-    """Destino obrigatório ausente: linha vazia, sempre em revisão."""
+def _placeholder(extracao, chave, requer_revisao=True):
+    """Destino obrigatório ausente: linha vazia, editável em revisão."""
     return CampoSugerido(
         extracao=extracao,
         chave=chave,
@@ -781,12 +852,38 @@ def _placeholder(extracao, chave):
         normalized=None,
         tipo_valor=destinos.destino_de(chave).tipo_valor,
         confianca=None,
-        requer_revisao=True,
+        requer_revisao=requer_revisao,
         motivos_revisao=[],
         evidencia_pagina=None,
         evidencia_trecho='',
         evidencia_bbox=None,
     )
+
+
+def garantir_placeholders_obrigatorios(extracao):
+    """Cria as linhas exigidas pelo tipo efetivo que ainda não existem.
+
+    Chamado depois de salvar um bloco: mudar ``tipo_sugerido`` pode passar a
+    exigir título/descrição/cartório de origem. ``requer_revisao=False``
+    porque a ausência já é bloqueada por ``obrigatorio_ausente``; duplicar a
+    pendência só polui a tela. Devolve as linhas não salvas.
+    """
+    linhas, atos = _contexto_revisao(extracao)
+    tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
+    existentes = set(linhas)
+    novas = []
+    for ato in atos:
+        tipo_efetivo = tipos_por_ato.get(ato.chave)
+        configuracao = configuracoes.get(tipo_efetivo)
+        for caminho in _caminhos_do_tipo(tipo_efetivo, configuracao):
+            chave = f'{ato.chave}/{caminho}'
+            if chave in existentes:
+                continue
+            novas.append(_placeholder(extracao, chave, requer_revisao=False))
+            existentes.add(chave)
+    if novas:
+        CampoSugerido.objects.bulk_create(novas)
+    return novas
 
 
 def _checar_confianca(confianca, motivos):

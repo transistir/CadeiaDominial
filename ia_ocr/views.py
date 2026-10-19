@@ -577,9 +577,11 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         return JsonResponse({
             'erro': exc.code, 'chave': getattr(exc, 'chave', None),
         }, status=422)
-    except valores.ValorInvalido:
+    except valores.ValorInvalido as exc:
         return JsonResponse({
-            'erro': 'valor_invalido', 'chave': _chave_valor_invalido(extracao, decisoes),
+            'erro': 'valor_invalido',
+            'chave': getattr(exc, 'chave', None)
+            or _chave_valor_invalido(extracao, decisoes),
         }, status=422)
     except TransicaoInvalida as exc:
         return JsonResponse({'erro': exc.code or 'estado_invalido'}, status=409)

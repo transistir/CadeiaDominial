@@ -3,7 +3,8 @@
 Um teste por comportamento: chaves JSON Pointer + tipo_valor, placeholders
 dos obrigatórios ausentes, baixa confiança forçando revisão, closure sempre
 em revisão e evidência (página inexistente / trecho ausente). As linhas
-voltam sem pk e ``desnormalizar`` não toca o banco (assertNumQueries(0)).
+voltam sem pk; ``desnormalizar`` faz uma query por payload para resolver os
+``LancamentoTipo`` dos atos (assertNumQueries(2) para dois payloads).
 """
 
 from datetime import date, timedelta
@@ -412,6 +413,46 @@ class PendenciasEAvisosTest(TestCase):
         ])
         self._persistir(self._registro_completo())
         self.assertEqual(pendencias(self.extracao), [])
+
+    def test_desnormalizar_cria_linha_para_campo_exigido_ausente(self):
+        linhas = self._persistir(payload_registro(self.job.job_id))
+
+        for chave in ('/acts/0/titulo', '/acts/0/origem/cartorio'):
+            with self.subTest(chave=chave):
+                linha = linhas[chave]
+                self.assertIsNone(linha.raw)
+                self.assertIsNone(linha.normalized)
+                self.assertFalse(linha.requer_revisao)
+        # A ausência continua bloqueando, mas agora há controle para resolver.
+        self.assertCountEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/titulo'),
+            self._obrigatorio('/acts/0/origem/cartorio'),
+        ])
+
+    def test_desnormalizar_cria_descricao_exigida_pela_averbacao(self):
+        payload = payload_averbacao(self.job.job_id)
+        del payload['acts'][0]['descricao']
+
+        linhas = self._persistir(payload)
+
+        self.assertIn('/acts/0/descricao', linhas)
+        self.assertIsNone(linhas['/acts/0/descricao'].normalized)
+        self.assertEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/descricao'),
+        ])
+
+    def test_inicio_matricula_cria_cartorio_origem_mesmo_sem_flag(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['tipo_sugerido']['normalized'] = 'inicio_matricula'
+        self.inicio.requer_cartorio_origem = False
+        self.inicio.save()
+
+        linhas = self._persistir(payload)
+
+        self.assertIn('/acts/0/origem/cartorio', linhas)
+        self.assertEqual(pendencias(self.extracao), [
+            self._obrigatorio('/acts/0/origem/cartorio'),
+        ])
 
     def test_averbacao_exige_descricao(self):
         for estado in ('ausente', 'vazio', 'descartado'):
@@ -918,7 +959,8 @@ class DesnormalizarTest(TestCase):
         validar_payload(registro, self.job.job_id, [1])
         validar_payload(averbacao, self.job.job_id, [1])
 
-        with self.assertNumQueries(0):
+        # Uma query por payload resolve os ``LancamentoTipo`` dos atos.
+        with self.assertNumQueries(2):
             linhas = desnormalizar(self.extracao, registro, self.paginas)
             linhas_averbacao = desnormalizar(
                 self.extracao, averbacao, self.paginas

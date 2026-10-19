@@ -22,11 +22,21 @@ LIMITE_TEXTO = 10_000
 MOTIVO_INCOMPATIVEL = 'valor_incompativel_destino'
 _INCOMPATIVEL = MOTIVO_INCOMPATIVEL
 
+# Motivo estável de pendência: valor cabe na natureza, mas não nos limites.
+MOTIVO_LIMITE = 'valor_acima_do_limite_destino'
+
+# Decimal com expoente além disso é lixo/DoS: formatar materializaria
+# milhares/milhões de caracteres antes de o limite do destino decidir.
+LIMITE_EXPOENTE_DECIMAL = 10_000
+
 _DATA_ESTRITA = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
 class ValorInvalido(ValueError):
     """Valor do formulário não cabe no destino — vai para revisão."""
+
+    # Preenchido pelo save quando o valor inválido não veio de uma decisão.
+    chave = None
 
 
 class ErroInterno(ValueError):
@@ -114,7 +124,7 @@ def para_python(tipo, texto):
         return datetime.date.fromisoformat(texto)
     if tipo in ('decimal', 'area'):
         try:
-            return Decimal(texto)
+            return _validar_decimal_canonico(Decimal(texto))
         except InvalidOperation:
             raise ValorInvalido(
                 'decimal gravado fora do canônico (não é número)'
@@ -128,6 +138,45 @@ def para_python(tipo, texto):
             "booleano gravado fora do canônico ('true'/'false')"
         )
     return texto
+
+
+def validar_limites(campo, valor_efetivo):
+    """O valor efetivo cabe nos limites do destino? Devolve motivo ou None.
+
+    A sugestão do payload pode nunca ter passado pelo formulário; por isso
+    ``max_length``/``max_digits``/``decimal_places`` são revalidados também
+    na finalização e no save. ``MOTIVO_LIMITE`` independe de "conferido":
+    valor fora dos limites não pode chegar à I-6.
+
+    Só tipos com conversor de formulário são checados; ``parte``/``cartorio``
+    /``ato`` têm a natureza validada por ``validar_destino``.
+    """
+    if valor_efetivo is None:
+        return None
+    tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
+    if tipo_valor not in (
+        'texto', 'data', 'decimal', 'area', 'enum', 'booleano',
+    ):
+        return None
+
+    if isinstance(valor_efetivo, str):
+        texto = valor_efetivo
+    elif isinstance(valor_efetivo, bool):
+        texto = 'true' if valor_efetivo else 'false'
+    elif isinstance(valor_efetivo, datetime.date):
+        texto = valor_efetivo.isoformat()
+    elif isinstance(valor_efetivo, Decimal):
+        if not valor_efetivo.is_finite():
+            return MOTIVO_LIMITE
+        texto = format(valor_efetivo, 'f')
+    else:
+        return None
+
+    try:
+        do_formulario(tipo_valor, texto, campo)
+    except (ValorInvalido, ErroInterno):
+        return MOTIVO_LIMITE
+    return None
 
 
 def validar_destino(campo, valor_efetivo):
@@ -154,6 +203,12 @@ def validar_destino(campo, valor_efetivo):
     if not isinstance(valor_efetivo, str):
         return _INCOMPATIVEL
 
+    if tipo_valor in ('decimal', 'area'):
+        try:
+            _validar_decimal_canonico(Decimal(valor_efetivo))
+        except (InvalidOperation, ValorInvalido):
+            return _INCOMPATIVEL
+        return None
     if tipo_valor == 'data':
         try:
             _validar_data(valor_efetivo)
@@ -188,6 +243,7 @@ def _texto_decimal(texto, destino):
         numero = Decimal(canonico)
     except InvalidOperation:
         raise ValorInvalido('decimal não é número') from None
+    numero = _validar_decimal_canonico(numero)
     if numero < 0:
         raise ValorInvalido('decimal negativo não cabe em campo de valor')
 
@@ -205,6 +261,20 @@ def _texto_decimal(texto, destino):
             f'decimal acima dos {max_digits} dígitos do destino'
         )
     return format(numero, 'f')
+
+
+def _validar_decimal_canonico(numero):
+    """Rejeita NaN/Infinity e expoentes absurdos antes de materializar.
+
+    ``Decimal`` aceita ``NaN``/``Infinity`` e ``1e999999`` sem erro; a
+    explosão só apareceria no ``format(..., 'f')``. A checagem é O(1) e
+    vale também para valores lidos do banco em ``para_python``.
+    """
+    if not numero.is_finite():
+        raise ValorInvalido('decimal não finito')
+    if abs(numero.adjusted()) > LIMITE_EXPOENTE_DECIMAL:
+        raise ValorInvalido('decimal com expoente absurdo')
+    return numero
 
 
 def _validar_enum(texto, destino):

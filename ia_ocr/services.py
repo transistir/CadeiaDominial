@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from dominial.models import DocumentoDigital
 
-from . import estados
+from . import estados, valores
 from .backends import OcrBackendError, ResultadoOcr
 from .estados import TransicaoConcorrente
 from .extracao_backends import ResultadoExtracao, get_extracao_backend
@@ -28,7 +28,8 @@ from .models import (
 )
 from .revisao import (
     IndiceCartorios, IndicePessoas, aplicar_linha, desnormalizar,
-    enriquecer_payload, identidade_parte, pendencias, versao_linha,
+    enriquecer_payload, garantir_placeholders_obrigatorios, identidade_parte,
+    pendencias, versao_linha,
 )
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,25 @@ def _travar_extracao_revisao(extracao):
     return travada
 
 
+def _validar_limites_bloco(extracao):
+    """Revalida os valores efetivos (inclusive sugestões intocadas).
+
+    A sugestão nunca passou pelo formulário; sem esta checagem, um valor
+    acima de ``max_length``/``max_digits``/``decimal_places`` só quebraria
+    na I-6, depois de a revisão já ter sido dada por concluída.
+
+    Só as linhas incluídas contam: ``pendencias`` já respeita o descarte
+    da própria linha e dos ancestrais (ato/parte).
+    """
+    for pendencia in pendencias(extracao):
+        if pendencia['motivo'] == valores.MOTIVO_LIMITE:
+            erro = valores.ValorInvalido(
+                'valor acima do limite do destino'
+            )
+            erro.chave = pendencia['chave']
+            raise erro
+
+
 def salvar_bloco(
     extracao, decisoes, usuario, versao_cliente,
 ) -> tuple[ExtracaoSugerida, str]:
@@ -276,6 +296,10 @@ def salvar_bloco(
             }
             aplicar_linha(campo, **argumentos, usuario=usuario, agora=agora)
             campo.save()
+        # O tipo efetivo pode ter mudado: o novo tipo passa a exigir linhas
+        # que a extração original não trouxe (título, descrição, origem).
+        garantir_placeholders_obrigatorios(travada)
+        _validar_limites_bloco(travada)
         # Só depois de aplicar o bloco inteiro: a escolha antiga enviada
         # junto da correção não pode sobreviver por causa da ordem das linhas.
         indice_pessoas = None

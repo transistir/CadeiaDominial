@@ -57,6 +57,26 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertIsNotNone(botao)
         return botao.group(0)
 
+    @staticmethod
+    def _valor_do_card(html, chave):
+        card = next(
+            card for card in _elementos(
+                html, 'article', presentes=('data-campo',),
+            )
+            if _atributos(card)['data-chave'] == chave
+        )
+        for tag in ('input', 'textarea'):
+            elementos = _descendentes(card, tag, 'data-campo-valor')
+            if not elementos:
+                continue
+            elemento = elementos[0]
+            if tag == 'input':
+                return _atributos(elemento).get('value', '')
+            return ''.join(
+                filho for filho in elemento.children if isinstance(filho, str)
+            )
+        return None
+
     def test_tela_exige_extraido(self):
         self._extracao()
         OcrJob.objects.filter(pk=self.job.pk).update(status=estados.CONCLUIDO)
@@ -127,6 +147,28 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertEqual(len(valores), extracao.campos.count())
         for tag in valores:
             self.assertIn(' disabled', tag)
+
+    def test_campo_limpo_nao_ressuscita_ao_recarregar_nem_conferir(self):
+        self._extracao()
+        chave = '/document/numero'
+        versao = self._tela().context['versao']
+
+        # Limpar o texto opcional grava '' (vazio intencional, não None).
+        for conferido in (False, True):
+            with self.subTest(conferido=conferido):
+                resposta = self.client.post(
+                    self.url('salvar_bloco_ocr'),
+                    data=json.dumps({'versao': versao, 'decisoes': [{
+                        'chave': chave, 'incluir': True,
+                        'conferido': conferido, 'valor': '',
+                    }]}),
+                    content_type='application/json',
+                )
+                self.assertEqual(resposta.status_code, 200, resposta.content)
+                versao = resposta.json()['versao']
+
+                html = self._tela().content.decode()
+                self.assertEqual(self._valor_do_card(html, chave), '')
 
     def test_tela_exige_login_e_permissao(self):
         self._extracao()
