@@ -97,6 +97,8 @@ class AtoRevisado:
     observacoes: str | None
     cartorio_origem_id: int | None
     cartorio_transmissao_id: int | None
+    cartorio_origem_criar_novo: bool
+    cartorio_transmissao_criar_novo: bool
     eh_inicio_matricula: bool | None
     origem: dict | None
     partes: tuple[ParteRevisada, ...]
@@ -109,6 +111,8 @@ class DocumentoRevisado:
     data: date
     cartorio_id: int | None
     cri_atual_id: int | None
+    cartorio_criar_novo: bool
+    cri_atual_criar_novo: bool
     livro: str | None
     folha: str | None
 
@@ -121,7 +125,12 @@ class DadosRevisados:
 
 
 def dados_revisados(extracao) -> DadosRevisados:
-    """Lê a revisão vigente e finalizada, revalidando suas decisões atuais."""
+    """Lê a revisão vigente e finalizada, revalidando suas decisões atuais.
+
+    Cada vínculo de cartório expõe ``*_id`` e ``*_criar_novo`` para a I-6.
+    Criar prevalece sobre IDs/candidatos anteriores: ID ausente com flag
+    falsa é diferente de uma decisão explícita de criar cadastro.
+    """
     job = extracao.ocr_job
     if job.status != 'revisado':
         raise RevisaoInvalidada('O job não está revisado.')
@@ -143,13 +152,17 @@ def dados_revisados(extracao) -> DadosRevisados:
 
     def cartorio_id(chave):
         campo = linhas.get(chave)
-        if campo is None:
+        if campo is None or campo.criar_novo:
             return None
         if campo.cartorio_escolhido_id is not None:
             return campo.cartorio_escolhido_id
         if len(campo.match_candidatos) == 1:
             return campo.match_candidatos[0]
         return None
+
+    def cartorio_criar_novo(chave):
+        campo = linhas.get(chave)
+        return campo is not None and campo.criar_novo
 
     destinos_linhas = {}
     conferencia = {}
@@ -168,6 +181,8 @@ def dados_revisados(extracao) -> DadosRevisados:
         data=valor('/document/data'),
         cartorio_id=cartorio_id('/document/cartorio'),
         cri_atual_id=cartorio_id('/document/cri_atual'),
+        cartorio_criar_novo=cartorio_criar_novo('/document/cartorio'),
+        cri_atual_criar_novo=cartorio_criar_novo('/document/cri_atual'),
         livro=valor('/document/livro'),
         folha=valor('/document/folha'),
     )
@@ -191,6 +206,7 @@ def dados_revisados(extracao) -> DadosRevisados:
                 for nome in ('tipo_documento', 'numero', 'livro', 'folha', 'data')
             }
             origem['cartorio_id'] = origem_cartorio_id
+            origem['cartorio_criar_novo'] = cartorio_criar_novo(f'{chave}/origem/cartorio')
 
         partes = []
         linhas_partes = sorted(
@@ -237,6 +253,10 @@ def dados_revisados(extracao) -> DadosRevisados:
             observacoes=valor(f'{chave}/observacoes'),
             cartorio_origem_id=origem_cartorio_id,
             cartorio_transmissao_id=cartorio_id(f'{chave}/cartorio_transmissao'),
+            cartorio_origem_criar_novo=cartorio_criar_novo(f'{chave}/origem/cartorio'),
+            cartorio_transmissao_criar_novo=cartorio_criar_novo(
+                f'{chave}/cartorio_transmissao',
+            ),
             eh_inicio_matricula=valor(f'{chave}/eh_inicio_matricula'),
             origem=origem,
             partes=tuple(partes),
@@ -322,6 +342,13 @@ def aplicar_linha(
             )
             if valor is not None else campo.normalized
         )
+        if valor is None and campo.tipo_valor == 'enum':
+            # Conferir/reincluir também valida o valor que será preservado.
+            valores.do_formulario(
+                'enum',
+                _valor_efetivo(campo) if campo.status_revisao == 'descartado' else canonico,
+                destinos.destino_de(campo.chave),
+            )
         if canonico != campo.normalized:
             campo.status_revisao = 'editado'
             campo.valor_final = canonico
@@ -355,6 +382,18 @@ def aplicar_linha(
 
 def _valor_efetivo(campo):
     return campo.valor_final if campo.valor_final is not None else campo.normalized
+
+
+def identidade_parte(chave, linhas):
+    """Identidade revisada usada para invalidar a escolha de cadastro da parte."""
+    identidade = []
+    for sufixo in ('nome', 'documento_identificacao/tipo', 'documento_identificacao/valor'):
+        campo = linhas.get(f'{chave}/{sufixo}')
+        identidade.append(
+            _valor_efetivo(campo)
+            if campo is not None and campo.status_revisao != 'descartado' else None
+        )
+    return tuple(identidade)
 
 
 def _contexto_revisao(extracao):

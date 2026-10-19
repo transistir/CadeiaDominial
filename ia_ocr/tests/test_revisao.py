@@ -15,7 +15,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
-from ia_ocr import valores
+from ia_ocr import destinos, valores
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
@@ -53,6 +53,34 @@ class AplicarLinhaTest(SimpleTestCase):
         }
         self.usuario = get_user_model()(username='revisor')
         self.agora = timezone.now()
+
+    def test_tipo_ato_invalido_recusado_no_codec(self):
+        with self.assertRaises(valores.ValorInvalido):
+            valores.do_formulario(
+                'enum', 'registroo', destinos.destino_de('/acts/0/tipo_sugerido'),
+            )
+
+    def test_tipo_ato_invalido_recusado_ao_aplicar_linha(self):
+        campo = self.linhas['/acts/0/tipo_sugerido']
+        with self.assertRaises(valores.ValorInvalido):
+            aplicar_linha(campo, incluir=True, valor='registroo')
+
+    def test_tipo_ato_invalido_recusado_ao_conferir_ou_reincluir(self):
+        for reincluir in (False, True):
+            with self.subTest(reincluir=reincluir):
+                campo = self.linhas['/acts/0/tipo_sugerido']
+                campo.normalized = 'registro' if reincluir else 'registroo'
+                campo.valor_final = 'registroo' if reincluir else None
+                campo.status_revisao = 'descartado' if reincluir else 'sugerido'
+                with self.assertRaises(valores.ValorInvalido):
+                    aplicar_linha(campo, incluir=True, conferido=True)
+
+    def test_tipos_ato_validos_aceitos(self):
+        for tipo, _rotulo in LancamentoTipo.TIPO_CHOICES:
+            with self.subTest(tipo=tipo):
+                campo = self.linhas['/acts/0/tipo_sugerido']
+                aplicar_linha(campo, incluir=True, valor=tipo, conferido=True)
+                self.assertEqual(campo.valor_final or campo.normalized, tipo)
 
     def test_descartar_apos_editar_preserva_valor_final(self):
         campo = self.linhas['/document/data']
@@ -684,6 +712,8 @@ class DadosRevisadosTest(TestCase):
         self.assertIsInstance(dados.documento.data, date)
         self.assertEqual(dados.documento.cartorio_id, self.cartorio.pk)
         self.assertEqual(dados.documento.cri_atual_id, self.cartorio.pk)
+        self.assertFalse(dados.documento.cartorio_criar_novo)
+        self.assertFalse(dados.documento.cri_atual_criar_novo)
         self.assertIsNone(dados.documento.livro)
         self.assertEqual(dados.documento.folha, '087')
         self.assertIsInstance(dados.atos, tuple)
@@ -708,9 +738,12 @@ class DadosRevisadosTest(TestCase):
         self.assertEqual(ato.observacoes, 'Observações revisadas')
         self.assertEqual(ato.cartorio_origem_id, self.cartorio.pk)
         self.assertEqual(ato.cartorio_transmissao_id, self.cartorio.pk)
+        self.assertFalse(ato.cartorio_origem_criar_novo)
+        self.assertFalse(ato.cartorio_transmissao_criar_novo)
         self.assertEqual(ato.origem, {
             'tipo_documento': 'transcricao', 'numero': '99',
             'cartorio_id': self.cartorio.pk, 'livro': '3-A', 'folha': '12',
+            'cartorio_criar_novo': False,
             'data': date(1990, 1, 2),
         })
         self.assertIsInstance(ato.partes, tuple)
@@ -848,7 +881,8 @@ class DadosRevisadosTest(TestCase):
         dados = dados_revisados(self.extracao)
 
         self.assertEqual(dados.documento.cartorio_id, self.cartorio.pk)
-        self.assertEqual(dados.documento.cri_atual_id, outro.pk)
+        self.assertIsNone(dados.documento.cri_atual_id)
+        self.assertTrue(dados.documento.cri_atual_criar_novo)
 
 
 class DesnormalizarTest(TestCase):

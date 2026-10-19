@@ -60,6 +60,7 @@ class Destino:
     max_length: Optional[int] = None
     max_digits: Optional[int] = None
     decimal_places: Optional[int] = None
+    choices: tuple[tuple[str, str], ...] = ()
 
     @property
     def campo_modelo(self):
@@ -239,6 +240,12 @@ def _do_campo(modelo, campo, tipo_valor):
             decimal_places=SEM.decimal_places,
         )
     field = apps.get_model(modelo)._meta.get_field(campo)
+    # O formulário revisa o código do tipo, não o PK do ForeignKey.
+    # Lancamento.tipo não tem choices; o enum pertence a LancamentoTipo.
+    choices = (
+        tuple(apps.get_model('dominial.LancamentoTipo').TIPO_CHOICES)
+        if (modelo, campo) == ('dominial.Lancamento', 'tipo') else ()
+    )
     return Destino(
         modelo=modelo,
         campo=campo,
@@ -246,6 +253,7 @@ def _do_campo(modelo, campo, tipo_valor):
         max_length=getattr(field, 'max_length', None),
         max_digits=getattr(field, 'max_digits', None),
         decimal_places=getattr(field, 'decimal_places', None),
+        choices=choices,
     )
 
 

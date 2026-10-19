@@ -330,6 +330,25 @@ class ExtracaoViewsTest(TelaTextoBase):
                 self.assertIn('chave', resposta.json())
                 self.assertEqual(services.versao_bloco(extracao), versao)
 
+    def test_salvar_tipo_ato_invalido_422_sem_gravacao_parcial(self):
+        extracao = self._extracao()
+        versao = services.versao_bloco(extracao)
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': versao,
+            'decisoes': [
+                {'chave': '/document/numero', 'incluir': True, 'valor': '42.719'},
+                {'chave': '/acts/0/tipo_sugerido', 'incluir': True,
+                 'valor': 'registroo'},
+            ],
+        })
+
+        self.assertEqual(resposta.status_code, 422)
+        self.assertEqual(resposta.json(), {
+            'erro': 'valor_invalido', 'chave': '/acts/0/tipo_sugerido',
+        })
+        self.assertEqual(services.versao_bloco(extracao), versao)
+
     def test_finalizar_com_pendencia_422(self):
         extracao = self._extracao()
         pendencias = revisao.pendencias(extracao)

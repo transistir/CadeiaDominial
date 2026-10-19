@@ -28,7 +28,7 @@ from .models import (
 )
 from .revisao import (
     IndiceCartorios, IndicePessoas, aplicar_linha, desnormalizar,
-    enriquecer_payload, pendencias, versao_linha,
+    enriquecer_payload, identidade_parte, pendencias, versao_linha,
 )
 
 logger = logging.getLogger(__name__)
@@ -261,6 +261,11 @@ def salvar_bloco(
                 chaves = list(decisoes)
             raise ConflitoVersao(chaves)
 
+        identidades_antes = {
+            chave: identidade_parte(chave, campos)
+            for chave, campo in campos.items() if campo.tipo_valor == 'parte'
+        }
+        agora = timezone.now()
         for chave, decisao in decisoes.items():
             campo = campos[chave]
             argumentos = {
@@ -269,8 +274,31 @@ def salvar_bloco(
                     'ha_convertido', 'confirmo_conversao',
                 ) if nome in decisao
             }
-            aplicar_linha(campo, **argumentos, usuario=usuario, agora=timezone.now())
+            aplicar_linha(campo, **argumentos, usuario=usuario, agora=agora)
             campo.save()
+        # Só depois de aplicar o bloco inteiro: a escolha antiga enviada
+        # junto da correção não pode sobreviver por causa da ordem das linhas.
+        indice_pessoas = None
+        for chave, identidade_antes in identidades_antes.items():
+            identidade = identidade_parte(chave, campos)
+            if identidade == identidade_antes:
+                continue
+            if indice_pessoas is None:
+                indice_pessoas = IndicePessoas()
+            escolhido, candidatos = indice_pessoas.match(*identidade)
+            parte = campos[chave]
+            parte.pessoa_escolhida_id = None
+            # Mesmo um match único volta como opção, sem decidir pelo revisor.
+            parte.match_candidatos = candidatos or (
+                [escolhido] if escolhido is not None else []
+            )
+            parte.criar_novo = False
+            parte.revisado_por = usuario
+            parte.revisado_em = agora
+            parte.save(update_fields=[
+                'pessoa_escolhida', 'match_candidatos', 'criar_novo',
+                'revisado_por', 'revisado_em',
+            ])
         versao = versao_bloco(travada)
     return travada, versao
 
