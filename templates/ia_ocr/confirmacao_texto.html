@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Confirmar texto do OCR - {{ documento.numero }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'dominial/css/ocr_texto.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container ocr-texto" data-ocr-texto>
+    <div class="cadeia-header">
+        <h1>Confirmar texto do OCR</h1>
+        <div class="imovel-info">
+            <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
+            <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
+            <div><strong>Arquivo:</strong> {{ arquivo.nome_original }}</div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <a href="{% url 'upload_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">← Voltar aos arquivos</a>
+        <span class="fw-bold" data-ocr-progresso role="status" aria-live="polite">{{ confirmadas }} de {{ total }} páginas confirmadas</span>
+    </div>
+
+    <nav aria-label="Páginas do documento">
+        <ul class="ocr-abas">
+            {% for aba in abas %}
+            <li>
+                <a class="ocr-aba ocr-aba--{{ aba.pagina.estado }}{% if aba.atual %} ocr-aba--atual{% endif %}"
+                   href="{{ aba.url }}"
+                   data-ocr-aba
+                   data-pagina="{{ aba.numero }}"
+                   data-estado="{{ aba.pagina.estado }}"
+                   {% if aba.atual %}aria-current="page"{% endif %}>
+                    <span aria-hidden="true" class="ocr-aba-icone"></span>
+                    Página {{ aba.numero }}
+                    <span class="visually-hidden">— {{ aba.pagina.estado_rotulo }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </nav>
+
+    <div class="row g-3 mt-1">
+        <section class="col-lg-6" aria-label="PDF original">
+            <iframe class="ocr-texto-pdf" src="{{ url_pdf_pagina }}" title="PDF original, página {{ pagina.numero_pagina }}"></iframe>
+            <p class="small mt-1 mb-0">
+                <a href="{{ url_pdf }}" target="_blank" rel="noopener">Abrir o PDF em nova aba</a>
+            </p>
+        </section>
+
+        <section class="col-lg-6" aria-labelledby="ocr-texto-titulo">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h5 mb-0" id="ocr-texto-titulo">Texto da página {{ pagina.numero_pagina }}</h2>
+                <span class="badge ocr-estado ocr-estado--{{ pagina.estado }}" data-ocr-estado-pagina>{{ pagina.estado_rotulo }}</span>
+            </div>
+
+            {% if pagina.confirmado_em %}
+            <p class="small text-muted mb-2" data-ocr-auditoria-atual>
+                Confirmada por
+                <strong>{% if pagina.confirmado_por %}{{ pagina.confirmado_por.get_full_name|default:pagina.confirmado_por.username }}{% else %}usuário não disponível{% endif %}</strong>
+                em {{ pagina.confirmado_em|date:'d/m/Y H:i' }}
+            </p>
+            {% elif pagina.estado == 'editada' %}
+            <p class="small text-muted mb-2" data-ocr-aviso-editada>
+                Edição salva, mas ainda não confirmada: confirme a página para validá-la.
+            </p>
+            {% endif %}
+
+            <form method="post" action="{{ url_confirmar }}" data-ocr-texto-form>
+                {% csrf_token %}
+                <input type="hidden" name="versao" value="{{ pagina.versao }}">
+                <label for="ocr-texto-area" class="visually-hidden">Texto da página {{ pagina.numero_pagina }}</label>
+                <textarea id="ocr-texto-area" name="texto" class="form-control font-monospace" rows="22" spellcheck="false" data-ocr-texto-area{% if not editavel %} readonly{% endif %}>
+{{ texto_atual }}</textarea>
+                {% if editavel %}
+                <div class="d-flex gap-2 flex-wrap align-items-center mt-2">
+                    <button type="submit" class="btn btn-success" data-ocr-confirmar-pagina>Confirmar página</button>
+                    <button type="submit" class="btn btn-secondary" formaction="{{ url_editar }}" data-ocr-salvar-edicao>Salvar edição</button>
+                    <small class="text-muted" data-ocr-nao-salvo role="status" aria-live="polite" hidden>Alterações não salvas</small>
+                </div>
+                {% endif %}
+            </form>
+
+            {% if diff %}
+            <section class="mt-3" data-ocr-diff aria-labelledby="ocr-diff-titulo">
+                <h3 class="h6" id="ocr-diff-titulo">Diferenças em relação ao OCR original</h3>
+                <p class="small text-muted mb-1"><del>removido do OCR</del> · <ins>acrescentado na revisão</ins></p>
+                <pre class="ocr-diff font-monospace" data-ocr-diff-texto>{% for tipo, trecho in diff %}{% if tipo == 'removido' %}<del>{{ trecho }}</del>{% elif tipo == 'adicionado' %}<ins>{{ trecho }}</ins>{% else %}{{ trecho }}{% endif %}{% endfor %}</pre>
+            </section>
+            {% endif %}
+
+            <div class="d-flex justify-content-between mt-3">
+                {% if anterior %}<a href="{{ anterior.url }}" class="btn btn-secondary" data-ocr-anterior>← Página anterior</a>{% else %}<span></span>{% endif %}
+                {% if proxima %}<a href="{{ proxima.url }}" class="btn btn-secondary" data-ocr-proxima>Próxima página →</a>{% endif %}
+            </div>
+        </section>
+    </div>
+
+    <div class="card mt-3" data-ocr-acoes>
+        <div class="card-body">
+            <h2 class="h6 mb-3">Ações do texto</h2>
+            {% if editavel %}
+            <div class="row g-3">
+                <form class="col-md-4" method="post" action="{{ url_confirmar_todas }}" data-ocr-form-global>
+                    {% csrf_token %}
+                    <input type="hidden" name="pagina" value="{{ pagina.numero_pagina }}">
+                    <button type="submit" class="btn btn-secondary" data-ocr-confirmar-todas data-ocr-acao-global{% if not pode_confirmar_todas %} disabled{% endif %}>Confirmar todas as páginas</button>
+                    {% if pode_confirmar_todas %}
+                    <small class="text-muted d-block mt-1">Confirma, sem alteração, o texto do OCR de {{ faltam }} página{{ faltam|pluralize }} pendente{{ faltam|pluralize }}.</small>
+                    {% elif tem_editadas %}
+                    <small class="text-muted d-block mt-1" data-ocr-confirmar-todas-motivo>Há página editada aguardando confirmação: confirme-a individualmente para liberar esta ação.</small>
+                    {% else %}
+                    <small class="text-muted d-block mt-1" data-ocr-confirmar-todas-motivo>Todas as páginas já estão confirmadas.</small>
+                    {% endif %}
+                </form>
+
+                <form class="col-md-4" method="post" action="{{ url_reprocessar }}" data-ocr-form-global>
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-warning" data-ocr-reprocessar data-ocr-acao-global>Reprocessar OCR</button>
+                    <small class="text-muted d-block mt-1" data-ocr-reprocessar-aviso>Cria um novo processamento do arquivo. O texto confirmado deste processamento só será substituído depois que o novo ciclo terminar e for confirmado; o histórico é preservado.</small>
+                </form>
+
+                <form class="col-md-4" method="post" action="{{ url_extrair_campos }}" data-ocr-form-global>
+                    {% csrf_token %}
+                    <input type="hidden" name="pagina" value="{{ pagina.numero_pagina }}">
+                    <button type="submit" class="btn btn-primary" data-ocr-extrair-campos data-ocr-acao-global{% if not todas_confirmadas %} disabled{% endif %}>Extrair campos →</button>
+                    {% if not todas_confirmadas %}
+                    <small class="text-muted d-block mt-1" data-ocr-extrair-campos-motivo>{% if faltam == 1 %}Falta 1 página{% else %}Faltam {{ faltam }} páginas{% endif %} para confirmar.</small>
+                    {% endif %}
+                </form>
+            </div>
+            {% else %}
+            <p class="mb-2" data-ocr-texto-confirmado>
+                Texto confirmado{% if confirmacao_texto %} por
+                <strong>{% if confirmacao_texto.usuario %}{{ confirmacao_texto.usuario.get_full_name|default:confirmacao_texto.usuario.username }}{% else %}usuário não disponível{% endif %}</strong>
+                em {{ confirmacao_texto.criado_em|date:'d/m/Y H:i' }}{% endif %}.
+                O texto agora é somente leitura.
+            </p>
+            <a href="{{ url_campos }}" class="btn btn-primary" data-ocr-campos-link>Revisar campos →</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <details class="mt-3" data-ocr-auditoria>
+        <summary>Auditoria das páginas</summary>
+        <table class="table table-sm mt-2">
+            <thead>
+                <tr><th scope="col">Página</th><th scope="col">Estado</th><th scope="col">Confirmada por</th><th scope="col">Quando</th></tr>
+            </thead>
+            <tbody>
+                {% for aba in abas %}
+                <tr data-ocr-auditoria-pagina="{{ aba.numero }}">
+                    <td>{{ aba.numero }}</td>
+                    <td>{{ aba.pagina.estado_rotulo }}</td>
+                    <td>{% if aba.pagina.confirmado_em %}{% if aba.pagina.confirmado_por %}{{ aba.pagina.confirmado_por.get_full_name|default:aba.pagina.confirmado_por.username }}{% else %}usuário não disponível{% endif %}{% else %}—{% endif %}</td>
+                    <td>{% if aba.pagina.confirmado_em %}{{ aba.pagina.confirmado_em|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{# JS da tela versionado em estático, com testes em ia_ocr/tests/js/. #}
+<script src="{% static 'dominial/js/ocr_texto.js' %}"></script>
+{% endblock %}

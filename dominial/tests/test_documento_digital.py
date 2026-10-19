@@ -153,6 +153,36 @@ class DocumentoDigitalTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
 
+    def test_servir_documento_permite_embutir_no_proprio_site(self):
+        """I-4 (#261): a tela de confirmação do texto exibe o PDF num iframe da
+        própria origem; o padrão do Django (X-Frame-Options: DENY) o bloquearia."""
+        pdf_content = b'%PDF-1.4 test content'
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = DocumentoDigital.objects.create(
+                    documento=self.documento,
+                    arquivo=SimpleUploadedFile(
+                        'embed_test.pdf', pdf_content, content_type='application/pdf'
+                    ),
+                    nome_original='embed_test.pdf',
+                    tipo_mime='application/pdf',
+                    tamanho_bytes=len(pdf_content),
+                    upload_por=self.user,
+                )
+                url = reverse('servir_documento_digital', kwargs={
+                    'tis_id': self.ti.id, 'imovel_id': self.imovel.id,
+                    'documento_id': self.documento.id, 'arquivo_id': dd.id
+                })
+
+                response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['X-Frame-Options'], 'SAMEORIGIN')
+        # O restante do contrato do arquivo servido não muda.
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+        self.assertIn('X-Accel-Redirect', response)
+
     def test_excluir_documento(self):
         """Exclusão via POST funciona."""
         pdf_file = SimpleUploadedFile(

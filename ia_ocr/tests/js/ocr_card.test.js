@@ -4,6 +4,7 @@
  * Node puro, sem dependências novas: o JS é lido com fs.readFileSync e
  * avaliado com vm.runInNewContext num sandbox com DOM/fetch/timers mockados
  * à mão. Fecha o P2 "Polling lacks automated tests" do Greptile no PR #279.
+ * Casos 6–8 (issue #261 / I-4): "Revisar texto" vira link com o job concluído.
  *
  * Uso: node ia_ocr/tests/js/ocr_card.test.js   (exit 1 se algum caso falhar)
  */
@@ -108,10 +109,15 @@ function criarCard(atributos) {
   atualizar.textContent = 'Atualizar status';
   atualizar.hidden = true;
   const motivo = criarElemento('small', { 'data-ocr-revisar-motivo': '', class: 'text-muted' });
-  motivo.textContent = 'Disponível na I-4';
+  motivo.textContent = 'Texto já confirmado: a revisão só fica disponível até a extração dos campos.';
   motivo.hidden = true;
-  [badge, erro, disparo, retry, revisar, atualizar, motivo].forEach((filho) => card.appendChild(filho));
-  return { card, badge, erro, disparo, retry, revisar, atualizar, motivo };
+  // I-4 (#261): com o OCR concluído, "Revisar texto" é um link para a tela
+  // de confirmação; o botão desabilitado fica para os estados já confirmados.
+  const link = criarElemento('a', { 'data-ocr-revisar-link': '', href: '/texto/', class: 'btn btn-success btn-sm' });
+  link.textContent = 'Revisar texto';
+  link.hidden = true;
+  [badge, erro, disparo, retry, link, revisar, atualizar, motivo].forEach((filho) => card.appendChild(filho));
+  return { card, badge, erro, disparo, retry, revisar, atualizar, motivo, link };
 }
 
 function criarInputCsrf() {
@@ -374,6 +380,100 @@ caso('sem data-status-url: nenhum GET de status e botão de retomada escondido',
   afirmarIgual(amb.chamadasFetch.length, 0, 'nenhum fetch de status sem data-status-url');
   afirmar(filaTimers.length === 0, 'nenhum polling agendado');
   afirmarIgual(partes.atualizar.hidden, true, 'botão de retomada continua escondido');
+});
+
+// 6. I-4: ativo → concluido libera o link "Revisar texto"
+caso('ativo → concluido: link Revisar texto aparece e o botão desabilitado sai', async () => {
+  resetarTimers();
+  const partes = criarCard({
+    'data-status-ativos': '["pendente"]',
+    'data-status-com-texto': '["concluido","texto_confirmado"]',
+    'data-status-revisaveis': '["concluido"]',
+    'data-status-url': '/status',
+    'data-ocr-status': 'pendente',
+  });
+  const amb = criarAmbiente({
+    filhos: [partes.card],
+    respostas: [
+      { status: 200, corpo: { status: 'pendente', status_display: 'Na fila' } },
+      { status: 200, corpo: { status: 'concluido', status_display: 'Concluído' } },
+    ],
+  });
+  carregarScript(amb.sandbox);
+  dispararDomContentLoaded(amb.documento);
+  await aguardarMicrotarefas();
+  afirmarIgual(partes.link.hidden, true, 'link escondido enquanto o OCR está ativo');
+  executarTimers();
+  await aguardarMicrotarefas();
+  afirmarIgual(partes.link.hidden, false, 'link Revisar texto visível com o job concluído');
+  afirmarIgual(partes.link.getAttribute('href'), '/texto/', 'o link mantém o href da tela de confirmação');
+  afirmarIgual(partes.revisar.hidden, true, 'botão desabilitado some quando o texto é revisável');
+  afirmarIgual(partes.motivo.hidden, true, 'motivo some junto do botão desabilitado');
+  afirmarIgual(partes.disparo.hidden, true, 'disparo escondido no estado terminal');
+  afirmar(filaTimers.length === 0, 'timers param no estado terminal');
+});
+
+// 7. I-4: texto já confirmado → botão desabilitado com a explicação
+caso('texto_confirmado: Revisar texto fica desabilitado com o motivo e sem link', async () => {
+  resetarTimers();
+  const partes = criarCard({
+    'data-status-ativos': '["pendente"]',
+    'data-status-com-texto': '["concluido","texto_confirmado"]',
+    'data-status-revisaveis': '["concluido"]',
+    'data-status-url': '/status',
+    'data-ocr-status': 'pendente',
+  });
+  partes.link.hidden = false; // estado anterior: link visível
+  const amb = criarAmbiente({
+    filhos: [partes.card],
+    respostas: [{ status: 200, corpo: { status: 'texto_confirmado', status_display: 'Texto confirmado' } }],
+  });
+  carregarScript(amb.sandbox);
+  dispararDomContentLoaded(amb.documento);
+  await aguardarMicrotarefas();
+  afirmarIgual(partes.link.hidden, true, 'sem link depois da confirmação do texto');
+  afirmarIgual(partes.revisar.hidden, false, 'botão Revisar texto visível (desabilitado)');
+  afirmarIgual(partes.motivo.hidden, false, 'motivo visível junto do botão');
+  afirmarIgual(partes.badge.textContent, 'Texto confirmado', 'badge mostra o status_display');
+});
+
+// 8. cards sem o link (renderizados sem job) e sem a lista de revisáveis
+caso('sem data-status-revisaveis ou sem o link: mantém o botão desabilitado e não quebra', async () => {
+  resetarTimers();
+  const semLista = criarCard({
+    'data-status-ativos': '["pendente"]',
+    'data-status-com-texto': '["concluido"]',
+    'data-status-url': '/status',
+    'data-ocr-status': 'pendente',
+  });
+  const amb1 = criarAmbiente({
+    filhos: [semLista.card],
+    respostas: [{ status: 200, corpo: { status: 'concluido', status_display: 'Concluído' } }],
+  });
+  carregarScript(amb1.sandbox);
+  dispararDomContentLoaded(amb1.documento);
+  await aguardarMicrotarefas();
+  afirmarIgual(semLista.link.hidden, true, 'sem a lista de revisáveis o link continua escondido');
+  afirmarIgual(semLista.revisar.hidden, false, 'sem a lista, o botão desabilitado continua visível');
+
+  resetarTimers();
+  const semLink = criarCard({
+    'data-status-ativos': '["pendente"]',
+    'data-status-com-texto': '["concluido"]',
+    'data-status-revisaveis': '["concluido"]',
+    'data-status-url': '/status',
+    'data-ocr-status': 'pendente',
+  });
+  semLink.card.children = semLink.card.children.filter((filho) => filho !== semLink.link);
+  const amb2 = criarAmbiente({
+    filhos: [semLink.card],
+    respostas: [{ status: 200, corpo: { status: 'concluido', status_display: 'Concluído' } }],
+  });
+  carregarScript(amb2.sandbox);
+  dispararDomContentLoaded(amb2.documento);
+  await aguardarMicrotarefas();
+  afirmarIgual(semLink.revisar.hidden, false, 'sem o elemento de link, cai para o botão desabilitado');
+  afirmarIgual(semLink.badge.textContent, 'Concluído', 'a pintura do badge não é interrompida');
 });
 
 // ---------- runner ----------

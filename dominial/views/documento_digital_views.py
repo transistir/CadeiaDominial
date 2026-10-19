@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.db import DatabaseError, transaction
 from django.db.models import ProtectedError
 from django.http import HttpResponse, Http404, JsonResponse
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.utils.http import content_disposition_header
 
@@ -17,6 +18,7 @@ from ia_ocr.estados import (
     PENDENTE,
     STATUS_ATIVOS,
     STATUS_COM_TEXTO,
+    STATUS_REVISAVEIS,
 )
 from ia_ocr.models import OcrJob
 from ia_ocr.services import criar_job, registrar_pendencia_limpeza
@@ -120,13 +122,19 @@ def upload_documento_digital(request, tis_id, imovel_id, documento_id):
         # as listas e as expõe ao JS via data-* em JSON no container do card.
         'status_ativos': STATUS_ATIVOS,
         'status_com_texto': STATUS_COM_TEXTO,
+        'status_revisaveis': STATUS_REVISAVEIS,
         'status_ativos_json': json.dumps(STATUS_ATIVOS),
         'status_com_texto_json': json.dumps(STATUS_COM_TEXTO),
+        'status_revisaveis_json': json.dumps(STATUS_REVISAVEIS),
     }
     return render(request, 'dominial/upload_documento_digital.html', context)
 
 
 @login_required
+# A tela de confirmação do texto OCR (I-4, #261) exibe o PDF num iframe da
+# própria origem; o padrão do Django (DENY) o bloquearia. SAMEORIGIN só libera
+# páginas do mesmo site — outras origens continuam sem poder embutir o arquivo.
+@xframe_options_sameorigin
 def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_id):
     """Serve o arquivo via X-Accel-Redirect (nginx internal) — nunca expõe URL pública."""
     tis, imovel, documento = _get_contexto_documento(request, tis_id, imovel_id, documento_id)

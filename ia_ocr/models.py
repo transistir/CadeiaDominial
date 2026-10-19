@@ -24,6 +24,18 @@ STATUS_REVISAO_CHOICES = [
     ('importado', 'Importado'),
 ]
 
+# Estados de revisão do texto de uma página (I-4 / #261). Não são coluna:
+# derivam de confirmado_em / texto_confirmado, que existem desde a I-1.
+ESTADO_NAO_CONFIRMADA = 'nao_confirmada'
+ESTADO_CONFIRMADA = 'confirmada'
+ESTADO_EDITADA = 'editada'
+
+ESTADO_PAGINA_ROTULOS = {
+    ESTADO_NAO_CONFIRMADA: 'Não confirmada',
+    ESTADO_CONFIRMADA: 'Confirmada',
+    ESTADO_EDITADA: 'Editada — reconfirmar',
+}
+
 
 class OcrJob(models.Model):
     documento_digital = models.ForeignKey(
@@ -240,6 +252,9 @@ class PaginaOcr(models.Model):
         related_name='+',
     )
     confirmado_em = models.DateTimeField(null=True, blank=True)
+    # Concorrência otimista: toda mutação do texto incrementa. O formulário da
+    # tela devolve a versão que exibiu e o serviço recusa a obsoleta.
+    versao = models.PositiveIntegerField(default=0)
     blocos = models.JSONField(null=True, blank=True)
 
     class Meta:
@@ -251,6 +266,41 @@ class PaginaOcr(models.Model):
     def __str__(self):
         # ocr_job_id (número da página + id): nunca o documento (PII).
         return f'Página {self.numero_pagina} do job {self.ocr_job_id}'
+
+    @property
+    def estado(self):
+        """Estado de revisão do texto, derivado das colunas existentes.
+
+        confirmada      — confirmado_em preenchido (critério de
+                          OcrJob._validar_confirmacao_de_texto);
+        editada         — há texto_confirmado salvo, mas sem confirmação:
+                          edição que aguarda (re)confirmação;
+        nao_confirmada  — nenhuma das duas.
+        """
+        if self.confirmado_em is not None:
+            return ESTADO_CONFIRMADA
+        if self.texto_confirmado is not None:
+            return ESTADO_EDITADA
+        return ESTADO_NAO_CONFIRMADA
+
+    @property
+    def estado_rotulo(self):
+        return ESTADO_PAGINA_ROTULOS[self.estado]
+
+    @property
+    def texto_exibido(self):
+        """Texto vigente da página: o confirmado/editado, ou o do OCR."""
+        if self.texto_confirmado is not None:
+            return self.texto_confirmado
+        return self.texto_ocr
+
+    @property
+    def tem_edicao(self):
+        """O texto vigente diverge do OCR original (há diff a mostrar)."""
+        return (
+            self.texto_confirmado is not None
+            and self.texto_confirmado != self.texto_ocr
+        )
 
 
 class ExtracaoSugerida(models.Model):
