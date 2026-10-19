@@ -402,7 +402,7 @@ def _mascarar_cpf(cpf):
 _CPF = re.compile(r'\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}\b')
 _RG = re.compile(r'\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx]\b')
 _RG_ROTULO = re.compile(
-    r'(?i)(\bR\.?G\.?(?:\s*n[º°o.]?)?\s*[:\-]?\s*)[\d.\-/]{5,13}[\dXx]'
+    r'(?i)(\bR\.?G\.?(?:\s*n\.?[º°o]?\.?)?\s*[:\-]?\s*)[\d.\-/]{5,13}[\dXx]'
 )
 
 
