@@ -70,6 +70,7 @@
 
             <form method="post" action="{{ url_confirmar }}" data-ocr-texto-form>
                 {% csrf_token %}
+                <input type="hidden" name="versao" value="{{ pagina.versao }}">
                 <label for="ocr-texto-area" class="visually-hidden">Texto da página {{ pagina.numero_pagina }}</label>
                 <textarea id="ocr-texto-area" name="texto" class="form-control font-monospace" rows="22" spellcheck="false" data-ocr-texto-area{% if not editavel %} readonly{% endif %}>
 {{ texto_atual }}</textarea>

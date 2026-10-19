@@ -46,6 +46,9 @@ class TextoSemPiiEmLogsTest(TestCase):
             **extra,
         }
 
+    def _versao(self, numero):
+        return self.job.paginas.get(numero_pagina=numero).versao
+
     def _afirmar_sem_pii(self, saida):
         for sensivel in (MARCADOR_TEXTO, NOME_SENSIVEL, MARCADOR_USUARIO):
             self.assertNotIn(sensivel, saida, f'{sensivel!r} vazou para o log')
@@ -76,11 +79,11 @@ class TextoSemPiiEmLogsTest(TestCase):
         with self.assertLogs('ia_ocr', level=logging.DEBUG) as capturado:
             self.client.post(
                 reverse('confirmar_pagina_ocr', kwargs=self._kwargs(numero=1)),
-                {'texto': f'{MARCADOR_TEXTO} pela tela'},
+                {'texto': f'{MARCADOR_TEXTO} pela tela', 'versao': self._versao(1)},
             )
             self.client.post(
                 reverse('editar_pagina_ocr', kwargs=self._kwargs(numero=2)),
-                {'texto': f'{MARCADOR_TEXTO} rascunho'},
+                {'texto': f'{MARCADOR_TEXTO} rascunho', 'versao': self._versao(2)},
             )
             self.client.post(reverse('reprocessar_job_ocr', kwargs=self._kwargs()))
 

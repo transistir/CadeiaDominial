@@ -252,14 +252,20 @@ class ExtrairCamposViewTest(TelaTextoBase):
 
     def test_editar_pagina_confirmada_desabilita_o_botao_ate_reconfirmar(self):
         self._confirmar_todas()
-        self.client.post(self.url('editar_pagina_ocr', numero=2), {'texto': 'segunda mexida'})
+        self.client.post(
+            self.url('editar_pagina_ocr', numero=2),
+            {'texto': 'segunda mexida', 'versao': self.versao(2)},
+        )
 
         tela = self.client.get(self.url_tela(pagina=2))
         self.assertIn(
             'disabled', _atributos(_botao(tela.content.decode(), 'data-ocr-extrair-campos'))
         )
 
-        self.client.post(self.url('confirmar_pagina_ocr', numero=2), {'texto': 'segunda mexida'})
+        self.client.post(
+            self.url('confirmar_pagina_ocr', numero=2),
+            {'texto': 'segunda mexida', 'versao': self.versao(2)},
+        )
         tela = self.client.get(self.url_tela(pagina=2))
         self.assertNotIn(
             'disabled', _atributos(_botao(tela.content.decode(), 'data-ocr-extrair-campos'))

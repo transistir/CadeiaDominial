@@ -252,6 +252,9 @@ class PaginaOcr(models.Model):
         related_name='+',
     )
     confirmado_em = models.DateTimeField(null=True, blank=True)
+    # Concorrência otimista: toda mutação do texto incrementa. O formulário da
+    # tela devolve a versão que exibiu e o serviço recusa a obsoleta.
+    versao = models.PositiveIntegerField(default=0)
     blocos = models.JSONField(null=True, blank=True)
 
     class Meta:

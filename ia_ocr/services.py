@@ -148,6 +148,11 @@ class EdicaoPendente(Exception):
     codigo = 'EDICAO_PENDENTE'
 
 
+class PaginaDesatualizada(Exception):
+    """O formulário foi aberto numa versão da página que já mudou."""
+    codigo = 'PAGINA_DESATUALIZADA'
+
+
 def registrar_pendencia_limpeza(
     documento_digital_id, caminho_storage, documento_id=None
 ):
@@ -259,20 +264,39 @@ def _travar_job_editavel(job):
     return travado
 
 
-def confirmar_pagina(job, numero_pagina, usuario, texto=None):
+def _exigir_versao(job, pagina, versao_esperada):
+    """Recusa o formulário aberto numa versão anterior da página.
+
+    Chamar com o job já travado e antes de qualquer escrita: a trava serializa
+    as mutações, então a versão lida é a última commitada. Sem
+    `versao_esperada` (chamadas internas) não há checagem.
+    """
+    if versao_esperada is not None and versao_esperada != pagina.versao:
+        raise PaginaDesatualizada(
+            f'job {job.job_id} página {pagina.numero_pagina}: formulário da '
+            f'versão {versao_esperada}, mas a página já está na versão '
+            f'{pagina.versao}.'
+        )
+
+
+def confirmar_pagina(job, numero_pagina, usuario, texto=None, versao_esperada=None):
     """Confirma o texto de uma página: grava texto_confirmado + auditoria.
 
     `texto` é o conteúdo do textarea; sem ele, confirma o texto vigente (o
     rascunho salvo ou, na falta dele, o do OCR). Idempotente: reconfirmar o
     mesmo texto mantém quem/quando da confirmação original. O texto do OCR
     nunca é alterado. Exige job `concluido` (``TextoNaoEditavel``) e página
-    existente (``PaginaOcr.DoesNotExist``). Devolve ``(pagina, alterada)``.
+    existente (``PaginaOcr.DoesNotExist``). Com `versao_esperada` (a versão
+    que o formulário exibiu) diferente da atual, recusa com
+    ``PaginaDesatualizada`` sem gravar nada — mesmo que o pedido não mudasse
+    nada. Devolve ``(pagina, alterada)``.
     """
     with transaction.atomic():
         travado = _travar_job_editavel(job)
         pagina = PaginaOcr.objects.get(
             ocr_job=travado, numero_pagina=numero_pagina,
         )
+        _exigir_versao(travado, pagina, versao_esperada)
         texto_final = (
             pagina.texto_exibido if texto is None
             else _normalizar_quebras_de_linha(texto)
@@ -282,14 +306,15 @@ def confirmar_pagina(job, numero_pagina, usuario, texto=None):
         pagina.texto_confirmado = texto_final
         pagina.confirmado_por = usuario
         pagina.confirmado_em = timezone.now()
+        pagina.versao += 1
         pagina.save(update_fields=[
-            'texto_confirmado', 'confirmado_por', 'confirmado_em',
+            'texto_confirmado', 'confirmado_por', 'confirmado_em', 'versao',
         ])
     logger.info('job_id=%s pagina=%s confirmada', job.job_id, numero_pagina)
     return pagina, True
 
 
-def editar_pagina(job, numero_pagina, texto):
+def editar_pagina(job, numero_pagina, texto, versao_esperada=None):
     """Salva uma edição do texto e invalida a confirmação da página.
 
     A página vira "editada": texto_confirmado guarda o rascunho e
@@ -298,21 +323,24 @@ def editar_pagina(job, numero_pagina, texto):
     (``OcrJob._validar_confirmacao_de_texto``). Texto igual ao vigente não é
     edição: nada muda e a confirmação existente é mantida. Não há coluna para
     o autor da edição; quem responde pelo texto é quem o confirma.
-    Devolve ``(pagina, alterada)``.
+    `versao_esperada` obsoleta: ``PaginaDesatualizada``, como em
+    ``confirmar_pagina``. Devolve ``(pagina, alterada)``.
     """
     with transaction.atomic():
         travado = _travar_job_editavel(job)
         pagina = PaginaOcr.objects.get(
             ocr_job=travado, numero_pagina=numero_pagina,
         )
+        _exigir_versao(travado, pagina, versao_esperada)
         texto_final = _normalizar_quebras_de_linha(texto)
         if pagina.texto_exibido == texto_final:
             return pagina, False
         pagina.texto_confirmado = texto_final
         pagina.confirmado_por = None
         pagina.confirmado_em = None
+        pagina.versao += 1
         pagina.save(update_fields=[
-            'texto_confirmado', 'confirmado_por', 'confirmado_em',
+            'texto_confirmado', 'confirmado_por', 'confirmado_em', 'versao',
         ])
     logger.info('job_id=%s pagina=%s editada', job.job_id, numero_pagina)
     return pagina, True
@@ -324,8 +352,10 @@ def confirmar_todas_paginas(job, usuario):
     Só vale quando o usuário não editou nada: com alguma página "editada"
     (rascunho aguardando reconfirmação) recusa com ``EdicaoPendente`` e nada é
     gravado — as editadas se confirmam uma a uma. Páginas já confirmadas, com
-    ou sem edição, não são tocadas: texto e auditoria delas permanecem. Não
-    transiciona o job. Devolve quantas páginas foram confirmadas agora.
+    ou sem edição, não são tocadas: texto e auditoria delas permanecem. As
+    confirmadas agora ganham versão nova, o que invalida formulários abertos
+    nelas. Não transiciona o job. Devolve quantas páginas foram confirmadas
+    agora.
     """
     with transaction.atomic():
         travado = _travar_job_editavel(job)
@@ -340,6 +370,7 @@ def confirmar_todas_paginas(job, usuario):
             texto_confirmado=F('texto_ocr'),
             confirmado_por=usuario,
             confirmado_em=timezone.now(),
+            versao=F('versao') + 1,
         )
     if total:
         logger.info('job_id=%s paginas=%s confirmadas em lote', job.job_id, total)

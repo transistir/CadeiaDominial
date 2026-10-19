@@ -75,5 +75,9 @@ class TelaTextoBase(TestCase):
     def pagina(self, numero, job=None):
         return (job or self.job).paginas.get(numero_pagina=numero)
 
+    def versao(self, numero, job=None):
+        """Versão atual da página: a que o formulário da tela enviaria."""
+        return self.pagina(numero, job).versao
+
     def mensagens(self, resposta):
         return [(m.level_tag, str(m)) for m in get_messages(resposta.wsgi_request)]
