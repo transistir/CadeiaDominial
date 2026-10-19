@@ -116,10 +116,13 @@ def _pagina_pedida(request, paginas):
 def _disponibilidade_extracao(job, paginas):
     """(pode_extrair, motivo): após a #290 só depende do OCR, não da confirmação.
 
+    ``texto_confirmado`` continua aceito pelo serviço (#12): a tela desse
+    estado precisa oferecer o mesmo botão que a de ``concluido``.
+
     Mesma regra de ``services.extrair_campos``: sem páginas ou com
     ``texto_ocr`` nulo, recusa; verso em branco (``''``) é legítimo.
     """
-    if job.status != estados.CONCLUIDO:
+    if job.status not in (estados.CONCLUIDO, estados.TEXTO_CONFIRMADO):
         return False, 'Aguardando o OCR terminar.'
     if not paginas or any(pagina.texto_ocr is None for pagina in paginas):
         return False, 'O OCR não devolveu texto para todas as páginas.'
@@ -444,9 +447,15 @@ def _anexar_opcoes_cadastro(campos):
             ids_cartorios.update(campo.match_candidatos or [])
             if campo.cartorio_escolhido_id:
                 ids_cartorios.add(campo.cartorio_escolhido_id)
-    pessoas = {p.pk: p for p in Pessoas.objects.filter(pk__in=ids_pessoas)}
+    pessoas = {
+        p.pk: p for p in Pessoas.objects.filter(
+            pk__in=ids_pessoas,
+        ).only('nome', 'cpf', 'rg')
+    }
     cartorios = {
-        c.pk: c for c in Cartorios.objects.filter(pk__in=ids_cartorios)
+        c.pk: c for c in Cartorios.objects.filter(
+            pk__in=ids_cartorios,
+        ).only('nome', 'cidade', 'estado', 'cns')
     }
 
     def opcoes(ids, escolhido, rotulos):
@@ -642,6 +651,8 @@ def _chave_valor_invalido(extracao, decisoes):
             revisao.aplicar_linha(campos[chave], **argumentos)
         except valores.ValorInvalido:
             return chave
+        except revisao.EscolhaIncompativel:
+            return chave
     return None
 
 
@@ -662,9 +673,13 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         extracao = job.extracao_vigente()
         if extracao is None:
             raise services.ExtracaoRecusada('sem_extracao')
-        _salva, versao = services.salvar_bloco(
+        _salva, versao, invalidou_partes = services.salvar_bloco(
             extracao, decisoes, request.user, dados['versao'],
         )
+    except revisao.EscolhaIncompativel as exc:
+        return JsonResponse({
+            'erro': exc.code, 'chave': exc.chave,
+        }, status=422)
     except services.ConflitoVersao as exc:
         return JsonResponse({
             'erro': 'conflito_versao', 'chaves': exc.chaves_afetadas,
@@ -686,6 +701,8 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
     return JsonResponse({
         'ok': True,
         'versao': versao,
+        # A escolha de cadastro foi zerada: a tela precisa reler os candidatos.
+        'recarregar': invalidou_partes,
         # Só chave/motivo: a tela reabilita o finalizar sem expor dados da revisão.
         'pendencias': [
             {'chave': item['chave'], 'motivo': item['motivo']}

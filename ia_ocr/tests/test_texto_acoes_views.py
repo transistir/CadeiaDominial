@@ -237,6 +237,33 @@ class ExtrairCamposViewTest(TelaTextoBase):
         self.assertNotIn('disabled', atributos)
         self.assertEqual(motivo, [])
 
+    def test_texto_confirmado_mostra_extrair(self):
+        services.confirmar_todas_paginas(self.job, self.dono)
+        services.confirmar_texto(self.job, self.dono)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.TEXTO_CONFIRMADO)
+
+        resposta = self.client.get(self.url_tela(pagina=1))
+        conteudo = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.context['pode_extrair'])
+        botao = _botao(conteudo, 'data-ocr-extrair-campos')
+        self.assertIsNotNone(botao)
+        self.assertNotIn('disabled', _atributos(botao))
+        self.assertEqual(
+            _elementos(conteudo, 'button', presentes=('data-ocr-confirmar-todas',)),
+            [],
+        )
+        self.assertEqual(
+            _elementos(conteudo, 'button', presentes=('data-ocr-reprocessar',)),
+            [],
+        )
+        self.assertEqual(
+            len(_elementos(conteudo, 'a', presentes=('data-ocr-campos-link',))),
+            1,
+        )
+
     def test_botao_desabilitado_enquanto_job_nao_concluiu(self):
         OcrJob.objects.filter(pk=self.job.pk).update(status=estados.EM_EXECUCAO)
         self.job.refresh_from_db()

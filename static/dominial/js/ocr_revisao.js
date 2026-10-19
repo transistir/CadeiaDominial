@@ -138,10 +138,11 @@
             return item;
         }
 
-        function recarregar() {
+        function recarregar(mensagem) {
             if (recarregando) return;
             recarregando = true;
-            window.alert('A revisão foi alterada em outro lugar. A página será atualizada.');
+            window.alert(mensagem
+                || 'A revisão foi alterada em outro lugar. A página será atualizada.');
             window.location.reload();
         }
 
@@ -176,6 +177,12 @@
                         marcarEstado(card, 'Salvo');
                         if (Array.isArray(dados.pendencias)) {
                             atualizarPendencias(dados.pendencias);
+                        }
+                        // A identidade de uma parte mudou e a escolha antiga
+                        // foi zerada no servidor: o select do card ainda tem
+                        // o valor velho, então só recarregar evita reenviá-lo.
+                        if (dados.recarregar) {
+                            recarregar('A identidade de uma parte foi corrigida; a tela será atualizada.');
                         }
                     } else if (resposta.status === 409) {
                         falhas.add(card);
@@ -231,7 +238,14 @@
 
         raiz.addEventListener('input', function (evento) {
             var card = cardDe(evento.target);
-            if (card && evento.target.type !== 'checkbox') agendar(card);
+            if (!card || evento.target.type === 'checkbox') return;
+            // Nome de cartório digitado vence o match antigo: sem limpar o
+            // select, o próximo save reenviaria a escolha que o texto trocou.
+            if (evento.target.getAttribute('data-tipo') === 'cartorio') {
+                var select = card.querySelector('[data-ocr-escolha]');
+                if (select) select.value = '';
+            }
+            agendar(card);
         });
         raiz.addEventListener('change', function (evento) {
             var card = cardDe(evento.target);

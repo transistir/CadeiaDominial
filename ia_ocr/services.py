@@ -203,6 +203,17 @@ class RevisaoIncompleta(Exception):
         super().__init__(self.code)
 
 
+def _campos_ordenados(extracao, campos=None):
+    """Linhas pela chave, sempre em Python (GET e save usam o mesmo critério).
+
+    Sem ``campos``, ``order_by`` evita a cache de ``prefetch_related`` de uma
+    extração carregada antes da gravação (o token sairia do estado antigo).
+    """
+    if campos is None:
+        campos = extracao.campos.order_by('chave')
+    return sorted(campos, key=lambda campo: campo.chave)
+
+
 def versao_bloco(extracao, campos=None) -> str:
     """Hash do pk da extração e das versões persistidas das linhas, pela chave.
 
@@ -213,11 +224,9 @@ def versao_bloco(extracao, campos=None) -> str:
     mesma lista que exibe, para que um save entre as duas leituras não gere
     token novo sobre valores antigos.
     """
-    if campos is None:
-        ordenados = extracao.campos.order_by('chave')
-    else:
-        ordenados = sorted(campos, key=lambda campo: campo.chave)
-    versoes = ''.join(versao_linha(campo) for campo in ordenados)
+    versoes = ''.join(
+        versao_linha(campo) for campo in _campos_ordenados(extracao, campos)
+    )
     return hashlib.sha256(f'{extracao.pk}:{versoes}'.encode('utf-8')).hexdigest()
 
 
@@ -262,11 +271,13 @@ def _validar_limites_bloco(extracao, decisoes):
 
 def salvar_bloco(
     extracao, decisoes, usuario, versao_cliente,
-) -> tuple[ExtracaoSugerida, str]:
+) -> tuple[ExtracaoSugerida, str, bool]:
     """Persiste atomicamente decisões indexadas pela chave JSON Pointer.
 
-    Devolve a extração e o token do bloco calculado ainda sob o lock: lido
-    depois do commit, ele já poderia incluir a gravação de outro revisor.
+    Devolve a extração, o token do bloco calculado ainda sob o lock (lido
+    depois do commit, ele já poderia incluir a gravação de outro revisor) e
+    se alguma identidade de parte mudou — nesse caso a tela precisa recarregar
+    para não reenviar a escolha de cadastro já invalidada.
     """
     with transaction.atomic():
         travada = _travar_extracao_revisao(extracao)
@@ -310,10 +321,12 @@ def salvar_bloco(
         # Só depois de aplicar o bloco inteiro: a escolha antiga enviada
         # junto da correção não pode sobreviver por causa da ordem das linhas.
         indice_pessoas = None
+        invalidou_partes = False
         for chave, identidade_antes in identidades_antes.items():
             identidade = identidade_parte(chave, campos)
             if identidade == identidade_antes:
                 continue
+            invalidou_partes = True
             if indice_pessoas is None:
                 indice_pessoas = IndicePessoas()
             escolhido, candidatos = indice_pessoas.match(*identidade)
@@ -331,7 +344,7 @@ def salvar_bloco(
                 'revisado_por', 'revisado_em',
             ])
         versao = versao_bloco(travada)
-    return travada, versao
+    return travada, versao, invalidou_partes
 
 
 def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerida:

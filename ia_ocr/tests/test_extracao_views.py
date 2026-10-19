@@ -10,13 +10,16 @@ from django.shortcuts import resolve_url
 from django.test import Client, override_settings
 from django.urls import reverse
 
+from dominial.models import Pessoas
 from ia_ocr import estados, revisao, services
 from ia_ocr.estados import TransicaoInvalida
 from ia_ocr.extracao_backends import ExtracaoBackendError
 from ia_ocr.models import OcrJob
 
 from .base_texto import TelaTextoBase
-from .payloads_extracao import TEXTO_PAGINA_1, payload_averbacao
+from .payloads_extracao import (
+    TEXTO_PAGINA_1, payload_averbacao, payload_registro,
+)
 
 
 @override_settings(EXTRACAO_HTTP_TIMEOUT_SECONDS=30)
@@ -46,7 +49,9 @@ class ExtracaoViewsTest(TelaTextoBase):
         backend_patch.start()
         self.addCleanup(backend_patch.stop)
 
-    def _extracao(self):
+    def _extracao(self, payload=None):
+        if payload is not None:
+            self.backend.extrair.return_value['extracao'] = payload
         return services.solicitar_extracao(self.job, self.dono)
 
     def _post_json(self, nome, dados, client=None):
@@ -192,6 +197,7 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(resposta.json(), {
             'ok': True,
             'versao': services.versao_bloco(extracao),
+            'recarregar': False,
             'pendencias': [
                 {'chave': item['chave'], 'motivo': item['motivo']}
                 for item in revisao.pendencias(extracao)
@@ -202,6 +208,82 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(campo.valor_final, '2020-01-11')
         self.assertEqual(campo.revisado_por, self.dono)
         self.assertIsNotNone(campo.revisado_em)
+
+    def test_identidade_corrigida_marca_recarregar(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+
+        corrigida = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': '/acts/0/partes/0/nome',
+                'incluir': True, 'conferido': True,
+                'valor': 'JOÃO DA SILVA CORRIGIDO',
+            }],
+        })
+
+        self.assertEqual(corrigida.status_code, 200, corrigida.content)
+        self.assertIs(corrigida.json()['recarregar'], True)
+
+        sem_identidade = self._post_json('salvar_bloco_ocr', {
+            'versao': corrigida.json()['versao'],
+            'decisoes': [{
+                'chave': '/document/numero', 'incluir': True, 'valor': '43.000',
+            }],
+        })
+
+        self.assertEqual(sem_identidade.status_code, 200, sem_identidade.content)
+        self.assertIs(sem_identidade.json()['recarregar'], False)
+
+    def test_tipo_documento_invalido_e_recusado(self):
+        extracao = self._extracao()
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': '/document/tipo', 'incluir': True, 'valor': 'matriculaa',
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 422, resposta.content)
+        self.assertEqual(resposta.json()['erro'], 'valor_invalido')
+        self.assertEqual(resposta.json()['chave'], '/document/tipo')
+
+    def test_origem_tipo_documento_invalido_e_recusado(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['origem'] = {
+            'tipo_documento': dict(payload['document']['tipo']),
+        }
+        extracao = self._extracao(payload)
+        chave = '/acts/0/origem/tipo_documento'
+        self.assertTrue(extracao.campos.filter(chave=chave).exists())
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': chave, 'incluir': True, 'valor': 'matriculaa',
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 422, resposta.content)
+        self.assertEqual(resposta.json()['erro'], 'valor_invalido')
+        self.assertEqual(resposta.json()['chave'], chave)
+
+    def test_escolha_de_pessoa_em_linha_de_cartorio_e_recusada(self):
+        pessoa = Pessoas.objects.create(nome='FULANO DE TAL')
+        extracao = self._extracao()
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': '/document/cartorio', 'incluir': True,
+                'escolha': {'pessoa_id': pessoa.pk, 'criar_novo': False},
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 422, resposta.content)
+        self.assertEqual(resposta.json(), {
+            'erro': 'escolha_incompativel', 'chave': '/document/cartorio',
+        })
 
     def test_salvar_devolve_pendencias_restantes(self):
         extracao = self._extracao()

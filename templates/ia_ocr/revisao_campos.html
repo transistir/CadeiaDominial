@@ -34,7 +34,7 @@
         <h2 class="h6" id="ocr-pendencias-titulo">Pendências</h2>
         <ul class="revisao-lista">
             {% for item in pendencias %}
-            <li class="pendencia"><code>{{ item.chave }}</code> — {{ item.motivo }}</li>
+            <li class="pendencia"><code>{{ item.chave }}</code> — {% if item.motivo == 'criar_novo_sem_nome' %}Informe o nome do novo cartório{% else %}{{ item.motivo }}{% endif %}</li>
             {% endfor %}
         </ul>
     </section>
@@ -79,7 +79,7 @@
                     {% endif %}
 
                     {% for motivo in campo.motivos_revisao %}
-                    <span class="badge-motivo">{% if motivo == 'baixa_confianca' %}Baixa confiança{% elif motivo == 'normalizacao_invalida' %}Formato não reconhecido{% elif motivo == 'unidade_area' %}Converter unidade{% elif motivo == 'closure' %}Fim de cadeia{% elif motivo == 'evidencia_invalida' %}Evidência inválida{% elif motivo == 'trecho_ausente' %}Trecho não localizado{% elif motivo == 'match_invalidado' %}Vínculo invalidado{% else %}{{ motivo }}{% endif %}</span>
+                    <span class="badge-motivo">{% if motivo == 'baixa_confianca' %}Baixa confiança{% elif motivo == 'normalizacao_invalida' %}Formato não reconhecido{% elif motivo == 'unidade_area' %}Converter unidade{% elif motivo == 'closure' %}Fim de cadeia{% elif motivo == 'evidencia_invalida' %}Evidência inválida{% elif motivo == 'trecho_ausente' %}Trecho não localizado{% elif motivo == 'match_invalidado' %}Vínculo invalidado{% elif motivo == 'criar_novo_sem_nome' %}Informe o nome do novo cartório{% else %}{{ motivo }}{% endif %}</span>
                     {% endfor %}
                 </header>
 

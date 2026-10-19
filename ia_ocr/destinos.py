@@ -240,12 +240,15 @@ def _do_campo(modelo, campo, tipo_valor):
             decimal_places=SEM.decimal_places,
         )
     field = apps.get_model(modelo)._meta.get_field(campo)
-    # O formulário revisa o código do tipo, não o PK do ForeignKey.
-    # Lancamento.tipo não tem choices; o enum pertence a LancamentoTipo.
-    choices = (
-        tuple(apps.get_model('dominial.LancamentoTipo').TIPO_CHOICES)
-        if (modelo, campo) == ('dominial.Lancamento', 'tipo') else ()
-    )
+    choices = tuple(getattr(field, 'choices', None) or ())
+    if not choices:
+        # O formulário revisa o código do tipo, não o PK do ForeignKey.
+        if (modelo, campo) == ('dominial.Documento', 'tipo'):
+            choices = tuple(apps.get_model('dominial.DocumentoTipo').TIPO_CHOICES)
+        elif (modelo, campo) == ('dominial.Lancamento', 'tipo'):
+            choices = tuple(
+                apps.get_model('dominial.LancamentoTipo').TIPO_CHOICES
+            )
     return Destino(
         modelo=modelo,
         campo=campo,

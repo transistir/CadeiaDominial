@@ -9,7 +9,9 @@ from unittest import mock
 
 from django.db import IntegrityError, connection
 from django.db.models import Max
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import (
+    SimpleTestCase, TestCase, TransactionTestCase, override_settings,
+)
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -527,3 +529,39 @@ class ExtracaoSemTransacaoTest(ExtracaoFixtureMixin, TransactionTestCase):
         self.extrair.assert_called_once()
         self.assertEqual(self.job.extracao_vigente(), extracao)
         self.assertReservaLimpa()
+
+
+class VersaoBlocoOrdenacaoTest(SimpleTestCase):
+    def test_campos_fora_de_ordem_geram_mesmo_token(self):
+        class Campo:
+            def __init__(self, chave):
+                self.chave = chave
+
+        class Campos:
+            def __init__(self, itens):
+                self.itens = itens
+
+            def all(self):
+                return list(self.itens)
+
+            def order_by(self, _nome):
+                return list(self.itens)
+
+        class Extracao:
+            pk = 7
+
+            def __init__(self, itens):
+                self.campos = Campos(itens)
+
+        itens = [Campo('/document/numero'), Campo('/document/data'),
+                 Campo('/document/livro')]
+        ordenados = sorted(itens, key=lambda campo: campo.chave)
+
+        with mock.patch(
+            'ia_ocr.services.versao_linha',
+            side_effect=lambda campo: campo.chave,
+        ):
+            self.assertEqual(
+                services.versao_bloco(Extracao(itens)),
+                services.versao_bloco(Extracao(itens), campos=ordenados),
+            )

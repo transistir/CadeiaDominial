@@ -357,6 +357,12 @@ class PendenciasEAvisosTest(TestCase):
             'chave': chave, 'motivo': 'obrigatorio_ausente', 'bloqueante': True,
         }
 
+    @staticmethod
+    def _criar_novo_sem_nome(chave):
+        return {
+            'chave': chave, 'motivo': 'criar_novo_sem_nome', 'bloqueante': True,
+        }
+
     def test_obrigatorio_descartado_bloqueia(self):
         linhas = self._persistir(self._registro_completo())
         self.assertEqual(pendencias(self.extracao), [])
@@ -410,6 +416,7 @@ class PendenciasEAvisosTest(TestCase):
         self._persistir(payload_registro(self.job.job_id))
         self.assertCountEqual(pendencias(self.extracao), [
             self._obrigatorio('/acts/0/titulo'),
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
         self._persistir(self._registro_completo())
@@ -427,6 +434,7 @@ class PendenciasEAvisosTest(TestCase):
         # A ausência continua bloqueando, mas agora há controle para resolver.
         self.assertCountEqual(pendencias(self.extracao), [
             self._obrigatorio('/acts/0/titulo'),
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
 
@@ -452,6 +460,7 @@ class PendenciasEAvisosTest(TestCase):
 
         self.assertIn('/acts/0/origem/cartorio', linhas)
         self.assertEqual(pendencias(self.extracao), [
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
 
@@ -481,6 +490,7 @@ class PendenciasEAvisosTest(TestCase):
                 self.inicio.requer_cartorio_origem = flag
                 self.inicio.save()
                 self.assertEqual(pendencias(self.extracao), [
+                    self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
                     self._obrigatorio('/acts/0/origem/cartorio'),
                 ])
         payload['acts'][0]['origem'] = {
@@ -497,24 +507,29 @@ class PendenciasEAvisosTest(TestCase):
         linhas = self._persistir(payload)
         self.assertCountEqual(pendencias(self.extracao), [
             self._obrigatorio('/acts/0/titulo'),
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
         tipo = linhas['/acts/0/tipo_sugerido']
         aplicar_linha(tipo, incluir=True, valor='averbacao')
         tipo.save()
         self.assertEqual(tipo.normalized, 'registro')
-        self.assertEqual(pendencias(self.extracao), [])
+        self.assertEqual(pendencias(self.extracao), [
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
+        ])
 
         descricao = linhas['/acts/0/descricao']
         aplicar_linha(descricao, incluir=True, valor='')
         descricao.save()
         self.assertEqual(pendencias(self.extracao), [
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/descricao'),
         ])
 
         aplicar_linha(tipo, incluir=True, valor='inicio_matricula')
         tipo.save()
         self.assertEqual(pendencias(self.extracao), [
+            self._criar_novo_sem_nome('/acts/0/origem/cartorio'),
             self._obrigatorio('/acts/0/origem/cartorio'),
         ])
 

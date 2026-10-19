@@ -56,7 +56,7 @@ class RevisaoServicesTest(TestCase):
         versao = services.versao_bloco(carregada)
         antes = timezone.now()
 
-        resultado, versao_devolvida = services.salvar_bloco(
+        resultado, versao_devolvida, _invalidou_partes = services.salvar_bloco(
             carregada, {
                 '/document/data': {'incluir': True, 'valor': '2020-01-11'},
                 '/document/numero': {'incluir': True, 'conferido': True},
@@ -128,7 +128,7 @@ class RevisaoServicesTest(TestCase):
                 self.assertEqual(services.versao_bloco(self.extracao), versao_atual)
 
     def test_versao_devolvida_pelo_save_e_a_da_transacao(self):
-        salva, versao_salva = services.salvar_bloco(
+        salva, versao_salva, _invalidou_partes = services.salvar_bloco(
             self.extracao,
             {'/document/data': {'incluir': True, 'valor': '2020-01-11'}},
             self.usuario, services.versao_bloco(self.extracao),
@@ -139,7 +139,7 @@ class RevisaoServicesTest(TestCase):
 
         # Outro revisor grava logo depois: o token já devolvido segue sendo o
         # do estado que o primeiro save deixou e não serve mais para gravar.
-        _, versao_do_outro = services.salvar_bloco(
+        _, versao_do_outro, _invalidou_outra = services.salvar_bloco(
             self.extracao,
             {'/document/numero': {'incluir': True, 'conferido': True}},
             criar_usuario(), versao_salva,

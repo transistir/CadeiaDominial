@@ -288,6 +288,48 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertEqual(dados.documento.cartorio_nome, 'Cartório Novo')
         self.assertTrue(dados.documento.cartorio_criar_novo)
 
+    def test_criar_novo_cartorio_opcional_sem_nome_gera_pendencia(self):
+        extracao = self._extracao(resolver=True)
+        self.assertEqual(revisao.pendencias(extracao), [])
+        chave = '/document/cri_atual'
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': chave, 'incluir': True, 'valor': '',
+                    'escolha': {'criar_novo': True},
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        self.assertIn(
+            {'chave': chave, 'motivo': 'criar_novo_sem_nome',
+             'bloqueante': True},
+            revisao.pendencias(extracao),
+        )
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': salvar.json()['versao'],
+                'decisoes': [{
+                    'chave': chave, 'incluir': True, 'valor': 'Cartório Novo',
+                    'escolha': {'criar_novo': True},
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        self.assertFalse(any(
+            pendencia['motivo'] == 'criar_novo_sem_nome'
+            for pendencia in revisao.pendencias(extracao)
+        ))
+
     def test_escolher_cartorio_existente_zera_nome(self):
         cartorio = Cartorios.objects.create(
             nome='Cartório Existente', cns='E2E-novo', estado='PR',

@@ -56,6 +56,7 @@ MOTIVO_BAIXA_CONFIANCA = 'baixa_confianca'
 MOTIVO_CLOSURE = 'closure'
 MOTIVO_EVIDENCIA_INVALIDA = 'evidencia_invalida'
 MOTIVO_TRECHO_AUSENTE = 'trecho_ausente'
+MOTIVO_CRIAR_NOVO_SEM_NOME = 'criar_novo_sem_nome'
 
 # Destinos obrigatórios (§2.A): ausentes no payload → placeholder em revisão.
 _OBRIGATORIOS_DOCUMENTO = ('tipo', 'data', 'cartorio')
@@ -70,6 +71,16 @@ class RevisaoInvalidada(Exception):
     """A extração não pode mais ser consumida como uma revisão concluída."""
 
     code = 'revisao_invalida'
+
+
+class EscolhaIncompativel(Exception):
+    """A escolha de cadastro não corresponde ao tipo da linha (HTTP 422)."""
+
+    code = 'escolha_incompativel'
+
+    def __init__(self, chave):
+        self.chave = chave
+        super().__init__(self.code)
 
 
 @dataclass(frozen=True)
@@ -308,6 +319,17 @@ def aplicar_linha(
     campos_escolha = (
         'pessoa_escolhida_id', 'cartorio_escolhido_id', 'criar_novo',
     )
+    if escolha is not None:
+        # Escolher pessoa numa linha de cartório (ou vice-versa) não é uma
+        # decisão válida: recusar em vez de deixar a pendência "sumir".
+        if (
+            campo.tipo_valor == 'parte'
+            and escolha.get('cartorio_escolhido_id') is not None
+        ) or (
+            campo.tipo_valor == 'cartorio'
+            and escolha.get('pessoa_escolhida_id') is not None
+        ):
+            raise EscolhaIncompativel(campo.chave)
     antes = versao_linha(campo)
 
     if not incluir:
@@ -544,6 +566,17 @@ def pendencias(extracao) -> list[dict]:
                 )
             ):
                 adicionar(campo.chave, 'decisao_perdida')
+        if campo.tipo_valor == 'cartorio' and campo.criar_novo:
+            # "Criar novo" sem nome não aponta para cadastro nenhum; vale para
+            # cartório obrigatório e opcional (o destino precisa do nome).
+            valor = _valor_efetivo(campo)
+            if (
+                campo.status_revisao != 'descartado'
+                and (valor is None or (
+                    isinstance(valor, str) and not valor.strip()
+                ))
+            ):
+                adicionar(campo.chave, MOTIVO_CRIAR_NOVO_SEM_NOME)
         if (
             'match_invalidado' in campo.motivos_revisao
             and campo.status_revisao == 'sugerido'
