@@ -286,23 +286,24 @@ def confirmar_pagina(job, numero_pagina, usuario, texto=None, versao_esperada=No
     rascunho salvo ou, na falta dele, o do OCR). Idempotente: reconfirmar o
     mesmo texto mantém quem/quando da confirmação original. O texto do OCR
     nunca é alterado. Exige job `concluido` (``TextoNaoEditavel``) e página
-    existente (``PaginaOcr.DoesNotExist``). Com `versao_esperada` (a versão
-    que o formulário exibiu) diferente da atual, recusa com
-    ``PaginaDesatualizada`` sem gravar nada — mesmo que o pedido não mudasse
-    nada. Devolve ``(pagina, alterada)``.
+    existente (``PaginaOcr.DoesNotExist``). `versao_esperada` (a versão que o
+    formulário exibiu) só é exigida quando o pedido grava: página já
+    confirmada com este texto é reenvio (duplo clique, "voltar"), não
+    conflito, e devolve sem erro. Se gravaria e a versão é outra, recusa com
+    ``PaginaDesatualizada`` sem gravar nada. Devolve ``(pagina, alterada)``.
     """
     with transaction.atomic():
         travado = _travar_job_editavel(job)
         pagina = PaginaOcr.objects.get(
             ocr_job=travado, numero_pagina=numero_pagina,
         )
-        _exigir_versao(travado, pagina, versao_esperada)
         texto_final = (
             pagina.texto_exibido if texto is None
             else _normalizar_quebras_de_linha(texto)
         )
         if pagina.confirmado_em is not None and pagina.texto_exibido == texto_final:
             return pagina, False
+        _exigir_versao(travado, pagina, versao_esperada)
         pagina.texto_confirmado = texto_final
         pagina.confirmado_por = usuario
         pagina.confirmado_em = timezone.now()
@@ -321,9 +322,10 @@ def editar_pagina(job, numero_pagina, texto, versao_esperada=None):
     confirmado_em/confirmado_por são zerados, então ela precisa ser
     reconfirmada — sem isso o job não vai para `texto_confirmado`
     (``OcrJob._validar_confirmacao_de_texto``). Texto igual ao vigente não é
-    edição: nada muda e a confirmação existente é mantida. Não há coluna para
-    o autor da edição; quem responde pelo texto é quem o confirma.
-    `versao_esperada` obsoleta: ``PaginaDesatualizada``, como em
+    edição: nada muda e a confirmação existente é mantida, qualquer que seja
+    `versao_esperada` (reenvio não é conflito). Não há coluna para o autor da
+    edição; quem responde pelo texto é quem o confirma. Se gravaria e
+    `versao_esperada` é obsoleta: ``PaginaDesatualizada``, como em
     ``confirmar_pagina``. Devolve ``(pagina, alterada)``.
     """
     with transaction.atomic():
@@ -331,10 +333,10 @@ def editar_pagina(job, numero_pagina, texto, versao_esperada=None):
         pagina = PaginaOcr.objects.get(
             ocr_job=travado, numero_pagina=numero_pagina,
         )
-        _exigir_versao(travado, pagina, versao_esperada)
         texto_final = _normalizar_quebras_de_linha(texto)
         if pagina.texto_exibido == texto_final:
             return pagina, False
+        _exigir_versao(travado, pagina, versao_esperada)
         pagina.texto_confirmado = texto_final
         pagina.confirmado_por = None
         pagina.confirmado_em = None

@@ -1,9 +1,11 @@
 """Formulário obsoleto na confirmação do texto (P1 do review do PR #288).
 
 Dois revisores abrem a mesma página. O formulário do texto devolve a versão da
-página que exibiu; se alguém gravou depois disso, o envio é recusado e nada
-muda — nem o texto, nem a auditoria, nem o avanço do job. O lock do job só
-serializa as escritas: quem detecta o formulário antigo é a versão.
+página que exibiu; se alguém gravou depois disso e o envio gravaria, ele é
+recusado e nada muda — nem o texto, nem a auditoria, nem o avanço do job. O
+lock do job só serializa as escritas: quem detecta o formulário antigo é a
+versão. Envio obsoleto que não mudaria nada (duplo clique, "voltar") é reenvio,
+não conflito: não dá erro e não grava.
 """
 
 from django.contrib.auth.models import User
@@ -121,25 +123,100 @@ class VersaoPaginaTest(TelaTextoBase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.CONCLUIDO)
 
-    def test_reenvio_do_formulario_ja_aplicado_e_recusado_sem_mudar_nada(self):
-        """Mesmo com o mesmo texto, o formulário já aplicado é obsoleto.
+    def test_confirmar_texto_do_ocr_com_formulario_obsoleto_e_recusado_no_servico(self):
+        """O texto antigo ser igual ao do OCR não faz do envio um reenvio."""
+        services.confirmar_pagina(
+            self.job, 1, self.dono, texto=TEXTO_CORRIGIDO,
+            versao_esperada=VERSAO_INICIAL,
+        )
+        antes = self.pagina(1)
 
-        Duplo clique ou "voltar" do navegador reenviam a versão antiga: a
-        recusa não grava nada e a tela recarregada mostra a página confirmada.
+        for chamada in (
+            lambda: services.confirmar_pagina(
+                self.job, 1, self.revisor_b, texto=TEXTO_ANTIGO,
+                versao_esperada=VERSAO_INICIAL,
+            ),
+            lambda: services.editar_pagina(
+                self.job, 1, TEXTO_ANTIGO, versao_esperada=VERSAO_INICIAL,
+            ),
+        ):
+            with self.assertRaises(services.PaginaDesatualizada):
+                chamada()
+
+        depois = self.pagina(1)
+        self.assertEqual(
+            (depois.texto_confirmado, depois.confirmado_por,
+             depois.confirmado_em, depois.versao),
+            (TEXTO_CORRIGIDO, self.dono, antes.confirmado_em, antes.versao),
+        )
+
+    def test_confirmar_rascunho_alheio_com_formulario_obsoleto_e_recusado(self):
+        """Mesmo texto, mas a página não está confirmada: confirmar gravaria.
+
+        A salvou a correção como rascunho; B, com o formulário antigo, digitou
+        o mesmo texto e confirma. Não é reenvio — B não viu o rascunho de A.
+        """
+        self.postar(self.dono, 'editar_pagina_ocr', TEXTO_CORRIGIDO, VERSAO_INICIAL)
+
+        resposta = self.postar(
+            self.revisor_b, 'confirmar_pagina_ocr', TEXTO_CORRIGIDO, VERSAO_INICIAL
+        )
+
+        pagina = self.pagina(1)
+        self.assertEqual(pagina.estado, ESTADO_EDITADA)
+        self.assertIsNone(pagina.confirmado_por)
+        self.assertEqual(pagina.versao, VERSAO_INICIAL + 1)
+        self.assert_recusado(resposta)
+
+    def assert_reenvio_ignorado(self, resposta, antes, mensagem):
+        """Reenvio não é conflito: volta à página sem erro e nada é gravado."""
+        self.assertRedirects(
+            resposta, self.url_tela(pagina=1), fetch_redirect_response=False
+        )
+        mensagens = self.mensagens(resposta)
+        self.assertEqual([msg for nivel, msg in mensagens if nivel == 'error'], [])
+        self.assertIn(('info', mensagem), mensagens)
+        depois = self.pagina(1)
+        self.assertEqual(
+            (depois.texto_confirmado, depois.confirmado_por,
+             depois.confirmado_em, depois.versao),
+            (antes.texto_confirmado, antes.confirmado_por,
+             antes.confirmado_em, antes.versao),
+        )
+
+    def test_duplo_clique_em_confirmar_nao_e_conflito(self):
+        """O 2º POST do duplo clique reenvia a versão antiga com o mesmo texto.
+
+        A página já está confirmada com esse texto: o envio não mudaria nada,
+        então não é formulário obsoleto — é reenvio, e a confirmação original
+        (quem/quando/versão) é mantida.
         """
         self.postar(self.dono, 'confirmar_pagina_ocr', TEXTO_CORRIGIDO, VERSAO_INICIAL)
         antes = self.pagina(1)
+        self.assertEqual(antes.versao, VERSAO_INICIAL + 1)
 
         resposta = self.postar(
             self.dono, 'confirmar_pagina_ocr', TEXTO_CORRIGIDO, VERSAO_INICIAL
         )
 
-        depois = self.pagina(1)
-        self.assertEqual(
-            (depois.texto_confirmado, depois.confirmado_em, depois.versao),
-            (antes.texto_confirmado, antes.confirmado_em, antes.versao),
+        self.assert_reenvio_ignorado(
+            resposta, antes, 'A página 1 já estava confirmada com este texto.'
         )
-        self.assert_recusado(resposta)
+
+    def test_duplo_clique_em_salvar_edicao_nao_e_conflito(self):
+        self.postar(self.dono, 'editar_pagina_ocr', TEXTO_CORRIGIDO, VERSAO_INICIAL)
+        antes = self.pagina(1)
+        self.assertEqual(antes.estado, ESTADO_EDITADA)
+        self.assertEqual(antes.versao, VERSAO_INICIAL + 1)
+
+        resposta = self.postar(
+            self.dono, 'editar_pagina_ocr', TEXTO_CORRIGIDO, VERSAO_INICIAL
+        )
+
+        self.assert_reenvio_ignorado(
+            resposta, antes, 'Nenhuma alteração para salvar na página 1.'
+        )
+        self.assertEqual(self.pagina(1).estado, ESTADO_EDITADA)
 
     def test_versao_incrementa_a_cada_mutacao(self):
         self.assertEqual(self.versao(1), VERSAO_INICIAL)
