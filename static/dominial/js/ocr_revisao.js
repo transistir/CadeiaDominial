@@ -48,15 +48,55 @@
         var emFila = 0;
         var recarregando = false;
         var recargaPendente = false;
+        var finalizando = false;
         // Último envio de cada card falhou: finalizar não pode ignorá-los.
         var falhas = new Set();
+        // Chaves de atos distintos na mesma tela: sem o prefixo, "tipo" ou
+        // "data" de atos diferentes ficam com o mesmo rótulo.
+        var atosNaTela = new Set();
+        cards.forEach(function (card) {
+            var ato = /\/acts\/(\d+)(?:\/|$)/.exec(card.getAttribute('data-chave') || '');
+            if (ato) atosNaTela.add(ato[1]);
+        });
 
         function rotular(card) {
             var rotulo = card.querySelector('[data-campo-rotulo]');
             if (!rotulo) return;
-            var partes = card.getAttribute('data-chave').split('/').filter(Boolean);
+            var chave = card.getAttribute('data-chave') || '';
+            var partes = chave.split('/').filter(Boolean);
             var ultimo = partes.length ? partes[partes.length - 1] : '';
-            if (ultimo) rotulo.textContent = ultimo.replace(/_/g, ' ');
+            if (!ultimo) return;
+            var texto = ultimo.replace(/_/g, ' ');
+            var ato = /\/acts\/(\d+)(?:\/|$)/.exec(chave);
+            if (ato && atosNaTela.size > 1) {
+                texto = 'Ato ' + (parseInt(ato[1], 10) + 1) + ' · ' + texto;
+            }
+            rotulo.textContent = texto;
+        }
+
+        function controlesDaRevisao() {
+            return Array.prototype.slice.call(
+                raiz.querySelectorAll('input, select, textarea, button')
+            ).filter(function (elemento) {
+                // CSRF e versão são hidden e precisam continuar enviando.
+                return !(elemento.tagName === 'INPUT' && elemento.type === 'hidden');
+            });
+        }
+
+        // Guarda o estado de cada controle para restaurar exatamente o que
+        // já estava desabilitado (somente leitura, pendências etc.).
+        function bloquearControles() {
+            return controlesDaRevisao().map(function (elemento) {
+                var estado = { elemento: elemento, estavaDesabilitado: elemento.disabled };
+                elemento.disabled = true;
+                return estado;
+            });
+        }
+
+        function restaurarControles(estados) {
+            estados.forEach(function (estado) {
+                estado.elemento.disabled = estado.estavaDesabilitado;
+            });
         }
 
         function definirVersao(versao) {
@@ -203,6 +243,9 @@
         // senão dois cards salvos juntos dão 409 contra a própria tela.
         function salvar(card) {
             timers.delete(card);
+            // Durante a finalização os controles estão bloqueados: um save
+            // atrasado tomaria 422 estado_invalido e a edição se perderia.
+            if (finalizando) return Promise.resolve();
             marcarEstado(card, 'Salvando…');
             emFila += 1;
             fila = fila.then(function () {
@@ -380,7 +423,8 @@
             return ultima;
         }
 
-        function finalizar(botao) {
+        function finalizar() {
+            if (finalizando) return;
             if (timers.size || emFila) {
                 msgFinalizar.textContent = 'Aguarde o salvamento dos campos alterados.';
                 return;
@@ -391,14 +435,15 @@
                 msgFinalizar.textContent = 'Há campos com erro de salvamento. Reenviando…';
                 reenviarFalhas().then(function () {
                     if (!falhas.size) {
-                        finalizar(botao);
+                        finalizar();
                     } else {
                         msgFinalizar.textContent = 'Ainda há campos com erro de salvamento. Corrija-os e tente de novo.';
                     }
                 });
                 return;
             }
-            if (botao) botao.disabled = true;
+            finalizando = true;
+            var controles = bloquearControles();
             fetch(form.action, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -411,14 +456,16 @@
                     } else if (resposta.status === 409) {
                         recarregar();
                     } else {
-                        if (botao) botao.disabled = false;
+                        finalizando = false;
+                        restaurarControles(controles);
                         msgFinalizar.textContent = dados.erro === 'revisao_incompleta'
                             ? 'Ainda há pendências. Atualize a página para vê-las.'
                             : 'Não foi possível finalizar a revisão.';
                     }
                 });
             }).catch(function () {
-                if (botao) botao.disabled = false;
+                finalizando = false;
+                restaurarControles(controles);
                 msgFinalizar.textContent = 'Sem conexão com o servidor. Tente de novo.';
             });
         }
@@ -428,7 +475,7 @@
                 evento.preventDefault();
                 var botao = form.querySelector('[data-ocr-finalizar]');
                 if (botao && botao.disabled) return;
-                finalizar(botao);
+                finalizar();
             });
         }
     }
