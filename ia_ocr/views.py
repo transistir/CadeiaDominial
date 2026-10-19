@@ -399,15 +399,18 @@ def _mascarar_cpf(cpf):
     return f'CPF ***.***.***-{digitos[-2:]}' if len(digitos) >= 2 else 'CPF ***'
 
 
-_CPF = re.compile(r'\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b')
+_CPF = re.compile(r'\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}\b')
 _RG = re.compile(r'\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx]\b')
+_RG_CURTO = re.compile(r'(?<![\d.,-])\d{6,9}(?![\d.,-])')
 
 
 def _mascarar_evidencia(trecho):
     """Esconde CPF/RG no trecho exibido; datas, valores e CNS ficam intactos."""
     if not trecho:
         return trecho
-    return _RG.sub('***', _CPF.sub('***', trecho))
+    mascarado = _CPF.sub('***', trecho)
+    mascarado = _RG.sub('***', mascarado)
+    return _RG_CURTO.sub('***', mascarado)
 
 
 def _mascarar_rg(rg):

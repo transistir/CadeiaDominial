@@ -504,7 +504,7 @@ class RevisaoTelaTest(TelaTextoBase):
         )
         self.assertEqual(
             mascarar('Trecho sem documento, com 123456 apenas.'),
-            'Trecho sem documento, com 123456 apenas.',
+            'Trecho sem documento, com *** apenas.',
         )
 
     def test_mascara_preserva_data_iso_valor_cns_e_processo(self):
@@ -521,6 +521,99 @@ class RevisaoTelaTest(TelaTextoBase):
             mascarar('CPF 12345678900 e RG 1234567-X, matrícula 123456.'),
             'CPF *** e RG ***, matrícula 123456.',
         )
+
+    def test_mascara_cpf_com_espacos_contiguo_e_rg_curto(self):
+        mascarar = views._mascarar_evidencia
+        self.assertEqual(
+            mascarar('CPF 123 456 789 00 e CPF 12345678900.'),
+            'CPF *** e CPF ***.',
+        )
+        self.assertEqual(
+            mascarar('RG 123456 e RG 123456789.'),
+            'RG *** e RG ***.',
+        )
+
+    def test_mascara_preserva_valor_sem_milhar_e_processo_longo(self):
+        mascarar = views._mascarar_evidencia
+        trecho = (
+            'Valor 1500000,00, processo 000123456789, '
+            'CNS 123456789012345.'
+        )
+        self.assertEqual(mascarar(trecho), trecho)
+
+    def test_valor_transacao_opcional_vazio_salva_e_finaliza(self):
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        self.assertEqual(revisao.pendencias(extracao), [])
+        chave = '/acts/0/valor_transacao'
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': chave, 'incluir': True, 'valor': '',
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        self.assertEqual(
+            extracao.campos.get(chave=chave).valor_final, '',
+        )
+        self.assertFalse(any(
+            pendencia['chave'] == chave
+            for pendencia in revisao.pendencias(extracao)
+        ))
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+
+    def test_obrigatorio_vazio_continua_bloqueando_finalizacao(self):
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        chave = '/document/data'
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': chave, 'incluir': True, 'valor': '',
+                }],
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': salvar.json()['versao']}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 422, finalizar.content)
+        self.assertIn(
+            {
+                'chave': chave,
+                'motivo': 'obrigatorio_ausente',
+                'bloqueante': True,
+            },
+            finalizar.json()['pendencias'],
+        )
+        self.assertFalse(any(
+            pendencia['chave'] == chave
+            and pendencia['motivo'] == 'valor_incompativel_destino'
+            for pendencia in finalizar.json()['pendencias']
+        ))
 
     def test_descartar_campo_exigido_pelo_tipo_nao_estoura(self):
         LancamentoTipo.objects.create(

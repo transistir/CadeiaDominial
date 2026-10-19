@@ -140,6 +140,13 @@ def para_python(tipo, texto):
     return texto
 
 
+def _sem_valor(valor_efetivo):
+    """Vazio (``None`` ou só espaços) é ausência de valor opcional."""
+    return valor_efetivo is None or (
+        isinstance(valor_efetivo, str) and not valor_efetivo.strip()
+    )
+
+
 def validar_limites(campo, valor_efetivo, campo_sugerido=None):
     """O valor efetivo cabe nos limites do destino? Devolve motivo ou None.
 
@@ -155,7 +162,7 @@ def validar_limites(campo, valor_efetivo, campo_sugerido=None):
     escolhido no cadastro e ``criar_novo`` falso, o nome do OCR não é usado
     e não pode bloquear o save/finalização por tamanho.
     """
-    if valor_efetivo is None:
+    if _sem_valor(valor_efetivo):
         return None
     tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
     if tipo_valor not in (
@@ -205,7 +212,7 @@ def validar_destino(campo, valor_efetivo):
     Usado por ``desnormalizar`` e por ``pendencias``; limites (tamanho/
     dígitos) NOT são alvo aqui — quem checa é ``do_formulario``.
     """
-    if valor_efetivo is None:
+    if _sem_valor(valor_efetivo):
         return None
     tipo_valor = getattr(campo, 'tipo_valor', None) or 'texto'
     if isinstance(valor_efetivo, bool):
