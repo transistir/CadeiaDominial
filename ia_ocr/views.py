@@ -430,7 +430,7 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'por_destino': por_destino,
         'pendencias': revisao.pendencias(extracao),
         'avisos': revisao.avisos(extracao),
-        'versao': services.versao_bloco(extracao),
+        'versao': services.versao_bloco(extracao, campos=campos),
         'somente_leitura': job.status == estados.REVISADO,
         'dpi': job.dpi or 200,
         'url_salvar': reverse('salvar_bloco_ocr', kwargs=kwargs_job),
@@ -566,7 +566,9 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         extracao = job.extracao_vigente()
         if extracao is None:
             raise services.ExtracaoRecusada('sem_extracao')
-        salva = services.salvar_bloco(extracao, decisoes, request.user, dados['versao'])
+        _salva, versao = services.salvar_bloco(
+            extracao, decisoes, request.user, dados['versao'],
+        )
     except services.ConflitoVersao as exc:
         return JsonResponse({
             'erro': 'conflito_versao', 'chaves': exc.chaves_afetadas,
@@ -583,7 +585,7 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         return JsonResponse({'erro': exc.code or 'estado_invalido'}, status=409)
     except TransicaoConcorrente:
         return JsonResponse({'erro': 'transicao_concorrente'}, status=409)
-    return JsonResponse({'ok': True, 'versao': services.versao_bloco(salva)})
+    return JsonResponse({'ok': True, 'versao': versao})
 
 
 @_respostas_json_ocr
@@ -600,11 +602,20 @@ def finalizar_revisao_ocr(request, tis_id, imovel_id, documento_id, job_id):
         return JsonResponse({'erro': 'json_invalido'}, status=400)
     if not isinstance(dados, dict):
         return JsonResponse({'erro': 'corpo_invalido', 'chave': None}, status=422)
+    # Sem o token que a tela exibiu, não há como saber se a revisão mudou.
+    if not isinstance(dados.get('versao'), str):
+        return JsonResponse({'erro': 'versao_ausente', 'chave': None}, status=422)
     try:
         extracao = job.extracao_vigente()
         if extracao is None:
             raise services.ExtracaoRecusada('sem_extracao')
-        services.finalizar_revisao(extracao, request.user)
+        services.finalizar_revisao(
+            extracao, request.user, versao_cliente=dados['versao'],
+        )
+    except services.ConflitoVersao as exc:
+        return JsonResponse({
+            'erro': 'conflito_versao', 'chaves': exc.chaves_afetadas,
+        }, status=409)
     except services.RevisaoIncompleta as exc:
         return JsonResponse({
             'erro': 'revisao_incompleta', 'pendencias': exc.pendencias,

@@ -55,7 +55,7 @@ class RevisaoServicesTest(TestCase):
         versao = services.versao_bloco(carregada)
         antes = timezone.now()
 
-        resultado = services.salvar_bloco(
+        resultado, versao_devolvida = services.salvar_bloco(
             carregada, {
                 '/document/data': {'incluir': True, 'valor': '2020-01-11'},
                 '/document/numero': {'incluir': True, 'conferido': True},
@@ -83,9 +83,11 @@ class RevisaoServicesTest(TestCase):
             self.assertLessEqual(campo.revisado_em, timezone.now())
         versao_atual = services.versao_bloco(carregada)
         self.assertNotEqual(versao_atual, versao)
-        self.assertEqual(versao_atual, sha256(''.join(
-            versao_linha(campos[chave]) for chave in sorted(campos)
-        ).encode('utf-8')).hexdigest())
+        self.assertEqual(versao_devolvida, versao_atual)
+        versoes = ''.join(versao_linha(campos[chave]) for chave in sorted(campos))
+        self.assertEqual(versao_atual, sha256(
+            f'{self.extracao.pk}:{versoes}'.encode('utf-8'),
+        ).hexdigest())
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.EXTRAIDO)
         self.assertFalse(self.job.transicoes.exists())
@@ -123,6 +125,32 @@ class RevisaoServicesTest(TestCase):
                     list(decisoes) if sem_versao else ['/document/data'],
                 )
                 self.assertEqual(services.versao_bloco(self.extracao), versao_atual)
+
+    def test_versao_devolvida_pelo_save_e_a_da_transacao(self):
+        salva, versao_salva = services.salvar_bloco(
+            self.extracao,
+            {'/document/data': {'incluir': True, 'valor': '2020-01-11'}},
+            self.usuario, services.versao_bloco(self.extracao),
+        )
+
+        self.assertEqual(salva.pk, self.extracao.pk)
+        self.assertEqual(versao_salva, services.versao_bloco(self.extracao))
+
+        # Outro revisor grava logo depois: o token já devolvido segue sendo o
+        # do estado que o primeiro save deixou e não serve mais para gravar.
+        _, versao_do_outro = services.salvar_bloco(
+            self.extracao,
+            {'/document/numero': {'incluir': True, 'conferido': True}},
+            criar_usuario(), versao_salva,
+        )
+
+        self.assertNotEqual(versao_salva, versao_do_outro)
+        self.assertEqual(services.versao_bloco(self.extracao), versao_do_outro)
+        with self.assertRaises(services.ConflitoVersao):
+            services.salvar_bloco(
+                self.extracao, {'/document/livro': {'incluir': False}},
+                self.usuario, versao_salva,
+            )
 
     def test_decisao_de_linha_inexistente_recusa(self):
         versao = services.versao_bloco(self.extracao)
@@ -216,3 +244,22 @@ class RevisaoServicesTest(TestCase):
         self.assertEqual(self.extracao.finalizada_por, self.usuario)
         self.assertEqual(self.job.status, estados.REVISADO)
         self.assertEqual(self.job.transicoes.get().pk, transicao.pk)
+
+    def test_finalizar_com_versao_atual_funciona(self):
+        self._resolver_pendencias()
+        versao = services.versao_bloco(self.extracao)
+
+        finalizada = services.finalizar_revisao(
+            self.extracao, self.usuario, versao_cliente=versao,
+        )
+        # Duplo clique: finalizar não muda o bloco, e o reenvio é idempotente.
+        repetida = services.finalizar_revisao(
+            self.extracao, self.usuario, versao_cliente=versao,
+        )
+
+        self.job.refresh_from_db()
+        self.assertIsNotNone(finalizada.finalizada_em)
+        self.assertEqual(finalizada.finalizada_por, self.usuario)
+        self.assertEqual(repetida.finalizada_em, finalizada.finalizada_em)
+        self.assertEqual(self.job.status, estados.REVISADO)
+        self.assertEqual(self.job.transicoes.count(), 1)

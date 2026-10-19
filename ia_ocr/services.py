@@ -202,12 +202,22 @@ class RevisaoIncompleta(Exception):
         super().__init__(self.code)
 
 
-def versao_bloco(extracao) -> str:
-    """Hash das versões persistidas das linhas, ordenadas pela chave."""
-    versoes = ''.join(
-        versao_linha(campo) for campo in extracao.campos.order_by('chave')
-    )
-    return hashlib.sha256(versoes.encode('utf-8')).hexdigest()
+def versao_bloco(extracao, campos=None) -> str:
+    """Hash do pk da extração e das versões persistidas das linhas, pela chave.
+
+    O pk entra porque a reextração recria as linhas no mesmo estado: sem ele,
+    o token de uma página antiga valeria na extração substituta.
+
+    Com ``campos``, o hash sai dessa lista (sem nova consulta): a tela usa a
+    mesma lista que exibe, para que um save entre as duas leituras não gere
+    token novo sobre valores antigos.
+    """
+    if campos is None:
+        ordenados = extracao.campos.order_by('chave')
+    else:
+        ordenados = sorted(campos, key=lambda campo: campo.chave)
+    versoes = ''.join(versao_linha(campo) for campo in ordenados)
+    return hashlib.sha256(f'{extracao.pk}:{versoes}'.encode('utf-8')).hexdigest()
 
 
 def _travar_extracao_revisao(extracao):
@@ -223,8 +233,14 @@ def _travar_extracao_revisao(extracao):
     return travada
 
 
-def salvar_bloco(extracao, decisoes, usuario, versao_cliente) -> ExtracaoSugerida:
-    """Persiste atomicamente decisões indexadas pela chave JSON Pointer."""
+def salvar_bloco(
+    extracao, decisoes, usuario, versao_cliente,
+) -> tuple[ExtracaoSugerida, str]:
+    """Persiste atomicamente decisões indexadas pela chave JSON Pointer.
+
+    Devolve a extração e o token do bloco calculado ainda sob o lock: lido
+    depois do commit, ele já poderia incluir a gravação de outro revisor.
+    """
     with transaction.atomic():
         travada = _travar_extracao_revisao(extracao)
         if travada.ocr_job.status != estados.EXTRAIDO:
@@ -255,13 +271,22 @@ def salvar_bloco(extracao, decisoes, usuario, versao_cliente) -> ExtracaoSugerid
             }
             aplicar_linha(campo, **argumentos, usuario=usuario, agora=timezone.now())
             campo.save()
-    return travada
+        versao = versao_bloco(travada)
+    return travada, versao
 
 
-def finalizar_revisao(extracao, usuario) -> ExtracaoSugerida:
-    """Finaliza a revisão vigente sem pendências e audita uma única transição."""
+def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerida:
+    """Finaliza a revisão vigente sem pendências e audita uma única transição.
+
+    `versao_cliente` é o token que a tela exibiu; divergir do bloco travado é
+    conflito. None (chamada interna) dispensa a comparação.
+    """
     with transaction.atomic():
         travada = _travar_extracao_revisao(extracao)
+        # Finalizar não muda o token: o reenvio da mesma tela ainda casa.
+        if versao_cliente is not None and versao_cliente != versao_bloco(travada):
+            # Sem versões por linha no corpo, não há chave a apontar.
+            raise ConflitoVersao([])
         # Uma repetição chega com o job já revisado (ou importado).
         if travada.finalizada_em is not None:
             return travada

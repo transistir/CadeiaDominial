@@ -222,6 +222,67 @@ class ExtracaoViewsTest(TelaTextoBase):
         linha.refresh_from_db()
         self.assertEqual(linha.valor_final, '2020-01-11')
 
+    def test_salvar_em_extracao_substituta_com_mesmo_estado_e_conflito(self):
+        antiga = self._extracao()
+        versao_antiga = services.versao_bloco(antiga)
+        # A reextração recria as linhas no mesmo estado das da antiga.
+        nova = self._extracao()
+        self.assertEqual(
+            [revisao.versao_linha(campo) for campo in nova.campos.order_by('chave')],
+            [revisao.versao_linha(campo) for campo in antiga.campos.order_by('chave')],
+        )
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': versao_antiga,
+            'decisoes': [{
+                'chave': '/document/data', 'incluir': True, 'valor': '2020-01-11',
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertEqual(resposta.json(), {
+            'erro': 'conflito_versao', 'chaves': ['/document/data'],
+        })
+        linha = nova.campos.get(chave='/document/data')
+        self.assertIsNone(linha.valor_final)
+        self.assertIsNone(linha.revisado_em)
+
+    def test_resposta_do_save_usa_a_versao_da_transacao(self):
+        extracao = self._extracao()
+        salvar_bloco = services.salvar_bloco
+        versao_no_commit = []
+
+        def outro_revisor_grava_depois_do_commit(*args, **kwargs):
+            resultado = salvar_bloco(*args, **kwargs)
+            versao_no_commit.append(services.versao_bloco(extracao))
+            salvar_bloco(extracao, {
+                '/document/livro': {'incluir': False},
+            }, self.dono, versao_no_commit[0])
+            return resultado
+
+        with mock.patch(
+            'ia_ocr.views.services.salvar_bloco',
+            side_effect=outro_revisor_grava_depois_do_commit,
+        ):
+            resposta = self._post_json('salvar_bloco_ocr', {
+                'versao': services.versao_bloco(extracao),
+                'decisoes': [{
+                    'chave': '/document/data', 'incluir': True, 'valor': '2020-01-11',
+                }],
+            })
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()['versao'], versao_no_commit[0])
+        # Com esse token, a página não passa por cima da gravação do outro.
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': resposta.json()['versao'],
+            'decisoes': [{'chave': '/document/livro', 'incluir': True}],
+        })
+        self.assertEqual(resposta.status_code, 409)
+        self.assertEqual(
+            extracao.campos.get(chave='/document/livro').status_revisao, 'descartado',
+        )
+
     def test_salvar_bloco_json_invalido_400(self):
         for nome in ('salvar_bloco_ocr', 'finalizar_revisao_ocr'):
             for corpo in (b'{', b'', b'\xff'):
@@ -274,7 +335,9 @@ class ExtracaoViewsTest(TelaTextoBase):
         pendencias = revisao.pendencias(extracao)
         self.assertTrue(pendencias)
 
-        resposta = self._post_json('finalizar_revisao_ocr', {})
+        resposta = self._post_json('finalizar_revisao_ocr', {
+            'versao': services.versao_bloco(extracao),
+        })
 
         self.assertEqual(resposta.status_code, 422)
         self.assertEqual(resposta.json(), {
@@ -289,7 +352,9 @@ class ExtracaoViewsTest(TelaTextoBase):
         extracao = self._extracao()
         self._resolver_pendencias(extracao)
 
-        resposta = self._post_json('finalizar_revisao_ocr', {})
+        resposta = self._post_json('finalizar_revisao_ocr', {
+            'versao': services.versao_bloco(extracao),
+        })
 
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(resposta.json(), {'ok': True, 'redirect': self._url_documento()})
@@ -299,6 +364,44 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(extracao.finalizada_por, self.dono)
         self.assertIsNotNone(extracao.finalizada_em)
         self.assertEqual(self.job.transicoes.get(para_status=estados.REVISADO).usuario, self.dono)
+
+    def test_finalizar_com_versao_obsoleta_e_409_e_nao_finaliza(self):
+        extracao = self._extracao()
+        self._resolver_pendencias(extracao)
+        versao_a = services.versao_bloco(extracao)
+        # Com a página em A, outra aba grava uma correção (B).
+        services.salvar_bloco(extracao, {
+            '/document/data': {'incluir': True, 'valor': '2020-01-11'},
+        }, self.dono, versao_a)
+        self.assertEqual(revisao.pendencias(extracao), [])
+
+        resposta = self._post_json('finalizar_revisao_ocr', {'versao': versao_a})
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertEqual(resposta.json(), {'erro': 'conflito_versao', 'chaves': []})
+        extracao.refresh_from_db()
+        self.job.refresh_from_db()
+        self.assertIsNone(extracao.finalizada_em)
+        self.assertIsNone(extracao.finalizada_por)
+        self.assertEqual(self.job.status, estados.EXTRAIDO)
+        self.assertFalse(self.job.transicoes.filter(para_status=estados.REVISADO).exists())
+
+    def test_finalizar_sem_versao_na_view_e_422(self):
+        extracao = self._extracao()
+        self._resolver_pendencias(extracao)
+
+        for corpo in ({}, {'versao': None}, {'versao': 123}, {'versao': ['x']}):
+            with self.subTest(corpo=corpo):
+                resposta = self._post_json('finalizar_revisao_ocr', corpo)
+
+                self.assertEqual(resposta.status_code, 422)
+                self.assertEqual(resposta.json(), {
+                    'erro': 'versao_ausente', 'chave': None,
+                })
+        extracao.refresh_from_db()
+        self.job.refresh_from_db()
+        self.assertIsNone(extracao.finalizada_em)
+        self.assertEqual(self.job.status, estados.EXTRAIDO)
 
     def test_salvar_exige_csrf(self):
         extracao = self._extracao()
@@ -393,3 +496,38 @@ class ExtracaoViewsTest(TelaTextoBase):
                 self.assertEqual(contexto['url_finalizar'], self.url('finalizar_revisao_ocr'))
                 self.assertEqual(contexto['url_texto'], self.url_tela())
                 self.assertEqual(contexto['url_documento'], self._url_documento())
+
+    def test_campos_versao_vem_da_mesma_lista_exibida(self):
+        extracao = self._extracao()
+        pendencias = revisao.pendencias
+
+        def outro_revisor_grava_durante_o_get(*args, **kwargs):
+            # Commit concorrente depois de a view já ter lido as linhas.
+            services.salvar_bloco(extracao, {
+                '/document/livro': {'incluir': False},
+            }, self.dono, services.versao_bloco(extracao))
+            return pendencias(*args, **kwargs)
+
+        with mock.patch(
+            'ia_ocr.views.render', return_value=HttpResponse(),
+        ) as renderizar, mock.patch(
+            'ia_ocr.views.revisao.pendencias',
+            side_effect=outro_revisor_grava_durante_o_get,
+        ):
+            resposta = self.client.get(self.url('campos_job_ocr'))
+
+        self.assertEqual(resposta.status_code, 200)
+        contexto = renderizar.call_args.args[2]
+        exibido = {campo.chave: campo for campo in contexto['campos']}
+        self.assertNotEqual(exibido['/document/livro'].status_revisao, 'descartado')
+        self.assertEqual(
+            contexto['versao'],
+            services.versao_bloco(extracao, campos=contexto['campos']),
+        )
+        self.assertNotEqual(contexto['versao'], services.versao_bloco(extracao))
+        # Com o token da tela, a gravação seguinte esbarra no save do outro.
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': contexto['versao'],
+            'decisoes': [{'chave': '/document/livro', 'incluir': True}],
+        })
+        self.assertEqual(resposta.status_code, 409)
