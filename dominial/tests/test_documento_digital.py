@@ -1,4 +1,5 @@
 import io
+import re
 import tempfile
 from datetime import date
 
@@ -13,7 +14,14 @@ from django.utils import timezone
 from dominial.models import (
     TIs, Imovel, DocumentoTipo, Documento, Cartorios, DocumentoDigital, Pessoas, UserImovel
 )
-from ia_ocr.models import OcrJob, PaginaOcr, PendenciaLimpezaArquivo
+from ia_ocr.models import (
+    CampoSugerido,
+    ExtracaoSugerida,
+    OcrJob,
+    OcrJobTransicao,
+    PaginaOcr,
+    PendenciaLimpezaArquivo,
+)
 
 
 class DocumentoDigitalTestCase(TestCase):
@@ -300,6 +308,16 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
             'documento_id': self.documento.id, 'arquivo_id': arquivo_id,
         })
 
+    def _assinatura(self, arquivo_id):
+        """Assinatura do estado atual, extraída da confirmação renderizada."""
+        response = self.client.post(self._url(arquivo_id))
+        self.assertEqual(response.status_code, 200)
+        match = re.search(
+            r'name="assinatura" value="([^"]+)"', response.content.decode()
+        )
+        self.assertIsNotNone(match, 'A confirmação não trouxe a assinatura.')
+        return match.group(1)
+
     def test_excluir_com_job_ocr_pede_confirmacao(self):
         with tempfile.TemporaryDirectory() as midia:
             with override_settings(MEDIA_ROOT=midia):
@@ -338,6 +356,7 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                 PaginaOcr.objects.create(
                     ocr_job=job, numero_pagina=1, texto_ocr='texto sintetico'
                 )
+                assinatura = self._assinatura(arquivo_id)
 
                 # Falha física deixa a pendência durável para retry (#258).
                 with patch(
@@ -345,7 +364,8 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                     side_effect=OSError('falha simulada'),
                 ):
                     response = self.client.post(
-                        self._url(arquivo_id), {'confirmar_ocr': '1'}
+                        self._url(arquivo_id),
+                        {'confirmar_ocr': '1', 'assinatura': assinatura},
                     )
 
                 self.assertEqual(response.status_code, 302)
@@ -392,28 +412,251 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                     content,
                 )
 
-    def test_cancelar_confirmacao_nao_apaga_nada(self):
+    def test_dois_posts_sem_confirmar_ocr_nao_apagam_nada(self):
         with tempfile.TemporaryDirectory() as midia:
             with override_settings(MEDIA_ROOT=midia):
                 dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
                 job = OcrJob.objects.create(documento_digital=dd)
 
-                response = self.client.get(reverse(
-                    'documento_detalhado',
-                    kwargs={
-                        'tis_id': self.ti.id,
-                        'imovel_id': self.imovel.id,
-                        'documento_id': self.documento.id,
-                    },
-                ))
+                for _ in range(2):
+                    response = self.client.post(self._url(dd.id))
+                    self.assertEqual(response.status_code, 200)
+                    self.assertContains(response, 'Apagar arquivo e OCR')
 
-                self.assertEqual(response.status_code, 200)
                 self.assertTrue(
                     DocumentoDigital.objects.filter(id=dd.id).exists()
                 )
                 self.assertTrue(
                     OcrJob.objects.filter(id=job.id).exists()
                 )
+                self.assertTrue(default_storage.exists(caminho))
+
+    def test_confirmar_ocr_zero_renderiza_confirmacao_sem_apagar(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                job = OcrJob.objects.create(documento_digital=dd)
+
+                response = self.client.post(
+                    self._url(dd.id), {'confirmar_ocr': '0'}
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'Apagar arquivo e OCR')
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
+
+    def test_confirmacao_divergente_nao_apaga_nada(self):
+        """P2: se o OCR mudou desde o render, a confirmação antiga não vale.
+
+        O status escolhido para a divergência é 409 (Conflict): a página é
+        re-renderizada com os números atuais e o aviso, sem apagar nada.
+        """
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(documento_digital=dd)
+                pagina = PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=1, texto_ocr='pagina 1'
+                )
+                assinatura_velha = self._assinatura(dd.id)
+
+                # Outro usuário confirma a página entre o render e o POST.
+                pagina.confirmado_em = timezone.now()
+                pagina.save(update_fields=['confirmado_em'])
+
+                response = self.client.post(
+                    self._url(dd.id),
+                    {'confirmar_ocr': '1', 'assinatura': assinatura_velha},
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertContains(
+                    response,
+                    'O processamento mudou desde que você abriu esta página.',
+                    status_code=409,
+                )
+                self.assertContains(response, '1 confirmada', status_code=409)
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
+                self.assertTrue(
+                    PaginaOcr.objects.filter(id=pagina.id).exists()
+                )
+                self.assertTrue(default_storage.exists(caminho))
+
+    def test_confirmado_sem_assinatura_nao_apaga_nada(self):
+        """Cliente antigo (aba velha) não tem assinatura: trata como divergente."""
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(documento_digital=dd)
+
+                response = self.client.post(
+                    self._url(dd.id), {'confirmar_ocr': '1'}
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
+                self.assertTrue(default_storage.exists(caminho))
+
+    def test_aviso_neutro_quando_nao_ha_pagina_confirmada(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                job = OcrJob.objects.create(documento_digital=dd)
+                PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=1, texto_ocr='pendente'
+                )
+
+                response = self.client.post(self._url(dd.id))
+
+                content = response.content.decode()
+                self.assertIn(
+                    'O processamento de OCR deste arquivo será removido.',
+                    content,
+                )
+                self.assertNotIn(
+                    'O texto confirmado deste arquivo será perdido.', content
+                )
+
+    def test_confirmado_apaga_cascatas_e_arquivo_fisico_sem_pendencia(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo('cascata.pdf')
+                arquivo_id = dd.id
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(documento_digital=dd)
+                pagina = PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=1, texto_ocr='pagina 1'
+                )
+                extracao = ExtracaoSugerida.objects.create(
+                    ocr_job=job, schema_version='v1', payload={},
+                    provider='teste', payload_servico={},
+                )
+                campo = CampoSugerido.objects.create(
+                    extracao=extracao, chave='nome'
+                )
+                transicao = OcrJobTransicao.objects.create(
+                    ocr_job=job, de_status='pendente', para_status='em_execucao'
+                )
+                assinatura = self._assinatura(arquivo_id)
+
+                with self.assertLogs(
+                    'dominial.views.documento_digital_views', level='INFO'
+                ) as logs:
+                    response = self.client.post(
+                        self._url(arquivo_id),
+                        {'confirmar_ocr': '1', 'assinatura': assinatura},
+                    )
+
+                self.assertEqual(response.status_code, 302)
+                self.assertFalse(
+                    DocumentoDigital.objects.filter(id=arquivo_id).exists()
+                )
+                self.assertFalse(OcrJob.objects.filter(id=job.id).exists())
+                self.assertFalse(
+                    PaginaOcr.objects.filter(id=pagina.id).exists()
+                )
+                self.assertFalse(
+                    ExtracaoSugerida.objects.filter(id=extracao.id).exists()
+                )
+                self.assertFalse(
+                    CampoSugerido.objects.filter(id=campo.id).exists()
+                )
+                self.assertFalse(
+                    OcrJobTransicao.objects.filter(id=transicao.id).exists()
+                )
+                self.assertFalse(default_storage.exists(caminho))
+                self.assertFalse(
+                    PendenciaLimpezaArquivo.objects.filter(
+                        documento_digital_id=arquivo_id
+                    ).exists()
+                )
+                log = '\n'.join(logs.output)
+                self.assertIn(f'arquivo_id={arquivo_id}', log)
+                self.assertIn(f'user_id={self.user.id}', log)
+                self.assertIn('jobs=1', log)
+                self.assertNotIn('cascata.pdf', log)
+
+    def test_dois_jobs_no_mesmo_arquivo_apagam_junto(self):
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                arquivo_id = dd.id
+                job1 = OcrJob.objects.create(documento_digital=dd)
+                job2 = OcrJob.objects.create(documento_digital=dd)
+                pag1 = PaginaOcr.objects.create(
+                    ocr_job=job1, numero_pagina=1, texto_ocr='p1'
+                )
+                pag2 = PaginaOcr.objects.create(
+                    ocr_job=job2, numero_pagina=1, texto_ocr='p2',
+                    confirmado_em=timezone.now(),
+                )
+                assinatura = self._assinatura(arquivo_id)
+
+                response = self.client.post(
+                    self._url(arquivo_id),
+                    {'confirmar_ocr': '1', 'assinatura': assinatura},
+                )
+
+                self.assertEqual(response.status_code, 302)
+                self.assertFalse(
+                    DocumentoDigital.objects.filter(id=arquivo_id).exists()
+                )
+                self.assertFalse(
+                    OcrJob.objects.filter(id__in=[job1.id, job2.id]).exists()
+                )
+                self.assertFalse(
+                    PaginaOcr.objects.filter(
+                        id__in=[pag1.id, pag2.id]
+                    ).exists()
+                )
+
+    def test_protected_error_orienta_tentar_novamente(self):
+        from unittest.mock import patch
+        from django.db.models import ProtectedError
+
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                job = OcrJob.objects.create(documento_digital=dd)
+                assinatura = self._assinatura(dd.id)
+
+                with patch(
+                    'django.db.models.query.QuerySet.delete',
+                    side_effect=ProtectedError('protegido', []),
+                ):
+                    response = self.client.post(
+                        self._url(dd.id),
+                        {'confirmar_ocr': '1', 'assinatura': assinatura},
+                    )
+
+                self.assertEqual(response.status_code, 302)
+                mensagens = [
+                    str(m) for m in get_messages(response.wsgi_request)
+                ]
+                self.assertIn(
+                    'O processamento de OCR mudou enquanto você confirmava. '
+                    'Tente novamente.',
+                    mensagens,
+                )
+                self.assertFalse(
+                    any('suporte' in mensagem for mensagem in mensagens)
+                )
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
 
     def test_excluir_sem_job_ocr_apaga_registro_e_arquivo(self):
         with tempfile.TemporaryDirectory() as midia:

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import mimetypes
@@ -155,6 +156,53 @@ def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_i
     return response
 
 
+def _resumo_jobs(jobs):
+    """Contagens exibidas na confirmação e usadas na assinatura."""
+    return [
+        {
+            'job': job,
+            'paginas': job.paginas.count(),
+            'confirmadas': job.paginas.filter(
+                confirmado_em__isnull=False
+            ).count(),
+            'extracoes': job.extracoes.count(),
+        }
+        for job in jobs.order_by('id')
+    ]
+
+
+def _assinatura_jobs(resumo):
+    """Impressão digital do estado do OCR no momento do render.
+
+    Cobre o que a exclusão destrói (jobs, páginas, confirmações e extrações) e
+    o `atualizado_em` do job (transições/reprocessamento). Ordenada por id para
+    não depender da ordem do queryset.
+    """
+    partes = [
+        (
+            item['job'].id,
+            item['paginas'],
+            item['confirmadas'],
+            item['extracoes'],
+            item['job'].atualizado_em.isoformat(),
+        )
+        for item in resumo
+    ]
+    return hashlib.sha256(repr(partes).encode('utf-8')).hexdigest()
+
+
+def _contexto_confirmacao(tis, imovel, documento, arquivo, resumo):
+    return {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento,
+        'arquivo': arquivo,
+        'jobs': resumo,
+        'assinatura': _assinatura_jobs(resumo),
+        'total_confirmadas': sum(item['confirmadas'] for item in resumo),
+    }
+
+
 @login_required
 @require_POST
 def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_id):
@@ -168,27 +216,10 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     # O OCR é apagado junto com o arquivo, mas o usuário precisa confirmar:
     # páginas, texto confirmado e extrações vão embora sem volta.
     if jobs.exists() and request.POST.get('confirmar_ocr') != '1':
-        jobs_resumo = [
-            {
-                'job': job,
-                'paginas': job.paginas.count(),
-                'confirmadas': job.paginas.filter(
-                    confirmado_em__isnull=False
-                ).count(),
-                'extracoes': job.extracoes.count(),
-            }
-            for job in jobs
-        ]
         return render(
             request,
             'dominial/confirmar_exclusao_ocr.html',
-            {
-                'tis': tis,
-                'imovel': imovel,
-                'documento': documento,
-                'arquivo': arquivo,
-                'jobs': jobs_resumo,
-            },
+            _contexto_confirmacao(tis, imovel, documento, arquivo, _resumo_jobs(jobs)),
         )
 
     # Registro e intenção de limpeza formam uma unidade: se a pendência não
@@ -196,6 +227,36 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     caminho = arquivo.arquivo.name if arquivo.arquivo else None
     try:
         with transaction.atomic():
+            # Mesma trava do reprocessar: confirmação e mutação do OCR não
+            # podem se entrecortar. A assinatura é recalculada sob a trava.
+            arquivo = get_object_or_404(
+                DocumentoDigital.objects.select_for_update(),
+                id=arquivo_id, documento=documento,
+            )
+            caminho = arquivo.arquivo.name if arquivo.arquivo else None
+            jobs = OcrJob.objects.filter(documento_digital=arquivo)
+
+            if request.POST.get('confirmar_ocr') == '1':
+                resumo = _resumo_jobs(jobs)
+                if request.POST.get('assinatura') != _assinatura_jobs(resumo):
+                    # Cliente antigo (sem assinatura) também cai aqui: sem
+                    # prova de que viu o estado atual, nada é apagado.
+                    return render(
+                        request,
+                        'dominial/confirmar_exclusao_ocr.html',
+                        _contexto_confirmacao(
+                            tis, imovel, documento, arquivo, resumo,
+                        ) | {'aviso_divergencia': True},
+                        status=409,
+                    )
+
+            quantidade_jobs = jobs.count()
+            logger.info(
+                'Excluindo arquivo digital; arquivo_id=%s user_id=%s jobs=%s',
+                arquivo_id,
+                request.user.id,
+                quantidade_jobs,
+            )
             jobs.delete()
             arquivo.delete()
             pendencia = (
@@ -210,8 +271,8 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     except ProtectedError:
         messages.error(
             request,
-            f'Arquivo "{nome}" possui processamento de OCR vinculado e não pode ser '
-            'excluído. Fale com o suporte.'
+            'O processamento de OCR mudou enquanto você confirmava. '
+            'Tente novamente.'
         )
         return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
     except DatabaseError:

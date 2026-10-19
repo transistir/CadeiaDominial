@@ -13,6 +13,13 @@
     </div>
 
     <div style="max-width: 640px; margin: 2rem auto;">
+        {% if aviso_divergencia %}
+            <p class="alert alert-warning">
+                O processamento mudou desde que você abriu esta página.
+                Confira os números e confirme de novo.
+            </p>
+        {% endif %}
+
         <p>
             O arquivo <strong>{{ arquivo.nome_original }}</strong> possui
             processamento de OCR vinculado. Ao apagá-lo, também serão removidos:
@@ -29,9 +36,15 @@
             {% endfor %}
         </ul>
 
-        <p class="alert alert-danger">
-            O texto confirmado deste arquivo será perdido. Esta ação não pode ser desfeita.
-        </p>
+        {% if total_confirmadas > 0 %}
+            <p class="alert alert-danger">
+                O texto confirmado deste arquivo será perdido. Esta ação não pode ser desfeita.
+            </p>
+        {% else %}
+            <p class="alert alert-warning">
+                O processamento de OCR deste arquivo será removido. Esta ação não pode ser desfeita.
+            </p>
+        {% endif %}
 
         <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
             <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}"
@@ -41,6 +54,7 @@
                   style="display: inline;">
                 {% csrf_token %}
                 <input type="hidden" name="confirmar_ocr" value="1">
+                <input type="hidden" name="assinatura" value="{{ assinatura }}">
                 <button type="submit" class="btn btn-danger">Apagar arquivo e OCR</button>
             </form>
         </div>
