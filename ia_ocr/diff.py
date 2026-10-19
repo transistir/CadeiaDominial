@@ -21,6 +21,14 @@ _LINHAS = re.compile(r'[^\n]*\n|[^\n]+')
 # (original + confirmado) cai para linhas, que mantém o custo baixo.
 LIMITE_TOKENS = 20000
 
+# Por linhas o SequenceMatcher (autojunk=False) também degrada quando as
+# linhas se repetem: cada chamada percorre todas as ocorrências da linha e,
+# com trocas espalhadas, são até uma chamada por linha — cúbico no pior caso.
+# Medido (CPython 3.13) com linhas repetidas e trocas alternadas: 2000 linhas
+# somadas ≈ 12 s, 1000 ≈ 1,5 s, 500 ≈ 0,2 s, 400 ≈ 0,1 s. Acima deste total
+# (original + confirmado) o diff é grosseiro, em O(n).
+LIMITE_LINHAS = 400
+
 
 def _acrescentar(segmentos, tipo, texto):
     if not texto:
@@ -36,6 +44,28 @@ def _so_espaco_na_linha(texto):
     return not texto.strip() and '\n' not in texto
 
 
+def _diff_grosseiro(linhas_a, linhas_b):
+    """Prefixo e sufixo comuns intactos e o miolo como uma troca só, sem matcher."""
+    comum = min(len(linhas_a), len(linhas_b))
+    prefixo = 0
+    while prefixo < comum and linhas_a[prefixo] == linhas_b[prefixo]:
+        prefixo += 1
+    # Limitado ao que sobrou do prefixo: com linhas repetidas os dois se
+    # sobreporiam e o miolo deixaria de remontar os textos.
+    sufixo = 0
+    while sufixo < comum - prefixo and linhas_a[-1 - sufixo] == linhas_b[-1 - sufixo]:
+        sufixo += 1
+    fim_a = len(linhas_a) - sufixo
+    fim_b = len(linhas_b) - sufixo
+
+    segmentos = []
+    _acrescentar(segmentos, IGUAL, ''.join(linhas_a[:prefixo]))
+    _acrescentar(segmentos, REMOVIDO, ''.join(linhas_a[prefixo:fim_a]))
+    _acrescentar(segmentos, ADICIONADO, ''.join(linhas_b[prefixo:fim_b]))
+    _acrescentar(segmentos, IGUAL, ''.join(linhas_a[fim_a:]))
+    return segmentos
+
+
 def segmentos_diff(original, confirmado):
     """Trechos que transformam ``original`` em ``confirmado``.
 
@@ -49,6 +79,8 @@ def segmentos_diff(original, confirmado):
     if len(tokens_a) + len(tokens_b) > LIMITE_TOKENS:
         tokens_a = _LINHAS.findall(original)
         tokens_b = _LINHAS.findall(confirmado)
+        if len(tokens_a) + len(tokens_b) > LIMITE_LINHAS:
+            return _diff_grosseiro(tokens_a, tokens_b)
 
     # autojunk=False: o espaço é o token mais frequente e a heurística o
     # trataria como "lixo", degradando o alinhamento em textos longos.
