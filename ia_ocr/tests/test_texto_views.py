@@ -40,7 +40,8 @@ class PermissaoTelaTextoTest(TelaTextoBase):
         for nome in ('confirmar_pagina_ocr', 'editar_pagina_ocr'):
             with self.subTest(acao=nome):
                 resposta = self.client.post(
-                    self.url(nome, numero=1), {'texto': 'invasor'}
+                    self.url(nome, numero=1),
+                    {'texto': 'invasor', 'versao': self.versao(1)},
                 )
 
                 self.assertEqual(resposta.status_code, 302)
@@ -60,7 +61,8 @@ class PermissaoTelaTextoTest(TelaTextoBase):
         for nome in ('confirmar_pagina_ocr', 'editar_pagina_ocr'):
             with self.subTest(acao=nome):
                 resposta = self.client.post(
-                    self.url(nome, numero=1), {'texto': 'invasor'}
+                    self.url(nome, numero=1),
+                    {'texto': 'invasor', 'versao': self.versao(1)},
                 )
 
                 self.assertEqual(resposta.status_code, 404)
@@ -346,7 +348,8 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
 
     def test_confirmar_grava_texto_e_auditoria_e_volta_para_a_mesma_pagina(self):
         resposta = self.client.post(
-            self.url('confirmar_pagina_ocr', numero=1), {'texto': TEXTOS[0]}
+            self.url('confirmar_pagina_ocr', numero=1),
+            {'texto': TEXTOS[0], 'versao': self.versao(1)},
         )
 
         self.assertRedirects(
@@ -362,7 +365,7 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
     def test_confirmar_com_texto_editado_grava_o_texto_do_textarea(self):
         resposta = self.client.post(
             self.url('confirmar_pagina_ocr', numero=2),
-            {'texto': 'segunda corrigida\r\ncom duas linhas'},
+            {'texto': 'segunda corrigida\r\ncom duas linhas', 'versao': self.versao(2)},
         )
 
         self.assertEqual(resposta.status_code, 302)
@@ -372,16 +375,22 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
         self.assertEqual(pagina.estado, ESTADO_CONFIRMADA)
 
     def test_confirmar_sem_o_campo_texto_confirma_o_texto_vigente(self):
-        resposta = self.client.post(self.url('confirmar_pagina_ocr', numero=3))
+        resposta = self.client.post(
+            self.url('confirmar_pagina_ocr', numero=3), {'versao': self.versao(3)}
+        )
 
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(self.pagina(3).texto_confirmado, TEXTOS[2])
 
     def test_editar_depois_de_confirmada_marca_editada_e_exige_reconfirmacao(self):
-        self.client.post(self.url('confirmar_pagina_ocr', numero=1), {'texto': TEXTOS[0]})
+        self.client.post(
+            self.url('confirmar_pagina_ocr', numero=1),
+            {'texto': TEXTOS[0], 'versao': self.versao(1)},
+        )
 
         resposta = self.client.post(
-            self.url('editar_pagina_ocr', numero=1), {'texto': 'primeira editada'}
+            self.url('editar_pagina_ocr', numero=1),
+            {'texto': 'primeira editada', 'versao': self.versao(1)},
         )
 
         self.assertRedirects(
@@ -399,7 +408,9 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
         self.assertContains(tela, 'Editada')
 
     def test_editar_sem_o_campo_texto_e_requisicao_invalida_e_nao_esvazia_a_pagina(self):
-        resposta = self.client.post(self.url('editar_pagina_ocr', numero=1))
+        resposta = self.client.post(
+            self.url('editar_pagina_ocr', numero=1), {'versao': self.versao(1)}
+        )
 
         self.assertEqual(resposta.status_code, 400)
         pagina = self.pagina(1)
@@ -412,7 +423,8 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
         for nome in ('confirmar_pagina_ocr', 'editar_pagina_ocr'):
             with self.subTest(acao=nome):
                 resposta = self.client.post(
-                    self.url(nome, numero=1), {'texto': 'tarde demais'}
+                    self.url(nome, numero=1),
+                    {'texto': 'tarde demais', 'versao': self.versao(1)},
                 )
 
                 self.assertRedirects(
@@ -429,7 +441,7 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
             for numero in (99, 10 ** 20):
                 with self.subTest(acao=nome, numero=numero):
                     resposta = self.client.post(
-                        self.url(nome, numero=numero), {'texto': 'x'}
+                        self.url(nome, numero=numero), {'texto': 'x', 'versao': 0}
                     )
 
                     self.assertEqual(resposta.status_code, 404)
@@ -440,7 +452,9 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
         UserTI.objects.create(user=outro, tis=self.ti)
         self.client.force_login(outro)
 
-        resposta = self.client.post(self.url('confirmar_pagina_ocr', numero=1))
+        resposta = self.client.post(
+            self.url('confirmar_pagina_ocr', numero=1), {'versao': self.versao(1)}
+        )
 
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(self.pagina(1).confirmado_por, outro)

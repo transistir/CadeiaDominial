@@ -105,6 +105,71 @@ class SegmentosDiffTest(SimpleTestCase):
         self.assertIn((REMOVIDO, 'linha 15000\n'), segmentos)
         self.assertIn((ADICIONADO, 'linha corrigida\n'), segmentos)
 
+    def test_linhas_repetidas_acima_do_orcamento_usa_diff_grosseiro(self):
+        """Linhas repetidas deixam o matcher quadrático: acima do orçamento de
+        linhas o miolo vira um bloco só, sem a sequência de micro-blocos."""
+        linhas = ['linha repetida\n'] * 5000
+        alteradas = list(linhas)
+        alteradas[1000] = 'linha corrigida\n'
+        alteradas[4000] = 'outra linha corrigida\n'
+
+        segmentos = segmentos_diff(''.join(linhas), ''.join(alteradas))
+
+        self.assertEqual(
+            [tipo for tipo, _texto in segmentos], [IGUAL, REMOVIDO, ADICIONADO, IGUAL]
+        )
+        self.assertEqual(segmentos[0][1], ''.join(linhas[:1000]))
+        self.assertEqual(segmentos[1][1], ''.join(linhas[1000:4001]))
+        self.assertEqual(segmentos[2][1], ''.join(alteradas[1000:4001]))
+        self.assertEqual(segmentos[3][1], ''.join(linhas[4001:]))
+
+    def test_diff_grosseiro_preserva_o_invariante(self):
+        """Prefixo e sufixo comuns não se sobrepõem, mesmo com linhas repetidas."""
+        linhas = ['linha repetida do texto\n'] * 3000 + ['fim sem quebra']
+        espalhadas = list(linhas)
+        espalhadas[500] = 'troca\n'
+        espalhadas[2500] = 'outra troca\n'
+        del espalhadas[2000:2010]
+        espalhadas.insert(1500, 'linha inserida\n')
+        original = ''.join(linhas)
+        casos = {
+            'trocas espalhadas': ''.join(espalhadas),
+            'remoção de linhas repetidas': ''.join(linhas[:2500] + linhas[-1:]),
+            'inserção no início': 'nova primeira linha\n' + original,
+            'última linha sem quebra alterada': ''.join(linhas[:-1]) + 'fim alterado',
+            'texto todo trocado': 'texto novo',
+        }
+
+        for caso, confirmado in casos.items():
+            with self.subTest(caso):
+                segmentos = segmentos_diff(original, confirmado)
+
+                tipos = [tipo for tipo, _texto in segmentos]
+                self.assertLessEqual(tipos.count(REMOVIDO), 1)
+                self.assertLessEqual(tipos.count(ADICIONADO), 1)
+                self.assertEqual(_reconstruir(segmentos, IGUAL, REMOVIDO), original)
+                self.assertEqual(_reconstruir(segmentos, IGUAL, ADICIONADO), confirmado)
+
+    def test_abaixo_do_orcamento_continua_detalhado(self):
+        """Poucas linhas, ainda que longas, seguem no matcher: trocas separadas."""
+        antes = 'igual antes ' * 1000 + '\n'
+        meio = 'igual no meio ' * 1000 + '\n'
+        depois = 'igual depois ' * 1000
+        original = antes + 'velha um\n' + meio + 'velha dois\n' + depois
+        confirmado = antes + 'nova um\n' + meio + 'nova dois\n' + depois
+
+        segmentos = segmentos_diff(original, confirmado)
+
+        self.assertEqual(segmentos, [
+            (IGUAL, antes),
+            (REMOVIDO, 'velha um\n'),
+            (ADICIONADO, 'nova um\n'),
+            (IGUAL, meio),
+            (REMOVIDO, 'velha dois\n'),
+            (ADICIONADO, 'nova dois\n'),
+            (IGUAL, depois),
+        ])
+
 
 class DiffNaTelaTest(TelaTextoBase):
     def setUp(self):

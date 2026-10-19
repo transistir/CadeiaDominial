@@ -1,7 +1,8 @@
-"""Migração 0005 (I-5): campos da fase de extração, data legado e constraints.
+"""Migração 0006 (I-5): campos da fase de extração, data legado e constraints.
 
-Cobre dependências mínimas, avanço de 0004 com dados legados e a reversão
-com raw/normalized NULL (o reverso devolve '' antes da volta ao NOT NULL).
+Cobre dependências mínimas, avanço da migração anterior (0005, versão da
+página, da I-4) com dados legados e a reversão com raw/normalized NULL (o
+reverso devolve '' antes da volta ao NOT NULL).
 """
 
 from django.conf import settings
@@ -10,28 +11,28 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.loader import MigrationLoader
 from django.test import SimpleTestCase, TransactionTestCase
 
-MIGRACAO_0004 = ('ia_ocr', '0004_ocrjob_forcar_ocr_ocrjob_lease_expira_em')
-MIGRACAO_0005 = ('ia_ocr', '0005_extracao_revisao')
+MIGRACAO_ANTERIOR = ('ia_ocr', '0005_paginaocr_versao')
+MIGRACAO_0006 = ('ia_ocr', '0006_extracao_revisao')
 
 
-class DependenciasDa0005Test(SimpleTestCase):
+class DependenciasDa0006Test(SimpleTestCase):
     def test_dependencias_minimas(self):
         # MigrationLoader(None, ...) lê o grafo do disco, sem banco.
         loader = MigrationLoader(None, ignore_no_migrations=True)
-        node = loader.graph.node_map[MIGRACAO_0005]
+        node = loader.graph.node_map[MIGRACAO_0006]
         pais = {p.key for p in node.parents if p is not None}
         app_usuario = settings.AUTH_USER_MODEL.split('.')[0]
         pais_usuario = {p for p in pais if p[0] == app_usuario}
         self.assertEqual(
             pais - pais_usuario,
-            {MIGRACAO_0004, ('dominial', '0001_initial')},
+            {MIGRACAO_ANTERIOR, ('dominial', '0001_initial')},
         )
         self.assertEqual(len(pais_usuario), 1)
 
 
-class ExtracaoRevisao0005Test(TransactionTestCase):
-    migrate_from = [MIGRACAO_0004]
-    migrate_to = [MIGRACAO_0005]
+class ExtracaoRevisao0006Test(TransactionTestCase):
+    migrate_from = [MIGRACAO_ANTERIOR]
+    migrate_to = [MIGRACAO_0006]
 
     def setUp(self):
         super().setUp()
@@ -51,7 +52,7 @@ class ExtracaoRevisao0005Test(TransactionTestCase):
         return executor.loader.project_state(destino).apps
 
     def _criar_job_com_extracao(self, apps):
-        """Job + extração + 2 campos no estado 0004 (modelos históricos).
+        """Job + extração + 2 campos no estado anterior (modelos históricos).
 
         O DocumentoDigital sai da fábrica corrente: as tabelas dominial do
         banco de teste ficam no estado atual — só a ia_ocr volta no tempo.
@@ -81,7 +82,7 @@ class ExtracaoRevisao0005Test(TransactionTestCase):
         ]
         return job, extracao, campos
 
-    def test_0004_com_extracao_e_campos_para_0005(self):
+    def test_anterior_com_extracao_e_campos_para_0006(self):
         job, extracao, campos = self._criar_job_com_extracao(self.apps_antes)
 
         apps_depois = self._migrar(self.migrate_to)
@@ -100,7 +101,7 @@ class ExtracaoRevisao0005Test(TransactionTestCase):
                 campo.full_clean()
 
     def test_colunas_texto_corrigido_e_dpi(self):
-        """0005 acrescenta ocrjob.dpi, paginaocr.texto_corrigido e
+        """0006 acrescenta ocrjob.dpi, paginaocr.texto_corrigido e
         paginaocr.corrigido_em, todos nullable (decisão #290/16-10)."""
         job, _, _ = self._criar_job_com_extracao(self.apps_antes)
         pagina_antes = self.apps_antes.get_model(
@@ -143,17 +144,17 @@ class ExtracaoRevisao0005Test(TransactionTestCase):
 
     def test_reversao_com_raw_normalized_null(self):
         self._criar_job_com_extracao(self.apps_antes)
-        apps_0005 = self._migrar(self.migrate_to)
-        ExtracaoSugerida = apps_0005.get_model('ia_ocr', 'ExtracaoSugerida')
-        CampoSugerido = apps_0005.get_model('ia_ocr', 'CampoSugerido')
+        apps_0006 = self._migrar(self.migrate_to)
+        ExtracaoSugerida = apps_0006.get_model('ia_ocr', 'ExtracaoSugerida')
+        CampoSugerido = apps_0006.get_model('ia_ocr', 'CampoSugerido')
         extracao = ExtracaoSugerida.objects.get()
         campo = CampoSugerido.objects.create(
             extracao=extracao, chave='z', raw=None, normalized=None,
         )
         pk_campo, pk_extracao = campo.pk, extracao.pk
 
-        apps_0004 = self._migrar([MIGRACAO_0004])
-        CampoSugerido = apps_0004.get_model('ia_ocr', 'CampoSugerido')
+        apps_anterior = self._migrar(self.migrate_from)
+        CampoSugerido = apps_anterior.get_model('ia_ocr', 'CampoSugerido')
         # O reverso rodou antes da volta ao NOT NULL e preencheu com ''.
         revertido = CampoSugerido.objects.get(pk=pk_campo)
         self.assertEqual(revertido.raw, '')

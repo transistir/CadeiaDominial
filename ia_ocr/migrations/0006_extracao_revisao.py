@@ -74,7 +74,7 @@ class Migration(migrations.Migration):
         # migration_utils.py) faria a ia_ocr entrar no plano fake do dominial
         # e suas tabelas com FK pendurada seriam órfãs no flush do
         # TransactionTestCase.
-        ('ia_ocr', '0004_ocrjob_forcar_ocr_ocrjob_lease_expira_em'),
+        ('ia_ocr', '0005_paginaocr_versao'),
         ('dominial', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

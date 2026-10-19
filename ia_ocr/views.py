@@ -34,6 +34,13 @@ from .models import (
     OcrJobTransicao, PaginaOcr,
 )
 
+MENSAGEM_PAGINA_DESATUALIZADA = (
+    'A página {numero} foi alterada por outra pessoa (ou em outra aba) depois '
+    'que você a abriu. Nada foi gravado, para não sobrescrever essa alteração: '
+    'o texto atual foi recarregado. Revise-o e repita a ação se ainda for '
+    'necessário.'
+)
+
 
 def _contexto_job(request, tis_id, imovel_id, documento_id, job_id):
     """TI, imóvel, documento e job, validando a hierarquia completa."""
@@ -68,6 +75,18 @@ def _numero_pagina(bruto):
     3.11+ (e nenhum documento tem tantas páginas — acima disso é 404 de todo jeito).
     """
     if bruto is not None and re.fullmatch(r'[0-9]{1,6}', bruto):
+        return int(bruto)
+    return None
+
+
+def _versao_do_formulario(request):
+    """Versão da página que o formulário exibiu, ou None se ausente/inválida.
+
+    Limite de dígitos pelo mesmo motivo de ``_numero_pagina``; o valor só é
+    comparado em Python com a versão da página, nunca vai para o banco.
+    """
+    bruto = request.POST.get('versao')
+    if bruto is not None and re.fullmatch(r'[0-9]{1,10}', bruto):
         return int(bruto)
     return None
 
@@ -201,10 +220,15 @@ def confirmar_pagina_ocr(request, tis_id, imovel_id, documento_id, job_id, numer
     tis, imovel, documento, job = _contexto_job(
         request, tis_id, imovel_id, documento_id, job_id
     )
+    # Sem a versão não há como saber se o formulário é obsoleto.
+    versao = _versao_do_formulario(request)
+    if versao is None:
+        return HttpResponseBadRequest('Campo "versao" ausente ou inválido.')
     destino = _url_tela(_kwargs_job(tis, imovel, documento, job), numero)
     try:
         _pagina, alterada = services.confirmar_pagina(
             job, numero, request.user, texto=request.POST.get('texto'),
+            versao_esperada=versao,
         )
     except PaginaOcr.DoesNotExist:
         raise Http404('Página inexistente.')
@@ -212,6 +236,9 @@ def confirmar_pagina_ocr(request, tis_id, imovel_id, documento_id, job_id, numer
         messages.error(
             request, 'Este processamento não aceita mais alterações no texto.'
         )
+        return redirect(destino)
+    except services.PaginaDesatualizada:
+        messages.error(request, MENSAGEM_PAGINA_DESATUALIZADA.format(numero=numero))
         return redirect(destino)
 
     if alterada:
@@ -231,10 +258,13 @@ def editar_pagina_ocr(request, tis_id, imovel_id, documento_id, job_id, numero):
     # Sem o campo, "editar" esvaziaria a página: é requisição malformada.
     if 'texto' not in request.POST:
         return HttpResponseBadRequest('Campo "texto" ausente.')
+    versao = _versao_do_formulario(request)
+    if versao is None:
+        return HttpResponseBadRequest('Campo "versao" ausente ou inválido.')
     destino = _url_tela(_kwargs_job(tis, imovel, documento, job), numero)
     try:
         _pagina, alterada = services.editar_pagina(
-            job, numero, request.POST['texto'],
+            job, numero, request.POST['texto'], versao_esperada=versao,
         )
     except PaginaOcr.DoesNotExist:
         raise Http404('Página inexistente.')
@@ -242,6 +272,9 @@ def editar_pagina_ocr(request, tis_id, imovel_id, documento_id, job_id, numero):
         messages.error(
             request, 'Este processamento não aceita mais alterações no texto.'
         )
+        return redirect(destino)
+    except services.PaginaDesatualizada:
+        messages.error(request, MENSAGEM_PAGINA_DESATUALIZADA.format(numero=numero))
         return redirect(destino)
 
     if alterada:
