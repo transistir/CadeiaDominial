@@ -46,7 +46,7 @@
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
             <h2 class="h5 mb-0" id="ocr-texto-titulo">Texto da página {{ pagina.numero_pagina }}</h2>
             <div class="d-flex align-items-center flex-wrap gap-2">
-                <a href="{{ url_pdf }}" target="_blank" rel="noopener">Abrir o PDF em nova aba</a>
+                <a href="{{ url_pdf }}#page={{ pagina.numero_pagina }}" target="_blank" rel="noopener">Abrir o PDF em nova aba</a>
                 <span class="badge ocr-estado ocr-estado--{{ pagina.estado }}" data-ocr-estado-pagina>{{ pagina.estado_rotulo }}</span>
             </div>
         </div>
@@ -79,8 +79,8 @@
 {{ texto_atual }}</textarea>
             {% if editavel %}
             <div class="ocr-texto-acoes">
-                <button type="submit" class="btn btn-success{% if pagina.estado == 'editada' %} btn-lg{% endif %}" data-ocr-confirmar-pagina>Confirmar página</button>
-                <button type="submit" class="btn btn-outline-secondary" formaction="{{ url_editar }}" data-ocr-salvar-edicao>Salvar edição</button>
+                <button type="submit" class="btn btn-success{% if pagina.estado == 'editada' %} btn-principal-destaque{% endif %}" data-ocr-confirmar-pagina>Confirmar página</button>
+                <button type="submit" class="btn btn-secondary" formaction="{{ url_editar }}" data-ocr-salvar-edicao>Salvar edição</button>
                 <small class="text-muted" data-ocr-nao-salvo role="status" aria-live="polite" hidden>Alterações não salvas</small>
             </div>
             {% endif %}

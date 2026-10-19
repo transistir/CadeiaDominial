@@ -28,6 +28,14 @@
     margin-top: 0.5rem;
 }
 
+/* Destaque do confirmar quando a página tem edição salva. Classe própria
+   porque o base.css, carregado depois do Bootstrap, anula .btn-lg. */
+.ocr-texto-acoes .btn-principal-destaque {
+    font-size: 1.15em;
+    padding: 14px 28px;
+    font-weight: 600;
+}
+
 /* Abas por página. Classes próprias: o .nav/.nav-link do base.css (barra do topo)
    conflita com o nav-tabs do Bootstrap. O estado também sai em texto
    (visually-hidden) e no ícone, nunca só em cor. */
