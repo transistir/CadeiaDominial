@@ -156,23 +156,86 @@ def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_i
     return response
 
 
+def _hash_json(valor):
+    """Hash estável de um JSONField (ordem das chaves não importa)."""
+    return hashlib.sha256(
+        json.dumps(valor, sort_keys=True, default=str).encode('utf-8')
+    ).hexdigest()
+
+
+def _estado_paginas(paginas):
+    """Estado exato de cada página, não só a contagem.
+
+    `versao`, `confirmado_em` e o texto vigente mudam quando outra pessoa
+    edita e reconfirma uma página já confirmada — sem alterar o job.
+    """
+    return [
+        (
+            pagina.numero_pagina,
+            pagina.versao,
+            pagina.confirmado_em.isoformat() if pagina.confirmado_em else None,
+            hashlib.sha256(
+                (
+                    pagina.texto_confirmado
+                    or pagina.texto_corrigido
+                    or pagina.texto_ocr
+                    or ''
+                ).encode('utf-8')
+            ).hexdigest(),
+        )
+        for pagina in paginas
+    ]
+
+
+def _estado_extracoes(extracoes):
+    """Conteúdo das extrações, não só a contagem.
+
+    `ExtracaoSugerida` não tem `atualizado_em`: o id + hash dos campos
+    sugeridos detecta uma extração alterada no lugar.
+    """
+    return [
+        (
+            extracao.id,
+            _hash_json(
+                {
+                    'schema_version': extracao.schema_version,
+                    'payload': extracao.payload,
+                    'payload_servico': extracao.payload_servico,
+                    'provider': extracao.provider,
+                    'finalizada_em': (
+                        extracao.finalizada_em.isoformat()
+                        if extracao.finalizada_em
+                        else None
+                    ),
+                    'finalizada_por_id': extracao.finalizada_por_id,
+                }
+            ),
+        )
+        for extracao in extracoes
+    ]
+
+
 def _resumo_jobs(jobs):
-    """Contagens exibidas na confirmação e usadas na assinatura.
+    """Contagens exibidas na confirmação e estado usado na assinatura.
 
     Aceita lista ou queryset: a confirmação usa queryset e a exclusão usa a
     lista já travada por `select_for_update`.
     """
-    return [
-        {
+    resumo = []
+    for job in sorted(jobs, key=lambda job: job.id):
+        paginas = list(job.paginas.order_by('numero_pagina'))
+        extracoes = list(job.extracoes.order_by('id'))
+        resumo.append({
             'job': job,
-            'paginas': job.paginas.count(),
-            'confirmadas': job.paginas.filter(
-                confirmado_em__isnull=False
-            ).count(),
-            'extracoes': job.extracoes.count(),
-        }
-        for job in sorted(jobs, key=lambda job: job.id)
-    ]
+            'paginas': len(paginas),
+            'confirmadas': sum(
+                1 for pagina in paginas if pagina.confirmado_em is not None
+            ),
+            'extracoes': len(extracoes),
+            'estado_paginas': _estado_paginas(paginas),
+            'estado_extracoes': _estado_extracoes(extracoes),
+        })
+    return resumo
 
 
 def _assinatura_jobs(resumo):
@@ -180,7 +243,9 @@ def _assinatura_jobs(resumo):
 
     Cobre o que a exclusão destrói (jobs, páginas, confirmações e extrações) e
     o `atualizado_em` do job (transições/reprocessamento). Ordenada por id para
-    não depender da ordem do queryset.
+    não depender da ordem do queryset. Páginas e extrações entram pelo estado
+    exato, não só pela contagem: edição/reconfirmação de página ou alteração de
+    extração invalida a assinatura mesmo sem mudar as contagens.
     """
     partes = [
         (
@@ -189,6 +254,8 @@ def _assinatura_jobs(resumo):
             item['confirmadas'],
             item['extracoes'],
             item['job'].atualizado_em.isoformat(),
+            item['estado_paginas'],
+            item['estado_extracoes'],
         )
         for item in resumo
     ]

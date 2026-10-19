@@ -490,6 +490,86 @@ class ExcluirDocumentoDigitalComOcrTest(TestCase):
                 )
                 self.assertTrue(default_storage.exists(caminho))
 
+    def test_pagina_editada_e_reconfirmada_invalida_confirmacao(self):
+        """P1: editar/reconfirmar a página muda texto e versão, não as contagens."""
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(documento_digital=dd)
+                pagina = PaginaOcr.objects.create(
+                    ocr_job=job, numero_pagina=1, texto_ocr='ocr original',
+                    texto_confirmado='texto confirmado original',
+                    confirmado_em=timezone.now(), versao=1,
+                )
+                assinatura_velha = self._assinatura(dd.id)
+
+                # Outro usuário edita e reconfirma a mesma página: contagem e
+                # job continuam iguais, mas texto e versão mudam.
+                PaginaOcr.objects.filter(id=pagina.id).update(
+                    texto_confirmado='texto novo nunca exibido',
+                    versao=2,
+                    confirmado_em=timezone.now(),
+                )
+
+                response = self.client.post(
+                    self._url(dd.id),
+                    {'confirmar_ocr': '1', 'assinatura': assinatura_velha},
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertContains(
+                    response,
+                    'O processamento mudou desde que você abriu esta página.',
+                    status_code=409,
+                )
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
+                pagina.refresh_from_db()
+                self.assertEqual(pagina.texto_confirmado, 'texto novo nunca exibido')
+                self.assertEqual(pagina.versao, 2)
+                self.assertTrue(default_storage.exists(caminho))
+
+    def test_extracao_alterada_no_lugar_invalida_confirmacao(self):
+        """P1: conteúdo novo de extração invalida a assinatura sem mudar contagem."""
+        with tempfile.TemporaryDirectory() as midia:
+            with override_settings(MEDIA_ROOT=midia):
+                dd = self._criar_arquivo()
+                caminho = dd.arquivo.name
+                job = OcrJob.objects.create(documento_digital=dd)
+                extracao = ExtracaoSugerida.objects.create(
+                    ocr_job=job, schema_version='v1',
+                    payload={'campo': 'original'},
+                    provider='teste', payload_servico={'campo': 'original'},
+                )
+                assinatura_velha = self._assinatura(dd.id)
+
+                # Outro usuário altera a extração sem criar/remover nenhuma.
+                ExtracaoSugerida.objects.filter(id=extracao.id).update(
+                    payload={'campo': 'alterado'},
+                )
+
+                response = self.client.post(
+                    self._url(dd.id),
+                    {'confirmar_ocr': '1', 'assinatura': assinatura_velha},
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertContains(
+                    response,
+                    'O processamento mudou desde que você abriu esta página.',
+                    status_code=409,
+                )
+                self.assertTrue(
+                    DocumentoDigital.objects.filter(id=dd.id).exists()
+                )
+                self.assertTrue(OcrJob.objects.filter(id=job.id).exists())
+                extracao.refresh_from_db()
+                self.assertEqual(extracao.payload, {'campo': 'alterado'})
+                self.assertTrue(default_storage.exists(caminho))
+
     def test_job_criado_depois_do_render_invalida_confirmacao(self):
         """P3: job novo entre o render e o POST re-renderiza com ele na lista."""
         with tempfile.TemporaryDirectory() as midia:
