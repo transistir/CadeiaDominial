@@ -906,7 +906,9 @@ def garantir_placeholders_obrigatorios(extracao):
     """
     linhas, atos = _contexto_revisao(extracao)
     tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
-    existentes = set(linhas)
+    # Inclui descartadas: uma linha descartada ainda ocupa a chave única e
+    # não pode virar placeholder de novo (IntegrityError).
+    existentes = set(extracao.campos.values_list('chave', flat=True))
     novas = []
     for ato in atos:
         tipo_efetivo = tipos_por_ato.get(ato.chave)

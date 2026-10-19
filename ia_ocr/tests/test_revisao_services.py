@@ -210,7 +210,7 @@ class RevisaoServicesTest(TestCase):
         self.assertEqual(campos['/acts/0/titulo'].valor_final, 'Escritura Pública')
         self.assertTrue(campos['/acts/0/origem/cartorio'].criar_novo)
 
-    def test_salvar_recusa_sugestao_acima_do_limite(self):
+    def test_salvar_recusa_sugestao_acima_do_limite_na_linha_enviada(self):
         self._resolver_pendencias()
         CampoSugerido.objects.create(
             extracao=self.extracao,
@@ -225,12 +225,65 @@ class RevisaoServicesTest(TestCase):
         with self.assertRaises(valores.ValorInvalido) as contexto:
             services.salvar_bloco(
                 self.extracao,
-                {'/document/numero': {'incluir': True, 'conferido': True}},
+                {'/acts/0/valor_transacao': {
+                    'incluir': True, 'conferido': True,
+                }},
                 self.usuario, versao,
             )
 
         self.assertEqual(contexto.exception.chave, '/acts/0/valor_transacao')
         self.assertEqual(services.versao_bloco(self.extracao), versao)
+
+    def _criar_linha_acima_do_limite(self, chave):
+        CampoSugerido.objects.create(
+            extracao=self.extracao,
+            chave=chave,
+            raw='R$ 999.999.999,99',
+            normalized='999999999.99',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+        )
+
+    def test_save_corrige_uma_linha_mesmo_com_outra_acima_do_limite(self):
+        self._resolver_pendencias()
+        for chave in ('/acts/0/valor_transacao', '/acts/1/valor_transacao'):
+            self._criar_linha_acima_do_limite(chave)
+        versao = services.versao_bloco(self.extracao)
+
+        services.salvar_bloco(
+            self.extracao,
+            {'/acts/0/valor_transacao': {
+                'incluir': True, 'conferido': True, 'valor': '100.00',
+            }},
+            self.usuario, versao,
+        )
+
+        limite = {
+            item['chave'] for item in pendencias(self.extracao)
+            if item['motivo'] == valores.MOTIVO_LIMITE
+        }
+        self.assertEqual(limite, {'/acts/1/valor_transacao'})
+        self.assertEqual(
+            self.extracao.campos.get(
+                chave='/acts/0/valor_transacao',
+            ).status_revisao,
+            'editado',
+        )
+
+    def test_finalizacao_ainda_bloqueia_por_limite_intocado(self):
+        self._resolver_pendencias()
+        self._criar_linha_acima_do_limite('/acts/1/valor_transacao')
+
+        with self.assertRaises(services.RevisaoIncompleta) as contexto:
+            services.finalizar_revisao(self.extracao, self.usuario)
+
+        self.assertEqual(contexto.exception.pendencias, [{
+            'chave': '/acts/1/valor_transacao',
+            'motivo': valores.MOTIVO_LIMITE,
+            'bloqueante': True,
+        }])
+        self.extracao.refresh_from_db()
+        self.assertIsNone(self.extracao.finalizada_em)
 
     def test_linha_descartada_acima_do_limite_nao_bloqueia_save(self):
         self.extracao.campos.filter(chave='/document/numero').update(

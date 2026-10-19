@@ -72,6 +72,14 @@
             erro.hidden = !texto;
         }
 
+        function cardDaChave(chave) {
+            if (!chave) return null;
+            for (var i = 0; i < cards.length; i += 1) {
+                if (cards[i].getAttribute('data-chave') === chave) return cards[i];
+            }
+            return null;
+        }
+
         function marcarEstado(card, texto) {
             var estado = card.querySelector('[data-campo-estado]');
             if (estado) estado.textContent = texto;
@@ -175,7 +183,9 @@
                     } else if (resposta.status === 422) {
                         falhas.add(card);
                         marcarEstado(card, '');
-                        mostrarErro(card, MENSAGENS_ERRO[dados.erro] || 'Não foi possível salvar este campo.');
+                        var alvo = cardDaChave(dados.chave) || card;
+                        if (alvo !== card) mostrarErro(card, '');
+                        mostrarErro(alvo, MENSAGENS_ERRO[dados.erro] || 'Não foi possível salvar este campo.');
                     } else {
                         falhas.add(card);
                         marcarEstado(card, '');

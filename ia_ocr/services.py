@@ -234,18 +234,25 @@ def _travar_extracao_revisao(extracao):
     return travada
 
 
-def _validar_limites_bloco(extracao):
-    """Revalida os valores efetivos (inclusive sugestões intocadas).
+def _validar_limites_bloco(extracao, decisoes):
+    """Revalida os limites das linhas enviadas neste bloco.
 
     A sugestão nunca passou pelo formulário; sem esta checagem, um valor
     acima de ``max_length``/``max_digits``/``decimal_places`` só quebraria
     na I-6, depois de a revisão já ter sido dada por concluída.
 
-    Só as linhas incluídas contam: ``pendencias`` já respeita o descarte
-    da própria linha e dos ancestrais (ato/parte).
+    Só as linhas presentes em ``decisoes``: a tela salva um card por POST,
+    então uma linha intocada acima do limite não pode impedir a correção de
+    outra. Na finalização, ``pendencias`` continua bloqueando as intocadas.
+
+    ``pendencias`` já respeita o descarte da própria linha e dos ancestrais
+    (ato/parte).
     """
     for pendencia in pendencias(extracao):
-        if pendencia['motivo'] == valores.MOTIVO_LIMITE:
+        if (
+            pendencia['motivo'] == valores.MOTIVO_LIMITE
+            and pendencia['chave'] in decisoes
+        ):
             erro = valores.ValorInvalido(
                 'valor acima do limite do destino'
             )
@@ -299,7 +306,7 @@ def salvar_bloco(
         # O tipo efetivo pode ter mudado: o novo tipo passa a exigir linhas
         # que a extração original não trouxe (título, descrição, origem).
         garantir_placeholders_obrigatorios(travada)
-        _validar_limites_bloco(travada)
+        _validar_limites_bloco(travada, decisoes)
         # Só depois de aplicar o bloco inteiro: a escolha antiga enviada
         # junto da correção não pode sobreviver por causa da ordem das linhas.
         indice_pessoas = None

@@ -8,7 +8,7 @@ from django.shortcuts import resolve_url
 from django.test.html import Element
 from django.utils import timezone
 
-from dominial.models import Cartorios, Pessoas
+from dominial.models import Cartorios, LancamentoTipo, Pessoas
 from ia_ocr import estados, revisao
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
@@ -329,6 +329,56 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertEqual(salvar.status_code, 422, salvar.content)
         self.assertEqual(salvar.json()['erro'], 'valor_invalido')
         self.assertEqual(salvar.json()['chave'], '/document/cartorio')
+
+    def test_descartar_campo_exigido_pelo_tipo_nao_estoura(self):
+        LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+        extracao = self._extracao()
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{'chave': '/acts/0/descricao', 'incluir': False}],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/descricao')
+        self.assertEqual(campo.status_revisao, 'descartado')
+
+    def test_mudar_tipo_com_titulo_descartado_nao_estoura(self):
+        LancamentoTipo.objects.create(
+            tipo='registro', requer_titulo=True,
+            requer_cartorio_origem=False, requer_observacao=False,
+        )
+        extracao = self._extracao()
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/titulo',
+            raw='Título antigo',
+            normalized='Título antigo',
+            tipo_valor='texto',
+            status_revisao='descartado',
+        )
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/tipo_sugerido',
+                    'incluir': True, 'valor': 'registro',
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/titulo')
+        self.assertEqual(campo.status_revisao, 'descartado')
 
     def test_finaliza_usando_apenas_os_controles_renderizados(self):
         # Cartório do documento: match único; cri_atual: dois homônimos;
