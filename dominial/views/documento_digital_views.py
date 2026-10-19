@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import mimetypes
@@ -5,7 +6,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import DatabaseError, transaction
-from django.db.models import ProtectedError
+from django.db.models import Prefetch, ProtectedError
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
@@ -20,7 +21,7 @@ from ia_ocr.estados import (
     STATUS_COM_TEXTO,
     STATUS_REVISAVEIS,
 )
-from ia_ocr.models import OcrJob
+from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.services import criar_job, registrar_pendencia_limpeza
 
 
@@ -155,6 +156,173 @@ def servir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_i
     return response
 
 
+def _hash_json(valor):
+    """Hash estável de um JSONField (ordem das chaves não importa)."""
+    return hashlib.sha256(
+        json.dumps(valor, sort_keys=True, default=str).encode('utf-8')
+    ).hexdigest()
+
+
+def _estado_paginas(paginas):
+    """Estado exato de cada página, não só a contagem.
+
+    `versao`, `confirmado_em` e o texto vigente mudam quando outra pessoa
+    edita e reconfirma uma página já confirmada — sem alterar o job.
+    """
+    return [
+        (
+            pagina.numero_pagina,
+            pagina.versao,
+            pagina.confirmado_em.isoformat() if pagina.confirmado_em else None,
+            hashlib.sha256(
+                (
+                    pagina.texto_confirmado
+                    or pagina.texto_corrigido
+                    or pagina.texto_ocr
+                    or ''
+                ).encode('utf-8')
+            ).hexdigest(),
+        )
+        for pagina in paginas
+    ]
+
+
+def _jobs_com_estado(queryset):
+    """Carrega páginas, extrações e campos em três consultas, sem N+1.
+
+    `order_by()` no manager relacionado ignora o cache do `prefetch_related`;
+    por isso a ordem vai no `Prefetch` e o resumo lê com `.all()`.
+    """
+    return queryset.prefetch_related(
+        Prefetch(
+            'paginas',
+            queryset=PaginaOcr.objects.order_by('numero_pagina'),
+        ),
+        Prefetch(
+            'extracoes',
+            queryset=ExtracaoSugerida.objects.order_by('id').prefetch_related(
+                Prefetch(
+                    'campos',
+                    queryset=CampoSugerido.objects.order_by('id'),
+                ),
+            ),
+        ),
+    )
+
+
+def _estado_campos(campos):
+    """Estado revisável de cada campo sugerido.
+
+    `salvar_bloco` grava a revisão em `CampoSugerido` sem tocar em `payload`,
+    `payload_servico`, `finalizada_em` nem no job. Sem os campos na assinatura,
+    uma confirmação aberta antes da revisão apagaria o que foi revisado depois.
+    """
+    return [
+        (
+            campo.id,
+            campo.status_revisao,
+            campo.valor_final,
+            campo.pessoa_escolhida_id,
+            campo.cartorio_escolhido_id,
+            campo.criar_novo,
+            campo.area_convertida,
+            campo.revisado_por_id,
+            campo.revisado_em.isoformat() if campo.revisado_em else None,
+            _hash_json(campo.motivos_revisao),
+            _hash_json(campo.match_candidatos),
+        )
+        for campo in campos
+    ]
+
+
+def _estado_extracoes(extracoes):
+    """Conteúdo das extrações, não só a contagem.
+
+    `ExtracaoSugerida` não tem `atualizado_em`: o id + hash da extração e do
+    estado revisável dos campos sugeridos detecta alteração no lugar.
+    """
+    return [
+        (
+            extracao.id,
+            _hash_json(
+                {
+                    'schema_version': extracao.schema_version,
+                    'payload': extracao.payload,
+                    'payload_servico': extracao.payload_servico,
+                    'provider': extracao.provider,
+                    'finalizada_em': (
+                        extracao.finalizada_em.isoformat()
+                        if extracao.finalizada_em
+                        else None
+                    ),
+                    'finalizada_por_id': extracao.finalizada_por_id,
+                    'campos': _estado_campos(extracao.campos.all()),
+                }
+            ),
+        )
+        for extracao in extracoes
+    ]
+
+
+def _resumo_jobs(jobs):
+    """Contagens exibidas na confirmação e estado usado na assinatura.
+
+    Aceita lista ou queryset: a confirmação usa queryset e a exclusão usa a
+    lista já travada por `select_for_update`.
+    """
+    resumo = []
+    for job in sorted(jobs, key=lambda job: job.id):
+        paginas = list(job.paginas.all())
+        extracoes = list(job.extracoes.all())
+        resumo.append({
+            'job': job,
+            'paginas': len(paginas),
+            'confirmadas': sum(
+                1 for pagina in paginas if pagina.confirmado_em is not None
+            ),
+            'extracoes': len(extracoes),
+            'estado_paginas': _estado_paginas(paginas),
+            'estado_extracoes': _estado_extracoes(extracoes),
+        })
+    return resumo
+
+
+def _assinatura_jobs(resumo):
+    """Impressão digital do estado do OCR no momento do render.
+
+    Cobre o que a exclusão destrói (jobs, páginas, confirmações e extrações) e
+    o `atualizado_em` do job (transições/reprocessamento). Ordenada por id para
+    não depender da ordem do queryset. Páginas e extrações entram pelo estado
+    exato, não só pela contagem: edição/reconfirmação de página ou alteração de
+    extração invalida a assinatura mesmo sem mudar as contagens.
+    """
+    partes = [
+        (
+            item['job'].id,
+            item['paginas'],
+            item['confirmadas'],
+            item['extracoes'],
+            item['job'].atualizado_em.isoformat(),
+            item['estado_paginas'],
+            item['estado_extracoes'],
+        )
+        for item in resumo
+    ]
+    return hashlib.sha256(repr(partes).encode('utf-8')).hexdigest()
+
+
+def _contexto_confirmacao(tis, imovel, documento, arquivo, resumo):
+    return {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento,
+        'arquivo': arquivo,
+        'jobs': resumo,
+        'assinatura': _assinatura_jobs(resumo),
+        'total_confirmadas': sum(item['confirmadas'] for item in resumo),
+    }
+
+
 @login_required
 @require_POST
 def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_id):
@@ -163,11 +331,67 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     arquivo = get_object_or_404(DocumentoDigital, id=arquivo_id, documento=documento)
 
     nome = arquivo.nome_original
+
     # Registro e intenção de limpeza formam uma unidade: se a pendência não
     # puder ser persistida, o DocumentoDigital continua disponível.
     caminho = arquivo.arquivo.name if arquivo.arquivo else None
     try:
         with transaction.atomic():
+            # Mesma trava do reprocessar: confirmação e mutação do OCR não
+            # podem se entrecortar. A assinatura é recalculada sob a trava.
+            arquivo = get_object_or_404(
+                DocumentoDigital.objects.select_for_update(),
+                id=arquivo_id, documento=documento,
+            )
+            caminho = arquivo.arquivo.name if arquivo.arquivo else None
+
+            # A decisão de pedir confirmação também acontece sob a trava:
+            # um job criado entre a checagem e a exclusão não pode escapar.
+            jobs_atuais = _jobs_com_estado(
+                OcrJob.objects.filter(documento_digital=arquivo)
+            )
+            if (
+                jobs_atuais.exists()
+                and request.POST.get('confirmar_ocr') != '1'
+            ):
+                return render(
+                    request,
+                    'dominial/confirmar_exclusao_ocr.html',
+                    _contexto_confirmacao(
+                        tis, imovel, documento, arquivo,
+                        _resumo_jobs(jobs_atuais),
+                    ),
+                )
+
+            # Jobs travados na mesma ordem do DocumentoDigital: páginas e
+            # confirmações não podem mudar entre a assinatura e o delete.
+            jobs = list(_jobs_com_estado(
+                OcrJob.objects.select_for_update()
+                .filter(documento_digital=arquivo)
+                .order_by('id')
+            ))
+
+            if request.POST.get('confirmar_ocr') == '1':
+                resumo = _resumo_jobs(jobs)
+                if request.POST.get('assinatura') != _assinatura_jobs(resumo):
+                    # Cliente antigo (sem assinatura) também cai aqui: sem
+                    # prova de que viu o estado atual, nada é apagado.
+                    return render(
+                        request,
+                        'dominial/confirmar_exclusao_ocr.html',
+                        _contexto_confirmacao(
+                            tis, imovel, documento, arquivo, resumo,
+                        ) | {'aviso_divergencia': True},
+                        status=409,
+                    )
+
+            logger.info(
+                'Excluindo arquivo digital; arquivo_id=%s user_id=%s jobs=%s',
+                arquivo_id,
+                request.user.id,
+                len(jobs),
+            )
+            OcrJob.objects.filter(id__in=[job.id for job in jobs]).delete()
             arquivo.delete()
             pendencia = (
                 registrar_pendencia_limpeza(
@@ -181,8 +405,8 @@ def excluir_documento_digital(request, tis_id, imovel_id, documento_id, arquivo_
     except ProtectedError:
         messages.error(
             request,
-            f'Arquivo "{nome}" possui processamento de OCR vinculado e não pode ser '
-            'excluído. Fale com o suporte.'
+            'O processamento de OCR mudou enquanto você confirmava. '
+            'Tente novamente.'
         )
         return redirect('documento_detalhado', tis_id=tis_id, imovel_id=imovel_id, documento_id=documento_id)
     except DatabaseError:

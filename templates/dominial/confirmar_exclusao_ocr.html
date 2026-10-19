@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Confirmar exclusão — {{ arquivo.nome_original }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="cadeia-header">
+        <h1>Confirmar exclusão do arquivo</h1>
+        <div class="imovel-info">
+            <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
+            <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
+        </div>
+    </div>
+
+    <div style="max-width: 640px; margin: 2rem auto;">
+        {% if aviso_divergencia %}
+            <p class="alert alert-warning">
+                O processamento mudou desde que você abriu esta página.
+                Confira os números e confirme de novo.
+            </p>
+        {% endif %}
+
+        <p>
+            O arquivo <strong>{{ arquivo.nome_original }}</strong> possui
+            processamento de OCR vinculado. Ao apagá-lo, também serão removidos:
+        </p>
+
+        <ul>
+            {% for item in jobs %}
+                <li>
+                    <strong>1 processamento de OCR</strong> —
+                    {{ item.paginas }} página{{ item.paginas|pluralize }}
+                    ({{ item.confirmadas }} confirmada{{ item.confirmadas|pluralize }}),
+                    {{ item.extracoes }} extraç{{ item.extracoes|pluralize:"ão,ões" }} de campos
+                </li>
+            {% endfor %}
+        </ul>
+
+        {% if total_confirmadas > 0 %}
+            <p class="alert alert-danger">
+                O texto confirmado deste arquivo será perdido. Esta ação não pode ser desfeita.
+            </p>
+        {% else %}
+            <p class="alert alert-warning">
+                O processamento de OCR deste arquivo será removido. Esta ação não pode ser desfeita.
+            </p>
+        {% endif %}
+
+        <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+            <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}"
+               class="btn btn-secondary">Cancelar</a>
+            <form method="post"
+                  action="{% url 'excluir_documento_digital' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.id %}"
+                  style="display: inline;">
+                {% csrf_token %}
+                <input type="hidden" name="confirmar_ocr" value="1">
+                <input type="hidden" name="assinatura" value="{{ assinatura }}">
+                <button type="submit" class="btn btn-danger">Apagar arquivo e OCR</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
