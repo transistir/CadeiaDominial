@@ -587,7 +587,15 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         return JsonResponse({'erro': exc.code or 'estado_invalido'}, status=409)
     except TransicaoConcorrente:
         return JsonResponse({'erro': 'transicao_concorrente'}, status=409)
-    return JsonResponse({'ok': True, 'versao': versao})
+    return JsonResponse({
+        'ok': True,
+        'versao': versao,
+        # Só chave/motivo: a tela reabilita o finalizar sem expor dados da revisão.
+        'pendencias': [
+            {'chave': item['chave'], 'motivo': item['motivo']}
+            for item in revisao.pendencias(_salva)
+        ],
+    })
 
 
 @_respostas_json_ocr

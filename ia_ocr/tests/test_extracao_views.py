@@ -190,13 +190,76 @@ class ExtracaoViewsTest(TelaTextoBase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(resposta.json(), {
-            'ok': True, 'versao': services.versao_bloco(extracao),
+            'ok': True,
+            'versao': services.versao_bloco(extracao),
+            'pendencias': [
+                {'chave': item['chave'], 'motivo': item['motivo']}
+                for item in revisao.pendencias(extracao)
+            ],
         })
         self.assertNotEqual(resposta.json()['versao'], versao)
         campo = extracao.campos.get(chave='/document/data')
         self.assertEqual(campo.valor_final, '2020-01-11')
         self.assertEqual(campo.revisado_por, self.dono)
         self.assertIsNotNone(campo.revisado_em)
+
+    def test_salvar_devolve_pendencias_restantes(self):
+        extracao = self._extracao()
+        antes = revisao.pendencias(extracao)
+        self.assertTrue(antes)
+
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': '/document/numero', 'incluir': True, 'conferido': True,
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        devolvidas = resposta.json()['pendencias']
+        self.assertEqual(
+            devolvidas,
+            [
+                {'chave': item['chave'], 'motivo': item['motivo']}
+                for item in revisao.pendencias(extracao)
+            ],
+        )
+        self.assertTrue(devolvidas)
+        self.assertIn(antes[0]['chave'], [item['chave'] for item in devolvidas])
+
+    def test_salvar_ultima_pendencia_devolve_lista_vazia(self):
+        extracao = self._extracao()
+
+        def decisao_da(chave):
+            campo = extracao.campos.get(chave=chave)
+            decisao = {'incluir': True, 'conferido': True}
+            if campo.tipo_valor in ('cartorio', 'parte'):
+                decisao['escolha'] = {'criar_novo': True}
+            return decisao
+
+        # Resolve tudo menos uma pendência pelo serviço; só a última passa
+        # pela view, que é quem devolve o estado restante para a tela.
+        restantes = revisao.pendencias(extracao)
+        for _ in range(extracao.campos.count()):
+            if len(restantes) <= 1:
+                break
+            chave = restantes[0]['chave']
+            services.salvar_bloco(
+                extracao, {chave: decisao_da(chave)},
+                self.dono, services.versao_bloco(extracao),
+            )
+            restantes = revisao.pendencias(extracao)
+        self.assertEqual(len(restantes), 1)
+
+        ultima = restantes[0]['chave']
+        resposta = self._post_json('salvar_bloco_ocr', {
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{'chave': ultima, **decisao_da(ultima)}],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(resposta.json()['pendencias'], [])
+        self.assertEqual(revisao.pendencias(extracao), [])
 
     def test_salvar_bloco_conflito_409_com_chaves(self):
         extracao = self._extracao()

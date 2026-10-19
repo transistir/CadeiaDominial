@@ -14,7 +14,7 @@
         <div class="imovel-info">
             <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
             <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
-            <div data-ocr-contador><strong>{{ pendencias|length }}</strong> pendência{{ pendencias|length|pluralize }} · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
+            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias|length }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias|length|pluralize }}</span> · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
         </div>
     </div>
 

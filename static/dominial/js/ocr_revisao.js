@@ -5,9 +5,11 @@
  * Cada alteração num card (valor, incluir, conferido, escolha de cadastro,
  * conversão de área) agenda, com debounce de 300 ms, um POST só daquele card
  * para url_salvar. Os POSTs saem em fila, um por vez, cada um com a versão
- * devolvida pelo anterior. 200 atualiza a versão; 409 recarrega a página (outra aba
- * ou usuário mudou a revisão); 422 mostra o erro no próprio card. O finalizar
- * também vai em JSON, porque o endpoint não aceita formulário.
+ * devolvida pelo anterior. 200 atualiza a versão e o contador/botão de
+ * pendências; 409 recarrega a página (outra aba ou usuário mudou a revisão);
+ * 422 mostra o erro no próprio card. Cards cujo último envio falhou ficam
+ * registrados e são reenviados antes de finalizar. O finalizar também vai em
+ * JSON, porque o endpoint não aceita formulário.
  *
  * Teclado (fora de campos de texto): j/k próximo/anterior, x alterna incluir.
  * Enter num input marca o card como conferido e avança.
@@ -42,6 +44,8 @@
         var fila = Promise.resolve();
         var emFila = 0;
         var recarregando = false;
+        // Último envio de cada card falhou: finalizar não pode ignorá-los.
+        var falhas = new Set();
 
         function rotular(card) {
             var rotulo = card.querySelector('[data-campo-rotulo]');
@@ -70,6 +74,28 @@
         function marcarEstado(card, texto) {
             var estado = card.querySelector('[data-campo-estado]');
             if (estado) estado.textContent = texto;
+        }
+
+        function atualizarPendencias(pendencias) {
+            var total = pendencias.length;
+            var contador = raiz.querySelector('[data-ocr-contador-pendencias]');
+            var rotulo = raiz.querySelector('[data-ocr-contador-pendencias-texto]');
+            var botao = form && form.querySelector('[data-ocr-finalizar]');
+            if (contador) contador.textContent = String(total);
+            if (rotulo) rotulo.textContent = total === 1 ? 'pendência' : 'pendências';
+            if (botao) {
+                var somenteLeitura = !!raiz.querySelector('[data-ocr-somente-leitura]');
+                if (!total && !somenteLeitura) {
+                    botao.disabled = false;
+                    botao.removeAttribute('title');
+                } else {
+                    botao.disabled = true;
+                    botao.title = somenteLeitura
+                        ? 'Esta extração já foi revisada.'
+                        : 'Resolva as pendências antes de finalizar.';
+                }
+            }
+            if (msgFinalizar) msgFinalizar.textContent = '';
         }
 
         function decisao(card) {
@@ -133,22 +159,30 @@
             }).then(function (resposta) {
                 return resposta.json().catch(function () { return {}; }).then(function (dados) {
                     if (resposta.status === 200) {
+                        falhas.delete(card);
                         definirVersao(dados.versao);
                         card.classList.remove('alterado');
                         card.classList.add('salvo');
                         mostrarErro(card, '');
                         marcarEstado(card, 'Salvo');
+                        if (Array.isArray(dados.pendencias)) {
+                            atualizarPendencias(dados.pendencias);
+                        }
                     } else if (resposta.status === 409) {
+                        falhas.add(card);
                         recarregar();
                     } else if (resposta.status === 422) {
+                        falhas.add(card);
                         marcarEstado(card, '');
                         mostrarErro(card, MENSAGENS_ERRO[dados.erro] || 'Não foi possível salvar este campo.');
                     } else {
+                        falhas.add(card);
                         marcarEstado(card, '');
                         mostrarErro(card, 'Erro ao salvar (HTTP ' + resposta.status + ').');
                     }
                 });
             }).catch(function () {
+                falhas.add(card);
                 marcarEstado(card, '');
                 mostrarErro(card, 'Sem conexão com o servidor. Tente de novo.');
             });
@@ -239,38 +273,62 @@
             }
         });
 
+        function reenviarFalhas() {
+            var pendentes = Array.from(falhas);
+            var ultima = Promise.resolve();
+            pendentes.forEach(function (card) { ultima = salvar(card); });
+            return ultima;
+        }
+
+        function finalizar(botao) {
+            if (timers.size || emFila) {
+                msgFinalizar.textContent = 'Aguarde o salvamento dos campos alterados.';
+                return;
+            }
+            // Save que falhou não pode ser perdido na finalização: reenvia
+            // todos antes e só segue quando o registro de falhas esvaziar.
+            if (falhas.size) {
+                msgFinalizar.textContent = 'Há campos com erro de salvamento. Reenviando…';
+                reenviarFalhas().then(function () {
+                    if (!falhas.size) {
+                        finalizar(botao);
+                    } else {
+                        msgFinalizar.textContent = 'Ainda há campos com erro de salvamento. Corrija-os e tente de novo.';
+                    }
+                });
+                return;
+            }
+            if (botao) botao.disabled = true;
+            fetch(form.action, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ versao: versaoAtual })
+            }).then(function (resposta) {
+                return resposta.json().catch(function () { return {}; }).then(function (dados) {
+                    if (resposta.status === 200 && dados.redirect) {
+                        window.location.assign(dados.redirect);
+                    } else if (resposta.status === 409) {
+                        recarregar();
+                    } else {
+                        if (botao) botao.disabled = false;
+                        msgFinalizar.textContent = dados.erro === 'revisao_incompleta'
+                            ? 'Ainda há pendências. Atualize a página para vê-las.'
+                            : 'Não foi possível finalizar a revisão.';
+                    }
+                });
+            }).catch(function () {
+                if (botao) botao.disabled = false;
+                msgFinalizar.textContent = 'Sem conexão com o servidor. Tente de novo.';
+            });
+        }
+
         if (form) {
             form.addEventListener('submit', function (evento) {
                 evento.preventDefault();
                 var botao = form.querySelector('[data-ocr-finalizar]');
                 if (botao && botao.disabled) return;
-                if (timers.size || emFila) {
-                    msgFinalizar.textContent = 'Aguarde o salvamento dos campos alterados.';
-                    return;
-                }
-                if (botao) botao.disabled = true;
-                fetch(form.action, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                    body: JSON.stringify({ versao: versaoAtual })
-                }).then(function (resposta) {
-                    return resposta.json().catch(function () { return {}; }).then(function (dados) {
-                        if (resposta.status === 200 && dados.redirect) {
-                            window.location.assign(dados.redirect);
-                        } else if (resposta.status === 409) {
-                            recarregar();
-                        } else {
-                            if (botao) botao.disabled = false;
-                            msgFinalizar.textContent = dados.erro === 'revisao_incompleta'
-                                ? 'Ainda há pendências. Atualize a página para vê-las.'
-                                : 'Não foi possível finalizar a revisão.';
-                        }
-                    });
-                }).catch(function () {
-                    if (botao) botao.disabled = false;
-                    msgFinalizar.textContent = 'Sem conexão com o servidor. Tente de novo.';
-                });
+                finalizar(botao);
             });
         }
     }
