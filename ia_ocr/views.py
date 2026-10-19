@@ -401,7 +401,9 @@ def _mascarar_cpf(cpf):
 
 _CPF = re.compile(r'\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}\b')
 _RG = re.compile(r'\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx]\b')
-_RG_CURTO = re.compile(r'(?<![\d.,-])\d{6,9}(?!\d|[.,-]\d)')
+_RG_ROTULO = re.compile(
+    r'(?i)(\bR\.?G\.?(?:\s*n[º°o.]?)?\s*[:\-]?\s*)[\d.\-/]{5,13}[\dXx]'
+)
 
 
 def _mascarar_evidencia(trecho):
@@ -410,7 +412,7 @@ def _mascarar_evidencia(trecho):
         return trecho
     mascarado = _CPF.sub('***', trecho)
     mascarado = _RG.sub('***', mascarado)
-    return _RG_CURTO.sub('***', mascarado)
+    return _RG_ROTULO.sub(r'\1***', mascarado)
 
 
 def _mascarar_rg(rg):

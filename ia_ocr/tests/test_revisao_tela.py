@@ -496,16 +496,56 @@ class RevisaoTelaTest(TelaTextoBase):
             'Transmitente: JOÃO DA SILVA (CPF 123.456.789-00).',
         )
 
-    def test_mascara_sequencias_longas_e_preserva_texto_sem_documento(self):
+    CASOS_MASCARADOS = (
+        ('RG 123456', 'RG ***'),
+        ('RG 123456,', 'RG ***,'),
+        ('RG 1234567.', 'RG ***.'),
+        ('RG 1.234.567', 'RG ***'),
+        ('RG 12.345.678', 'RG ***'),
+        ('RG 12.345.678-9', 'RG ***'),
+        ('R.G. 12.345.678-9', 'R.G. ***'),
+        ('RG nº 1.234.567', 'RG nº ***'),
+        ('CPF 123.456.789-00', 'CPF ***'),
+        ('CPF 123 456 789 00', 'CPF ***'),
+        ('CPF 12345678900', 'CPF ***'),
+    )
+
+    CASOS_INTACTOS = (
+        'MATRÍCULA Nº 142718 FICHA 01',
+        'matrícula 123456',
+        'com 123456 apenas',
+        'R$ 1500000',
+        'R$ 1.500.000,00',
+        '1500000,00',
+        '250000 m²',
+        'CNS 123456789012345',
+        '10/01/2020',
+        '2020-01-10',
+        '0001234-56.2020.8.16.0001',
+    )
+
+    def test_mascara_cpf_e_rg_sem_apagar_seis_digitos(self):
         mascarar = views._mascarar_evidencia
         self.assertEqual(
             mascarar('CPF 123.456.789-00 e RG 12.345.678-9'),
             'CPF *** e RG ***',
         )
         self.assertEqual(
-            mascarar('Trecho sem documento, com 123456 apenas.'),
-            'Trecho sem documento, com *** apenas.',
+            mascarar('Trecho sem documento, com 123456 apenas'),
+            'Trecho sem documento, com 123456 apenas',
         )
+
+    def test_mascara_rg_pelo_rotulo(self):
+        mascarar = views._mascarar_evidencia
+        for trecho, esperado in self.CASOS_MASCARADOS:
+            with self.subTest(trecho=trecho):
+                self.assertEqual(mascarar(trecho), esperado)
+
+    def test_mascara_preserva_numeros_sem_rotulo(self):
+        mascarar = views._mascarar_evidencia
+        for trecho in self.CASOS_INTACTOS:
+            with self.subTest(trecho=trecho):
+                self.assertEqual(mascarar(trecho), trecho)
 
     def test_mascara_preserva_data_iso_valor_cns_e_processo(self):
         mascarar = views._mascarar_evidencia
@@ -519,7 +559,7 @@ class RevisaoTelaTest(TelaTextoBase):
         mascarar = views._mascarar_evidencia
         self.assertEqual(
             mascarar('CPF 12345678900 e RG 1234567-X, matrícula 123456.'),
-            'CPF *** e RG ***, matrícula ***.',
+            'CPF *** e RG ***, matrícula 123456.',
         )
 
     def test_mascara_rg_seguido_de_pontuacao(self):
@@ -556,6 +596,57 @@ class RevisaoTelaTest(TelaTextoBase):
             'CNS 123456789012345.'
         )
         self.assertEqual(mascarar(trecho), trecho)
+
+    def _titulos_da_evidencia(self, campo, trecho):
+        CampoSugerido.objects.filter(pk=campo.pk).update(
+            evidencia_trecho=trecho, evidencia_pagina=1,
+        )
+        html = self._tela().content.decode()
+        trechos = _elementos(
+            html, 'span', presentes=('title',),
+            valores={'class': 'campo-trecho'},
+        )
+        return [_atributos(span)['title'] for span in trechos]
+
+    def test_tela_mascara_title_dos_casos_com_rotulo(self):
+        extracao = self._extracao()
+        campo = extracao.campos.get(chave='/document/numero')
+        for trecho, esperado in self.CASOS_MASCARADOS:
+            with self.subTest(trecho=trecho):
+                self.assertIn(
+                    esperado, self._titulos_da_evidencia(campo, trecho),
+                )
+
+    def test_tela_preserva_title_dos_casos_sem_rotulo(self):
+        extracao = self._extracao()
+        campo = extracao.campos.get(chave='/document/numero')
+        for trecho in self.CASOS_INTACTOS:
+            with self.subTest(trecho=trecho):
+                self.assertIn(
+                    trecho, self._titulos_da_evidencia(campo, trecho),
+                )
+
+    def test_evidencia_mascarada_nao_altera_valor_do_campo(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        chave = '/acts/0/partes/0/documento_identificacao/valor'
+        campo = extracao.campos.get(chave=chave)
+        CampoSugerido.objects.filter(pk=campo.pk).update(
+            evidencia_trecho='CPF 123.456.789-00', evidencia_pagina=1,
+        )
+
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertEqual(self._valor_do_card(html, chave), '12345678900')
+        campo.refresh_from_db()
+        self.assertEqual(campo.normalized, '12345678900')
+        trechos = _elementos(
+            html, 'span', presentes=('title',),
+            valores={'class': 'campo-trecho'},
+        )
+        self.assertIn(
+            'CPF ***', [_atributos(trecho)['title'] for trecho in trechos],
+        )
 
     def test_valor_transacao_opcional_vazio_salva_e_finaliza(self):
         extracao = self._extracao(
