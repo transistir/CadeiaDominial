@@ -99,7 +99,9 @@ class ExtracaoFixtureMixin:
 class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
     def test_estados_recusados(self):
         for status, _rotulo in estados.STATUS_CHOICES:
-            if status in {estados.CONCLUIDO, estados.EXTRAIDO}:
+            if status in {
+                estados.CONCLUIDO, estados.TEXTO_CONFIRMADO, estados.EXTRAIDO,
+            }:
                 continue
             with self.subTest(status=status):
                 # O objeto do chamador permanece concluido: vale o estado do banco.
@@ -184,6 +186,7 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
 
         self.extrair.assert_called_once_with({
             'schema_version': SCHEMA_VERSION,
+            'job_id': str(self.job.job_id),
             'tipo_documento': 'transcricao',
             'paginas': [
                 {'pagina': p.numero_pagina, 'texto': p.texto_ocr}
@@ -196,6 +199,31 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
                 'blocos': [{'pagina': 1, 'blocks': pagina.blocos}],
             },
         })
+
+    def test_requisicao_inclui_job_id(self):
+        extracao = services.solicitar_extracao(self.job, self.usuario)
+
+        requisicao = self.extrair.call_args.args[0]
+        self.assertEqual(requisicao['job_id'], str(self.job.job_id))
+        # O mesmo job_id ecoado em `meta` é aceito e a extração é persistida.
+        self.assertEqual(
+            self.envelope['extracao']['meta']['job_id'], str(self.job.job_id),
+        )
+        self.assertEqual(extracao.ocr_job, self.job)
+        self.assertTrue(self.job.extracoes.filter(pk=extracao.pk).exists())
+
+    def test_job_em_texto_confirmado_pode_extrair(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.TEXTO_CONFIRMADO)
+
+        extracao = services.solicitar_extracao(self.job, self.usuario)
+
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.EXTRAIDO)
+        self.assertEqual(self.job.extracao_vigente(), extracao)
+        transicao = self.job.transicoes.get()
+        self.assertEqual(transicao.de_status, estados.TEXTO_CONFIRMADO)
+        self.assertEqual(transicao.para_status, estados.EXTRAIDO)
+        self.assertReservaLimpa()
 
     def test_requisicao_sem_blocos_usa_dpi_padrao(self):
         services.solicitar_extracao(self.job, self.usuario)

@@ -359,7 +359,9 @@ def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerid
 
 
 def _validar_solicitacao_extracao(job, extracao_id):
-    if job.status not in {estados.CONCLUIDO, estados.EXTRAIDO}:
+    if job.status not in {
+        estados.CONCLUIDO, estados.TEXTO_CONFIRMADO, estados.EXTRAIDO,
+    }:
         raise ExtracaoRecusada('estado_invalido')
     vigente = job.extracao_vigente()
     vigente_id = vigente.pk if vigente is not None else None
@@ -434,6 +436,7 @@ def solicitar_extracao(job, usuario, extracao_id=None) -> ExtracaoSugerida:
                 contexto['blocos'] = blocos
             requisicao = {
                 'schema_version': 'umbelino-extracao-matricula-v1',
+                'job_id': str(travado.job_id),
                 'tipo_documento': documento.tipo.tipo,
                 'paginas': [
                     {'pagina': pagina.numero_pagina, 'texto': pagina.texto_ocr}
@@ -488,7 +491,7 @@ def solicitar_extracao(job, usuario, extracao_id=None) -> ExtracaoSugerida:
             travado.extracao_reserva = None
             travado.extracao_reservada_ate = None
             travado.save(update_fields=['dpi', 'extracao_reserva', 'extracao_reservada_ate'])
-            if status_inicial == estados.CONCLUIDO:
+            if status_inicial in {estados.CONCLUIDO, estados.TEXTO_CONFIRMADO}:
                 travado.transicionar(estados.EXTRAIDO, usuario=usuario)
     except Exception as erro:
         # Atomic separado: um rollback da F3 não deve restaurar a reserva.
