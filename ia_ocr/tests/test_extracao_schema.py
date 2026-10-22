@@ -9,12 +9,21 @@ normalized=NULL + requer_revisao na desnormalização, não rejeição).
 import hashlib
 import json
 import logging
+import shutil
+import tempfile
+from pathlib import Path
 
 from django.test import SimpleTestCase
 
 from jsonschema import Draft202012Validator
 
-from ia_ocr.extracao_schema import SCHEMA_PATH, PayloadExtracaoInvalido, validar_payload
+from ia_ocr import extracao_schema
+from ia_ocr.extracao_schema import (
+    SCHEMA_PATH,
+    SCHEMA_VERSION,
+    PayloadExtracaoInvalido,
+    validar_payload,
+)
 
 
 def campo(normalized=None, raw=None, confianca=0.9, evidencia=None):
@@ -54,7 +63,7 @@ def ato(ordem=1, partes=0):
 def payload_minimo(job_id='11111111-1111-1111-1111-111111111111', paginas=(1,)):
     """Payload que satisfaz o A3 por inteiro (âncora dos testes)."""
     return {
-        'schema_version': 'umbelino-extracao-matricula-v1',
+        'schema_version': SCHEMA_VERSION,
         'document': {
             'tipo': campo('matricula'),
             'numero': campo(
@@ -79,8 +88,55 @@ class SchemaVendorizado(SimpleTestCase):
         sha256 = hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest()
         self.assertEqual(
             sha256,
-            'ea1e1397f7a2d3e77ad0223748c0dc0218b9b6e9c5c19d581d4910da48206c5a',
+            'ae296837b964f180c8f80ac1a77815a43ff05eca52b6f3586a237129b9b2caff',
         )
+
+    def test_versao_unica_derivada_do_vendorizado(self):
+        """SCHEMA_VERSION é a fonte única da versão: o nome do arquivo e o
+        $id/const do vendorizado derivam dela — e a requisição (services)
+        envia essa mesma constante."""
+        schema = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
+        self.assertEqual(SCHEMA_VERSION, 'umbelino-extracao-matricula-v1.1')
+        self.assertEqual(SCHEMA_PATH.name, f'{SCHEMA_VERSION}.json')
+        self.assertEqual(schema['$id'], SCHEMA_VERSION)
+        self.assertEqual(
+            schema['properties']['schema_version']['const'], SCHEMA_VERSION,
+        )
+
+    def test_versao_deriva_do_const_do_vendorizado(self):
+        """Derivação de verdade: numa cópia do contrato com o `const` da
+        versão seguinte (v1.2), a versão derivada segue o JSON — nenhum
+        literal de versão na mão no módulo."""
+        with tempfile.TemporaryDirectory() as tmp:
+            diretorio = Path(tmp)
+            const_seguinte = 'umbelino-extracao-matricula-v1.2'
+            schema = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
+            schema['$id'] = const_seguinte
+            schema['properties']['schema_version']['const'] = const_seguinte
+            (diretorio / f'{const_seguinte}.json').write_text(
+                json.dumps(schema), encoding='utf-8'
+            )
+
+            caminho, carregado = extracao_schema._carregar_contrato(diretorio)
+
+            self.assertEqual(caminho.name, f'{const_seguinte}.json')
+            self.assertEqual(
+                extracao_schema._versao_do_schema(carregado), const_seguinte
+            )
+
+    def test_carregar_contrato_exige_arquivo_unico(self):
+        """Dois contratos vendorizados juntos é troca mal feita (o antigo
+        não saiu no PR) → erro, em vez de validar contra o errado."""
+        with tempfile.TemporaryDirectory() as tmp:
+            diretorio = Path(tmp)
+            shutil.copy(SCHEMA_PATH, diretorio / SCHEMA_PATH.name)
+            shutil.copy(
+                SCHEMA_PATH,
+                diretorio / 'umbelino-extracao-matricula-v1.2.json',
+            )
+
+            with self.assertRaises(FileNotFoundError):
+                extracao_schema._carregar_contrato(diretorio)
 
     def test_schema_e_2020_12_valido(self):
         """O JSON vendorizado é um schema Draft 2020-12 válido."""
@@ -183,6 +239,33 @@ class ValidarPayload(SimpleTestCase):
                 payload['document']['data'] = campo(normalized, raw=normalized)
 
                 validar_payload(payload, self.JOB_ID, (1,))  # não levanta
+
+    def test_evidencia_aceita_bbox_opcional(self):
+        """A3 v1.1: evidence aceita bbox [x0, y0, x1, y1] em pixels do OCR
+        (opcional, array de 4 números) sem rejeitar o payload."""
+        payload = payload_minimo()
+        payload['document']['numero']['evidencia'] = {
+            'pagina': 1,
+            'trecho': 'matrícula nº 42.718',
+            'bbox': [10.0, 20.0, 30.0, 40.0],
+        }
+
+        validar_payload(payload, self.JOB_ID, (1,))  # não levanta
+
+    def test_evidencia_continua_exigindo_trecho(self):
+        """A3 v1.1: bbox NÃO substitui o trecho — evidence sem `trecho`
+        continua rejeitada (required de #/$defs/evidence)."""
+        payload = payload_minimo()
+        payload['document']['numero']['evidencia'] = {
+            'pagina': 1,
+            'bbox': [10.0, 20.0, 30.0, 40.0],
+        }
+
+        with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+            validar_payload(payload, self.JOB_ID, (1,))
+
+        self.assertEqual(ctx.exception.codigo, 'schema_violado')
+        self.assertEqual(ctx.exception.caminho, '$.document.numero.evidencia')
 
     def test_rejeita_meta_data_invalida(self):
         """texto_confirmado_em é o único lugar com formato estrito."""

@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from dominial.models import Cartorios, Documento, Lancamento, LancamentoPessoa, Pessoas
 from ia_ocr import estados, services
+from ia_ocr.backends import OcrServiceBackend
 from ia_ocr.extracao_backends import ExtracaoBackendError, ResultadoExtracao
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import pendencias
@@ -176,10 +177,10 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
         documento = self.job.documento_digital.documento
         documento.tipo.tipo = 'transcricao'
         documento.tipo.save(update_fields=['tipo'])
-        self.job.dpi = 240
+        self.job.dpi = 300
         self.job.save(update_fields=['dpi'])
         pagina = self.job.paginas.get(numero_pagina=1)
-        pagina.blocos = [{'text': 'Texto sintético', 'bbox': [10, 20, 30, 40]}]
+        pagina.blocos = self._blocos_do_adaptador(pagina)
         pagina.texto_corrigido = 'Correção anterior que não deve ser enviada.'
         pagina.texto_confirmado = 'Confirmação legada que não deve ser enviada.'
         pagina.save(update_fields=['blocos', 'texto_corrigido', 'texto_confirmado'])
@@ -197,10 +198,54 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
             'contexto': {
                 'cartorio': documento.cartorio.nome,
                 'municipio': 'Guaíra',
-                'dpi': 240,
-                'blocos': [{'pagina': 1, 'blocks': pagina.blocos}],
+                'dpi': 300,
+                'blocos': [
+                    {
+                        'pagina': 1,
+                        # O combinado na #290 é a LISTA de blocos — o
+                        # envelope interno {'dpi', 'width_px', 'height_px',
+                        # 'blocos'} do adaptador não atravessa a requisição.
+                        'blocks': [{'text': 'Texto sintético', 'bbox': [10, 20, 30, 40]}],
+                    },
+                ],
             },
         })
+
+    @staticmethod
+    def _blocos_do_adaptador(pagina):
+        """O valor REAL de PaginaOcr.blocos: envelope montado por
+        OcrServiceBackend._montar_resultado (backends.py), não um atalho."""
+        resultado_servico = {
+            'source': {'sha256': 'a' * 64, 'page_count': 1},
+            'pages': [
+                {
+                    'page': pagina.numero_pagina,
+                    'text': pagina.texto_ocr,
+                    'width_px': 1700,
+                    'height_px': 2200,
+                    'blocks': [{'text': 'Texto sintético', 'bbox': [10, 20, 30, 40]}],
+                },
+            ],
+        }
+        resultado = OcrServiceBackend._montar_resultado(
+            None, resultado_servico, 'a' * 64, 200,
+        )
+        return list(resultado.paginas)[0]['blocos']
+
+    def test_requisicao_aceita_blocos_legados_como_lista_direta(self):
+        """Registros legados guardaram a LISTA direto em PaginaOcr.blocos,
+        sem envelope: a leitura aceita ambos os formatos."""
+        pagina = self.job.paginas.get(numero_pagina=1)
+        pagina.blocos = [{'text': 'Legado', 'bbox': [1, 2, 3, 4]}]
+        pagina.save(update_fields=['blocos'])
+
+        services.solicitar_extracao(self.job, self.usuario)
+
+        requisicao = self.extrair.call_args.args[0]
+        self.assertEqual(
+            requisicao['contexto']['blocos'],
+            [{'pagina': 1, 'blocks': [{'text': 'Legado', 'bbox': [1, 2, 3, 4]}]}],
+        )
 
     def test_requisicao_inclui_job_id(self):
         extracao = services.solicitar_extracao(self.job, self.usuario)

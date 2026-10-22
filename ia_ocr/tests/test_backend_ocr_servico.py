@@ -108,14 +108,14 @@ class OcrServiceBackendTests(TestCase):
         return [r for r in stub.recebidas if r['metodo'] == 'POST']
 
     @staticmethod
-    def _resultado_servico(job_id, sha256, *, texto='texto OCR sensivel'):
+    def _resultado_servico(job_id, sha256, *, texto='texto OCR sensivel', dpi=None):
         bloco = {
             'text': 'bloco reconhecido',
             'type': 'text',
             'bbox': [10, 20, 30, 40],
             'confidence': 0.98,
         }
-        return {
+        resultado = {
             'job_id': str(job_id),
             'model': 'PaddleOCR-VL-1.6',
             'source': {
@@ -142,6 +142,9 @@ class OcrServiceBackendTests(TestCase):
             ],
             'timings_ms': {'inference': 321, 'total': 456},
         }
+        if dpi is not None:
+            resultado['dpi'] = dpi
+        return resultado
 
     def test_ciclo_completo_retorna_paginas_geometria_metadados_sem_mudar_status(self):
         pdf = self._pdf(textos=[None, None])
@@ -1079,6 +1082,69 @@ class OcrServiceBackendTests(TestCase):
             ).count(),
             0,
         )
+
+    def test_dpi_remoto_substitui_o_solicitado_no_resultado(self):
+        """O serviço devolve o DPI que USOU (300) e o envio pediu 200: o
+        resultado carrega o DPI remoto, inclusive no envelope de blocos."""
+        pdf = self._pdf(textos=[None])
+        job = self._job(pdf, forcar_ocr=True)
+        sha256 = hashlib.sha256(pdf).hexdigest()
+        stub = self._stub(
+            [
+                (200, {'job_id': str(job.job_id), 'status': 'succeeded'}, {}),
+                (200, self._resultado_servico(job.job_id, sha256, dpi=300), {}),
+            ]
+        )
+
+        resultado = self._processar(job, stub)
+
+        self.assertEqual(resultado.dpi, 300)
+        self.assertEqual(list(resultado.paginas)[0]['blocos']['dpi'], 300)
+
+    def test_dpi_ausente_cai_no_dpi_solicitado(self):
+        """Serviço sem `dpi` no resultado (contrato antigo): o fallback é o
+        DPI solicitado no envio (OCR_DPI=200), nunca None."""
+        pdf = self._pdf(textos=[None])
+        job = self._job(pdf, forcar_ocr=True)
+        sha256 = hashlib.sha256(pdf).hexdigest()
+        stub = self._stub(
+            [
+                (200, {'job_id': str(job.job_id), 'status': 'succeeded'}, {}),
+                (200, self._resultado_servico(job.job_id, sha256), {}),
+            ]
+        )
+
+        resultado = self._processar(job, stub)
+
+        self.assertEqual(resultado.dpi, 200)
+        self.assertEqual(list(resultado.paginas)[0]['blocos']['dpi'], 200)
+
+    @override_settings(OCR_BACKEND='ia_ocr.backends.OcrServiceBackend')
+    def test_worker_persiste_dpi_remoto_no_job(self):
+        """Ponta a ponta: resposta com dpi=300 e OCR_DPI=200 → OcrJob.dpi
+        persiste 300 (o campo já existe; extração e bbox dependem dele)."""
+        pdf = self._pdf(textos=[None])
+        job = self._job_pendente(pdf, forcar_ocr=True)
+        sha256 = hashlib.sha256(pdf).hexdigest()
+        stub = self._stub(
+            [
+                (202, {'job_id': str(job.job_id), 'status': 'queued'}, {}),
+                (
+                    200,
+                    {'job_id': str(job.job_id), 'status': 'succeeded'},
+                    {},
+                ),
+                (200, self._resultado_servico(job.job_id, sha256, dpi=300), {}),
+            ]
+        )
+
+        with self.settings(OCR_SERVICE_URL=stub.base_url):
+            call_command('process_ocr_queue', '--max-jobs', '1', verbosity=0)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, estados.CONCLUIDO)
+        self.assertEqual(job.dpi, 300)
+        self.assertEqual(job.paginas.get(numero_pagina=1).blocos['dpi'], 300)
 
     @override_settings(OCR_BACKEND='ia_ocr.backends.OcrServiceBackend')
     def test_worker_ponta_a_ponta_conclui_e_persiste_paginas(self):
