@@ -17,8 +17,8 @@ from ia_ocr.ocr_client import _ClienteHttpComPrazo, OrcamentoEsgotado
 
 from .extracao_backends import ExtracaoBackendError
 
-# Extrai a partir de matrícula: um POST por matrícula — e ponto.
-CAMINHO_EXTRACAO = '/v1/extracao/matricula'
+# Contrato A3 v1.1: um POST por job em /v1/extract (commit 39161ed).
+CAMINHO_EXTRACAO = '/v1/extract'
 
 
 class ExtracaoServiceClient(_ClienteHttpComPrazo):

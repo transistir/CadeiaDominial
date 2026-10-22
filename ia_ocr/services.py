@@ -21,7 +21,7 @@ from . import estados, valores
 from .backends import OcrBackendError, ResultadoOcr
 from .estados import TransicaoConcorrente
 from .extracao_backends import ResultadoExtracao, get_extracao_backend
-from .extracao_schema import validar_payload
+from .extracao_schema import SCHEMA_VERSION, validar_payload
 from .models import (
     ORIGEM_CHOICES, CampoSugerido, ExtracaoSugerida, OcrJob, OcrJobTransicao, PaginaOcr,
     PendenciaLimpezaArquivo,
@@ -427,6 +427,20 @@ def _textos_corrigidos_extracao(envelope, numeros_paginas):
     return textos
 
 
+def _blocos_da_pagina(pagina):
+    """Lista de blocos OCR da página para o `contexto.blocos` da requisição.
+
+    O adaptador grava em PaginaOcr.blocos o envelope
+    ``{'dpi', 'width_px', 'height_px', 'blocos': [...]}`` (backends.py); o
+    combinado na #290 é enviar só a LISTA em ``blocks``. Registros legados
+    guardaram a lista direta no campo — a leitura aceita ambos.
+    """
+    envelope = pagina.blocos
+    if isinstance(envelope, dict):
+        return envelope.get('blocos')
+    return envelope
+
+
 def solicitar_extracao(job, usuario, extracao_id=None) -> ExtracaoSugerida:
     """Reserva → HTTP sem transação → persistência atômica da extração.
 
@@ -451,14 +465,17 @@ def solicitar_extracao(job, usuario, extracao_id=None) -> ExtracaoSugerida:
                 'municipio': documento.cartorio.cidade,
                 'dpi': travado.dpi or 200,
             }
-            blocos = [
-                {'pagina': pagina.numero_pagina, 'blocks': pagina.blocos}
-                for pagina in paginas if pagina.blocos is not None
-            ]
+            blocos = []
+            for pagina in paginas:
+                lista = _blocos_da_pagina(pagina)
+                if lista is not None:
+                    blocos.append(
+                        {'pagina': pagina.numero_pagina, 'blocks': lista}
+                    )
             if blocos:
                 contexto['blocos'] = blocos
             requisicao = {
-                'schema_version': 'umbelino-extracao-matricula-v1',
+                'schema_version': SCHEMA_VERSION,
                 'job_id': str(travado.job_id),
                 'tipo_documento': documento.tipo.tipo,
                 'paginas': [
@@ -916,6 +933,11 @@ def finalizar(job, resultado_ou_erro, tentativa):
                 # Sem origem no resultado: a origem definida no criar_job
                 # (ex.: texto_embutido da I-2) permanece.
                 campos['origem'] = resultado.origem
+            if type(resultado.dpi) is int and resultado.dpi > 0:
+                # DPI efetivo do OCR (o remoto, ou o solicitado como fallback):
+                # extração e conversão de bbox dependem dele. None (ex.:
+                # texto_embutido) não persiste — não houve raster.
+                campos['dpi'] = resultado.dpi
             rowcount = OcrJob.objects.filter(
                 pk=job.pk, status=estados.EM_EXECUCAO, tentativa=tentativa,
             ).update(**campos)

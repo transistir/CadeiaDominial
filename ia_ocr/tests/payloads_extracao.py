@@ -5,9 +5,11 @@ registro com closure preenchido — todos válidos contra
 ``validar_payload(payload, job_id, [1])``. Todo campo de valor carrega
 evidência cujo trecho é substring literal de ``TEXTO_PAGINA_1`` (o texto
 OCR sintético da página 1 dos testes); nada aqui vem de documento real.
+
+A versão do contrato vem de ``ia_ocr.extracao_schema`` (fonte única).
 """
 
-SCHEMA_VERSION = 'umbelino-extracao-matricula-v1'
+from ia_ocr.extracao_schema import SCHEMA_VERSION
 
 PROVIDER = 'local-model'
 MODEL = 'umbelino-extracao-v1'

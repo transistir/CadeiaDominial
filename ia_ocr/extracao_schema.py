@@ -1,7 +1,10 @@
 """Validação do payload de extração estruturada contra o schema A3.
 
 O schema em ia_ocr/schemas/ é o contrato byte a byte com o serviço de
-OCR (umbelino-extracao-matricula-v1); nunca editar à mão.
+OCR (umbelino-extracao-matricula-v1.1, commit 39161ed); nunca editar à
+mão. A versão deriva do próprio JSON vendorizado (``const`` de
+``properties.schema_version``): ``SCHEMA_VERSION`` é esse valor e é o
+que vai na requisição (services).
 
 A validação estrutural roda SEM format_checker: em campo de valor o
 `format` do A3 é anotação, não checagem — data inválida em campo de valor
@@ -16,7 +19,31 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-SCHEMA_PATH = Path(__file__).parent / 'schemas' / 'umbelino-extracao-matricula-v1.json'
+
+def _versao_do_schema(schema):
+    """Versão do contrato: o `const` de `properties.schema_version`."""
+    return schema['properties']['schema_version']['const']
+
+
+def _carregar_contrato(diretorio):
+    """Localiza e lê o contrato vendorizado (um arquivo por vez).
+
+    Dois arquivos juntos é troca mal feita (o antigo não saiu no PR):
+    erro em vez de validar contra o contrato errado.
+    """
+    arquivos = sorted(diretorio.glob('umbelino-extracao-matricula-*.json'))
+    if len(arquivos) != 1:
+        raise FileNotFoundError(
+            f'esperado 1 contrato vendorizado em {diretorio}, '
+            f'encontrei {[caminho.name for caminho in arquivos]}'
+        )
+    with open(arquivos[0], encoding='utf-8') as arquivo:
+        return arquivos[0], json.load(arquivo)
+
+
+SCHEMA_PATH, _SCHEMA = _carregar_contrato(Path(__file__).parent / 'schemas')
+SCHEMA_VERSION = _versao_do_schema(_SCHEMA)
+_VALIDADOR = Draft202012Validator(_SCHEMA)
 
 # Limites anti-lixo de contorno (I-5): uma matrícula real tem dezenas de
 # atos, meia dúzia de partes por ato e campos legíveis. Payload acima disso
@@ -55,15 +82,6 @@ def _caminho(path):
     for item in path:
         texto += f'[{item}]' if isinstance(item, int) else f'.{item}'
     return texto
-
-
-def _carregar_validador():
-    with open(SCHEMA_PATH, encoding='utf-8') as arquivo:
-        schema = json.load(arquivo)
-    return Draft202012Validator(schema)
-
-
-_VALIDADOR = _carregar_validador()
 
 
 def _erro_estrutural_para_excecao(erro):

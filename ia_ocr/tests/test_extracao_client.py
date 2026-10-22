@@ -32,6 +32,15 @@ class ContratoBaseClienteHttpTests(SimpleTestCase):
         self.assertFalse(hasattr(_ClienteHttpComPrazo, 'MAX_BYTES_RESPOSTA'))
 
 
+class CaminhoExtracaoTests(SimpleTestCase):
+    def test_caminho_fixado_em_v1_extract(self):
+        """Contrato A3 v1.1 (commit 39161ed do serviço de OCR): o POST de
+        extração vai em /v1/extract — e não no caminho antigo por matrícula."""
+        from ia_ocr.extracao_client import CAMINHO_EXTRACAO
+
+        self.assertEqual(CAMINHO_EXTRACAO, '/v1/extract')
+
+
 class _RespostaFechavel:
     """Resposta falsa de sessão intermediária que conta os closes."""
 

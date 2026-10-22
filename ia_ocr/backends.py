@@ -58,6 +58,10 @@ class ResultadoOcr:
     # None (default) preserva a origem definida no criar_job (ex.:
     # texto_embutido da I-2); só um valor explícito do resultado sobrescreve.
     origem: str | None = None
+    # DPI efetivo do raster: o que o serviço declarou ter usado, ou o DPI
+    # solicitado quando o resultado não o traz. None só no texto_embutido
+    # (não houve raster) — aí o job não tem DPI a persistir.
+    dpi: int | None = None
 
 
 class OcrBackendError(Exception):
@@ -237,8 +241,24 @@ class OcrServiceBackend(OcrBackend):
             if status_resultado == 'failed':
                 self._levantar_falha_do_estado(resultado)
             return self._montar_resultado(
-                job, resultado, sha256_pdf, settings.OCR_DPI
+                job,
+                resultado,
+                sha256_pdf,
+                self._dpi_efetivo(resultado, settings.OCR_DPI),
             )
+
+    @staticmethod
+    def _dpi_efetivo(resultado, dpi_solicitado):
+        """O DPI que o serviço DECLAROU usar; ausente/inválido → o solicitado.
+
+        O envio pede ``settings.OCR_DPI``, mas o serviço pode rasterizar em
+        outro DPI — e bbox pixel→PDF só converge com o DPI real. `bool` é
+        int em Python: não vale como DPI.
+        """
+        remoto = resultado.get('dpi') if isinstance(resultado, dict) else None
+        if type(remoto) is int and remoto > 0:
+            return remoto
+        return dpi_solicitado
 
     @staticmethod
     def _job_id_servico(job):
@@ -345,6 +365,7 @@ class OcrServiceBackend(OcrBackend):
             page_count=page_count,
             timings_ms=timings_ms,
             origem='ocr',
+            dpi=dpi,
         )
 
 
