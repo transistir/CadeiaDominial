@@ -20,6 +20,10 @@
 > Produto 3 contra o contrato FADESP 019/2026
 > (`docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md`), que também delimita o
 > escopo (só código Django/D3 — fora: FUNAPE Fase 3, React Flow/v2 e Produto 4).
+> **Enfileiramento 19/10/2026 (autorizado pelo Hiure):** **#297** entra no
+> **R4 item 11** — exibir "Anexar Arquivo" em documento importado e gravar o
+> arquivo no documento do **imóvel de origem** (mesmo padrão de redirect do
+> `novo_lancamento`; um único `DocumentoDigital`, compartilhado pelas cadeias).
 > **Registro 16/10/2026 (decisão do Hiure no grupo Transistir_CadDomDev,
 > opção (a) do status da fila):** a **Fase 3 (contrato FUNAPE — IA/OCR)** ganha
 > seção própria neste roadmap (**F3**) como **trilha paralela** — é outro
@@ -486,6 +490,15 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
     **registro/averbação** — origem obrigatória só no início de matrícula.
     Ajuste de usabilidade do formulário de lançamento, mesma área do #271.
     **Enfileirada 14/10 (Hiure).**
+11. **#297** 🐛 UX (relato 19/10): página de documento importado esconde o
+    botão **📎 Anexar Arquivo** — `{% if not is_importado %}` em
+    `templates/dominial/documento_detalhado.html:251`. Correção mínima:
+    exibir o botão e redirecionar o upload para o documento do **imóvel de
+    origem**, reaproveitando o padrão de `novo_lancamento`
+    (`lancamento_views.py:438-453`). O arquivo é gravado uma única vez no
+    `DocumentoDigital` do documento original e fica visível em todas as
+    cadeias que o exibem. Preservar a segregação do #132 (documento de outro
+    usuário/TIS continua 404). **Enfileirada 19/10 (Hiure).**
 
 ## R5 — Constraint de identidade + fantasmas fase final (~0,5–1 semana)
 
