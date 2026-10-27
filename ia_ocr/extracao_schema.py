@@ -15,6 +15,7 @@ formato só existe em ``meta``.
 
 import datetime
 import json
+import uuid
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -146,8 +147,9 @@ def validar_payload(payload, job_id, paginas):
 
     - Estrutura: Draft 2020-12 (additionalProperties, required, enums e
       confiança 0–1) SEM format_checker (ver docstring do módulo).
-    - ``meta`` estrita: job_id do job, páginas dentro do job, provider ≤ 100
-      e ``texto_confirmado_em`` como date-time de verdade.
+    - ``meta`` estrita: job_id do job ou UUID próprio do serviço, páginas
+      dentro do job, provider ≤ 100 e ``texto_confirmado_em`` como date-time
+      de verdade.
     - Contagem: atos ≤ 300, partes por ato ≤ 40, cada `ordem` única e
       volume total ≤ 10 000 objetos/10 000 chars por string.
 
@@ -162,7 +164,11 @@ def validar_payload(payload, job_id, paginas):
 
     meta = payload.get('meta', {})
     if meta.get('job_id') != str(job_id):
-        raise PayloadExtracaoInvalido('job_id_divergente', '$.meta.job_id')
+        # O ocrcadeia gera um ID próprio; preservar o valor para rastreabilidade.
+        try:
+            uuid.UUID(meta['job_id'])
+        except ValueError:
+            raise PayloadExtracaoInvalido('job_id_invalido', '$.meta.job_id') from None
     fora_do_job = set(meta.get('pages_used') or []) - set(paginas)
     if fora_do_job:
         raise PayloadExtracaoInvalido('pagina_fora_do_job', '$.meta.pages_used')

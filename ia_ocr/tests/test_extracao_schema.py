@@ -24,6 +24,7 @@ from ia_ocr.extracao_schema import (
     PayloadExtracaoInvalido,
     validar_payload,
 )
+from .payloads_extracao import payload_registro
 
 
 def campo(normalized=None, raw=None, confianca=0.9, evidencia=None):
@@ -148,6 +149,22 @@ class SchemaVendorizado(SimpleTestCase):
 class ValidarPayload(SimpleTestCase):
     JOB_ID = '11111111-1111-1111-1111-111111111111'
 
+    def test_aceita_job_id_uuid_divergente_do_servico(self):
+        """O ocrcadeia gera um UUID próprio a cada chamada de extração."""
+        job_id = '4883db41-773e-4b54-9fdc-55ce8f525e05'
+        for id_servico in (
+            '15987107-0672-4d05-a5d6-675aaaf1419c',
+            'b747b7f1-5abf-4dd4-82ba-6464135f1fff',
+        ):
+            with self.subTest(id_servico=id_servico):
+                payload = payload_registro(id_servico)
+                payload['meta']['provider'] = 'workers-ai'
+                payload['meta']['pages_used'] = [1, 2]
+
+                validar_payload(payload, job_id, (1, 2))
+
+                self.assertEqual(payload['meta']['job_id'], id_servico)
+
     def test_rejeita_propriedade_extra(self):
         """Raiz com propriedade fora do A3 → código + caminho, sem valor."""
         payload = payload_minimo()
@@ -196,15 +213,44 @@ class ValidarPayload(SimpleTestCase):
         self.assertEqual(ctx.exception.codigo, 'valor_fora_do_enum')
         self.assertEqual(ctx.exception.caminho, '$.document.tipo.normalized')
 
-    def test_rejeita_job_id_alheio(self):
-        """meta.job_id que não é o do job em validação → rejeita."""
-        payload = payload_minimo(job_id='22222222-2222-2222-2222-222222222222')
+    def test_rejeita_job_id_divergente_nao_uuid(self):
+        """ID diferente do job precisa ser um UUID do serviço."""
+        for id_servico in ('outro-job', '', '15987107-0672-4d05-a5d6-675aaaf1419z'):
+            with self.subTest(id_servico=id_servico):
+                payload = payload_minimo(job_id=id_servico)
 
+                with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+                    validar_payload(payload, self.JOB_ID, (1,))
+
+                self.assertEqual(ctx.exception.codigo, 'job_id_invalido')
+                self.assertEqual(ctx.exception.caminho, '$.meta.job_id')
+                self.assertEqual(str(ctx.exception), 'job_id_invalido ($.meta.job_id)')
+
+    def test_job_id_continua_obrigatorio_e_string(self):
+        for valor in (None, 123, [], {}):
+            with self.subTest(valor=valor):
+                payload = payload_minimo(job_id=valor)
+                with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+                    validar_payload(payload, self.JOB_ID, (1,))
+                self.assertEqual(ctx.exception.codigo, 'schema_violado')
+                self.assertEqual(ctx.exception.caminho, '$.meta.job_id')
+
+        payload = payload_minimo()
+        del payload['meta']['job_id']
         with self.assertRaises(PayloadExtracaoInvalido) as ctx:
             validar_payload(payload, self.JOB_ID, (1,))
+        self.assertEqual(ctx.exception.codigo, 'schema_violado')
+        self.assertEqual(ctx.exception.caminho, '$.meta')
 
-        self.assertEqual(ctx.exception.codigo, 'job_id_divergente')
-        self.assertEqual(ctx.exception.caminho, '$.meta.job_id')
+    def test_uuid_divergente_nao_permite_pagina_fora_do_job(self):
+        payload = payload_registro('15987107-0672-4d05-a5d6-675aaaf1419c')
+        payload['meta']['pages_used'] = [1, 7]
+
+        with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+            validar_payload(payload, self.JOB_ID, (1, 2))
+
+        self.assertEqual(ctx.exception.codigo, 'pagina_fora_do_job')
+        self.assertEqual(ctx.exception.caminho, '$.meta.pages_used')
 
     def test_rejeita_pages_used_inexistente(self):
         """pages_used citando página que não pertence ao job → rejeita."""
