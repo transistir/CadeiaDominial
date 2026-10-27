@@ -154,6 +154,27 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
         self.assertEqual(transicao.usuario, self.usuario)
         self.extrair.assert_called_once()
 
+    def test_uuid_do_servico_preservado_e_vinculado_ao_job_do_app(self):
+        id_servico = '15987107-0672-4d05-a5d6-675aaaf1419c'
+        self.assertNotEqual(id_servico, str(self.job.job_id))
+        self.envelope['extracao']['meta'].update(
+            job_id=id_servico, provider='workers-ai', pages_used=[1, 2],
+        )
+        self.envelope['dpi'] = 200
+        original = copy.deepcopy(self.envelope['extracao'])
+
+        extracao = services.solicitar_extracao(self.job, self.usuario)
+
+        extracao.refresh_from_db()
+        self.job.refresh_from_db()
+        self.assertEqual(extracao.payload_servico, original)
+        self.assertEqual(extracao.ocr_job, self.job)
+        self.assertEqual(self.extrair.call_args.args[0]['job_id'], str(self.job.job_id))
+        self.assertEqual(self.job.status, estados.EXTRAIDO)
+        self.assertEqual(self.job.dpi, 200)
+        self.assertTrue(extracao.campos.exists())
+        self.assertReservaLimpa()
+
     def test_grava_texto_corrigido_e_dpi(self):
         originais = list(self.job.paginas.values_list('texto_ocr', flat=True))
         antes = timezone.now()
@@ -437,7 +458,7 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
         self.assertFalse(self.job.paginas.filter(corrigido_em__isnull=False).exists())
 
     def test_payload_invalido_limpa_reserva_sem_gravar(self):
-        self.envelope['extracao']['meta']['job_id'] = str(uuid.uuid4())
+        self.envelope['extracao']['meta']['job_id'] = 'id-invalido-do-servico'
 
         with self.assertRaises(services.ExtracaoIndisponivel):
             services.solicitar_extracao(self.job, self.usuario)
