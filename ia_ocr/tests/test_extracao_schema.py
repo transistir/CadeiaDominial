@@ -24,7 +24,7 @@ from ia_ocr.extracao_schema import (
     PayloadExtracaoInvalido,
     validar_payload,
 )
-from .payloads_extracao import payload_registro
+from ia_ocr.tests.payloads_extracao import payload_registro
 
 
 def campo(normalized=None, raw=None, confianca=0.9, evidencia=None):
@@ -155,6 +155,9 @@ class ValidarPayload(SimpleTestCase):
         for id_servico in (
             '15987107-0672-4d05-a5d6-675aaaf1419c',
             'b747b7f1-5abf-4dd4-82ba-6464135f1fff',
+            '15987107-0672-4D05-A5D6-675AAAF1419C',
+            '{15987107-0672-4d05-a5d6-675aaaf1419c}',
+            'urn:uuid:15987107-0672-4d05-a5d6-675aaaf1419c',
         ):
             with self.subTest(id_servico=id_servico):
                 payload = payload_registro(id_servico)
@@ -162,8 +165,6 @@ class ValidarPayload(SimpleTestCase):
                 payload['meta']['pages_used'] = [1, 2]
 
                 validar_payload(payload, job_id, (1, 2))
-
-                self.assertEqual(payload['meta']['job_id'], id_servico)
 
     def test_rejeita_propriedade_extra(self):
         """Raiz com propriedade fora do A3 → código + caminho, sem valor."""

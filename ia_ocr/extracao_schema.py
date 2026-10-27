@@ -147,9 +147,9 @@ def validar_payload(payload, job_id, paginas):
 
     - Estrutura: Draft 2020-12 (additionalProperties, required, enums e
       confiança 0–1) SEM format_checker (ver docstring do módulo).
-    - ``meta`` estrita: job_id do job ou UUID próprio do serviço, páginas
-      dentro do job, provider ≤ 100 e ``texto_confirmado_em`` como date-time
-      de verdade.
+    - ``meta`` estrita: job_id do job ou UUID válido (qualquer forma aceita
+      por ``uuid.UUID``) do serviço, páginas dentro do job, provider ≤ 100 e
+      ``texto_confirmado_em`` como date-time de verdade.
     - Contagem: atos ≤ 300, partes por ato ≤ 40, cada `ordem` única e
       volume total ≤ 10 000 objetos/10 000 chars por string.
 
@@ -167,7 +167,7 @@ def validar_payload(payload, job_id, paginas):
         # O ocrcadeia gera um ID próprio; preservar o valor para rastreabilidade.
         try:
             uuid.UUID(meta['job_id'])
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             raise PayloadExtracaoInvalido('job_id_invalido', '$.meta.job_id') from None
     fora_do_job = set(meta.get('pages_used') or []) - set(paginas)
     if fora_do_job:
