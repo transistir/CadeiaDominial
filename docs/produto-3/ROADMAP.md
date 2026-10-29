@@ -24,6 +24,16 @@
 > **R4 item 11** — exibir "Anexar Arquivo" em documento importado e gravar o
 > arquivo no documento do **imóvel de origem** (mesmo padrão de redirect do
 > `novo_lancamento`; um único `DocumentoDigital`, compartilhado pelas cadeias).
+> **Replanejamento 29/10/2026 (Hiure — issue #307):** a sprint da F3 é
+> reorganizada. A **#307** (UX/robustez do OCR no teste ponta a ponta:
+> expectativa de tempo, progresso quando `pages_done=0`, backoff do polling
+> e confirmação de que o worker roda no servidor de testes) entra na seção
+> **F3** como **I-9** e é executada **antes do I-6**, porque sem ela o teste
+> ponta a ponta não é confiável — worker frio leva até ~12 min sem sinal na
+> tela e 15 s de rede instável já viram "falha" na UI. Ordem da sprint:
+> **I-9 (#307) → I-6 (#263) → I-7 (#264) → I-8 (#265)**. Esta entrada
+> também corrige o estado do bloco: **I-3 (#279), I-4 (#288) e I-5 (#291)
+> já estão em develop** — a seção F3 ainda dizia "I-3 em validação" (16/10).
 > **Registro 16/10/2026 (decisão do Hiure no grupo Transistir_CadDomDev,
 > opção (a) do status da fila):** a **Fase 3 (contrato FUNAPE — IA/OCR)** ganha
 > seção própria neste roadmap (**F3**) como **trilha paralela** — é outro
@@ -79,6 +89,9 @@ via PRD** (tabela × exportações); #206 (origens homônimas) a revalidar. Veja
 
 **Fila Django (snapshot 02/10/2026): 59 issues abertas no GitHub — 46
 Django** (excluídos #1 guarda-chuva e #61–#72 v2 fora de escopo).
+**Atualização 29/10/2026:** 87 issues abertas — 21 com label `fase3-ia-ocr`
+(trilha F3) e 12 com label `v2` (fora de escopo). O snapshot de 02/10 fica
+como histórico.
 - Cinco pendências de implementação que estavam fora dos blocos numerados
   foram incorporadas na reordenação 23/09: **#218, #219, #212** (R3), **#206**
   (R3.5), **#215** (R4).
@@ -743,13 +756,31 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > outro contrato"). O plano geral da trilha (5 produtos, 5 etapas) é mantido no
 > diretório de trabalho do contrato FUNAPE, **fora deste repositório** (não
 > versionado aqui) — **prazo final 31/10/2026**; o acompanhamento dentro deste
-> repo é pelas issues da série `fase3-ia-ocr` (#258–#265) e por esta seção.
+> repo é pelas issues da série `fase3-ia-ocr` (#258–#265 + #307) e por esta seção.
 > Entregues: **Produto 1** (arquitetura/UX + contrato OpenAPI + schema de
 > extração, aceite 06/10/2026) e **Produto 2** (serviço OCR auto-hospedado em
 > homologação — evidência de aceite na #277, 16/10/2026, `ocr-teste.transistir.com`).
 > **Decisão de fila 16/10/2026 (Hiure, opção (a)):** terminar **I-3 → I-8** e
 > só depois retomar o **R4**. Ao fechar o bloco, o R4 volta a ser o próximo
 > item executável deste roadmap.
+>
+> **Replanejamento da sprint — 29/10/2026 (Hiure, issue #307):** a ordem de
+> execução passa a ser **I-9 (#307) → I-6 (#263) → I-7 (#264) → I-8 (#265)**.
+> Motivo: o aceite do Produto 3 é o fluxo funcionando no servidor de testes
+> (#290) e a UI atual não sustenta esse teste — sem mensagem de expectativa,
+> progresso preso em "0 de N" e falha declarada após 15 s de instabilidade.
+> A **#307 é correção de app, fora dos 5 produtos do contrato**, e entra como
+> **I-9**; a numeração I-1…I-8 dos produtos FUNAPE não muda.
+> **Risco de prazo registrado:** o contrato vence **31/10/2026** e o restante
+> (I-9 + I-6 + I-7 + I-8) soma **2,5–4 dias de agente**. **Decisão do Hiure em
+> 29/10: entregar I-9 + I-6 até 31/10 e deslizar I-7/I-8** para depois do
+> prazo (com o escopo mínimo já anotado nos itens 8 e 9).
+
+**Estado real do bloco (verificado 29/10/2026 em `origin/develop`):** I-1
+(#274), I-2 (#275/#276), I-3 (#279), I-4 (#288) e I-5 (#291) estão mergeados;
+também em develop os fixes #280 (#286), #299 (#302), #282 (#303), #304 PR1
+(#305) e #300 (#306). As issues #258–#262 seguem **abertas de propósito** —
+fecham na validação do bloco, não no merge.
 
 1. **I-1 ✅** #258 — app `ia_ocr` (models `OcrJob`/`PaginaOcr`/`ExtracaoSugerida`/
    `CampoSugerido`, máquina de estados, fila Postgres `SKIP LOCKED`).
@@ -758,24 +789,51 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    real, atalho de texto embutido, reprocessamento). PRs #275 (squash
    `9538da46`) e #276 (`e8ba4f19`, compose com o serviço
    `cadeia_dominial_ocr_worker`), mergeados 15–16/10.
-3. **I-3 🟡 EM VALIDAÇÃO** #260 — UI passo 1: card "Extrair texto com IA" na página
+3. **I-3 ✅** #260 — UI passo 1: card "Extrair texto com IA" na página
    `upload-digital` + status do job (badge/polling), ações por estado
    (reprocessar / revisar texto) e 1 job ativo por `DocumentoDigital`.
-   **PR #279 aberto** (base `develop`, head `2f92e722`) — Greptile 4/5 com 2 P2
-   não-bloqueantes, ambos fechados no head atual (guarda de duplo clique no
-   disparo/retry + extração do JS para `static/dominial/js/ocr_card.js` com teste
-   em Node e mutation check). Suíte: 524 testes OK.
-4. **I-4** #261 — UI passo 2: tela de confirmação do texto OCR (PDF × texto
-   editável, diff, confirmação por página com auditoria).
-5. **I-5** #262 — extração estruturada por schema + tela de revisão de campos
+   **PR #279 mergeado 19/10** (squash `1b865f8b`); os 2 P3 da review fechados
+   no PR #285 (`dc96e432`).
+4. **I-4 ✅** #261 — UI passo 2: tela de confirmação do texto OCR (PDF × texto
+   editável, diff, confirmação por página com auditoria). **PR #288 mergeado
+   19/10** (squash `e33cf95a`); CTA evidente e remoção do PDF embutido no PR
+   #302 (`39b4bca3`, #299). **Ressalva de fluxo (#290):** o aceite do Produto 3
+   **não** passa pela confirmação manual do texto — o usuário revisa os campos
+   já estruturados (I-5); a tela da I-4 fica como caminho de correção manual.
+5. **I-5 ✅** #262 — extração estruturada por schema + tela de revisão de campos
    (lançamento pré-preenchido, evidência clicável, confiança) — Produto 3 do
-   contrato FUNAPE.
-6. **I-6** #263 — importação assistida: gravação transacional de
+   contrato FUNAPE. **PR #291 mergeado 19/10** (squash `127daf2c`); contrato
+   A3 v1.1 integrado no PR #305 (`8743eee4`, #304 PR1) e `job_id` próprio do
+   ocrcadeia aceito no PR #306 (`a0fce77f`, #300). Débitos de review no #296.
+6. **I-9 🆕 P1 — PRÓXIMO** #307 — UX/robustez do OCR no teste ponta a ponta
+   (correção de app, não é produto do contrato):
+   (a) mensagem de expectativa + tempo decorrido no card durante `processando`
+   (`templates/dominial/upload_documento_digital.html`,
+   `static/dominial/js/ocr_card.js`);
+   (b) com `pages_done == 0` e `processando`, mostrar "processando… (Xs)" em vez
+   de "0 de N" (dependência externa: `transistir/ocr-service#29`);
+   (c) polling com backoff 3 s → 5 s → 10 s e "reconectando…"; falha só com
+   resposta explícita do backend (aposenta `MAX_FALHAS_SEGUIDAS = 5`);
+   (d) worker no test server: **verificado 29/10** — container
+   `cadeia_dominial_ocr_worker` up há 2 dias, `OCR_BACKEND=OcrServiceBackend`,
+   `OCR_SERVICE_URL=https://ocr-teste.transistir.com`,
+   `OCR_QUEUE_INTERVAL_SECONDS=30`; banco de teste com 3 jobs `concluido`
+   (19/10) + 1 `extraido` (27/10), nenhum `pendente`/`erro`. Expor no
+   healthcheck fica **opcional**.
+   Estimativa ~0,5 dia; teste em Node (`ia_ocr/tests/js/ocr_card.test.js`).
+7. **I-6** #263 — importação assistida: gravação transacional de
    Lançamento/Pessoas com prevenção de duplicidade e vínculo ao PDF — Produto 4.
-7. **I-7** #264 — admin de acompanhamento dos processamentos + logs de
-   auditoria mínimos (sem PII), exportáveis.
-8. **I-8** #265 — regressão dos fluxos existentes + smoke ponta a ponta com
-   stubs — núcleo do Produto 5 (testes/documentação/entrega).
+   **Absorve o item 1 do #296** (limites contextuais: RG → `Pessoas.rg` 20,
+   CPF → 11, cartório → `Cartorios.nome` 200) — hoje uma sugestão longa passa
+   na revisão e só quebra aqui.
+8. **I-7 ⏭ DESLIZADO (pós-31/10)** #264 — admin de acompanhamento dos
+   processamentos + logs de auditoria mínimos (sem PII), exportáveis. **Escopo
+   mínimo quando entrar:** listagem/estado dos jobs + auditoria sem PII; o
+   exportável pode deslizar. #282 já resolvido no PR #303.
+9. **I-8 ⏭ DESLIZADO (pós-31/10)** #265 — regressão dos fluxos existentes +
+   smoke ponta a ponta com stubs — núcleo do Produto 5 (testes/documentação/
+   entrega). Roda **depois do I-9**, cujo "como validar" (#307) é o roteiro do
+   teste manual no test server.
 
 > **Achados da validação do I-3 no ambiente dev (16/10/2026 — Hiure):**
 > - **#280 (bug, afeta prod):** PDF com criptografia AES morre em `INVALID_PDF` porque
@@ -798,8 +856,29 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > `issue-260-ia-ocr-ui1`, porta 8020, banco `cd_test_201_db`, migração `ia_ocr.0004`
 > aplicada), substituindo o `cd-test-210` (mergeado na v1.0.11).
 
-> **Pendência de housekeeping:** as issues **#258 (I-1)** e **#259 (I-2)**
-> seguem ABERTAS apesar dos PRs mergeados — fechar **na validação do bloco**
+> **Achados de 29/10/2026 (issue #307 — levantamento do serviço OCR):**
+> - Backend de qualidade (PaddleOCR-VL-1.6 em GPU): documento real de 2 páginas
+>   leva **84 s com worker quente** e **até ~12 min com worker frio**; o CPU
+>   antigo fazia ~99 s nas mesmas 2 páginas. `OCR_JOB_TIMEOUT_SECONDS=3600`
+>   (`env.example:43`) já cobre — o problema é **percepção**, não limite.
+> - O serviço devolve **sempre `pages_done=0`** (`transistir/ocr-service#29`),
+>   então a tela fica "0 de N páginas" por minutos sem sinal de avanço.
+> - `static/dominial/js/ocr_card.js:9-10`: `INTERVALO_MS=3000` ×
+>   `MAX_FALHAS_SEGUIDAS=5` → **15 s** de rede instável viram "falha" na tela,
+>   mesmo com o job seguindo no servidor.
+> - Worker no test server **está ativo** (ver I-9 item d) — não é a causa de
+>   "fila eterna" neste ambiente; segue como checagem de pré-teste.
+
+> **Débitos abertos da F3 (não bloqueiam I-9/I-6):** #296 itens 2–3 (reload de
+> linhas novas; pendências recalculadas fora do lock), #294 (diff por palavras
+> ainda cúbico), #295 (`jsonschema` no venv), #292/#293 (runner de testes no
+> Python 3.13 / suíte legada), #289 (concorrência só em Postgres), #287 (except
+> amplo no decrypt), #281 (extrair depois do upload), #283 (estado do OCR fora
+> da `upload-digital`). **#290** é tracking do prazo do aceite — fechar na
+> validação do bloco.
+
+> **Pendência de housekeeping:** as issues **#258–#262 (I-1…I-5)** seguem
+> ABERTAS apesar dos PRs mergeados — fechar **na validação do bloco**
 > (padrão do #132, que fechou na tag), não no merge. Nada a fazer agora.
 
 ---
@@ -888,6 +967,13 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > Hiure, 16/10, opção (a)); as datas do R4 em diante devem ser replanejadas
 > nesse momento — R4 estimado em 1–1,5 sprint → **v1.2.0**.
 
+> **Atualizado 29/10 (replanejamento da sprint F3 — issue #307):** a sprint
+> corrente passa a ser **I-9 (#307) → I-6 (#263) → I-7 (#264) → I-8 (#265)**.
+> O prazo do contrato (**31/10/2026**) fica em risco: o restante soma 2,5–4
+> dias de agente. **Decisão do Hiure em 29/10: entregar I-9 + I-6 até 31/10 e
+> deslizar I-7/I-8** (escopo mínimo anotado na seção F3). Nada muda no
+> Produto 3: o **R4** continua sendo o próximo bloco depois de fechar a F3.
+
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
                  milestone seguem no housekeeping) + R2 #13/#179 XLS consolidado ✅
@@ -929,6 +1015,18 @@ do Django estabilizar. #1 segue aberta como guarda-chuva. **Fase 3 (FUNAPE)
 não é escopo do Produto 3/FADESP (decisão do Hiure, 14/10).
 
 ---
+
+*Última atualização: 29/10/2026 — **replanejamento da sprint F3 (issue #307).**
+A #307 (UX/robustez do OCR no teste ponta a ponta: expectativa de tempo,
+progresso com `pages_done=0`, backoff do polling e checagem do worker) entra
+como **I-9** e passa na frente do I-6: ordem da sprint **I-9 → I-6 → I-7 →
+I-8**. Estado do bloco corrigido contra `origin/develop`: I-3 (#279), I-4
+(#288) e I-5 (#291) já mergeados, além dos fixes #280/#282/#299/#300/#304.
+Medições do serviço OCR registradas (84 s quente, até ~12 min frio; CPU antigo
+~99 s) e worker do test server confirmado ativo em 29/10. **Prazo:** contrato
+vence 31/10 e o restante soma 2,5–4 dias — **decisão do Hiure em 29/10:
+entregar I-9 + I-6 até 31/10 e deslizar I-7/I-8**. A sequência do Produto 3
+(R4 → R5 → R6 → R7 → R8 → R10) **não muda**; o R4 começa ao fechar a F3.*
 
 *Última atualização: 16/10/2026 — **Fase 3 (contrato FUNAPE) registrada como
 trilha paralela — nova seção F3.** Motivo: o roadmap dizia "próximo = R4"
