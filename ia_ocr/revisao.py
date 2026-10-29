@@ -101,6 +101,9 @@ class ParteRevisada:
     rg: str | None
     pessoa_id: int | None
     criar_novo: bool
+    # Chave da linha estrutural da parte (``/acts/N/partes/M``): a importação
+    # usa para ancorar erros por campo e vínculos de auditoria.
+    chave: str | None = None
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,9 @@ class AtoRevisado:
     partes: tuple[ParteRevisada, ...]
     cartorio_origem_nome: str | None = None
     cartorio_transmissao_nome: str | None = None
+    # Chave da linha estrutural do ato (``/acts/N``): a importação usa para
+    # responder os atos marcados no POST e vincular a auditoria.
+    chave: str | None = None
 
 
 @dataclass(frozen=True)
@@ -259,6 +265,7 @@ def dados_revisados(extracao) -> DadosRevisados:
                 ),
                 pessoa_id=parte.pessoa_escolhida_id,
                 criar_novo=parte.criar_novo,
+                chave=parte.chave,
             ))
 
         revisado = AtoRevisado(
@@ -288,6 +295,7 @@ def dados_revisados(extracao) -> DadosRevisados:
             partes=tuple(partes),
             cartorio_origem_nome=valor(f'{chave}/origem/cartorio'),
             cartorio_transmissao_nome=valor(f'{chave}/cartorio_transmissao'),
+            chave=chave,
         )
         revisados.append((revisado.ordem, indice, revisado))
 

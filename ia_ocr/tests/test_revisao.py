@@ -967,12 +967,16 @@ class DadosRevisadosTest(TestCase):
         self.assertEqual(ato.partes, (
             ParteRevisada(
                 'transmitente', 'JOÃO DA SILVA', '12345678900', None,
-                self.pessoa.pk, False,
+                self.pessoa.pk, False, chave='/acts/0/partes/0',
             ),
             ParteRevisada(
                 'transmitente', 'MARIA DA SILVA', None, 'RG-123', None, True,
+                chave='/acts/0/partes/1',
             ),
-            ParteRevisada('adquirente', 'PEDRO SANTOS', None, None, None, True),
+            ParteRevisada(
+                'adquirente', 'PEDRO SANTOS', None, None, None, True,
+                chave='/acts/0/partes/2',
+            ),
         ))
 
     def test_dados_revisados_recusa_job_nao_revisado(self):
