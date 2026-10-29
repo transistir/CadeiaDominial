@@ -61,7 +61,7 @@
                  data-status-com-texto="{{ status_com_texto_json }}"
                  data-status-revisaveis="{{ status_revisaveis_json }}"
                  data-criar-url="{% url 'criar_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk %}"
-                 {% if job %}data-status-url="{% url 'status_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk job_id=job.job_id %}" data-ocr-status="{{ job.status }}"{% endif %}>
+                 {% if job %}data-status-url="{% url 'status_job_ocr' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id arquivo_id=arquivo.pk job_id=job.job_id %}" data-ocr-status="{{ job.status }}" data-ocr-criado-em="{{ job.criado_em.isoformat }}"{% endif %}>
                 <div class="d-flex justify-content-between align-items-start gap-2">
                     <div>
                         <strong>{{ arquivo.nome_original }}</strong>
@@ -73,6 +73,10 @@
                     <span class="badge bg-light text-dark" data-ocr-badge role="status" aria-live="polite">OCR não iniciado</span>
                     {% endif %}
                 </div>
+                {# R1/#307: expectativa de demora + tempo decorrido (preenchido pelo JS). Nasce vazia — o texto é da constante do JS, para não divergir. Fora de aria-live: o contador mudaria a cada segundo; o badge continua sendo o anúncio acessível de estado. #}
+                <small class="text-muted d-block mt-1" data-ocr-expectativa hidden></small>
+                {# R3/#307 (rodada 2): "Reconectando…" é região viva própria, sempre no DOM, vazia — o estado é o texto, não o hidden (que leitores de tela não anunciam de forma confiável). #}
+                <small class="text-muted d-block mt-1" data-ocr-reconectando role="status" aria-live="polite"></small>
                 <small class="text-danger d-block mt-1" data-ocr-erro role="status" aria-live="polite"{% if not job or job.status != 'falhou' %} hidden{% endif %}>{% if job and job.status == 'falhou' %}{{ job.erro_mensagem|default:job.erro_codigo }}{% endif %}</small>
                 <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
                     <button type="button" class="btn btn-primary btn-sm" data-ocr-disparo{% if not job %}{% elif job.status in status_ativos %} disabled{% else %} hidden{% endif %}><span aria-hidden="true">▶</span> Extrair texto com IA</button>
