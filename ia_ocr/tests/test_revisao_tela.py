@@ -479,6 +479,56 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertEqual(salvar.json()['erro'], 'valor_invalido')
         self.assertEqual(salvar.json()['chave'], '/document/cartorio')
 
+    @staticmethod
+    def _campo_sintetico(valor):
+        return {
+            'raw': valor, 'normalized': valor, 'confianca': 0.95,
+            'requer_revisao': False, 'evidencia': None,
+        }
+
+    def _extracao_com_rg_longo(self, comprimento):
+        """OCR sugere documento de identificação RG acima do limite da parte."""
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['partes'][2]['documento_identificacao'] = {
+            'tipo': self._campo_sintetico('RG'),
+            'valor': self._campo_sintetico('x' * comprimento),
+        }
+        return self._extracao(payload, resolver=True)
+
+    def test_rg_acima_de_20_e_422_no_save_com_a_chave(self):
+        chave = '/acts/0/partes/2/documento_identificacao/valor'
+        self._extracao_com_rg_longo(21)
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{'chave': chave, 'incluir': True,
+                              'conferido': True}],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'valor_invalido')
+        self.assertEqual(salvar.json()['chave'], chave)
+
+    def test_rg_acima_de_20_bloqueia_a_finalizacao(self):
+        chave = '/acts/0/partes/2/documento_identificacao/valor'
+        self._extracao_com_rg_longo(21)
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(finalizar.status_code, 422, finalizar.content)
+        self.assertIn({
+            'chave': chave, 'motivo': 'valor_acima_do_limite_destino',
+            'bloqueante': True,
+        }, finalizar.json()['pendencias'])
+
     def test_evidencia_mascara_documentos_com_7_ou_mais_digitos(self):
         payload = payload_averbacao(self.job.job_id)
         payload['document']['numero']['evidencia'] = {

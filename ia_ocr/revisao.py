@@ -193,10 +193,7 @@ def dados_revisados(extracao) -> DadosRevisados:
     destinos_linhas = {}
     conferencia = {}
     for chave, campo in linhas.items():
-        contexto = [_valor_efetivo(campo)]
-        if chave.endswith('/documento_identificacao/valor'):
-            contexto.insert(0, valor(chave.rsplit('/', 1)[0] + '/tipo'))
-        destino = destinos.destino_de(chave, *contexto)
+        destino = _destino_da_linha(chave, linhas)
         destinos_linhas[chave] = destino
         if destino == destinos.SEM_DESTINO:
             conferencia[chave] = _valor_efetivo(campo)
@@ -451,6 +448,36 @@ def _valor_efetivo(campo):
     return campo.valor_final if campo.valor_final is not None else campo.normalized
 
 
+def _destino_da_linha(chave, linhas):
+    """Destino da linha com os valores efetivos de contexto (§2.A, #296).
+
+    A linha de ``documento_identificacao/valor`` só conhece o alvo
+    (``Pessoas.rg`` 20 / ``Pessoas.cpf`` 11) com o ``tipo`` efetivo da mesma
+    parte; sem ele cai no limite genérico do ``SEM_DESTINO`` e a revisão
+    finaliza com valor que a importação (I-6) não consegue gravar.
+    """
+    campo = linhas.get(chave)
+    contexto = [None] if campo is None else [_valor_efetivo(campo)]
+    if chave.endswith('/documento_identificacao/valor'):
+        tipo = linhas.get(chave.rsplit('/', 1)[0] + '/tipo')
+        contexto.insert(0, _valor_efetivo(tipo) if tipo is not None else None)
+    return destinos.destino_de(chave, *contexto)
+
+
+def _valor_para_limite(destino, valor_efetivo):
+    """CPF conta apenas os dígitos contra o ``max_length=11`` (#296 item 1).
+
+    A importação grava os dígitos; validar o texto mascarado
+    (``123.456.789-00``, 14 caracteres) bloquearia um CPF válido à toa.
+    """
+    if (
+        destino.campo_modelo == 'dominial.Pessoas.cpf'
+        and isinstance(valor_efetivo, str)
+    ):
+        return _so_digitos(valor_efetivo)
+    return valor_efetivo
+
+
 def identidade_parte(chave, linhas):
     """Identidade revisada usada para invalidar a escolha de cadastro da parte."""
     identidade = []
@@ -624,14 +651,14 @@ def pendencias(extracao) -> list[dict]:
             and not campo.area_convertida
         ):
             adicionar(campo.chave, MOTIVO_UNIDADE_AREA)
-        destino = destinos.destino_de(campo.chave)
+        destino = _destino_da_linha(campo.chave, linhas)
         valor_efetivo = _valor_efetivo(campo)
         motivo = valores.validar_destino(destino, valor_efetivo)
         if motivo:
             adicionar(campo.chave, motivo)
         else:
             motivo_limite = valores.validar_limites(
-                destino, valor_efetivo, campo,
+                destino, _valor_para_limite(destino, valor_efetivo), campo,
             )
             if motivo_limite:
                 adicionar(campo.chave, motivo_limite)
