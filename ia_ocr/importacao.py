@@ -19,16 +19,17 @@ Decisões de gravação (brief #263):
   ou por nome canônico + RG; sem CPF nem RG, cada ato grava o seu).
 - **cartório** (E): ``criar novo`` busca ``nome__iexact`` e cria apenas
   quando não acha (mesma regra do fluxo manual,
-  ``lancamento_campos_service``).
+  ``lancamento_campos_service``); a criação é serializada pelo nome, com
+  as travas tomadas de uma vez e em ordem global (rodadas 4 e 5).
 - **origem**: o texto do lançamento é o prefixo canônico (M/T) + número
   normalizado; a ``LancamentoOrigem`` e o documento de origem vêm do
   ``LancamentoOrigemService`` com o mapeamento do "POST corrente" definido
   na instância — nunca do sinal ``post_save`` (que engole exceções).
 """
 
+import hashlib
 import re
 import uuid
-from contextlib import contextmanager
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
@@ -107,7 +108,9 @@ def importar(extracao, usuario, versao, atos):
     """Grava os atos marcados da revisão finalizada e devolve a resposta.
 
     Ordem das travas (a mesma da exclusão do PDF, para não deadlockar):
-    ``DocumentoDigital`` → job → extração → ``Documento``. Job ``importado``
+    ``DocumentoDigital`` → job → extração → ``Documento`` — e, por último,
+    os nomes de cartório a criar, todos antes do primeiro ato e em ordem
+    global (``_travar_cartorios_a_criar``, #263 rodada 5). Job ``importado``
     devolve o resultado gravado (idempotência); qualquer outro estado que
     não ``revisado`` recusa. A revisão é revalidada ANTES do token: o
     cadastro escolhido que some (FK ``SET_NULL``) muda a linha e envelhece
@@ -144,6 +147,9 @@ def importar(extracao, usuario, versao, atos):
             .select_for_update(of=('self',))
             .get(pk=job.documento_digital.documento_id)
         )
+        # Nomes de cartório: travados aqui, todos e em ordem global, antes
+        # do primeiro ato (#263 rodada 5).
+        nomes_travados = _travar_cartorios_a_criar(dados, marcados)
         imovel = documento.imovel
         linhas = _linhas_por_chave(extracao)
         # Chave de identificação ('cpf', digitos) / ('rg', nome, rg) → pessoa.
@@ -174,7 +180,7 @@ def importar(extracao, usuario, versao, atos):
                     resposta, erros = _importar_ato(
                         ato, documento, imovel, usuario, job, linhas,
                         cache_pessoas, documentos_usuario,
-                        lancamentos_importados,
+                        lancamentos_importados, nomes_travados,
                     )
                     if erros.itens:
                         raise _AtoInvalido(erros)
@@ -247,6 +253,7 @@ def resumo(extracao):
 def _importar_ato(
     ato, documento, imovel, usuario, job, linhas,
     cache_pessoas, documentos_usuario, lancamentos_importados,
+    nomes_travados,
 ):
     """Grava um ato (lançamento + origem + partes) e devolve a linha resposta.
 
@@ -254,7 +261,8 @@ def _importar_ato(
     ``_AtoInvalido`` DENTRO do savepoint, que desfaz na hora o que este ato
     criou (lançamento parcial, cartórios, pessoas, documento de origem).
     ``lancamentos_importados`` são os gravados pelos atos anteriores desta
-    importação (duplicata contra eles é interna, sem ``existente``).
+    importação (duplicata contra eles é interna, sem ``existente``);
+    ``nomes_travados``, os nomes de cartório que o ``importar`` já travou.
     """
     chave = ato.chave
     erros = _Erros(chave)
@@ -296,7 +304,7 @@ def _importar_ato(
     cartorio_transmissao = _resolver_cartorio(
         ato.cartorio_transmissao_id, ato.cartorio_transmissao_criar_novo,
         ato.cartorio_transmissao_nome,
-        f'{chave}/cartorio_transmissao', criados_cartorios,
+        f'{chave}/cartorio_transmissao', criados_cartorios, nomes_travados,
     )
     if cartorio_transmissao is None and ato.cartorio_transmissao_id is not None:
         # Escolha da revisão que sumiu entre a leitura e a gravação: o ato
@@ -322,7 +330,7 @@ def _importar_ato(
         cartorio_origem = _resolver_cartorio(
             origem.get('cartorio_id'), origem.get('cartorio_criar_novo'),
             origem.get('cartorio_nome'), f'{chave}/origem/cartorio',
-            criados_cartorios,
+            criados_cartorios, nomes_travados,
         )
         if cartorio_origem is None:
             if origem.get('cartorio_id') is not None:
@@ -586,7 +594,72 @@ def _resolver_pessoa(parte, cache_pessoas, erros):
     return pessoa, criada
 
 
-@contextmanager
+def _nome_da_trava(nome):
+    """Nome do cartório como a trava o compara: sem bordas e sem caixa."""
+    return (nome or '').strip().casefold()
+
+
+def _chave_da_trava(nome):
+    """Id ``bigint`` da trava do nome — e a ordem global das travas.
+
+    Calculado aqui, não com ``hashtext`` no SQL: a ordem tem que ser a do
+    id TRAVADO. Ordenar pelos nomes e travar o hash deles deixaria dois
+    nomes de hash colidente inverterem a sequência entre duas importações
+    (o ABBA de volta). 63 bits do blake2b: estável entre processos (o
+    ``hash()`` do Python não é) e nunca negativo no ``bigint``.
+    """
+    digest = hashlib.blake2b(
+        _nome_da_trava(nome).encode('utf-8'), digest_size=8,
+    ).digest()
+    return int.from_bytes(digest, 'big') >> 1
+
+
+def _travar_cartorios_a_criar(dados, marcados):
+    """Trava de uma vez, em ordem global, os nomes que a importação pode criar.
+
+    Travar no uso, na ordem dos atos, fechava ABBA entre importações em
+    documentos distintos (#263 rodada 5, Greptile P1): X travava ``A``
+    (transmissão) e depois ``B`` (origem), Y travava ``B`` e depois ``A``
+    — o Postgres abortava uma delas com 500. Em ordem crescente do id e
+    antes do primeiro ato (nada gravado ainda), duas importações disputam
+    os nomes na MESMA sequência: uma espera a outra, nunca fecha ciclo.
+
+    Os pedidos espelham as duas chamadas do ``_resolver_cartorio`` no
+    ``_importar_ato`` — transmissão e, havendo origem, o cartório dela —
+    com a mesma regra: "criar novo" com nome não vazio. Cartório escolhido
+    pelo id nunca trava. Nome já cadastrado trava também, por escolha: o
+    conjunto vem do payload, não da tabela — consultá-la antes abriria a
+    janela do nome que some e o mandaria para uma trava fora de ordem. Ato
+    que vai parar antes do cartório (tipo inexistente, duplicata) entra
+    mesmo assim: travar a mais só serializa, a menos reabriria o ABBA.
+
+    Devolve os nomes travados, normalizados: ``_resolver_cartorio`` não os
+    trava de novo.
+    """
+    nomes = set()
+    for ato in dados.atos:
+        if ato.chave not in marcados:
+            continue
+        pedidos = [(
+            ato.cartorio_transmissao_criar_novo,
+            ato.cartorio_transmissao_nome,
+        )]
+        if ato.origem is not None:
+            pedidos.append((
+                ato.origem.get('cartorio_criar_novo'),
+                ato.origem.get('cartorio_nome'),
+            ))
+        nomes.update(
+            _nome_da_trava(nome) for criar_novo, nome in pedidos
+            if criar_novo and _nome_da_trava(nome)
+        )
+    for nome in sorted(
+        nomes, key=lambda candidato: (_chave_da_trava(candidato), candidato),
+    ):
+        _trava_nome_cartorio(nome)
+    return frozenset(nomes)
+
+
 def _trava_nome_cartorio(nome):
     """Serializa a criação de cartório pelo nome normalizado (decisão E).
 
@@ -594,43 +667,51 @@ def _trava_nome_cartorio(nome):
     distintos, a janela busca→INSERT do ``_resolver_cartorio``: a trava do
     ``Documento`` não cobre ``Cartorios`` e só o CNS é unique (e é gerado)
     — sem isso, duas importações que criam o MESMO nome gravam duas linhas
-    (#263 rodada 4, Greptile P1). A trava morre com a transação; no sqlite
-    (um escritor por vez) é no-op.
+    (#263 rodada 4, Greptile P1). Quem trava é o
+    ``_travar_cartorios_a_criar``; o ``_resolver_cartorio``, só no ramo
+    defensivo. A trava morre com a transação; no sqlite (um escritor por
+    vez) é no-op.
     """
     if connection.vendor != 'postgresql':
-        yield
         return
     with connection.cursor() as cursor:
         cursor.execute(
-            'SELECT pg_advisory_xact_lock(hashtext(%s))',
-            [(nome or '').strip().casefold()],
+            'SELECT pg_advisory_xact_lock(%s::bigint)',
+            [_chave_da_trava(nome)],
         )
-    yield
 
 
-def _resolver_cartorio(cartorio_id, criar_novo, nome, chave_linha, criados):
+def _resolver_cartorio(
+    cartorio_id, criar_novo, nome, chave_linha, criados, nomes_travados,
+):
     """FK escolhida ou cartório por nome (decisão E); cria se não achar.
 
     ``criados`` acumula ``(modelo, cartorio, chave_linha)`` para o vínculo
     de auditoria — cartório reutilizado não gera vínculo novo.
+    ``nomes_travados`` (do ``_travar_cartorios_a_criar``) estão sob a trava
+    desde antes do primeiro ato: a busca deles já é a re-busca SOB a trava
+    — outra importação que criou o mesmo nome antes já commitou, e a linha
+    vencedora é reaproveitada.
     """
     if criar_novo:
         nome = (nome or '').strip()
         if not nome:
             return None
         cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
+        if cartorio is None and _nome_da_trava(nome) not in nomes_travados:
+            # Defensivo: o conjunto pré-travado cobre todo "criar novo" do
+            # payload, então este ramo só roda se esta regra e a do
+            # ``_travar_cartorios_a_criar`` divergirem — por isso não
+            # reintroduz o ABBA. Se rodar, trava (a única fora da ordem
+            # global) e re-busca, como na rodada 4: nunca cria sem trava.
+            _trava_nome_cartorio(nome)
+            cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
         if cartorio is None:
-            with _trava_nome_cartorio(nome):
-                # Re-busca SOB a trava: outra importação pode ter commitado
-                # o mesmo nome entre a primeira busca e aqui. Reutilizar a
-                # linha vencedora é a decisão E — e não gera vínculo novo.
-                cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
-                if cartorio is None:
-                    cartorio = Cartorios.objects.create(
-                        nome=nome,
-                        cns=f'CNS{str(uuid.uuid4().int)[:10]}',
-                    )
-                    criados.append(('Cartorios', cartorio, chave_linha))
+            cartorio = Cartorios.objects.create(
+                nome=nome,
+                cns=f'CNS{str(uuid.uuid4().int)[:10]}',
+            )
+            criados.append(('Cartorios', cartorio, chave_linha))
         return cartorio
     if cartorio_id is None:
         return None
