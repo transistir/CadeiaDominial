@@ -547,6 +547,59 @@ def processar_origens_para_documentos(
     return origens_processadas
 
 
+def origem_estruturada_para_documento(
+    numero_documento,
+    imovel_atual,
+    lancamento=None,
+    cartorio=None,
+    *,
+    tipo,
+    documentos_queryset,
+):
+    """
+    [(numero, tipo)] da origem cujo tipo documental veio ESTRUTURADO do
+    POST (importação assistida I-6 / #263 rodada 4).
+
+    A identidade (tipo + número) já foi revisada antes de chegar aqui: o
+    parser de texto livre de ``processar_origens_para_documentos`` NÃO roda
+    — um número com pontuação (``T42.718``) seria repartido em dois números
+    e viraria dois documentos errados (``M42`` e ``M718``). Sobra apenas a
+    regra anti-órfão de ``_validar_origem_existente`` decidir a criação.
+
+    Args:
+        numero_documento (str): Número com prefixo (ex: "T42.718")
+        tipo (str): Tipo documental revisado ('matricula'/'transcricao')
+        imovel_atual, lancamento, cartorio, documentos_queryset: como em
+            ``processar_origens_para_documentos`` (queryset obrigatório, C2).
+
+    Returns:
+        list: Lista com zero ou UMA entrada de documento identificado.
+    """
+    if documentos_queryset is None:
+        raise TypeError(
+            'origem_estruturada_para_documento exige documentos_queryset. '
+            'None→global é proibido (contrato C2).'
+        )
+    if tipo not in ('matricula', 'transcricao'):
+        return []
+    if _validar_origem_existente(
+        numero_documento,
+        imovel_atual,
+        lancamento,
+        cartorio,
+        documentos_queryset=documentos_queryset,
+    ):
+        return [{
+            'numero': numero_documento,
+            'tipo': tipo,
+            'descricao': (
+                f'{tipo.title()} {numero_documento} identificada na origem '
+                'do lançamento'
+            ),
+        }]
+    return []
+
+
 def _validar_origem_existente(
     numero_documento,
     imovel_atual,

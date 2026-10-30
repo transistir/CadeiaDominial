@@ -9,7 +9,10 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from ..utils.hierarquia_utils import processar_origens_para_documentos
+from ..utils.hierarquia_utils import (
+    origem_estruturada_para_documento,
+    processar_origens_para_documentos,
+)
 from ..managers import identidade_existe_fora_do_escopo
 from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ..models import Cartorios, Documento, DocumentoTipo, LancamentoOrigem
@@ -512,10 +515,23 @@ class LancamentoOrigemService:
                 1, 0, 0, 'da origem identificada', restritas=[indice_unico]
             )
         
-        origens_processadas = processar_origens_para_documentos(
-            origem_unica, imovel, lancamento, dados_origem['cartorio'],
-            documentos_queryset=documentos_queryset,
-        )
+        tipo_estruturado = dados_origem.get('tipo_documento')
+        if tipo_estruturado:
+            # Origem com tipo ESTRUTURADO do POST (importação I-6): a
+            # identidade (tipo + número) já veio revisada — o parser de
+            # texto livre não roda, senão 'T42.718' viraria 'M42' e 'M718'
+            # (#263 rodada 4, Codex P1). Vale também para o processamento
+            # disparado pelo sinal post_save (o mapeamento vive na
+            # instância desde antes do save).
+            origens_processadas = origem_estruturada_para_documento(
+                origem_unica, imovel, lancamento, dados_origem['cartorio'],
+                tipo=tipo_estruturado, documentos_queryset=documentos_queryset,
+            )
+        else:
+            origens_processadas = processar_origens_para_documentos(
+                origem_unica, imovel, lancamento, dados_origem['cartorio'],
+                documentos_queryset=documentos_queryset,
+            )
 
         if not origens_processadas:
             if LancamentoOrigemService._origem_ambigua(
@@ -755,10 +771,21 @@ class LancamentoOrigemService:
                 continue
 
             # Validar com o cartório DESTA origem (#144), não o da primeira.
-            origens_processadas = processar_origens_para_documentos(
-                origem_individual, imovel, lancamento, cartorio,
-                documentos_queryset=documentos_queryset,
-            )
+            # Com tipo estruturado no mapeamento (importação I-6), a
+            # identidade revisada substitui o parser de texto livre (#263
+            # rodada 4) — mesmo motivo do caminho de origem única.
+            tipo_estruturado = dados_origem.get('tipo_documento')
+            if tipo_estruturado:
+                origens_processadas = origem_estruturada_para_documento(
+                    origem_individual, imovel, lancamento, cartorio,
+                    tipo=tipo_estruturado,
+                    documentos_queryset=documentos_queryset,
+                )
+            else:
+                origens_processadas = processar_origens_para_documentos(
+                    origem_individual, imovel, lancamento, cartorio,
+                    documentos_queryset=documentos_queryset,
+                )
 
             if not origens_processadas and LancamentoOrigemService._origem_ambigua(
                 origem_individual, cartorio, documentos_queryset=documentos_queryset,
@@ -962,7 +989,7 @@ class LancamentoOrigemService:
         """
         dados = {
             'cartorio': None, 'livro': None, 'folha': None, 'ambiguo': False,
-            'ambiguo_registrada': False,
+            'ambiguo_registrada': False, 'tipo_documento': None,
         }
 
         # 1. Mapeamento do POST corrente (atributo da instância). O seletor
@@ -989,6 +1016,10 @@ class LancamentoOrigemService:
                 dados['livro'] = item.get('livro')
                 dados['folha'] = item.get('folha')
                 dados['cartorio'] = cartorio
+                # Tipo documental ESTRUTURADO do POST (importação I-6): a
+                # criação do documento usa esta identidade revisada e não
+                # reparseia o texto livre (#263 rodada 4).
+                dados['tipo_documento'] = item.get('tipo_documento')
                 return dados
 
         # 2. Linha persistida desta origem (D3): posição primeiro; homônima

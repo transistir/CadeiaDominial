@@ -10,7 +10,7 @@ o aceite humano.
 
 import io
 import threading
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from copy import deepcopy
 from datetime import date
 from decimal import Decimal
@@ -1465,3 +1465,222 @@ class StdoutSemValorDocumentalTest(ImportacaoBase):
             self._importar(extracao)
 
         self.assertNotIn('366', saida.getvalue())
+
+
+# ---------------------------------------------------------------------------
+# Rodada 4 (bots no PR #310): CPF/cartório disputados por importações em
+# documentos distintos, origem pontuada virando dois documentos e origem só
+# com cartório.
+# ---------------------------------------------------------------------------
+
+
+class CpfConcorrenteTest(ImportacaoBase):
+    """P1 Greptile (#263 rodada 4): CPF gravado por outra importação.
+
+    Duas importações em documentos diferentes resolvem o MESMO CPF: as duas
+    não acham cadastro e chamam ``full_clean``/``save``. A trava do
+    ``Documento`` não protege ``Pessoas`` — sem savepoint, o unique de CPF
+    derruba a segunda importação com 500 e rollback total. Decisão D: a
+    linha vencedora é relida e REUTILIZADA.
+    """
+
+    def test_cpf_gravado_na_janela_e_reutilizado_sem_erro(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        limpo = Pessoas.full_clean
+
+        def full_clean_com_concorrente(alvo):
+            limpo(alvo)  # a checagem de unicidade passa: ninguém commitou
+            if getattr(alvo, 'cpf', None) == '12345678900':
+                # ... e a importação do OUTRO documento commitou o MESMO
+                # CPF entre a checagem e o INSERT deste ato.
+                Pessoas.objects.create(
+                    nome='JOÃO DE OUTRO DOCUMENTO', cpf='12345678900',
+                )
+
+        with patch.object(
+            Pessoas, 'full_clean', autospec=True,
+            side_effect=full_clean_com_concorrente,
+        ):
+            resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        (lancamento,) = Lancamento.objects.all()
+        joao = Pessoas.objects.get(cpf='12345678900')
+        self.assertEqual(joao.nome, 'JOÃO DE OUTRO DOCUMENTO')
+        self.assertEqual(
+            LancamentoPessoa.objects.filter(
+                lancamento=lancamento, pessoa=joao,
+            ).count(),
+            1,
+        )
+        # Uma única linha com o CPF: o INSERT perdedor morreu no savepoint
+        # e a vencedora foi reutilizada, não duplicada.
+        self.assertEqual(Pessoas.objects.filter(cpf='12345678900').count(), 1)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, 'importado')
+
+
+class CartorioConcorrenteTest(ImportacaoBase):
+    """P1 Greptile (#263 rodada 4): mesmo nome de cartório, uma linha só.
+
+    A trava do ``Documento`` não cobre ``Cartorios`` e só o CNS é unique
+    (e é gerado): importações em documentos distintos que criam o mesmo
+    nome gravavam duas linhas. A criação é serializada pelo nome
+    normalizado e a re-busca sob a trava reaproveita a linha vencedora.
+    """
+
+    def test_cartorio_do_outro_escritor_e_reaproveitado(self):
+        extracao = self._extracao(self._payload_origem())
+        vencedor = {}
+
+        @contextmanager
+        def trava_com_outro_escritor(nome):
+            # A primeira busca desta importação não achou o nome; ela
+            # bloqueia na trava do nome enquanto a importação do OUTRO
+            # documento cria o cartório, commita e libera. A re-busca SOB
+            # a trava tem que achar a linha dele.
+            vencedor['cartorio'] = Cartorios.objects.create(
+                nome='CRI de Origem', cns='CNS-OUTRO-DOC',
+            )
+            yield
+
+        with patch.object(
+            modulo_importacao, '_trava_nome_cartorio',
+            trava_com_outro_escritor,
+        ):
+            self._importar(extracao)
+
+        self.assertIn('cartorio', vencedor)
+        self.assertEqual(
+            Cartorios.objects.filter(nome__iexact='CRI de Origem').count(), 1,
+        )
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.cartorio_origem, vencedor['cartorio'])
+        # Cartório reutilizado não gera vínculo de auditoria novo.
+        self.assertFalse(
+            ImportacaoIA.objects.filter(modelo='Cartorios').exists(),
+        )
+
+    def test_caminho_sequencial_cria_o_cartorio_uma_vez(self):
+        # Regressão do caminho sem disputa: sem concorrente, a importação
+        # cria o cartório e o vínculo de auditoria como antes.
+        extracao = self._extracao(self._payload_origem())
+
+        self._importar(extracao)
+
+        self.assertEqual(
+            Cartorios.objects.filter(nome__iexact='CRI de Origem').count(), 1,
+        )
+        self.assertTrue(
+            ImportacaoIA.objects.filter(modelo='Cartorios').exists(),
+        )
+
+
+class OrigemPontuadaTest(ImportacaoBase):
+    """P1 Codex (#263 rodada 4): 'T42.718' não vira 'M42' + 'M718'.
+
+    O normalizador preserva a pontuação do número (decisão dele); o
+    fallback de texto livre do ``processar_origens_para_documentos``
+    repartia 'T42.718' em dois números e criava dois documentos errados —
+    com o ``LancamentoOrigem`` apontando 'T42.718' e sucesso na resposta.
+    O tipo estruturado revisado viaja até a criação do documento.
+    """
+
+    def _extracao_inicio_matricula(self, numero):
+        DocumentoTipo.objects.create(tipo='transcricao')
+        # O fallback de texto livre cria 'M42'/'M718' como MATRÍCULA: sem o
+        # tipo cadastrado a falha engolida escondia o bug (0 documentos).
+        DocumentoTipo.objects.create(tipo='matricula')
+        LancamentoTipo.objects.create(tipo='inicio_matricula')
+        payload = self._payload_origem()
+        payload['acts'][0]['tipo_sugerido'] = self._campo(
+            'inicio_matricula', 'R-1/42.718',
+        )
+        payload['acts'][0]['origem']['numero'] = self._campo(
+            numero, '42.718',
+        )
+        return self._extracao(payload)
+
+    def test_inicio_de_matricula_com_pontuacao_cria_um_documento_sozinho(self):
+        extracao = self._extracao_inicio_matricula('T42.718')
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        # O fallback de texto livre não rodou: nenhum M42/M718 nasceu.
+        self.assertFalse(
+            Documento.objects.filter(numero__in=['M42', 'M718']).exists(),
+        )
+        (documento_origem,) = Documento.objects.exclude(pk=self.documento.pk)
+        self.assertEqual(documento_origem.numero, 'T42.718')
+        self.assertEqual(documento_origem.tipo.tipo, 'transcricao')
+        self.assertEqual(documento_origem.imovel, self.imovel)
+        # O documento de origem criado entra na auditoria, como o T366.
+        vinculo = ImportacaoIA.objects.get(modelo='Documento')
+        self.assertEqual(vinculo.objeto_id, documento_origem.pk)
+        self.assertEqual(vinculo.campo.chave, '/acts/0/origem/numero')
+        # O texto revisado é preservado e a origem estruturada é uma só.
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.origem, 'T42.718')
+        origem = LancamentoOrigem.objects.get()
+        self.assertEqual(origem.tipo_documento, 'transcricao')
+        self.assertEqual(origem.numero_normalizado, '42.718')
+
+
+class OrigemSoCartorioTest(ImportacaoBase):
+    """Major CodeRabbit (#263 rodada 4): origem sem número, só cartório.
+
+    ``_resolver_cartorio`` só rodava no ramo que monta o ``texto_origem``:
+    origem com apenas o cartório ficava sem ``cartorio_origem`` e a
+    validação de ``requer_cartorio_origem`` do lançamento recusava. O
+    cartório é resolvido sempre que há origem; o número só entra na
+    montagem do texto/mapeamento.
+    """
+
+    def _tornar_exigente(self):
+        self.tipo_registro.requer_cartorio_origem = True
+        self.tipo_registro.save(update_fields=['requer_cartorio_origem'])
+
+    def _payload_so_cartorio(self):
+        payload = self._payload_origem()
+        payload['acts'][0]['origem'] = {
+            'cartorio': self._campo('CRI de Origem', 'CRI de Guaíra'),
+        }
+        return payload
+
+    def test_origem_so_com_cartorio_grava_o_cartorio_de_origem(self):
+        self._tornar_exigente()
+        extracao = self._extracao(self._payload_so_cartorio())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.cartorio_origem.nome, 'CRI de Origem')
+        # Sem número não há texto de origem nem linha estruturada.
+        self.assertIsNone(lancamento.origem)
+        self.assertEqual(LancamentoOrigem.objects.count(), 0)
+        self.assertEqual(Documento.objects.count(), 1)
+        self.assertTrue(
+            ImportacaoIA.objects.filter(modelo='Cartorios').exists(),
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, 'importado')
+
+    def test_origem_sem_numero_e_sem_cartorio_recusa_na_chave_da_origem(self):
+        # Registro exigente sem origem no payload: a linha placeholder de
+        # origem/cartorio existe (o tipo exige) e vazia — a revalidação da
+        # revisão recusa com a pendência NA CHAVE da origem, antes da
+        # gravação (contrato que esta rodada congela).
+        self._tornar_exigente()
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        versao_tela = services.versao_bloco(extracao)
+
+        with self.assertRaises(RevisaoInvalidada):
+            importar(extracao, self.usuario, versao_tela, ['/acts/0'])
+
+        self.assertIn(
+            {'chave': '/acts/0/origem/cartorio', 'motivo': 'obrigatorio_ausente'},
+            modulo_importacao.pendencias_para_resposta(extracao),
+        )
+        self.assertEqual(Lancamento.objects.count(), 0)

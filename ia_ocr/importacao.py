@@ -28,9 +28,10 @@ Decisões de gravação (brief #263):
 
 import re
 import uuid
+from contextlib import contextmanager
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
@@ -307,12 +308,17 @@ def _importar_ato(
         return None, erros
 
     origem = ato.origem
+    numero = (origem.get('numero') or '').strip() if origem else ''
+    tipo_informado = origem.get('tipo_documento') if origem else None
     texto_origem = None
     mapeamento = None
     cartorio_origem = None
-    if origem is not None and (
-        (origem.get('numero') or '').strip() or origem.get('tipo_documento')
-    ):
+    # O cartório da origem é resolvido SEMPRE que há origem — inclusive
+    # quando ela só tem o cartório, sem número/tipo (#263 rodada 4,
+    # CodeRabbit): o tipo do lançamento pode exigir cartório de origem e a
+    # gravação precisa dele na FK. Número/tipo são exigidos só na montagem
+    # do texto/mapeamento (abaixo), nunca para resolver o cartório.
+    if origem is not None:
         cartorio_origem = _resolver_cartorio(
             origem.get('cartorio_id'), origem.get('cartorio_criar_novo'),
             origem.get('cartorio_nome'), f'{chave}/origem/cartorio',
@@ -324,49 +330,61 @@ def _importar_ato(
                     f'{chave}/origem/cartorio', 'decisao_perdida',
                     'O cartório escolhido para a origem não existe mais.',
                 )
-            else:
+                return None, erros
+            if numero or tipo_informado:
                 erros.add(
                     f'{chave}/origem/cartorio', 'valor_obrigatorio',
                     'O cartório da origem é obrigatório para importar o ato.',
                 )
-            return None, erros
-        numero = (origem.get('numero') or '').strip()
-        if not numero:
-            erros.add(
-                f'{chave}/origem/numero', 'valor_obrigatorio',
-                'O número da origem é obrigatório para importar o ato.',
-            )
-            return None, erros
-        tipo_documento = _tipo_documento_da_origem(origem, numero)
-        try:
-            normalizado = normalizar_numero_documento(numero, tipo_documento)
-        except (TypeError, ValueError) as exc:
-            # Mensagem fixa do util: cita o prefixo, nunca o número inteiro.
-            erros.add(
-                f'{chave}/origem/numero', 'valor_incompativel_destino', str(exc),
-            )
-            return None, erros
-        texto_origem = PREFIXO_TIPO_DOCUMENTO[tipo_documento] + normalizado
-        # O valor PERSISTIDO ganha prefixo: a revisão validou o limite da
-        # linha (sem prefixo), o destino valida o valor final. Estourou o
-        # max_length do LancamentoOrigem.numero é erro da linha da origem
-        # — nunca um ValidationError cru lá embaixo virando 500 (#263
-        # rodada 2).
-        limite_origem = destinos.destino_de(f'{chave}/origem/numero').max_length
-        if limite_origem and len(texto_origem) > limite_origem:
-            erros.add(
-                f'{chave}/origem/numero', MOTIVO_LIMITE,
-                'O número da origem, com o prefixo do tipo documental, '
-                'ultrapassa o limite do destino.',
-            )
-            return None, erros
-        mapeamento = [{
-            'indice': 0,
-            'origem': texto_origem,
-            'cartorio_id': cartorio_origem.pk,
-            'livro': origem.get('livro'),
-            'folha': origem.get('folha'),
-        }]
+                return None, erros
+        elif numero or tipo_informado:
+            if not numero:
+                erros.add(
+                    f'{chave}/origem/numero', 'valor_obrigatorio',
+                    'O número da origem é obrigatório para importar o ato.',
+                )
+                return None, erros
+            tipo_documento = _tipo_documento_da_origem(origem, numero)
+            try:
+                normalizado = normalizar_numero_documento(
+                    numero, tipo_documento,
+                )
+            except (TypeError, ValueError) as exc:
+                # Mensagem fixa do util: cita o prefixo, nunca o número
+                # inteiro.
+                erros.add(
+                    f'{chave}/origem/numero', 'valor_incompativel_destino',
+                    str(exc),
+                )
+                return None, erros
+            texto_origem = PREFIXO_TIPO_DOCUMENTO[tipo_documento] + normalizado
+            # O valor PERSISTIDO ganha prefixo: a revisão validou o limite
+            # da linha (sem prefixo), o destino valida o valor final.
+            # Estourou o max_length do LancamentoOrigem.numero é erro da
+            # linha da origem — nunca um ValidationError cru lá embaixo
+            # virando 500 (#263 rodada 2).
+            limite_origem = destinos.destino_de(
+                f'{chave}/origem/numero',
+            ).max_length
+            if limite_origem and len(texto_origem) > limite_origem:
+                erros.add(
+                    f'{chave}/origem/numero', MOTIVO_LIMITE,
+                    'O número da origem, com o prefixo do tipo documental, '
+                    'ultrapassa o limite do destino.',
+                )
+                return None, erros
+            mapeamento = [{
+                'indice': 0,
+                'origem': texto_origem,
+                # Tipo documental ESTRUTURADO revisado: viaja com o
+                # mapeamento até a criação do documento de origem — o
+                # texto livre nunca é reparseado ('T42.718' com pontuação
+                # não vira 'M42' + 'M718') (#263 rodada 4, Codex P1).
+                'tipo_documento': tipo_documento,
+                'cartorio_id': cartorio_origem.pk,
+                'livro': origem.get('livro'),
+                'folha': origem.get('folha'),
+            }]
 
     lancamento = Lancamento(
         documento=documento,
@@ -544,13 +562,50 @@ def _resolver_pessoa(parte, cache_pessoas, erros):
         except ValidationError as exc:
             erros.do_modelo(exc, 'dominial.Pessoas', chave_parte=chave_parte)
             return None, False
-        pessoa.save()
-        criada = True
+        try:
+            # Savepoint: o CPF pode ser gravado por OUTRA importação (outro
+            # documento) entre o lookup e o INSERT — a trava do Documento
+            # não cobre Pessoas. Decisão D: relê a linha vencedora e
+            # REUTILIZA; a unicidade de CPF nunca sobe como 500 (#263
+            # rodada 4, Greptile P1).
+            with transaction.atomic():
+                pessoa.save()
+        except IntegrityError:
+            vencedora = (
+                Pessoas.objects.filter(cpf=cpf).first() if cpf else None
+            )
+            if vencedora is None:
+                raise
+            pessoa = vencedora
+        else:
+            criada = True
     if chave_cpf is not None:
         cache_pessoas[chave_cpf] = pessoa
     if chave_rg is not None:
         cache_pessoas[chave_rg] = pessoa
     return pessoa, criada
+
+
+@contextmanager
+def _trava_nome_cartorio(nome):
+    """Serializa a criação de cartório pelo nome normalizado (decisão E).
+
+    ``pg_advisory_xact_lock`` fecha, entre importações em documentos
+    distintos, a janela busca→INSERT do ``_resolver_cartorio``: a trava do
+    ``Documento`` não cobre ``Cartorios`` e só o CNS é unique (e é gerado)
+    — sem isso, duas importações que criam o MESMO nome gravam duas linhas
+    (#263 rodada 4, Greptile P1). A trava morre com a transação; no sqlite
+    (um escritor por vez) é no-op.
+    """
+    if connection.vendor != 'postgresql':
+        yield
+        return
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'SELECT pg_advisory_xact_lock(hashtext(%s))',
+            [(nome or '').strip().casefold()],
+        )
+    yield
 
 
 def _resolver_cartorio(cartorio_id, criar_novo, nome, chave_linha, criados):
@@ -565,11 +620,17 @@ def _resolver_cartorio(cartorio_id, criar_novo, nome, chave_linha, criados):
             return None
         cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
         if cartorio is None:
-            cartorio = Cartorios.objects.create(
-                nome=nome,
-                cns=f'CNS{str(uuid.uuid4().int)[:10]}',
-            )
-            criados.append(('Cartorios', cartorio, chave_linha))
+            with _trava_nome_cartorio(nome):
+                # Re-busca SOB a trava: outra importação pode ter commitado
+                # o mesmo nome entre a primeira busca e aqui. Reutilizar a
+                # linha vencedora é a decisão E — e não gera vínculo novo.
+                cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
+                if cartorio is None:
+                    cartorio = Cartorios.objects.create(
+                        nome=nome,
+                        cns=f'CNS{str(uuid.uuid4().int)[:10]}',
+                    )
+                    criados.append(('Cartorios', cartorio, chave_linha))
         return cartorio
     if cartorio_id is None:
         return None
