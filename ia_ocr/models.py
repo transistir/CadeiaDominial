@@ -515,6 +515,7 @@ class ImportacaoIA(models.Model):
         ('Lancamento', 'Lançamento'),
         ('LancamentoPessoa', 'Pessoa do lançamento'),
         ('LancamentoOrigem', 'Origem de lançamento'),
+        ('Documento', 'Documento de origem'),
         ('Pessoas', 'Pessoa'),
         ('Cartorios', 'Cartório'),
     ]

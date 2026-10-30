@@ -16,7 +16,7 @@ Decisões de gravação (brief #263):
 - **pessoa** (D): ``criar novo`` com CPF já cadastrado reutiliza o cadastro
   (busca pelos dígitos); só o nome igual não basta — homônimos existem. A
   mesma pessoa não é criada duas vezes na mesma importação (cache por CPF
-  ou nome canônico).
+  ou por nome canônico + RG; sem CPF nem RG, cada ato grava o seu).
 - **cartório** (E): ``criar novo`` busca ``nome__iexact`` e cria apenas
   quando não acha (mesma regra do fluxo manual,
   ``lancamento_campos_service``).
@@ -50,6 +50,7 @@ from . import destinos, revisao, services
 from .estados import IMPORTADO, REVISADO
 from .models import ImportacaoIA, OcrJob
 from .revisao import _normalizar_nome, _so_digitos
+from .valores import MOTIVO_LIMITE
 
 MOTIVO_TRANSICAO = 'importacao_ia'
 
@@ -64,6 +65,16 @@ for _chave, _entrada in destinos.DESTINOS.items():
         _PADRAO_POR_CAMPO.setdefault(
             f'{_entrada[0]}.{_entrada[1]}', [],
         ).append(_chave)
+# Pessoas não tem linha própria no mapa (só chega via parte): os erros de
+# nome/CPF/RG ancoram na linha da parte que os originou, não no ato (#263
+# rodada 2 — o message_dict caía em ``/acts/i`` sem a tela saber onde).
+_PADRAO_POR_CAMPO['dominial.Pessoas.nome'] = ['/acts/*/partes/*/nome']
+_PADRAO_POR_CAMPO['dominial.Pessoas.cpf'] = [
+    '/acts/*/partes/*/documento_identificacao/valor',
+]
+_PADRAO_POR_CAMPO['dominial.Pessoas.rg'] = [
+    '/acts/*/partes/*/documento_identificacao/valor',
+]
 
 
 class ImportacaoInvalida(Exception):
@@ -76,14 +87,32 @@ class ImportacaoInvalida(Exception):
         super().__init__(self.code)
 
 
+class _AtoInvalido(Exception):
+    """Controle interno: força o savepoint do ato a rodar rollback.
+
+    Devolver erros "normalmente" do ``_importar_ato`` deixava o savepoint
+    COMITAR o que o ato inválido já tinha gravado (lançamento parcial,
+    pessoas, cartórios) — o rollback só vinha no final, tarde demais para
+    os atos seguintes (#263 rodada 2). Levantada DENTRO do atomic do ato,
+    ela desfaz o savepoint na hora; o loop captura fora e acumula.
+    """
+
+    def __init__(self, erros):
+        self.erros = erros
+        super().__init__('ato invalido')
+
+
 def importar(extracao, usuario, versao, atos):
     """Grava os atos marcados da revisão finalizada e devolve a resposta.
 
     Ordem das travas (a mesma da exclusão do PDF, para não deadlockar):
     ``DocumentoDigital`` → job → extração → ``Documento``. Job ``importado``
     devolve o resultado gravado (idempotência); qualquer outro estado que
-    não ``revisado`` recusa. Erros de ato viram ``ImportacaoInvalida``
-    DENTRO da transação: nada persiste.
+    não ``revisado`` recusa. A revisão é revalidada ANTES do token: o
+    cadastro escolhido que some (FK ``SET_NULL``) muda a linha e envelhece
+    o token da tela, e o 409 genérico esconderia ONDE a decisão se perdeu
+    (#263 rodada 3). Erros de ato viram ``ImportacaoInvalida`` DENTRO da
+    transação: nada persiste.
     """
     with transaction.atomic():
         job = OcrJob.objects.select_related(
@@ -100,19 +129,29 @@ def importar(extracao, usuario, versao, atos):
             raise services.ExtracaoRecusada('estado_invalido')
         if not isinstance(versao, str) or not versao:
             raise services.ExtracaoRecusada('versao_ausente')
+        dados = revisao.dados_revisados(extracao)
         if versao != services.versao_bloco(extracao):
             raise services.ConflitoVersao([])
 
-        dados = revisao.dados_revisados(extracao)
         marcados = _atos_marcados(dados, atos)
+        # Trava SÓ o Documento (#263 rodada 3): sem ``of``, o JOIN do
+        # select_related travaria também o Imovel — ciclo possível com o
+        # cadastro manual, que trava o Documento e insere documento de
+        # origem no mesmo imóvel.
         documento = (
-            Documento.objects.select_related('imovel').select_for_update()
+            Documento.objects.select_related('imovel')
+            .select_for_update(of=('self',))
             .get(pk=job.documento_digital.documento_id)
         )
         imovel = documento.imovel
         linhas = _linhas_por_chave(extracao)
-        cache_pessoas: dict[str, Pessoas] = {}
+        # Chave de identificação ('cpf', digitos) / ('rg', nome, rg) → pessoa.
+        cache_pessoas: dict[tuple, Pessoas] = {}
         documentos_usuario = documentos_for_user(usuario)
+        # Lançamentos dos atos anteriores DESTA importação: colidir com eles
+        # é duplicata interna do payload — o rollback global os desfaz, então
+        # nunca viram ``existente`` (#263 rodada 3).
+        lancamentos_importados: set[int] = set()
 
         respostas = []
         importadas = []
@@ -122,19 +161,32 @@ def importar(extracao, usuario, versao, atos):
                     ato.chave, _rotulo(ato.chave, linhas), 'ignorado',
                 ))
                 continue
-            # Savepoint: o erro de um ato não interrompe a coleta dos demais.
-            with transaction.atomic():
-                resposta, erros = _importar_ato(
-                    ato, documento, imovel, usuario, job, linhas,
-                    cache_pessoas, documentos_usuario,
-                )
-            if erros.itens:
+            # Savepoint de verdade (#263 rodada 2): o erro levanta
+            # ``_AtoInvalido`` DENTRO do atomic, que desfaz na hora o que
+            # este ato gravou (lançamento parcial, pessoas, cartórios) — o
+            # que gravou fica de pé para os atos seguintes. As entradas de
+            # cache criadas no ato desfeito também são descartadas: elas
+            # apontariam para registros que o rollback apagou.
+            chaves_antes = set(cache_pessoas)
+            try:
+                with transaction.atomic():
+                    resposta, erros = _importar_ato(
+                        ato, documento, imovel, usuario, job, linhas,
+                        cache_pessoas, documentos_usuario,
+                        lancamentos_importados,
+                    )
+                    if erros.itens:
+                        raise _AtoInvalido(erros)
+            except _AtoInvalido as exc:
+                for chave_nova in set(cache_pessoas) - chaves_antes:
+                    cache_pessoas.pop(chave_nova, None)
                 resposta = _linha_resposta(
                     ato.chave, _rotulo(ato.chave, linhas), 'erro',
-                    erros=erros.itens,
+                    erros=exc.erros.itens,
                 )
             else:
                 importadas.append(ato.chave)
+                lancamentos_importados.add(resposta['lancamento_id'])
             respostas.append(resposta)
 
         if any(resposta['status'] == 'erro' for resposta in respostas):
@@ -193,13 +245,15 @@ def resumo(extracao):
 
 def _importar_ato(
     ato, documento, imovel, usuario, job, linhas,
-    cache_pessoas, documentos_usuario,
+    cache_pessoas, documentos_usuario, lancamentos_importados,
 ):
     """Grava um ato (lançamento + origem + partes) e devolve a linha resposta.
 
-    Sempre devolve ``(resposta | None, erros)``: com erro, quem chamou faz o
-    savepoint desfazer tudo o que este ato criou (cartórios, pessoas,
-    documento de origem).
+    Sempre devolve ``(resposta | None, erros)``: com erro, o chamador levanta
+    ``_AtoInvalido`` DENTRO do savepoint, que desfaz na hora o que este ato
+    criou (lançamento parcial, cartórios, pessoas, documento de origem).
+    ``lancamentos_importados`` são os gravados pelos atos anteriores desta
+    importação (duplicata contra eles é interna, sem ``existente``).
     """
     chave = ato.chave
     erros = _Erros(chave)
@@ -214,12 +268,25 @@ def _importar_ato(
 
     duplicado = _lancamento_duplicado(
         documento, tipo, ato.data, ato.numero_lancamento,
+        Lancamento.objects.exclude(pk__in=lancamentos_importados),
     )
     if duplicado is not None:
         erros.add(
             chave, 'lancamento_duplicado',
             'Já existe um lançamento deste ato no documento.',
             existente=_existente(duplicado),
+        )
+        return None, erros
+    if lancamentos_importados and _lancamento_duplicado(
+        documento, tipo, ato.data, ato.numero_lancamento,
+        Lancamento.objects.filter(pk__in=lancamentos_importados),
+    ) is not None:
+        # O outro lançamento só existe dentro desta transação: apontá-lo
+        # como ``existente`` levaria a tela a um registro que o rollback
+        # global apaga (#263 rodada 3).
+        erros.add(
+            chave, 'ato_duplicado_na_importacao',
+            'Outro ato marcado nesta importação grava o mesmo lançamento.',
         )
         return None, erros
 
@@ -230,6 +297,14 @@ def _importar_ato(
         ato.cartorio_transmissao_nome,
         f'{chave}/cartorio_transmissao', criados_cartorios,
     )
+    if cartorio_transmissao is None and ato.cartorio_transmissao_id is not None:
+        # Escolha da revisão que sumiu entre a leitura e a gravação: o ato
+        # não grava sem o cartório escolhido (#263 rodada 3, como a origem).
+        erros.add(
+            f'{chave}/cartorio_transmissao', 'decisao_perdida',
+            'O cartório escolhido para a transmissão não existe mais.',
+        )
+        return None, erros
 
     origem = ato.origem
     texto_origem = None
@@ -272,6 +347,19 @@ def _importar_ato(
             )
             return None, erros
         texto_origem = PREFIXO_TIPO_DOCUMENTO[tipo_documento] + normalizado
+        # O valor PERSISTIDO ganha prefixo: a revisão validou o limite da
+        # linha (sem prefixo), o destino valida o valor final. Estourou o
+        # max_length do LancamentoOrigem.numero é erro da linha da origem
+        # — nunca um ValidationError cru lá embaixo virando 500 (#263
+        # rodada 2).
+        limite_origem = destinos.destino_de(f'{chave}/origem/numero').max_length
+        if limite_origem and len(texto_origem) > limite_origem:
+            erros.add(
+                f'{chave}/origem/numero', MOTIVO_LIMITE,
+                'O número da origem, com o prefixo do tipo documental, '
+                'ultrapassa o limite do destino.',
+            )
+            return None, erros
         mapeamento = [{
             'indice': 0,
             'origem': texto_origem,
@@ -318,8 +406,24 @@ def _importar_ato(
             lancamento, lancamento.origem or '', imovel,
             documentos_queryset=documentos_usuario,
         )
+    except ValidationError:
+        # Defesa em profundidade: o serviço da origem ainda pode recusar
+        # algo que nem a revisão nem o pre-check acima viram. Vira erro da
+        # linha da origem com mensagem fixa, nunca um 500 (#263 rodada 2).
+        erros.add(
+            f'{chave}/origem/numero', 'valor_incompativel_destino',
+            'O número da origem não pôde ser gravado no lançamento.',
+        )
+        return None, erros
     finally:
         LancamentoOrigemService.limpar_mapeamento(lancamento)
+        # Documento de origem que o caminho de criação devolveu — o do
+        # sinal post_save inclusive, que cria durante o save. Nunca o diff
+        # do imóvel: ele não está travado e pegaria o documento de outro
+        # escritor (#263 rodada 3).
+        documentos_origem = (
+            LancamentoOrigemService.consumir_documentos_criados(lancamento)
+        )
 
     registros = [('Lancamento', lancamento.pk, chave)]
     registros.extend(
@@ -333,6 +437,13 @@ def _importar_ato(
                 'LancamentoOrigem', origem_estruturada.pk,
                 f'{chave}/origem/numero',
             ))
+        # Documento de origem criado (início de matrícula): entra na
+        # auditoria como qualquer outro objeto gravado (#263 rodada 2) —
+        # sem isso ele nascia sem vínculo com o PDF nem com o ato.
+        registros.extend(
+            ('Documento', pk, f'{chave}/origem/numero')
+            for pk in documentos_origem
+        )
 
     for parte in ato.partes:
         pessoa, pessoa_criada = _resolver_pessoa(parte, cache_pessoas, erros)
@@ -355,8 +466,19 @@ def _importar_ato(
     return resposta, erros
 
 
+def _rg_normalizado(rg):
+    """RG comparável: só alfanumérico, em caixa alta (o RG não é só dígito)."""
+    return re.sub(r'[^A-Z0-9]', '', (rg or '').upper())
+
+
 def _resolver_pessoa(parte, cache_pessoas, erros):
-    """Pessoa da parte (decisão D): escolhida, reutilizada por CPF ou nova.
+    """Pessoa da parte (decisão D): escolhida, reutilizada por identificação ou nova.
+
+    Reuso exige IDENTIFICAÇÃO, nunca nome puro (homônimo existe): CPF por
+    cache ou cadastro; RG por cache, e só com o nome igual. Sem CPF e sem
+    RG cada ato grava o seu cadastro — não há evidência de mesma pessoa.
+    Se o CPF e o RG da MESMA parte apontam para pessoas distintas, é
+    conflito: erro na linha da parte, nunca fusão silenciosa (#263 rodada 2).
 
     Devolve ``(pessoa | None, criada_na_importacao)``.
     """
@@ -384,17 +506,38 @@ def _resolver_pessoa(parte, cache_pessoas, erros):
             'O nome da parte é obrigatório para criar a pessoa.',
         )
         return None, False
-    digitos = _so_digitos(parte.cpf) if parte.cpf else ''
-    chave_cache = digitos or _normalizar_nome(nome)
-    if chave_cache and chave_cache in cache_pessoas:
-        return cache_pessoas[chave_cache], False
-    pessoa = (
-        Pessoas.objects.filter(cpf=digitos).first() if digitos else None
-    )
+    cpf = _so_digitos(parte.cpf) if parte.cpf else ''
+    rg = _rg_normalizado(parte.rg)
+    chave_cpf = ('cpf', cpf) if cpf else None
+    chave_rg = ('rg', _normalizar_nome(nome), rg) if rg else None
+
+    pessoa_cpf = None
+    if chave_cpf is not None:
+        pessoa_cpf = cache_pessoas.get(chave_cpf)
+        if pessoa_cpf is None:
+            pessoa_cpf = Pessoas.objects.filter(cpf=cpf).first()
+    pessoa_rg = cache_pessoas.get(chave_rg) if chave_rg is not None else None
+
+    # Checagem DEFENSIVA (#263 rodada 3): ``dados_revisados`` entrega CPF
+    # ou RG por parte, nunca os dois (a linha do documento tem um destino
+    # só). Fica de guarda caso o contrato da parte passe a trazer ambos.
+    if (
+        pessoa_cpf is not None and pessoa_rg is not None
+        and pessoa_cpf.pk != pessoa_rg.pk
+    ):
+        erros.add(
+            f'{chave_parte}/documento_identificacao/valor',
+            'decisao_conflitante',
+            'O CPF e o RG desta parte apontam para pessoas cadastradas '
+            'diferentes; revise a identificação da parte.',
+        )
+        return None, False
+
+    pessoa = pessoa_cpf or pessoa_rg
     criada = False
     if pessoa is None:
         pessoa = Pessoas(
-            nome=nome, cpf=digitos or None, rg=parte.rg,
+            nome=nome, cpf=cpf or None, rg=parte.rg,
         )
         try:
             pessoa.full_clean()
@@ -403,8 +546,10 @@ def _resolver_pessoa(parte, cache_pessoas, erros):
             return None, False
         pessoa.save()
         criada = True
-    if chave_cache:
-        cache_pessoas[chave_cache] = pessoa
+    if chave_cpf is not None:
+        cache_pessoas[chave_cpf] = pessoa
+    if chave_rg is not None:
+        cache_pessoas[chave_rg] = pessoa
     return pessoa, criada
 
 
@@ -441,30 +586,30 @@ def _tipo_documento_da_origem(origem, numero):
     return 'matricula'
 
 
-def _lancamento_duplicado(documento, tipo, data, numero):
+def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     """Lançamento existente que colide com o ato, ou None.
 
     Mesma regra do fluxo manual (``lancamento_validacao_service``): a tupla
     (documento, tipo, data, número) — com número nulo casando null e '' — e
     ainda o número sozinho dentro do documento, mudando tipo ou data.
+    ``lancamentos`` restringe onde procurar (padrão: todos).
     """
+    if lancamentos is None:
+        lancamentos = Lancamento.objects.all()
+    lancamentos = lancamentos.select_related('documento__imovel')
     filtro = Q(documento=documento, tipo=tipo)
     filtro &= Q(data=data) if data is not None else Q(data__isnull=True)
     if numero:
         filtro &= Q(numero_lancamento=numero)
     else:
         filtro &= Q(numero_lancamento__isnull=True) | Q(numero_lancamento='')
-    existente = (
-        Lancamento.objects.select_related('documento__imovel')
-        .filter(filtro).first()
-    )
+    existente = lancamentos.filter(filtro).first()
     if existente is not None:
         return existente
     if numero:
-        return (
-            Lancamento.objects.select_related('documento__imovel')
-            .filter(documento=documento, numero_lancamento=numero).first()
-        )
+        return lancamentos.filter(
+            documento=documento, numero_lancamento=numero,
+        ).first()
     return None
 
 
@@ -504,15 +649,51 @@ def _vincular(job, usuario, lancamento, registros, linhas):
 
 
 def _marcar_importadas(extracao, usuario, chaves_atos):
-    """Linhas dos atos importados → ``importado`` com autoria da revisão."""
-    filtro = Q()
-    for chave in chaves_atos:
-        filtro |= Q(chave=chave) | Q(chave__startswith=f'{chave}/')
-    extracao.campos.filter(filtro).update(
+    """Linhas EFETIVAMENTE incluídas dos atos importados → ``importado``.
+
+    Linha descartada (direta ou por ancestral descartado) continua com o
+    status e a autoria que a revisão deixou: importação não reescreve
+    decisão de descarte (#263 rodada 2). Mesma noção de incluída do
+    ``revisao._contexto_revisao`` (a que alimenta a gravação).
+    """
+    incluidas, _ = revisao._contexto_revisao(extracao)
+    chaves_atos = set(chaves_atos)
+    alvos = [
+        chave for chave in incluidas
+        if chave in chaves_atos or any(
+            chave.startswith(f'{ato}/') for ato in chaves_atos
+        )
+    ]
+    extracao.campos.filter(chave__in=alvos).update(
         status_revisao='importado',
         revisado_por=usuario,
         revisado_em=timezone.now(),
     )
+
+
+def pendencias_para_resposta(extracao):
+    """Pendências estruturadas da revisão invalidada, para a resposta 422.
+
+    A recusa em si já vem do ``RevisaoInvalidada``; o que falta à tela é
+    saber ONDE — cada pendência com sua chave de linha. Uma PARTE ou um
+    CARTÓRIO que a revisão finalizou como escolha e voltou a ficar
+    pendente só acontece quando o cadastro escolhido desapareceu (FKs
+    ``SET_NULL``): o motivo vira ``decisao_perdida`` na linha da parte
+    (#263 rodada 2) ou do cartório — origem, transmissão (rodada 3).
+    """
+    linhas = _linhas_por_chave(extracao)
+    saida = []
+    for pendencia in revisao.pendencias(extracao):
+        motivo = pendencia['motivo']
+        campo = linhas.get(pendencia['chave'])
+        if (
+            motivo == 'escolha_pendente'
+            and campo is not None
+            and campo.tipo_valor in ('parte', 'cartorio')
+        ):
+            motivo = 'decisao_perdida'
+        saida.append({'chave': pendencia['chave'], 'motivo': motivo})
+    return saida
 
 
 # ---------------------------------------------------------------------------

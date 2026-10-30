@@ -762,8 +762,15 @@ def importar_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         )
     except revisao.RevisaoInvalidada as exc:
         # Mensagens fixas do motor (sem valor digitado): a tela recarrega.
+        # As pendências estruturadas dizem ONDE — a parte cuja escolha de
+        # pessoa virou nada chega como ``decisao_perdida`` (#263 rodada 2).
         return JsonResponse(
-            {'erro': 'revisao_invalidada', 'mensagem': str(exc)}, status=422,
+            {
+                'erro': 'revisao_invalidada',
+                'mensagem': str(exc),
+                'pendencias': importacao.pendencias_para_resposta(extracao),
+            },
+            status=422,
         )
     except services.ConflitoVersao as exc:
         return JsonResponse({

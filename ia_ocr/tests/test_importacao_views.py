@@ -11,7 +11,7 @@ from datetime import date
 from django.test import Client
 from django.utils import timezone
 
-from dominial.models import Lancamento, LancamentoTipo
+from dominial.models import Lancamento, LancamentoTipo, Pessoas
 from ia_ocr import services
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import desnormalizar
@@ -221,3 +221,61 @@ class ImportarJobOcrResultadoTest(ImportacaoViewBase):
         self.assertEqual(resposta.json(), {
             'erro': 'estado_invalido', 'chave': None,
         })
+
+    def test_origem_acima_do_limite_e_422_na_linha_da_origem(self):
+        # P2-4 (#263 rodada 2): 50 dígitos + prefixo T estouram o
+        # max_length do LancamentoOrigem.numero — erro de ato, nunca 500.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['origem'] = {
+            'tipo_documento': self._campo('transcricao', 'MATRÍCULA Nº 42.718'),
+            'numero': self._campo('1' * 50, '42.718'),
+            'cartorio': self._campo('CRI de Origem', 'CRI de Guaíra'),
+            'livro': self._campo('2', 'Livro 2-RG'),
+            'folha': self._campo('123', 'Folha 087'),
+        }
+        extracao = self._extracao(payload)
+
+        resposta = self.post_importar(self._corpo(extracao))
+
+        self.assertEqual(resposta.status_code, 422)
+        corpo = resposta.json()
+        self.assertEqual(corpo['erro'], 'importacao_invalida')
+        (erro,) = corpo['linhas'][0]['erros']
+        self.assertEqual(erro['chave'], '/acts/0/origem/numero')
+        self.assertEqual(erro['codigo'], 'valor_acima_do_limite_destino')
+
+
+class ImportarJobOcrRevisaoInvalidadaTest(ImportacaoViewBase):
+    """P2-8 (#263 rodada 2): recusa identifica a parte com decisão perdida."""
+
+    def _corpo(self, extracao, atos=('/acts/0',)):
+        return {
+            'versao': services.versao_bloco(extracao),
+            'atos': list(atos),
+        }
+
+    def test_pessoa_deletada_devolve_pendencias_com_decisao_perdida(self):
+        extracao = self._extracao()
+        maria = Pessoas.objects.create(nome='MARIA EXISTENTE', cpf='11122233344')
+        CampoSugerido.objects.filter(chave='/acts/0/partes/1').update(
+            pessoa_escolhida=maria, criar_novo=False,
+        )
+        # A tela leu o token ANTES da exclusão e é com ele que o POST chega
+        # (#263 rodada 3): o SET_NULL envelhece o token, e um 409 genérico
+        # esconderia a parte que perdeu a decisão.
+        corpo = self._corpo(extracao)
+        # A escolha morre com a pessoa (FK SET_NULL): a revisão finalizada
+        # deixa de ser válida e a resposta precisa dizer ONDE.
+        maria.delete()
+
+        resposta = self.post_importar(corpo)
+
+        self.assertEqual(resposta.status_code, 422)
+        corpo = resposta.json()
+        self.assertEqual(corpo['erro'], 'revisao_invalidada')
+        self.assertIn('mensagem', corpo)
+        self.assertIn(
+            {'chave': '/acts/0/partes/1', 'motivo': 'decisao_perdida'},
+            corpo['pendencias'],
+        )
+        self.assertEqual(Lancamento.objects.count(), 0)

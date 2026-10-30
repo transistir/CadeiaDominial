@@ -41,6 +41,12 @@ class LancamentoOrigemService:
     # TTL de 1h para POSTs seguintes e era um por processo (gunicorn com
     # workers sync), como o do tronco que o #210 já tinha desligado.
     ATRIBUTO_MAPEAMENTO = '_mapeamento_origens_post'
+    # IDs dos documentos de origem que a criação automática gravou para a
+    # instância (#263 rodada 3), no mesmo molde temporário do mapeamento:
+    # cobre também o documento criado pelo sinal post_save durante o save.
+    # Quem precisa do vínculo consome a lista — nunca infere pelo diff dos
+    # documentos do imóvel, que pega o que outro escritor criou ali.
+    ATRIBUTO_DOCUMENTOS_CRIADOS = '_documentos_origem_criados'
 
     @staticmethod
     def _origem_restrita(tipo, numero, cartorio, documentos_queryset):
@@ -86,6 +92,20 @@ class LancamentoOrigemService:
         lancamento.__dict__.pop(
             LancamentoOrigemService.ATRIBUTO_MAPEAMENTO, None
         )
+
+    @staticmethod
+    def _registrar_documento_criado(lancamento, documento):
+        """Anota na instância o documento de origem que acabou de ser criado."""
+        lancamento.__dict__.setdefault(
+            LancamentoOrigemService.ATRIBUTO_DOCUMENTOS_CRIADOS, []
+        ).append(documento.pk)
+
+    @staticmethod
+    def consumir_documentos_criados(lancamento):
+        """IDs dos documentos de origem criados para a instância; limpa a lista."""
+        return tuple(lancamento.__dict__.pop(
+            LancamentoOrigemService.ATRIBUTO_DOCUMENTOS_CRIADOS, ()
+        ))
 
     @staticmethod
     def item_do_mapeamento(
@@ -529,6 +549,9 @@ class LancamentoOrigemService:
                 continue
             if documento_criado:
                 documentos_criados.append(documento_criado)
+                LancamentoOrigemService._registrar_documento_criado(
+                    lancamento, documento_criado
+                )
 
         return LancamentoOrigemService._montar_mensagem_origens(
             len(origens_processadas), len(documentos_criados), falhas,
@@ -776,6 +799,9 @@ class LancamentoOrigemService:
                     continue
                 if documento_criado:
                     documentos_criados.append(documento_criado)
+                    LancamentoOrigemService._registrar_documento_criado(
+                        lancamento, documento_criado
+                    )
 
         if not identificadas:
             return None

@@ -492,7 +492,9 @@ def processar_origens_para_documentos(
                     'descricao': f'{tipo.title()} {origem} identificada na origem do lançamento'
                 })
             else:
-                print(f"AVISO: Origem {origem} não existe em outros imóveis - não criando documento automático")
+                # Mensagem fixa com id técnico (#263 rodada 2): stdout é
+                # log — número/tipo de documento não vai para lá.
+                print(f"AVISO: Origem do lançamento {getattr(lancamento, 'pk', None)} não existe em outros imóveis - não criando documento automático")
         
         # VALIDAÇÃO 3: Números simples - assumir como matrícula (padrão)
         elif re.match(r'^\d+$', origem):
@@ -510,7 +512,8 @@ def processar_origens_para_documentos(
                     'descricao': f'Matrícula M{origem} identificada na origem do lançamento'
                 })
             else:
-                print(f"AVISO: Número {origem} não pode ser criado como M{origem} - não criando documento automático")
+                # Id técnico, nunca o número digitado (#263 rodada 2).
+                print(f"AVISO: Origem do lançamento {getattr(lancamento, 'pk', None)} não pode ser criada como matrícula - não criando documento automático")
         
         # VALIDAÇÃO 4: Texto com números - apenas se contexto for muito claro
         elif re.search(r'\d+', origem):
@@ -539,7 +542,7 @@ def processar_origens_para_documentos(
                         'descricao': f'{tipo.title()} {numero_completo} extraída do texto: "{origem}"'
                     })
                 else:
-                    print(f"AVISO: {tipo.title()} {numero_completo} não existe em outros imóveis - não criando documento automático")
+                    print(f"AVISO: Documento de origem do lançamento {getattr(lancamento, 'pk', None)} não existe em outros imóveis - não criando documento automático")
     
     return origens_processadas
 
@@ -589,7 +592,8 @@ def _validar_origem_existente(
     if documento_existente:
         # Documento existe em outro imóvel - NÃO criar duplicado
         # Em vez disso, deve importar a cadeia dominial
-        print(f"AVISO: Documento {numero_documento} já existe no imóvel {documento_existente.imovel.id} (número: {documento_existente.numero}) - não criando duplicado")
+        # Ids técnicos no log, nunca o número do documento (#263 rodada 2).
+        print(f"AVISO: Documento pk={documento_existente.pk} já existe no imóvel pk={documento_existente.imovel_id} - não criando duplicado")
         return False
 
     # REGRA PÉTREA: Se é lançamento de início de matrícula e não existe em outros imóveis
