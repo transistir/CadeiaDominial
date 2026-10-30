@@ -4,7 +4,10 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-from .migration_utils import executor_para_migracao_historica
+from .migration_utils import (
+    executor_para_migracao_historica,
+    restaurar_estado_mais_recente,
+)
 
 
 CAMPOS_POR_MODELO = {
@@ -39,8 +42,7 @@ class NormalizaNoneTextualMigrationTest(TransactionTestCase):
         self._criar_base()
 
     def tearDown(self):
-        executor = MigrationExecutor(connection)
-        executor.migrate(self.migrate_to)
+        restaurar_estado_mais_recente(connection)
         super().tearDown()
 
     def _criar_base(self):

@@ -2,7 +2,10 @@ from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-from .migration_utils import executor_para_migracao_historica
+from .migration_utils import (
+    executor_para_migracao_historica,
+    restaurar_estado_mais_recente,
+)
 
 
 class ImovelCartorioNotNullMigrationTest(TransactionTestCase):
@@ -19,9 +22,8 @@ class ImovelCartorioNotNullMigrationTest(TransactionTestCase):
         self.tis, self.pessoa = self.criar_base()
 
     def tearDown(self):
-        executor = MigrationExecutor(connection)
         self.apps_antes.get_model('dominial', 'Imovel').objects.all().delete()
-        executor.migrate(self.migrate_to)
+        restaurar_estado_mais_recente(connection)
         super().tearDown()
 
     def criar_base(self):
