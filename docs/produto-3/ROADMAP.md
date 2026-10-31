@@ -775,6 +775,15 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > (I-9 + I-6 + I-7 + I-8) soma **2,5–4 dias de agente**. **Decisão do Hiure em
 > 29/10: entregar I-9 + I-6 até 31/10 e deslizar I-7/I-8** para depois do
 > prazo (com o escopo mínimo já anotado nos itens 8 e 9).
+>
+> **Replanejamento da sprint — 31/10/2026 (Hiure, issues #312 e #314):** o
+> teste do bloco F3 no servidor de testes mostrou que o bloqueio não é a
+> extração, é a **complexidade da revisão**. A ordem de execução passa a ser
+> **I-10 (#314) → I-6 (#263) → I-7 (#264) → I-8 (#265)**.
+> O **I-9 (#307)** fica **absorvido**: card/polling entregues no #309; o
+> restante (fluxo de um clique, obrigatório não descartável, pendência em
+> linguagem de negócio, seletor de cartório nunca vazio) é o **I-10**.
+> Decisão registrada nesta seção, como exige a regra de fila do topo.
 
 **Estado real do bloco (verificado 29/10/2026 em `origin/develop`):** I-1
 (#274), I-2 (#275/#276), I-3 (#279), I-4 (#288) e I-5 (#291) estão mergeados;
@@ -805,8 +814,9 @@ fecham na validação do bloco, não no merge.
    contrato FUNAPE. **PR #291 mergeado 19/10** (squash `127daf2c`); contrato
    A3 v1.1 integrado no PR #305 (`8743eee4`, #304 PR1) e `job_id` próprio do
    ocrcadeia aceito no PR #306 (`a0fce77f`, #300). Débitos de review no #296.
-6. **I-9 🆕 P1 — PRÓXIMO** #307 — UX/robustez do OCR no teste ponta a ponta
-   (correção de app, não é produto do contrato):
+6. **I-9 ✅ parcial** #307 — UX/robustez do OCR no teste ponta a ponta:
+   card com expectativa, progresso e polling resiliente **entregues no #309**;
+   o restante do escopo foi reescrito como **I-10 (#314)** em 31/10.
    (a) mensagem de expectativa + tempo decorrido no card durante `processando`
    (`templates/dominial/upload_documento_digital.html`,
    `static/dominial/js/ocr_card.js`);
@@ -821,6 +831,25 @@ fecham na validação do bloco, não no merge.
    (19/10) + 1 `extraido` (27/10), nenhum `pendente`/`erro`. Expor no
    healthcheck fica **opcional**.
    Estimativa ~0,5 dia; teste em Node (`ia_ocr/tests/js/ocr_card.test.js`).
+6b. **I-10 🆕 P0 — PRÓXIMO** #314 — revisão em **um clique**: formulário
+   pré-preenchido primeiro, revisão de texto opcional (correção de app, fora
+   dos 5 produtos do contrato). Escopo decidido pelo Hiure em 31/10, no teste
+   real:
+   (a) extração automática ao concluir o OCR — sem clique em "extrair campos"
+   e sem passar pela confirmação de texto;
+   (b) a revisão abre no formulário pré-preenchido (documento/partes/área) e
+   "Revisar texto do OCR" vira ação secundária;
+   (c) **campo obrigatório não se descarta** (`tipo`, `data`, `cartorio`) —
+   vira ação explícita ("informar cartório"), nunca card descartado bloqueando;
+   (d) pendência em linguagem de negócio, não `/document/cartorio —
+   obrigatorio_ausente`;
+   (e) seletor de cartório **nunca vazio** e pré-seleção quando há 1
+   correspondência no cadastro (#315; defesa em profundidade ao
+   `ocr-service#37`);
+   (f) saída única "Concluir revisão" (e "Confirmar e importar" quando a I-6
+   existir).
+   Depende de `ocr-service#37` para o caso real do teste (cartório não
+   extraído), mas o desenho não pode depender dele.
 7. **I-6** #263 — importação assistida: gravação transacional de
    Lançamento/Pessoas com prevenção de duplicidade e vínculo ao PDF — Produto 4.
    **Absorve o item 1 do #296** (limites contextuais: RG → `Pessoas.rg` 20,
@@ -973,6 +1002,13 @@ fecham na validação do bloco, não no merge.
 > dias de agente. **Decisão do Hiure em 29/10: entregar I-9 + I-6 até 31/10 e
 > deslizar I-7/I-8** (escopo mínimo anotado na seção F3). Nada muda no
 > Produto 3: o **R4** continua sendo o próximo bloco depois de fechar a F3.
+
+> **Atualizado 31/10 (replanejamento da sprint F3 — issue #314):** a sprint
+> corrente passa a ser **I-10 (#314) → I-6 (#263) → I-7 (#264) → I-8 (#265)**.
+> O I-9 (#307) fica parcialmente entregue (#309) e o restante absorvido pelo
+> I-10, decidido pelo Hiure depois do teste real no servidor de testes — o
+> gargalo é a revisão, não a extração. O bloco F3 não fecha no prazo do
+> contrato (31/10); I-6 em diante escorrega.
 
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
