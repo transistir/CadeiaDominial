@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container ocr-revisao" data-ocr-revisao data-url-salvar="{{ url_salvar }}">
+<div class="container ocr-revisao" data-ocr-revisao{% if permitir_sem_atos %} data-permitir-sem-atos="1"{% endif %} data-url-salvar="{{ url_salvar }}">
     <div class="cadeia-header">
         <h1>Revisão de campos</h1>
         <div class="imovel-info">
@@ -37,6 +37,24 @@
             <li class="pendencia"><code>{{ item.chave }}</code> — {% if item.motivo == 'criar_novo_sem_nome' %}Informe o nome do novo cartório{% else %}{{ item.motivo }}{% endif %}</li>
             {% endfor %}
         </ul>
+    </section>
+    {% endif %}
+
+    {% if permitir_sem_atos %}
+    {% comment %}
+       Issue #262: a pendência continua na lista acima; aqui só a confirmação
+       explícita do revisor, sem fabricar atos nem esconder a ausência.
+    {% endcomment %}
+    <section class="revisao-bloco" aria-labelledby="ocr-sem-atos-titulo" data-ocr-aviso-sem-atos>
+        <h2 class="h6" id="ocr-sem-atos-titulo">0 atos reconhecidos</h2>
+        <p class="mb-2">
+            Nenhum ato foi reconhecido neste documento. Se isso estiver correto,
+            confirme abaixo para concluir a revisão sem importar atos.
+        </p>
+        <label class="campo-check">
+            <input type="checkbox" data-ocr-sem-atos{% if somente_leitura %} disabled{% endif %}>
+            Confirmo que este documento não tem atos a importar
+        </label>
     </section>
     {% endif %}
 
@@ -164,7 +182,7 @@
             {% csrf_token %}
             <input type="hidden" name="versao" value="{{ versao }}" data-ocr-versao>
             <button type="submit" class="btn btn-primary" data-ocr-finalizar
-                    {% if somente_leitura %}disabled title="Esta extração já foi revisada."{% elif pendencias %}disabled title="Resolva as pendências antes de finalizar."{% endif %}>Finalizar revisão</button>
+                    {% if somente_leitura %}disabled title="Esta extração já foi revisada."{% elif permitir_sem_atos %}disabled{% elif pendencias %}disabled title="Resolva as pendências antes de finalizar."{% endif %}>Finalizar revisão</button>
             <small class="text-muted" data-ocr-finalizar-msg role="status" aria-live="polite"></small>
         </form>
     </div>

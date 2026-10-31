@@ -29,7 +29,7 @@ from .models import (
 from .revisao import (
     IndiceCartorios, IndicePessoas, aplicar_linha, desnormalizar,
     enriquecer_payload, garantir_placeholders_obrigatorios, identidade_parte,
-    pendencias, versao_linha,
+    pendencias, pendencias_sem_atos, versao_linha,
 )
 
 logger = logging.getLogger(__name__)
@@ -350,11 +350,60 @@ def salvar_bloco(
     return travada, versao, partes_invalidadas, campos_novos
 
 
-def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerida:
+def pode_finalizar_sem_atos(extracao, bloqueios=None) -> bool:
+    """Flag ligada e a única coisa que falta são os atos (issue #262).
+
+    A paliativa existe porque o **serviço** devolve ``acts: []``. Se
+    ``payload_servico`` traz atos, a ausência na tela vem de descarte do
+    revisor — finalizar "sem atos" seria falso — e atos descartados pelo
+    revisor não contam para liberar a finalização.
+    """
+    if not getattr(settings, 'OCR_PERMITIR_FINALIZAR_SEM_ATOS', False):
+        return False
+    payload = extracao.payload_servico
+    if payload is None or payload.get('acts'):
+        return False
+    if bloqueios is None:
+        bloqueios = pendencias(extracao)
+    return (
+        bool(bloqueios)
+        and all(item['motivo'] == 'nenhum_ato' for item in bloqueios)
+        and not pendencias_sem_atos(extracao)
+    )
+
+
+def _com_bloqueios_de_campo(bloqueios, extracao) -> list[dict]:
+    """Junta os bloqueios de campo sem duplicar pares (chave, motivo).
+
+    Sem atos, ``pendencias()`` devolve só ``nenhum_ato``; os bloqueios de
+    campo só existem em ``pendencias_sem_atos``. A ordem é a de
+    ``pendencias()`` (a tela e o 422 mostram primeiro o que já era visível).
+    """
+    vistos = {(item['chave'], item['motivo']) for item in bloqueios}
+    resultado = list(bloqueios)
+    for item in pendencias_sem_atos(extracao):
+        par = (item['chave'], item['motivo'])
+        if par in vistos:
+            continue
+        vistos.add(par)
+        resultado.append(item)
+    return resultado
+
+
+def finalizar_revisao(
+    extracao, usuario, versao_cliente=None, confirmar_sem_atos=False,
+) -> ExtracaoSugerida:
     """Finaliza a revisão vigente sem pendências e audita uma única transição.
 
     `versao_cliente` é o token que a tela exibiu; divergir do bloco travado é
     conflito. None (chamada interna) dispensa a comparação.
+
+    Issue #262 (I-5): enquanto o serviço devolve ``acts: []``, a pendência
+    ``nenhum_ato`` continua existindo (é visível na tela e no histórico). A
+    flag ``OCR_PERMITIR_FINALIZAR_SEM_ATOS`` só destrava a finalização quando
+    o revisor confirma explicitamente (``confirmar_sem_atos``) e TODAS as
+    pendências restantes são ``nenhum_ato`` — nunca fabrica atos nem descarta
+    outra pendência. A transição é auditada com motivo próprio.
     """
     with transaction.atomic():
         travada = _travar_extracao_revisao(extracao)
@@ -369,14 +418,26 @@ def finalizar_revisao(extracao, usuario, versao_cliente=None) -> ExtracaoSugerid
         if job.status != estados.EXTRAIDO:
             raise ExtracaoRecusada('estado_invalido')
         bloqueios = pendencias(travada)
-        if bloqueios:
-            raise RevisaoIncompleta(bloqueios)
+        sem_atos = (
+            confirmar_sem_atos is True
+            and pode_finalizar_sem_atos(travada, bloqueios)
+        )
+        if bloqueios and not sem_atos:
+            # O 422 precisa explicar também os bloqueios de campo que
+            # ``pendencias()`` esconde atrás de ``nenhum_ato``.
+            raise RevisaoIncompleta(
+                _com_bloqueios_de_campo(bloqueios, travada)
+            )
 
         travada.finalizada_em = timezone.now()
         travada.finalizada_por = usuario
         travada.save(update_fields=['finalizada_em', 'finalizada_por'])
         job.transicionar(
-            estados.REVISADO, usuario=usuario, motivo='revisao_finalizada',
+            estados.REVISADO, usuario=usuario,
+            motivo=(
+                'revisao_finalizada_sem_atos' if sem_atos
+                else 'revisao_finalizada'
+            ),
         )
     return travada
 

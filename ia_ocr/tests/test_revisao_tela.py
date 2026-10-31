@@ -5,6 +5,7 @@ import re
 
 from django.conf import settings
 from django.shortcuts import resolve_url
+from django.test import override_settings
 from django.test.html import Element
 from django.utils import timezone
 
@@ -953,3 +954,93 @@ def _decisao_do_card(card):
             'criar_novo': escolhido is None and bool(criar),
         }
     return decisao
+
+
+class RevisaoSemAtosTelaTest(TelaTextoBase):
+    """Issue #262: a tela oferece confirmação sem atos só com a flag ligada."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.dono)
+        self.documento.tipo.tipo = 'matricula'
+        self.documento.tipo.save(update_fields=['tipo'])
+        self.job.paginas.filter(numero_pagina=1).update(texto_ocr=TEXTO_PAGINA_1)
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.EXTRAIDO)
+        self.job.refresh_from_db()
+
+    def _extracao_sem_atos(self):
+        payload = payload_averbacao(self.job.job_id)
+        payload['acts'] = []
+        extracao = ExtracaoSugerida.objects.create(
+            ocr_job=self.job, schema_version=SCHEMA_VERSION,
+            payload=payload, payload_servico=payload, provider=PROVIDER,
+        )
+        CampoSugerido.objects.bulk_create(
+            revisao.desnormalizar(extracao, payload, list(self.job.paginas.all())),
+        )
+        # Sem atos, o cabeçalho ainda precisa das escolhas de cartório.
+        extracao.campos.filter(tipo_valor='cartorio').update(criar_novo=True)
+        return extracao
+
+    @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
+    def test_flag_ligada_mostra_aviso_e_mantem_pendencia(self):
+        self._extracao_sem_atos()
+
+        resposta = self.client.get(self.url('campos_job_ocr'))
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('data-permitir-sem-atos="1"', html)
+        self.assertIn('0 atos reconhecidos', html)
+        self.assertIn('data-ocr-sem-atos', html)
+        # A pendência continua visível: nunca é escondida.
+        self.assertIn('<code>/acts</code> — nenhum_ato', html)
+
+    @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=False)
+    def test_flag_desligada_renderiza_como_hoje(self):
+        self._extracao_sem_atos()
+
+        resposta = self.client.get(self.url('campos_job_ocr'))
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotIn('data-permitir-sem-atos', html)
+        self.assertNotIn('0 atos reconhecidos', html)
+        self.assertNotIn('data-ocr-sem-atos', html)
+        self.assertIn('<code>/acts</code> — nenhum_ato', html)
+
+    @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
+    def test_campo_obrigatorio_pendente_nao_mostra_confirmacao(self):
+        # Issue #262: sem atos e com campo do documento pendente, a tela não
+        # pode oferecer a confirmação que destravaria a finalização.
+        payload = payload_averbacao(self.job.job_id)
+        payload['acts'] = []
+        payload['document'].pop('data')
+        extracao = ExtracaoSugerida.objects.create(
+            ocr_job=self.job, schema_version=SCHEMA_VERSION,
+            payload=payload, payload_servico=payload, provider=PROVIDER,
+        )
+        CampoSugerido.objects.bulk_create(
+            revisao.desnormalizar(extracao, payload, list(self.job.paginas.all())),
+        )
+
+        resposta = self.client.get(self.url('campos_job_ocr'))
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotIn('data-permitir-sem-atos', html)
+        self.assertNotIn('data-ocr-sem-atos', html)
+        self.assertIn('<code>/acts</code> — nenhum_ato', html)
+
+    @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
+    def test_comentario_do_template_nao_vaza_no_html(self):
+        # Issue #262: o bloco de aviso usa {% comment %}; o texto não pode
+        # aparecer como conteúdo da página.
+        self._extracao_sem_atos()
+
+        resposta = self.client.get(self.url('campos_job_ocr'))
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('data-permitir-sem-atos="1"', html)
+        self.assertNotIn('sem fabricar atos nem esconder a ausência', html)
