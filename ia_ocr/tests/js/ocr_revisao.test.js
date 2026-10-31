@@ -182,9 +182,13 @@ function criarCenario(opcoes) {
   const valor = criarElemento('input', { 'data-campo-valor': '', 'data-tipo': 'texto' }, card);
   valor.type = 'text';
   valor.value = 'original';
-  const incluir = criarElemento('input', { 'data-campo-incluir': '' }, card);
-  incluir.type = 'checkbox';
-  incluir.checked = true;
+  // Campo obrigatório (tipo/data/cartório) não renderiza o checkbox de incluir.
+  let incluir = null;
+  if (!opcoes.obrigatorio) {
+    incluir = criarElemento('input', { 'data-campo-incluir': '' }, card);
+    incluir.type = 'checkbox';
+    incluir.checked = true;
+  }
   const conferido = criarElemento('input', { 'data-campo-conferido': '' }, card);
   conferido.type = 'checkbox';
   conferido.checked = true;
@@ -254,7 +258,7 @@ function criarCenario(opcoes) {
   (sandbox.document.listeners.DOMContentLoaded || []).forEach((fn) => fn());
 
   return {
-    raiz, form, botao, msg, contador, rotulo, checkbox, card, valor,
+    raiz, form, botao, msg, contador, rotulo, checkbox, card, valor, conferido,
     timeouts, alertas, navegacoes, chamadas,
     dispararInput() {
       (raiz.listeners.input || []).forEach((fn) => fn({ target: valor }));
@@ -475,6 +479,23 @@ caso('sem o modo: save elegível pede reload para liberar o finalizar sem atos',
     c.navegacoes.indexOf('reload') !== -1,
     'save elegível sem o modo deve recarregar para criar os controles'
   );
+});
+
+// 9. Campo obrigatório não tem checkbox de incluir: o payload manda
+//    incluir true e o change não marca o card como descartado.
+caso('obrigatório sem checkbox: payload incluir true e card não descartado', async () => {
+  const c = criarCenario({ semAtos: false, obrigatorio: true });
+  afirmarIgual(c.card.querySelector('[data-campo-incluir]'), null, 'card não deve ter checkbox de incluir');
+
+  c.conferido.checked = false;
+  c.dispararChange(c.conferido);
+  afirmarIgual(c.card.classList.contains('descartado'), false, 'change não pode descartar obrigatório');
+
+  c.executarTimeout(0);
+  await esperar();
+  const salvar = c.chamadas.find((item) => item.url === '/salvar/');
+  afirmar(!!salvar, 'change deve agendar o save');
+  afirmarIgual(salvar.corpo.decisoes[0].incluir, true, 'payload do obrigatório deve ter incluir true');
 });
 
 (async () => {

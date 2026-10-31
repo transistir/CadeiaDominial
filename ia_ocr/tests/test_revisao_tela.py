@@ -5,7 +5,7 @@ import re
 
 from django.conf import settings
 from django.shortcuts import resolve_url
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from django.test.html import Element
 from django.utils import timezone
 
@@ -111,6 +111,76 @@ class RevisaoTelaTest(TelaTextoBase):
         self.assertNotContains(resposta, '"><img onerror=1>')
         self.assertContains(resposta, '&lt;script&gt;alert(1)&lt;/script&gt;')
         self.assertContains(resposta, '&quot;&gt;&lt;img onerror=1&gt;')
+
+    def _artigo(self, html, chave):
+        achado = re.search(
+            r'<article[^>]*data-chave="%s".*?</article>' % re.escape(chave),
+            html, re.S,
+        )
+        self.assertIsNotNone(achado, chave)
+        return achado.group(0)
+
+    def test_salvar_incluir_false_em_obrigatorio_e_coagido(self):
+        extracao = self._extracao()
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{'chave': '/document/cartorio', 'incluir': False}],
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/document/cartorio')
+        self.assertNotEqual(campo.status_revisao, 'descartado')
+
+    def test_salvar_incluir_false_em_nao_obrigatorio_descarta(self):
+        extracao = self._extracao()
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{'chave': '/document/numero', 'incluir': False}],
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/document/numero')
+        self.assertEqual(campo.status_revisao, 'descartado')
+
+    def test_tela_obrigatorio_sem_checkbox_incluir_e_com_badge(self):
+        self._extracao()
+        html = self._tela().content.decode()
+        obrigatorio = self._artigo(html, '/document/cartorio')
+        self.assertNotIn('data-campo-incluir', obrigatorio)
+        self.assertIn('Obrigatório', obrigatorio)
+        opcional = self._artigo(html, '/document/numero')
+        self.assertIn('data-campo-incluir', opcional)
+        self.assertNotIn('Obrigatório', opcional)
+
+    def test_tela_obrigatorio_legado_descartado_aparece_incluido(self):
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/document/cartorio').update(
+            status_revisao='descartado',
+        )
+        html = self._tela().content.decode()
+        self.assertNotIn(' descartado"', self._artigo(html, '/document/cartorio'))
+
+    def test_tela_pendencia_de_cartorio_em_linguagem_de_negocio(self):
+        self._extracao_com_cartorio_nulo()
+        html = self._tela().content.decode()
+        bloco = re.search(r'data-ocr-pendencias.*?</section>', html, re.S).group(0)
+        self.assertIn('escolha o cartório', bloco)
+        principal = re.sub(r'<details.*?</details>', '', bloco, flags=re.S)
+        principal = re.sub(r'title="[^"]*"', '', principal)
+        self.assertNotIn('/document/cartorio', principal)
+
+    def test_campo_obrigatorio(self):
+        self.assertTrue(revisao.campo_obrigatorio('/document/tipo'))
+        self.assertTrue(revisao.campo_obrigatorio('/acts/0/data'))
+        self.assertTrue(revisao.campo_obrigatorio('/acts/2/tipo_sugerido'))
+        self.assertFalse(revisao.campo_obrigatorio('/document/numero'))
+        self.assertFalse(revisao.campo_obrigatorio('/acts/0/partes/1/nome'))
 
     def test_tela_mostra_pendencias_e_desabilita_finalizar(self):
         extracao = self._extracao()
@@ -994,7 +1064,7 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
         self.assertIn('0 atos reconhecidos', html)
         self.assertIn('data-ocr-sem-atos', html)
         # A pendência continua visível: nunca é escondida.
-        self.assertIn('<code>/acts</code> — nenhum_ato', html)
+        self.assertIn('Nenhum ato reconhecido neste documento', html)
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=False)
     def test_flag_desligada_renderiza_como_hoje(self):
@@ -1007,7 +1077,7 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
         self.assertNotIn('data-permitir-sem-atos', html)
         self.assertNotIn('0 atos reconhecidos', html)
         self.assertNotIn('data-ocr-sem-atos', html)
-        self.assertIn('<code>/acts</code> — nenhum_ato', html)
+        self.assertIn('Nenhum ato reconhecido neste documento', html)
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_campo_obrigatorio_pendente_nao_mostra_confirmacao(self):
@@ -1030,7 +1100,7 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
         self.assertEqual(resposta.status_code, 200)
         self.assertNotIn('data-permitir-sem-atos', html)
         self.assertNotIn('data-ocr-sem-atos', html)
-        self.assertIn('<code>/acts</code> — nenhum_ato', html)
+        self.assertIn('Nenhum ato reconhecido neste documento', html)
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_comentario_do_template_nao_vaza_no_html(self):
@@ -1044,3 +1114,25 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
         self.assertEqual(resposta.status_code, 200)
         self.assertIn('data-permitir-sem-atos="1"', html)
         self.assertNotIn('sem fabricar atos nem esconder a ausência', html)
+
+
+class DescreverPendenciaMotivosDoMotorTest(SimpleTestCase):
+    def test_motivos_do_motor_tem_rotulo_e_acao(self):
+        for motivo in (
+            'revisao_pendente', 'decisao_perdida', 'match_invalidado',
+            'valor_incompativel_destino', 'valor_acima_do_limite_destino',
+        ):
+            with self.subTest(motivo=motivo):
+                d = revisao.descrever_pendencia(
+                    {'chave': '/document/x', 'motivo': motivo},
+                )
+                self.assertNotEqual(d['rotulo'], motivo)
+                self.assertTrue(d['acao'])
+
+    def test_motivo_desconhecido_nao_vaza_codigo_cru(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/document/x', 'motivo': 'foo_bar'},
+        )
+        self.assertEqual(d['rotulo'], 'Pendência a revisar')
+        self.assertEqual(d['acao'], 'revise o campo')
+        self.assertEqual(d['motivo'], 'foo_bar')

@@ -179,9 +179,11 @@
         }
 
         function decisao(card) {
+            // Obrigatório não tem checkbox de inclusão: sempre entra.
+            var incluir = card.querySelector('[data-campo-incluir]');
             var item = {
                 chave: card.getAttribute('data-chave'),
-                incluir: !!(card.querySelector('[data-campo-incluir]') || {}).checked,
+                incluir: incluir ? !!incluir.checked : true,
                 conferido: !!(card.querySelector('[data-campo-conferido]') || {}).checked
             };
             var valor = card.querySelector('[data-campo-valor]');
@@ -415,7 +417,8 @@
                 } else if (alvo === select && select.value && criarNovo) {
                     criarNovo.checked = false;
                 }
-                card.classList.toggle('descartado', !(card.querySelector('[data-campo-incluir]') || {}).checked);
+                var incluirCard = card.querySelector('[data-campo-incluir]');
+                card.classList.toggle('descartado', incluirCard ? !incluirCard.checked : false);
                 agendar(card);
             }
         });

@@ -61,6 +61,7 @@ MOTIVO_CRIAR_NOVO_SEM_NOME = 'criar_novo_sem_nome'
 # Destinos obrigatórios (§2.A): ausentes no payload → placeholder em revisão.
 _OBRIGATORIOS_DOCUMENTO = ('tipo', 'data', 'cartorio')
 _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
+_CHAVE_OBRIGATORIA_ATO = re.compile(r'/acts/\d+/(.+)')
 
 _TIPOS_NORMALIZAVEIS = ('data', 'decimal', 'area')
 
@@ -534,6 +535,68 @@ def _tem_folha(no, caminho):
             return False
         no = no.get(parte)
     return _eh_folha(no)
+
+
+def campo_obrigatorio(chave: str) -> bool:
+    """A linha é obrigatória (documento ou ato) e não pode ser descartada."""
+    if chave.startswith('/document/'):
+        return chave[len('/document/'):] in _OBRIGATORIOS_DOCUMENTO
+    achado = _CHAVE_OBRIGATORIA_ATO.fullmatch(chave)
+    return bool(achado) and achado.group(1) in _OBRIGATORIOS_ATO
+
+
+_ROTULO_PENDENCIA = {
+    'nenhum_ato': 'Nenhum ato reconhecido neste documento',
+    'obrigatorio_ausente': 'Campo obrigatório não preenchido',
+    'escolha_pendente': 'Cadastro não escolhido',
+    'baixa_confianca': 'Confira este valor (baixa confiança)',
+    'trecho_ausente': 'Sem trecho de origem',
+    'normalizacao_invalida': 'Valor não reconhecido',
+    'unidade_area': 'Área em unidade não reconhecida',
+    MOTIVO_CRIAR_NOVO_SEM_NOME: 'Informe o nome do novo cartório',
+    'revisao_pendente': 'Confira este valor',
+    'decisao_perdida': 'A decisão anterior não foi aplicada',
+    'match_invalidado': 'O cadastro escolhido não corresponde mais ao texto',
+    'valor_incompativel_destino': 'Valor não aceito neste campo',
+    'valor_acima_do_limite_destino': 'Valor acima do limite deste campo',
+}
+_ACAO_PENDENCIA = {
+    'escolha_pendente': 'escolha o cadastro correspondente',
+    'trecho_ausente': 'confira no documento',
+    'normalizacao_invalida': 'corrija o valor',
+    'unidade_area': 'confirme a conversão',
+    'revisao_pendente': 'confirme ou corrija',
+    'decisao_perdida': 'revise o campo',
+    'match_invalidado': 'escolha novamente',
+    'valor_incompativel_destino': 'corrija o valor',
+    'valor_acima_do_limite_destino': 'reduza o valor',
+}
+_ACAO_OBRIGATORIO = {
+    'tipo': 'informe o tipo do documento',
+    'data': 'informe a data',
+    'cartorio': 'escolha o cartório',
+}
+
+
+def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
+    """Texto de negócio de uma pendência; chave/motivo crus seguem para suporte."""
+    chave, motivo = item['chave'], item['motivo']
+    if motivo == 'obrigatorio_ausente':
+        acao = _ACAO_OBRIGATORIO.get(chave.rsplit('/', 1)[-1], 'preencha o campo')
+    elif motivo == 'nenhum_ato':
+        acao = 'confirmar que não há atos' if sem_atos_liberado else ''
+    else:
+        acao = _ACAO_PENDENCIA.get(motivo, '')
+    rotulo = _ROTULO_PENDENCIA.get(motivo)
+    if rotulo is None:
+        # Motivo fora do mapa: o código cru fica só no <details> (``motivo``).
+        rotulo, acao = 'Pendência a revisar', 'revise o campo'
+    return {
+        'chave': chave,
+        'motivo': motivo,
+        'rotulo': rotulo,
+        'acao': acao,
+    }
 
 
 def pendencias(extracao) -> list[dict]:
