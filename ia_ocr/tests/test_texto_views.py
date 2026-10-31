@@ -11,6 +11,7 @@ TI→Imóvel→Documento). Fora do escopo do usuário → 404, o padrão do proj
 
 import uuid
 from datetime import date
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
@@ -513,3 +514,53 @@ class ConfirmarPaginaViewTest(TelaTextoBase):
 
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(self.pagina(1).confirmado_por, outro)
+
+
+class AutoExtrairTelaTextoTest(TelaTextoBase):
+    """#314: a tela só se auto-submete quando ainda não há extração."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.dono)
+
+    def _auto(self, resposta):
+        return _elementos(resposta.content.decode(), 'form', presentes=('data-ocr-auto-extrair',))
+
+    def test_auto_extrair_verdadeiro_sem_extracao(self):
+        resposta = self.client.get(self.url_tela())
+
+        self.assertTrue(resposta.context['auto_extrair'])
+        self.assertEqual(len(self._auto(resposta)), 1)
+        self.assertContains(resposta, 'aria-live="polite"')
+        # Progresso nasce escondido e a região viva vazia (o JS preenche no disparo).
+        self.assertContains(resposta, 'hidden data-ocr-auto-extrair-progresso')
+        self.assertContains(resposta, 'data-ocr-auto-extrair-aviso role="status" aria-live="polite"></small>')
+        self.assertNotContains(resposta, 'Preparando o formulário com os campos reconhecidos')
+        self.assertContains(resposta, 'dominial/js/ocr_auto_extrair.js')
+
+    def test_auto_extrair_falso_com_extracao_vigente(self):
+        with mock.patch.object(type(self.job), 'extracao_vigente', return_value=object()):
+            resposta = self.client.get(self.url_tela())
+
+        self.assertFalse(resposta.context['auto_extrair'])
+        self.assertEqual(self._auto(resposta), [])
+        self.assertNotContains(resposta, 'ocr_auto_extrair.js')
+
+    def test_auto_extrair_falso_sem_pode_extrair(self):
+        with mock.patch(
+            'ia_ocr.views._disponibilidade_extracao',
+            return_value=(False, 'O OCR não devolveu texto para todas as páginas.'),
+        ):
+            resposta = self.client.get(self.url_tela())
+
+        self.assertFalse(resposta.context['pode_extrair'])
+        self.assertFalse(resposta.context['auto_extrair'])
+        self.assertEqual(self._auto(resposta), [])
+
+    def test_auto_extrair_falso_com_job_nao_revisavel(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.TEXTO_CONFIRMADO)
+
+        resposta = self.client.get(self.url_tela())
+
+        self.assertFalse(resposta.context['auto_extrair'])
+        self.assertEqual(self._auto(resposta), [])

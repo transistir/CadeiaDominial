@@ -124,10 +124,15 @@
                     <small class="text-muted d-block mt-1" data-ocr-reprocessar-aviso>Cria um novo processamento do arquivo. O texto confirmado deste processamento só será substituído depois que o novo ciclo terminar e for confirmado; o histórico é preservado.</small>
                 </form>
 
-                <form class="col-md-4" method="post" action="{{ url_extrair_campos }}" data-ocr-form-global>
+                <form class="col-md-4" method="post" action="{{ url_extrair_campos }}" data-ocr-form-global{% if auto_extrair %} data-ocr-auto-extrair data-ocr-auto-extrair-job="{{ job.job_id }}"{% endif %}>
                     {% csrf_token %}
                     <input type="hidden" name="pagina" value="{{ pagina.numero_pagina }}">
                     <button type="submit" class="btn btn-primary" data-ocr-extrair-campos data-ocr-acao-global{% if not pode_extrair %} disabled{% endif %}>Extrair campos →</button>
+                    {% if auto_extrair %}
+                    {# Região viva vazia: o JS insere o texto no disparo (senão não é anunciado). #}
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true" hidden data-ocr-auto-extrair-progresso></span>
+                    <small class="d-block mt-1" data-ocr-auto-extrair-aviso role="status" aria-live="polite"></small>
+                    {% endif %}
                     {% if motivo_sem_extracao %}
                     <small class="text-muted d-block mt-1" data-ocr-extrair-campos-motivo>{{ motivo_sem_extracao }}</small>
                     {% endif %}
@@ -181,4 +186,5 @@
 {% block extra_js %}
 {# JS da tela versionado em estático, com testes em ia_ocr/tests/js/. #}
 <script src="{% static 'dominial/js/ocr_texto.js' %}"></script>
+{% if auto_extrair %}<script src="{% static 'dominial/js/ocr_auto_extrair.js' %}"></script>{% endif %}
 {% endblock %}

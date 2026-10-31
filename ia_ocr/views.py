@@ -177,6 +177,11 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     editadas = [p for p in paginas if p.estado == ESTADO_EDITADA]
     confirmadas = len(paginas) - len(nao_confirmadas) - len(editadas)
     pode_extrair, motivo_sem_extracao = _disponibilidade_extracao(job, paginas)
+    # #314: um clique do upload ao formulário — a tela submete sozinha o
+    # "Extrair campos" quando ainda não há extração (o POST segue o fluxo normal).
+    auto_extrair = bool(
+        pode_extrair and editavel and job.extracao_vigente() is None
+    )
 
     return render(request, 'ia_ocr/confirmacao_texto.html', {
         'tis': tis,
@@ -198,6 +203,7 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'faltam': len(nao_confirmadas) + len(editadas),
         'todas_confirmadas': confirmadas == len(paginas),
         'pode_extrair': pode_extrair,
+        'auto_extrair': auto_extrair,
         'motivo_sem_extracao': motivo_sem_extracao,
         # Bulk só quando há o que confirmar e o usuário não editou nada.
         'tem_editadas': bool(editadas),
