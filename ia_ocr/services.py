@@ -27,8 +27,9 @@ from .models import (
     PendenciaLimpezaArquivo,
 )
 from .revisao import (
-    IndiceCartorios, IndicePessoas, aplicar_linha, desnormalizar,
-    enriquecer_payload, garantir_placeholders_obrigatorios, identidade_parte,
+    IndiceCartorios, IndicePessoas, aplicar_linha, comarca_do_documento,
+    desnormalizar, enriquecer_payload, fallback_cartorio,
+    garantir_placeholders_obrigatorios, identidade_parte,
     pendencias, pendencias_sem_atos, versao_linha,
 )
 
@@ -269,6 +270,33 @@ def _validar_limites_bloco(extracao, decisoes):
             raise erro
 
 
+def _persistir_fallback_cartorio(extracao, campos, decisoes):
+    """Escolha de cartório vinda do fallback da tela: grava-o como candidato.
+
+    Só para campo sem ``match_candidatos`` cujo id escolhido está no fallback;
+    fora dele, ``aplicar_linha`` mantém a recusa.
+    """
+    indice = None
+    comarca = None
+    for chave, decisao in decisoes.items():
+        campo = campos[chave]
+        escolhido = (decisao.get('escolha') or {}).get('cartorio_escolhido_id')
+        if (
+            escolhido is None or campo.tipo_valor != 'cartorio'
+            or campo.match_candidatos
+        ):
+            continue
+        if indice is None:
+            indice = IndiceCartorios()
+            comarca = comarca_do_documento(extracao)
+        fallback = fallback_cartorio(
+            campo, indice, comarca, valor=decisao.get('valor'),
+        )
+        if escolhido in fallback:
+            campo.match_candidatos = fallback
+            campo.save(update_fields=['match_candidatos'])
+
+
 def salvar_bloco(
     extracao, decisoes, usuario, versao_cliente,
 ) -> tuple[ExtracaoSugerida, str, list[str], list[str]]:
@@ -305,6 +333,7 @@ def salvar_bloco(
             for chave, campo in campos.items() if campo.tipo_valor == 'parte'
         }
         agora = timezone.now()
+        _persistir_fallback_cartorio(travada, campos, decisoes)
         for chave, decisao in decisoes.items():
             campo = campos[chave]
             argumentos = {

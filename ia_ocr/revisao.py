@@ -1218,17 +1218,46 @@ class IndiceCartorios:
 
     def __init__(self):
         self._por_nome = {}
-        for cartorio_id, nome, cidade in Cartorios.objects.values_list(
-            'id', 'nome', 'cidade'
+        self._por_cidade = {}
+        for cartorio_id, nome, cidade, estado in Cartorios.objects.values_list(
+            'id', 'nome', 'cidade', 'estado'
         ):
+            cidade_chave = _normalizar_nome(cidade)
+            if cidade_chave:
+                self._por_cidade.setdefault(cidade_chave, []).append(
+                    (nome or '', cartorio_id, (estado or '').strip().upper())
+                )
             chave = _normalizar_nome(nome)
             if chave:
                 self._por_nome.setdefault(chave, []).append(
-                    (cartorio_id, _normalizar_nome(cidade))
+                    (
+                        cartorio_id, _normalizar_nome(cidade),
+                        (estado or '').strip().upper(),
+                    )
                 )
 
-    def match(self, nome, cidade=None):
+    def ids_da_cidade(self, cidade, uf=None, limite=None):
+        """Ids dos cartórios da cidade (sem acento/caixa), por nome.
+
+        ``uf`` informada exclui homônimos de outro estado.
+        """
+        entradas = sorted(
+            (
+                entrada
+                for entrada in self._por_cidade.get(
+                    _normalizar_nome(cidade), [],
+                )
+                if not uf or entrada[2] == uf
+            ),
+            key=lambda entrada: (entrada[0], entrada[1]),
+        )
+        ids = [cartorio_id for _nome, cartorio_id, _uf in entradas]
+        return ids[:limite] if limite else ids
+
+    def match(self, nome, cidade=None, uf=None):
         """``(escolhido_id|None, candidatos)`` por nome normalizado + cidade.
+
+        ``uf`` informada descarta cartório de outro estado.
 
         Cidade informada filtra: cidade divergente — ou cartório sem cidade
         para confirmar — não casa (homônimo de outro município é outro
@@ -1245,10 +1274,105 @@ class IndiceCartorios:
                 entrada for entrada in entradas
                 if entrada[1] == cidade_chave
             ]
-        ids = [cartorio_id for cartorio_id, _cidade in entradas]
+        if uf:
+            entradas = [entrada for entrada in entradas if entrada[2] == uf]
+        ids = [cartorio_id for cartorio_id, _cidade, _uf in entradas]
         if len(ids) == 1:
             return ids[0], []
         return None, ids
+
+
+_COMARCA = re.compile(
+    r'COMARCA\s+DE\s+([^\-–—/,\n]+)'
+    r'(?:\s*[-–—/,]\s*(?:ESTADO\s+D[AEO]\s+)?([A-ZÀ-Ú][A-ZÀ-Ú ]*))?',
+    re.IGNORECASE,
+)
+_UFS = {
+    'ACRE': 'AC', 'ALAGOAS': 'AL', 'AMAPA': 'AP', 'AMAZONAS': 'AM',
+    'BAHIA': 'BA', 'CEARA': 'CE', 'DISTRITO FEDERAL': 'DF',
+    'ESPIRITO SANTO': 'ES', 'GOIAS': 'GO', 'MARANHAO': 'MA',
+    'MATO GROSSO': 'MT', 'MATO GROSSO DO SUL': 'MS', 'MINAS GERAIS': 'MG',
+    'PARA': 'PA', 'PARAIBA': 'PB', 'PARANA': 'PR', 'PERNAMBUCO': 'PE',
+    'PIAUI': 'PI', 'RIO DE JANEIRO': 'RJ', 'RIO GRANDE DO NORTE': 'RN',
+    'RIO GRANDE DO SUL': 'RS', 'RONDONIA': 'RO', 'RORAIMA': 'RR',
+    'SANTA CATARINA': 'SC', 'SAO PAULO': 'SP', 'SERGIPE': 'SE',
+    'TOCANTINS': 'TO',
+}
+_SIGLAS = frozenset(_UFS.values())
+LIMITE_CANDIDATOS_FALLBACK = 20
+TAMANHO_CABECALHO = 600
+
+
+@dataclass(frozen=True)
+class Comarca:
+    cidade: str
+    uf: str | None = None
+
+
+def comarca_do_documento(extracao):
+    """``Comarca`` do CABEÇALHO (página 1, 600 primeiros caracteres).
+
+    Só ``COMARCA DE <CIDADE>``: trecho do corpo que cita outra comarca não
+    conta. Mais de uma cidade distinta no cabeçalho é ambíguo → ``None``.
+    """
+    textos = extracao.ocr_job.paginas.filter(numero_pagina=1).values_list(
+        'texto_confirmado', 'texto_corrigido', 'texto_ocr',
+    ).first() or ()
+    texto = next((t for t in textos if t), '')[:TAMANHO_CABECALHO]
+    achados = {}
+    for achado in _COMARCA.finditer(texto):
+        cidade = achado.group(1).strip(' .')
+        if cidade:
+            texto_uf = _normalizar_nome(achado.group(2) or '').upper()
+            uf = _UFS.get(texto_uf) or (
+                texto_uf if texto_uf in _SIGLAS else None
+            )
+            _cidade, ufs = achados.setdefault(
+                _normalizar_nome(cidade), (cidade, set()),
+            )
+            if uf:
+                ufs.add(uf)
+    if len(achados) != 1:
+        return None
+    (cidade, ufs), = achados.values()
+    # Mesma cidade com UFs diferentes (BOM JESUS - PI / - GO) é ambígua.
+    if len(ufs) > 1:
+        return None
+    return Comarca(cidade, next(iter(ufs), None))
+
+
+def candidatos_cartorio_fallback(
+    extracao, chave, indice, comarca=None,
+) -> list[int]:
+    """Candidatos de cartório quando o serviço não trouxe nenhum.
+
+    Sem escrita: devolve os ``match_candidatos`` do campo; senão o match
+    único por nome (com a cidade da ``comarca``); senão os cartórios da
+    comarca do cabeçalho (até 20, por nome). Sem comarca nem valor, ``[]``.
+    ``comarca`` vem de ``comarca_do_documento`` (calculada uma vez).
+    """
+    campo = extracao.campos.filter(chave=chave).first()
+    if campo is None:
+        return []
+    if campo.match_candidatos:
+        return list(campo.match_candidatos)
+    return fallback_cartorio(campo, indice, comarca)
+
+
+def fallback_cartorio(campo, indice, comarca, valor=None):
+    """``valor`` (decisão em curso) tem precedência sobre o salvo."""
+    valor = valor or campo.valor_final or campo.normalized
+    escolhido, _candidatos = indice.match(
+        valor, comarca.cidade if comarca else None,
+        comarca.uf if comarca else None,
+    )
+    if escolhido is not None:
+        return [escolhido]
+    if comarca is None:
+        return []
+    return indice.ids_da_cidade(
+        comarca.cidade, comarca.uf, LIMITE_CANDIDATOS_FALLBACK,
+    )
 
 
 def _normalized(no):

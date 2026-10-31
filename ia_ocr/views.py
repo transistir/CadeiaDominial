@@ -510,6 +510,26 @@ def _anexar_opcoes_cadastro(campos):
             campo.opcoes_cadastro = []
 
 
+def _preencher_fallback_cartorio(extracao, campos):
+    """Seletor de cartório nunca vazio: candidatos da comarca, só em memória.
+
+    Roda antes de ``_anexar_opcoes_cadastro`` para os rótulos saírem na mesma
+    query. Nada é salvo nem pré-selecionado: a escolha é do revisor.
+    """
+    sem_candidatos = [
+        campo for campo in campos
+        if campo.tipo_valor == 'cartorio' and not campo.match_candidatos
+    ]
+    if not sem_candidatos:
+        return
+    indice = revisao.IndiceCartorios()
+    comarca = revisao.comarca_do_documento(extracao)
+    for campo in sem_candidatos:
+        campo.match_candidatos = revisao.fallback_cartorio(
+            campo, indice, comarca,
+        )
+
+
 @login_required
 @require_GET
 def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
@@ -525,6 +545,9 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     if extracao is None:
         raise Http404('Extração indisponível.')
     campos = list(extracao.campos.order_by('chave'))
+    # Token do estado salvo: os candidatos abaixo são só de exibição.
+    versao = services.versao_bloco(extracao, campos=campos)
+    _preencher_fallback_cartorio(extracao, campos)
     _anexar_opcoes_cadastro(campos)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
@@ -569,7 +592,7 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'pendencias_total': len(pendencias),
         'permitir_sem_atos': permitir_sem_atos,
         'avisos': revisao.avisos(extracao),
-        'versao': services.versao_bloco(extracao, campos=campos),
+        'versao': versao,
         'somente_leitura': somente_leitura,
         'dpi': job.dpi or 200,
         'url_salvar': reverse('salvar_bloco_ocr', kwargs=kwargs_job),
