@@ -32,6 +32,7 @@
         sem_extracao: 'Extração indisponível.'
     };
     var AVISO_RECARGA = 'Identidade alterada: a tela será atualizada quando você sair dos campos.';
+    var AVISO_SEM_ATOS = 'Pendências resolvidas: a tela será atualizada para liberar o finalizar sem atos.';
 
     function iniciar(raiz) {
         var urlSalvar = raiz.getAttribute('data-url-salvar');
@@ -49,6 +50,12 @@
         var recarregando = false;
         var recargaPendente = false;
         var finalizando = false;
+        var semAtosElegivel = modoSemAtos();
+        // Issue #262: antes do primeiro save a única pendência já é a ausência
+        // de atos; sem isso o checkbox liberava o botão com total 0.
+        var ultimasPendencias = modoSemAtos()
+            ? [{ chave: '/acts', motivo: 'nenhum_ato' }]
+            : [];
         // Último envio de cada card falhou: finalizar não pode ignorá-los.
         var falhas = new Set();
         // Chaves de atos distintos na mesma tela: sem o prefixo, "tipo" ou
@@ -129,6 +136,7 @@
         }
 
         function atualizarPendencias(pendencias) {
+            ultimasPendencias = pendencias;
             var total = pendencias.length;
             var contador = raiz.querySelector('[data-ocr-contador-pendencias]');
             var rotulo = raiz.querySelector('[data-ocr-contador-pendencias-texto]');
@@ -137,7 +145,14 @@
             if (rotulo) rotulo.textContent = total === 1 ? 'pendência' : 'pendências';
             if (botao) {
                 var somenteLeitura = !!raiz.querySelector('[data-ocr-somente-leitura]');
-                if (!total && !somenteLeitura) {
+                // Issue #262: no modo sem atos a única pendência continua
+                // contada; o checkbox de confirmação é que libera o botão.
+                var semAtos = modoSemAtos() && semAtosElegivel && total === 1
+                    && pendencias[0] && pendencias[0].motivo === 'nenhum_ato';
+                if (semAtos) {
+                    botao.disabled = somenteLeitura || !confirmouSemAtos();
+                    botao.removeAttribute('title');
+                } else if (!total && !somenteLeitura) {
                     botao.disabled = false;
                     botao.removeAttribute('title');
                 } else {
@@ -148,8 +163,19 @@
                 }
             }
             if (msgFinalizar) {
-                msgFinalizar.textContent = recargaPendente ? AVISO_RECARGA : '';
+                msgFinalizar.textContent = recargaPendente
+                    ? (semAtosElegivel && !modoSemAtos() ? AVISO_SEM_ATOS : AVISO_RECARGA)
+                    : '';
             }
+        }
+
+        function modoSemAtos() {
+            return raiz.getAttribute('data-permitir-sem-atos') === '1';
+        }
+
+        function confirmouSemAtos() {
+            var checkbox = raiz.querySelector('[data-ocr-sem-atos]');
+            return !!(checkbox && checkbox.checked);
         }
 
         function decisao(card) {
@@ -220,7 +246,12 @@
         }
 
         function avisarRecargaPendente() {
-            if (msgFinalizar) msgFinalizar.textContent = AVISO_RECARGA;
+            if (!msgFinalizar) return;
+            // O reload diferido também precisa preservar o aviso específico:
+            // sem o modo, o reload é o que cria o checkbox de finalizar.
+            msgFinalizar.textContent = semAtosElegivel && !modoSemAtos()
+                ? AVISO_SEM_ATOS
+                : AVISO_RECARGA;
         }
 
         // Reload diferido: a identidade de uma parte mudou, mas o usuário
@@ -272,6 +303,17 @@
                         card.classList.add('salvo');
                         mostrarErro(card, '');
                         marcarEstado(card, 'Salvo');
+                        // Issue #262: um bloqueio de campo criado no save tira
+                        // a elegibilidade mesmo com a lista vindo só de atos.
+                        if (typeof dados.sem_atos_elegivel === 'boolean') {
+                            semAtosElegivel = dados.sem_atos_elegivel;
+                        }
+                        // A tela nasceu sem o modo sem atos (sem checkbox e sem
+                        // atributo) e o save a tornou elegível: só o reload
+                        // cria os controles que liberam o finalizar.
+                        if (semAtosElegivel && !modoSemAtos()) {
+                            recargaPendente = true;
+                        }
                         if (Array.isArray(dados.pendencias)) {
                             atualizarPendencias(dados.pendencias);
                         }
@@ -359,6 +401,11 @@
         raiz.addEventListener('change', function (evento) {
             var card = cardDe(evento.target);
             var alvo = evento.target;
+            // Issue #262: confirmação sem atos não é decisão de card.
+            if (alvo.getAttribute && alvo.getAttribute('data-ocr-sem-atos') !== null) {
+                atualizarPendencias(ultimasPendencias);
+                return;
+            }
             if (card && (alvo.type === 'checkbox' || alvo.tagName === 'SELECT')) {
                 // Escolher um cadastro e "criar novo" se excluem.
                 var select = card.querySelector('[data-ocr-escolha]');
@@ -444,11 +491,14 @@
             }
             finalizando = true;
             var controles = bloquearControles();
+            var corpo = { versao: versaoAtual };
+            // Issue #262: só no modo sem atos e com a confirmação marcada.
+            if (modoSemAtos() && confirmouSemAtos()) corpo.sem_atos = true;
             fetch(form.action, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                body: JSON.stringify({ versao: versaoAtual })
+                body: JSON.stringify(corpo)
             }).then(function (resposta) {
                 return resposta.json().catch(function () { return {}; }).then(function (dados) {
                     if (resposta.status === 200 && dados.redirect) {
@@ -458,6 +508,13 @@
                     } else {
                         finalizando = false;
                         restaurarControles(controles);
+                        // Issue #262: o 422 pode trazer pendências que a tela
+                        // ainda não conhece; re-bloqueia antes de reabilitar.
+                        if (dados.erro === 'revisao_incompleta'
+                                && Array.isArray(dados.pendencias)) {
+                            semAtosElegivel = false;
+                            atualizarPendencias(dados.pendencias);
+                        }
                         msgFinalizar.textContent = dados.erro === 'revisao_incompleta'
                             ? 'Ainda há pendências. Atualize a página para vê-las.'
                             : 'Não foi possível finalizar a revisão.';
@@ -478,6 +535,12 @@
                 finalizar();
             });
         }
+
+        // Issue #262: no voltar/avançar o navegador pode restaurar o checkbox
+        // marcado com o botão inconsistente. Só no modo sem atos a lista do
+        // servidor é conhecida do JS; nos demais atualizarPendencias([]) zeraria
+        // o contador renderizado.
+        if (modoSemAtos()) atualizarPendencias(ultimasPendencias);
     }
 
     document.addEventListener('DOMContentLoaded', function () {

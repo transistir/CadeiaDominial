@@ -199,6 +199,13 @@ OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA = int(
     os.environ.get('OCR_TEXTO_EMBUTIDO_MIN_CHARS_PAGINA', '200')
 )
 OCR_DPI = int(os.environ.get('OCR_DPI', '200'))
+# Issue #262 (I-5): o serviço ainda devolve ``acts: []``. Desligada por padrão,
+# permite finalizar a revisão quando a única pendência é ``nenhum_ato`` e o
+# revisor confirma explicitamente que não há atos a importar. Não fabrica atos
+# nem esconde a pendência.
+OCR_PERMITIR_FINALIZAR_SEM_ATOS = os.environ.get(
+    'OCR_PERMITIR_FINALIZAR_SEM_ATOS', 'False'
+).lower() in ('1', 'true', 'yes')
 
 # ─── IA/Extração estruturada (issue #262 / I-5) ────────────────────
 # Chamada SÍNCRONA do web para o serviço de extração (os checks da ia_ocr

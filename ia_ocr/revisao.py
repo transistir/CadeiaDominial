@@ -541,7 +541,22 @@ def pendencias(extracao) -> list[dict]:
     linhas, atos = _contexto_revisao(extracao)
     if not atos:
         return [{'chave': '/acts', 'motivo': 'nenhum_ato', 'bloqueante': True}]
+    return _pendencias_de_linhas(linhas, atos)
 
+
+def pendencias_sem_atos(extracao) -> list[dict]:
+    """Bloqueios de campo do documento mesmo sem atos (issue #262).
+
+    ``pendencias()`` retorna cedo quando ``acts`` está vazio, então os
+    bloqueios de campo nunca seriam avaliados. Esta função roda as mesmas
+    checagens sobre as linhas existentes, sem exigir atos, para que a
+    confirmação "sem atos" não destrave campo obrigatório não revisado.
+    """
+    linhas, atos = _contexto_revisao(extracao)
+    return _pendencias_de_linhas(linhas, atos)
+
+
+def _pendencias_de_linhas(linhas, atos) -> list[dict]:
     resultado = []
 
     def adicionar(chave, motivo):

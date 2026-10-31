@@ -43,6 +43,11 @@ MENSAGEM_PAGINA_DESATUALIZADA = (
 )
 
 
+def _sem_atos_elegivel(extracao) -> bool:
+    """Flag ligada e a única coisa que falta são os atos (issue #262)."""
+    return services.pode_finalizar_sem_atos(extracao)
+
+
 def _contexto_job(request, tis_id, imovel_id, documento_id, job_id):
     """TI, imóvel, documento e job, validando a hierarquia completa."""
     tis, imovel, documento = _get_contexto_documento(
@@ -537,6 +542,16 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         except destinos.ChaveDesconhecida:
             destino = destinos.SEM_DESTINO
         por_destino.setdefault(destino.campo_modelo or 'SEM_DESTINO', []).append(campo)
+    somente_leitura = job.status == estados.REVISADO
+    pendencias = services._com_bloqueios_de_campo(
+        revisao.pendencias(extracao), extracao,
+    )
+    # Issue #262: a confirmação sem atos só aparece quando a ÚNICA pendência é
+    # a ausência de atos. A comparação é por conteúdo: a lista de pendências
+    # continua sendo exibida e a flag nunca a remove.
+    permitir_sem_atos = (
+        services.pode_finalizar_sem_atos(extracao) and not somente_leitura
+    )
     return render(request, 'ia_ocr/revisao_campos.html', {
         'tis': tis,
         'imovel': imovel,
@@ -546,10 +561,11 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'extracao': extracao,
         'campos': campos,
         'por_destino': por_destino,
-        'pendencias': revisao.pendencias(extracao),
+        'pendencias': pendencias,
+        'permitir_sem_atos': permitir_sem_atos,
         'avisos': revisao.avisos(extracao),
         'versao': services.versao_bloco(extracao, campos=campos),
-        'somente_leitura': job.status == estados.REVISADO,
+        'somente_leitura': somente_leitura,
         'dpi': job.dpi or 200,
         'url_salvar': reverse('salvar_bloco_ocr', kwargs=kwargs_job),
         'url_finalizar': reverse('finalizar_revisao_ocr', kwargs=kwargs_job),
@@ -727,10 +743,18 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         # o cliente recarrega quando puder para exibi-las.
         'campos_novos': campos_novos,
         # Só chave/motivo: a tela reabilita o finalizar sem expor dados da revisão.
+        # Com sem atos, ``pendencias()`` só traz ``nenhum_ato``; o helper
+        # acrescenta os bloqueios de campo sem duplicar.
         'pendencias': [
             {'chave': item['chave'], 'motivo': item['motivo']}
-            for item in revisao.pendencias(_salva)
+            for item in services._com_bloqueios_de_campo(
+                revisao.pendencias(_salva), _salva,
+            )
         ],
+        # Issue #262: um bloqueio de campo criado no save não aparece em
+        # ``pendencias`` (sem atos ela é sempre nenhum_ato); a tela precisa
+        # saber que a confirmação sem atos deixou de ser suficiente.
+        'sem_atos_elegivel': _sem_atos_elegivel(_salva),
     })
 
 
@@ -748,6 +772,10 @@ def finalizar_revisao_ocr(request, tis_id, imovel_id, documento_id, job_id):
         return JsonResponse({'erro': 'json_invalido'}, status=400)
     if not isinstance(dados, dict):
         return JsonResponse({'erro': 'corpo_invalido', 'chave': None}, status=422)
+    # Issue #262: a confirmação é explícita e estritamente booleana; a string
+    # "true" (ou 1) não pode destravar a finalização por acidente.
+    if 'sem_atos' in dados and not isinstance(dados['sem_atos'], bool):
+        return JsonResponse({'erro': 'corpo_invalido', 'chave': None}, status=422)
     # Sem o token que a tela exibiu, não há como saber se a revisão mudou.
     if not isinstance(dados.get('versao'), str):
         return JsonResponse({'erro': 'versao_ausente', 'chave': None}, status=422)
@@ -757,6 +785,7 @@ def finalizar_revisao_ocr(request, tis_id, imovel_id, documento_id, job_id):
             raise services.ExtracaoRecusada('sem_extracao')
         services.finalizar_revisao(
             extracao, request.user, versao_cliente=dados['versao'],
+            confirmar_sem_atos=(dados.get('sem_atos') is True),
         )
     except services.ConflitoVersao as exc:
         return JsonResponse({
