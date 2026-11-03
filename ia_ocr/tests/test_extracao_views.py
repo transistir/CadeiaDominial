@@ -151,6 +151,57 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertEqual(transicao.usuario, self.dono)
         self.backend.extrair.assert_called_once()
 
+    def test_extrair_auto_sem_extracao_cria_e_redireciona_campos(self):
+        resposta = self.client.post(
+            self.url('extrair_campos_ocr'), {'extrair_auto': '1'},
+        )
+
+        self.assertRedirects(
+            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+        )
+        self.assertIn((
+            'success', 'Extração concluída. Revise os campos.',
+        ), self.mensagens(resposta))
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.EXTRAIDO)
+        self.assertEqual(self.job.extracoes.count(), 1)
+        self.backend.extrair.assert_called_once()
+
+    def test_extrair_auto_com_vigente_redireciona_campos_sem_nova_extracao(self):
+        # Greptile P1 (PR #319): o POST atrasado da segunda aba não cria
+        # extração vigente nova — volta para os campos com aviso, sem erro.
+        vigente = self._extracao()
+
+        resposta = self.client.post(
+            self.url('extrair_campos_ocr'), {'extrair_auto': '1'},
+        )
+
+        self.assertRedirects(
+            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+        )
+        self.assertIn(
+            ('info', 'Os campos já foram extraídos.'), self.mensagens(resposta),
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.extracoes.count(), 1)
+        self.assertEqual(self.job.extracao_vigente(), vigente)
+        self.backend.extrair.assert_called_once()
+
+    def test_extrair_manual_sem_flag_com_vigente_reeextrai(self):
+        vigente = self._extracao()
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(
+            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+        )
+        self.assertIn((
+            'success', 'Extração concluída. Revise os campos.',
+        ), self.mensagens(resposta))
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.extracoes.count(), 2)
+        self.assertNotEqual(self.job.extracao_vigente(), vigente)
+
     def test_extrair_erros_exibem_mensagens_seguras(self):
         indisponivel = 'O serviço de extração não respondeu. Tente novamente em instantes.'
         casos = (

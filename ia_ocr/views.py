@@ -177,6 +177,11 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     editadas = [p for p in paginas if p.estado == ESTADO_EDITADA]
     confirmadas = len(paginas) - len(nao_confirmadas) - len(editadas)
     pode_extrair, motivo_sem_extracao = _disponibilidade_extracao(job, paginas)
+    # #314: um clique do upload ao formulário — a tela submete sozinha o
+    # "Extrair campos" quando ainda não há extração (o POST segue o fluxo normal).
+    auto_extrair = bool(
+        pode_extrair and editavel and job.extracao_vigente() is None
+    )
 
     return render(request, 'ia_ocr/confirmacao_texto.html', {
         'tis': tis,
@@ -198,6 +203,7 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'faltam': len(nao_confirmadas) + len(editadas),
         'todas_confirmadas': confirmadas == len(paginas),
         'pode_extrair': pode_extrair,
+        'auto_extrair': auto_extrair,
         'motivo_sem_extracao': motivo_sem_extracao,
         # Bulk só quando há o que confirmar e o usuário não editou nada.
         'tem_editadas': bool(editadas),
@@ -370,9 +376,17 @@ def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
         request, tis_id, imovel_id, documento_id, job_id
     )
     kwargs_job = _kwargs_job(tis, imovel, documento, job)
+    # #314/PR #319: só o POST da tela auto-submetida marca `extrair_auto`;
+    # o clique manual segue sem o flag e continua podendo reextrair.
+    auto = request.POST.get('extrair_auto') == '1'
     try:
-        services.solicitar_extracao(job, request.user)
+        services.solicitar_extracao(job, request.user, somente_se_inexistente=auto)
     except services.ExtracaoRecusada as exc:
+        if exc.code == 'extracao_existente':
+            # O POST atrasado de uma segunda aba: já há revisão vigente com
+            # as correções de quem chegou primeiro — não é falha.
+            messages.info(request, 'Os campos já foram extraídos.')
+            return redirect('campos_job_ocr', **kwargs_job)
         mensagens = {
             'sem_texto_ocr': 'O OCR ainda não devolveu texto para todas as páginas.',
             'extracao_desatualizada': 'A extração mudou. Recarregue a tela.',

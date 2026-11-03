@@ -485,12 +485,16 @@ def finalizar_revisao(
     return travada
 
 
-def _validar_solicitacao_extracao(job, extracao_id):
+def _validar_solicitacao_extracao(job, extracao_id, somente_se_inexistente=False):
     if job.status not in {
         estados.CONCLUIDO, estados.TEXTO_CONFIRMADO, estados.EXTRAIDO,
     }:
         raise ExtracaoRecusada('estado_invalido')
     vigente = job.extracao_vigente()
+    if somente_se_inexistente and vigente is not None:
+        # PR #319: o POST atrasado de uma segunda aba não cria extração
+        # vigente nova (o que esconderia as correções gravadas na primeira).
+        raise ExtracaoRecusada('extracao_existente')
     vigente_id = vigente.pk if vigente is not None else None
     if extracao_id is not None and str(extracao_id) != str(vigente_id):
         raise ExtracaoConcorrente()
@@ -545,20 +549,30 @@ def _blocos_da_pagina(pagina):
     return envelope
 
 
-def solicitar_extracao(job, usuario, extracao_id=None) -> ExtracaoSugerida:
+def solicitar_extracao(
+    job, usuario, extracao_id=None, somente_se_inexistente=False,
+) -> ExtracaoSugerida:
     """Reserva → HTTP sem transação → persistência atômica da extração.
 
     O chamador deve executar fora de uma transação abrangente. Reextrações
     preservam as versões anteriores; a maior PK passa a ser a vigente.
+
+    ``somente_se_inexistente`` (auto-extração da #314) recusa com
+    ``ExtracaoRecusada('extracao_existente')`` quando o job já tem extração
+    vigente — inclusive na releitura sob ``select_for_update``, que fecha a
+    janela entre a leitura otimista e a transação. Sem o flag, a reextração
+    manual funciona como antes.
     """
     atual = OcrJob.objects.get(pk=job.pk)
-    _validar_solicitacao_extracao(atual, extracao_id)
+    _validar_solicitacao_extracao(atual, extracao_id, somente_se_inexistente)
     reserva = uuid.uuid4()
     try:
         # F1: relê as guardas sob trava e só mantém a reserva durante o HTTP.
         with transaction.atomic():
             travado = OcrJob.objects.select_for_update().get(pk=job.pk)
-            vigente_id = _validar_solicitacao_extracao(travado, extracao_id)
+            vigente_id = _validar_solicitacao_extracao(
+                travado, extracao_id, somente_se_inexistente,
+            )
             status_inicial = travado.status
             paginas = list(travado.paginas.all())
             if not paginas or any(pagina.texto_ocr is None for pagina in paginas):

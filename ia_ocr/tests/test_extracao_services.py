@@ -495,6 +495,83 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
 
 
 @override_settings(**CONFIG_EXTRACAO)
+class SomenteSeInexistenteTest(ExtracaoFixtureMixin, TestCase):
+    """Guarda da auto-extração (PR #319, Greptile P1 "second tab").
+
+    Duas abas podem renderizar a tela de confirmação antes de existir
+    extração; o POST atrasado da segunda (``somente_se_inexistente``) não
+    pode criar uma extração vigente nova e esconder as correções gravadas
+    sobre a primeira. A guarda vale na leitura otimista E dentro do
+    ``transaction.atomic()`` com ``select_for_update()``.
+    """
+
+    def test_primeira_solicitacao_automatica_cria_extracao(self):
+        extracao = services.solicitar_extracao(
+            self.job, self.usuario, somente_se_inexistente=True,
+        )
+
+        self.assertEqual(self.job.extracao_vigente(), extracao)
+        self.assertEqual(self.job.extracoes.count(), 1)
+        self.extrair.assert_called_once()
+        self.assertReservaLimpa()
+
+    def test_segunda_solicitacao_automatica_recusa_e_preserva_vigente(self):
+        primeira = services.solicitar_extracao(
+            self.job, self.usuario, somente_se_inexistente=True,
+        )
+
+        with self.assertRaises(services.ExtracaoRecusada) as contexto:
+            services.solicitar_extracao(
+                self.job, self.usuario, somente_se_inexistente=True,
+            )
+
+        self.assertEqual(contexto.exception.code, 'extracao_existente')
+        self.assertEqual(self.job.extracoes.count(), 1)
+        self.assertEqual(self.job.extracao_vigente(), primeira)
+        self.extrair.assert_called_once()
+        self.assertReservaLimpa()
+
+    def test_guarda_dentro_da_transacao_com_leitura_otimista_obsoleta(self):
+        services.solicitar_extracao(self.job, self.usuario)
+        vigente = self.job.extracao_vigente()
+        self.extrair.reset_mock()
+        # Gêmeo sem extração: o que a leitura otimista (fora da transação)
+        # devolveria se a vigente surgisse depois dela. A guarda tem de
+        # levantar de novo sob ``select_for_update`` e antes do HTTP.
+        gemeo = criar_job_concluido(
+            self.job.documento_digital,
+            textos=['Gêmeo sintético.'],
+            criado_por=self.usuario,
+        )
+
+        with mock.patch.object(OcrJob.objects, 'get', return_value=gemeo):
+            with self.assertRaises(services.ExtracaoRecusada) as contexto:
+                services.solicitar_extracao(
+                    self.job, self.usuario, somente_se_inexistente=True,
+                )
+
+        self.assertEqual(contexto.exception.code, 'extracao_existente')
+        self.extrair.assert_not_called()
+        self.assertEqual(self.job.extracoes.count(), 1)
+        self.assertEqual(self.job.extracao_vigente(), vigente)
+        self.assertReservaLimpa()
+
+    def test_reextracao_manual_sem_flag_continua_criando_versao_nova(self):
+        anterior = services.solicitar_extracao(
+            self.job, self.usuario, somente_se_inexistente=False,
+        )
+
+        nova = services.solicitar_extracao(
+            self.job, self.usuario,
+            extracao_id=anterior.pk, somente_se_inexistente=False,
+        )
+
+        self.assertEqual(self.job.extracoes.count(), 2)
+        self.assertEqual(self.job.extracao_vigente(), nova)
+        self.assertReservaLimpa()
+
+
+@override_settings(**CONFIG_EXTRACAO)
 class ZeroEscritaTest(ExtracaoFixtureMixin, TestCase):
     """Aceite da #262: extrair, revisar e finalizar não gravam no domínio."""
 
