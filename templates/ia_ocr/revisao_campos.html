@@ -14,7 +14,7 @@
         <div class="imovel-info">
             <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
             <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
-            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias|length }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias|length|pluralize }}</span> · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
+            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias_total }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias_total|pluralize }}</span> · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
         </div>
     </div>
 
@@ -34,7 +34,10 @@
         <h2 class="h6" id="ocr-pendencias-titulo">Pendências</h2>
         <ul class="revisao-lista">
             {% for item in pendencias %}
-            <li class="pendencia"><code>{{ item.chave }}</code> — {% if item.motivo == 'criar_novo_sem_nome' %}Informe o nome do novo cartório{% else %}{{ item.motivo }}{% endif %}</li>
+            <li class="pendencia" title="{{ item.chave }} — {{ item.motivo }}">
+                {% if item.local %}{{ item.local }}: {% endif %}{{ item.rotulo }}{% if item.acao %} — {{ item.acao }}{% endif %}
+                <details><summary>Detalhe técnico</summary><code>{{ item.chave }}</code> — <code>{{ item.motivo }}</code></details>
+            </li>
             {% endfor %}
         </ul>
     </section>
@@ -77,7 +80,7 @@
             </h2>
 
             {% for campo in grupo %}
-            <article class="campo{% if campo.status_revisao == 'descartado' %} descartado{% endif %}"
+            <article class="campo{% if campo.status_revisao == 'descartado' and not campo.obrigatorio %} descartado{% endif %}"
                      data-chave="{{ campo.chave }}"
                      data-versao="{{ versao }}"
                      data-campo
@@ -160,10 +163,14 @@
                 {% endif %}
 
                 <div class="campo-acoes">
+                    {% if campo.obrigatorio %}
+                    <span class="badge-confianca alta">Obrigatório</span>
+                    {% else %}
                     <label class="campo-check">
                         <input type="checkbox" data-campo-incluir{% if campo.status_revisao != 'descartado' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
                         Incluir
                     </label>
+                    {% endif %}
                     <label class="campo-check">
                         <input type="checkbox" data-campo-conferido{% if campo.status_revisao == 'aceito' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
                         Conferido

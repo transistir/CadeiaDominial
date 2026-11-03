@@ -61,6 +61,7 @@ MOTIVO_CRIAR_NOVO_SEM_NOME = 'criar_novo_sem_nome'
 # Destinos obrigatórios (§2.A): ausentes no payload → placeholder em revisão.
 _OBRIGATORIOS_DOCUMENTO = ('tipo', 'data', 'cartorio')
 _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
+_CHAVE_OBRIGATORIA_ATO = re.compile(r'/acts/\d+/(.+)')
 
 _TIPOS_NORMALIZAVEIS = ('data', 'decimal', 'area')
 
@@ -534,6 +535,141 @@ def _tem_folha(no, caminho):
             return False
         no = no.get(parte)
     return _eh_folha(no)
+
+
+def campo_obrigatorio(chave: str) -> bool:
+    """A linha é obrigatória (documento ou ato) e não pode ser descartada."""
+    if chave.startswith('/document/'):
+        return chave[len('/document/'):] in _OBRIGATORIOS_DOCUMENTO
+    achado = _CHAVE_OBRIGATORIA_ATO.fullmatch(chave)
+    return bool(achado) and achado.group(1) in _OBRIGATORIOS_ATO
+
+
+_ROTULO_PENDENCIA = {
+    'nenhum_ato': 'Nenhum ato reconhecido neste documento',
+    'obrigatorio_ausente': 'Campo obrigatório não preenchido',
+    'escolha_pendente': 'Cadastro não escolhido',
+    'baixa_confianca': 'Confira este valor (baixa confiança)',
+    'trecho_ausente': 'Sem trecho de origem',
+    'normalizacao_invalida': 'Valor não reconhecido',
+    'unidade_area': 'Área em unidade não reconhecida',
+    MOTIVO_CRIAR_NOVO_SEM_NOME: 'Informe o nome do novo cartório',
+    'revisao_pendente': 'Confira este valor',
+    'decisao_perdida': 'A decisão anterior não foi aplicada',
+    'match_invalidado': 'O cadastro escolhido não corresponde mais ao texto',
+    'valor_incompativel_destino': 'Valor não aceito neste campo',
+    'valor_acima_do_limite_destino': 'Valor acima do limite deste campo',
+}
+_ACAO_PENDENCIA = {
+    'escolha_pendente': 'escolha o cadastro correspondente',
+    'trecho_ausente': 'confira no documento',
+    'normalizacao_invalida': 'corrija o valor',
+    'unidade_area': 'confirme a conversão',
+    'revisao_pendente': 'confirme ou corrija',
+    'decisao_perdida': 'revise o campo',
+    'match_invalidado': 'escolha novamente',
+    'valor_incompativel_destino': 'corrija o valor',
+    'valor_acima_do_limite_destino': 'reduza o valor',
+}
+_ACAO_OBRIGATORIO = {
+    'tipo': 'informe o tipo do documento',
+    'data': 'informe a data',
+    'cartorio': 'escolha o cartório',
+}
+
+# Onde está o campo citado pela pendência (Greptile P2 #317): índices 1-based.
+_LOCAL_DOCUMENTO = {
+    'tipo': 'tipo',
+    'data': 'data',
+    'cartorio': 'cartório',
+}
+_LOCAL_ATO = {
+    'data': 'data',
+    'tipo_sugerido': 'tipo',
+    'cartorio_transmissao': 'cartório de transmissão',
+    'origem/cartorio': 'cartório de origem',
+    'valor_transacao': 'valor',
+}
+_CHAVE_ATO_LOCAL = re.compile(r'/acts/(\d+)(?:/(.+))?')
+_CHAVE_PARTE_LOCAL = re.compile(r'partes/(\d+)(?:/(.+))?')
+
+
+def _rotulo_fallback(caminho: str) -> str:
+    """Último segmento com ``_`` por espaço — nunca quebra."""
+    return caminho.rsplit('/', 1)[-1].replace('_', ' ')
+
+
+def _local_de_ato(resto: str | None) -> str:
+    """Rótulo do resto do caminho de um ato (``partes`` é 1-based)."""
+    if not resto:
+        return ''
+    partes = _CHAVE_PARTE_LOCAL.fullmatch(resto)
+    if partes is not None:
+        indice, sub = partes.groups()
+        local = f'parte {int(indice) + 1}'
+        rotulo = _local_de_ato(sub)
+        if rotulo:
+            local = f'{local} — {rotulo}'
+        return local
+    mapeado = _LOCAL_ATO.get(resto)
+    if mapeado is not None:
+        return mapeado
+    return _rotulo_fallback(resto)
+
+
+def _local_da_chave(chave) -> str:
+    """Identificação legível do campo citado pela pendência.
+
+    Chave ausente ou não-string (payload cru/legado) → ``''``, sem exceção;
+    resto vazio depois de ``/acts/{i}/`` ou ``/document/`` → rótulo sem
+    travessão pendurado.
+    """
+    if not isinstance(chave, str):
+        return ''
+    if chave.startswith('/document/'):
+        resto = chave[len('/document/'):]
+        rotulo = _LOCAL_DOCUMENTO.get(resto) or _rotulo_fallback(resto)
+        return f'Documento — {rotulo}' if rotulo else 'Documento'
+    if chave == '/acts':
+        return 'Documento — atos'
+    achado = _CHAVE_ATO_LOCAL.fullmatch(chave.rstrip('/'))
+    if achado is not None:
+        indice, resto = achado.groups()
+        local = f'Ato {int(indice) + 1}'
+        rotulo = _local_de_ato(resto)
+        if rotulo:
+            local = f'{local} — {rotulo}'
+        return local
+    return _rotulo_fallback(chave)
+
+
+def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
+    """Texto de negócio de uma pendência; chave/motivo crus seguem para suporte.
+
+    Chave ausente/não-string (payload cru/legado) não levanta exceção: o
+    texto sai sem local e a ação cai no genérico.
+    """
+    chave, motivo = item['chave'], item['motivo']
+    texto_chave = chave if isinstance(chave, str) else ''
+    if motivo == 'obrigatorio_ausente':
+        acao = _ACAO_OBRIGATORIO.get(
+            texto_chave.rsplit('/', 1)[-1], 'preencha o campo',
+        )
+    elif motivo == 'nenhum_ato':
+        acao = 'confirmar que não há atos' if sem_atos_liberado else ''
+    else:
+        acao = _ACAO_PENDENCIA.get(motivo, '')
+    rotulo = _ROTULO_PENDENCIA.get(motivo)
+    if rotulo is None:
+        # Motivo fora do mapa: o código cru fica só no <details> (``motivo``).
+        rotulo, acao = 'Pendência a revisar', 'revise o campo'
+    return {
+        'chave': chave,
+        'motivo': motivo,
+        'local': _local_da_chave(chave),
+        'rotulo': rotulo,
+        'acao': acao,
+    }
 
 
 def pendencias(extracao) -> list[dict]:

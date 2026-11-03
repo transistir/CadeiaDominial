@@ -528,6 +528,7 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     _anexar_opcoes_cadastro(campos)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
+        campo.obrigatorio = revisao.campo_obrigatorio(campo.chave)
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
@@ -561,7 +562,11 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'extracao': extracao,
         'campos': campos,
         'por_destino': por_destino,
-        'pendencias': pendencias,
+        'pendencias': [
+            revisao.descrever_pendencia(item, permitir_sem_atos)
+            for item in pendencias
+        ],
+        'pendencias_total': len(pendencias),
         'permitir_sem_atos': permitir_sem_atos,
         'avisos': revisao.avisos(extracao),
         'versao': services.versao_bloco(extracao, campos=campos),
@@ -705,9 +710,23 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         return JsonResponse({'erro': 'json_invalido'}, status=400)
     try:
         decisoes = _decisoes_bloco(dados)
+        # ``valor: null`` explícito pede o OCR; só a chave ausente preserva.
+        com_valor = {item['chave'] for item in dados['decisoes'] if 'valor' in item}
         extracao = job.extracao_vigente()
         if extracao is None:
             raise services.ExtracaoRecusada('sem_extracao')
+        obrigatorias = {
+            chave for chave in decisoes if revisao.campo_obrigatorio(chave)
+        }
+        corrigidos = dict(extracao.campos.filter(
+            chave__in=obrigatorias, valor_final__isnull=False,
+        ).values_list('chave', 'valor_final'))
+        for chave in obrigatorias:
+            decisao = decisoes[chave]
+            decisao['incluir'] = True
+            # Sem a chave ``valor`` o motor volta ao OCR: preserva a correção salva.
+            if chave not in com_valor and chave in corrigidos:
+                decisao['valor'] = corrigidos[chave]
         _salva, versao, partes_invalidadas, campos_novos = services.salvar_bloco(
             extracao, decisoes, request.user, dados['versao'],
         )

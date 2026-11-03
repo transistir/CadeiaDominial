@@ -803,7 +803,10 @@ class ExtracaoViewsTest(TelaTextoBase):
                     contexto['por_destino']['dominial.Documento.data'],
                     [vigente.campos.get(chave='/document/data')],
                 )
-                self.assertEqual(contexto['pendencias'], revisao.pendencias(vigente))
+                self.assertEqual(contexto['pendencias'], [
+                    revisao.descrever_pendencia(item)
+                    for item in revisao.pendencias(vigente)
+                ])
                 self.assertEqual(contexto['avisos'], revisao.avisos(vigente))
                 self.assertEqual(contexto['versao'], services.versao_bloco(vigente))
                 self.assertEqual(contexto['somente_leitura'], status == estados.REVISADO)
@@ -912,13 +915,73 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
         self.assertEqual(resposta.status_code, 200, resposta.content)
         self.assertIs(resposta.json()['sem_atos_elegivel'], True)
 
+        # Obrigatório não se descarta pela API; o dado legado vem do banco.
+        extracao.campos.filter(chave='/document/data').update(
+            status_revisao='descartado',
+        )
         bloqueio = self._post_salvar({
-            'versao': resposta.json()['versao'],
-            'decisoes': [{'chave': '/document/data', 'incluir': False}],
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [],
         })
 
         self.assertEqual(bloqueio.status_code, 200, bloqueio.content)
         self.assertIs(bloqueio.json()['sem_atos_elegivel'], False)
+
+    @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
+    def test_salvar_data_vazia_cria_bloqueio_real(self):
+        extracao = self._extracao_sem_atos()
+
+        resposta = self._post_salvar({
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{
+                'chave': '/document/data', 'incluir': True, 'valor': '',
+            }],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertIs(resposta.json()['sem_atos_elegivel'], False)
+        self.assertIn(
+            {'chave': '/document/data', 'motivo': 'obrigatorio_ausente'},
+            resposta.json()['pendencias'],
+        )
+
+    def test_incluir_false_sem_valor_preserva_correcao_obrigatoria(self):
+        extracao = self._extracao_sem_atos()
+        campo = extracao.campos.get(chave='/document/data')
+        campo.valor_final = '2020-01-11'
+        campo.status_revisao = 'editado'
+        campo.save()
+
+        resposta = self._post_salvar({
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [{'chave': '/document/data', 'incluir': False}],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        campo.refresh_from_db()
+        self.assertEqual(campo.valor_final, '2020-01-11')
+        self.assertEqual(campo.status_revisao, 'editado')
+
+    def test_incluir_false_valor_null_explicito_volta_ao_ocr(self):
+        extracao = self._extracao_sem_atos()
+        campo = extracao.campos.get(chave='/document/data')
+        normalizado = campo.normalized
+        campo.valor_final = '2020-01-11'
+        campo.status_revisao = 'editado'
+        campo.save()
+
+        resposta = self._post_salvar({
+            'versao': services.versao_bloco(extracao),
+            'decisoes': [
+                {'chave': '/document/data', 'incluir': False, 'valor': None},
+            ],
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        campo.refresh_from_db()
+        # Sem valor_final o valor efetivo volta a ser o normalizado do OCR.
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.normalized, normalizado)
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_flag_ligada_sem_atos_200_com_redirect(self):
@@ -1009,11 +1072,11 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
         self.assertEqual(self.job.status, estados.EXTRAIDO)
 
     def _descartar_data(self, extracao):
-        resposta = self._post_salvar({
-            'versao': services.versao_bloco(extracao),
-            'decisoes': [{'chave': '/document/data', 'incluir': False}],
-        })
-        self.assertEqual(resposta.status_code, 200, resposta.content)
+        # Obrigatório não se descarta pela API (incluir é coagido); o dado
+        # legado descartado é simulado direto no banco.
+        extracao.campos.filter(chave='/document/data').update(
+            status_revisao='descartado',
+        )
         self.assertIn(
             {
                 'chave': '/document/data',
@@ -1036,7 +1099,7 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
         self.assertEqual(resposta.status_code, 200)
         self.assertNotIn('data-permitir-sem-atos', html)
         self.assertNotIn('data-ocr-sem-atos', html)
-        self.assertIn('<code>/document/data</code> — obrigatorio_ausente', html)
+        self.assertIn('Campo obrigatório não preenchido — informe a data', html)
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_post_sem_atos_com_bloqueio_de_campo_422_explica(self):
@@ -1071,8 +1134,8 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
         html = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn('<code>/acts</code> — nenhum_ato', html)
-        self.assertIn('<code>/document/data</code> — obrigatorio_ausente', html)
+        self.assertIn('Nenhum ato reconhecido neste documento', html)
+        self.assertIn('Campo obrigatório não preenchido — informe a data', html)
 
         resposta = self._post_finalizar({
             'versao': services.versao_bloco(extracao),
