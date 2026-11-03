@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from ..models import Lancamento, LancamentoTipo
+from ..models import Documento, Lancamento, LancamentoTipo
 from .lancamento_form_service import LancamentoFormService
 from .lancamento_validacao_service import LancamentoValidacaoService
 from .lancamento_origem_service import LancamentoOrigemService
@@ -45,6 +45,13 @@ class LancamentoCriacaoService:
     ):
         """
         Cria um lançamento completo com todas as validações e processamentos
+
+        Ordem de travas (#263 rodada 2): a criação manual trava o
+        ``Documento`` com ``select_for_update`` DENTRO do atomic e
+        REVALIDA a duplicidade depois da trava — a mesma última trava da
+        ordem da exclusão do PDF e da importação da IA
+        (``DocumentoDigital`` → extração → ``Documento``), para os dois
+        escritores se serializarem em vez de correr para o mesmo número.
         """
         # `documento_ativo` chega pronto do caller. Sem revalidar aqui, o service
         # grava em documento de outro usuário assim que qualquer view a montante
@@ -174,6 +181,28 @@ class LancamentoCriacaoService:
             # (nunca `str(e)` — vazaria documento/matrícula do usuário).
             # O `return` dentro do `with` comita o atomic normalmente.
             with transaction.atomic():
+                # CORRIDA IA × MANUAL (#263 rodada 2): a checagem de
+                # duplicidade acima rodou FORA da transação, sem trava —
+                # a importação assistida (que trava o Documento e checa
+                # dentro) podia gravar o mesmo número na janela entre a
+                # checagem e o INSERT. A trava serializa os escritores;
+                # a revalidação DEPOIS dela fecha a janela.
+                Documento.objects.select_for_update().get(
+                    pk=documento_ativo.pk
+                )
+                # A instância do caller foi lida antes da trava: relê para
+                # a regra pétrea e o ``documento.save()`` abaixo não
+                # trabalharem sobre livro/folha velhos (#263 rodada 3).
+                documento_ativo.refresh_from_db()
+                valido, motivo_rechecado = (
+                    LancamentoValidacaoService.validar_numero_lancamento(
+                        dados_lancamento['numero_lancamento'],
+                        documento_ativo,
+                    )
+                )
+                if not valido:
+                    raise ValidationError(motivo_rechecado)
+
                 lancamento = LancamentoCriacaoService._criar_lancamento_basico(
                     documento_ativo, dados_lancamento, tipo_lanc
                 )
