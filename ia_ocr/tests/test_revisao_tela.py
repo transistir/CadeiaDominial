@@ -26,7 +26,9 @@ from .test_ui_card_ocr import _atributos, _elementos
 RAW_MALICIOSO = '<script>alert(1)</script>"><img onerror=1>'
 
 
-class RevisaoTelaTest(TelaTextoBase):
+class TelaRevisaoBase(TelaTextoBase):
+    """Infraestrutura da tela de revisão; sem testes (reutilizável)."""
+
     def setUp(self):
         super().setUp()
         self.client.force_login(self.dono)
@@ -54,6 +56,8 @@ class RevisaoTelaTest(TelaTextoBase):
     def _tela(self):
         return self.client.get(self.url('campos_job_ocr'))
 
+
+class RevisaoTelaTest(TelaRevisaoBase):
     def _botao_finalizar(self, resposta):
         html = resposta.content.decode()
         botao = re.search(r'<button[^>]*data-ocr-finalizar[^>]*>', html)

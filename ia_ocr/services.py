@@ -27,8 +27,9 @@ from .models import (
     PendenciaLimpezaArquivo,
 )
 from .revisao import (
-    IndiceCartorios, IndicePessoas, aplicar_linha, desnormalizar,
-    enriquecer_payload, garantir_placeholders_obrigatorios, identidade_parte,
+    IndiceCartorios, IndicePessoas, aplicar_linha, comarca_do_documento,
+    desnormalizar, enriquecer_payload, fallback_cartorio,
+    garantir_placeholders_obrigatorios, identidade_parte,
     pendencias, pendencias_sem_atos, versao_linha,
 )
 
@@ -269,6 +270,43 @@ def _validar_limites_bloco(extracao, decisoes):
             raise erro
 
 
+def _preparar_fallback_cartorio(extracao, campos, decisoes):
+    """Escolha de cartório vinda do fallback da tela: valida contra o índice.
+
+    Para campo ``cartorio`` cujo id escolhido não está nos candidatos atuais,
+    o fallback é SEMPRE recalculado (mesmo índice/comarca, ``valor`` da
+    decisão em curso) e atribuído em memória quando contém a escolha; fora
+    dele, ``aplicar_linha`` mantém a recusa. Nada é gravado (#318): o
+    fallback vem sem corte — milhares de ids por campo inflariam o JSON — e
+    congelar ``[escolhido]`` no banco fazia o segundo save (trocar de
+    cartório) virar 422, pois o recalculo nem rodava. Devolve as chaves
+    preparadas com o ``match_candidatos`` original, para o ``save()`` do
+    bloco seguinte gravar o estado de antes; ``cartorio_escolhido_id`` é o
+    que a tela usa.
+    """
+    indice = None
+    comarca = None
+    preparados = {}
+    for chave, decisao in decisoes.items():
+        campo = campos[chave]
+        escolhido = (decisao.get('escolha') or {}).get('cartorio_escolhido_id')
+        if (
+            escolhido is None or campo.tipo_valor != 'cartorio'
+            or escolhido in (campo.match_candidatos or [])
+        ):
+            continue
+        if indice is None:
+            indice = IndiceCartorios()
+            comarca = comarca_do_documento(extracao)
+        fallback = fallback_cartorio(
+            campo, indice, comarca, valor=decisao.get('valor'),
+        )
+        if escolhido in fallback:
+            preparados[chave] = campo.match_candidatos
+            campo.match_candidatos = fallback
+    return preparados
+
+
 def salvar_bloco(
     extracao, decisoes, usuario, versao_cliente,
 ) -> tuple[ExtracaoSugerida, str, list[str], list[str]]:
@@ -305,6 +343,7 @@ def salvar_bloco(
             for chave, campo in campos.items() if campo.tipo_valor == 'parte'
         }
         agora = timezone.now()
+        preparados = _preparar_fallback_cartorio(travada, campos, decisoes)
         for chave, decisao in decisoes.items():
             campo = campos[chave]
             argumentos = {
@@ -314,6 +353,10 @@ def salvar_bloco(
                 ) if nome in decisao
             }
             aplicar_linha(campo, **argumentos, usuario=usuario, agora=agora)
+            if chave in preparados:
+                # O fallback serviu só para validar a escolha em memória:
+                # o banco segue sem lista congelada — o GET recalcula.
+                campo.match_candidatos = preparados[chave]
             campo.save()
         # O tipo efetivo pode ter mudado: o novo tipo passa a exigir linhas
         # que a extração original não trouxe (título, descrição, origem).
