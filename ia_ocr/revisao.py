@@ -1212,29 +1212,30 @@ class IndicePessoas:
 class IndiceCartorios:
     """Índice de ``Cartorios`` em memória: UMA query na construção.
 
-    ``values_list('id', 'nome', 'cidade')`` uma única vez; todo ``match``
-    é puro, sem banco.
+    ``values_list('id', 'nome', 'cidade', 'estado')`` uma única vez; todo
+    ``match`` é puro, sem banco.
     """
 
     def __init__(self):
         self._por_nome = {}
         self._por_cidade = {}
+        # Estágios de UF e lista completa do fallback (#315): (nome, id, uf).
+        self._todos = []
         for cartorio_id, nome, cidade, estado in Cartorios.objects.values_list(
             'id', 'nome', 'cidade', 'estado'
         ):
+            uf = (estado or '').strip().upper()
             cidade_chave = _normalizar_nome(cidade)
             if cidade_chave:
                 self._por_cidade.setdefault(cidade_chave, []).append(
-                    (nome or '', cartorio_id, (estado or '').strip().upper())
+                    (nome or '', cartorio_id, uf)
                 )
             chave = _normalizar_nome(nome)
             if chave:
                 self._por_nome.setdefault(chave, []).append(
-                    (
-                        cartorio_id, _normalizar_nome(cidade),
-                        (estado or '').strip().upper(),
-                    )
+                    (cartorio_id, cidade_chave, uf)
                 )
+            self._todos.append((nome or '', cartorio_id, uf))
 
     def ids_da_cidade(self, cidade, uf=None, limite=None):
         """Ids dos cartórios da cidade (sem acento/caixa), por nome.
@@ -1250,6 +1251,35 @@ class IndiceCartorios:
                 if not uf or entrada[2] == uf
             ),
             key=lambda entrada: (entrada[0], entrada[1]),
+        )
+        ids = [cartorio_id for _nome, cartorio_id, _uf in entradas]
+        return ids[:limite] if limite else ids
+
+    def ids_da_uf(self, uf, limite=None):
+        """Ids dos cartórios da UF, em ordem determinística de (nome, id).
+
+        Estágio do fallback (#315) quando a cidade da comarca não está no
+        índice. UF vazia/não informada não filtra ninguém: devolve ``[]``
+        para o estágio cair para a lista completa.
+        """
+        uf_chave = (uf or '').strip().upper()
+        if not uf_chave:
+            return []
+        entradas = sorted(
+            (entrada for entrada in self._todos if entrada[2] == uf_chave),
+            key=lambda entrada: (entrada[0], entrada[1]),
+        )
+        ids = [cartorio_id for _nome, cartorio_id, _uf in entradas]
+        return ids[:limite] if limite else ids
+
+    def ids_de_todos(self, limite=None):
+        """Ids de todos os cartórios, em ordem determinística de (nome, id).
+
+        Último estágio do fallback (#315): com o índice povoado, o seletor
+        de cartório nunca fica vazio.
+        """
+        entradas = sorted(
+            self._todos, key=lambda entrada: (entrada[0], entrada[1]),
         )
         ids = [cartorio_id for _nome, cartorio_id, _uf in entradas]
         return ids[:limite] if limite else ids
@@ -1282,8 +1312,11 @@ class IndiceCartorios:
         return None, ids
 
 
+# Cidade: hífen interno SEM espaços é parte do nome (XIQUE-XIQUE,
+# SÃO JOÃO DEL-REI); com espaços em volta, ` - ` / ` / ` / ` , ` (ou
+# apertado) separa a UF/estado. Apóstrofo preserva OLHO D'ÁGUA.
 _COMARCA = re.compile(
-    r'COMARCA\s+DE\s+([^\-–—/,\n]+)'
+    r'COMARCA\s+DE\s+([A-ZÀ-Ú][A-ZÀ-Ú .\'’]*(?:-[A-ZÀ-Ú]+)*)'
     r'(?:\s*[-–—/,]\s*(?:ESTADO\s+D[AEO]\s+)?([A-ZÀ-Ú][A-ZÀ-Ú ]*))?',
     re.IGNORECASE,
 )
@@ -1300,6 +1333,8 @@ _UFS = {
 }
 _SIGLAS = frozenset(_UFS.values())
 LIMITE_CANDIDATOS_FALLBACK = 20
+LIMITE_CANDIDATOS_UF = 500
+LIMITE_CARTORIOS_TODOS = 500
 TAMANHO_CABECALHO = 600
 
 
@@ -1346,9 +1381,10 @@ def candidatos_cartorio_fallback(
 ) -> list[int]:
     """Candidatos de cartório quando o serviço não trouxe nenhum.
 
-    Sem escrita: devolve os ``match_candidatos`` do campo; senão o match
-    único por nome (com a cidade da ``comarca``); senão os cartórios da
-    comarca do cabeçalho (até 20, por nome). Sem comarca nem valor, ``[]``.
+    Sem escrita: devolve os ``match_candidatos`` do campo; senão os estágios
+    de ``fallback_cartorio`` — match único por nome (com a cidade da
+    ``comarca``); cartórios da cidade da comarca (até 20, por nome); da UF
+    (até 500); lista completa (até 500). Nunca vazio com o índice povoado.
     ``comarca`` vem de ``comarca_do_documento`` (calculada uma vez).
     """
     campo = extracao.campos.filter(chave=chave).first()
@@ -1360,7 +1396,15 @@ def candidatos_cartorio_fallback(
 
 
 def fallback_cartorio(campo, indice, comarca, valor=None):
-    """``valor`` (decisão em curso) tem precedência sobre o salvo."""
+    """``valor`` (decisão em curso) tem precedência sobre o salvo.
+
+    Estágios, parando no primeiro não vazio (incremento B do I-10):
+    (a) match único do valor pelo índice; (b) cartórios da cidade da
+    comarca (até 20); (c) cartórios da UF da comarca (até 500);
+    (d) lista completa (até 500). Com cabeçalho ilegível (``comarca``
+    ``None``) ou cidade fora do índice, o seletor ainda sai preenchido —
+    nunca ``[]`` com o índice povoado.
+    """
     valor = valor or campo.valor_final or campo.normalized
     escolhido, _candidatos = indice.match(
         valor, comarca.cidade if comarca else None,
@@ -1368,11 +1412,16 @@ def fallback_cartorio(campo, indice, comarca, valor=None):
     )
     if escolhido is not None:
         return [escolhido]
-    if comarca is None:
-        return []
-    return indice.ids_da_cidade(
-        comarca.cidade, comarca.uf, LIMITE_CANDIDATOS_FALLBACK,
-    )
+    if comarca is not None:
+        da_cidade = indice.ids_da_cidade(
+            comarca.cidade, comarca.uf, LIMITE_CANDIDATOS_FALLBACK,
+        )
+        if da_cidade:
+            return da_cidade
+        da_uf = indice.ids_da_uf(comarca.uf, LIMITE_CANDIDATOS_UF)
+        if da_uf:
+            return da_uf
+    return indice.ids_de_todos(LIMITE_CARTORIOS_TODOS)
 
 
 def _normalized(no):
