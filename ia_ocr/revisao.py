@@ -577,6 +577,61 @@ _ACAO_OBRIGATORIO = {
     'cartorio': 'escolha o cartório',
 }
 
+# Onde está o campo citado pela pendência (Greptile P2 #317): índices 1-based.
+_LOCAL_DOCUMENTO = {
+    'tipo': 'tipo',
+    'data': 'data',
+    'cartorio': 'cartório',
+}
+_LOCAL_ATO = {
+    'data': 'data',
+    'tipo_sugerido': 'tipo',
+    'cartorio_transmissao': 'cartório de transmissão',
+    'origem/cartorio': 'cartório de origem',
+    'valor_transacao': 'valor',
+}
+_CHAVE_ATO_LOCAL = re.compile(r'/acts/(\d+)(?:/(.+))?')
+_CHAVE_PARTE_LOCAL = re.compile(r'partes/(\d+)(?:/(.+))?')
+
+
+def _rotulo_fallback(caminho: str) -> str:
+    """Último segmento com ``_`` por espaço — nunca quebra."""
+    return caminho.rsplit('/', 1)[-1].replace('_', ' ')
+
+
+def _local_de_ato(resto: str | None) -> str:
+    """Rótulo do resto do caminho de um ato (``partes`` é 1-based)."""
+    if resto is None:
+        return ''
+    partes = _CHAVE_PARTE_LOCAL.fullmatch(resto)
+    if partes is not None:
+        indice, sub = partes.groups()
+        local = f'parte {int(indice) + 1}'
+        if sub is not None:
+            local = f'{local} — {_local_de_ato(sub)}'
+        return local
+    mapeado = _LOCAL_ATO.get(resto)
+    if mapeado is not None:
+        return mapeado
+    return _rotulo_fallback(resto)
+
+
+def _local_da_chave(chave: str) -> str:
+    """Identificação legível do campo citado pela pendência."""
+    if chave.startswith('/document/'):
+        resto = chave[len('/document/'):]
+        return f'Documento — {_LOCAL_DOCUMENTO.get(resto) or _rotulo_fallback(resto)}'
+    if chave == '/acts':
+        return 'Documento — atos'
+    achado = _CHAVE_ATO_LOCAL.fullmatch(chave)
+    if achado is not None:
+        indice, resto = achado.groups()
+        local = f'Ato {int(indice) + 1}'
+        if resto is not None:
+            local = f'{local} — {_local_de_ato(resto)}'
+        return local
+    return _rotulo_fallback(chave)
+
 
 def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
     """Texto de negócio de uma pendência; chave/motivo crus seguem para suporte."""
@@ -594,6 +649,7 @@ def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
     return {
         'chave': chave,
         'motivo': motivo,
+        'local': _local_da_chave(chave),
         'rotulo': rotulo,
         'acao': acao,
     }

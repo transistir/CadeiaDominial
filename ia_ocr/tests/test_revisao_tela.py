@@ -175,6 +175,30 @@ class RevisaoTelaTest(TelaTextoBase):
         principal = re.sub(r'title="[^"]*"', '', principal)
         self.assertNotIn('/document/cartorio', principal)
 
+    def test_tela_pendencias_de_atos_distintos_dizem_o_campo(self):
+        # Greptile P2 (#317): duas datas faltando em atos diferentes não podem
+        # vir textos idênticos — o local diz qual ato corrigir.
+        payload = payload_averbacao(self.job.job_id)
+        payload['acts'].append(payload_registro(self.job.job_id)['acts'][0])
+        for ato in payload['acts']:
+            ato.pop('data')
+        self._extracao(payload)
+
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(
+            'Ato 1 — data: Campo obrigatório não preenchido — informe a data',
+            html,
+        )
+        self.assertIn(
+            'Ato 2 — data: Campo obrigatório não preenchido — informe a data',
+            html,
+        )
+        # A chave crua continua só no detalhe técnico.
+        self.assertNotIn('/acts/0/data: Campo obrigatório', html)
+
     def test_campo_obrigatorio(self):
         self.assertTrue(revisao.campo_obrigatorio('/document/tipo'))
         self.assertTrue(revisao.campo_obrigatorio('/acts/0/data'))
@@ -1136,3 +1160,62 @@ class DescreverPendenciaMotivosDoMotorTest(SimpleTestCase):
         self.assertEqual(d['rotulo'], 'Pendência a revisar')
         self.assertEqual(d['acao'], 'revise o campo')
         self.assertEqual(d['motivo'], 'foo_bar')
+
+
+class DescreverPendenciaLocalTest(SimpleTestCase):
+    """``local`` identifica o campo citado pela pendência (Greptile P2, #317)."""
+
+    def test_regras_mapeadas(self):
+        casos = (
+            ('/document/tipo', 'Documento — tipo'),
+            ('/document/data', 'Documento — data'),
+            ('/document/cartorio', 'Documento — cartório'),
+            ('/acts/0/data', 'Ato 1 — data'),
+            ('/acts/1/tipo_sugerido', 'Ato 2 — tipo'),
+            ('/acts/0/cartorio_transmissao', 'Ato 1 — cartório de transmissão'),
+            ('/acts/0/valor_transacao', 'Ato 1 — valor'),
+            ('/acts/0/origem/cartorio', 'Ato 1 — cartório de origem'),
+            ('/acts/1/partes/2', 'Ato 2 — parte 3'),
+        )
+        for chave, local in casos:
+            with self.subTest(chave=chave):
+                d = revisao.descrever_pendencia(
+                    {'chave': chave, 'motivo': 'revisao_pendente'},
+                )
+                self.assertEqual(d['local'], local)
+
+    def test_fallback_usa_ultimo_segmento_com_espacos(self):
+        casos = (
+            ('/acts/0/origem/livro', 'Ato 1 — livro'),
+            ('/document/cri_atual', 'Documento — cri atual'),
+        )
+        for chave, local in casos:
+            with self.subTest(chave=chave):
+                d = revisao.descrever_pendencia(
+                    {'chave': chave, 'motivo': 'revisao_pendente'},
+                )
+                self.assertEqual(d['local'], local)
+
+    def test_campo_de_parte_mantem_o_prefixo_da_parte(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/acts/1/partes/2/nome', 'motivo': 'revisao_pendente'},
+        )
+        self.assertEqual(d['local'], 'Ato 2 — parte 3 — nome')
+
+    def test_nenhum_ato_aponta_para_os_atos_do_documento(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/acts', 'motivo': 'nenhum_ato'},
+        )
+        self.assertEqual(d['local'], 'Documento — atos')
+
+    def test_chave_motivo_rotulo_e_acao_permanecem(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/acts/0/data', 'motivo': 'obrigatorio_ausente'},
+        )
+        self.assertEqual(d, {
+            'chave': '/acts/0/data',
+            'motivo': 'obrigatorio_ausente',
+            'local': 'Ato 1 — data',
+            'rotulo': 'Campo obrigatório não preenchido',
+            'acao': 'informe a data',
+        })
