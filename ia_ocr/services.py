@@ -271,10 +271,15 @@ def _validar_limites_bloco(extracao, decisoes):
 
 
 def _persistir_fallback_cartorio(extracao, campos, decisoes):
-    """Escolha de cartório vinda do fallback da tela: grava-o como candidato.
+    """Escolha de cartório vinda do fallback da tela: grava-a como candidato.
 
     Só para campo sem ``match_candidatos`` cujo id escolhido está no fallback;
-    fora dele, ``aplicar_linha`` mantém a recusa.
+    fora dele, ``aplicar_linha`` mantém a recusa. Persiste SÓ a escolha
+    aceita (#318): o fallback agora vem sem corte — milhares de ids por
+    campo inflariam o JSON e envelheceriam no registro. A escolha continua
+    válida: ``aplicar_linha`` roda depois desta gravação e confere contra o
+    que ficou aqui; ``cartorio_escolhido_id`` (gravado pelo bloco seguinte)
+    é o que a tela usa.
     """
     indice = None
     comarca = None
@@ -293,7 +298,7 @@ def _persistir_fallback_cartorio(extracao, campos, decisoes):
             campo, indice, comarca, valor=decisao.get('valor'),
         )
         if escolhido in fallback:
-            campo.match_candidatos = fallback
+            campo.match_candidatos = [escolhido]
             campo.save(update_fields=['match_candidatos'])
 
 

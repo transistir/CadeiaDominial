@@ -1314,7 +1314,10 @@ class IndiceCartorios:
 
 # Cidade: hífen interno SEM espaços é parte do nome (XIQUE-XIQUE,
 # SÃO JOÃO DEL-REI); com espaços em volta, ` - ` / ` / ` / ` , ` (ou
-# apertado) separa a UF/estado. Apóstrofo preserva OLHO D'ÁGUA.
+# apertado) separa a UF/estado. Apóstrofo preserva OLHO D'ÁGUA. O mesmo
+# hífen interno engole a UF colada (ITAMARAJU-BA); o sufixo que é
+# sigla/nome de estado é separado depois do match, em
+# ``comarca_do_documento``.
 _COMARCA = re.compile(
     r'COMARCA\s+DE\s+([A-ZÀ-Ú][A-ZÀ-Ú .\'’]*(?:-[A-ZÀ-Ú]+)*)'
     r'(?:\s*[-–—/,]\s*(?:ESTADO\s+D[AEO]\s+)?([A-ZÀ-Ú][A-ZÀ-Ú ]*))?',
@@ -1333,8 +1336,6 @@ _UFS = {
 }
 _SIGLAS = frozenset(_UFS.values())
 LIMITE_CANDIDATOS_FALLBACK = 20
-LIMITE_CANDIDATOS_UF = 500
-LIMITE_CARTORIOS_TODOS = 500
 TAMANHO_CABECALHO = 600
 
 
@@ -1362,6 +1363,19 @@ def comarca_do_documento(extracao):
             uf = _UFS.get(texto_uf) or (
                 texto_uf if texto_uf in _SIGLAS else None
             )
+            # UF colada por hífen (regressão do hífen interno, #318): o
+            # mesmo hífen que preserva XIQUE-XIQUE engoliu a sigla em
+            # `ITAMARAJU-BA`/`ITAMARAJU-BAHIA`. Sufixo que é sigla/nome de
+            # estado separa: cidade = parte antes, UF = sufixo normalizado
+            # (vence o grupo separado, que não coexiste no cabeçalho real).
+            base, _, sufixo = cidade.rpartition('-')
+            if base:
+                chave_colada = _normalizar_nome(sufixo).upper()
+                uf_colada = _UFS.get(chave_colada) or (
+                    chave_colada if chave_colada in _SIGLAS else None
+                )
+                if uf_colada:
+                    cidade, uf = base.strip(' .'), uf_colada
             _cidade, ufs = achados.setdefault(
                 _normalizar_nome(cidade), (cidade, set()),
             )
@@ -1384,7 +1398,8 @@ def candidatos_cartorio_fallback(
     Sem escrita: devolve os ``match_candidatos`` do campo; senão os estágios
     de ``fallback_cartorio`` — match único por nome (com a cidade da
     ``comarca``); cartórios da cidade da comarca (até 20, por nome); da UF
-    (até 500); lista completa (até 500). Nunca vazio com o índice povoado.
+    (sem corte); lista completa (sem corte). Nunca vazio com o índice
+    povoado.
     ``comarca`` vem de ``comarca_do_documento`` (calculada uma vez).
     """
     campo = extracao.campos.filter(chave=chave).first()
@@ -1400,10 +1415,17 @@ def fallback_cartorio(campo, indice, comarca, valor=None):
 
     Estágios, parando no primeiro não vazio (incremento B do I-10):
     (a) match único do valor pelo índice; (b) cartórios da cidade da
-    comarca (até 20); (c) cartórios da UF da comarca (até 500);
-    (d) lista completa (até 500). Com cabeçalho ilegível (``comarca``
+    comarca (até 20); (c) cartórios da UF da comarca, sem corte;
+    (d) lista completa, sem corte. Com cabeçalho ilegível (``comarca``
     ``None``) ou cidade fora do índice, o seletor ainda sai preenchido —
     nunca ``[]`` com o índice povoado.
+
+    Trade-off dos estágios (c) e (d) sem limite (#318): a lista completa
+    só é montada quando não há candidatos e, no pior caso, quando o
+    cabeçalho é ilegível. Cortar em 500 deixava o registro na posição
+    501+ inalcançável no ``<select>`` — e o save só aceita id que esteja
+    no próprio fallback —, recriando a duplicata que o fallback existe
+    para evitar. A alternativa era manter o beco sem saída.
     """
     valor = valor or campo.valor_final or campo.normalized
     escolhido, _candidatos = indice.match(
@@ -1418,10 +1440,10 @@ def fallback_cartorio(campo, indice, comarca, valor=None):
         )
         if da_cidade:
             return da_cidade
-        da_uf = indice.ids_da_uf(comarca.uf, LIMITE_CANDIDATOS_UF)
+        da_uf = indice.ids_da_uf(comarca.uf)
         if da_uf:
             return da_uf
-    return indice.ids_de_todos(LIMITE_CARTORIOS_TODOS)
+    return indice.ids_de_todos()
 
 
 def _normalized(no):

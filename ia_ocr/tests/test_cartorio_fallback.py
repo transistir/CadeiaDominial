@@ -101,6 +101,33 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
             revisao.Comarca('XIQUE-XIQUE', 'BA'),
         )
 
+    def test_comarca_uf_colada_por_hifen_sigla(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE ITAMARAJU-BA\nMatrícula 1\n'
+        )
+        self.assertEqual(
+            revisao.comarca_do_documento(extracao),
+            revisao.Comarca('ITAMARAJU', 'BA'),
+        )
+
+    def test_comarca_uf_colada_por_hifen_estado_por_extenso(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE ITAMARAJU-BAHIA\nMatrícula 1\n'
+        )
+        self.assertEqual(
+            revisao.comarca_do_documento(extracao),
+            revisao.Comarca('ITAMARAJU', 'BA'),
+        )
+
+    def test_comarca_hifenizada_com_uf_colada(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE XIQUE-XIQUE-BA\nMatrícula 1\n'
+        )
+        self.assertEqual(
+            revisao.comarca_do_documento(extracao),
+            revisao.Comarca('XIQUE-XIQUE', 'BA'),
+        )
+
     def test_comarca_com_hifen_interno_sem_uf(self):
         extracao = self._com_cartorio_sem_candidatos(
             'COMARCA DE XIQUE-XIQUE\nMatrícula 1\n'
@@ -137,6 +164,14 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
             'COMARCA DE XIQUE-XIQUE - BA\nMatrícula 1\n'
         )
         self.assertEqual(self._candidatos(extracao), [xique.pk])
+
+    def test_comarca_uf_colada_busca_cartorio_da_cidade(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE ITAMARAJU-BA\nMatrícula 1\n'
+        )
+        # UF colada não pode virar "cidade" ITAMARAJU-BA (fora do índice):
+        # o cartório de ITAMARAJU sai, não a lista completa.
+        self.assertEqual(self._candidatos(extracao), [self.itamaraju.pk])
 
     def test_duas_comarcas_hifenizadas_sao_ambiguas(self):
         extracao = self._com_cartorio_sem_candidatos(
@@ -182,12 +217,8 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
         extracao = self._com_cartorio_sem_candidatos('Sem cabeçalho útil.')
         ids = self._candidatos(extracao)
         self.assertTrue(ids)
-        self.assertLessEqual(len(ids), revisao.LIMITE_CARTORIOS_TODOS)
         self.assertEqual(ids, self._lista_completa())
-        self.assertEqual(
-            ids,
-            IndiceCartorios().ids_de_todos(revisao.LIMITE_CARTORIOS_TODOS),
-        )
+        self.assertEqual(ids, IndiceCartorios().ids_de_todos())
 
     def test_cidade_fora_do_indice_cai_para_os_cartorios_da_uf(self):
         campinas = Cartorios.objects.create(
@@ -325,11 +356,91 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
         resposta = self._salvar(extracao, self.outro.pk)
         self.assertEqual(resposta.status_code, 200, resposta.content)
         campo = extracao.campos.get(chave=CHAVE)
-        # O fallback gravado é o do estágio de UF: só cartórios da BA.
-        self.assertEqual(
-            campo.match_candidatos, [self.itamaraju.pk, self.outro.pk],
-        )
+        # Grava SÓ a escolha aceita (#318): persistir a lista inteira do
+        # estágio de UF (sem corte) envelheceria milhares de ids no JSON —
+        # a escolha segue válida em ``aplicar_linha`` e o que a tela usa é
+        # o ``cartorio_escolhido_id``.
+        self.assertEqual(campo.match_candidatos, [self.outro.pk])
         self.assertEqual(campo.cartorio_escolhido_id, self.outro.pk)
+
+    def _povoar_501_na_uf(self):
+        """501 cartórios na BA com o alvo na posição 501 — a última.
+
+        Antes do #318 o corte de 500 escondia o alvo do ``<select>`` e o
+        save o recusava (id fora do fallback): duplicata de volta.
+        """
+        Cartorios.objects.bulk_create(
+            Cartorios(
+                nome=f'A Cartório BA {i:03d}', cidade='PORTO SEGURO',
+                estado='BA', cns=f'9000{i:05d}',
+            )
+            for i in range(1, 499)
+        )
+        return Cartorios.objects.create(
+            nome='Z Cartório Alvo da UF', cidade='PORTO SEGURO',
+            estado='BA', cns='9499999',
+        )
+
+    def test_uf_com_501_cartorios_inclui_o_ultimo_no_seletor_e_no_save(self):
+        alvo = self._povoar_501_na_uf()
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE EUNÁPOLIS - ESTADO DA BAHIA\nMatrícula 1\n'
+        )
+        ids = self._candidatos(extracao)
+        # Sem a cidade da comarca no índice, o estágio de UF devolve TODA
+        # a BA: o cartório na posição 501 não pode sumir.
+        self.assertEqual(len(ids), 501)
+        self.assertEqual(ids[-1], alvo.pk)
+        resposta = self._salvar(extracao, alvo.pk)
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        campo = extracao.campos.get(chave=CHAVE)
+        self.assertIn(alvo.pk, campo.match_candidatos)
+        self.assertEqual(campo.cartorio_escolhido_id, alvo.pk)
+
+    def _povoar_501_no_total(self):
+        """501 cartórios no índice com o alvo na última posição."""
+        Cartorios.objects.bulk_create(
+            Cartorios(
+                nome=f'Cartório Total {i:03d}', cidade='PORTO SEGURO',
+                estado='BA', cns=f'9100{i:05d}',
+            )
+            for i in range(1, 498)
+        )
+        return Cartorios.objects.create(
+            nome='Z Cartório Sem Comarca', cidade='PORTO SEGURO',
+            estado='BA', cns='9599999',
+        )
+
+    def test_sem_comarca_501_cartorios_inclui_o_ultimo_no_seletor_e_no_save(self):
+        alvo = self._povoar_501_no_total()
+        extracao = self._com_cartorio_sem_candidatos('Sem cabeçalho útil.')
+        self.assertIsNone(revisao.comarca_do_documento(extracao))
+        ids = self._candidatos(extracao)
+        # Pior caso (cabeçalho ilegível): lista completa sem corte — o
+        # último do índice continua escolhível e aceito no save.
+        self.assertEqual(len(ids), 501)
+        self.assertEqual(ids[-1], alvo.pk)
+        resposta = self._salvar(extracao, alvo.pk)
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        campo = extracao.campos.get(chave=CHAVE)
+        self.assertEqual(campo.match_candidatos, [alvo.pk])
+        self.assertEqual(campo.cartorio_escolhido_id, alvo.pk)
+
+    def test_estagio_da_cidade_corta_em_20(self):
+        Cartorios.objects.bulk_create(
+            Cartorios(
+                nome=f'A Cartório de Itamaraju {i:02d}', cidade='ITAMARAJU',
+                estado='BA', cns=f'9200{i:05d}',
+            )
+            for i in range(1, 21)
+        )
+        extracao = self._com_cartorio_sem_candidatos(CABECALHO)
+        ids = self._candidatos(extracao)
+        # A cidade da comarca continua cortada em 20 (comportamento
+        # mantido): os 'A …' precedem 'Registro de Imóveis …' na ordem,
+        # então o cartório da fixture fica fora do corte.
+        self.assertEqual(len(ids), revisao.LIMITE_CANDIDATOS_FALLBACK)
+        self.assertNotIn(self.itamaraju.pk, ids)
 
     def test_save_recusa_id_fora_do_fallback(self):
         extracao = self._com_cartorio_sem_candidatos()
