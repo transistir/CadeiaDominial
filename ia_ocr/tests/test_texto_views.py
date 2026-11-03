@@ -564,3 +564,19 @@ class AutoExtrairTelaTextoTest(TelaTextoBase):
 
         self.assertFalse(resposta.context['auto_extrair'])
         self.assertEqual(self._auto(resposta), [])
+
+    def test_form_auto_marca_extrair_auto_e_manual_nao(self):
+        """Só o POST disparado pela tela auto-submetida marca `extrair_auto`:
+        o botão manual segue idêntico e continua podendo reextrair."""
+        resposta = self.client.get(self.url_tela())
+
+        self.assertTrue(resposta.context['auto_extrair'])
+        self.assertContains(resposta, 'name="extrair_auto" value="1"')
+
+        with mock.patch.object(type(self.job), 'extracao_vigente', return_value=object()):
+            manual = self.client.get(self.url_tela())
+        html_manual = manual.content.decode()
+
+        self.assertFalse(manual.context['auto_extrair'])
+        self.assertIn('data-ocr-extrair-campos', html_manual)
+        self.assertNotIn('name="extrair_auto"', html_manual)
