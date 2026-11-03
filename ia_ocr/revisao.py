@@ -577,12 +577,84 @@ _ACAO_OBRIGATORIO = {
     'cartorio': 'escolha o cartório',
 }
 
+# Onde está o campo citado pela pendência (Greptile P2 #317): índices 1-based.
+_LOCAL_DOCUMENTO = {
+    'tipo': 'tipo',
+    'data': 'data',
+    'cartorio': 'cartório',
+}
+_LOCAL_ATO = {
+    'data': 'data',
+    'tipo_sugerido': 'tipo',
+    'cartorio_transmissao': 'cartório de transmissão',
+    'origem/cartorio': 'cartório de origem',
+    'valor_transacao': 'valor',
+}
+_CHAVE_ATO_LOCAL = re.compile(r'/acts/(\d+)(?:/(.+))?')
+_CHAVE_PARTE_LOCAL = re.compile(r'partes/(\d+)(?:/(.+))?')
+
+
+def _rotulo_fallback(caminho: str) -> str:
+    """Último segmento com ``_`` por espaço — nunca quebra."""
+    return caminho.rsplit('/', 1)[-1].replace('_', ' ')
+
+
+def _local_de_ato(resto: str | None) -> str:
+    """Rótulo do resto do caminho de um ato (``partes`` é 1-based)."""
+    if not resto:
+        return ''
+    partes = _CHAVE_PARTE_LOCAL.fullmatch(resto)
+    if partes is not None:
+        indice, sub = partes.groups()
+        local = f'parte {int(indice) + 1}'
+        rotulo = _local_de_ato(sub)
+        if rotulo:
+            local = f'{local} — {rotulo}'
+        return local
+    mapeado = _LOCAL_ATO.get(resto)
+    if mapeado is not None:
+        return mapeado
+    return _rotulo_fallback(resto)
+
+
+def _local_da_chave(chave) -> str:
+    """Identificação legível do campo citado pela pendência.
+
+    Chave ausente ou não-string (payload cru/legado) → ``''``, sem exceção;
+    resto vazio depois de ``/acts/{i}/`` ou ``/document/`` → rótulo sem
+    travessão pendurado.
+    """
+    if not isinstance(chave, str):
+        return ''
+    if chave.startswith('/document/'):
+        resto = chave[len('/document/'):]
+        rotulo = _LOCAL_DOCUMENTO.get(resto) or _rotulo_fallback(resto)
+        return f'Documento — {rotulo}' if rotulo else 'Documento'
+    if chave == '/acts':
+        return 'Documento — atos'
+    achado = _CHAVE_ATO_LOCAL.fullmatch(chave.rstrip('/'))
+    if achado is not None:
+        indice, resto = achado.groups()
+        local = f'Ato {int(indice) + 1}'
+        rotulo = _local_de_ato(resto)
+        if rotulo:
+            local = f'{local} — {rotulo}'
+        return local
+    return _rotulo_fallback(chave)
+
 
 def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
-    """Texto de negócio de uma pendência; chave/motivo crus seguem para suporte."""
+    """Texto de negócio de uma pendência; chave/motivo crus seguem para suporte.
+
+    Chave ausente/não-string (payload cru/legado) não levanta exceção: o
+    texto sai sem local e a ação cai no genérico.
+    """
     chave, motivo = item['chave'], item['motivo']
+    texto_chave = chave if isinstance(chave, str) else ''
     if motivo == 'obrigatorio_ausente':
-        acao = _ACAO_OBRIGATORIO.get(chave.rsplit('/', 1)[-1], 'preencha o campo')
+        acao = _ACAO_OBRIGATORIO.get(
+            texto_chave.rsplit('/', 1)[-1], 'preencha o campo',
+        )
     elif motivo == 'nenhum_ato':
         acao = 'confirmar que não há atos' if sem_atos_liberado else ''
     else:
@@ -594,6 +666,7 @@ def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
     return {
         'chave': chave,
         'motivo': motivo,
+        'local': _local_da_chave(chave),
         'rotulo': rotulo,
         'acao': acao,
     }

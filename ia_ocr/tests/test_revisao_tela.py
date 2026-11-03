@@ -4,7 +4,9 @@ import json
 import re
 
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.shortcuts import resolve_url
+from django.template.loader import render_to_string
 from django.test import SimpleTestCase, override_settings
 from django.test.html import Element
 from django.utils import timezone
@@ -178,6 +180,28 @@ class RevisaoTelaTest(TelaRevisaoBase):
         principal = re.sub(r'<details.*?</details>', '', bloco, flags=re.S)
         principal = re.sub(r'title="[^"]*"', '', principal)
         self.assertNotIn('/document/cartorio', principal)
+
+    def test_tela_pendencias_de_atos_distintos_dizem_o_campo(self):
+        # Greptile P2 (#317): duas datas faltando em atos diferentes não podem
+        # vir textos idênticos — o local diz qual ato corrigir.
+        payload = payload_averbacao(self.job.job_id)
+        payload['acts'].append(payload_registro(self.job.job_id)['acts'][0])
+        for ato in payload['acts']:
+            ato.pop('data')
+        self._extracao(payload)
+
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(
+            'Ato 1 — data: Campo obrigatório não preenchido — informe a data',
+            html,
+        )
+        self.assertIn(
+            'Ato 2 — data: Campo obrigatório não preenchido — informe a data',
+            html,
+        )
 
     def test_campo_obrigatorio(self):
         self.assertTrue(revisao.campo_obrigatorio('/document/tipo'))
@@ -1140,3 +1164,131 @@ class DescreverPendenciaMotivosDoMotorTest(SimpleTestCase):
         self.assertEqual(d['rotulo'], 'Pendência a revisar')
         self.assertEqual(d['acao'], 'revise o campo')
         self.assertEqual(d['motivo'], 'foo_bar')
+
+
+class DescreverPendenciaLocalTest(SimpleTestCase):
+    """``local`` identifica o campo citado pela pendência (Greptile P2, #317)."""
+
+    def test_regras_mapeadas(self):
+        casos = (
+            ('/document/tipo', 'Documento — tipo'),
+            ('/document/data', 'Documento — data'),
+            ('/document/cartorio', 'Documento — cartório'),
+            ('/acts/0/data', 'Ato 1 — data'),
+            ('/acts/1/tipo_sugerido', 'Ato 2 — tipo'),
+            ('/acts/0/cartorio_transmissao', 'Ato 1 — cartório de transmissão'),
+            ('/acts/0/valor_transacao', 'Ato 1 — valor'),
+            ('/acts/0/origem/cartorio', 'Ato 1 — cartório de origem'),
+            ('/acts/1/partes/2', 'Ato 2 — parte 3'),
+        )
+        for chave, local in casos:
+            with self.subTest(chave=chave):
+                d = revisao.descrever_pendencia(
+                    {'chave': chave, 'motivo': 'revisao_pendente'},
+                )
+                self.assertEqual(d['local'], local)
+
+    def test_fallback_usa_ultimo_segmento_com_espacos(self):
+        casos = (
+            ('/acts/0/origem/livro', 'Ato 1 — livro'),
+            ('/document/cri_atual', 'Documento — cri atual'),
+        )
+        for chave, local in casos:
+            with self.subTest(chave=chave):
+                d = revisao.descrever_pendencia(
+                    {'chave': chave, 'motivo': 'revisao_pendente'},
+                )
+                self.assertEqual(d['local'], local)
+
+    def test_campo_de_parte_mantem_o_prefixo_da_parte(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/acts/1/partes/2/nome', 'motivo': 'revisao_pendente'},
+        )
+        self.assertEqual(d['local'], 'Ato 2 — parte 3 — nome')
+
+    def test_nenhum_ato_aponta_para_os_atos_do_documento(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/acts', 'motivo': 'nenhum_ato'},
+        )
+        self.assertEqual(d['local'], 'Documento — atos')
+
+    def test_chave_motivo_rotulo_e_acao_permanecem(self):
+        d = revisao.descrever_pendencia(
+            {'chave': '/acts/0/data', 'motivo': 'obrigatorio_ausente'},
+        )
+        self.assertEqual(d, {
+            'chave': '/acts/0/data',
+            'motivo': 'obrigatorio_ausente',
+            'local': 'Ato 1 — data',
+            'rotulo': 'Campo obrigatório não preenchido',
+            'acao': 'informe a data',
+        })
+
+    def test_chave_nao_string_nao_levanta_excecao(self):
+        # MUST-FIX Opus (#317): payload cru/legado pode trazer chave None ou
+        # não-string; a descrição da pendência não pode derrubar a tela.
+        for chave in (None, '', 42):
+            with self.subTest(chave=chave):
+                self.assertEqual(revisao._local_da_chave(chave), '')
+        d = revisao.descrever_pendencia(
+            {'chave': None, 'motivo': 'revisao_pendente'},
+        )
+        self.assertEqual(d['local'], '')
+        self.assertEqual(d['rotulo'], 'Confira este valor')
+        self.assertEqual(d['acao'], 'confirme ou corrija')
+
+    def test_resto_vazio_nao_deixa_travessao_pendurado(self):
+        # ``/acts/0/`` não pode virar "Ato 1 — " nem '' virar "Documento — ".
+        casos = (
+            ('/acts/0/', 'Ato 1'),
+            ('/acts/1/', 'Ato 2'),
+            ('/document/', 'Documento'),
+            ('/acts/1/partes/2/', 'Ato 2 — parte 3'),
+        )
+        for chave, local in casos:
+            with self.subTest(chave=chave):
+                self.assertEqual(revisao._local_da_chave(chave), local)
+
+
+class PendenciaSemLocalNoTemplateTest(SimpleTestCase):
+    """Item de pendência sem ``local`` (dict cru) não imprime ': ' órfão."""
+
+    def _html(self, pendencias):
+        # ``user`` só porque o ``default:`` do base.html resolve seu argumento
+        # sem o tratamento silencioso de variável ausente.
+        return render_to_string('ia_ocr/revisao_campos.html', {
+            'user': AnonymousUser(),
+            'pendencias': pendencias,
+        })
+
+    def test_item_sem_local_nao_comeca_com_dois_pontos(self):
+        html = self._html([{
+                'chave': '/acts/0/data',
+                'motivo': 'obrigatorio_ausente',
+                'rotulo': 'Campo obrigatório não preenchido',
+                'acao': 'informe a data',
+                # sem ``local``: outro produtor de dict / payload legado
+            }],
+        )
+        linha = re.search(
+            r'<li class="pendencia"[^>]*>\s*(.*?)\s*<details>', html, re.S,
+        ).group(1)
+        self.assertIn(
+            'Campo obrigatório não preenchido — informe a data', linha,
+        )
+        self.assertFalse(
+            linha.startswith(': '), f'linha começa com ": ": {linha!r}',
+        )
+
+    def test_item_com_local_mantem_o_prefixo(self):
+        html = self._html([{
+            'chave': '/acts/0/data',
+            'motivo': 'obrigatorio_ausente',
+            'local': 'Ato 1 — data',
+            'rotulo': 'Campo obrigatório não preenchido',
+            'acao': 'informe a data',
+        }])
+        self.assertIn(
+            'Ato 1 — data: Campo obrigatório não preenchido — informe a data',
+            html,
+        )

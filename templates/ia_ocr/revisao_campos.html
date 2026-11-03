@@ -35,7 +35,7 @@
         <ul class="revisao-lista">
             {% for item in pendencias %}
             <li class="pendencia" title="{{ item.chave }} — {{ item.motivo }}">
-                {{ item.rotulo }}{% if item.acao %} — {{ item.acao }}{% endif %}
+                {% if item.local %}{{ item.local }}: {% endif %}{{ item.rotulo }}{% if item.acao %} — {{ item.acao }}{% endif %}
                 <details><summary>Detalhe técnico</summary><code>{{ item.chave }}</code> — <code>{{ item.motivo }}</code></details>
             </li>
             {% endfor %}
