@@ -27,6 +27,7 @@ from ia_ocr.models import (
 )
 
 from .base_texto import TEXTOS, TelaTextoBase, _texto_completo
+from .payloads_extracao import TEXTO_PAGINA_1, payload_averbacao
 from .test_ui_card_ocr import _atributos, _elementos
 
 
@@ -565,13 +566,18 @@ class AutoExtrairTelaTextoTest(TelaTextoBase):
         self.assertFalse(resposta.context['auto_extrair'])
         self.assertEqual(self._auto(resposta), [])
 
-    def test_form_auto_marca_extrair_auto_e_manual_nao(self):
-        """Só o POST disparado pela tela auto-submetida marca `extrair_auto`:
-        o botão manual segue idêntico e continua podendo reextrair."""
+    def test_tela_auto_nao_servida_com_o_campo_extrair_auto(self):
+        """PR #319 tarefa 2 (Codex MUST-FIX): a marca `extrair_auto` não pode
+        viver no HTML do form — senão o clique manual do mesmo form a carrega
+        e, havendo extração vigente (outra aba/página volta pelo histórico),
+        deixa de reextrair e recebe "Os campos já foram extraídos.". O campo
+        passa a ser injetado pelo JS só no disparo automático."""
         resposta = self.client.get(self.url_tela())
 
         self.assertTrue(resposta.context['auto_extrair'])
-        self.assertContains(resposta, 'name="extrair_auto" value="1"')
+        self.assertNotContains(resposta, 'name="extrair_auto"')
+        # O JS continua achando o form e o job para injetar a marca no disparo.
+        self.assertContains(resposta, 'data-ocr-auto-extrair-job=')
 
         with mock.patch.object(type(self.job), 'extracao_vigente', return_value=object()):
             manual = self.client.get(self.url_tela())
@@ -580,3 +586,57 @@ class AutoExtrairTelaTextoTest(TelaTextoBase):
         self.assertFalse(manual.context['auto_extrair'])
         self.assertIn('data-ocr-extrair-campos', html_manual)
         self.assertNotIn('name="extrair_auto"', html_manual)
+
+
+class AutoExtrairCliqueManualTest(TelaTextoBase):
+    """PR #319 tarefa 2: o clique manual em "Extrair campos" na tela da
+    auto-extração vai SEM `extrair_auto` (o campo não está mais no HTML) e
+    continua podendo reextrair sobre uma extração vigente — não vira
+    "Os campos já foram extraídos."."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.dono)
+        self.documento.tipo.tipo = 'matricula'
+        self.documento.tipo.save(update_fields=['tipo'])
+        self.backend = mock.Mock(spec=['extrair'])
+        self.backend.extrair.return_value = {
+            'extracao': payload_averbacao(self.job.job_id),
+            'dpi': 300,
+            'paginas': [
+                {
+                    'pagina': pagina.numero_pagina,
+                    'texto_corrigido': (
+                        TEXTO_PAGINA_1 if pagina.numero_pagina == 1 else pagina.texto_ocr
+                    ),
+                }
+                for pagina in self.job.paginas.all()
+            ],
+        }
+        backend_patch = mock.patch(
+            'ia_ocr.services.get_extracao_backend', return_value=self.backend,
+        )
+        backend_patch.start()
+        self.addCleanup(backend_patch.stop)
+
+    def test_clique_manual_sem_flag_reeextrai_sobre_vigente(self):
+        """POST manual (sem o campo) com extração vigente: reextrai de verdade
+        — 2 extrações e mensagem de sucesso, não o aviso de já-extraído."""
+        vigente = services.solicitar_extracao(self.job, self.dono)
+        self.assertEqual(self.job.extracoes.count(), 1)
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(
+            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+        )
+        self.assertIn((
+            'success', 'Extração concluída. Revise os campos.',
+        ), self.mensagens(resposta))
+        self.assertNotIn(
+            ('info', 'Os campos já foram extraídos.'), self.mensagens(resposta),
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.extracoes.count(), 2)
+        self.assertNotEqual(self.job.extracao_vigente(), vigente)
+        self.assertEqual(self.backend.extrair.call_count, 2)

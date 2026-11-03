@@ -46,6 +46,11 @@ function criarStorage(inicial) {
   };
 }
 
+// Inputs injetados pelo JS no form (mesmo padrão de ocr_revisao.test.js).
+function marcasNoForm(form) {
+  return (form.filhos || []).filter((el) => el.name === 'extrair_auto');
+}
+
 // opcoes: { storage, comMarca (default true), botaoDesabilitado, adiarInicio }
 // Com adiarInicio o script carrega mas DOMContentLoaded só dispara em c.iniciar().
 function criarCenario(opcoes) {
@@ -62,6 +67,14 @@ function criarCenario(opcoes) {
   const aviso = criarElemento({
     'data-ocr-auto-extrair-aviso': '', role: 'status', 'aria-live': 'polite',
   });
+  form.filhos = [];
+  form.appendChild = (filho) => { filho.parentNode = form; form.filhos.push(filho); return filho; };
+  form.removeChild = (filho) => {
+    const i = form.filhos.indexOf(filho);
+    if (i !== -1) form.filhos.splice(i, 1);
+    filho.parentNode = null;
+    return filho;
+  };
   form.submit = () => { envios.push('auto'); };
   form.querySelector = (sel) => {
     if (sel === '[data-ocr-extrair-campos]') return botao;
@@ -79,6 +92,7 @@ function criarCenario(opcoes) {
     String,
     document: {
       addEventListener(evento, fn) { (docOuvintes[evento] = docOuvintes[evento] || []).push(fn); },
+      createElement(nome) { return criarElemento({}); },
       querySelector(sel) {
         return sel === '[data-ocr-auto-extrair]' && opcoes.comMarca !== false ? form : null;
       },
@@ -214,6 +228,32 @@ caso('pageshow persisted não deixa spinner preso', () => {
   afirmarIgual(c.botao.disabled, false, 'botão volta a habilitar');
   afirmar(c.aviso.textContent.indexOf('clique em Extrair campos') !== -1, 'aviso de demora');
   c.pageshow(false);
+});
+
+caso('disparo automático anexa extrair_auto=1 ao form', () => {
+  // PR #319 tarefa 2: a marca não está no HTML — entra só aqui, no autoenvio.
+  const c = criarCenario();
+  const marcas = marcasNoForm(c.form);
+  afirmarIgual(marcas.length, 1, 'exatamente uma marca no form');
+  afirmarIgual(marcas[0].value, '1', 'valor da marca');
+  afirmarIgual(marcas[0].type, 'hidden', 'campo escondido');
+});
+
+caso('submit manual no mesmo documento não leva extrair_auto', () => {
+  // O clique manual não passa pelo caminho do autoenvio: sem marca no form.
+  const c = criarCenario({ botaoDesabilitado: true });
+  c.cliqueManual();
+  afirmarIgual(marcasNoForm(c.form).length, 0, 'manual não injeta a marca');
+  afirmarIgual(c.envios.join(','), 'manual', 'só o envio manual');
+});
+
+caso('após restaurar pelo bfcache o form volta sem a marca', () => {
+  // A página restaurada ainda teria o input injetado: o clique manual
+  // seguinte não pode herdar o flag de auto-extração.
+  const c = criarCenario();
+  afirmarIgual(marcasNoForm(c.form).length, 1, 'marca presente no disparo');
+  c.pageshow(true);
+  afirmarIgual(marcasNoForm(c.form).length, 0, 'marca removida na restauração');
 });
 
 (async () => {

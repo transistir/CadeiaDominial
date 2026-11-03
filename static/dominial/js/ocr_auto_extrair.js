@@ -8,8 +8,11 @@
  * `ocr-auto-extrair:<job_id>` (instante do disparo, validade 10 min). Regras:
  *  - sem conseguir persistir a marca (storage lança/bloqueado) NÃO há autoenvio;
  *  - o submit manual é capturado já no carregamento do script e sempre vence;
+ *  - o campo `extrair_auto=1` (critério do servidor p/ `somente_se_inexistente`)
+ *    NÃO está no HTML: é injetado só no disparo automático — o clique manual
+ *    nunca o carrega e continua podendo reextrair (PR #319, tarefa 2);
  *  - o bloco de progresso nasce `hidden` e só aparece quando o envio sai;
- *  - voltar pelo histórico (bfcache) não deixa spinner preso.
+ *  - voltar pelo histórico (bfcache) não deixa spinner preso nem marca residual.
  * Testes em Node: ia_ocr/tests/js/ocr_auto_extrair.test.js.
  */
 (function () {
@@ -23,6 +26,7 @@
 
     var travado = false;          // manual ou automático já ocorreu nesta página
     var desabilitouBotao = false; // fomos nós que desabilitamos o botão
+    var marcaAuto = null;         // input `extrair_auto` injetado no disparo
 
     function chaveDe(form) {
         return PREFIXO + (form.getAttribute('data-ocr-auto-extrair-job') || '');
@@ -61,6 +65,26 @@
         };
     }
 
+    // PR #319 tarefa 2: a marca de auto-extração não vive no HTML do form —
+    // se vivesse, o clique manual do mesmo form a carregaria e deixaria de
+    // reextrair ("Os campos já foram extraídos."). Ela entra aqui, só no
+    // disparo automático, imediatamente antes do submit.
+    function marcarAuto(form) {
+        if (marcaAuto) return;
+        marcaAuto = document.createElement('input');
+        marcaAuto.type = 'hidden';
+        marcaAuto.name = 'extrair_auto';
+        marcaAuto.value = '1';
+        form.appendChild(marcaAuto);
+    }
+
+    // A página restaurada pelo bfcache ainda teria o input injetado: sem
+    // removê-lo, o clique manual seguinte herdaria o flag de automático.
+    function desmarcarAuto(form) {
+        if (marcaAuto && marcaAuto.parentNode === form) form.removeChild(marcaAuto);
+        marcaAuto = null;
+    }
+
     // Captura imediata: um submit manual (antes ou depois do DOMContentLoaded)
     // trava o automático e grava a marca para os reloads seguintes.
     document.addEventListener('submit', function (ev) {
@@ -89,11 +113,13 @@
         desabilitouBotao = true;
         if (p.progresso) p.progresso.hidden = false;
         avisar(MSG_PREPARANDO);
+        marcarAuto(form);
         form.submit();
     }
 
     function restaurar(form) {
         var p = partes(form);
+        desmarcarAuto(form);
         if (p.progresso) p.progresso.hidden = true;
         if (p.botao && desabilitouBotao) {
             p.botao.disabled = false;
