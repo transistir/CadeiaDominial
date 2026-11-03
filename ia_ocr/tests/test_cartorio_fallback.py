@@ -341,12 +341,12 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
             content_type='application/json',
         )
 
-    def test_save_aceita_id_do_fallback_e_persiste_candidatos(self):
+    def test_save_aceita_id_do_fallback_sem_gravar_candidatos(self):
         extracao = self._com_cartorio_sem_candidatos()
         resposta = self._salvar(extracao, self.itamaraju.pk)
         self.assertEqual(resposta.status_code, 200, resposta.content)
         campo = extracao.campos.get(chave=CHAVE)
-        self.assertEqual(campo.match_candidatos, [self.itamaraju.pk])
+        self.assertEqual(campo.match_candidatos, [])
         self.assertEqual(campo.cartorio_escolhido_id, self.itamaraju.pk)
 
     def test_save_aceita_escolha_vinda_do_estagio_de_uf(self):
@@ -356,11 +356,11 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
         resposta = self._salvar(extracao, self.outro.pk)
         self.assertEqual(resposta.status_code, 200, resposta.content)
         campo = extracao.campos.get(chave=CHAVE)
-        # Grava SÓ a escolha aceita (#318): persistir a lista inteira do
-        # estágio de UF (sem corte) envelheceria milhares de ids no JSON —
-        # a escolha segue válida em ``aplicar_linha`` e o que a tela usa é
-        # o ``cartorio_escolhido_id``.
-        self.assertEqual(campo.match_candidatos, [self.outro.pk])
+        # Nada é gravado (#318): persistir a lista do estágio de UF (sem
+        # corte) envelheceria milhares de ids no JSON, e congelar só a
+        # escolha fechava o seletor na troca de cartório. O que a tela usa
+        # é o ``cartorio_escolhido_id``; o fallback o GET recalcula.
+        self.assertEqual(campo.match_candidatos, [])
         self.assertEqual(campo.cartorio_escolhido_id, self.outro.pk)
 
     def _povoar_501_na_uf(self):
@@ -394,7 +394,7 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
         resposta = self._salvar(extracao, alvo.pk)
         self.assertEqual(resposta.status_code, 200, resposta.content)
         campo = extracao.campos.get(chave=CHAVE)
-        self.assertIn(alvo.pk, campo.match_candidatos)
+        self.assertEqual(campo.match_candidatos, [])
         self.assertEqual(campo.cartorio_escolhido_id, alvo.pk)
 
     def _povoar_501_no_total(self):
@@ -423,7 +423,7 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
         resposta = self._salvar(extracao, alvo.pk)
         self.assertEqual(resposta.status_code, 200, resposta.content)
         campo = extracao.campos.get(chave=CHAVE)
-        self.assertEqual(campo.match_candidatos, [alvo.pk])
+        self.assertEqual(campo.match_candidatos, [])
         self.assertEqual(campo.cartorio_escolhido_id, alvo.pk)
 
     def test_estagio_da_cidade_corta_em_20(self):
@@ -448,4 +448,67 @@ class CartorioFallbackTest(tela.TelaRevisaoBase):
         self.assertEqual(resposta.status_code, 422, resposta.content)
         self.assertEqual(
             extracao.campos.get(chave=CHAVE).match_candidatos, [],
+        )
+
+    def _opcoes_cartorio(self):
+        """Ids oferecidos no ``<select>`` do card de cartório, pela tela."""
+        html = self._tela().content.decode()
+        card = next(
+            c for c in _elementos(html, 'article', presentes=('data-campo',))
+            if _atributos(c)['data-chave'] == CHAVE
+        )
+        select = _descendentes(card, 'select', 'data-ocr-escolha')[0]
+        return [
+            _atributos(o)['value']
+            for o in _descendentes(select, 'option', 'value')
+            if _atributos(o)['value']
+        ]
+
+    def test_segundo_save_pode_trocar_de_cartorio(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE EUNÁPOLIS - ESTADO DA BAHIA\nMatrícula 1\n'
+        )
+        primeira = self._salvar(extracao, self.itamaraju.pk)
+        self.assertEqual(primeira.status_code, 200, primeira.content)
+        segunda = self._salvar(extracao, self.outro.pk)
+        self.assertEqual(segunda.status_code, 200, segunda.content)
+        campo = extracao.campos.get(chave=CHAVE)
+        self.assertEqual(campo.cartorio_escolhido_id, self.outro.pk)
+
+    def test_get_depois_do_save_continua_listando_o_fallback(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE EUNÁPOLIS - ESTADO DA BAHIA\nMatrícula 1\n'
+        )
+        resposta = self._salvar(extracao, self.itamaraju.pk)
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        # Trocar de cartório depende do seletor continuar oferecendo o
+        # fallback inteiro depois de uma escolha salva.
+        self.assertEqual(
+            self._opcoes_cartorio(),
+            [str(self.itamaraju.pk), str(self.outro.pk)],
+        )
+
+    def test_save_nao_persiste_a_lista_do_fallback(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE EUNÁPOLIS - ESTADO DA BAHIA\nMatrícula 1\n'
+        )
+        resposta = self._salvar(extracao, self.outro.pk)
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        campo = extracao.campos.get(chave=CHAVE)
+        # Nada de lista congelada no banco: sem corte, a lista inteira do
+        # estágio de UF (milhares de ids) inflaria o JSON de cada campo.
+        self.assertLessEqual(len(campo.match_candidatos), 1)
+
+    def test_segundo_save_recusa_id_fora_do_fallback(self):
+        extracao = self._com_cartorio_sem_candidatos(
+            'COMARCA DE EUNÁPOLIS - ESTADO DA BAHIA\nMatrícula 1\n'
+        )
+        primeira = self._salvar(extracao, self.itamaraju.pk)
+        self.assertEqual(primeira.status_code, 200, primeira.content)
+        # O cartório do documento da fixture é SP: fora do fallback da BA.
+        resposta = self._salvar(extracao, self.documento.cartorio_id)
+        self.assertEqual(resposta.status_code, 422, resposta.content)
+        self.assertEqual(
+            extracao.campos.get(chave=CHAVE).cartorio_escolhido_id,
+            self.itamaraju.pk,
         )
