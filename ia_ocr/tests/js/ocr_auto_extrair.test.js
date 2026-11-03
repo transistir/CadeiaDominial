@@ -256,6 +256,21 @@ caso('após restaurar pelo bfcache o form volta sem a marca', () => {
   afirmarIgual(marcasNoForm(c.form).length, 0, 'marca removida na restauração');
 });
 
+caso('clique manual após autoenvio interrompido não leva extrair_auto', () => {
+  // Codex MUST-FIX (PR #319): o autoenvio sai com a marca injetada; o usuário
+  // edita o texto e desfaz a edição (ocr_texto.js reabilita o botão) e o
+  // clique manual seguinte, no MESMO documento, não pode carregar o
+  // extrair_auto=1 residual — senão o servidor recusa a reextração com
+  // "Os campos já foram extraídos.".
+  const c = criarCenario();
+  afirmarIgual(c.envios.join(','), 'auto', 'autoenvio ocorreu');
+  afirmarIgual(marcasNoForm(c.form).length, 1, 'marca injetada pelo autoenvio');
+  c.botao.disabled = false; // ocr_texto.js reabilita o botão
+  c.cliqueManual();
+  afirmarIgual(marcasNoForm(c.form).length, 0, 'marca residual removida no submit manual');
+  afirmarIgual(c.envios.join(','), 'auto,manual', 'envio manual seguiu adiante');
+});
+
 (async () => {
   let falhas = 0;
   for (const item of casos) {

@@ -10,7 +10,9 @@
  *  - o submit manual é capturado já no carregamento do script e sempre vence;
  *  - o campo `extrair_auto=1` (critério do servidor p/ `somente_se_inexistente`)
  *    NÃO está no HTML: é injetado só no disparo automático — o clique manual
- *    nunca o carrega e continua podendo reextrair (PR #319, tarefa 2);
+ *    nunca o carrega e continua podendo reextrair (PR #319, tarefa 2). Se um
+ *    autoenvio interrompido deixou a marca residual, o submit manual em
+ *    captura a remove antes do envio (PR #319, tarefa 3);
  *  - o bloco de progresso nasce `hidden` e só aparece quando o envio sai;
  *  - voltar pelo histórico (bfcache) não deixa spinner preso nem marca residual.
  * Testes em Node: ia_ocr/tests/js/ocr_auto_extrair.test.js.
@@ -86,11 +88,17 @@
     }
 
     // Captura imediata: um submit manual (antes ou depois do DOMContentLoaded)
-    // trava o automático e grava a marca para os reloads seguintes.
+    // trava o automático e grava a marca para os reloads seguintes. Se um
+    // autoenvio interrompido/reabilitado deixou o input `extrair_auto` injetado
+    // (o usuário editou o texto e o ocr_texto.js reabilitou o botão, p.ex.),
+    // ele sai daqui — antes de o envio seguir — para o clique manual não
+    // herdar o flag de automático e ser recusado como reextração. O
+    // `form.submit()` do disparo automático não dispara este evento.
     document.addEventListener('submit', function (ev) {
         var form = ev && ev.target;
         if (!ehFormAuto(form)) return;
         travado = true;
+        desmarcarAuto(form);
         gravarStorage(chaveDe(form));
     }, true);
 
