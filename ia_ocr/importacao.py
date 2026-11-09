@@ -16,7 +16,11 @@ Decisões de gravação (brief #263):
 - **pessoa** (D): ``criar novo`` com CPF já cadastrado reutiliza o cadastro
   (busca pelos dígitos); só o nome igual não basta — homônimos existem. A
   mesma pessoa não é criada duas vezes na mesma importação (cache por CPF
-  ou por nome canônico + RG; sem CPF nem RG, cada ato grava o seu).
+  ou por nome canônico + RG; sem CPF nem RG, cada ato grava o seu). A
+  criação por CPF é serializada como a do cartório, com as travas tomadas
+  de uma vez e em ordem global (rodada 6); o ``IntegrityError`` e a
+  unicidade que vencer o ``full_clean`` continuam relendo a vencedora
+  (defesa para o cadastro manual, que não passa pelas travas).
 - **cartório** (E): ``criar novo`` busca ``nome__iexact`` e cria apenas
   quando não acha (mesma regra do fluxo manual,
   ``lancamento_campos_service``); a criação é serializada pelo nome, com
@@ -109,8 +113,9 @@ def importar(extracao, usuario, versao, atos):
 
     Ordem das travas (a mesma da exclusão do PDF, para não deadlockar):
     ``DocumentoDigital`` → job → extração → ``Documento`` — e, por último,
-    os nomes de cartório a criar, todos antes do primeiro ato e em ordem
-    global (``_travar_cartorios_a_criar``, #263 rodada 5). Job ``importado``
+    os nomes de cartório a criar e os CPFs de partes a criar, todos antes
+    do primeiro ato e em ordem global (``_travar_cartorios_a_criar``,
+    rodada 5; ``_travar_cpfs_a_criar``, rodada 6). Job ``importado``
     devolve o resultado gravado (idempotência); qualquer outro estado que
     não ``revisado`` recusa. A revisão é revalidada ANTES do token: o
     cadastro escolhido que some (FK ``SET_NULL``) muda a linha e envelhece
@@ -148,8 +153,11 @@ def importar(extracao, usuario, versao, atos):
             .get(pk=job.documento_digital.documento_id)
         )
         # Nomes de cartório: travados aqui, todos e em ordem global, antes
-        # do primeiro ato (#263 rodada 5).
+        # do primeiro ato (#263 rodada 5). CPFs de partes a criar: o mesmo
+        # desenho, para o índice unique de ``Pessoas.cpf`` não fechar ciclo
+        # entre duas importações (#263 rodada 6).
         nomes_travados = _travar_cartorios_a_criar(dados, marcados)
+        _travar_cpfs_a_criar(dados, marcados)
         imovel = documento.imovel
         linhas = _linhas_por_chave(extracao)
         # Chave de identificação ('cpf', digitos) / ('rg', nome, rg) → pessoa.
@@ -397,7 +405,12 @@ def _importar_ato(
     lancamento = Lancamento(
         documento=documento,
         tipo=tipo,
-        numero_lancamento=ato.numero_lancamento,
+        # Gravação normalizada, como o fluxo manual valida e grava: o
+        # número sem bordas — ' R-1 ' persistido colidiria com o 'R-1' do
+        # fluxo manual na próxima duplicata (#263 rodada 6, Codex P2).
+        numero_lancamento=(
+            ato.numero_lancamento.strip() if ato.numero_lancamento else None
+        ),
         data=ato.data,
         valor_transacao=ato.valor,
         area=ato.area,
@@ -568,25 +581,39 @@ def _resolver_pessoa(parte, cache_pessoas, erros):
         try:
             pessoa.full_clean()
         except ValidationError as exc:
-            erros.do_modelo(exc, 'dominial.Pessoas', chave_parte=chave_parte)
-            return None, False
-        try:
-            # Savepoint: o CPF pode ser gravado por OUTRA importação (outro
-            # documento) entre o lookup e o INSERT — a trava do Documento
-            # não cobre Pessoas. Decisão D: relê a linha vencedora e
-            # REUTILIZA; a unicidade de CPF nunca sobe como 500 (#263
-            # rodada 4, Greptile P1).
-            with transaction.atomic():
-                pessoa.save()
-        except IntegrityError:
-            vencedora = (
-                Pessoas.objects.filter(cpf=cpf).first() if cpf else None
-            )
+            # Corrida do full_clean (rodada 6, Codex): o cadastro concorrente
+            # (outra importação ou o manual, que não passa pelas travas)
+            # pode commitar o MESMO CPF entre o lookup acima e a checagem de
+            # unicidade — o ValidationError de unique chega ANTES do INSERT
+            # e o handler de IntegrityError nunca rodaria, rejeitando o
+            # lote inteiro. Mesma decisão do savepoint: reler a vencedora e
+            # REUTILIZAR. Qualquer outro ValidationError segue como erro de
+            # linha — o full_clean não perde validação nenhuma.
+            vencedora = _vencedora_da_unicidade_cpf(exc, cpf)
             if vencedora is None:
-                raise
+                erros.do_modelo(
+                    exc, 'dominial.Pessoas', chave_parte=chave_parte,
+                )
+                return None, False
             pessoa = vencedora
         else:
-            criada = True
+            try:
+                # Savepoint: o CPF pode ser gravado por OUTRA importação
+                # (outro documento) entre o lookup e o INSERT — a trava do
+                # Documento não cobre Pessoas. Decisão D: relê a linha
+                # vencedora e REUTILIZA; a unicidade de CPF nunca sobe como
+                # 500 (#263 rodada 4, Greptile P1).
+                with transaction.atomic():
+                    pessoa.save()
+            except IntegrityError:
+                vencedora = (
+                    Pessoas.objects.filter(cpf=cpf).first() if cpf else None
+                )
+                if vencedora is None:
+                    raise
+                pessoa = vencedora
+            else:
+                criada = True
     if chave_cpf is not None:
         cache_pessoas[chave_cpf] = pessoa
     if chave_rg is not None:
@@ -594,24 +621,64 @@ def _resolver_pessoa(parte, cache_pessoas, erros):
     return pessoa, criada
 
 
+def _vencedora_da_unicidade_cpf(exc, cpf):
+    """Pessoa que o cadastro concorrente commitou, se o erro for o do CPF.
+
+    Reconhece SÓ a mensagem de unicidade do campo cpf (código ``unique``)
+    com CPF não vazio: erro de formato, de outro campo ou de texto solto
+    devolve None e segue como erro de linha. O código é lido do
+    ``error_dict`` — o ``message_dict`` achata as mensagens para ``str`` e
+    PERDE o ``code``. A devolvida é a linha já commitada com esse CPF —
+    None quando ela não existe mais, e o erro original volta a valer
+    (nada é mascarado).
+    """
+    if not cpf:
+        return None
+    dicionario = getattr(exc, 'error_dict', None)
+    if not isinstance(dicionario, dict):
+        return None
+    mensagens = dicionario.get('cpf') or ()
+    if not mensagens or any(
+        getattr(mensagem, 'code', None) != 'unique' for mensagem in mensagens
+    ):
+        return None
+    return Pessoas.objects.filter(cpf=cpf).first()
+
+
 def _nome_da_trava(nome):
     """Nome do cartório como a trava o compara: sem bordas e sem caixa."""
     return (nome or '').strip().casefold()
 
 
-def _chave_da_trava(nome):
-    """Id ``bigint`` da trava do nome — e a ordem global das travas.
+def _id_da_trava(material):
+    """Id ``bigint`` de uma trava de importação, do material já qualificado.
 
-    Calculado aqui, não com ``hashtext`` no SQL: a ordem tem que ser a do
-    id TRAVADO. Ordenar pelos nomes e travar o hash deles deixaria dois
-    nomes de hash colidente inverterem a sequência entre duas importações
-    (o ABBA de volta). 63 bits do blake2b: estável entre processos (o
-    ``hash()`` do Python não é) e nunca negativo no ``bigint``.
+    63 bits do blake2b: estável entre processos (o ``hash()`` do Python
+    não é) e nunca negativo no ``bigint``. Calculado no Python, não com
+    ``hashtext`` no SQL, porque a ordem global das travas tem que ser a do
+    id TRAVADO — ordenar pelo material e travar o hash deixaria dois
+    materiais de hash colidente inverterem a sequência entre duas
+    importações (o ABBA de volta).
     """
-    digest = hashlib.blake2b(
-        _nome_da_trava(nome).encode('utf-8'), digest_size=8,
-    ).digest()
+    digest = hashlib.blake2b(material.encode('utf-8'), digest_size=8).digest()
     return int.from_bytes(digest, 'big') >> 1
+
+
+def _chave_da_trava(nome):
+    """Id ``bigint`` da trava do nome de cartório — e a ordem global delas."""
+    return _id_da_trava(_nome_da_trava(nome))
+
+
+def _chave_cpf_da_trava(cpf):
+    """Id ``bigint`` da trava do CPF — em espaço SEPARADO do do cartório.
+
+    O material do CPF é hasheado com o prefixo ``'cpf:'``: sem a
+    qualificação, um CPF colidiria com o id da trava do cartório cujo nome
+    normalizado fosse o mesmo material — dois tipos de trava distintos
+    disputando o MESMO id, uma importação esperando a outra sem disputar
+    nada (#263 rodada 6, Codex P1).
+    """
+    return _id_da_trava(f'cpf:{cpf}')
 
 
 def _travar_cartorios_a_criar(dados, marcados):
@@ -681,6 +748,65 @@ def _trava_nome_cartorio(nome):
         )
 
 
+def _travar_cpfs_a_criar(dados, marcados):
+    """Trava de uma vez, em ordem global, os CPFs que a importação pode criar.
+
+    Espelho do ``_travar_cartorios_a_criar`` para a decisão D (rodada 6,
+    Codex P1): duas importações em documentos distintos que criam o MESMO
+    CPF — ou CPFs distintos em ordens opostas de atos — disputam as
+    entradas não commitadas do índice unique de ``Pessoas.cpf`` na ordem
+    dos atos, e o Postgres aborta uma delas com ``deadlock_detected``. O
+    handler de ``IntegrityError`` do ``_resolver_pessoa`` não vê o
+    deadlock (é ``OperationalError``) e a trava do ``Documento`` não cobre
+    ``Pessoas``. Em ordem crescente do id e antes do primeiro ato (nada
+    gravado ainda), duas importações disputam os CPFs na MESMA sequência:
+    uma espera a outra, nunca fecha ciclo.
+
+    O conjunto espelha as partes do ``_resolver_pessoa`` — CPFs de partes
+    com ``criar_novo`` e CPF não vazio, normalizados por ``_so_digitos``
+    (o mesmo material do lookup e do INSERT, máscara inclusive). Parte
+    escolhida pelo id nunca trava. Parte sem CPF não trava: sem material
+    não há índice a disputar, e o nome puro nunca identifica (homônimo
+    existe). Ato que vai parar antes das partes (tipo inexistente,
+    duplicata) entra mesmo assim: travar a mais só serializa, travar a
+    menos reabriria o ABBA.
+    """
+    cpfs = set()
+    for ato in dados.atos:
+        if ato.chave not in marcados:
+            continue
+        for parte in ato.partes:
+            if not parte.criar_novo or not parte.cpf:
+                continue
+            cpf = _so_digitos(parte.cpf)
+            if cpf:
+                cpfs.add(cpf)
+    for cpf in sorted(cpfs, key=lambda candidato: (
+        _chave_cpf_da_trava(candidato), candidato,
+    )):
+        _trava_cpf(cpf)
+
+
+def _trava_cpf(cpf):
+    """Serializa a criação de pessoa pelo CPF (decisão D).
+
+    Espelho do ``_trava_nome_cartorio`` para CPFs de partes a criar: fecha
+    a janela busca→INSERT do ``_resolver_pessoa`` — e, com as travas todas
+    tomadas antes do primeiro ato em ordem global, elimina o deadlock do
+    índice unique de ``Pessoas.cpf`` entre duas importações (#263 rodada
+    6, Codex P1). O cadastro manual não passa por aqui, por isso o handler
+    de ``IntegrityError`` fica de pé como defesa. A trava morre com a
+    transação; no sqlite (um escritor por vez) é no-op.
+    """
+    if connection.vendor != 'postgresql':
+        return
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'SELECT pg_advisory_xact_lock(%s::bigint)',
+            [_chave_cpf_da_trava(cpf)],
+        )
+
+
 def _resolver_cartorio(
     cartorio_id, criar_novo, nome, chave_linha, criados, nomes_travados,
 ):
@@ -731,11 +857,15 @@ def _tipo_documento_da_origem(origem, numero):
 def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     """Lançamento existente que colide com o ato, ou None.
 
-    Mesma regra do fluxo manual (``lancamento_validacao_service``): a tupla
-    (documento, tipo, data, número) — com número nulo casando null e '' — e
-    ainda o número sozinho dentro do documento, mudando tipo ou data.
-    ``lancamentos`` restringe onde procurar (padrão: todos).
+    Mesma regra do fluxo manual (``lancamento_validacao_service``), que
+    consulta pelo número sem bordas: o número é comparado normalizado
+    (strip) — ' R-1 ' é duplicata de 'R-1', não lançamento novo (#263
+    rodada 6, Codex P2). A tupla (documento, tipo, data, número) — com
+    número nulo casando null e '' — e ainda o número sozinho dentro do
+    documento, mudando tipo ou data. ``lancamentos`` restringe onde
+    procurar (padrão: todos).
     """
+    numero = numero.strip() if numero else numero
     if lancamentos is None:
         lancamentos = Lancamento.objects.all()
     lancamentos = lancamentos.select_related('documento__imovel')
