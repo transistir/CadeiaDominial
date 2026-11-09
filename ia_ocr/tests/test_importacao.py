@@ -1947,10 +1947,14 @@ class TravaCpfOrdemGlobalTest(ImportacaoBase):
         )
 
     def test_trava_cpf_e_no_op_fora_do_postgresql(self):
-        # Contrato do guard: no sqlite (um escritor por vez) a trava não
-        # consulta o banco — a suíte padrão inteira roda sobre o no-op.
-        with CaptureQueriesContext(connection) as consultas:
-            modulo_importacao._trava_cpf('12345678900')
+        # Contrato do guard: fora do Postgres (um escritor por vez) a trava
+        # não consulta o banco — a suíte padrão inteira roda sobre o no-op.
+        # O ``vendor`` é forçado para 'sqlite': sem isso o teste rodaria o
+        # caminho real no PostgreSQL (consulta de advisory lock) e falharia
+        # lá com a trava funcionando (Greptile P1 no PR #310).
+        with patch.object(connection, 'vendor', 'sqlite'):
+            with CaptureQueriesContext(connection) as consultas:
+                modulo_importacao._trava_cpf('12345678900')
         self.assertEqual(len(consultas), 0)
 
 
