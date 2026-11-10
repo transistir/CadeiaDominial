@@ -664,15 +664,10 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
         self.assertIsNone(lancamento.numero_lancamento)
 
     def test_tipo_sugerido_vazio_nao_chega_a_importar(self):
-        # Parede da revisão (I-5): tipo_sugerido vazio é pendência
-        # bloqueante — ``importar`` recusa a extração inteira antes de
-        # gravação alguma (o tipo vazio não vira 'tipo_inexistente'; nem
-        # chega a gravar). O fallback do rótulo (#322) é a defesa da
-        # gravação para o estado que vencer essa parede — os testes acima
-        # o exercitam na fronteira da gravação. Se um dia a revisão aceitar
-        # o tipo vazio decidido pelo rótulo, este teste abre o caminho e
-        # eles migram para ``importar``.
-        payload = self._payload(numero='R-5')
+        # Parede da revisão (I-5 / #322 rodada 7): sem rótulo, tipo_sugerido
+        # vazio é pendência bloqueante — ``importar`` recusa a extração
+        # inteira antes de gravação alguma.
+        payload = self._payload(rotulo=TEXTO_SEM_ROTULO, numero=None)
         payload['acts'][0]['tipo_sugerido'] = self._campo(None, 'R-1/42.718')
         extracao = self._extracao(payload)
 
@@ -680,3 +675,18 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
             self._importar(extracao)
 
         self.assertEqual(Lancamento.objects.count(), 0)
+
+    def test_tipo_sugerido_vazio_com_rotulo_importa(self):
+        # #322 rodada 7: com rótulo R/Av, tipo_sugerido vazio conclui e importa
+        payload = self._payload(numero='R-5')
+        payload['acts'][0]['tipo_sugerido'] = self._campo(None, 'R-1/42.718')
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertEqual(
+            lancamento.numero_lancamento, f'R5 {self.documento.numero}',
+        )

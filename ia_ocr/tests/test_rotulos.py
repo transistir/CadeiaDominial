@@ -13,6 +13,7 @@ from django.test import TestCase
 
 from ia_ocr.rotulos import (
     Classificacao, analisar_rotulo, classificar_atos, compor_numero_lancamento,
+    resolver_tipo,
 )
 
 
@@ -483,3 +484,49 @@ class ComporNumeroLancamentoTest(TestCase):
             compor_numero_lancamento('transcricao', '5', 'M237'), '5',
         )
         self.assertIsNone(compor_numero_lancamento(None, None, 'M237'))
+
+
+class ResolverTipoTest(TestCase):
+    """Precedência de resolução de tipo do ato (#322 rodada 7)."""
+
+    def test_tipo_explicito_vence_rotulo_e_sugestao(self):
+        tipo, divergencia, origem = resolver_tipo('averbacao', 'R-1', 'registro')
+        self.assertEqual(tipo, 'averbacao')
+        self.assertFalse(divergencia)
+        self.assertEqual(origem, 'explicito')
+
+    def test_rotulo_vence_sugestao_com_divergencia(self):
+        tipo, divergencia, origem = resolver_tipo(None, 'R-1', 'averbacao')
+        self.assertEqual(tipo, 'registro')
+        self.assertTrue(divergencia)
+        self.assertEqual(origem, 'rotulo')
+
+    def test_rotulo_concorda_com_sugestao_sem_divergencia(self):
+        tipo, divergencia, origem = resolver_tipo(None, 'R-1', 'registro')
+        self.assertEqual(tipo, 'registro')
+        self.assertFalse(divergencia)
+        self.assertEqual(origem, 'rotulo')
+
+    def test_sugestao_vence_sem_rotulo_nem_edicao(self):
+        tipo, divergencia, origem = resolver_tipo(None, None, 'averbacao')
+        self.assertEqual(tipo, 'averbacao')
+        self.assertFalse(divergencia)
+        self.assertEqual(origem, 'sugerido')
+
+    def test_rotulo_matricula_nao_define_tipo(self):
+        tipo, divergencia, origem = resolver_tipo(None, 'M-3-14511', 'registro')
+        self.assertEqual(tipo, 'registro')
+        self.assertFalse(divergencia)
+        self.assertEqual(origem, 'sugerido')
+
+    def test_tipo_explicito_invalido_ignorado(self):
+        tipo, divergencia, origem = resolver_tipo('tipo_invalido', 'R-1', 'averbacao')
+        self.assertEqual(tipo, 'registro')
+        self.assertTrue(divergencia)
+        self.assertEqual(origem, 'rotulo')
+
+    def test_tudo_vazio_devolve_nenhum(self):
+        tipo, divergencia, origem = resolver_tipo(None, None, None)
+        self.assertIsNone(tipo)
+        self.assertFalse(divergencia)
+        self.assertEqual(origem, 'nenhum')

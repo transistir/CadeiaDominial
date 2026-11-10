@@ -57,7 +57,7 @@ from .models import ImportacaoIA, OcrJob
 from .revisao import _normalizar_nome, _so_digitos
 from .rotulos import (
     TIPOS_SUGERIDOS, analisar_rotulo, compor_numero_lancamento,
-    normalizar_numero_lancamento, tipo_do_rotulo,
+    normalizar_numero_lancamento, resolver_tipo, tipo_do_rotulo,
 )
 from .valores import MOTIVO_LIMITE
 
@@ -310,27 +310,36 @@ def _resolver_tipo_e_numero(ato, rotulo, documento):
     - rótulo de matrícula com número válido no campo: o número preservado
       veio do campo revisado, não do rótulo (P2, rodada 5).
     """
-    tipo_rotulo = (
-        rotulo.tipo if rotulo.reconhecido and not rotulo.eh_matricula else None
+    tipo_explicito = getattr(ato, 'tipo_explicito', None)
+    tipo_sugerido = getattr(ato, 'tipo_sugerido', None)
+    if ato.tipo == '':
+        tipo_explicito = None
+        tipo_sugerido = None
+    elif ato.tipo is not None and ato.tipo != (tipo_explicito or tipo_sugerido):
+        tipo_explicito = ato.tipo
+
+    tipo_nome, divergencia, _origem = resolver_tipo(
+        tipo_explicito, rotulo, tipo_sugerido,
     )
-    tipo = LancamentoTipo.objects.filter(
-        tipo=tipo_rotulo or ato.tipo,
-    ).order_by('pk').first()
+    tipo = (
+        LancamentoTipo.objects.filter(tipo=tipo_nome).order_by('pk').first()
+        if tipo_nome is not None else None
+    )
     avisos = []
-    if (
-        tipo_rotulo is not None
-        and ato.tipo in TIPOS_SUGERIDOS
-        and ato.tipo != tipo_rotulo
-    ):
+    if divergencia:
+        tipo_rotulo = (
+            rotulo.tipo if rotulo.reconhecido and not rotulo.eh_matricula else None
+        )
         avisos.append(
             f'O rótulo indica {tipo_rotulo}; o tipo sugerido '
-            f'({ato.tipo}) foi ignorado.'
+            f'({tipo_sugerido}) foi ignorado.'
         )
     if rotulo.eh_matricula:
         # P2 (#322 rodada 5): a matrícula do rótulo não vira número de
         # ato, mas o número de /numero_lancamento que É um número de ato
         # válido continua valendo — o aviso reflete o que aconteceu.
         numero_do_ato = _numero_de_ato_do_campo(ato.numero_lancamento)
+        componivel = numero_do_ato is not None
         avisos.append(
             'O rótulo é referência de matrícula (prefixo M), não de '
             'lançamento; o número de ato preservado veio do campo '
@@ -340,15 +349,23 @@ def _resolver_tipo_e_numero(ato, rotulo, documento):
             'lançamento; nenhum número de ato foi extraído dele.'
         )
     else:
-        numero_do_ato = normalizar_numero_lancamento(ato.numero_lancamento)
-    numero = (
-        compor_numero_lancamento(
-            tipo.tipo if tipo is not None else None,
-            numero_do_ato,
-            documento.numero,
+        numero_do_ato, componivel = _numero_do_campo(ato.numero_lancamento)
+    if tipo is None:
+        numero = None
+    elif numero_do_ato is None:
+        # Sem número o composto canônico só muda o início de matrícula
+        # (a sigla); registro/averbação gravam sem número, como antes.
+        numero = compor_numero_lancamento(tipo.tipo, None, documento.numero)
+    elif componivel:
+        numero = compor_numero_lancamento(
+            tipo.tipo, numero_do_ato, documento.numero,
         )
-        if tipo is not None else None
-    )
+    else:
+        # P1-1 (#322 rodada 7): texto que NÃO é número de ato ('X-1',
+        # 'Av. Brasil') é preservado como veio (trim), sem prefixo nem
+        # sigla. Compor gravava 'RX-1 M237' e a duplicata contra o 'X-1'
+        # gravado não casava — a base comparava texto com texto.
+        numero = numero_do_ato
     return tipo, numero, avisos
 
 
@@ -1265,20 +1282,32 @@ def _rotulo_efetivo(chave, linhas):
     Devolve, na folha e, sem ela, na linha estrutural, o primeiro não
     vazio entre ``valor_final``, ``normalized`` e ``raw`` — ``None``
     quando nada existe (o parser devolve ``reconhecido=False`` e o
-    ``tipo_sugerido`` decide).
+    ``tipo_sugerido`` decide). A leitura é a MESMA da revisão
+    (``revisao.rotulo_efetivo``, #322 rodada 7): uma única regra decide o
+    tipo nos dois caminhos.
     """
-    for campo in (
-        linhas.get(f'{chave}/rotulo'), linhas.get(chave),
-    ):
-        if campo is None or campo.status_revisao == 'descartado':
-            continue
-        if campo.valor_final:
-            return campo.valor_final
-        if campo.normalized is not None:
-            return campo.normalized
-        if campo.raw is not None:
-            return campo.raw
-    return None
+    return revisao.rotulo_efetivo(chave, linhas)
+
+
+def _numero_do_campo(texto):
+    """``(número a gravar, pode ser composto no formato canônico do V1)``.
+
+    P1-1 (#322 rodada 7): só é número de ato — e só aceita a composição
+    ``'R5 M237'``/``'AV6 M237'`` — o rótulo R/Av reconhecido ('R-5' → '5',
+    o normalizador devolve o número puro) ou o número puro já sem prefixo
+    ('5', '12.345'). Qualquer outro texto ('X-1', 'Av. Brasil', a
+    referência 'M-3-14511') é preservado como veio (trim), sem prefixo e
+    sem sigla do documento: a duplicata compara texto com texto, como a
+    base fazia. Compor qualquer texto gravava 'RX-1 M237' e a duplicata
+    contra o 'X-1' gravado passava.
+    """
+    analisado = analisar_rotulo(texto)
+    if analisado.reconhecido and not analisado.eh_matricula:
+        return analisado.numero, True
+    normalizado = normalizar_numero_lancamento(texto)
+    if normalizado is None:
+        return None, False
+    return normalizado, bool(_NUMERO_SIMPLES.fullmatch(normalizado))
 
 
 def _numero_de_ato_do_campo(texto):
@@ -1298,13 +1327,8 @@ def _numero_de_ato_do_campo(texto):
     'X-9', texto comum) continua descartado: compô-lo é o que a rodada 4
     corrigiu ('RM-3-14511 M237').
     """
-    analisado = analisar_rotulo(texto)
-    if analisado.reconhecido and not analisado.eh_matricula:
-        return analisado.numero
-    normalizado = normalizar_numero_lancamento(texto)
-    if isinstance(normalizado, str) and _NUMERO_SIMPLES.fullmatch(normalizado):
-        return normalizado
-    return None
+    numero, componivel = _numero_do_campo(texto)
+    return numero if componivel else None
 
 
 def _atos_marcados(dados, atos):

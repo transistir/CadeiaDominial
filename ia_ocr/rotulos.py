@@ -201,6 +201,60 @@ def tipo_do_rotulo(texto):
     return None
 
 
+def resolver_tipo(
+    tipo_explicito: str | None,
+    rotulo_texto: str | Rotulo | None,
+    tipo_sugerido: str | None,
+) -> tuple[str | None, bool, str]:
+    """Resolve o tipo do ato pela precedência estabelecida (#322 rodada 7).
+
+    A escolha EXPLÍCITA do usuário não pode ser sobrescrita pelo rótulo:
+
+    1. ``tipo_explicito`` em ``TIPOS_SUGERIDOS`` (usuário mudou o tipo na
+       tela, inclusive via ``aplicar_linha``/fluxo "mudar tipo") — vence;
+    2. Rótulo efetivo com prefixo R/Av (lido como na rodada 6:
+       ``valor_final`` → ``normalized`` → ``raw``, linha descartada
+       ignorada);
+    3. ``tipo_sugerido`` em ``TIPOS_SUGERIDOS`` (sugestão normalizada do OCR).
+
+    Devolve ``(tipo | None, divergencia: bool, origem: str)``.
+    ``origem`` é ``'explicito'``, ``'rotulo'``, ``'sugerido'`` ou ``'nenhum'``.
+    ``divergencia`` é True quando o rótulo R/Av resolve e difere do
+    ``tipo_sugerido`` válido. Módulo PURO, sem Django e sem I/O.
+    """
+    if isinstance(tipo_explicito, str):
+        tipo_exp = tipo_explicito.strip()
+        if tipo_exp in TIPOS_SUGERIDOS:
+            return tipo_exp, False, 'explicito'
+
+    analisado = (
+        rotulo_texto
+        if isinstance(rotulo_texto, Rotulo)
+        else analisar_rotulo(rotulo_texto)
+    )
+    tipo_rotulo = (
+        analisado.tipo
+        if analisado.reconhecido and not analisado.eh_matricula
+        else None
+    )
+
+    sug = (
+        tipo_sugerido.strip()
+        if isinstance(tipo_sugerido, str)
+        else None
+    )
+    eh_sug_valido = sug in TIPOS_SUGERIDOS
+
+    if tipo_rotulo in TIPOS_SUGERIDOS:
+        divergencia = bool(eh_sug_valido and sug != tipo_rotulo)
+        return tipo_rotulo, divergencia, 'rotulo'
+
+    if eh_sug_valido:
+        return sug, False, 'sugerido'
+
+    return None, False, 'nenhum'
+
+
 def compor_numero_lancamento(tipo, numero, sigla_matricula):
     """Número de lançamento no formato canônico do V1 (fluxo manual).
 
@@ -323,17 +377,16 @@ def classificar_atos(payload) -> Classificacao:
         if analisado.eh_matricula:
             continue
         sugerido = _valor_do_campo(ato.get('tipo_sugerido'))
-        # Divergência só quando os DOIS lados são tipos válidos e diferem:
-        # tipo_sugerido ausente/inválido é como se não existisse (o prefixo
-        # do rótulo decide sozinho, sem registrar conflito).
-        divergencia = (
-            sugerido in TIPOS_SUGERIDOS and sugerido != analisado.tipo
+        tipo, divergencia, _origem = resolver_tipo(
+            tipo_explicito=None,
+            rotulo_texto=analisado,
+            tipo_sugerido=sugerido,
         )
         ordenaveis.append((
             _ordem_ordenavel(ato.get('ordem'), indice),
             {
                 'ordem': ordem,
-                'tipo': analisado.tipo,
+                'tipo': tipo,
                 'numero': analisado.numero,
                 'matricula': analisado.matricula,
                 'ato': ato,
