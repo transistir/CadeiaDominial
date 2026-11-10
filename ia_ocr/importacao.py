@@ -37,7 +37,7 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Q
+from django.db.models import F, Func, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -859,28 +859,34 @@ def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
 
     Mesma regra do fluxo manual (``lancamento_validacao_service``), que
     consulta pelo número sem bordas: o número é comparado normalizado
-    (strip) — ' R-1 ' é duplicata de 'R-1', não lançamento novo (#263
-    rodada 6, Codex P2). A tupla (documento, tipo, data, número) — com
-    número nulo casando null e '' — e ainda o número sozinho dentro do
-    documento, mudando tipo ou data. ``lancamentos`` restringe onde
-    procurar (padrão: todos).
+    (strip) dos DOIS lados — ' R-1 ' é duplicata de 'R-1', não lançamento
+    novo (#263 rodada 6, Codex P2; rodada 7 normaliza também o JÁ GRAVADO
+    via TRIM, que importador anterior e edição manual conseguiram gravar
+    com bordas). A tupla (documento, tipo, data, número) — com número nulo
+    casando null e gravado vazio (null, '' e só espaços) — e ainda o
+    número sozinho dentro do documento, mudando tipo ou data.
+    ``lancamentos`` restringe onde procurar (padrão: todos).
     """
     numero = numero.strip() if numero else numero
     if lancamentos is None:
         lancamentos = Lancamento.objects.all()
-    lancamentos = lancamentos.select_related('documento__imovel')
+    lancamentos = lancamentos.select_related('documento__imovel').annotate(
+        numero_gravado=Func(F('numero_lancamento'), function='TRIM'),
+    )
     filtro = Q(documento=documento, tipo=tipo)
     filtro &= Q(data=data) if data is not None else Q(data__isnull=True)
     if numero:
-        filtro &= Q(numero_lancamento=numero)
+        filtro &= Q(numero_gravado=numero)
     else:
-        filtro &= Q(numero_lancamento__isnull=True) | Q(numero_lancamento='')
+        # TRIM(null) é null: null casa só por ``isnull``; gravado só com
+        # espaços vira '' no TRIM e casa como vazio, como um ''.
+        filtro &= Q(numero_lancamento__isnull=True) | Q(numero_gravado='')
     existente = lancamentos.filter(filtro).first()
     if existente is not None:
         return existente
     if numero:
         return lancamentos.filter(
-            documento=documento, numero_lancamento=numero,
+            documento=documento, numero_gravado=numero,
         ).first()
     return None
 

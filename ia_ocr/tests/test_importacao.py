@@ -362,6 +362,51 @@ class DuplicidadeTest(ImportacaoBase):
             Lancamento.objects.get().numero_lancamento, 'R-1',
         )
 
+    def test_gravado_com_bordas_recusa_o_importado_sem_bordas(self):
+        # Rodada 7 (review Codex): a rodada 6 normalizou só o número
+        # RECEBIDO. Quem já tem ' R-1 ' gravado (importador anterior e
+        # edição manual gravam bordas) não pode receber 'R-1' como novo.
+        existente = self._existente(' R-1 ')
+
+        (erro,) = self._erros()
+
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(erro['existente']['id'], existente.pk)
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_segundo_filtro_normaliza_o_numero_gravado(self):
+        # O fallback "número sozinho dentro do documento, mudando tipo/data"
+        # compara o gravado sem bordas do mesmo jeito.
+        tipo_averbacao = LancamentoTipo.objects.create(tipo='averbacao')
+        existente = self._existente(
+            ' R-1 ', tipo=tipo_averbacao, data=date(2021, 1, 1),
+        )
+
+        (erro,) = self._erros()
+
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(erro['existente']['id'], existente.pk)
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_gravado_somente_espacos_cai_no_ramo_de_vazio(self):
+        # Gravado só com espaços é vazio: o ato sem número casa no ramo de
+        # null/'' da dupla (documento, tipo, data), como um '' gravado.
+        self.job.status = 'importado'
+        self.job.save(update_fields=['status'])
+        self.job = OcrJob.objects.create(
+            documento_digital=self.arquivo, status='revisado',
+        )
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        existente = self._existente('   ')
+
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        (erro,) = contexto.exception.linhas[0]['erros']
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(erro['existente']['id'], existente.pk)
+        self.assertEqual(Lancamento.objects.count(), 1)
+
     def _novo_job_com_extracao(self, numero):
         """Extracao finalizada nova (constraint: uma por job), número dado."""
         self.job.status = 'importado'
@@ -776,6 +821,21 @@ class ResumoTest(ImportacaoBase):
         (ato,) = dados['atos']
         self.assertFalse(ato['duplicado'])
         self.assertIsNone(ato['existente'])
+
+    def test_resumo_normaliza_o_numero_gravado(self):
+        # Rodada 7: a pendência da prévia herda a comparação dos dois lados
+        # normalizados — ' R-1 ' gravado marca a importação de 'R-1'.
+        extracao = self._extracao(self._payload_com_numero())
+        existente = Lancamento.objects.create(
+            documento=self.documento, tipo=self.tipo_registro,
+            numero_lancamento=' R-1 ', data=date(2020, 2, 15),
+        )
+
+        dados = resumo(extracao)
+
+        (ato,) = dados['atos']
+        self.assertTrue(ato['duplicado'])
+        self.assertEqual(ato['existente']['id'], existente.pk)
 
 
 # ---------------------------------------------------------------------------
