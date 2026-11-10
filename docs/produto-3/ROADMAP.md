@@ -784,6 +784,37 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > restante (fluxo de um clique, obrigatório não descartável, pendência em
 > linguagem de negócio, seletor de cartório nunca vazio) é o **I-10**.
 > Decisão registrada nesta seção, como exige a regra de fila do topo.
+>
+> **Replanejamento — 09/11/2026 (Hiure, teste real no M237):** o I-6 foi
+> mergeado (#310, squash `e4f77a4c`), mas o fluxo entregue **não é o que o
+> cliente espera**. Hoje a entrega é uma **grade de revisão de campos**; o
+> cliente quer o **formulário real de lançamento, um por ato, pré-preenchido**.
+> Nasce o bloco **I-11 (#321–#325)**, que roda **antes do I-7/I-8**. Ordem:
+> **I-10 → I-6 ✅ → I-11 → I-7 → I-8**. Regras decididas pelo cliente em
+> 09/11 (valem como requisito, não como sugestão):
+> (a) **um formulário por ato**, empilhados, todos pré-preenchidos, cada um com
+> seu "Confirmar" — com os blocos reais por tipo (registro, averbação, início
+> de matrícula, transmissão, origem);
+> (b) preenchimento em **ordem reversa**: do último parágrafo para o primeiro;
+> (c) **lançamento sempre começa com `R` (registro) ou `Av` (averbação)** — o
+> **primeiro parágrafo, e às vezes o segundo**, traz dados do imóvel e do
+> **início de matrícula**, e isso **varia por documento**;
+> (d) `M` **não é lançamento**: é o número da matrícula (referência de origem);
+> "R: 1-237" → tipo Registro, número **1**;
+> (e) parágrafo sem `R`/`Av` vai para **"não reconhecidos"**, tratado no fim;
+> (f) **livro/folha da transmissão** (do ato) e **livro/folha da origem** (onde
+> a escritura foi lavrada, no cabeçalho da matrícula) são conceitos distintos —
+> o modelo já tem as quatro colunas, **sem migration**; o contrato do OCR só
+> tem os da origem, então os da transmissão exigem **v1.2** no `ocr-service`;
+> (g) o livro/folha da origem do **próximo** documento só é conhecido ao
+> analisar os documentos que originaram o atual — fica **pendência explícita**,
+> nunca valor inventado;
+> (h) o backend transacional do I-6 é **reusado**; muda a tela/fluxo, não a
+> gravação.
+> **Bloqueadores do bloco:** #311 (app envia schema v1 e o serviço exige v1.1
+> → 422, extração vazia) e #315 (seletor de cartório nunca vazio). #320 (job
+> preso em `revisado` após falha de importação) entra junto, senão o fluxo trava
+> sem saída.
 
 **Estado real do bloco (verificado 29/10/2026 em `origin/develop`):** I-1
 (#274), I-2 (#275/#276), I-3 (#279), I-4 (#288) e I-5 (#291) estão mergeados;
@@ -850,12 +881,29 @@ fecham na validação do bloco, não no merge.
    existir).
    Depende de `ocr-service#37` para o caso real do teste (cartório não
    extraído), mas o desenho não pode depender dele.
-7. **I-6** #263 — importação assistida: gravação transacional de
+7. **I-6 ✅** #263 — importação assistida: gravação transacional de
    Lançamento/Pessoas com prevenção de duplicidade e vínculo ao PDF — Produto 4.
+   **PR #310 mergeado em `develop` em 09/11** (squash `e4f77a4c`), depois de
+   8 rodadas de review: `pg_advisory_xact_lock` para cartório e CPF em ordem
+   global (ABBA fechado), recuperação de corrida de CPF (`IntegrityError` e
+   `full_clean`), duplicidade comparando o número normalizado dos dois lados e
+   replay em ordem numérica. Revisado por Opus (sem P0/P1), Codex xhigh e
+   Greptile 5/5; 780 testes verdes em SQLite e em Postgres real.
    **Absorve o item 1 do #296** (limites contextuais: RG → `Pessoas.rg` 20,
-   CPF → 11, cartório → `Cartorios.nome` 200) — hoje uma sugestão longa passa
-   na revisão e só quebra aqui.
-8. **I-7 ⏭ DESLIZADO (pós-31/10)** #264 — admin de acompanhamento dos
+   CPF → 11, cartório → `Cartorios.nome` 200).
+7b. **I-11 🆕 P0 — PRÓXIMO** #321–#325 — formulários de lançamento por ato
+   (substitui a grade de revisão como caminho principal):
+   - **I-11a (#321)** UI: um formulário por ato, pré-preenchido, empilhados, em
+     ordem reversa, confirmação por ato pelo backend do I-6, progresso retomável;
+   - **I-11b (#322)** parser: cabeçalho (1º, às vezes 2º parágrafo) → início de
+     matrícula; `R`/`Av` → lançamento; `M` é matrícula; bucket "não reconhecidos";
+   - **I-11c (#323)** contrato OCR v1.2: livro/folha/data da **transmissão** no
+     ato (hoje só existem na origem) — depende do `ocr-service`;
+   - **I-11d (#324)** origem do ato preenchida + criação/vínculo do documento de
+     origem, com livro/folha da origem como pendência explícita quando ausente;
+   - **I-11e (#325)** aceite no M237 + regressão dos fluxos existentes.
+   Bloqueadores: #311 (schema v1.1) e #315; #320 entra junto.
+8. **I-7 ⏭ DESLIZADO (pós-I-11)** #264 — admin de acompanhamento dos
    processamentos + logs de auditoria mínimos (sem PII), exportáveis. **Escopo
    mínimo quando entrar:** listagem/estado dos jobs + auditoria sem PII; o
    exportável pode deslizar. #282 já resolvido no PR #303.
