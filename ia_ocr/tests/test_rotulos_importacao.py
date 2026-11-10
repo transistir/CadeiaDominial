@@ -1,4 +1,4 @@
-"""Testes de integração rótulos → importação (I-11b / #322, rodada 3).
+"""Testes de integração rótulos → importação (I-11b / #322, rodadas 3–4).
 
 O contrato da gravação (#322 rodada 3): o número gravado é o COMPOSTO
 canônico do V1 — ``'R-5'`` na matrícula grava ``'R5 {documento.numero}'``,
@@ -10,6 +10,12 @@ no tipo do prefixo. A duplicata compara os dois lados normalizados
 compatíveis: R-5 × AV5 M237 não colidem. Rótulo não reconhecido mantém o
 comportamento anterior (#322): não inventa número nem tipo — o destino do
 bucket deles é decisão da UI (#321).
+
+Rodada 4 (review Codex): o rótulo é lido pelo EFETIVO (``normalized`` ou,
+sem ele, o ``raw`` da folha — a mesma leitura do ``classificar_atos``);
+rótulo de MATRÍCULA não gera número de ato (aviso, nunca exceção); a
+prévia (``resumo``) devolve o tipo que a gravação usará, com a divergência
+no ``aviso`` do item; meia-risca/travessão valem como hífen.
 
 A revisão vigente EXIGE ``tipo_sugerido`` preenchido por ato (pendência
 bloqueante da I-5), então ``importar`` não alcança o estado ``tipo`` vazio
@@ -28,7 +34,7 @@ from dominial.managers import documentos_for_user
 from dominial.models import Lancamento, LancamentoTipo
 from ia_ocr import importacao as modulo_importacao
 from ia_ocr import revisao
-from ia_ocr.importacao import ImportacaoInvalida, importar
+from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
 from ia_ocr.models import OcrJob
 from ia_ocr.revisao import RevisaoInvalidada
 from ia_ocr.rotulos import analisar_rotulo
@@ -159,6 +165,109 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
         (aviso,) = linha['avisos']
         self.assertIn('registro', aviso)
         self.assertIn('averbacao', aviso)
+
+    def test_rotulo_apenas_no_raw_define_o_tipo_como_o_classificar(self):
+        # P1 (rodada 4): no payload real o rótulo vem com ``normalized=None``
+        # e o carimbo no ``raw`` — sem o fallback a gravação não via o rótulo
+        # e o tipo_sugerido divergente decidia sozinho, o contrário do
+        # ``classificar_atos`` (que lê ``normalized or raw``).
+        payload = self._payload(rotulo='R-5', tipo='averbacao', numero='R-5')
+        payload['acts'][0]['rotulo']['normalized'] = None
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertEqual(
+            lancamento.numero_lancamento, f'R5 {self.documento.numero}',
+        )
+        (linha,) = resultado['linhas']
+        (aviso,) = linha['avisos']
+        self.assertIn('registro', aviso)
+        self.assertIn('averbacao', aviso)
+
+    def test_rotulo_apenas_no_raw_bloqueia_a_duplicata_do_tipo_certo(self):
+        # P1 (rodada 4), cenário do review: rótulo 'R-5' só no raw com
+        # tipo_sugerido divergente — a gravação seguia o tipo sugerido
+        # ('averbacao'), gravava 'AV5 {sigla}' e não casava com o 'R-5' já
+        # existente; com o rótulo efetivo o tipo é registro e a duplicata
+        # volta a ser bloqueada (a base já bloqueava).
+        Lancamento.objects.create(
+            documento=self.documento,
+            tipo=self.tipo_registro,
+            numero_lancamento='R-5',
+            data=DATA_DO_ATO,
+        )
+        payload = self._payload(rotulo='R-5', tipo='averbacao', numero='R-5')
+        payload['acts'][0]['rotulo']['normalized'] = None
+        extracao = self._extracao(payload)
+
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        (linha,) = contexto.exception.linhas
+        (erro,) = linha['erros']
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_rotulo_de_matricula_nao_gera_numero_de_lancamento(self):
+        # P2-1 (rodada 4): 'M-3-14511' é referência de matrícula — compor
+        # número com ele gravaria 'RM-3-14511 {sigla}'. O ato grava com o
+        # tipo do tipo_sugerido, SEM número e com aviso; nada vira exceção
+        # (o item segue sendo tratado pela UI, #321).
+        extracao = self._extracao(self._payload(
+            rotulo='M-3-14511', tipo='registro', numero='M-3-14511',
+        ))
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertIsNone(lancamento.numero_lancamento)
+        (linha,) = resultado['linhas']
+        (aviso,) = linha['avisos']
+        self.assertIn('matrícula', aviso)
+
+    def test_resumo_mostra_o_tipo_que_a_gravacao_usara(self):
+        # P2-2 (rodada 4): rótulo 'R-5' × tipo_sugerido 'averbacao' — a
+        # prévia devolve o tipo RESOLVIDO (registro, o mesmo da gravação) e
+        # expõe a divergência no aviso do item, antes de confirmar.
+        extracao = self._extracao(self._payload(tipo='averbacao', numero='R-5'))
+
+        dados = resumo(extracao)
+
+        (ato,) = dados['atos']
+        self.assertEqual(ato['tipo'], 'registro')
+        self.assertIn('registro', ato['aviso'])
+        self.assertIn('averbacao', ato['aviso'])
+        self.assertFalse(ato['duplicado'])
+
+    def test_resumo_sem_divergencia_nao_tem_aviso(self):
+        extracao = self._extracao(self._payload(numero='R-5'))
+
+        (ato,) = resumo(extracao)['atos']
+
+        self.assertEqual(ato['tipo'], 'registro')
+        self.assertIsNone(ato['aviso'])
+
+    def test_meia_risca_no_rotulo_grava_no_formato_canonico(self):
+        # P2-4 (rodada 4): 'R–5' (meia-risca U+2013) é registro nº 5 — sem
+        # o travessão como separador o texto caía em sem_prefixo e a
+        # recomposição gravava 'RR–5 {sigla}'.
+        extracao = self._extracao(self._payload(
+            rotulo='R–5', tipo='registro', numero='R–5',
+        ))
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(
+            Lancamento.objects.get().numero_lancamento,
+            f'R5 {self.documento.numero}',
+        )
 
     def test_tipo_sugerido_invalido_nao_vence_o_rotulo(self):
         # P2-3: 'transcricao' (fora de TIPO_CHOICES) não pode vencer o

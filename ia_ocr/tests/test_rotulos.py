@@ -105,6 +105,27 @@ class AnalisarRotuloTest(TestCase):
                 self.assertEqual(analisado.matricula, matricula)
                 self.assertFalse(analisado.eh_matricula)
 
+    def test_separadores_tipograficos_valem_como_hifen(self):
+        # P2-4 (#322 rodada 4): o OCR/Word traz meia-risca (U+2013) e
+        # travessão (U+2014) no lugar do hífen — 'R–5' é registro nº 5, não
+        # 'sem_prefixo'; entre os números, 'R: 1—237' traz a matrícula 237.
+        casos = [
+            ('R–5', 'registro', '5', None),
+            ('R—5', 'registro', '5', None),
+            ('R: 1–237', 'registro', '1', '237'),
+            ('R: 1—237', 'registro', '1', '237'),
+            ('Av–6', 'averbacao', '6', None),
+            ('M–3–14511', None, None, '14511'),
+        ]
+        for texto, tipo, numero, matricula in casos:
+            with self.subTest(texto=texto):
+                analisado = analisar_rotulo(texto)
+                self.assertTrue(analisado.reconhecido)
+                self.assertEqual(analisado.tipo, tipo)
+                self.assertEqual(analisado.numero, numero)
+                self.assertEqual(analisado.matricula, matricula)
+                self.assertEqual(analisado.eh_matricula, texto[:1] in 'Mm')
+
     def test_matriculas_sao_rotulos_validos_que_nao_sao_lancamento(self):
         casos = [
             ('M-3-14511', '14511'),

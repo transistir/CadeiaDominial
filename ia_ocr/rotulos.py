@@ -26,8 +26,11 @@ TIPOS_SUGERIDOS = ('registro', 'averbacao', 'inicio_matricula')
 
 # Prefixo do rótulo: 1–3 letras no começo do texto + separador opcional
 # (``-``, ``:``, ``.`` e/ou espaços) + o corpo. Caixa alta/baixa indiferente.
+# Meia-risca (U+2013) e travessão (U+2014) valem como ``-``: o OCR/Word traz
+# ``'R–5'`` e sem eles o texto caía em ``sem_prefixo`` e a recomposição
+# gravava ``'RR–5 M237'`` (#322 rodada 4, P2-4).
 _ROTULO = re.compile(
-    r'^\s*(?P<prefixo>[A-Za-z]{1,3})\s*(?P<sep>[-:.]?\s*)(?P<corpo>\S.*)?$',
+    r'^\s*(?P<prefixo>[A-Za-z]{1,3})\s*(?P<sep>[-–—:.]?\s*)(?P<corpo>\S.*)?$',
     re.IGNORECASE,
 )
 
@@ -35,8 +38,9 @@ _ROTULO = re.compile(
 _NUMERO = re.compile(r'\d+(?:\.\d+)*')
 
 # O corpo é dividido no primeiro destes separadores: o primeiro número é o
-# ato, o segundo é a matrícula de origem ('R: 1-237', 'R-1/42.718').
-_SEPARADOR_DE_NUMEROS = re.compile(r'[-–/]')
+# ato, o segundo é a matrícula de origem ('R: 1-237', 'R-1/42.718'). Os
+# travessões tipográficos ('R: 1—237') valem como o '-' (rodada 4, P2-4).
+_SEPARADOR_DE_NUMEROS = re.compile(r'[-–—/]')
 
 _PREFIXOS = {'r': 'registro', 'av': 'averbacao', 'm': None}
 
