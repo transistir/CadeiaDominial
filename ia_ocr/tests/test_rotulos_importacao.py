@@ -23,6 +23,12 @@ rótulo de MATRÍCULA, o número de ato REVISADO que é rótulo R/Av válido (ou
 número puro já sem prefixo) é preservado e composto — só a referência da
 matrícula continua descartada.
 
+Rodada 6 (review Codex, P1): linha DESCARTADA não decide. ``aplicar_linha``
+com ``incluir=False`` preserva o ``valor_final`` da edição; sem olhar o
+``status_revisao``, a edição descartada vencia e a importação criava o
+lançamento que o usuário tinha descartado. O descarte PULA o candidato
+(folha → linha estrutural), nunca volta ``None`` no meio.
+
 A revisão vigente EXIGE ``tipo_sugerido`` preenchido por ato (pendência
 bloqueante da I-5), então ``importar`` não alcança o estado ``tipo`` vazio
 num fluxo limpo: os testes do fallback do rótulo exercitam a fronteira da
@@ -274,6 +280,136 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
         self.assertEqual(
             lancamento.numero_lancamento, f'R5 {self.documento.numero}',
         )
+
+    def test_rotulo_editado_e_descartado_nao_decide_a_duplicata(self):
+        # P1 (rodada 6), o cenário do Codex: editar a FOLHA do rótulo para
+        # 'Av-5' e depois DESCARTAR a linha — ``aplicar_linha`` preserva o
+        # ``valor_final`` da edição e só marca ``descartado``. Sem ignorar
+        # a linha descartada, a edição vencia: a prévia dizia averbação,
+        # não via a duplicata e a importação criava 'AV5 M237'. O correto
+        # é valer o carimbo do OCR na linha estrutural ('R-5'): registro,
+        # duplicata do 'R5 M237' já gravado e importação recusada.
+        self.documento.numero = 'M237'
+        self.documento.save(update_fields=['numero'])
+        Lancamento.objects.create(
+            documento=self.documento,
+            tipo=self.tipo_registro,
+            numero_lancamento='R5 M237',
+            data=DATA_DO_ATO,
+        )
+        extracao = self._extracao(self._payload(numero='R-5'))
+        campo = extracao.campos.get(chave='/acts/0/rotulo')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='Av-5', usuario=self.usuario,
+        )
+        revisao.aplicar_linha(campo, incluir=False, usuario=self.usuario)
+        campo.save()
+        self.assertEqual(campo.status_revisao, 'descartado')
+        self.assertEqual(campo.valor_final, 'Av-5')
+
+        (ato,) = resumo(extracao)['atos']
+        self.assertEqual(ato['tipo'], 'registro')
+        self.assertTrue(ato['duplicado'])
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        (linha,) = contexto.exception.linhas
+        (erro,) = linha['erros']
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_rotulo_editado_e_mantido_continua_decidindo(self):
+        # Rodada 6, o outro lado: o MESMO cenário com a folha ATIVA — o
+        # ``valor_final`` da rodada 5 continua vencendo o carimbo. A
+        # edição 'Av-5' leva ao tipo averbação e à duplicata do
+        # 'AV5 M237' já gravado; o descarte da linha vizinha não afrouxa
+        # a regra da linha incluída.
+        self.documento.numero = 'M237'
+        self.documento.save(update_fields=['numero'])
+        Lancamento.objects.create(
+            documento=self.documento,
+            tipo=self.tipo_averbacao,
+            numero_lancamento='AV5 M237',
+            data=DATA_DO_ATO,
+        )
+        extracao = self._extracao(self._payload(numero='R-5'))
+        campo = extracao.campos.get(chave='/acts/0/rotulo')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='Av-5', usuario=self.usuario,
+        )
+        campo.save()
+
+        (ato,) = resumo(extracao)['atos']
+        self.assertEqual(ato['tipo'], 'averbacao')
+        self.assertTrue(ato['duplicado'])
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        (linha,) = contexto.exception.linhas
+        (erro,) = linha['erros']
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_folha_descartada_com_valor_final_vazio_cai_na_estrutural(self):
+        # Rodada 6: a folha descartada não decide nem pelo ``valor_final``
+        # vazio nem pelo carimbo dela — o candidato é PULADO e vale o
+        # ``normalized`` da linha estrutural ('R-5'). O tipo_sugerido
+        # divergente ('averbacao') é ignorado, como se a folha não
+        # existisse: a gravação sai registro.
+        extracao = self._extracao(self._payload(
+            rotulo='R-5', tipo='averbacao', numero='R-5',
+        ))
+        campo = extracao.campos.get(chave='/acts/0/rotulo')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='', usuario=self.usuario,
+        )
+        revisao.aplicar_linha(campo, incluir=False, usuario=self.usuario)
+        campo.save()
+        self.assertEqual(campo.status_revisao, 'descartado')
+        self.assertEqual(campo.valor_final, '')
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertEqual(
+            lancamento.numero_lancamento, f'R5 {self.documento.numero}',
+        )
+
+    def test_rotulo_efetivo_ignora_so_a_linha_descartada(self):
+        # Rodada 6: a ordem vale candidato a candidato. Linha ESTRUTURAL
+        # descartada → a FOLHA ativa ainda decide; descartar a folha
+        # também → os dois candidatos são pulados e o leitor devolve
+        # ``None`` sem exceção — o ``tipo_sugerido`` volta a decidir
+        # (comportamento anterior à rodada 4).
+        extracao = self._extracao(self._payload(
+            rotulo='R-5', tipo='averbacao', numero='R-5',
+        ))
+        linhas = modulo_importacao._linhas_por_chave(extracao)
+        (marcado,) = revisao.dados_revisados(extracao).atos
+        estrutural = linhas['/acts/0']
+        folha = linhas['/acts/0/rotulo']
+
+        revisao.aplicar_linha(
+            estrutural, incluir=False, usuario=self.usuario,
+        )
+        estrutural.save()
+        efetivo = modulo_importacao._rotulo_efetivo('/acts/0', linhas)
+        self.assertEqual(efetivo, 'R-5')
+        tipo, _, _ = modulo_importacao._resolver_tipo_e_numero(
+            marcado, analisar_rotulo(efetivo), self.documento,
+        )
+        self.assertEqual(tipo.tipo, 'registro')
+
+        revisao.aplicar_linha(folha, incluir=False, usuario=self.usuario)
+        folha.save()
+        efetivo = modulo_importacao._rotulo_efetivo('/acts/0', linhas)
+        self.assertIsNone(efetivo)
+        tipo, _, _ = modulo_importacao._resolver_tipo_e_numero(
+            marcado, analisar_rotulo(efetivo), self.documento,
+        )
+        self.assertEqual(tipo.tipo, 'averbacao')
 
     def test_rotulo_de_matricula_nao_gera_numero_de_lancamento(self):
         # P2-1 (rodada 4): 'M-3-14511' é referência de matrícula — compor

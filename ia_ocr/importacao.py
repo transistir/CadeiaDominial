@@ -1253,6 +1253,15 @@ def _rotulo_efetivo(chave, linhas):
     grava ``''``) não decide nada — a leitura cai no ``normalized``/``raw``
     de antes.
 
+    P1 (#322 rodada 6): linha DESCARTADA não decide — ``aplicar_linha``
+    com ``incluir=False`` preserva o ``valor_final`` da edição e só marca
+    ``descartado``; ler o valor sem olhar o status deixava a edição
+    descartada vencer e a gravação criava o lançamento que o usuário tinha
+    descartado. Descarte PULA o candidato (mesma convenção de
+    ``revisao.identidade_parte``): a folha descartada cai na linha
+    estrutural e a estrutural descartada cai na folha; as duas
+    descartadas não decidem nada.
+
     Devolve, na folha e, sem ela, na linha estrutural, o primeiro não
     vazio entre ``valor_final``, ``normalized`` e ``raw`` — ``None``
     quando nada existe (o parser devolve ``reconhecido=False`` e o
@@ -1261,7 +1270,7 @@ def _rotulo_efetivo(chave, linhas):
     for campo in (
         linhas.get(f'{chave}/rotulo'), linhas.get(chave),
     ):
-        if campo is None:
+        if campo is None or campo.status_revisao == 'descartado':
             continue
         if campo.valor_final:
             return campo.valor_final
