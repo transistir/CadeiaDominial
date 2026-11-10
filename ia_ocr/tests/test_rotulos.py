@@ -11,7 +11,9 @@ os lançamentos em ordem REVERSA e os rótulos não reconhecidos.
 
 from django.test import TestCase
 
-from ia_ocr.rotulos import Classificacao, analisar_rotulo, classificar_atos
+from ia_ocr.rotulos import (
+    Classificacao, analisar_rotulo, classificar_atos, compor_numero_lancamento,
+)
 
 
 def _campo(normalized=None, raw=None):
@@ -119,15 +121,19 @@ class AnalisarRotuloTest(TestCase):
                 self.assertIsNone(analisado.numero)
                 self.assertEqual(analisado.matricula, matricula)
 
-    def test_rotulo_conhecido_sem_numero_fica_reconhecido_sem_tipo_de_numero(self):
-        # Prefixo reconhecido, número ausente: o tipo vem do prefixo; não há
-        # número a gravar nem a comparar. Comportamento travado por escolha.
-        for texto in ('R', 'R:', 'Av -'):
+    def test_prefixo_sem_numero_nao_e_lancamento(self):
+        # P2-5 (#322 rodada 3): prefixo R/Av/M SEM número não é lançamento —
+        # 'Av. Brasil, 123' é endereço, 'R$ 5.000' é valor, 'R'/'R:'/'Av -'
+        # são carimbo vazio. Novo motivo; o destino é o bucket de não
+        # reconhecidos (UI, #321).
+        for texto in ('Av. Brasil, 123', 'R$ 5.000', 'R', 'R:', 'Av -', 'M'):
             with self.subTest(texto=texto):
                 analisado = analisar_rotulo(texto)
-                self.assertTrue(analisado.reconhecido)
+                self.assertFalse(analisado.reconhecido)
+                self.assertEqual(analisado.motivo, 'sem_numero')
                 self.assertIsNone(analisado.numero)
-                self.assertEqual(analisado.tipo, 'registro' if texto.startswith('R') else 'averbacao')
+                self.assertIsNone(analisado.tipo)
+                self.assertFalse(analisado.eh_matricula)
 
     def test_vazios(self):
         for texto in ('', None, '   '):
@@ -226,10 +232,11 @@ class ClassificarAposTest(TestCase):
             ['7', '2', '1'],
         )
 
-    def test_ordem_ausente_ou_sem_digito_fica_estavel(self):
-        # Sem ordem (ou com texto sem dígito) o item cai na chave 0; o sort
-        # estável conserva a ordem original entre os empatados — e o campo
-        # 'ordem' exposto segue como veio, sem conversão.
+    def test_ordem_ausente_ou_sem_digito_cai_no_indice(self):
+        # P1-2 (#322 rodada 3): sem ordem (None) ou com texto sem dígito
+        # ('topo'), a chave é o ÍNDICE do payload + 1 — o item do meio do
+        # documento fica no MEIO, não vai parar no fim; o campo 'ordem'
+        # exposto segue como veio, sem conversão.
         payload = {'acts': [
             _ato(None, 'R-1'), _ato('topo', 'R-2'), _ato(3, 'R-3'),
         ]}
@@ -238,8 +245,82 @@ class ClassificarAposTest(TestCase):
 
         self.assertEqual(
             [item['ordem'] for item in classificacao.lancamentos],
-            [3, None, 'topo'],
+            [3, 'topo', None],
         )
+        self.assertEqual(
+            [item['numero'] for item in classificacao.lancamentos],
+            ['3', '2', '1'],
+        )
+
+    def test_sem_ordem_a_lista_sai_reversa_pelo_indice(self):
+        # P1-2: nenhum ato com 'ordem' — a chave é o índice do payload + 1 e
+        # a lista sai em ordem REVERSA ([R-1, Av-2, R-3] → [R-3, Av-2,
+        # R-1]); o campo exposto traz o índice + 1 no lugar do ausente.
+        atos = [_ato(1, 'R-1'), _ato(2, 'Av-2'), _ato(3, 'R-3')]
+        for ato in atos:
+            del ato['ordem']
+
+        classificacao = classificar_atos({'acts': atos})
+
+        self.assertEqual(
+            [item['numero'] for item in classificacao.lancamentos],
+            ['3', '2', '1'],
+        )
+        self.assertEqual(
+            [item['tipo'] for item in classificacao.lancamentos],
+            ['registro', 'averbacao', 'registro'],
+        )
+        self.assertEqual(
+            [item['ordem'] for item in classificacao.lancamentos],
+            [3, 2, 1],
+        )
+
+    def test_ordem_none_no_meio_fica_no_meio(self):
+        # P1-2, cenário misto do review: ordens ['1', None, '3'] — o None
+        # ordena pelo índice + 1 (2) e fica ENTRE o 3 e o 1; exposto como
+        # veio (None presente não é ausente).
+        payload = {'acts': [
+            _ato('1', 'R-1'), _ato(None, 'Av-2'), _ato('3', 'R-3'),
+        ]}
+
+        classificacao = classificar_atos(payload)
+
+        self.assertEqual(
+            [item['ordem'] for item in classificacao.lancamentos],
+            ['3', None, '1'],
+        )
+        self.assertEqual(
+            [item['numero'] for item in classificacao.lancamentos],
+            ['3', '2', '1'],
+        )
+
+    def test_ordem_nan_ou_infinito_nao_levanta_excecao(self):
+        # P2-6: o json.loads aceita NaN/Infinity como float — int() levantaria
+        # ValueError/OverflowError; a chave cai no índice do payload + 1.
+        for ordem in (float('nan'), float('inf'), float('-inf')):
+            with self.subTest(ordem=ordem):
+                classificacao = classificar_atos({'acts': [
+                    _ato(ordem, 'R-1'), _ato(2, 'Av-2'),
+                ]})
+
+                self.assertEqual(
+                    [item['numero'] for item in classificacao.lancamentos],
+                    ['2', '1'],
+                )
+                self.assertEqual(
+                    [item['ordem'] for item in classificacao.lancamentos],
+                    [2, ordem],
+                )
+
+    def test_acts_nao_lista_devolve_listas_vazias(self):
+        # P2-6: 'acts' que não é lista (número, bool, texto, dict) não é
+        # iterável de atos — listas vazias, nunca TypeError.
+        for acts in (5, True, 'não é lista', {'ordem': 1}, None):
+            with self.subTest(acts=repr(acts)):
+                classificacao = classificar_atos({'acts': acts})
+
+                self.assertEqual(classificacao.lancamentos, [])
+                self.assertEqual(classificacao.nao_reconhecidos, [])
 
     def test_tipo_sugerido_divergente_prevalece_o_do_rotulo(self):
         payload = {'acts': [_ato(4, 'R-4', 'averbacao')]}
@@ -277,6 +358,17 @@ class ClassificarAposTest(TestCase):
         self.assertEqual(item['rotulo'], texto)
         self.assertEqual(item['motivo'], 'sem_prefixo')
         self.assertIs(item['ato'], payload['acts'][0])
+
+    def test_rotulo_com_prefixo_sem_numero_vai_para_nao_reconhecidos(self):
+        # P2-5: 'Av. Brasil, 123' tem prefixo conhecido mas SEM número do
+        # ato — não entra em lancamentos; vai ao bucket com 'sem_numero'.
+        payload = {'acts': [_ato(4, 'Av. Brasil, 123')]}
+
+        classificacao = classificar_atos(payload)
+
+        self.assertEqual(classificacao.lancamentos, [])
+        (item,) = classificacao.nao_reconhecidos
+        self.assertEqual(item['motivo'], 'sem_numero')
 
     def test_rotulo_de_matricula_nao_e_lancamento_nem_erro(self):
         payload = {'acts': [_ato(1, 'M-3-14511', None)]}
@@ -325,3 +417,48 @@ class ClassificarAposTest(TestCase):
         self.assertEqual(classificacao.lancamentos, [])
         self.assertEqual(len(classificacao.nao_reconhecidos), 1)
         self.assertEqual(classificacao.nao_reconhecidos[0]['motivo'], 'vazio')
+
+
+class ComporNumeroLancamentoTest(TestCase):
+    """compor_numero_lancamento: o formato canônico do V1 (#322 rodada 3).
+
+    Decisão de produto (orquestrador, por falta de resposta do cliente): a
+    importação grava o MESMO texto do fluxo manual
+    (``lancamento_form_service._gerar_numero_lancamento``) — os sete
+    consumidores ordenam por ``^(R|AV)\\d+``.
+    """
+
+    def test_registro_e_averbacao_com_sigla(self):
+        self.assertEqual(
+            compor_numero_lancamento('registro', '5', 'M237'), 'R5 M237',
+        )
+        self.assertEqual(
+            compor_numero_lancamento('averbacao', '6', 'M237'), 'AV6 M237',
+        )
+
+    def test_sigla_vazia_compoe_sem_ela(self):
+        self.assertEqual(compor_numero_lancamento('registro', '5', ''), 'R5')
+        self.assertEqual(
+            compor_numero_lancamento('averbacao', '6', None), 'AV6',
+        )
+
+    def test_inicio_de_matricula_e_so_a_sigla(self):
+        self.assertEqual(
+            compor_numero_lancamento('inicio_matricula', '5', 'M237'),
+            'M237',
+        )
+        self.assertIsNone(
+            compor_numero_lancamento('inicio_matricula', '5', ''),
+        )
+
+    def test_sem_numero_do_ato_nao_compoe_prefixo(self):
+        # P2-5 na gravação: sem número do ato não há o que prefixar.
+        self.assertIsNone(compor_numero_lancamento('registro', None, 'M237'))
+        self.assertIsNone(compor_numero_lancamento('averbacao', '', 'M237'))
+
+    def test_tipo_fora_dos_tres_devolve_o_numero(self):
+        # Mesmo fallback do fluxo manual: número como veio.
+        self.assertEqual(
+            compor_numero_lancamento('transcricao', '5', 'M237'), '5',
+        )
+        self.assertIsNone(compor_numero_lancamento(None, None, 'M237'))

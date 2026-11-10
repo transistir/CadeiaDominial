@@ -241,6 +241,9 @@ class VinculoOrigemTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         extracao = self._extracao(payload)
 
         self._importar(extracao)
@@ -352,16 +355,17 @@ class DuplicidadeTest(ImportacaoBase):
         self.assertEqual(Lancamento.objects.count(), 1)
 
     def test_numero_da_gravacao_e_strip(self):
-        # #322 (decisão do cliente, 09/11): o valor PERSISTIDO é o número
-        # do ato SEM o prefixo do rótulo — ' R-1 ' grava '1', nunca o
-        # carimbo inteiro; as bordas seguem removidas (rodada 6).
+        # #322 rodada 3 (P1-1): o valor PERSISTIDO é o composto canônico do
+        # V1 — ' R-1 ' grava 'R1 {sigla}', nunca o carimbo inteiro; as
+        # bordas seguem removidas (rodada 6).
         self._novo_job_com_extracao(' R-1 ')
 
         resultado = self._importar(self.extracao)
 
         self.assertTrue(resultado['ok'])
         self.assertEqual(
-            Lancamento.objects.get().numero_lancamento, '1',
+            Lancamento.objects.get().numero_lancamento,
+            f'R1 {self.documento.numero}',
         )
 
     def test_numero_somente_espacos_grava_none(self):
@@ -1246,6 +1250,9 @@ class DocumentoOrigemAuditadoTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         extracao = self._extracao(payload)
 
         self._importar(extracao)
@@ -1270,6 +1277,9 @@ class DocumentoOrigemAuditadoTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         extracao = self._extracao(payload)
         processar = LancamentoOrigemService.processar_origens_automaticas
         alheios = []
@@ -1581,15 +1591,16 @@ class ImportacaoXCadastroManualPostgresTest(
 
     def test_cadastro_manual_espera_a_importacao_e_recusa_o_mesmo_numero(self):
         payload = payload_registro(self.job.job_id)
-        # Mesmo texto do número que o cadastro manual gera (a normalização
-        # entre ``R-1`` e ``R1 M42`` é assunto de outra issue).
+        # O importador compõe 'R{numero} {documento.numero}' (#322 rodada
+        # 3); o manual compõe com a sigla do POST — aqui a do documento, para
+        # os dois fluxos disputarem o MESMO número.
         payload['acts'][0]['numero_lancamento'] = self._campo(
-            'R1 M42', 'R-1/42.718',
+            'R-1', 'R-1/42.718',
         )
         extracao = self._extracao(payload)
-        request = RequestFactory().post(
-            '/lancamento/criar/', _post_cadastro_manual(self.tipo_registro),
-        )
+        post = _post_cadastro_manual(self.tipo_registro)
+        post['sigla_matricula'] = self.documento.numero
+        request = RequestFactory().post('/lancamento/criar/', post)
         request.user = self.usuario
         resultado = {}
         importacao = self._importacao_segurando_a_trava(extracao, resultado)
@@ -1615,7 +1626,10 @@ class ImportacaoXCadastroManualPostgresTest(
         self.assertEqual(resultado['manual'][0], 'ok', resultado['manual'])
         lancamento, mensagem = resultado['manual'][1]
         self.assertIsNone(lancamento)
-        self.assertIn('Já existe um lançamento com o número "R1 M42"', mensagem)
+        self.assertIn(
+            f'Já existe um lançamento com o número "R1 {self.documento.numero}"',
+            mensagem,
+        )
         self.assertEqual(
             Lancamento.objects.filter(documento=self.documento).count(), 1,
         )
@@ -2102,6 +2116,9 @@ class OrigemPontuadaTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         payload['acts'][0]['origem']['numero'] = self._campo(
             numero, '42.718',
         )
