@@ -37,7 +37,6 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models import F, Func, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -407,10 +406,10 @@ def _importar_ato(
         tipo=tipo,
         # Gravação normalizada, como o fluxo manual valida e grava: o
         # número sem bordas — ' R-1 ' persistido colidiria com o 'R-1' do
-        # fluxo manual na próxima duplicata (#263 rodada 6, Codex P2).
-        numero_lancamento=(
-            ato.numero_lancamento.strip() if ato.numero_lancamento else None
-        ),
+        # fluxo manual na próxima duplicata (#263 rodada 6, Codex P2) — e
+        # vazio de verdade é None, não '' (#263 rodada 8, review Opus P3):
+        # '   ' gravava '' e o fluxo manual grava None.
+        numero_lancamento=((ato.numero_lancamento or '').strip() or None),
         data=ato.data,
         valor_transacao=ato.valor,
         area=ato.area,
@@ -858,37 +857,47 @@ def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     """Lançamento existente que colide com o ato, ou None.
 
     Mesma regra do fluxo manual (``lancamento_validacao_service``), que
-    consulta pelo número sem bordas: o número é comparado normalizado
-    (strip) dos DOIS lados — ' R-1 ' é duplicata de 'R-1', não lançamento
-    novo (#263 rodada 6, Codex P2; rodada 7 normaliza também o JÁ GRAVADO
-    via TRIM, que importador anterior e edição manual conseguiram gravar
-    com bordas). A tupla (documento, tipo, data, número) — com número nulo
-    casando null e gravado vazio (null, '' e só espaços) — e ainda o
-    número sozinho dentro do documento, mudando tipo ou data.
-    ``lancamentos`` restringe onde procurar (padrão: todos).
+    consulta pelo número sem bordas: o número é comparado normalizado com a
+    MESMA função dos DOIS lados — o ``.strip()`` do Python, o que grava.
+    ' R-1 ' é duplicata de 'R-1', não lançamento novo (#263 rodada 6,
+    Codex P2); a rodada 7 normalizava o JÁ GRAVADO com ``TRIM()`` do SQL,
+    que só tira espaço — o ``'\\n'`` que texto de OCR deixa na borda do
+    número escapava da duplicata (#263 rodada 8, review Opus P2). A tupla
+    (documento, tipo, data, número) — com número nulo casando null e
+    gravado vazio (null, '' e só espaços) — e ainda o número sozinho
+    dentro do documento, mudando tipo ou data. ``lancamentos`` restringe
+    onde procurar (padrão: todos).
     """
     numero = numero.strip() if numero else numero
     if lancamentos is None:
         lancamentos = Lancamento.objects.all()
-    lancamentos = lancamentos.select_related('documento__imovel').annotate(
-        numero_gravado=Func(F('numero_lancamento'), function='TRIM'),
+    # A busca é por documento (poucas linhas) e a decisão é no Python:
+    # além da normalização igual à que grava, TRIM com outro caractere não
+    # é portátil entre SQLite e Postgres. ``order_by('pk')`` mantém o
+    # determinismo que o ``.first()`` anterior dava.
+    candidatos = (
+        lancamentos.filter(documento=documento)
+        .select_related('documento__imovel')
+        .order_by('pk')
     )
-    filtro = Q(documento=documento, tipo=tipo)
-    filtro &= Q(data=data) if data is not None else Q(data__isnull=True)
-    if numero:
-        filtro &= Q(numero_gravado=numero)
-    else:
-        # TRIM(null) é null: null casa só por ``isnull``; gravado só com
-        # espaços vira '' no TRIM e casa como vazio, como um ''.
-        filtro &= Q(numero_lancamento__isnull=True) | Q(numero_gravado='')
-    existente = lancamentos.filter(filtro).first()
-    if existente is not None:
-        return existente
-    if numero:
-        return lancamentos.filter(
-            documento=documento, numero_gravado=numero,
-        ).first()
-    return None
+    mesmo_numero = None
+    for lancamento in candidatos:
+        gravado = (lancamento.numero_lancamento or '').strip()
+        if numero:
+            if gravado != numero:
+                continue
+            # (b) número sozinho dentro do documento, mudando tipo/data —
+            # fallback: a tupla completa (a) tem prioridade.
+            mesmo_numero = mesmo_numero or lancamento
+            if lancamento.tipo_id == tipo.pk and lancamento.data == data:
+                return lancamento
+        elif not gravado and lancamento.tipo_id == tipo.pk and (
+            lancamento.data == data
+        ):
+            # null, '' e só-espaços casam como vazio — gravado só com
+            # espaços faz o strip virar '', como um ''.
+            return lancamento
+    return mesmo_numero
 
 
 def _existente(lancamento):
@@ -1052,9 +1061,11 @@ def _resultado_gravado(extracao):
         if vinculo.campo is not None and vinculo.lancamento is not None:
             por_ato[vinculo.campo.chave] = vinculo.lancamento
     respostas = []
-    for chave in sorted(linhas):
-        if linhas[chave].tipo_valor != 'ato':
-            continue
+    chaves_de_ato = [
+        chave for chave, campo in linhas.items()
+        if campo.tipo_valor == 'ato'
+    ]
+    for chave in sorted(chaves_de_ato, key=_indice_do_ato):
         lancamento = por_ato.get(chave)
         respostas.append(_linha_resposta(
             chave, _rotulo(chave, linhas),
@@ -1062,6 +1073,17 @@ def _resultado_gravado(extracao):
             lancamento=lancamento,
         ))
     return {'ok': True, 'linhas': respostas}
+
+
+def _indice_do_ato(chave):
+    """Índice NUMÉRICO do ato na chave ``/acts/N`` (#263 rodada 8).
+
+    A ordenação de texto do ``sorted`` punha ``/acts/10`` antes de
+    ``/acts/2`` no replay do job importado; o índice inteiro devolve a
+    ordem do payload. Linhas ``ato`` são sempre ``/acts/N`` (o mapa de
+    destinos só atribui o tipo à raiz do ato).
+    """
+    return int(chave.rsplit('/', 1)[1])
 
 
 def _linhas_por_chave(extracao):

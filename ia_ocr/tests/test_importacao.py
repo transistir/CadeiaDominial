@@ -362,11 +362,48 @@ class DuplicidadeTest(ImportacaoBase):
             Lancamento.objects.get().numero_lancamento, 'R-1',
         )
 
+    def test_numero_somente_espacos_grava_none(self):
+        # Rodada 8 (review Opus, P3): '   ' virava '' gravado — lixo que o
+        # fluxo manual nunca grava (ele guarda None). ``(strip) or None``
+        # alinha os dois fluxos.
+        self._novo_job_com_extracao('   ')
+
+        resultado = self._importar(self.extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertIsNone(Lancamento.objects.get().numero_lancamento)
+
     def test_gravado_com_bordas_recusa_o_importado_sem_bordas(self):
         # Rodada 7 (review Codex): a rodada 6 normalizou só o número
         # RECEBIDO. Quem já tem ' R-1 ' gravado (importador anterior e
         # edição manual gravam bordas) não pode receber 'R-1' como novo.
         existente = self._existente(' R-1 ')
+
+        (erro,) = self._erros()
+
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(erro['existente']['id'], existente.pk)
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_gravado_com_newline_recusa_o_importado_sem_bordas(self):
+        # Rodada 8 (review Opus, P2): o lado GRAVADO era normalizado por
+        # TRIM() do SQL, que só tira espaço — o '\n' que texto de OCR deixa
+        # no fim do número escapava da duplicata. Os dois lados passam a
+        # usar a MESMA normalização (o .strip() do Python, o que grava).
+        existente = self._existente('R-1\n')
+
+        (erro,) = self._erros()
+
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(erro['existente']['id'], existente.pk)
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_gravado_com_newline_e_espacos_recusa_o_importado(self):
+        # 'R-1 \n ' gravado x ' R-1 ' recebido: a borda mista sobrava '\n'
+        # depois do TRIM e casava com o recebido normalizado ('R-1') — o
+        # ato passava como lançamento novo.
+        self._novo_job_com_extracao(' R-1 ')
+        existente = self._existente('R-1 \n ')
 
         (erro,) = self._erros()
 
@@ -578,6 +615,31 @@ class EstadoEVersaoTest(ImportacaoBase):
         )
         self.assertEqual(
             self.job.transicoes.filter(para_status='importado').count(), 1,
+        )
+
+    def test_replay_de_12_atos_devolve_as_linhas_em_ordem_numerica(self):
+        # Rodada 8 (review Opus, P3): o replay do job importado ordenava as
+        # chaves como TEXTO — '/acts/10' vinha antes de '/acts/2'. A ordem
+        # devolvida é a do payload, pelo índice numérico do ato.
+        payload = payload_registro(self.job.job_id)
+        for ordem in range(2, 13):
+            ato = deepcopy(payload['acts'][0])
+            ato['ordem'] = ordem
+            ato['data'] = self._campo(
+                f'{2019 + ordem}-02-15', '15 de fevereiro de 2020',
+            )
+            payload['acts'].append(ato)
+        extracao = self._extracao(payload)
+        versao_tela = services.versao_bloco(extracao)
+
+        primeiro = self._importar(extracao, versao=versao_tela)
+        segundo = self._importar(extracao, versao=versao_tela)
+
+        self.assertTrue(primeiro['ok'])
+        self.assertTrue(segundo['ok'])
+        self.assertEqual(
+            [linha['chave'] for linha in segundo['linhas']],
+            [f'/acts/{indice}' for indice in range(12)],
         )
 
     def test_versao_velha_e_conflito(self):
