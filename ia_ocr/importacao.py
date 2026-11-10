@@ -55,6 +55,7 @@ from . import destinos, revisao, services
 from .estados import IMPORTADO, REVISADO
 from .models import ImportacaoIA, OcrJob
 from .revisao import _normalizar_nome, _so_digitos
+from .rotulos import analisar_rotulo, normalizar_numero_lancamento
 from .valores import MOTIVO_LIMITE
 
 MOTIVO_TRANSICAO = 'importacao_ia'
@@ -182,10 +183,16 @@ def importar(extracao, usuario, versao, atos):
             # cache criadas no ato desfeito também são descartadas: elas
             # apontariam para registros que o rollback apagou.
             chaves_antes = set(cache_pessoas)
+            # Rótulo do ato analisado UMA vez (#322): o número gravado é o
+            # número do ato sem o prefixo ('R-5' → '5') e o tipo_sugerido
+            # vazio cai no tipo do prefixo. Rótulo não reconhecido mantém o
+            # comportamento de antes — o bucket deles é decisão da UI
+            # (#321).
+            rotulo = analisar_rotulo(_rotulo(ato.chave, linhas))
             try:
                 with transaction.atomic():
                     resposta, erros = _importar_ato(
-                        ato, documento, imovel, usuario, job, linhas,
+                        ato, rotulo, documento, imovel, usuario, job, linhas,
                         cache_pessoas, documentos_usuario,
                         lancamentos_importados, nomes_travados,
                     )
@@ -234,9 +241,16 @@ def resumo(extracao):
     )
     atos = []
     for ato in dados.atos:
-        tipo = (
-            LancamentoTipo.objects.filter(tipo=ato.tipo).order_by('pk').first()
+        # Mesma resolução do tipo que a gravação usa (#322): tipo_sugerido
+        # vazio cai no tipo do prefixo do rótulo, analisado uma vez por ato.
+        rotulo = analisar_rotulo(_rotulo(ato.chave, linhas))
+        tipo_rotulo = (
+            rotulo.tipo if rotulo.reconhecido and not rotulo.eh_matricula
+            else None
         )
+        tipo = LancamentoTipo.objects.filter(
+            tipo=ato.tipo or tipo_rotulo,
+        ).order_by('pk').first()
         duplicado = (
             _lancamento_duplicado(documento, tipo, ato.data, ato.numero_lancamento)
             if tipo is not None else None
@@ -258,7 +272,7 @@ def resumo(extracao):
 # ---------------------------------------------------------------------------
 
 def _importar_ato(
-    ato, documento, imovel, usuario, job, linhas,
+    ato, rotulo, documento, imovel, usuario, job, linhas,
     cache_pessoas, documentos_usuario, lancamentos_importados,
     nomes_travados,
 ):
@@ -270,11 +284,20 @@ def _importar_ato(
     ``lancamentos_importados`` são os gravados pelos atos anteriores desta
     importação (duplicata contra eles é interna, sem ``existente``);
     ``nomes_travados``, os nomes de cartório que o ``importar`` já travou.
+    ``rotulo`` é o rótulo do ato já analisado uma vez pelo chamador (#322):
+    dá o tipo quando o ``tipo_sugerido`` vem vazio (lançamento começa com
+    ``R``/``Av`` — decisão do cliente) e nada mais; rótulo não reconhecido
+    mantém o comportamento de antes.
     """
     chave = ato.chave
     erros = _Erros(chave)
 
-    tipo = LancamentoTipo.objects.filter(tipo=ato.tipo).order_by('pk').first()
+    tipo_rotulo = (
+        rotulo.tipo if rotulo.reconhecido and not rotulo.eh_matricula else None
+    )
+    tipo = LancamentoTipo.objects.filter(
+        tipo=ato.tipo or tipo_rotulo,
+    ).order_by('pk').first()
     if tipo is None:
         erros.add(
             f'{chave}/tipo_sugerido', 'tipo_inexistente',
@@ -282,8 +305,9 @@ def _importar_ato(
         )
         return None, erros
 
+    numero_lancamento = normalizar_numero_lancamento(ato.numero_lancamento)
     duplicado = _lancamento_duplicado(
-        documento, tipo, ato.data, ato.numero_lancamento,
+        documento, tipo, ato.data, numero_lancamento,
         Lancamento.objects.exclude(pk__in=lancamentos_importados),
     )
     if duplicado is not None:
@@ -294,7 +318,7 @@ def _importar_ato(
         )
         return None, erros
     if lancamentos_importados and _lancamento_duplicado(
-        documento, tipo, ato.data, ato.numero_lancamento,
+        documento, tipo, ato.data, numero_lancamento,
         Lancamento.objects.filter(pk__in=lancamentos_importados),
     ) is not None:
         # O outro lançamento só existe dentro desta transação: apontá-lo
@@ -405,11 +429,12 @@ def _importar_ato(
         documento=documento,
         tipo=tipo,
         # Gravação normalizada, como o fluxo manual valida e grava: o
-        # número sem bordas — ' R-1 ' persistido colidiria com o 'R-1' do
-        # fluxo manual na próxima duplicata (#263 rodada 6, Codex P2) — e
-        # vazio de verdade é None, não '' (#263 rodada 8, review Opus P3):
+        # número sem o prefixo do rótulo ('R-5' grava '5' — #322) e sem
+        # bordas — ' R-1 ' persistido colidiria com o 'R-1' do fluxo
+        # manual na próxima duplicata (#263 rodada 6, Codex P2) — e vazio
+        # de verdade é None, não '' (#263 rodada 8, review Opus P3):
         # '   ' gravava '' e o fluxo manual grava None.
-        numero_lancamento=((ato.numero_lancamento or '').strip() or None),
+        numero_lancamento=numero_lancamento or None,
         data=ato.data,
         valor_transacao=ato.valor,
         area=ato.area,
@@ -857,18 +882,20 @@ def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     """Lançamento existente que colide com o ato, ou None.
 
     Mesma regra do fluxo manual (``lancamento_validacao_service``), que
-    consulta pelo número sem bordas: o número é comparado normalizado com a
-    MESMA função dos DOIS lados — o ``.strip()`` do Python, o que grava.
-    ' R-1 ' é duplicata de 'R-1', não lançamento novo (#263 rodada 6,
-    Codex P2); a rodada 7 normalizava o JÁ GRAVADO com ``TRIM()`` do SQL,
-    que só tira espaço — o ``'\\n'`` que texto de OCR deixa na borda do
-    número escapava da duplicata (#263 rodada 8, review Opus P2). A tupla
+    consulta pelo número normalizado: o número é comparado com a MESMA
+    função dos DOIS lados — o parser de rótulos, que é também o que grava.
+    'R-5' e '5' são a mesma duplicata (#322 — o OCR vinha gravando o
+    carimbo inteiro; decisão do cliente: o número é o número do ato SEM o
+    prefixo), ' R-1 ' é duplicata de 'R-1' (#263 rodada 6, Codex P2) e a
+    rodada 7 normalizava o JÁ GRAVADO com ``TRIM()`` do SQL, que só tira
+    espaço — o ``'\\n'`` que texto de OCR deixa na borda do número
+    escapava da duplicata (#263 rodada 8, review Opus P2). A tupla
     (documento, tipo, data, número) — com número nulo casando null e
     gravado vazio (null, '' e só espaços) — e ainda o número sozinho
     dentro do documento, mudando tipo ou data. ``lancamentos`` restringe
     onde procurar (padrão: todos).
     """
-    numero = numero.strip() if numero else numero
+    numero = normalizar_numero_lancamento(numero)
     if lancamentos is None:
         lancamentos = Lancamento.objects.all()
     # A busca é por documento (poucas linhas) e a decisão é no Python:
@@ -882,7 +909,9 @@ def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     )
     mesmo_numero = None
     for lancamento in candidatos:
-        gravado = (lancamento.numero_lancamento or '').strip()
+        gravado = normalizar_numero_lancamento(
+            lancamento.numero_lancamento,
+        ) or ''
         if numero:
             if gravado != numero:
                 continue

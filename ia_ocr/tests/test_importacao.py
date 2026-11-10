@@ -352,14 +352,16 @@ class DuplicidadeTest(ImportacaoBase):
         self.assertEqual(Lancamento.objects.count(), 1)
 
     def test_numero_da_gravacao_e_strip(self):
-        # O valor PERSISTIDO também é o strip: grava 'R-1', nunca ' R-1 '.
+        # #322 (decisão do cliente, 09/11): o valor PERSISTIDO é o número
+        # do ato SEM o prefixo do rótulo — ' R-1 ' grava '1', nunca o
+        # carimbo inteiro; as bordas seguem removidas (rodada 6).
         self._novo_job_com_extracao(' R-1 ')
 
         resultado = self._importar(self.extracao)
 
         self.assertTrue(resultado['ok'])
         self.assertEqual(
-            Lancamento.objects.get().numero_lancamento, 'R-1',
+            Lancamento.objects.get().numero_lancamento, '1',
         )
 
     def test_numero_somente_espacos_grava_none(self):

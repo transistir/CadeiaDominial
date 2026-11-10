@@ -1,0 +1,272 @@
+"""Parser de rótulos de lançamento (I-11b / #322).
+
+Rótulo é o carimbo que abre cada ato na matrícula: ``'R-1'``,
+``'Av: 2-237'``, ``'M-3-14511'``. Decisão do cliente (Hiure, 09/11):
+lançamento SEMPRE começa com ``R`` (registro) ou ``Av`` (averbação);
+``M`` é número de matrícula — rótulo válido, mas nunca um lançamento;
+``"R: 1-237"`` traz número de ato ``1`` e matrícula ``237``, e o texto
+depois do carimbo (protocolo, data, comarca) é ignorado.
+
+Módulo PURO, sem Django e sem I/O. ``analisar_rotulo`` NUNCA levanta
+exceção: entrada vazia, estranha ou com prefixo desconhecido cai em
+``reconhecido=False`` com um ``motivo`` — o destino do bucket de não
+reconhecidos é decisão da UI (#321). ``classificar_atos`` consome o
+payload da extração (``document`` + ``acts``) e devolve o cabeçalho do
+início de matrícula (que NÃO é um ato), os lançamentos em ordem REVERSA
+(maior ``ordem`` primeiro) e os não reconhecidos.
+"""
+
+import re
+from dataclasses import dataclass
+
+# Valores válidos de ``tipo_sugerido.normalized`` no contrato A3.
+TIPOS_SUGERIDOS = ('registro', 'averbacao', 'inicio_matricula')
+
+# Prefixo do rótulo: 1–3 letras no começo do texto + separador opcional
+# (``-``, ``:``, ``.`` e/ou espaços) + o corpo. Caixa alta/baixa indiferente.
+_ROTULO = re.compile(
+    r'^\s*(?P<prefixo>[A-Za-z]{1,3})\s*(?P<sep>[-:.]?\s*)(?P<corpo>\S.*)?$',
+    re.IGNORECASE,
+)
+
+# Número com pontuação preservada como veio ('12.345' NÃO vira '12345').
+_NUMERO = re.compile(r'\d+(?:\.\d+)*')
+
+# O corpo é dividido no primeiro destes separadores: o primeiro número é o
+# ato, o segundo é a matrícula de origem ('R: 1-237', 'R-1/42.718').
+_SEPARADOR_DE_NUMEROS = re.compile(r'[-–/]')
+
+_PREFIXOS = {'r': 'registro', 'av': 'averbacao', 'm': None}
+
+# Campos do cabeçalho (``/document/*``) que formam o início de matrícula.
+CAMPOS_INICIO_MATRICULA = (
+    'livro', 'numero', 'cartorio', 'area', 'data', 'imovel_descricao',
+)
+
+
+@dataclass(frozen=True)
+class Rotulo:
+    """Resultado da análise de um texto de rótulo."""
+
+    tipo: str | None
+    # 'registro' | 'averbacao' | 'inicio_matricula' | None
+    numero: str | None
+    # Número do ato SEM prefixo ('R-5' → '5').
+    matricula: str | None
+    # Número da matrícula quando o rótulo o traz ('1-237' → '237').
+    eh_matricula: bool
+    # True quando o prefixo é M (referência de matrícula, não lançamento).
+    reconhecido: bool
+    motivo: str | None
+    # 'vazio' | 'sem_prefixo' | 'prefixo_desconhecido'
+
+
+@dataclass(frozen=True)
+class Classificacao:
+    """Saída de ``classificar_atos`` para o payload da extração."""
+
+    inicio_matricula: dict | None
+    # Cabeçalho /document/* — não é um ato; None sem ``document``.
+    lancamentos: list
+    # {'ordem', 'tipo', 'numero', 'matricula', 'ato', 'divergencia'} em
+    # ordem REVERSA (maior ordem primeiro), só R/Av.
+    nao_reconhecidos: list
+    # {'ordem', 'rotulo', 'motivo', 'ato'} — bucket de decisão da UI (#321).
+
+
+def _nao_reconhecido(motivo):
+    return Rotulo(
+        tipo=None, numero=None, matricula=None, eh_matricula=False,
+        reconhecido=False, motivo=motivo,
+    )
+
+
+def _dois_numeros(corpo):
+    """Os dois primeiros números do corpo do rótulo: ato e matrícula.
+
+    ``'5-237 – PROTOCOLO Nº 13.607'`` → ``('5', '237')``: a matrícula é o
+    número imediatamente depois do primeiro separador, nunca o primeiro
+    número que aparecer no resto do texto (o ``Nº 13.607`` do protocolo).
+    """
+    partes = _SEPARADOR_DE_NUMEROS.split(corpo, maxsplit=1)
+    primeiro = _NUMERO.match(partes[0].strip())
+    segundo = (
+        _NUMERO.match(partes[1].strip()) if len(partes) > 1 else None
+    )
+    return (
+        primeiro.group(0) if primeiro else None,
+        segundo.group(0) if segundo else None,
+    )
+
+
+def analisar_rotulo(texto) -> Rotulo:
+    """Analisa o texto do rótulo; NUNCA levanta exceção.
+
+    Normalização: ``strip`` e colapso de espaços internos; zeros à esquerda
+    do número preservados ('R-007' → '007') e pontuação da matrícula como
+    veio ('M: 12.345' → '12.345'). Texto que não abre com um prefixo de
+    1–3 letras + número é cabeçalho/comum → ``sem_prefixo``; abre com
+    outra letra + número ('X-1') → ``prefixo_desconhecido``. Prefixo
+    reconhecido sem número fica reconhecido, sem número a gravar.
+    """
+    if texto is None:
+        return _nao_reconhecido('vazio')
+    if not isinstance(texto, str):
+        try:
+            texto = str(texto)
+        except Exception:
+            return _nao_reconhecido('sem_prefixo')
+    compacto = ' '.join(texto.split())
+    if not compacto:
+        return _nao_reconhecido('vazio')
+
+    achado = _ROTULO.match(compacto)
+    if achado is None:
+        return _nao_reconhecido('sem_prefixo')
+    prefixo = achado.group('prefixo').lower()
+    corpo = (achado.group('corpo') or '').strip()
+    tipo = _PREFIXOS.get(prefixo)
+    if prefixo != 'm' and tipo is None:
+        # 1–3 letras que não são R/Av/M: com número em seguida é um rótulo
+        # desconhecido ('X-1'); texto comum ('O imóvel rural...') não tem
+        # prefixo de rótulo.
+        if _NUMERO.match(corpo):
+            return _nao_reconhecido('prefixo_desconhecido')
+        return _nao_reconhecido('sem_prefixo')
+
+    primeiro, segundo = _dois_numeros(corpo)
+    if prefixo == 'm':
+        # 'M-3-14511' → a matrícula é o ÚLTIMO número do carimbo ('14511'),
+        # não o '3'; 'M: 12.345' → o único número que veio.
+        return Rotulo(
+            tipo=None, numero=None, matricula=segundo or primeiro,
+            eh_matricula=True, reconhecido=True, motivo=None,
+        )
+    return Rotulo(
+        tipo=tipo, numero=primeiro, matricula=segundo,
+        eh_matricula=False, reconhecido=True, motivo=None,
+    )
+
+
+def normalizar_numero_lancamento(texto) -> str | None:
+    """Número de lançamento gravável/comparável: sem o prefixo do rótulo.
+
+    ``'R-5'`` → ``'5'``; ``'Av: 6-237 – PROTOCOLO...'`` → ``'6'``; o número
+    digitado já sem prefixo volta igual; texto que não é rótulo R/Av volta
+    só com as bordas removidas (comportamento de antes, #322); vazio →
+    ``None``. A MESMA função normaliza os dois lados da duplicata — o que
+    o OCR trouxe com prefixo e o que está gravado.
+    """
+    analisado = analisar_rotulo(texto)
+    if (
+        analisado.reconhecido
+        and not analisado.eh_matricula
+        and analisado.numero
+    ):
+        return analisado.numero
+    if not isinstance(texto, str):
+        return None
+    return texto.strip() or None
+
+
+def _valor_do_campo(campo):
+    """Valor de um campo de valor A3: ``normalized`` quando veio, senão ``raw``.
+
+    No payload real os campos críticos do cabeçalho chegam com
+    ``normalized=None`` (o texto de OCR fica no ``raw``) — é o que a revisão
+    tem em mãos para julgar.
+    """
+    if not isinstance(campo, dict):
+        return None
+    if campo.get('normalized') is not None:
+        return campo['normalized']
+    return campo.get('raw')
+
+
+def _ordem_ordenavel(ordem):
+    """``ordem`` do ato como chave de ordenação inteira.
+
+    No payload real ``ordem`` vem como STRING ('1', '7') — o sintético dos
+    testes trazia int e escondia o bug de a chave ``isinstance(..., (int,
+    float))`` empatar tudo em 0, com a lista saindo na ordem original em
+    vez da reversa (#322). O ``sort`` do Python é estável: item sem ordem
+    (ou com texto sem dígito) fica na chave 0 e conserva a posição original
+    entre os empatados. O campo ``ordem`` exposto no item segue COMO VEIO —
+    a conversão é só a chave de ordenação.
+    """
+    if isinstance(ordem, (int, float)):
+        return int(ordem)
+    if isinstance(ordem, str):
+        try:
+            return int(ordem.strip())
+        except ValueError:
+            return 0
+    return 0
+
+
+def classificar_atos(payload) -> Classificacao:
+    """Classifica os atos do payload da extração; nunca levanta exceção.
+
+    - ``inicio_matricula``: os campos do cabeçalho ``/document/*`` (que
+      NÃO é um ato); ``None`` sem ``document``.
+    - ``lancamentos``: só o que é R/Av, em ordem REVERSA; o tipo resolvido
+      prefere o RÓTULO — ``tipo_sugerido.normalized`` presente e válido é
+      usado quando concorda; divergindo, prevalece o rótulo e o item sai
+      com ``divergencia=True`` (não é erro fatal).
+    - ``nao_reconhecidos``: rótulos que o parser não entendeu (rotulo
+      ``M`` não entra em nenhuma das duas listas — é referência de
+      matrícula, não lançamento, e não é erro).
+    """
+    document = payload.get('document') if isinstance(payload, dict) else None
+    inicio = None
+    if isinstance(document, dict) and document:
+        inicio = {
+            nome: _valor_do_campo(document.get(nome))
+            for nome in CAMPOS_INICIO_MATRICULA
+        }
+
+    lancamentos = []
+    nao_reconhecidos = []
+    atos = payload.get('acts') if isinstance(payload, dict) else None
+    for ato in atos or []:
+        if not isinstance(ato, dict):
+            continue
+        ordem = ato.get('ordem')
+        rotulo = _valor_do_campo(ato.get('rotulo'))
+        analisado = analisar_rotulo(rotulo)
+        if not analisado.reconhecido:
+            nao_reconhecidos.append({
+                'ordem': ordem,
+                'rotulo': rotulo,
+                'motivo': analisado.motivo,
+                'ato': ato,
+            })
+            continue
+        if analisado.eh_matricula:
+            continue
+        sugerido = _valor_do_campo(ato.get('tipo_sugerido'))
+        # Divergência só quando os DOIS lados são tipos válidos e diferem:
+        # tipo_sugerido ausente/inválido é como se não existisse (o prefixo
+        # do rótulo decide sozinho, sem registrar conflito).
+        divergencia = (
+            sugerido in TIPOS_SUGERIDOS and sugerido != analisado.tipo
+        )
+        lancamentos.append({
+            'ordem': ordem,
+            'tipo': analisado.tipo,
+            'numero': analisado.numero,
+            'matricula': analisado.matricula,
+            'ato': ato,
+            'divergencia': divergencia,
+        })
+    # Chave inteira (``ordem`` vem como string no payload real, #322); o
+    # campo exposto no item segue como veio.
+    lancamentos.sort(
+        key=lambda item: _ordem_ordenavel(item['ordem']),
+        reverse=True,
+    )
+    return Classificacao(
+        inicio_matricula=inicio,
+        lancamentos=lancamentos,
+        nao_reconhecidos=nao_reconhecidos,
+    )
