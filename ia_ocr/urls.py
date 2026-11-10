@@ -41,4 +41,8 @@ urlpatterns = [
         _BASE + 'campos/finalizar/',
         views.finalizar_revisao_ocr, name='finalizar_revisao_ocr',
     ),
+    path(
+        _BASE + 'campos/importar/',
+        views.importar_job_ocr, name='importar_job_ocr',
+    ),
 ]

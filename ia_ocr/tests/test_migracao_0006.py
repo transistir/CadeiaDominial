@@ -43,7 +43,11 @@ class ExtracaoRevisao0006Test(TransactionTestCase):
         ).apps
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate(self.migrate_to)
+        # Restaurar o grafo inteiro, não só a 0006: a 0007/0008 foi
+        # des-aplicada junto no setUp (dependem da dominial) e o flush do
+        # TransactionTestCase precisa de todas as tabelas do estado atual.
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def _migrar(self, destino):
