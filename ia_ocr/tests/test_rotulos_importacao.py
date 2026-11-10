@@ -1,4 +1,4 @@
-"""Testes de integração rótulos → importação (I-11b / #322, rodadas 3–4).
+"""Testes de integração rótulos → importação (I-11b / #322, rodadas 3–5).
 
 O contrato da gravação (#322 rodada 3): o número gravado é o COMPOSTO
 canônico do V1 — ``'R-5'`` na matrícula grava ``'R5 {documento.numero}'``,
@@ -16,6 +16,12 @@ sem ele, o ``raw`` da folha — a mesma leitura do ``classificar_atos``);
 rótulo de MATRÍCULA não gera número de ato (aviso, nunca exceção); a
 prévia (``resumo``) devolve o tipo que a gravação usará, com a divergência
 no ``aviso`` do item; meia-risca/travessão valem como hífen.
+
+Rodada 5 (review Codex): o rótulo CORRIGIDO pelo revisor (``valor_final``)
+vence na leitura do efetivo — vazio (campo limpo) não decide nada; sob
+rótulo de MATRÍCULA, o número de ato REVISADO que é rótulo R/Av válido (ou
+número puro já sem prefixo) é preservado e composto — só a referência da
+matrícula continua descartada.
 
 A revisão vigente EXIGE ``tipo_sugerido`` preenchido por ato (pendência
 bloqueante da I-5), então ``importar`` não alcança o estado ``tipo`` vazio
@@ -212,6 +218,63 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
         self.assertEqual(erro['codigo'], 'lancamento_duplicado')
         self.assertEqual(Lancamento.objects.count(), 1)
 
+    def test_rotulo_corrigido_pelo_revisor_define_o_tipo_da_duplicata(self):
+        # P1 (rodada 5): raw='R-5', normalized=None e o revisor CORRIGIU o
+        # rótulo para 'Av-5' — sem o ``valor_final`` na precedência, a
+        # gravação seguia o carimbo do OCR ('R-5'), gravava registro e a
+        # duplicata da averbação já na base passava (cenário do review).
+        self.documento.numero = 'M237'
+        self.documento.save(update_fields=['numero'])
+        Lancamento.objects.create(
+            documento=self.documento,
+            tipo=self.tipo_averbacao,
+            numero_lancamento='AV5 M237',
+            data=DATA_DO_ATO,
+        )
+        payload = self._payload(rotulo='R-5', tipo='averbacao', numero='Av-5')
+        payload['acts'][0]['rotulo']['normalized'] = None
+        extracao = self._extracao(payload)
+        campo = extracao.campos.get(chave='/acts/0/rotulo')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='Av-5', usuario=self.usuario,
+        )
+        campo.save()
+
+        (ato,) = resumo(extracao)['atos']
+        self.assertEqual(ato['tipo'], 'averbacao')
+        self.assertTrue(ato['duplicado'])
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        (linha,) = contexto.exception.linhas
+        (erro,) = linha['erros']
+        self.assertEqual(erro['codigo'], 'lancamento_duplicado')
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_rotulo_com_valor_final_vazio_cai_no_normalized_e_no_raw(self):
+        # P1 (rodada 5): ``valor_final`` vazio (o revisor LIMPOU o campo —
+        # ``aplicar_linha`` grava '') não decide nada: a leitura cai no
+        # ``normalized``/``raw`` como na rodada 4. Sem a guarda de vazio,
+        # '' venceria o 'R-5' do raw e o rótulo desapareceria.
+        payload = self._payload(rotulo='R-5', tipo='averbacao', numero='R-5')
+        payload['acts'][0]['rotulo']['normalized'] = None
+        extracao = self._extracao(payload)
+        campo = extracao.campos.get(chave='/acts/0/rotulo')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='', usuario=self.usuario,
+        )
+        campo.save()
+        self.assertEqual(campo.valor_final, '')
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertEqual(
+            lancamento.numero_lancamento, f'R5 {self.documento.numero}',
+        )
+
     def test_rotulo_de_matricula_nao_gera_numero_de_lancamento(self):
         # P2-1 (rodada 4): 'M-3-14511' é referência de matrícula — compor
         # número com ele gravaria 'RM-3-14511 {sigla}'. O ato grava com o
@@ -230,6 +293,86 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
         (linha,) = resultado['linhas']
         (aviso,) = linha['avisos']
         self.assertIn('matrícula', aviso)
+
+    def test_rotulo_de_matricula_preserva_o_numero_revisado(self):
+        # P2 (rodada 5): 'M-3-14511' no rótulo e o revisor corrigiu o
+        # /numero_lancamento para 'R-5' — o rótulo M só descarta o número
+        # que VEIO da referência de matrícula; o número de ato válido do
+        # campo revisado é preservado e composto (a rodada 4 zerava para
+        # NULL o que a base sempre gravou: 'R5 M237').
+        self.documento.numero = 'M237'
+        self.documento.save(update_fields=['numero'])
+        extracao = self._extracao(self._payload(
+            rotulo='M-3-14511', tipo='registro', numero='M-3-14511',
+        ))
+        campo = extracao.campos.get(chave='/acts/0/numero_lancamento')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='R-5', usuario=self.usuario,
+        )
+        campo.save()
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertEqual(lancamento.numero_lancamento, 'R5 M237')
+        (linha,) = resultado['linhas']
+        (aviso,) = linha['avisos']
+        self.assertIn('matrícula', aviso)
+        self.assertIn('campo revisado', aviso)
+
+    def test_rotulo_de_matricula_preserva_numero_puro_revisado(self):
+        # P2 (rodada 5): o número de ato válido também pode vir JÁ SEM
+        # prefixo ('5') — o normalizador devolve número, então ele é
+        # preservado e composto. Só a referência de matrícula e o texto
+        # sem número ficam de fora (testes vizinhos).
+        self.documento.numero = 'M237'
+        self.documento.save(update_fields=['numero'])
+        extracao = self._extracao(self._payload(
+            rotulo='M-3-14511', tipo='registro', numero='M-3-14511',
+        ))
+        campo = extracao.campos.get(chave='/acts/0/numero_lancamento')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='5', usuario=self.usuario,
+        )
+        campo.save()
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(
+            Lancamento.objects.get().numero_lancamento, 'R5 M237',
+        )
+        (linha,) = resultado['linhas']
+        (aviso,) = linha['avisos']
+        self.assertIn('campo revisado', aviso)
+
+    def test_rotulo_de_matricula_com_numero_revisado_invalido_grava_sem_numero(self):
+        # P2 (rodada 5), o outro lado da regra: 'X-9' editado no
+        # /numero_lancamento não é rótulo de ato R/Av válido — sob rótulo
+        # M nada é composto com ele. O ato grava SEM número e com o aviso
+        # da rodada 4 (comportamento mantido; o bucket segue com a UI,
+        # #321) — igual ao caso sem edição do teste de cima.
+        extracao = self._extracao(self._payload(
+            rotulo='M-3-14511', tipo='registro', numero='M-3-14511',
+        ))
+        campo = extracao.campos.get(chave='/acts/0/numero_lancamento')
+        revisao.aplicar_linha(
+            campo, incluir=True, valor='X-9', usuario=self.usuario,
+        )
+        campo.save()
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.tipo, self.tipo_registro)
+        self.assertIsNone(lancamento.numero_lancamento)
+        (linha,) = resultado['linhas']
+        (aviso,) = linha['avisos']
+        self.assertIn('matrícula', aviso)
+        self.assertIn('nenhum número de ato', aviso)
 
     def test_resumo_mostra_o_tipo_que_a_gravacao_usara(self):
         # P2-2 (rodada 4): rótulo 'R-5' × tipo_sugerido 'averbacao' — a
