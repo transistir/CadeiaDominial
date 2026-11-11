@@ -22,9 +22,9 @@ from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
     AtoRevisado, DadosRevisados, DocumentoRevisado, ParteRevisada,
-    RevisaoInvalidada, _tipos_efetivos, aplicar_linha, avisos, dados_revisados,
-    desnormalizar, garantir_placeholders_obrigatorios, pendencias,
-    versao_linha,
+    RevisaoInvalidada, _tipos_efetivos, _valor_explicito, aplicar_linha,
+    avisos, dados_revisados, desnormalizar,
+    garantir_placeholders_obrigatorios, pendencias, versao_linha,
 )
 
 from .factories import criar_documento_digital
@@ -145,6 +145,81 @@ class AplicarLinhaTest(SimpleTestCase):
         )
         self.assertIs(campo.revisado_por, self.usuario)
         self.assertEqual(campo.revisado_em, self.agora)
+
+    def test_confirmar_o_valor_igual_ao_sugerido_marca_escolha_explicita(self):
+        # P1 (Greptile, #322/PR #327): conferir o card sem digitar limpa o
+        # ``valor_final`` (canonico == normalized) e antes a precedência do
+        # tipo não via escolha nenhuma — o rótulo do ato vencia a decisão
+        # do revisor. A flag separa "qual é o valor" de "o revisor escolheu
+        # esse valor"; o estado novo também autora a linha.
+        campo = self.linhas['/acts/0/tipo_sugerido']
+
+        aplicar_linha(
+            campo, incluir=True, conferido=True,
+            usuario=self.usuario, agora=self.agora,
+        )
+
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'aceito')
+        self.assertTrue(campo.escolha_explicita)
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+    def test_reenviar_o_mesmo_valor_marca_escolha_explicita(self):
+        # O outro caminho do card: o revisor reenvia o MESMO valor —
+        # ``canonico == normalized`` deixa ``valor_final`` nulo e o status
+        # nem muda; só a flag registra a decisão (e autora a linha).
+        campo = self.linhas['/acts/0/tipo_sugerido']
+
+        aplicar_linha(
+            campo, incluir=True, valor=campo.normalized,
+            usuario=self.usuario, agora=self.agora,
+        )
+
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'sugerido')
+        self.assertTrue(campo.escolha_explicita)
+        self.assertIs(campo.revisado_por, self.usuario)
+        self.assertEqual(campo.revisado_em, self.agora)
+
+    def test_descartar_e_reincluir_preservam_a_escolha_explicita(self):
+        campo = self.linhas['/acts/0/tipo_sugerido']
+        aplicar_linha(campo, incluir=True, conferido=True)
+        self.assertTrue(campo.escolha_explicita)
+
+        aplicar_linha(campo, incluir=False)
+        self.assertEqual(campo.status_revisao, 'descartado')
+        self.assertTrue(campo.escolha_explicita)
+
+        # Reincluir sem novo valor: a escolha anterior continua valendo.
+        aplicar_linha(campo, incluir=True)
+        self.assertEqual(campo.status_revisao, 'sugerido')
+        self.assertTrue(campo.escolha_explicita)
+
+    def test_sem_decisao_do_revisor_a_flag_nao_e_marcada(self):
+        campo = self.linhas['/acts/0/tipo_sugerido']
+
+        aplicar_linha(campo, incluir=True)
+
+        self.assertFalse(campo.escolha_explicita)
+
+    def test_valor_explicito_cobre_as_quatro_decisoes(self):
+        # A regra que alimenta a precedência do tipo (``tipo_exp`` do
+        # ``dados_revisados`` e ``_tipos_efetivos``): descartado não decide;
+        # edição vence; confirmação devolve o sugerido; sem decisão, None.
+        campo = self.linhas['/acts/0/tipo_sugerido']
+        self.assertIsNone(_valor_explicito(campo))
+
+        campo.escolha_explicita = True
+        self.assertEqual(_valor_explicito(campo), campo.normalized)
+
+        campo.valor_final = 'averbacao'
+        self.assertEqual(_valor_explicito(campo), 'averbacao')
+
+        campo.status_revisao = 'descartado'
+        self.assertIsNone(_valor_explicito(campo))
+
+        self.assertIsNone(_valor_explicito(None))
 
     def test_requer_revisao_sem_conferido_nao_aceita(self):
         campo = self.linhas['/document/data']
@@ -279,6 +354,9 @@ class AplicarLinhaTest(SimpleTestCase):
         alteracoes = {
             'status_revisao': 'aceito',
             'valor_final': '2020-01-11',
+            # A escolha explícita no estado (P1 #322/PR #327): a confirmação
+            # que só zera o valor_final muda a versão — e autora a linha.
+            'escolha_explicita': True,
             'motivos_revisao': ['baixa_confianca'],
             'pessoa_escolhida_id': 1,
             'cartorio_escolhido_id': 2,
@@ -298,7 +376,7 @@ class AplicarLinhaTest(SimpleTestCase):
         campo = self.linhas['/document/numero']
         campo.valor_final = 'Área conferida'
         esperado = sha256(
-            '["sugerido","Área conferida",[],null,null,false,false,null]'
+            '["sugerido","Área conferida",false,[],null,null,false,false,null]'
             .encode('utf-8')
         ).hexdigest()[:16]
 
@@ -980,7 +1058,6 @@ class DadosRevisadosTest(TestCase):
             ('eh_inicio_matricula', True),
         ):
             ato[nome] = self._campo(valor)
-        ato['valor_transacao']['moeda_historica'] = 'Cr$'
         ato['cartorio_transmissao'] = self.payload['document']['cartorio'].copy()
         ato['origem'] = {
             nome: self._campo(valor) for nome, valor in (
@@ -1026,7 +1103,6 @@ class DadosRevisadosTest(TestCase):
             ('/document/data', '2020-01-11'),
             ('/document/livro', ''),
             ('/acts/0/data', '2020-02-16'),
-            ('/acts/0/valor_transacao', '0.00'),
             ('/acts/0/area', '0.0000'),
             ('/acts/0/eh_inicio_matricula', 'false'),
         ):
@@ -1055,9 +1131,6 @@ class DadosRevisadosTest(TestCase):
         self.assertEqual(ato.numero_lancamento, 'R-1')
         self.assertEqual(ato.data, date(2020, 2, 16))
         self.assertIsInstance(ato.data, date)
-        self.assertEqual(ato.valor, Decimal('0.00'))
-        self.assertIsInstance(ato.valor, Decimal)
-        self.assertEqual(ato.moeda_historica, 'Cr$')
         self.assertEqual(ato.area, Decimal('0.0000'))
         self.assertIsInstance(ato.area, Decimal)
         self.assertIs(ato.eh_inicio_matricula, False)
@@ -1168,6 +1241,28 @@ class DadosRevisadosTest(TestCase):
         self.assertIsNone(dados.atos[0].partes[0].cpf)
         self.assertEqual(len(dados.atos[0].partes), 2)
 
+    def test_linha_antiga_de_valor_transacao_e_ignorada(self):
+        """Tarefa C #322: extração antiga salva com a linha não bloqueia.
+
+        O formulário de lançamento não tem valor_transacao: a linha antiga,
+        mesmo pendente, não vira pendência nem impede a leitura revisada.
+        """
+        self._finalizar(self.payload)
+        self.extracao.campos.create(
+            chave='/acts/0/valor_transacao',
+            raw='R$ 999.999.999,99',
+            normalized='999999999.99',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        citadas = {item['chave'] for item in pendencias(self.extracao)}
+        self.assertNotIn('/acts/0/valor_transacao', citadas)
+
+        dados = dados_revisados(self.extracao)
+        self.assertEqual(len(dados.atos), 1)
+
     def test_dados_revisados_ordena_atos_e_respeita_descartes(self):
         self.payload['acts'][0]['ordem'] = 2
         for numero, ordem in (('Av-2', 1), ('Av-3', 1), ('Av-4', 1)):
@@ -1176,7 +1271,7 @@ class DadosRevisadosTest(TestCase):
             ato['numero_lancamento'] = self._campo(numero)
             self.payload['acts'].append(ato)
         self._finalizar(self.payload)
-        for chave in ('/acts/3', '/acts/0/partes/1', '/acts/0/valor_transacao'):
+        for chave in ('/acts/3', '/acts/0/partes/1'):
             self.extracao.campos.filter(chave=chave).update(
                 status_revisao='descartado',
             )
@@ -1192,8 +1287,6 @@ class DadosRevisadosTest(TestCase):
         self.assertEqual([ato.ordem for ato in dados.atos], [1, 1, 2])
         self.assertIsNone(dados.atos[0].origem)
         registro = dados.atos[2]
-        self.assertIsNone(registro.valor)
-        self.assertIsNone(registro.moeda_historica)
         self.assertEqual([parte.papel for parte in registro.partes], [
             'adquirente', 'adquirente',
         ])
@@ -1284,9 +1377,8 @@ class DesnormalizarTest(TestCase):
 
         self.assertEqual(por_chave['/document/tipo'].tipo_valor, 'enum')
         self.assertEqual(por_chave['/document/cartorio'].tipo_valor, 'cartorio')
-        self.assertEqual(
-            por_chave['/acts/0/valor_transacao'].tipo_valor, 'decimal'
-        )
+        # Tarefa C #322: a folha valor_transacao do schema A3 é ignorada.
+        self.assertNotIn('/acts/0/valor_transacao', por_chave)
         self.assertEqual(por_chave['/acts/0/area'].tipo_valor, 'area')
         self.assertEqual(
             por_chave['/acts/0/partes/0/documento_identificacao/valor']
@@ -1458,16 +1550,31 @@ class DesnormalizarTest(TestCase):
         # O valor canônico permanece: converter unidade é decisão humana.
         self.assertEqual(area.normalized, '12.50')
 
-    def test_normalizacao_invalida_em_decimal(self):
+    def test_normalizacao_invalida_em_area(self):
         payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['area']['normalized'] = 'abc'
+
+        area = self._por_chave(self._linhas(payload))['/acts/0/area']
+
+        self.assertIsNone(area.normalized)
+        self.assertTrue(area.requer_revisao)
+        self.assertIn('normalizacao_invalida', area.motivos_revisao)
+        self.assertEqual(area.raw, '12,50 ha')  # raw preservado
+
+    def test_valor_transacao_do_payload_nao_gera_linha(self):
+        """Tarefa C #322: o formulário de lançamento não tem valor_transacao.
+
+        O schema A3 (Umbelino v1.1) continua mandando a folha — o payload
+        segue com ela, mas nenhuma linha de revisão é criada, nem com
+        normalização inválida.
+        """
+        payload = payload_registro(self.job.job_id)
+        self.assertIn('valor_transacao', payload['acts'][0])
         payload['acts'][0]['valor_transacao']['normalized'] = 'abc'
 
-        valor = self._por_chave(self._linhas(payload))['/acts/0/valor_transacao']
+        linhas = self._por_chave(self._linhas(payload))
 
-        self.assertIsNone(valor.normalized)
-        self.assertTrue(valor.requer_revisao)
-        self.assertIn('normalizacao_invalida', valor.motivos_revisao)
-        self.assertEqual(valor.raw, 'R$ 150.000,00')  # raw preservado
+        self.assertNotIn('/acts/0/valor_transacao', linhas)
 
     def test_evidencia_usa_texto_corrigido(self):
         """Trecho é conferido contra o texto vigente: o corrigido (#290).

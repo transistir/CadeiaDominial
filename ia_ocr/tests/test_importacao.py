@@ -155,7 +155,9 @@ class CaminhoFelizTest(ImportacaoBase):
         self.assertEqual(lancamento.documento, self.documento)
         self.assertEqual(lancamento.tipo, self.tipo_registro)
         self.assertEqual(lancamento.data, date(2020, 2, 15))
-        self.assertEqual(lancamento.valor_transacao, Decimal('150000.00'))
+        # Tarefa C #322: valor_transacao não existe no formulário de
+        # lançamento — não é importado, mesmo vindo no payload do A3.
+        self.assertIsNone(lancamento.valor_transacao)
         self.assertEqual(lancamento.area, Decimal('12.50'))
         # 2 transmitentes + 1 adquirente: a parte sem identificação é só
         # sugestão (requer_revisao falso) e ainda assim entra — a finalização
@@ -190,6 +192,31 @@ class CaminhoFelizTest(ImportacaoBase):
         self.assertEqual(linha['status'], 'criado')
         self.assertEqual(linha['lancamento_id'], lancamento.pk)
         self.assertEqual(linha['url'], self.url_lancamento(lancamento))
+
+    def test_linha_antiga_de_valor_transacao_e_ignorada(self):
+        """Tarefa C #322: extração antiga salva com a linha importa sem erro.
+
+        SHOULD-FIX (revisão Opus): a linha antiga é uma que BLOQUEARIA sem o
+        filtro — pendente com ``requer_revisao=True`` viraria
+        ``revisao_pendente`` e ``dados_revisados`` recusaria a extração.
+        """
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 150.000,00',
+            normalized='150000.00',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        (lancamento,) = Lancamento.objects.all()
+        self.assertIsNone(lancamento.valor_transacao)
+        self.assertEqual(lancamento.area, Decimal('12.50'))
 
 
 class VinculoOrigemTest(ImportacaoBase):

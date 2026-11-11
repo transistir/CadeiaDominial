@@ -44,8 +44,7 @@ from django.test import TestCase
 
 from dominial.managers import documentos_for_user
 from dominial.models import Lancamento, LancamentoTipo
-from ia_ocr import importacao as modulo_importacao
-from ia_ocr import revisao
+from ia_ocr import estados, importacao as modulo_importacao, revisao, services
 from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
 from ia_ocr.models import OcrJob
 from ia_ocr.revisao import RevisaoInvalidada
@@ -690,3 +689,113 @@ class RotulosImportacaoTest(ImportacaoFixture, TestCase):
         self.assertEqual(
             lancamento.numero_lancamento, f'R5 {self.documento.numero}',
         )
+
+    def _salvar_card_tipo(self, extracao, decisao, chave='/acts/0/tipo_sugerido'):
+        """Salva um card como a tela faz, com o job ainda em revisão.
+
+        A fixture já entrega o job ``revisado`` e a extração finalizada; o
+        save da revisão acontece ANTES disso na vida real — o teste volta os
+        dois estados, aplica a decisão e refinaliza pelo serviço. O JS manda
+        UM card por request: a chave padrão é o card do tipo, mas um teste
+        pode salvar outro (``/acts/0/data``) para probar que a escolha
+        explícita não vaza para ele.
+        """
+        job = extracao.ocr_job
+        job.status = estados.EXTRAIDO
+        job.save(update_fields=['status'])
+        extracao.finalizada_em = None
+        extracao.save(update_fields=['finalizada_em'])
+        services.salvar_bloco(
+            extracao,
+            {chave: decisao},
+            self.usuario,
+            services.versao_bloco(extracao),
+        )
+        services.finalizar_revisao(extracao, self.usuario)
+
+    def test_revisor_confirma_o_tipo_no_card_e_a_importacao_grava_ele(self):
+        # P1 (Greptile, #322/PR #327): o revisor salva o card do tipo
+        # CONFIRMANDO o 'registro' que o OCR sugeriu — o valor enviado é
+        # igual ao sugerido, o ``valor_final`` fica nulo e antes a
+        # precedência não via escolha alguma: o rótulo 'Av-5' vencia e a
+        # importação gravava AVERBAÇÃO. Com a escolha explícita marcada na
+        # linha, o card confirmado vence o rótulo.
+        extracao = self._extracao(self._payload(
+            rotulo='Av-5', tipo='registro', numero='R-5',
+        ))
+
+        self._salvar_card_tipo(
+            extracao, {'incluir': True, 'conferido': True},
+        )
+
+        campo_tipo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertTrue(campo_tipo.escolha_explicita)
+        self.assertIsNone(campo_tipo.valor_final)
+        self.assertEqual(campo_tipo.status_revisao, 'aceito')
+        self.assertEqual(campo_tipo.revisado_por, self.usuario)
+        self.assertIsNotNone(campo_tipo.revisado_em)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(Lancamento.objects.get().tipo, self.tipo_registro)
+
+    def test_revisor_confirma_digitando_o_mesmo_valor_e_ele_vence(self):
+        # Mesma cena pelo outro caminho da tela: o revisor REENVIA o valor
+        # igual ao sugerido (editou e voltou). ``canonico == normalized``
+        # limpa o ``valor_final``; a escolha explícita marca que ele passou
+        # pelo card — o 'registro' confirmado vence o rótulo 'Av-5'.
+        extracao = self._extracao(self._payload(
+            rotulo='Av-5', tipo='registro', numero='R-5',
+        ))
+
+        self._salvar_card_tipo(extracao, {'incluir': True, 'valor': 'registro'})
+
+        campo_tipo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertTrue(campo_tipo.escolha_explicita)
+        self.assertEqual(campo_tipo.revisado_por, self.usuario)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(Lancamento.objects.get().tipo, self.tipo_registro)
+
+    def test_sem_decisao_no_card_o_rotulo_continua_vencendo(self):
+        # Caso de CONTROLE do P1: o revisor não toca no card do tipo — sem
+        # escolha explícita, o rótulo 'Av-5' segue vencendo o
+        # tipo_sugerido divergente (mesma regra de antes da flag).
+        extracao = self._extracao(self._payload(
+            rotulo='Av-5', tipo='registro', numero='R-5',
+        ))
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(Lancamento.objects.get().tipo, self.tipo_averbacao)
+
+    def test_salvar_outro_card_nao_marca_a_escolha_do_tipo(self):
+        # MUST-FIX (revisão Opus): o JS manda UM card por request
+        # (ocr_revisao.js) — salvar o card da DATA não pode marcar escolha
+        # explícita no card do TIPO; sem a flag, a importação continua
+        # gravando o tipo do RÓTULO ('Av-5' vence o tipo_sugerido 'registro').
+        extracao = self._extracao(self._payload(
+            rotulo='Av-5', tipo='registro', numero='R-5',
+        ))
+
+        self._salvar_card_tipo(
+            extracao, {'incluir': True, 'conferido': True},
+            chave='/acts/0/data',
+        )
+
+        # O card salvado marca a escolha; o do tipo, não.
+        self.assertTrue(
+            extracao.campos.get(chave='/acts/0/data').escolha_explicita,
+        )
+        campo_tipo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertFalse(campo_tipo.escolha_explicita)
+        self.assertIsNone(campo_tipo.valor_final)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(Lancamento.objects.get().tipo, self.tipo_averbacao)

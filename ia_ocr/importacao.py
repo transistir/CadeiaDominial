@@ -284,9 +284,11 @@ def resumo(extracao):
 def _resolver_tipo_e_numero(ato, rotulo, documento):
     """Tipo e número que a gravação gravará — e a prévia mostra (#322 r4–5).
 
-    A MESMA resolução nos dois caminhos (P2-2): o tipo do RÓTULO reconhecido
-    (R/Av) prevalece sobre o ``tipo_sugerido`` divergente — a regra do
-    ``classificar_atos`` — e o número é o composto canônico do V1 ('R5
+    A MESMA resolução nos dois caminhos (P2-2): a escolha EXPLÍCITA do
+    revisor (``ato.tipo_explicito``, P1 da #322/PR #327) vence; sem ela, o
+    tipo do RÓTULO reconhecido (R/Av) prevalece sobre o ``tipo_sugerido``
+    divergente — a regra do ``classificar_atos`` — e o número é o composto
+    canônico do V1 ('R5
     M237', P1-1 da rodada 3). Rótulo de MATRÍCULA (``M-3-14511``) não é
     lançamento (P2-1): não define tipo (o ``tipo_sugerido`` decide) e o
     número da matrícula NUNCA vira número de ato — compor com ele gravaria
@@ -310,13 +312,20 @@ def _resolver_tipo_e_numero(ato, rotulo, documento):
     - rótulo de matrícula com número válido no campo: o número preservado
       veio do campo revisado, não do rótulo (P2, rodada 5).
     """
-    tipo_explicito = getattr(ato, 'tipo_explicito', None)
-    tipo_sugerido = getattr(ato, 'tipo_sugerido', None)
+    # P1 (Greptile, #322/PR #327): a fonte da escolha EXPLÍCITA é o
+    # ``AtoRevisado.tipo_explicito`` (revisao._valor_explicito — edição em
+    # ``valor_final`` OU sugestão confirmada na flag ``escolha_explicita``).
+    # O fallback antigo tratava ``ato.tipo`` divergente como escolha — mas
+    # ``ato.tipo`` é o valor EFETIVO (revisado ou, na falta, o do próprio
+    # rótulo): com ele na frente, um rótulo disfarçado de decisão vencia a
+    # si mesmo e a confirmação do revisor continuava perdendo para o
+    # rótulo. Linha de tipo vazia (estado antigo/re-extração — a pendência
+    # da I-5 impede ``importar`` de chegar aqui) não decide nada.
+    tipo_explicito = ato.tipo_explicito
+    tipo_sugerido = ato.tipo_sugerido
     if ato.tipo == '':
         tipo_explicito = None
         tipo_sugerido = None
-    elif ato.tipo is not None and ato.tipo != (tipo_explicito or tipo_sugerido):
-        tipo_explicito = ato.tipo
 
     tipo_nome, divergencia, _origem = resolver_tipo(
         tipo_explicito, rotulo, tipo_sugerido,
@@ -541,7 +550,8 @@ def _importar_ato(
         # rodada 6) e vazio de verdade é None, não '' (#263 rodada 8).
         numero_lancamento=numero_lancamento or None,
         data=ato.data,
-        valor_transacao=ato.valor,
+        # valor_transacao não é importado (Tarefa C #322): o campo não
+        # existe no formulário de lançamento.
         area=ato.area,
         titulo=ato.titulo,
         forma=ato.forma,

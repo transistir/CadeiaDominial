@@ -12,7 +12,7 @@ from django.test.html import Element
 from django.utils import timezone
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
-from ia_ocr import estados, revisao, views
+from ia_ocr import estados, revisao, rotulos, services, views
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
 
@@ -56,6 +56,16 @@ class TelaRevisaoBase(TelaTextoBase):
     def _tela(self):
         return self.client.get(self.url('campos_job_ocr'))
 
+    @staticmethod
+    def _chaves_do_html(html):
+        return [
+            _atributos(card)['data-chave']
+            for card in _elementos(html, 'article', presentes=('data-campo',))
+        ]
+
+    def _chaves_na_tela(self):
+        return self._chaves_do_html(self._tela().content.decode())
+
 
 class RevisaoTelaTest(TelaRevisaoBase):
     def _botao_finalizar(self, resposta):
@@ -72,13 +82,15 @@ class RevisaoTelaTest(TelaRevisaoBase):
             )
             if _atributos(card)['data-chave'] == chave
         )
-        for tag in ('input', 'textarea'):
+        for tag in ('input', 'textarea', 'select'):
             elementos = _descendentes(card, tag, 'data-campo-valor')
             if not elementos:
                 continue
             elemento = elementos[0]
             if tag == 'input':
                 return _atributos(elemento).get('value', '')
+            if tag == 'select':
+                return _valor_do_select(elemento)
             return ''.join(
                 filho for filho in elemento.children if isinstance(filho, str)
             )
@@ -283,8 +295,16 @@ class RevisaoTelaTest(TelaRevisaoBase):
         self.assertContains(resposta, 'data-ocr-somente-leitura')
         self.assertIn('disabled', self._botao_finalizar(resposta))
         html = resposta.content.decode()
-        valores = re.findall(r'<(?:input|textarea)[^>]*data-campo-valor[^>]*>', html)
-        self.assertEqual(len(valores), extracao.campos.count())
+        valores = re.findall(
+            r'<(?:input|textarea|select)[^>]*data-campo-valor[^>]*>', html,
+        )
+        # Cards = linhas NÃO ignoradas (Tarefa C #322: extração antiga com
+        # valor_transacao salva não entra na tela nem na contagem).
+        cards_esperados = sum(
+            1 for campo in extracao.campos.all()
+            if not revisao.linha_ignorada(campo.chave)
+        )
+        self.assertEqual(len(valores), cards_esperados)
         for tag in valores:
             self.assertIn(' disabled', tag)
 
@@ -809,39 +829,47 @@ class RevisaoTelaTest(TelaRevisaoBase):
             'CPF ***', [_atributos(trecho)['title'] for trecho in trechos],
         )
 
-    def test_valor_transacao_opcional_vazio_salva_e_finaliza(self):
+    def test_valor_transacao_do_payload_nao_vira_card_e_finaliza(self):
+        """Tarefa C #322: o campo não existe no formulário de lançamento."""
         extracao = self._extracao(
             payload_registro(self.job.job_id), resolver=True,
         )
         self.assertEqual(revisao.pendencias(extracao), [])
-        chave = '/acts/0/valor_transacao'
-
-        salvar = self.client.post(
-            self.url('salvar_bloco_ocr'),
-            data=json.dumps({
-                'versao': self._tela().context['versao'],
-                'decisoes': [{
-                    'chave': chave, 'incluir': True, 'valor': '',
-                }],
-            }),
-            content_type='application/json',
+        self.assertNotIn(
+            '/acts/0/valor_transacao', self._chaves_na_tela(),
         )
-
-        self.assertEqual(salvar.status_code, 200, salvar.content)
-        self.assertEqual(
-            extracao.campos.get(chave=chave).valor_final, '',
-        )
-        self.assertFalse(any(
-            pendencia['chave'] == chave
-            for pendencia in revisao.pendencias(extracao)
-        ))
 
         finalizar = self.client.post(
             self.url('finalizar_revisao_ocr'),
-            data=json.dumps({'versao': salvar.json()['versao']}),
+            data=json.dumps({'versao': self._tela().context['versao']}),
             content_type='application/json',
         )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
 
+    def test_linha_antiga_de_valor_transacao_nao_aparece_na_tela(self):
+        """Tarefa C #322: extração antiga com a linha salva — sem card."""
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 150.000,00',
+            normalized='150000.00',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        self.assertNotIn(
+            '/acts/0/valor_transacao', self._chaves_na_tela(),
+        )
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
         self.assertEqual(finalizar.status_code, 200, finalizar.content)
 
     def test_obrigatorio_vazio_continua_bloqueando_finalizacao(self):
@@ -930,7 +958,8 @@ class RevisaoTelaTest(TelaRevisaoBase):
         extracao = self._extracao(
             payload_registro(self.job.job_id), resolver=True,
         )
-        for chave in ('/acts/0/valor_transacao', '/acts/0/area'):
+        # Tarefa C #322: valor_transacao não é mais linha de revisão.
+        for chave in ('/acts/0/area',):
             with self.subTest(chave=chave):
                 salvar = self.client.post(
                     self.url('salvar_bloco_ocr'),
@@ -1044,6 +1073,271 @@ class RevisaoTelaTest(TelaRevisaoBase):
         self.assertIn('redirect', finalizar.json())
 
 
+class TipoSugeridoSelectTest(TelaRevisaoBase):
+    """Tarefa B (#322/PR #327): o card do tipo é <select>, como o formulário.
+
+    As opções DESENHADAS e o enum ACEITO no save vêm da MESMA fonte — o
+    contrato A3 (``rotulos.TIPOS_SUGERIDOS``; revisão Opus, MUST-FIX #322).
+    O rótulo de exibição vem do cadastro (``LancamentoTipo``) quando a
+    linha existe e de ``TIPO_CHOICES`` quando não vem; valor efetivo fora
+    do enum ganha opção extra selecionada em vez de cair na vazia. Valor
+    fora do enum enviado no POST continua sendo recusado com 422.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Produção tem as 3 linhas de LancamentoTipo; a suíte não semeia.
+        for tipo in ('averbacao', 'registro', 'inicio_matricula'):
+            LancamentoTipo.objects.get_or_create(tipo=tipo)
+
+    def _card(self, html):
+        achado = re.search(
+            r'<article[^>]*data-chave="/acts/0/tipo_sugerido".*?</article>',
+            html, re.S,
+        )
+        self.assertIsNotNone(achado)
+        return achado.group(0)
+
+    def _tag_select(self, html):
+        tags = [
+            tag for tag in re.findall(r'<select[^>]*>', self._card(html))
+            if 'data-campo-valor' in tag
+        ]
+        self.assertEqual(len(tags), 1, tags)
+        return tags[0]
+
+    def _salvar_tipo(self, decisao):
+        return self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/tipo_sugerido', 'incluir': True,
+                    **decisao,
+                }],
+            }),
+            content_type='application/json',
+        )
+
+    def test_card_do_tipo_e_select_com_as_opcoes_do_contrato(self):
+        self._extracao()
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('data-tipo="enum"', self._tag_select(html))
+        self.assertIn('<option value=""></option>', card)
+        # Uma opção por código do contrato, com o display do cadastro.
+        for codigo in rotulos.TIPOS_SUGERIDOS:
+            self.assertIn(f'<option value="{codigo}"', card)
+        for _codigo, display in LancamentoTipo.TIPO_CHOICES:
+            self.assertIn(f'>{display}</option>', card)
+        # Selecionado = valor_final, senão normalized ('averbacao' aqui).
+        self.assertIn('<option value="averbacao" selected>', card)
+        # O select é o único editor da chave: nada de input de texto.
+        self.assertIsNone(re.search(r'<input[^>]*type="text"', card))
+        self.assertNotIn('<textarea', card)
+
+    def test_post_cada_opcao_desenhada_e_aceito(self):
+        # MUST-FIX (revisão Opus): nenhum valor que o select oferece pode
+        # dar 422 — opções e enum vêm da mesma fonte.
+        extracao = self._extracao()
+
+        for codigo in rotulos.TIPOS_SUGERIDOS:
+            with self.subTest(codigo=codigo):
+                salvar = self._salvar_tipo(
+                    {'conferido': True, 'valor': codigo},
+                )
+                self.assertEqual(salvar.status_code, 200, salvar.content)
+                campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+                self.assertEqual(
+                    campo.valor_final if campo.valor_final is not None
+                    else campo.normalized,
+                    codigo,
+                )
+
+    def test_normalizado_sem_linha_no_cadastro_nao_perde_o_valor(self):
+        # MUST-FIX (revisão Opus): 'inicio_matricula' está no contrato mas
+        # sem linha no cadastro — antes, nenhuma opção era marcada, o
+        # navegador enviava a vazia e o save apagava a sugestão. Agora a
+        # opção sai de TIPO_CHOICES, selecionada, e o valor sobrevive.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            normalized='inicio_matricula',
+        )
+        LancamentoTipo.objects.filter(tipo='inicio_matricula').delete()
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+        self.assertIn('<option value="inicio_matricula" selected>', card)
+        self.assertIn('>Início de Matrícula</option>', card)
+
+        salvar = self._salvar_tipo(
+            {'conferido': True, 'valor': 'inicio_matricula'},
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        # O design envia o MESMO valor do normalized: valor_final fica None
+        # por desenho e a decisão vive em escolha_explicita.
+        self.assertIsNone(campo.valor_final)
+        self.assertTrue(campo.escolha_explicita)
+        self.assertEqual(
+            campo.valor_final if campo.valor_final is not None
+            else campo.normalized,
+            'inicio_matricula',
+        )
+
+        # Save seguinte conferindo sem valor: o efetivo permanece.
+        salvar = self._salvar_tipo({'conferido': True})
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertEqual(
+            campo.valor_final if campo.valor_final is not None
+            else campo.normalized,
+            'inicio_matricula',
+        )
+
+    def test_select_seleciona_valor_final_revisado(self):
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='registro', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+
+        self.assertIn('<option value="registro" selected>', self._card(html))
+        self.assertNotIn(
+            '<option value="averbacao" selected>', self._card(html),
+        )
+
+    def test_somente_leitura_desabilita_o_select(self):
+        extracao = self._extracao()
+        ExtracaoSugerida.objects.filter(pk=extracao.pk).update(
+            finalizada_em=timezone.now(), finalizada_por=self.dono,
+        )
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.REVISADO)
+
+        html = self._tela().content.decode()
+
+        self.assertIn(' disabled', self._tag_select(html))
+
+    def test_post_registro_diferente_salva_valor_final(self):
+        # SHOULD-FIX (revisão Opus): o POST com valor DIFERENTE do
+        # normalized prova o salvamento — o sugerido aqui é 'averbacao'.
+        extracao = self._extracao()
+
+        salvar = self._salvar_tipo({'conferido': True, 'valor': 'registro'})
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertEqual(campo.valor_final, 'registro')
+        self.assertEqual(campo.status_revisao, 'editado')
+        self.assertTrue(campo.escolha_explicita)
+
+    def test_post_mesmo_valor_marca_escolha_explicita(self):
+        # Caso separado (SHOULD-FIX, revisão Opus): valor IGUAL ao sugerido
+        # deixa o ``valor_final`` nulo, mas a flag marca que o revisor
+        # passou pelo card — e é ela que vence o rótulo na importação.
+        extracao = self._extracao()
+
+        salvar = self._salvar_tipo({'conferido': True, 'valor': 'averbacao'})
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'aceito')
+        self.assertTrue(campo.escolha_explicita)
+
+    def test_post_fora_do_enum_e_422_sem_gravar(self):
+        extracao = self._extracao()
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/tipo_sugerido',
+                    'incluir': True, 'conferido': True,
+                    'valor': 'compra_e_venda',
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'valor_invalido')
+        self.assertEqual(salvar.json()['chave'], '/acts/0/tipo_sugerido')
+        # Sem refresh redundante: ``campos.get`` relê do banco (nit revisão).
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertEqual(campo.normalized, 'averbacao')
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'sugerido')
+
+
+class LinhaIgnoradaSaveTest(TelaRevisaoBase):
+    """Tarefa C #322 (revisão Opus): decisão sobre linha ignorada não é 500.
+
+    Extração antiga já salvou ``/acts/0/valor_transacao``; a folha não tem
+    mais destino (Tarefa C). Aba aberta antes do deploy pode reenviar o
+    card: o save recusa com 422 ``linha_inexistente``, sem gravar nada — e
+    o token da tela segue valendo para salvar OUTRO card (o token cobre
+    todas as linhas, inclusive a ignorada).
+    """
+
+    def _extracao_antiga(self):
+        extracao = self._extracao()
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 150.000,00',
+            normalized='150000.00',
+            tipo_valor='decimal',
+            status_revisao='aceito',
+        )
+        return extracao
+
+    def test_post_na_linha_ignorada_e_422_sem_gravar(self):
+        extracao = self._extracao_antiga()
+        versao = self._tela().context['versao']
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': versao,
+                'decisoes': [{
+                    'chave': '/acts/0/valor_transacao',
+                    'incluir': True, 'conferido': True, 'valor': '150000.00',
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'linha_inexistente')
+        campo = extracao.campos.get(chave='/acts/0/valor_transacao')
+        self.assertIsNone(campo.valor_final)
+        # Nada foi gravado: o token da tela continua sendo o vigente.
+        self.assertEqual(services.versao_bloco(extracao), versao)
+
+    def test_salvar_outro_card_com_o_token_da_tela_e_200(self):
+        self._extracao_antiga()
+        versao = self._tela().context['versao']
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': versao,
+                'decisoes': [{
+                    'chave': '/document/numero',
+                    'incluir': True, 'conferido': True,
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+
+
 def _descendentes(no, nome_tag, atributo):
     """Elementos `nome_tag` com `atributo` na subárvore de `no`."""
     achados = []
@@ -1056,6 +1350,18 @@ def _descendentes(no, nome_tag, atributo):
     return achados
 
 
+def _valor_do_select(select):
+    """O que o navegador enviaria: a opção selected, senão a primeira."""
+    opcoes = _descendentes(select, 'option', 'value')
+    selecionadas = [
+        opcao for opcao in opcoes if 'selected' in _atributos(opcao)
+    ]
+    escolhida = (selecionadas or opcoes or [None])[0]
+    if escolhida is None:
+        return ''
+    return _atributos(escolhida).get('value', '')
+
+
 def _decisao_do_card(card):
     """A decisão que o ocr_revisao.js mandaria com o card conferido.
 
@@ -1064,12 +1370,18 @@ def _decisao_do_card(card):
     nenhuma vem selecionada, ou criar novo quando não há candidata.
     """
     valor = None
-    for tag in ('input', 'textarea'):
+    for tag in ('input', 'textarea', 'select'):
         for elemento in _descendentes(card, tag, 'data-campo-valor'):
             atributos = _atributos(elemento)
-            valor = atributos.get('value') if tag == 'input' else ''.join(
-                filho for filho in elemento.children if isinstance(filho, str)
-            )
+            if tag == 'input':
+                valor = atributos.get('value')
+            elif tag == 'select':
+                valor = _valor_do_select(elemento)
+            else:
+                valor = ''.join(
+                    filho for filho in elemento.children
+                    if isinstance(filho, str)
+                )
             tipo = atributos['data-tipo']
     if not valor:
         return None

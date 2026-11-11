@@ -64,6 +64,26 @@ _OBRIGATORIOS_DOCUMENTO = ('tipo', 'data', 'cartorio')
 _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
 _CHAVE_OBRIGATORIA_ATO = re.compile(r'/acts/\d+/(.+)')
 
+# Tarefa C (#322/PR #327, decisão 11/11): o formulário de lançamento manda —
+# ``valor_transacao`` não existe nele, então não existe na revisão nem na
+# importação. O schema A3 do Umbelino (v1.1) continua mandando a folha; o
+# payload segue com ela, mas nenhuma linha é criada (payload novo) e linhas
+# antigas já salvas são ignoradas na leitura (_contexto_revisao) e na tela.
+LINHAS_IGNORADAS = frozenset({'valor_transacao'})
+
+# Revisão Opus (nit #322): o nome só ignora a FOLHA do A3 —
+# ``/acts/N/valor_transacao`` (e o ponteiro de padrão ``/acts/*/…`` que a
+# cobertura §25 compara) —, não qualquer folha homônima em outra
+# profundidade (``/document/valor_transacao``, ``/acts/0/partes/0/…``).
+_LINHA_IGNORADA = re.compile(r'/acts/(?:\d+|\*)/valor_transacao')
+
+
+def linha_ignorada(chave) -> bool:
+    """A chave é exatamente a folha ignorada (índice real ou padrão ``*``)."""
+    return isinstance(chave, str) and bool(
+        _LINHA_IGNORADA.fullmatch(chave)
+    )
+
 _TIPOS_NORMALIZAVEIS = ('data', 'decimal', 'area')
 
 _AREA_DE_ATO = re.compile(r'/acts/\d+/area')
@@ -114,8 +134,6 @@ class AtoRevisado:
     tipo: str
     numero_lancamento: str | None
     data: date
-    valor: Decimal | None
-    moeda_historica: str | None
     area: Decimal | None
     titulo: str | None
     forma: str | None
@@ -231,7 +249,6 @@ def dados_revisados(extracao) -> DadosRevisados:
         chave = ato.chave
         indice = int(chave.rsplit('/', 1)[1])
         metadados = atos_payload[indice] if indice < len(atos_payload) else {}
-        dinheiro = metadados.get('valor_transacao') or {}
         origem_cartorio_id = cartorio_id(f'{chave}/origem/cartorio')
         origem = None
         if origem_cartorio_id is not None or any(
@@ -274,13 +291,9 @@ def dados_revisados(extracao) -> DadosRevisados:
             ))
 
         campo_tipo = linhas.get(f'{chave}/tipo_sugerido')
-        tipo_exp = (
-            campo_tipo.valor_final
-            if campo_tipo is not None
-            and campo_tipo.status_revisao != 'descartado'
-            and campo_tipo.valor_final
-            else None
-        )
+        # P1 (#322/PR #327): a escolha explícita vem da regra única — o
+        # confirmado (flag) vale mesmo com o ``valor_final`` nulo.
+        tipo_exp = _valor_explicito(campo_tipo)
         tipo_sug = (
             campo_tipo.normalized
             if campo_tipo is not None
@@ -293,11 +306,6 @@ def dados_revisados(extracao) -> DadosRevisados:
             tipo=valor(f'{chave}/tipo_sugerido') or tipo_resolvido,
             numero_lancamento=valor(f'{chave}/numero_lancamento'),
             data=valor(f'{chave}/data'),
-            valor=valor(f'{chave}/valor_transacao'),
-            moeda_historica=(
-                dinheiro.get('moeda_historica')
-                if f'{chave}/valor_transacao' in linhas else None
-            ),
             area=valor(f'{chave}/area'),
             titulo=valor(f'{chave}/titulo'),
             forma=valor(f'{chave}/forma'),
@@ -335,6 +343,7 @@ def versao_linha(campo) -> str:
     estado = [
         campo.status_revisao,
         campo.valor_final,
+        campo.escolha_explicita,
         campo.motivos_revisao,
         campo.pessoa_escolhida_id,
         campo.cartorio_escolhido_id,
@@ -455,6 +464,13 @@ def aplicar_linha(
             campo.valor_final = None
             campo.status_revisao = 'aceito' if conferido else 'sugerido'
 
+    if incluir and (valor is not None or conferido):
+        # P1 (#322/PR #327): decisão com valor enviado — mesmo IGUAL ao
+        # sugerido, caso em que o ``valor_final`` fica nulo — ou conferida
+        # marca que o revisor passou pelo card. Descartar e reincluir sem
+        # valor não mudam a flag: a escolha anterior continua valendo.
+        campo.escolha_explicita = True
+
     if escolha is not None:
         for nome in campos_escolha:
             if nome in escolha:
@@ -476,6 +492,24 @@ def aplicar_linha(
 
 def _valor_efetivo(campo):
     return campo.valor_final if campo.valor_final is not None else campo.normalized
+
+
+def _valor_explicito(campo):
+    """Valor que o revisor ESCOLHEU de fato, ou None (P1 #322/PR #327).
+
+    Linha descartada não decide; com edição, o ``valor_final``; com o
+    sugerido CONFIRMADO (``escolha_explicita``, mesmo com o ``valor_final``
+    nulo que a confirmação deixa), o ``normalized``; sem decisão nenhuma,
+    None. Fonte única da precedência do tipo — ``tipo_explicito`` do
+    ``dados_revisados`` e de ``_tipos_efetivos``.
+    """
+    if campo is None or campo.status_revisao == 'descartado':
+        return None
+    if campo.valor_final is not None:
+        return campo.valor_final
+    if campo.escolha_explicita:
+        return campo.normalized
+    return None
 
 
 def rotulo_efetivo(chave, linhas):
@@ -564,10 +598,17 @@ def identidade_parte(chave, linhas):
 
 
 def _contexto_revisao(extracao):
-    """Indexa as linhas incluídas, respeitando o descarte dos ancestrais."""
+    """Indexa as linhas incluídas, respeitando o descarte dos ancestrais.
+
+    Linhas com nome em ``LINHAS_IGNORADAS`` (extrações antigas já salvaram
+    ``valor_transacao``) não entram: nem ``dados_revisados``, nem
+    ``pendencias``, nem a importação as veem.
+    """
     por_chave = {campo.chave: campo for campo in extracao.campos.all()}
     incluidas = {}
     for chave, campo in por_chave.items():
+        if linha_ignorada(chave):
+            continue
         ancestral = chave
         while ancestral:
             linha = por_chave.get(ancestral)
@@ -595,7 +636,9 @@ def _tipos_efetivos(linhas, atos):
     """Tipo efetivo de cada ato segundo a precedência (#322 rodada 7).
 
     A escolha EXPLÍCITA do usuário não pode ser sobrescrita pelo rótulo:
-    1. /acts/N/tipo_sugerido com valor_final preenchido (não descartado);
+    1. /acts/N/tipo_sugerido com escolha do revisor (``_valor_explicito`` —
+       edição em ``valor_final`` ou sugestão confirmada na flag, P1 da
+       #322/PR #327);
     2. Rótulo efetivo com prefixo R/Av (valor_final -> normalized -> raw);
     3. /acts/N/tipo_sugerido normalizado.
 
@@ -606,13 +649,7 @@ def _tipos_efetivos(linhas, atos):
     for ato in atos:
         chave_tipo = f'{ato.chave}/tipo_sugerido'
         campo_tipo = linhas.get(chave_tipo)
-        tipo_explicito = (
-            campo_tipo.valor_final
-            if campo_tipo is not None
-            and campo_tipo.status_revisao != 'descartado'
-            and campo_tipo.valor_final
-            else None
-        )
+        tipo_explicito = _valor_explicito(campo_tipo)
         rotulo_txt = rotulo_efetivo(ato.chave, linhas)
         tipo_sug = (
             campo_tipo.normalized
@@ -1036,7 +1073,13 @@ def _eh_folha(no):
 
 
 def _folhas(extracao, ponteiro, no, texto_paginas):
-    """Recursão genérica: uma linha por folha editável do ramo."""
+    """Recursão genérica: uma linha por folha editável do ramo.
+
+    Folhas com nome em ``LINHAS_IGNORADAS`` não viram linha — nem no payload
+    novo, nem na re-extração.
+    """
+    if linha_ignorada(ponteiro):
+        return []
     if _eh_folha(no):
         return [_de_campo(extracao, ponteiro, no, texto_paginas)]
     if isinstance(no, dict):
