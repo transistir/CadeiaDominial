@@ -113,7 +113,22 @@
                 </p>
                 {% endif %}
 
-                {% if campo.tipo_valor == 'texto' %}
+                {% if campo.eh_tipo_sugerido %}
+                {# Tarefa B #322: tipo é <select>, como no formulário de lançamento. As opções e o enum aceito no save vêm da MESMA fonte (rotulos.TIPOS_SUGERIDOS); valor efetivo fora delas ganha opção extra selecionada em vez de cair na vazia e apagar a sugestão no save seguinte (revisão Opus). #}
+                <select id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
+                        class="form-select campo-valor"
+                        data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>
+                    <option value=""></option>
+                    {% with atual=campo.valor_final|default_if_none:campo.normalized %}
+                    {% for opcao in opcoes_tipo_sugerido %}
+                    <option value="{{ opcao.codigo }}"{% if opcao.codigo == atual %} selected{% endif %}>{{ opcao.display }}</option>
+                    {% endfor %}
+                    {% if atual and not atual in codigos_tipo_sugerido %}
+                    <option value="{{ atual }}" selected>{{ atual }}</option>
+                    {% endif %}
+                    {% endwith %}
+                </select>
+                {% elif campo.tipo_valor == 'texto' %}
                 <textarea id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
                           class="form-control campo-valor" rows="3"
                           data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>

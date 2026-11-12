@@ -431,6 +431,11 @@ class CampoSugerido(models.Model):
         max_length=20, choices=STATUS_REVISAO_CHOICES, default='sugerido'
     )
     valor_final = models.TextField(null=True, blank=True)
+    # Separa "qual é o valor" (``valor_final``) de "o revisor ESCOLHEU esse
+    # valor": conferir/reenviar o mesmo valor do OCR limpa o ``valor_final``
+    # (canonico == normalized) sem apagar a decisão — a precedência do tipo
+    # (#322) precisa enxergar a escolha explícita mesmo com o valor nulo.
+    escolha_explicita = models.BooleanField(default=False)
     revisado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

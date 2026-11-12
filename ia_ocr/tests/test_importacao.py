@@ -155,7 +155,9 @@ class CaminhoFelizTest(ImportacaoBase):
         self.assertEqual(lancamento.documento, self.documento)
         self.assertEqual(lancamento.tipo, self.tipo_registro)
         self.assertEqual(lancamento.data, date(2020, 2, 15))
-        self.assertEqual(lancamento.valor_transacao, Decimal('150000.00'))
+        # Tarefa C #322: valor_transacao não existe no formulário de
+        # lançamento — não é importado, mesmo vindo no payload do A3.
+        self.assertIsNone(lancamento.valor_transacao)
         self.assertEqual(lancamento.area, Decimal('12.50'))
         # 2 transmitentes + 1 adquirente: a parte sem identificação é só
         # sugestão (requer_revisao falso) e ainda assim entra — a finalização
@@ -190,6 +192,31 @@ class CaminhoFelizTest(ImportacaoBase):
         self.assertEqual(linha['status'], 'criado')
         self.assertEqual(linha['lancamento_id'], lancamento.pk)
         self.assertEqual(linha['url'], self.url_lancamento(lancamento))
+
+    def test_linha_antiga_de_valor_transacao_e_ignorada(self):
+        """Tarefa C #322: extração antiga salva com a linha importa sem erro.
+
+        SHOULD-FIX (revisão Opus): a linha antiga é uma que BLOQUEARIA sem o
+        filtro — pendente com ``requer_revisao=True`` viraria
+        ``revisao_pendente`` e ``dados_revisados`` recusaria a extração.
+        """
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 150.000,00',
+            normalized='150000.00',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        (lancamento,) = Lancamento.objects.all()
+        self.assertIsNone(lancamento.valor_transacao)
+        self.assertEqual(lancamento.area, Decimal('12.50'))
 
 
 class VinculoOrigemTest(ImportacaoBase):
@@ -241,6 +268,9 @@ class VinculoOrigemTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         extracao = self._extracao(payload)
 
         self._importar(extracao)
@@ -352,14 +382,17 @@ class DuplicidadeTest(ImportacaoBase):
         self.assertEqual(Lancamento.objects.count(), 1)
 
     def test_numero_da_gravacao_e_strip(self):
-        # O valor PERSISTIDO também é o strip: grava 'R-1', nunca ' R-1 '.
+        # #322 rodada 3 (P1-1): o valor PERSISTIDO é o composto canônico do
+        # V1 — ' R-1 ' grava 'R1 {sigla}', nunca o carimbo inteiro; as
+        # bordas seguem removidas (rodada 6).
         self._novo_job_com_extracao(' R-1 ')
 
         resultado = self._importar(self.extracao)
 
         self.assertTrue(resultado['ok'])
         self.assertEqual(
-            Lancamento.objects.get().numero_lancamento, 'R-1',
+            Lancamento.objects.get().numero_lancamento,
+            f'R1 {self.documento.numero}',
         )
 
     def test_numero_somente_espacos_grava_none(self):
@@ -1244,6 +1277,9 @@ class DocumentoOrigemAuditadoTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         extracao = self._extracao(payload)
 
         self._importar(extracao)
@@ -1268,6 +1304,9 @@ class DocumentoOrigemAuditadoTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         extracao = self._extracao(payload)
         processar = LancamentoOrigemService.processar_origens_automaticas
         alheios = []
@@ -1579,15 +1618,16 @@ class ImportacaoXCadastroManualPostgresTest(
 
     def test_cadastro_manual_espera_a_importacao_e_recusa_o_mesmo_numero(self):
         payload = payload_registro(self.job.job_id)
-        # Mesmo texto do número que o cadastro manual gera (a normalização
-        # entre ``R-1`` e ``R1 M42`` é assunto de outra issue).
+        # O importador compõe 'R{numero} {documento.numero}' (#322 rodada
+        # 3); o manual compõe com a sigla do POST — aqui a do documento, para
+        # os dois fluxos disputarem o MESMO número.
         payload['acts'][0]['numero_lancamento'] = self._campo(
-            'R1 M42', 'R-1/42.718',
+            'R-1', 'R-1/42.718',
         )
         extracao = self._extracao(payload)
-        request = RequestFactory().post(
-            '/lancamento/criar/', _post_cadastro_manual(self.tipo_registro),
-        )
+        post = _post_cadastro_manual(self.tipo_registro)
+        post['sigla_matricula'] = self.documento.numero
+        request = RequestFactory().post('/lancamento/criar/', post)
         request.user = self.usuario
         resultado = {}
         importacao = self._importacao_segurando_a_trava(extracao, resultado)
@@ -1613,7 +1653,10 @@ class ImportacaoXCadastroManualPostgresTest(
         self.assertEqual(resultado['manual'][0], 'ok', resultado['manual'])
         lancamento, mensagem = resultado['manual'][1]
         self.assertIsNone(lancamento)
-        self.assertIn('Já existe um lançamento com o número "R1 M42"', mensagem)
+        self.assertIn(
+            f'Já existe um lançamento com o número "R1 {self.documento.numero}"',
+            mensagem,
+        )
         self.assertEqual(
             Lancamento.objects.filter(documento=self.documento).count(), 1,
         )
@@ -2100,6 +2143,9 @@ class OrigemPontuadaTest(ImportacaoBase):
         payload['acts'][0]['tipo_sugerido'] = self._campo(
             'inicio_matricula', 'R-1/42.718',
         )
+        # Rótulo de MATRÍCULA: com o rótulo prevalecendo (#322 rodada 3),
+        # o 'R-1' do payload-base faria o ato virar registro.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
         payload['acts'][0]['origem']['numero'] = self._campo(
             numero, '42.718',
         )
