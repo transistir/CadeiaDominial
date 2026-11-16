@@ -12,7 +12,7 @@ from django.test.html import Element
 from django.utils import timezone
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
-from ia_ocr import estados, revisao, views
+from ia_ocr import estados, revisao, rotulos, services, views
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
 
@@ -56,6 +56,16 @@ class TelaRevisaoBase(TelaTextoBase):
     def _tela(self):
         return self.client.get(self.url('campos_job_ocr'))
 
+    @staticmethod
+    def _chaves_do_html(html):
+        return [
+            _atributos(card)['data-chave']
+            for card in _elementos(html, 'article', presentes=('data-campo',))
+        ]
+
+    def _chaves_na_tela(self):
+        return self._chaves_do_html(self._tela().content.decode())
+
 
 class RevisaoTelaTest(TelaRevisaoBase):
     def _botao_finalizar(self, resposta):
@@ -72,13 +82,15 @@ class RevisaoTelaTest(TelaRevisaoBase):
             )
             if _atributos(card)['data-chave'] == chave
         )
-        for tag in ('input', 'textarea'):
+        for tag in ('input', 'textarea', 'select'):
             elementos = _descendentes(card, tag, 'data-campo-valor')
             if not elementos:
                 continue
             elemento = elementos[0]
             if tag == 'input':
                 return _atributos(elemento).get('value', '')
+            if tag == 'select':
+                return _valor_do_select(elemento)
             return ''.join(
                 filho for filho in elemento.children if isinstance(filho, str)
             )
@@ -283,8 +295,16 @@ class RevisaoTelaTest(TelaRevisaoBase):
         self.assertContains(resposta, 'data-ocr-somente-leitura')
         self.assertIn('disabled', self._botao_finalizar(resposta))
         html = resposta.content.decode()
-        valores = re.findall(r'<(?:input|textarea)[^>]*data-campo-valor[^>]*>', html)
-        self.assertEqual(len(valores), extracao.campos.count())
+        valores = re.findall(
+            r'<(?:input|textarea|select)[^>]*data-campo-valor[^>]*>', html,
+        )
+        # Cards = linhas NÃO ignoradas (Tarefa C #322: extração antiga com
+        # valor_transacao salva não entra na tela nem na contagem).
+        cards_esperados = sum(
+            1 for campo in extracao.campos.all()
+            if not revisao.linha_ignorada(campo.chave)
+        )
+        self.assertEqual(len(valores), cards_esperados)
         for tag in valores:
             self.assertIn(' disabled', tag)
 
@@ -809,39 +829,47 @@ class RevisaoTelaTest(TelaRevisaoBase):
             'CPF ***', [_atributos(trecho)['title'] for trecho in trechos],
         )
 
-    def test_valor_transacao_opcional_vazio_salva_e_finaliza(self):
+    def test_valor_transacao_do_payload_nao_vira_card_e_finaliza(self):
+        """Tarefa C #322: o campo não existe no formulário de lançamento."""
         extracao = self._extracao(
             payload_registro(self.job.job_id), resolver=True,
         )
         self.assertEqual(revisao.pendencias(extracao), [])
-        chave = '/acts/0/valor_transacao'
-
-        salvar = self.client.post(
-            self.url('salvar_bloco_ocr'),
-            data=json.dumps({
-                'versao': self._tela().context['versao'],
-                'decisoes': [{
-                    'chave': chave, 'incluir': True, 'valor': '',
-                }],
-            }),
-            content_type='application/json',
+        self.assertNotIn(
+            '/acts/0/valor_transacao', self._chaves_na_tela(),
         )
-
-        self.assertEqual(salvar.status_code, 200, salvar.content)
-        self.assertEqual(
-            extracao.campos.get(chave=chave).valor_final, '',
-        )
-        self.assertFalse(any(
-            pendencia['chave'] == chave
-            for pendencia in revisao.pendencias(extracao)
-        ))
 
         finalizar = self.client.post(
             self.url('finalizar_revisao_ocr'),
-            data=json.dumps({'versao': salvar.json()['versao']}),
+            data=json.dumps({'versao': self._tela().context['versao']}),
             content_type='application/json',
         )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
 
+    def test_linha_antiga_de_valor_transacao_nao_aparece_na_tela(self):
+        """Tarefa C #322: extração antiga com a linha salva — sem card."""
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 150.000,00',
+            normalized='150000.00',
+            tipo_valor='decimal',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        self.assertNotIn(
+            '/acts/0/valor_transacao', self._chaves_na_tela(),
+        )
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
         self.assertEqual(finalizar.status_code, 200, finalizar.content)
 
     def test_obrigatorio_vazio_continua_bloqueando_finalizacao(self):
@@ -930,7 +958,8 @@ class RevisaoTelaTest(TelaRevisaoBase):
         extracao = self._extracao(
             payload_registro(self.job.job_id), resolver=True,
         )
-        for chave in ('/acts/0/valor_transacao', '/acts/0/area'):
+        # Tarefa C #322: valor_transacao não é mais linha de revisão.
+        for chave in ('/acts/0/area',):
             with self.subTest(chave=chave):
                 salvar = self.client.post(
                     self.url('salvar_bloco_ocr'),
@@ -1044,6 +1073,480 @@ class RevisaoTelaTest(TelaRevisaoBase):
         self.assertIn('redirect', finalizar.json())
 
 
+class TipoSugeridoSelectTest(TelaRevisaoBase):
+    """Tarefa B (#322/PR #327): o card do tipo é <select>, como o formulário.
+
+    As opções DESENHADAS e o enum ACEITO no save vêm da MESMA fonte — o
+    contrato A3 (``rotulos.TIPOS_SUGERIDOS``; revisão Opus, MUST-FIX #322).
+    O rótulo de exibição vem do cadastro (``LancamentoTipo``) quando a
+    linha existe e de ``TIPO_CHOICES`` quando não vem; valor efetivo fora
+    do enum ganha opção extra selecionada em vez de cair na vazia. Valor
+    fora do enum enviado no POST continua sendo recusado com 422.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Produção tem as 3 linhas de LancamentoTipo; a suíte não semeia.
+        for tipo in ('averbacao', 'registro', 'inicio_matricula'):
+            LancamentoTipo.objects.get_or_create(tipo=tipo)
+
+    def _card(self, html):
+        achado = re.search(
+            r'<article[^>]*data-chave="/acts/0/tipo_sugerido".*?</article>',
+            html, re.S,
+        )
+        self.assertIsNotNone(achado)
+        return achado.group(0)
+
+    def _tag_select(self, html):
+        tags = [
+            tag for tag in re.findall(r'<select[^>]*>', self._card(html))
+            if 'data-campo-valor' in tag
+        ]
+        self.assertEqual(len(tags), 1, tags)
+        return tags[0]
+
+    def _salvar_tipo(self, decisao):
+        return self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/tipo_sugerido', 'incluir': True,
+                    **decisao,
+                }],
+            }),
+            content_type='application/json',
+        )
+
+    def test_card_do_tipo_e_select_com_as_opcoes_do_contrato(self):
+        self._extracao()
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('data-tipo="enum"', self._tag_select(html))
+        self.assertIn('<option value=""></option>', card)
+        # Uma opção por código do contrato, com o display do cadastro.
+        for codigo in rotulos.TIPOS_SUGERIDOS:
+            self.assertIn(f'<option value="{codigo}"', card)
+        for _codigo, display in LancamentoTipo.TIPO_CHOICES:
+            self.assertIn(f'>{display}</option>', card)
+        # Selecionado = tipo_exibido da view (aqui o rótulo 'Av-1' resolve
+        # 'averbacao', concordando com a sugestão).
+        self.assertIn('<option value="averbacao" selected>', card)
+        # O select é o único editor da chave: nada de input de texto.
+        self.assertIsNone(re.search(r'<input[^>]*type="text"', card))
+        self.assertNotIn('<textarea', card)
+
+    def test_post_cada_opcao_desenhada_e_aceito(self):
+        # MUST-FIX (revisão Opus): nenhum valor que o select oferece pode
+        # dar 422 — opções e enum vêm da mesma fonte.
+        extracao = self._extracao()
+
+        for codigo in rotulos.TIPOS_SUGERIDOS:
+            with self.subTest(codigo=codigo):
+                salvar = self._salvar_tipo(
+                    {'conferido': True, 'valor': codigo},
+                )
+                self.assertEqual(salvar.status_code, 200, salvar.content)
+                campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+                self.assertEqual(
+                    campo.valor_final if campo.valor_final is not None
+                    else campo.normalized,
+                    codigo,
+                )
+
+    def test_normalizado_sem_linha_no_cadastro_nao_perde_o_valor(self):
+        # MUST-FIX (revisão Opus): 'inicio_matricula' está no contrato mas
+        # sem linha no cadastro — antes, nenhuma opção era marcada, o
+        # navegador enviava a vazia e o save apagava a sugestão. Agora a
+        # opção sai de TIPO_CHOICES, selecionada, e o valor sobrevive.
+        # P2-2 (#322/PR #327): com o tipo exibido resolvido pelo ato, o
+        # rótulo 'Av-1' é neutralizado para a SUGESTÃO decidir — senão o
+        # card mostraria 'averbacao' (o que a importação usaria) em vez
+        # da sugestão 'inicio_matricula' que este teste exercita.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            normalized='inicio_matricula',
+        )
+        extracao.campos.filter(
+            chave__in=('/acts/0', '/acts/0/rotulo'),
+        ).update(normalized=None, raw=None, valor_final=None)
+        LancamentoTipo.objects.filter(tipo='inicio_matricula').delete()
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+        self.assertIn('<option value="inicio_matricula" selected>', card)
+        self.assertIn('>Início de Matrícula</option>', card)
+
+        salvar = self._salvar_tipo(
+            {'conferido': True, 'valor': 'inicio_matricula'},
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        # O design envia o MESMO valor do normalized: valor_final fica None
+        # por desenho e a decisão vive em escolha_explicita.
+        self.assertIsNone(campo.valor_final)
+        self.assertTrue(campo.escolha_explicita)
+        self.assertEqual(
+            campo.valor_final if campo.valor_final is not None
+            else campo.normalized,
+            'inicio_matricula',
+        )
+
+        # Save seguinte conferindo sem valor: o efetivo permanece.
+        salvar = self._salvar_tipo({'conferido': True})
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertEqual(
+            campo.valor_final if campo.valor_final is not None
+            else campo.normalized,
+            'inicio_matricula',
+        )
+
+    def test_select_seleciona_valor_final_revisado(self):
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='registro', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+
+        self.assertIn('<option value="registro" selected>', self._card(html))
+        self.assertNotIn(
+            '<option value="averbacao" selected>', self._card(html),
+        )
+
+    def test_select_mostra_o_tipo_resolvido_do_ato(self):
+        # P2-2 (#322/PR #327): rótulo 'Av-5' × sugestão 'registro' sem
+        # decisão do revisor — o card mostra o MESMO tipo que pendências,
+        # prévia e importação resolvem (o rótulo vence), não o normalized
+        # cru: o card não pode exibir um tipo e a importação usar outro.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        self._extracao(payload)
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('<option value="registro" selected>', card)
+
+    def test_select_com_linha_descartada_mostra_o_tipo_do_rotulo(self):
+        # P2 (#322/PR #327, rodada 10): linha de tipo DESCARTADA com edição
+        # preservada ('registro') — ``_contexto_revisao`` remove a linha e
+        # o resolvedor usa o rótulo 'Av-5'. A cópia antiga da precedência
+        # na view mostrava o ``valor_final`` morto; o card tem que exibir
+        # o que a importação usa ('averbacao'), nunca 'registro'.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            status_revisao='descartado', valor_final='registro',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('<option value="registro" selected>', card)
+
+    def test_select_com_ato_descartado_preserva_o_tipo_salvo(self):
+        # P2 Greptile / P3-1 Opus (#322/PR #327, rodada 11): aqui é o ATO
+        # (/acts/0) que está descartado, não a linha de tipo. O card do
+        # tipo CONTINUA na tela — a view só filtra LINHAS_IGNORADAS, o
+        # template desenha o card com a classe ``descartado`` e o checkbox
+        # de reinclusão. Rodada 12: ``resolucoes_de_tipo`` devolve a
+        # entrada do ato descartado (MESMO resolvedor, contexto que ignora
+        # só o descarte do próprio ato), então o select marca a escolha
+        # explícita salva — antes dela, o select vinha EM BRANCO com tipo
+        # salvo e o JS enviava valor='' no "Conferido" da reinclusão,
+        # apagando o tipo (origem 'limpo').
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='averbacao', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+
+    def test_select_com_ato_descartado_e_tipo_limpo_continua_vazio(self):
+        # Rodada 11→12: no ato descartado o '' gravado É a decisão de
+        # "sem tipo" — o resolvedor devolve origem 'limpo' (não cai no
+        # normalized 'averbacao' nem no rótulo) e o select fica sem opção
+        # marcada, como no ato presente.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value=""></option>', card)
+        self.assertIsNone(re.search(r'<option[^>]*\sselected', card))
+
+    def test_select_com_ato_descartado_mostra_o_tipo_do_rotulo(self):
+        # Rodada 12 (review Opus r11, caso a): ato descartado SEM escolha
+        # do revisor (normalized 'registro', valor_final nulo, sem flag) e
+        # rótulo divergente 'Av-5'. O fallback da rodada 11 copiava a
+        # precedência na view e exibia o normalized cru ('registro'); ao
+        # reincluir e conferir, o JS enviaria esse valor, a flag viraria
+        # True e a importação gravaria 'registro' — o rótulo deixaria de
+        # vencer sem aviso. O card marca o que o MESMO resolvedor devolve
+        # no contexto que ignora só o descarte do próprio ato.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('<option value="registro" selected>', card)
+
+    def test_select_com_ato_e_linha_de_tipo_descartados_mostra_o_rotulo(self):
+        # Rodada 12 (review Opus r11, caso c): além do ato, a linha de
+        # tipo está descartada com edição preservada ('registro'). O
+        # descarte da linha de DENTRO continua valendo no contexto do ato
+        # descartado — o resolvedor pula o valor_final morto e usa o
+        # rótulo 'Av-5', a mesma semântica do ato presente com a linha de
+        # tipo descartada.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            status_revisao='descartado', valor_final='registro',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('<option value="registro" selected>', card)
+
+    def test_select_com_ato_descartado_e_valor_fora_do_contrato_mostra_o_resolvido(self):
+        # Rodada 12 (review Opus r11, caso b): valor explícito FORA do
+        # contrato (estado do backfill da 0009: flag marcada, valor_final
+        # nulo, normalized 'transcricao') com rótulo 'R-3'. O fallback
+        # exibia 'transcricao' — não marca opção do contrato nenhuma e
+        # ainda ganhava opção extra; o 'Conferido' da reinclusão enviaria
+        # '' e apagaria o tipo. O resolvedor cai no rótulo: marca
+        # 'registro', sem opção extra de um valor que o save recusaria.
+        payload = payload_averbacao(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'R-3', 'normalized': 'R-3', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            normalized='transcricao', escolha_explicita=True,
+            status_revisao='aceito', valor_final=None,
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="registro" selected>', card)
+        self.assertNotIn('transcricao', card)
+
+    def test_select_com_valor_explicito_fora_do_contrato_mostra_o_resolvido(self):
+        # P2 (#322/PR #327, rodada 10): 'transcricao' fora de
+        # TIPOS_SUGERIDOS com escolha_explicita=True — estado que o
+        # backfill da 0009 pode criar a partir de 'aceito'/'importado'
+        # legados. O resolvedor NÃO usa esse valor (cai no rótulo), e o
+        # card mostra o que a importação usa; sem opção extra de um tipo
+        # que o próprio save recusaria com 422.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            normalized='transcricao', escolha_explicita=True,
+            status_revisao='aceito', valor_final=None,
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('transcricao', card)
+
+    def test_select_com_tipo_limpo_nao_seleciona_opcao_nenhuma(self):
+        # P2-1 + P2-2 (#322/PR #327): ``valor_final=''`` é tipo APAGADO —
+        # decisão válida; nenhuma opção marcada (o navegador enviaria a
+        # vazia) e a pendência de ``tipo_sugerido`` volta a bloquear.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value=""></option>', card)
+        self.assertIsNone(re.search(r'<option[^>]*\sselected', card))
+
+    def test_somente_leitura_desabilita_o_select(self):
+        extracao = self._extracao()
+        ExtracaoSugerida.objects.filter(pk=extracao.pk).update(
+            finalizada_em=timezone.now(), finalizada_por=self.dono,
+        )
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.REVISADO)
+
+        html = self._tela().content.decode()
+
+        self.assertIn(' disabled', self._tag_select(html))
+
+    def test_post_registro_diferente_salva_valor_final(self):
+        # SHOULD-FIX (revisão Opus): o POST com valor DIFERENTE do
+        # normalized prova o salvamento — o sugerido aqui é 'averbacao'.
+        extracao = self._extracao()
+
+        salvar = self._salvar_tipo({'conferido': True, 'valor': 'registro'})
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertEqual(campo.valor_final, 'registro')
+        self.assertEqual(campo.status_revisao, 'editado')
+        self.assertTrue(campo.escolha_explicita)
+
+    def test_post_mesmo_valor_marca_escolha_explicita(self):
+        # Caso separado (SHOULD-FIX, revisão Opus): valor IGUAL ao sugerido
+        # deixa o ``valor_final`` nulo, mas a flag marca que o revisor
+        # passou pelo card — e é ela que vence o rótulo na importação.
+        extracao = self._extracao()
+
+        salvar = self._salvar_tipo({'conferido': True, 'valor': 'averbacao'})
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'aceito')
+        self.assertTrue(campo.escolha_explicita)
+
+    def test_post_fora_do_enum_e_422_sem_gravar(self):
+        extracao = self._extracao()
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/tipo_sugerido',
+                    'incluir': True, 'conferido': True,
+                    'valor': 'compra_e_venda',
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'valor_invalido')
+        self.assertEqual(salvar.json()['chave'], '/acts/0/tipo_sugerido')
+        # Sem refresh redundante: ``campos.get`` relê do banco (nit revisão).
+        campo = extracao.campos.get(chave='/acts/0/tipo_sugerido')
+        self.assertEqual(campo.normalized, 'averbacao')
+        self.assertIsNone(campo.valor_final)
+        self.assertEqual(campo.status_revisao, 'sugerido')
+
+
+class LinhaIgnoradaSaveTest(TelaRevisaoBase):
+    """Tarefa C #322 (revisão Opus): decisão sobre linha ignorada não é 500.
+
+    Extração antiga já salvou ``/acts/0/valor_transacao``; a folha não tem
+    mais destino (Tarefa C). Aba aberta antes do deploy pode reenviar o
+    card: o save recusa com 422 ``linha_inexistente``, sem gravar nada — e
+    o token da tela segue valendo para salvar OUTRO card (o token cobre
+    todas as linhas, inclusive a ignorada).
+    """
+
+    def _extracao_antiga(self):
+        extracao = self._extracao()
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/valor_transacao',
+            raw='R$ 150.000,00',
+            normalized='150000.00',
+            tipo_valor='decimal',
+            status_revisao='aceito',
+        )
+        return extracao
+
+    def test_post_na_linha_ignorada_e_422_sem_gravar(self):
+        extracao = self._extracao_antiga()
+        versao = self._tela().context['versao']
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': versao,
+                'decisoes': [{
+                    'chave': '/acts/0/valor_transacao',
+                    'incluir': True, 'conferido': True, 'valor': '150000.00',
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 422, salvar.content)
+        self.assertEqual(salvar.json()['erro'], 'linha_inexistente')
+        campo = extracao.campos.get(chave='/acts/0/valor_transacao')
+        self.assertIsNone(campo.valor_final)
+        # Nada foi gravado: o token da tela continua sendo o vigente.
+        self.assertEqual(services.versao_bloco(extracao), versao)
+
+    def test_salvar_outro_card_com_o_token_da_tela_e_200(self):
+        self._extracao_antiga()
+        versao = self._tela().context['versao']
+
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': versao,
+                'decisoes': [{
+                    'chave': '/document/numero',
+                    'incluir': True, 'conferido': True,
+                }],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+
+
 def _descendentes(no, nome_tag, atributo):
     """Elementos `nome_tag` com `atributo` na subárvore de `no`."""
     achados = []
@@ -1056,6 +1559,18 @@ def _descendentes(no, nome_tag, atributo):
     return achados
 
 
+def _valor_do_select(select):
+    """O que o navegador enviaria: a opção selected, senão a primeira."""
+    opcoes = _descendentes(select, 'option', 'value')
+    selecionadas = [
+        opcao for opcao in opcoes if 'selected' in _atributos(opcao)
+    ]
+    escolhida = (selecionadas or opcoes or [None])[0]
+    if escolhida is None:
+        return ''
+    return _atributos(escolhida).get('value', '')
+
+
 def _decisao_do_card(card):
     """A decisão que o ocr_revisao.js mandaria com o card conferido.
 
@@ -1064,12 +1579,18 @@ def _decisao_do_card(card):
     nenhuma vem selecionada, ou criar novo quando não há candidata.
     """
     valor = None
-    for tag in ('input', 'textarea'):
+    for tag in ('input', 'textarea', 'select'):
         for elemento in _descendentes(card, tag, 'data-campo-valor'):
             atributos = _atributos(elemento)
-            valor = atributos.get('value') if tag == 'input' else ''.join(
-                filho for filho in elemento.children if isinstance(filho, str)
-            )
+            if tag == 'input':
+                valor = atributos.get('value')
+            elif tag == 'select':
+                valor = _valor_do_select(elemento)
+            else:
+                valor = ''.join(
+                    filho for filho in elemento.children
+                    if isinstance(filho, str)
+                )
             tipo = atributos['data-tipo']
     if not valor:
         return None

@@ -29,7 +29,7 @@ from .models import (
 from .revisao import (
     IndiceCartorios, IndicePessoas, aplicar_linha, comarca_do_documento,
     desnormalizar, enriquecer_payload, fallback_cartorio,
-    garantir_placeholders_obrigatorios, identidade_parte,
+    garantir_placeholders_obrigatorios, identidade_parte, linha_ignorada,
     pendencias, pendencias_sem_atos, versao_linha,
 )
 
@@ -327,6 +327,13 @@ def salvar_bloco(
 
         campos = {campo.chave: campo for campo in travada.campos.all()}
         if any(chave not in campos for chave in decisoes):
+            raise ExtracaoRecusada('linha_inexistente')
+        if any(linha_ignorada(chave) for chave in decisoes):
+            # Tarefa C #322 (revisão Opus): aba aberta antes do deploy pode
+            # reenviar o card de valor_transacao — a chave existe numa
+            # extração antiga, mas a folha não tem mais destino; aplicar a
+            # decisão levantaria ChaveDesconhecida (500). Recusa antes de
+            # gravar nada; a view converte em 422.
             raise ExtracaoRecusada('linha_inexistente')
         if versao_cliente != versao_bloco(travada):
             if all('versao' in decisao for decisao in decisoes.values()):

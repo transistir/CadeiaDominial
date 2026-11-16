@@ -55,11 +55,19 @@ from . import destinos, revisao, services
 from .estados import IMPORTADO, REVISADO
 from .models import ImportacaoIA, OcrJob
 from .revisao import _normalizar_nome, _so_digitos
+from .rotulos import (
+    TIPOS_SUGERIDOS, analisar_rotulo, compor_numero_lancamento,
+    normalizar_numero_lancamento, resolver_tipo, tipo_do_rotulo,
+)
 from .valores import MOTIVO_LIMITE
 
 MOTIVO_TRANSICAO = 'importacao_ia'
 
 PREFIXO_TIPO_DOCUMENTO = {'matricula': 'M', 'transcricao': 'T'}
+
+# Número puro, já sem prefixo ('5', '12.345') — a mesma forma que o parser
+# de rótulos reconhece e preserva como veio (#322 rodada 5).
+_NUMERO_SIMPLES = re.compile(r'\d+(?:\.\d+)*')
 
 # Inverso do mapa de destinos: campo do modelo → padrão de chave de linha.
 # ``_chave_de_erro`` concreta o padrão com o índice do ato (e da parte, nos
@@ -182,10 +190,19 @@ def importar(extracao, usuario, versao, atos):
             # cache criadas no ato desfeito também são descartadas: elas
             # apontariam para registros que o rollback apagou.
             chaves_antes = set(cache_pessoas)
+            # Rótulo do ato analisado UMA vez (#322): lido pelo EFETIVO
+            # (``valor_final`` do revisor ou, sem ele, ``normalized``/
+            # ``raw`` — P1 das rodadas 4–5), ele PREVALECE na decisão do
+            # tipo (tipo_sugerido só entra na falta dele) e o número
+            # gravado é o composto canônico do V1 ('R5 M237', igual ao
+            # fluxo manual). Rótulo não reconhecido mantém o
+            # comportamento de antes — o bucket deles é decisão da UI
+            # (#321).
+            rotulo = analisar_rotulo(_rotulo_efetivo(ato.chave, linhas))
             try:
                 with transaction.atomic():
                     resposta, erros = _importar_ato(
-                        ato, documento, imovel, usuario, job, linhas,
+                        ato, rotulo, documento, imovel, usuario, job, linhas,
                         cache_pessoas, documentos_usuario,
                         lancamentos_importados, nomes_travados,
                     )
@@ -224,7 +241,10 @@ def resumo(extracao):
     """Prévia consultiva da importação (GET do PR2): atos, tipo e duplicados.
 
     Não trava nada nem grava: é o que a tela de confirmação exibe antes de
-    o usuário marcar os atos e disparar o POST.
+    o usuário marcar os atos e disparar o POST. O ``tipo`` de cada item é o
+    que a GRAVAÇÃO usará (P2-2, rodada 4) — a mesma resolução do
+    ``_importar_ato`` — e o conflito rótulo × tipo_sugerido aparece no
+    ``aviso`` do item (str ou None) antes de o usuário confirmar.
     """
     dados = revisao.dados_revisados(extracao)
     linhas = _linhas_por_chave(extracao)
@@ -234,21 +254,25 @@ def resumo(extracao):
     )
     atos = []
     for ato in dados.atos:
-        tipo = (
-            LancamentoTipo.objects.filter(tipo=ato.tipo).order_by('pk').first()
-        )
+        # Mesma resolução do tipo/número que a gravação usa (#322, rodadas
+        # 4–5): o rótulo — lido pelo EFETIVO (``valor_final`` do revisor
+        # ou, sem ele, ``normalized``/``raw``) — PREVALECE; o
+        # tipo_sugerido só decide na falta dele.
+        rotulo = analisar_rotulo(_rotulo_efetivo(ato.chave, linhas))
+        tipo, numero, avisos = _resolver_tipo_e_numero(ato, rotulo, documento)
         duplicado = (
-            _lancamento_duplicado(documento, tipo, ato.data, ato.numero_lancamento)
+            _lancamento_duplicado(documento, tipo, ato.data, numero)
             if tipo is not None else None
         )
         atos.append({
             'chave': ato.chave,
             'rotulo': _rotulo(ato.chave, linhas),
-            'tipo': ato.tipo,
+            'tipo': tipo.tipo if tipo is not None else ato.tipo,
             'partes': len(ato.partes),
             'duplicado': duplicado is not None,
             'existente': _existente(duplicado) if duplicado else None,
             'erro': None if tipo is not None else 'tipo_inexistente',
+            'aviso': avisos[0] if avisos else None,
         })
     return {'atos': atos}
 
@@ -257,8 +281,105 @@ def resumo(extracao):
 # Gravação de um ato
 # ---------------------------------------------------------------------------
 
+def _resolver_tipo_e_numero(ato, rotulo, documento):
+    """Tipo e número que a gravação gravará — e a prévia mostra (#322 r4–5).
+
+    A MESMA resolução nos dois caminhos (P2-2): a escolha EXPLÍCITA do
+    revisor (``ato.tipo_explicito``, P1 da #322/PR #327) vence; sem ela, o
+    tipo do RÓTULO reconhecido (R/Av) prevalece sobre o ``tipo_sugerido``
+    divergente — a regra do ``classificar_atos`` — e o número é o composto
+    canônico do V1 ('R5
+    M237', P1-1 da rodada 3). Rótulo de MATRÍCULA (``M-3-14511``) não é
+    lançamento (P2-1): não define tipo (o ``tipo_sugerido`` decide) e o
+    número da matrícula NUNCA vira número de ato — compor com ele gravaria
+    ``'RM-3-14511 M237'``. O rótulo ``M`` só descarta o número que VEIO da
+    referência de matrícula: o ``/numero_lancamento`` (já efetivo/revisado)
+    que traz um número de ato válido (rótulo R/Av ou número puro) é
+    preservado e composto normalmente (P2, rodada 5 — antes a rodada 4
+    zerava também o número corrigido).
+    Devolve ``(LancamentoTipo | None, numero | None, avisos)``; sem tipo
+    configurado o número vem None e o chamador trata o
+    ``tipo_inexistente``.
+
+    Os avisos nunca bloqueiam a gravação:
+
+    - rótulo × ``tipo_sugerido`` válidos e diferentes: o rótulo venceu
+      (P2-3, rodada 3) — o mesmo texto da gravação, para a prévia expor o
+      conflito antes de o usuário confirmar;
+    - rótulo de matrícula sem número de ato válido no campo: sem número
+      extraído (P2-1) — o item segue sendo tratado pela UI (#321), nada
+      vira exceção;
+    - rótulo de matrícula com número válido no campo: o número preservado
+      veio do campo revisado, não do rótulo (P2, rodada 5).
+    """
+    # P1 (Greptile, #322/PR #327): a fonte da escolha EXPLÍCITA é o
+    # ``AtoRevisado.tipo_explicito`` (revisao._valor_explicito — edição em
+    # ``valor_final`` OU sugestão confirmada na flag ``escolha_explicita``).
+    # O fallback antigo tratava ``ato.tipo`` divergente como escolha — mas
+    # ``ato.tipo`` é o valor EFETIVO (revisado ou, na falta, o do próprio
+    # rótulo): com ele na frente, um rótulo disfarçado de decisão vencia a
+    # si mesmo e a confirmação do revisor continuava perdendo para o
+    # rótulo. Linha de tipo vazia (estado antigo/re-extração — a pendência
+    # da I-5 impede ``importar`` de chegar aqui) não decide nada.
+    tipo_explicito = ato.tipo_explicito
+    tipo_sugerido = ato.tipo_sugerido
+    if ato.tipo == '':
+        tipo_explicito = None
+        tipo_sugerido = None
+
+    tipo_nome, divergencia, _origem = resolver_tipo(
+        tipo_explicito, rotulo, tipo_sugerido,
+    )
+    tipo = (
+        LancamentoTipo.objects.filter(tipo=tipo_nome).order_by('pk').first()
+        if tipo_nome is not None else None
+    )
+    avisos = []
+    if divergencia:
+        tipo_rotulo = (
+            rotulo.tipo if rotulo.reconhecido and not rotulo.eh_matricula else None
+        )
+        avisos.append(
+            f'O rótulo indica {tipo_rotulo}; o tipo sugerido '
+            f'({tipo_sugerido}) foi ignorado.'
+        )
+    if rotulo.eh_matricula:
+        # P2 (#322 rodada 5): a matrícula do rótulo não vira número de
+        # ato, mas o número de /numero_lancamento que É um número de ato
+        # válido continua valendo — o aviso reflete o que aconteceu.
+        numero_do_ato = _numero_de_ato_do_campo(ato.numero_lancamento)
+        componivel = numero_do_ato is not None
+        avisos.append(
+            'O rótulo é referência de matrícula (prefixo M), não de '
+            'lançamento; o número de ato preservado veio do campo '
+            'revisado, não do rótulo.'
+            if numero_do_ato is not None else
+            'O rótulo é referência de matrícula (prefixo M), não de '
+            'lançamento; nenhum número de ato foi extraído dele.'
+        )
+    else:
+        numero_do_ato, componivel = _numero_do_campo(ato.numero_lancamento)
+    if tipo is None:
+        numero = None
+    elif numero_do_ato is None:
+        # Sem número o composto canônico só muda o início de matrícula
+        # (a sigla); registro/averbação gravam sem número, como antes.
+        numero = compor_numero_lancamento(tipo.tipo, None, documento.numero)
+    elif componivel:
+        numero = compor_numero_lancamento(
+            tipo.tipo, numero_do_ato, documento.numero,
+        )
+    else:
+        # P1-1 (#322 rodada 7): texto que NÃO é número de ato ('X-1',
+        # 'Av. Brasil') é preservado como veio (trim), sem prefixo nem
+        # sigla. Compor gravava 'RX-1 M237' e a duplicata contra o 'X-1'
+        # gravado não casava — a base comparava texto com texto.
+        numero = numero_do_ato
+    return tipo, numero, avisos
+
+
 def _importar_ato(
-    ato, documento, imovel, usuario, job, linhas,
+    ato, rotulo, documento, imovel, usuario, job, linhas,
     cache_pessoas, documentos_usuario, lancamentos_importados,
     nomes_travados,
 ):
@@ -270,20 +391,37 @@ def _importar_ato(
     ``lancamentos_importados`` são os gravados pelos atos anteriores desta
     importação (duplicata contra eles é interna, sem ``existente``);
     ``nomes_travados``, os nomes de cartório que o ``importar`` já travou.
+    ``rotulo`` é o rótulo do ato já analisado uma vez pelo chamador (#322,
+    lido pelo efetivo — P1 das rodadas 4–5): o tipo do rótulo PREVALECE
+    sobre o ``tipo_sugerido`` divergente — a MESMA regra do
+    ``classificar_atos`` (P2-3) — e a divergência vira aviso na resposta,
+    nunca bloqueio; sem rótulo utilizável, o ``tipo_sugerido`` decide como
+    antes. Rótulo de MATRÍCULA não define tipo e não gera número da
+    matrícula (P2-1): o número de ato REVISADO válido em
+    ``/numero_lancamento`` é preservado (P2, rodada 5); sem ele o ato
+    grava sem número, com aviso. Rótulo não reconhecido mantém o
+    comportamento de antes.
     """
     chave = ato.chave
     erros = _Erros(chave)
 
-    tipo = LancamentoTipo.objects.filter(tipo=ato.tipo).order_by('pk').first()
+    # A MESMA resolução de tipo/número da prévia (#322, rodadas 4–5): o
+    # rótulo (efetivo) prevalece sobre o tipo_sugerido divergente
+    # (P1/P2-2), o rótulo de matrícula não gera número DELA, mas o número
+    # de ato revisado válido é preservado (P2-1/P2) e o número é o
+    # composto canônico do V1 (P1-1 da rodada 3) — a duplicata normaliza os
+    # dois lados de volta ao número do ato.
+    tipo, numero_lancamento, avisos_do_rotulo = _resolver_tipo_e_numero(
+        ato, rotulo, documento,
+    )
     if tipo is None:
         erros.add(
             f'{chave}/tipo_sugerido', 'tipo_inexistente',
             'O tipo de lançamento não está configurado no sistema.',
         )
         return None, erros
-
     duplicado = _lancamento_duplicado(
-        documento, tipo, ato.data, ato.numero_lancamento,
+        documento, tipo, ato.data, numero_lancamento,
         Lancamento.objects.exclude(pk__in=lancamentos_importados),
     )
     if duplicado is not None:
@@ -294,7 +432,7 @@ def _importar_ato(
         )
         return None, erros
     if lancamentos_importados and _lancamento_duplicado(
-        documento, tipo, ato.data, ato.numero_lancamento,
+        documento, tipo, ato.data, numero_lancamento,
         Lancamento.objects.filter(pk__in=lancamentos_importados),
     ) is not None:
         # O outro lançamento só existe dentro desta transação: apontá-lo
@@ -404,14 +542,16 @@ def _importar_ato(
     lancamento = Lancamento(
         documento=documento,
         tipo=tipo,
-        # Gravação normalizada, como o fluxo manual valida e grava: o
-        # número sem bordas — ' R-1 ' persistido colidiria com o 'R-1' do
-        # fluxo manual na próxima duplicata (#263 rodada 6, Codex P2) — e
-        # vazio de verdade é None, não '' (#263 rodada 8, review Opus P3):
-        # '   ' gravava '' e o fluxo manual grava None.
-        numero_lancamento=((ato.numero_lancamento or '').strip() or None),
+        # Gravação no formato canônico do V1 (#322 rodada 3, P1-1): 'R-5'
+        # na matrícula 'M237' grava 'R5 M237' — o MESMO texto que o fluxo
+        # manual compõe e que os consumidores ordenam por '^(R|AV)\d+'; a
+        # sigla é o ``documento.numero`` e o número vem SEM bordas (' R-1 '
+        # persistido colidiria com o manual na próxima duplicata, #263
+        # rodada 6) e vazio de verdade é None, não '' (#263 rodada 8).
+        numero_lancamento=numero_lancamento or None,
         data=ato.data,
-        valor_transacao=ato.valor,
+        # valor_transacao não é importado (Tarefa C #322): o campo não
+        # existe no formulário de lançamento.
         area=ato.area,
         titulo=ato.titulo,
         forma=ato.forma,
@@ -497,9 +637,16 @@ def _importar_ato(
             registros.append(('Pessoas', pessoa.pk, parte.chave))
 
     _vincular(job, usuario, lancamento, registros, linhas)
+    avisos = []
+    if aviso:
+        avisos.append(aviso)
+    # P2-3/P2-2 (#322 rodadas 3–4): o conflito rótulo × tipo_sugerido — e o
+    # rótulo de matrícula sem número (P2-1) — aparecem para o revisor, sem
+    # bloquear uma gravação válida.
+    avisos.extend(avisos_do_rotulo)
     resposta = _linha_resposta(
         chave, _rotulo(chave, linhas), 'criado', lancamento=lancamento,
-        avisos=[aviso] if aviso else [],
+        avisos=avisos,
     )
     return resposta, erros
 
@@ -856,19 +1003,27 @@ def _tipo_documento_da_origem(origem, numero):
 def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     """Lançamento existente que colide com o ato, ou None.
 
-    Mesma regra do fluxo manual (``lancamento_validacao_service``), que
-    consulta pelo número sem bordas: o número é comparado normalizado com a
-    MESMA função dos DOIS lados — o ``.strip()`` do Python, o que grava.
-    ' R-1 ' é duplicata de 'R-1', não lançamento novo (#263 rodada 6,
-    Codex P2); a rodada 7 normalizava o JÁ GRAVADO com ``TRIM()`` do SQL,
-    que só tira espaço — o ``'\\n'`` que texto de OCR deixa na borda do
-    número escapava da duplicata (#263 rodada 8, review Opus P2). A tupla
-    (documento, tipo, data, número) — com número nulo casando null e
-    gravado vazio (null, '' e só espaços) — e ainda o número sozinho
-    dentro do documento, mudando tipo ou data. ``lancamentos`` restringe
+    O número é comparado com a MESMA função dos DOIS lados — o parser de
+    rótulos, que é também o que grava: 'R5 M237' (formato do fluxo
+    manual), 'R-5' e 'Av: 6-237' (legado do importador) e '5' normalizam
+    para o número do ato e casam entre si (#322); ' R-1 ' é duplicata de
+    'R-1' (#263 rodada 6, Codex P2) e o ``'\\n'`` que texto de OCR deixa
+    na borda do número também escapava sob o ``TRIM()`` do SQL da rodada
+    7 (#263 rodada 8, review Opus P2). A tupla (documento, tipo, data,
+    número) — com número nulo casando null e gravado vazio (null, '' e só
+    espaços) — e ainda o número sozinho dentro do documento, mudando tipo
+    ou data.
+
+    O número sozinho (#322 rodada 3, P2-1) exige rótulos COMPATÍVEIS: os
+    DOIS lados com prefixo R/Av reconhecido e tipos DIFERENTES ('R-5' ×
+    'AV5 M237') NÃO são duplicata — a numeração é por tipo (transcrição,
+    numeração antiga, erro de OCR passam a importar). Lado sem rótulo
+    reconhecido (número puro, texto comum) mantém a comparação antiga de
+    texto, incluindo o ' R-1 ' × 'R-1' do #263. ``lancamentos`` restringe
     onde procurar (padrão: todos).
     """
-    numero = numero.strip() if numero else numero
+    tipo_recebido = tipo_do_rotulo(numero)
+    numero = normalizar_numero_lancamento(numero)
     if lancamentos is None:
         lancamentos = Lancamento.objects.all()
     # A busca é por documento (poucas linhas) e a decisão é no Python:
@@ -882,9 +1037,19 @@ def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
     )
     mesmo_numero = None
     for lancamento in candidatos:
-        gravado = (lancamento.numero_lancamento or '').strip()
+        gravado = normalizar_numero_lancamento(
+            lancamento.numero_lancamento,
+        ) or ''
         if numero:
             if gravado != numero:
+                continue
+            # P2-1: os dois lados com rótulo R/Av conhecido e tipos
+            # DIFERENTES não colidem no fallback do número sozinho.
+            tipo_gravado = tipo_do_rotulo(lancamento.numero_lancamento)
+            if (
+                tipo_recebido is not None and tipo_gravado is not None
+                and tipo_recebido != tipo_gravado
+            ):
                 continue
             # (b) número sozinho dentro do documento, mudando tipo/data —
             # fallback: a tupla completa (a) tem prioridade.
@@ -1093,6 +1258,87 @@ def _linhas_por_chave(extracao):
 def _rotulo(chave, linhas):
     campo = linhas.get(chave)
     return campo.normalized if campo is not None else None
+
+
+def _rotulo_efetivo(chave, linhas):
+    """Rótulo que DECIDE tipo/número na gravação: ``valor_final``,
+    ``normalized`` ou ``raw``.
+
+    P1 (#322 rodada 4): no payload real o rótulo chega com
+    ``normalized=None`` e o carimbo no ``raw`` — a linha estrutural do ato
+    (``/acts/N``, a que o ``_rotulo`` exibe) só guarda o ``normalized``, e
+    ler só ela escondia o rótulo: o ``tipo_sugerido`` decidia sozinho, a
+    gravação divergia do ``classificar_atos`` (que lê ``normalized or
+    raw``) e a duplicata que a base bloqueava passava. O ``raw`` vive na
+    FOLHA ``/acts/N/rotulo`` (linha de conferência, ``SEM_DESTINO``), que
+    traz os dois campos do payload.
+
+    P1 (#322 rodada 5): o rótulo CORRIGIDO pelo revisor (``valor_final``)
+    vence — sem ele a correção feita na tela era ignorada e a gravação
+    decidia pelo carimbo do OCR que ficou no ``normalized``/``raw``.
+    ``valor_final`` VAZIO (revisor limpou o campo: ``aplicar_linha``
+    grava ``''``) não decide nada — a leitura cai no ``normalized``/``raw``
+    de antes.
+
+    P1 (#322 rodada 6): linha DESCARTADA não decide — ``aplicar_linha``
+    com ``incluir=False`` preserva o ``valor_final`` da edição e só marca
+    ``descartado``; ler o valor sem olhar o status deixava a edição
+    descartada vencer e a gravação criava o lançamento que o usuário tinha
+    descartado. Descarte PULA o candidato (mesma convenção de
+    ``revisao.identidade_parte``): a folha descartada cai na linha
+    estrutural e a estrutural descartada cai na folha; as duas
+    descartadas não decidem nada.
+
+    Devolve, na folha e, sem ela, na linha estrutural, o primeiro não
+    vazio entre ``valor_final``, ``normalized`` e ``raw`` — ``None``
+    quando nada existe (o parser devolve ``reconhecido=False`` e o
+    ``tipo_sugerido`` decide). A leitura é a MESMA da revisão
+    (``revisao.rotulo_efetivo``, #322 rodada 7): uma única regra decide o
+    tipo nos dois caminhos.
+    """
+    return revisao.rotulo_efetivo(chave, linhas)
+
+
+def _numero_do_campo(texto):
+    """``(número a gravar, pode ser composto no formato canônico do V1)``.
+
+    P1-1 (#322 rodada 7): só é número de ato — e só aceita a composição
+    ``'R5 M237'``/``'AV6 M237'`` — o rótulo R/Av reconhecido ('R-5' → '5',
+    o normalizador devolve o número puro) ou o número puro já sem prefixo
+    ('5', '12.345'). Qualquer outro texto ('X-1', 'Av. Brasil', a
+    referência 'M-3-14511') é preservado como veio (trim), sem prefixo e
+    sem sigla do documento: a duplicata compara texto com texto, como a
+    base fazia. Compor qualquer texto gravava 'RX-1 M237' e a duplicata
+    contra o 'X-1' gravado passava.
+    """
+    analisado = analisar_rotulo(texto)
+    if analisado.reconhecido and not analisado.eh_matricula:
+        return analisado.numero, True
+    normalizado = normalizar_numero_lancamento(texto)
+    if normalizado is None:
+        return None, False
+    return normalizado, bool(_NUMERO_SIMPLES.fullmatch(normalizado))
+
+
+def _numero_de_ato_do_campo(texto):
+    """Número de ato válido em ``/numero_lancamento`` (já efetivo/revisado).
+
+    P2 (#322 rodada 5): sob rótulo de MATRÍCULA, o que não pode virar
+    número de ato é a REFERÊNCIA de matrícula ('M-3-14511') — o número
+    corrigido no campo é preservado e composto. Vale como número de ato:
+
+    - rótulo R/Av reconhecido ('R-5', 'Av: 2-237'): o número do ato
+      ('5', '2'), nunca o texto como veio (o normalizador devolvendo o
+      número do ato);
+    - número puro já sem prefixo ('5', '12.345'): como veio, a MESMA
+      leitura do ``normalizar_numero_lancamento`` no caminho normal.
+
+    O resto (a própria referência 'M-3-14511', prefixo desconhecido
+    'X-9', texto comum) continua descartado: compô-lo é o que a rodada 4
+    corrigiu ('RM-3-14511 M237').
+    """
+    numero, componivel = _numero_do_campo(texto)
+    return numero if componivel else None
 
 
 def _atos_marcados(dados, atos):

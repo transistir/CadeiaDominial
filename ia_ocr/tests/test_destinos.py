@@ -9,7 +9,7 @@ import json
 from django.apps import apps
 from django.test import SimpleTestCase
 
-from ia_ocr import destinos
+from ia_ocr import destinos, rotulos
 from ia_ocr.destinos import (
     SEM_DESTINO,
     ChaveDesconhecida,
@@ -17,6 +17,7 @@ from ia_ocr.destinos import (
     destino_de,
 )
 from ia_ocr.extracao_schema import SCHEMA_PATH
+from ia_ocr.revisao import linha_ignorada
 
 
 def _schema():
@@ -29,7 +30,8 @@ class Cobertura(SimpleTestCase):
         faltantes = [
             ponteiro
             for ponteiro in caminhos_editaveis(_schema())
-            if not self._tem_entrada(ponteiro)
+            if not linha_ignorada(ponteiro)
+            and not self._tem_entrada(ponteiro)
         ]
         self.assertFalse(
             faltantes,
@@ -160,8 +162,13 @@ class LimitesVemDeMeta(SimpleTestCase):
         forma = destino_de('/acts/4/forma')
         self.assertEqual(forma.max_length, 100)
 
-        valor = destino_de('/acts/2/valor_transacao')
-        self.assertEqual((valor.max_digits, valor.decimal_places), (10, 2))
+        # Tarefa C #322: valor_transacao saiu do formulário de lançamento —
+        # sem destino, a folha do schema A3 é ignorada na revisão.
+        with self.assertRaises(ChaveDesconhecida):
+            destino_de('/acts/2/valor_transacao')
+
+        area = destino_de('/acts/2/area')
+        self.assertEqual((area.max_digits, area.decimal_places), (12, 4))
 
         for chave in (
             '/document/cartorio',
@@ -178,3 +185,26 @@ class LimitesVemDeMeta(SimpleTestCase):
                 destino = destino_de(chave)
                 self.assertIs(destino, SEM_DESTINO)
                 self.assertEqual(destino.max_length, 10_000)
+
+
+class TipoSugeridoEnumDoContrato(SimpleTestCase):
+    """Tarefa B (#322/PR #327): o enum do tipo vem do contrato A3.
+
+    A FK ``Lancamento.tipo`` não tem ``choices`` próprios e o fallback por
+    ``LancamentoTipo.TIPO_CHOICES`` deixaria o vocabulário da revisão refém
+    do cadastro (um tipo novo no ``TIPO_CHOICES`` passaria sem estar no
+    schema A3). O destino valida contra ``rotulos.TIPOS_SUGERIDOS``.
+    """
+
+    def test_choices_do_tipo_sugerido_sao_os_tipos_do_contrato(self):
+        destino = destino_de('/acts/0/tipo_sugerido')
+
+        self.assertEqual(destino.modelo, 'dominial.Lancamento')
+        self.assertEqual(destino.campo, 'tipo')
+        self.assertEqual(destino.tipo_valor, 'enum')
+        self.assertEqual(
+            destino.choices,
+            tuple(
+                (codigo, codigo) for codigo in rotulos.TIPOS_SUGERIDOS
+            ),
+        )

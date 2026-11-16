@@ -4,7 +4,7 @@ Toda linha editável do formulário de revisão resolve o seu destino por
 ``destino_de(chave, *valores_efetivos)``. O destino diz:
 
 - **para onde vai** (``modelo``/``campo``, ex.: ``dominial.Lancamento`` +
-  ``valor_transacao``), ou ``SEM_DESTINO`` — linha editável, mas só
+  ``area``), ou ``SEM_DESTINO`` — linha editável, mas só
   conferência (``DadosRevisados.conferencia``), nunca campo importável;
 - **o tipo canônico** do valor (``tipo_valor``, mesmo vocabulário do
   ``CampoSugerido.tipo_valor``);
@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 from django.apps import apps
+
+from . import rotulos
 
 MAX_DIGITS_SEM_DESTINO = 20
 DECIMAL_PLACES_SEM_DESTINO = 4
@@ -118,9 +120,9 @@ DESTINOS = {
         'dominial.Lancamento', 'numero_lancamento', 'texto',
     ),
     '/acts/*/data': ('dominial.Lancamento', 'data', 'data'),
-    '/acts/*/valor_transacao': (
-        'dominial.Lancamento', 'valor_transacao', 'decimal',
-    ),
+    # '/acts/*/valor_transacao' sem destino (Tarefa C #322): o campo não
+    # existe no formulário de lançamento; a folha do schema A3 é ignorada
+    # (revisao.LINHAS_IGNORADAS).
     '/acts/*/area': ('dominial.Lancamento', 'area', 'area'),
     '/acts/*/titulo': ('dominial.Lancamento', 'titulo', 'texto'),
     '/acts/*/forma': ('dominial.Lancamento', 'forma', 'texto'),
@@ -246,8 +248,13 @@ def _do_campo(modelo, campo, tipo_valor):
         if (modelo, campo) == ('dominial.Documento', 'tipo'):
             choices = tuple(apps.get_model('dominial.DocumentoTipo').TIPO_CHOICES)
         elif (modelo, campo) == ('dominial.Lancamento', 'tipo'):
+            # Tarefa B #322: o vocabulário de tipo_sugerido é o do contrato
+            # A3 (rotulos.TIPOS_SUGERIDOS), não o TIPO_CHOICES do cadastro —
+            # um tipo novo em LancamentoTipo não pode passar pela revisão
+            # sem estar no schema. Os rótulos de exibição vêm da tela
+            # (views: opcoes_tipo_sugerido); aqui o par é só para validação.
             choices = tuple(
-                apps.get_model('dominial.LancamentoTipo').TIPO_CHOICES
+                (codigo, codigo) for codigo in rotulos.TIPOS_SUGERIDOS
             )
     if tipo_valor == 'cartorio':
         # A FK não expõe max_length: o texto revisado é o nome do cartório.

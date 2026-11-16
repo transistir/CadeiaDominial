@@ -23,10 +23,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 # Hierarquia TI→Imóvel→Documento: a mesma do upload digital (reuso, não cópia).
-from dominial.models import Cartorios, Pessoas
+from dominial.models import Cartorios, LancamentoTipo, Pessoas
 from dominial.views.documento_digital_views import _get_contexto_documento
 
-from . import destinos, estados, revisao, services, valores
+from . import destinos, estados, revisao, rotulos, services, valores
 from . import importacao
 from .diff import segmentos_diff
 from .estados import TransicaoConcorrente, TransicaoInvalida
@@ -545,6 +545,34 @@ def _preencher_fallback_cartorio(extracao, campos):
         )
 
 
+def _opcoes_tipo_sugerido():
+    """Opções do <select> do tipo, na MESMA fonte do enum aceito no save.
+
+    Revisão Opus (MUST-FIX #322): as opções DESENHADAS saem de
+    ``rotulos.TIPOS_SUGERIDOS`` — o mesmo vocabulário que
+    ``destinos._do_campo`` aceita no POST. Tipo no cadastro fora do
+    contrato não vira opção que dá 422; código no contrato sem linha no
+    cadastro continua sendo ofertado. O rótulo de exibição vem do cadastro
+    (``get_tipo_display``) quando a linha existe e de
+    ``LancamentoTipo.TIPO_CHOICES`` quando não vem.
+    """
+    configuracoes = {
+        tipo.tipo: tipo for tipo in LancamentoTipo.objects.order_by('pk')
+    }
+    displays = dict(LancamentoTipo.TIPO_CHOICES)
+    return [
+        {
+            'codigo': codigo,
+            'display': (
+                configuracoes[codigo].get_tipo_display()
+                if codigo in configuracoes
+                else displays.get(codigo, codigo)
+            ),
+        }
+        for codigo in rotulos.TIPOS_SUGERIDOS
+    ]
+
+
 @login_required
 @require_GET
 def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
@@ -559,14 +587,50 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     extracao = job.extracao_vigente()
     if extracao is None:
         raise Http404('Extração indisponível.')
-    campos = list(extracao.campos.order_by('chave'))
-    # Token do estado salvo: os candidatos abaixo são só de exibição.
-    versao = services.versao_bloco(extracao, campos=campos)
+    todas_as_linhas = list(extracao.campos.order_by('chave'))
+    # Token do estado salvo: os candidatos abaixo são só de exibição. O
+    # token cobre TODAS as linhas salvas — inclusive as ignoradas na tela
+    # (Tarefa C #322), que o salvar_bloco ainda considera no seu próprio —
+    # senão o primeiro save da extração antiga daria conflito de versão.
+    versao = services.versao_bloco(extracao, campos=todas_as_linhas)
+    # Linhas em revisao.LINHAS_IGNORADAS (extrações antigas já salvaram
+    # valor_transacao) não podem virar card.
+    campos = [
+        campo for campo in todas_as_linhas
+        if not revisao.linha_ignorada(campo.chave)
+    ]
     _preencher_fallback_cartorio(extracao, campos)
     _anexar_opcoes_cadastro(campos)
+    # P2-2 (#322/PR #327, rodada 10): o card tem que mostrar o tipo que
+    # pendências, prévia e importação vão usar — o resolvedor único da
+    # revisão, AGORA COM A ORIGEM. Nada de recalcular a precedência aqui:
+    # a cópia anterior divergia em dois estados alcançáveis (linha de tipo
+    # descartada e valor explícito fora de TIPOS_SUGERIDOS criado pelo
+    # backfill da 0009). Rodada 12: a resolução cobre também o ato
+    # DESCARTADO (mesmo resolvedor, contexto que ignora só o descarte
+    # dele) — o fallback de valor_final/normalized da rodada 11 saiu.
+    resolucoes = revisao.resolucoes_de_tipo(extracao)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
         campo.obrigatorio = revisao.campo_obrigatorio(campo.chave)
+        # Exclusivo do card de tipo do ATO (/acts/N/tipo_sugerido): nenhuma
+        # outra chave do mapa de destinos termina em tipo_sugerido.
+        campo.eh_tipo_sugerido = re.fullmatch(
+            r'/acts/\d+/tipo_sugerido', campo.chave,
+        ) is not None
+        if campo.eh_tipo_sugerido:
+            # O que o <select> traz selecionado é o que a importação vai
+            # usar — inclusive quando a linha de tipo está descartada (o
+            # resolvedor já pula a linha e cai no rótulo) e quando o ATO
+            # está descartado. Única exceção: origem 'limpo' = select
+            # APAGADO (P2-1), decisão de "sem tipo" — nenhuma opção
+            # marcada. Sem linha estrutural do ato não há resolução
+            # (estado inalcançável: o desnormalizar sempre cria a linha do
+            # ato antes da de tipo) e o select fica em branco.
+            tipo, origem = resolucoes.get(
+                campo.chave.rsplit('/', 1)[0], (None, 'nenhum'),
+            )
+            campo.tipo_exibido = '' if origem == 'limpo' else tipo
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
@@ -600,6 +664,10 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'extracao': extracao,
         'campos': campos,
         'por_destino': por_destino,
+        # Tarefa B #322: o tipo é <select> como no formulário de lançamento;
+        # as opções e o enum aceito no save vêm da MESMA fonte (contrato A3).
+        'opcoes_tipo_sugerido': _opcoes_tipo_sugerido(),
+        'codigos_tipo_sugerido': list(rotulos.TIPOS_SUGERIDOS),
         'pendencias': [
             revisao.descrever_pendencia(item, permitir_sem_atos)
             for item in pendencias

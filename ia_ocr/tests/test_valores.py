@@ -14,7 +14,7 @@ from django.test import SimpleTestCase
 from dominial.models import Lancamento
 
 from ia_ocr import valores
-from ia_ocr.destinos import SEM_DESTINO, destino_de
+from ia_ocr.destinos import SEM_DESTINO, Destino, destino_de
 from ia_ocr.valores import (
     MOTIVO_INCOMPATIVEL,
     ErroInterno,
@@ -102,22 +102,6 @@ class ValidarLimites(SimpleTestCase):
             valores.MOTIVO_LIMITE,
         )
 
-    def test_decimal_acima_de_digitos_e_casas(self):
-        destino = destino_de('/acts/0/valor_transacao')
-        self.assertIsNone(valores.validar_limites(destino, '99999999.99'))
-        self.assertEqual(
-            valores.validar_limites(destino, '999999999.99'),
-            valores.MOTIVO_LIMITE,
-        )
-        self.assertEqual(
-            valores.validar_limites(destino, '999999999'),
-            valores.MOTIVO_LIMITE,
-        )
-        self.assertEqual(
-            valores.validar_limites(destino, '1.234'),
-            valores.MOTIVO_LIMITE,
-        )
-
     def test_area_acima_do_destino(self):
         destino = destino_de('/acts/0/area')
         self.assertIsNone(valores.validar_limites(destino, '1234.5678'))
@@ -128,6 +112,34 @@ class ValidarLimites(SimpleTestCase):
         )
         self.assertEqual(
             valores.validar_limites(destino, '999999999'),
+            valores.MOTIVO_LIMITE,
+        )
+
+    def test_decimal_acima_do_destino_sintetico(self):
+        """SHOULD-FIX (revisão Opus): a cobertura de ``decimal`` sumiu com a
+        remoção do destino de valor_transacao — um ``Destino`` sintético
+        (10, 2) cobre o caminho sem depender de chave no mapa. Com
+        ``modelo`` preenchido o destino vale como REAL: a parte inteira
+        não passa de ``max_digits - decimal_places``."""
+        destino = Destino(
+            modelo='dominial.Lancamento', campo='valor_transacao',
+            tipo_valor='decimal', max_digits=10, decimal_places=2,
+        )
+        self.assertIsNone(valores.validar_limites(destino, '1234.56'))
+        self.assertIsNone(valores.validar_limites(destino, '99999999.99'))
+        # 9 inteiros + 2 casas = 11 dígitos > max_digits=10
+        self.assertEqual(
+            valores.validar_limites(destino, '999999999.99'),
+            valores.MOTIVO_LIMITE,
+        )
+        # 9 inteiros > max_digits - decimal_places = 8
+        self.assertEqual(
+            valores.validar_limites(destino, '999999999'),
+            valores.MOTIVO_LIMITE,
+        )
+        # 3 casas > decimal_places=2
+        self.assertEqual(
+            valores.validar_limites(destino, '1.234'),
             valores.MOTIVO_LIMITE,
         )
 
@@ -261,13 +273,13 @@ class PorDestino(SimpleTestCase):
         with self.assertRaises(ValorInvalido):
             do_formulario('texto', 'x' * 10_001, SEM_DESTINO)
 
-    def test_decimal_do_destino_valor_transacao(self):
-        destino = destino_de('/acts/0/valor_transacao')
+    def test_decimal_do_destino_area(self):
+        destino = destino_de('/acts/0/area')
         self.assertEqual(
-            do_formulario('decimal', '99999999.99', destino), '99999999.99'
+            do_formulario('area', '99999999.99', destino), '99999999.99'
         )
         with self.assertRaises(ValorInvalido):
-            do_formulario('decimal', '999999999.99', destino)
+            do_formulario('area', '999999999.99', destino)
 
     def test_texto_do_destino_titulo(self):
         destino = destino_de('/acts/0/titulo')
@@ -295,7 +307,7 @@ class ValidarDestino(SimpleTestCase):
         self.assertIsNone(validar_destino(campo, 'texto comum'))
         self.assertIsNone(validar_destino(campo, None))
 
-        decimal_campo = destino_de('/acts/0/valor_transacao')
+        decimal_campo = destino_de('/acts/0/area')
         self.assertIsNone(validar_destino(decimal_campo, Decimal('1.5')))
         self.assertIsNone(validar_destino(decimal_campo, Decimal('0')))
 
