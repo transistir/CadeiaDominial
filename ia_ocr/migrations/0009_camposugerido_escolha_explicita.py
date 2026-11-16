@@ -15,16 +15,32 @@
 # estado posterior da linha já importada (``importacao.py``) — os dois são
 # decisão do revisor e voltam a valer como fonte única da precedência
 # (``_valor_explicito``), que não mudou.
+#
+# P1 estendido (review Opus 5, rodada 10): revisões já FINALIZADAS cujo
+# card de tipo nunca foi conferido também são decisão. ``requer_revisao``
+# falso não virava pendência e a finalização (``services.py``) só grava
+# ``finalizada_em`` — mas em revisão finalizada o ``normalized`` é o que o
+# revisor VIU e aprovou antes do deploy (no ``develop`` o tipo vinha dele);
+# sem a flag, o rótulo do OCR passaria a vencer depois do deploy. Linha
+# ``descartado`` continua não decidindo em nenhum dos dois caminhos.
 
 from django.db import migrations, models
+from django.db.models import Q
 
 
 def marcar_escolha_confirmada(apps, schema_editor):
-    """Backfill P1: confirmações antigas de tipo voltam a ser decisão."""
+    """Backfill P1: confirmações antigas de tipo voltam a ser decisão.
+
+    'aceito'/'importado' é decisão gravada; revisão finalizada
+    (``extracao.finalizada_em``) é decisão implícita — o revisor fechou
+    vendo o ``normalized``. Descartada nunca decide.
+    """
     CampoSugerido = apps.get_model('ia_ocr', 'CampoSugerido')
     CampoSugerido.objects.filter(
-        chave__endswith='/tipo_sugerido',
-        status_revisao__in=('aceito', 'importado'),
+        Q(chave__endswith='/tipo_sugerido'),
+        ~Q(status_revisao='descartado'),
+        Q(status_revisao__in=('aceito', 'importado'))
+        | Q(extracao__finalizada_em__isnull=False),
     ).update(escolha_explicita=True)
 
 

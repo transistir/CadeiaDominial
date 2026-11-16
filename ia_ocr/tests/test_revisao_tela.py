@@ -1236,6 +1236,52 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
         self.assertIn('<option value="averbacao" selected>', card)
         self.assertNotIn('<option value="registro" selected>', card)
 
+    def test_select_com_linha_descartada_mostra_o_tipo_do_rotulo(self):
+        # P2 (#322/PR #327, rodada 10): linha de tipo DESCARTADA com edição
+        # preservada ('registro') — ``_contexto_revisao`` remove a linha e
+        # o resolvedor usa o rótulo 'Av-5'. A cópia antiga da precedência
+        # na view mostrava o ``valor_final`` morto; o card tem que exibir
+        # o que a importação usa ('averbacao'), nunca 'registro'.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            status_revisao='descartado', valor_final='registro',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('<option value="registro" selected>', card)
+
+    def test_select_com_valor_explicito_fora_do_contrato_mostra_o_resolvido(self):
+        # P2 (#322/PR #327, rodada 10): 'transcricao' fora de
+        # TIPOS_SUGERIDOS com escolha_explicita=True — estado que o
+        # backfill da 0009 pode criar a partir de 'aceito'/'importado'
+        # legados. O resolvedor NÃO usa esse valor (cai no rótulo), e o
+        # card mostra o que a importação usa; sem opção extra de um tipo
+        # que o próprio save recusaria com 422.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            normalized='transcricao', escolha_explicita=True,
+            status_revisao='aceito', valor_final=None,
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('transcricao', card)
+
     def test_select_com_tipo_limpo_nao_seleciona_opcao_nenhuma(self):
         # P2-1 + P2-2 (#322/PR #327): ``valor_final=''`` é tipo APAGADO —
         # decisão válida; nenhuma opção marcada (o navegador enviaria a

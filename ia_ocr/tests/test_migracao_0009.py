@@ -6,6 +6,11 @@ linhas ``/acts/N/tipo_sugerido`` já confirmadas (``status_revisao``
 decisão do revisor em ``revisao._valor_explicito`` — e o rótulo do OCR
 ('Av-5') vencia a sugestão confirmada ('registro') na importação.
 
+P1 estendido (rodada 10): revisões já FINALIZADAS cujo card de tipo nunca
+foi conferido (``status_revisao='sugerido'``) também são marcadas — em
+revisão finalizada o ``normalized`` é o que o revisor viu e aprovou antes
+do deploy; linha descartada e extração não finalizada continuam de fora.
+
 A função do ``RunPython`` é chamada como o migrator chamaria: registry
 real (``django.apps.apps``) e ``schema_editor=None``.
 """
@@ -133,17 +138,73 @@ class Backfill0009Test(TestCase):
         self.extracao.save()
         dados = dados_revisados(self.extracao)
         self.assertEqual(len(dados.atos), 1)
+        # NOTA (rodada 10): a asserção ``dados.atos[0].tipo == 'registro'``
+        # passaria mesmo SEM o backfill — ``AtoRevisado.tipo`` lê
+        # ``valor_final``/``normalized`` da linha antes de recorrer ao
+        # resolvido. A prova do backfill é o PAR ``tipo_explicito`` +
+        # ``tipos_efetivos`` (o que a importação ``_resolver_tipo_e_numero``
+        # consome): sem a flag, ``tipo_explicito`` vinha None e o rótulo
+        # decidia.
         self.assertEqual(dados.atos[0].tipo, 'registro')
-        # É o ``tipo_explicito`` que a importação (_resolver_tipo_e_numero)
-        # consome — sem o backfill ele vinha None e o rótulo decidia.
         self.assertEqual(dados.atos[0].tipo_explicito, 'registro')
 
+    def test_extracao_finalizada_marca_linha_sugerida(self):
+        # (a) P1 estendido: revisão FINALIZADA cujo card de tipo nunca foi
+        # conferido ('sugerido', valor_final nulo) — requer_revisao falso
+        # não virou pendência e a finalização só gravou finalizada_em. O
+        # revisor fechou vendo a sugestão 'registro' contra o rótulo 'Av-5'
+        # (no develop o tipo vinha do normalized); sem a flag, o rótulo
+        # passaria a vencer depois do deploy.
+        self._confirmacao_legada()
+        CampoSugerido.objects.filter(chave='/acts/0/tipo_sugerido').update(
+            status_revisao='sugerido', valor_final=None,
+        )
+        self.extracao.finalizada_em = timezone.now()
+        self.extracao.save()
+
+        # Antes do backfill o rótulo 'Av-5' resolve 'averbacao'.
+        self.assertEqual(tipos_efetivos(self.extracao)['/acts/0'], 'averbacao')
+
+        self._rodar_backfill()
+
+        self.assertTrue(
+            self._campo('/acts/0/tipo_sugerido').escolha_explicita,
+        )
+        self.assertEqual(tipos_efetivos(self.extracao)['/acts/0'], 'registro')
+        # Caminho real: o que a importação (_resolver_tipo_e_numero)
+        # consome é o tipo_explicito — a prova é ele, não o ``tipo``
+        # (que lê valor_final/normalized antes).
+        self.assertEqual(pendencias(self.extracao), [])
+        self.job.status = 'revisado'
+        self.job.save()
+        dados = dados_revisados(self.extracao)
+        self.assertEqual(dados.atos[0].tipo_explicito, 'registro')
+
+    def test_extracao_finalizada_com_linha_descartada_nao_e_marcada(self):
+        # (b) linha descartada não decide NEM em revisão finalizada: a
+        # exclusão é decisão contrária, não aprovação do normalized.
+        self._confirmacao_legada()
+        CampoSugerido.objects.filter(chave='/acts/0/tipo_sugerido').update(
+            status_revisao='descartado', valor_final=None,
+        )
+        self.extracao.finalizada_em = timezone.now()
+        self.extracao.save()
+
+        self._rodar_backfill()
+
+        self.assertFalse(
+            self._campo('/acts/0/tipo_sugerido').escolha_explicita,
+        )
+
     def test_linha_sugerida_nao_e_marcada(self):
-        # (b) sem decisão do revisor a flag continua False.
+        # (c) extração NÃO finalizada com 'sugerido' → não marcada
+        # (comportamento atual preservado: sem decisão gravada E sem
+        # revisão fechada, a linha não é decisão do revisor).
         self._confirmacao_legada()
         CampoSugerido.objects.filter(chave='/acts/0/tipo_sugerido').update(
             status_revisao='sugerido',
         )
+        self.assertIsNone(self.extracao.finalizada_em)
 
         self._rodar_backfill()
 

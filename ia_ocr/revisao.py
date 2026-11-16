@@ -632,10 +632,36 @@ def _campo_ausente(linhas, chave):
     return valor is None or (isinstance(valor, str) and not valor.strip())
 
 
+def _resolver_tipo_do_ato(linhas, ato):
+    """``(tipo, origem)`` de UM ato pela precedência única (rodada 10).
+
+    Lê as linhas do ato (escolha explícita, rótulo efetivo, sugestão) e
+    delega a ``rotulos.resolver_tipo``, que já devolve a origem. Reusado
+    por ``_tipos_efetivos`` e ``resolucoes_de_tipo``: a view NÃO recalcula
+    a precedência — a cópia que existia lá divergia em dois estados
+    alcançáveis (linha de tipo descartada e valor explícito fora de
+    ``TIPOS_SUGERIDOS``, P2 do review Opus #322/PR #327).
+    """
+    campo_tipo = linhas.get(f'{ato.chave}/tipo_sugerido')
+    tipo_explicito = _valor_explicito(campo_tipo)
+    rotulo_txt = rotulo_efetivo(ato.chave, linhas)
+    tipo_sug = (
+        campo_tipo.normalized
+        if campo_tipo is not None
+        and campo_tipo.status_revisao != 'descartado'
+        else None
+    )
+    tipo, _divergencia, origem = resolver_tipo(
+        tipo_explicito, rotulo_txt, tipo_sug,
+    )
+    return tipo, origem
+
+
 def _tipos_efetivos(linhas, atos):
     """Tipo efetivo de cada ato segundo a precedência (#322 rodada 7).
 
-    A escolha EXPLÍCITA do usuário não pode ser sobrescrita pelo rótulo:
+    A escolha EXPLÍCITA do usuário não pode ser sobrescrita pelo rótulo
+    (precedência em ``_resolver_tipo_do_ato`` → ``rotulos.resolver_tipo``):
     1. /acts/N/tipo_sugerido com escolha do revisor (``_valor_explicito`` —
        edição em ``valor_final`` ou sugestão confirmada na flag, P1 da
        #322/PR #327);
@@ -647,19 +673,7 @@ def _tipos_efetivos(linhas, atos):
     """
     tipos_por_ato = {}
     for ato in atos:
-        chave_tipo = f'{ato.chave}/tipo_sugerido'
-        campo_tipo = linhas.get(chave_tipo)
-        tipo_explicito = _valor_explicito(campo_tipo)
-        rotulo_txt = rotulo_efetivo(ato.chave, linhas)
-        tipo_sug = (
-            campo_tipo.normalized
-            if campo_tipo is not None
-            and campo_tipo.status_revisao != 'descartado'
-            else None
-        )
-        tipo, _divergencia, _origem = resolver_tipo(
-            tipo_explicito, rotulo_txt, tipo_sug,
-        )
+        tipo, _origem = _resolver_tipo_do_ato(linhas, ato)
         tipos_por_ato[ato.chave] = tipo
     configuracoes = {}
     for tipo in LancamentoTipo.objects.filter(
@@ -667,6 +681,22 @@ def _tipos_efetivos(linhas, atos):
     ).order_by('pk'):
         configuracoes.setdefault(tipo.tipo, tipo)
     return tipos_por_ato, configuracoes
+
+
+def resolucoes_de_tipo(extracao):
+    """``{chave do ato: (tipo | None, origem)}`` — resolução por ato.
+
+    P2 (#322/PR #327, rodada 10): o ``tipo_exibido`` do card sai DAQUI,
+    não de uma cópia da precedência na view. A ``origem`` é a de
+    ``rotulos.resolver_tipo`` ('explicito', 'limpo', 'rotulo', 'sugerido',
+    'nenhum'): só ela distingue o select APAGADO ('limpo' → o card exibe
+    vazio, P2-1) do tipo resolvido que a importação vai usar.
+    """
+    linhas, atos = _contexto_revisao(extracao)
+    return {
+        ato.chave: _resolver_tipo_do_ato(linhas, ato)
+        for ato in atos
+    }
 
 
 def tipos_efetivos(extracao):
@@ -677,9 +707,10 @@ def tipos_efetivos(extracao):
     da MESMA regra (``_contexto_revisao`` + ``_tipos_efetivos``) para a
     view montar o ``tipo_exibido`` do card.
     """
-    linhas, atos = _contexto_revisao(extracao)
-    tipos_por_ato, _configuracoes = _tipos_efetivos(linhas, atos)
-    return tipos_por_ato
+    return {
+        chave: tipo
+        for chave, (tipo, _origem) in resolucoes_de_tipo(extracao).items()
+    }
 
 
 def _caminhos_do_tipo(tipo_efetivo, configuracao):

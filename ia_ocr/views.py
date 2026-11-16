@@ -601,9 +601,13 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     ]
     _preencher_fallback_cartorio(extracao, campos)
     _anexar_opcoes_cadastro(campos)
-    # P2-2 (#322/PR #327): o card tem que mostrar o tipo que pendências,
-    # prévia e importação vão usar — o resolvedor único da revisão.
-    tipos_por_ato = revisao.tipos_efetivos(extracao)
+    # P2-2 (#322/PR #327, rodada 10): o card tem que mostrar o tipo que
+    # pendências, prévia e importação vão usar — o resolvedor único da
+    # revisão, AGORA COM A ORIGEM. Nada de recalcular a precedência aqui:
+    # a cópia anterior divergia em dois estados alcançáveis (linha de tipo
+    # descartada e valor explícito fora de TIPOS_SUGERIDOS criado pelo
+    # backfill da 0009).
+    resolucoes = revisao.resolucoes_de_tipo(extracao)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
         campo.obrigatorio = revisao.campo_obrigatorio(campo.chave)
@@ -613,18 +617,15 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
             r'/acts/\d+/tipo_sugerido', campo.chave,
         ) is not None
         if campo.eh_tipo_sugerido:
-            # O que o <select> traz selecionado, na ordem da precedência:
-            # valor_final (inclusive '', que significa tipo apagado — P2-1),
-            # senão a sugestão CONFIRMADA (flag), senão o tipo resolvido do
-            # ato — nunca o normalized cru contra um rótulo divergente.
-            if campo.valor_final is not None:
-                campo.tipo_exibido = campo.valor_final
-            elif campo.escolha_explicita:
-                campo.tipo_exibido = campo.normalized
-            else:
-                campo.tipo_exibido = tipos_por_ato.get(
-                    campo.chave.rsplit('/', 1)[0],
-                )
+            # O que o <select> traz selecionado é o que a importação vai
+            # usar — inclusive quando a linha de tipo está descartada (o
+            # resolvedor já pula a linha e cai no rótulo). Única exceção:
+            # origem 'limpo' = select APAGADO (P2-1), decisão de "sem
+            # tipo" — nenhuma opção marcada.
+            tipo, origem = resolucoes.get(
+                campo.chave.rsplit('/', 1)[0], (None, 'nenhum'),
+            )
+            campo.tipo_exibido = '' if origem == 'limpo' else tipo
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
