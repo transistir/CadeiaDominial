@@ -1258,6 +1258,49 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
         self.assertIn('<option value="averbacao" selected>', card)
         self.assertNotIn('<option value="registro" selected>', card)
 
+    def test_select_com_ato_descartado_preserva_o_tipo_salvo(self):
+        # P2 Greptile / P3-1 Opus (#322/PR #327, rodada 11): aqui é o ATO
+        # (/acts/0) que está descartado, não a linha de tipo. O card do
+        # tipo CONTINUA na tela — a view só filtra LINHAS_IGNORADAS, o
+        # template desenha o card com a classe ``descartado`` e o checkbox
+        # de reinclusão — mas ``_contexto_revisao`` exclui o ato inteiro,
+        # então ``resolucoes_de_tipo`` não tem a chave. Sem o fallback, o
+        # select vinha EM BRANCO com tipo salvo e o JS enviaria valor=''
+        # no "Conferido" da reinclusão, apagando o tipo (origem 'limpo').
+        # O caminho equivalente da view é exatamente esse: chave do ato
+        # ausente em ``resolucoes`` → preserva a seleção salva.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='averbacao', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+
+    def test_select_com_ato_descartado_e_tipo_limpo_continua_vazio(self):
+        # Rodada 11, cláusula "valor_final inclusive ''": no ato
+        # descartado o '' gravado É a decisão de "sem tipo" — o fallback
+        # não pode cair no normalized ('averbacao') e recriar um tipo que
+        # o revisor apagou. Sem opção marcada, como no ato presente.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0').update(
+            status_revisao='descartado',
+        )
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value=""></option>', card)
+        self.assertIsNone(re.search(r'<option[^>]*\sselected', card))
+
     def test_select_com_valor_explicito_fora_do_contrato_mostra_o_resolvido(self):
         # P2 (#322/PR #327, rodada 10): 'transcricao' fora de
         # TIPOS_SUGERIDOS com escolha_explicita=True — estado que o

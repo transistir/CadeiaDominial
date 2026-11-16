@@ -622,10 +622,26 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
             # resolvedor já pula a linha e cai no rótulo). Única exceção:
             # origem 'limpo' = select APAGADO (P2-1), decisão de "sem
             # tipo" — nenhuma opção marcada.
-            tipo, origem = resolucoes.get(
-                campo.chave.rsplit('/', 1)[0], (None, 'nenhum'),
-            )
-            campo.tipo_exibido = '' if origem == 'limpo' else tipo
+            resolucao = resolucoes.get(campo.chave.rsplit('/', 1)[0])
+            if resolucao is None:
+                # P2 Greptile / P3-1 Opus (#322/PR #327, rodada 11): ato
+                # DESCARTADO sai de _contexto_revisao e não tem resolução —
+                # mas o card continua na tela (a view só filtra
+                # LINHAS_IGNORADAS) com o checkbox de reinclusão. Select em
+                # branco aqui faria o JS enviar valor='' no "Conferido" da
+                # reinclusão e APAGAR o tipo salvo (origem 'limpo' na
+                # resolução seguinte). Preserva a seleção salva:
+                # valor_final (inclusive '' — a decisão de "sem tipo"
+                # também é salva) antes do normalized (onde vive a escolha
+                # explícita gravada só na flag).
+                campo.tipo_exibido = (
+                    campo.valor_final
+                    if campo.valor_final is not None
+                    else campo.normalized
+                )
+            else:
+                tipo, origem = resolucao
+                campo.tipo_exibido = '' if origem == 'limpo' else tipo
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
