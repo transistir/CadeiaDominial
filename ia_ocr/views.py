@@ -601,6 +601,9 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     ]
     _preencher_fallback_cartorio(extracao, campos)
     _anexar_opcoes_cadastro(campos)
+    # P2-2 (#322/PR #327): o card tem que mostrar o tipo que pendências,
+    # prévia e importação vão usar — o resolvedor único da revisão.
+    tipos_por_ato = revisao.tipos_efetivos(extracao)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
         campo.obrigatorio = revisao.campo_obrigatorio(campo.chave)
@@ -609,6 +612,19 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         campo.eh_tipo_sugerido = re.fullmatch(
             r'/acts/\d+/tipo_sugerido', campo.chave,
         ) is not None
+        if campo.eh_tipo_sugerido:
+            # O que o <select> traz selecionado, na ordem da precedência:
+            # valor_final (inclusive '', que significa tipo apagado — P2-1),
+            # senão a sugestão CONFIRMADA (flag), senão o tipo resolvido do
+            # ato — nunca o normalized cru contra um rótulo divergente.
+            if campo.valor_final is not None:
+                campo.tipo_exibido = campo.valor_final
+            elif campo.escolha_explicita:
+                campo.tipo_exibido = campo.normalized
+            else:
+                campo.tipo_exibido = tipos_por_ato.get(
+                    campo.chave.rsplit('/', 1)[0],
+                )
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos

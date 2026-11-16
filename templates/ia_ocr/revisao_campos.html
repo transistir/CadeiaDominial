@@ -115,11 +115,12 @@
 
                 {% if campo.eh_tipo_sugerido %}
                 {# Tarefa B #322: tipo é <select>, como no formulário de lançamento. As opções e o enum aceito no save vêm da MESMA fonte (rotulos.TIPOS_SUGERIDOS); valor efetivo fora delas ganha opção extra selecionada em vez de cair na vazia e apagar a sugestão no save seguinte (revisão Opus). #}
+                {# P2-2 (#322/PR #327): o selecionado é o campo.tipo_exibido calculado na view (valor_final, senão a confirmação da sugestão, senão o tipo resolvido do ato — o mesmo de pendências/importação), nunca o normalized cru contra um rótulo divergente. #}
                 <select id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
                         class="form-select campo-valor"
                         data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>
                     <option value=""></option>
-                    {% with atual=campo.valor_final|default_if_none:campo.normalized %}
+                    {% with atual=campo.tipo_exibido %}
                     {% for opcao in opcoes_tipo_sugerido %}
                     <option value="{{ opcao.codigo }}"{% if opcao.codigo == atual %} selected{% endif %}>{{ opcao.display }}</option>
                     {% endfor %}

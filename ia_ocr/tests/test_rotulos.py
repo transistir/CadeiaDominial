@@ -530,3 +530,18 @@ class ResolverTipoTest(TestCase):
         self.assertIsNone(tipo)
         self.assertFalse(divergencia)
         self.assertEqual(origem, 'nenhum')
+
+    def test_tipo_limpo_e_decisao_antes_de_rotulo_e_sugestao(self):
+        # P2-1 (#322/PR #327): '' explícito (revisor limpou o <select>)
+        # é decisão de "sem tipo" — cairia no rótulo/sugestão e o tipo
+        # apagado seria importado sem aviso.
+        self.assertEqual(
+            resolver_tipo('', 'Av-5', 'averbacao'), (None, False, 'limpo'),
+        )
+
+    def test_tipo_ausente_mantem_a_precedencia_antiga(self):
+        # None continua "sem decisão": rótulo e sugestão decidem como antes.
+        self.assertEqual(
+            resolver_tipo(None, 'Av-5', 'averbacao'),
+            ('averbacao', False, 'rotulo'),
+        )

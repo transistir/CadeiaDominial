@@ -727,6 +727,29 @@ class PendenciasEAvisosTest(TestCase):
         with self.assertRaises(RevisaoInvalidada):
             dados_revisados(self.extracao)
 
+    def test_tipo_limpo_no_formulario_bloqueia_e_nao_importa(self):
+        # P2-1 (#322/PR #327): limpar o tipo no <select> grava
+        # ``valor_final=''`` — decisão de "sem tipo", não ausência de
+        # decisão. Sem isto o '' caía no rótulo/sugestão e o tipo apagado
+        # era importado sem aviso; a pendência de ``tipo_sugerido`` volta
+        # a bloquear (o formulário é a fonte de verdade).
+        payload = self._registro_completo()
+        linhas = self._persistir(payload)
+        tipo = linhas['/acts/0/tipo_sugerido']
+        aplicar_linha(tipo, incluir=True, valor='')
+        tipo.save()
+        self.assertEqual(tipo.valor_final, '')
+        self.assertEqual(tipo.status_revisao, 'editado')
+        self.assertIn(
+            self._obrigatorio('/acts/0/tipo_sugerido'),
+            pendencias(self.extracao),
+        )
+        self.job.status = 'revisado'
+        self.job.save()
+        self.extracao.finalizada_em = timezone.now()
+        with self.assertRaises(RevisaoInvalidada):
+            dados_revisados(self.extracao)
+
     def test_requer_forma_e_observacao_sao_aviso_nao_bloqueio(self):
         self.averbacao.requer_forma = True
         self.averbacao.requer_observacao = True

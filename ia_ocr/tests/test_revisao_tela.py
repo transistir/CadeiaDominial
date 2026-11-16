@@ -1132,7 +1132,8 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
             self.assertIn(f'<option value="{codigo}"', card)
         for _codigo, display in LancamentoTipo.TIPO_CHOICES:
             self.assertIn(f'>{display}</option>', card)
-        # Selecionado = valor_final, senão normalized ('averbacao' aqui).
+        # Selecionado = tipo_exibido da view (aqui o rótulo 'Av-1' resolve
+        # 'averbacao', concordando com a sugestão).
         self.assertIn('<option value="averbacao" selected>', card)
         # O select é o único editor da chave: nada de input de texto.
         self.assertIsNone(re.search(r'<input[^>]*type="text"', card))
@@ -1161,10 +1162,17 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
         # sem linha no cadastro — antes, nenhuma opção era marcada, o
         # navegador enviava a vazia e o save apagava a sugestão. Agora a
         # opção sai de TIPO_CHOICES, selecionada, e o valor sobrevive.
+        # P2-2 (#322/PR #327): com o tipo exibido resolvido pelo ato, o
+        # rótulo 'Av-1' é neutralizado para a SUGESTÃO decidir — senão o
+        # card mostraria 'averbacao' (o que a importação usaria) em vez
+        # da sugestão 'inicio_matricula' que este teste exercita.
         extracao = self._extracao()
         extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
             normalized='inicio_matricula',
         )
+        extracao.campos.filter(
+            chave__in=('/acts/0', '/acts/0/rotulo'),
+        ).update(normalized=None, raw=None, valor_final=None)
         LancamentoTipo.objects.filter(tipo='inicio_matricula').delete()
 
         html = self._tela().content.decode()
@@ -1209,6 +1217,39 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
         self.assertNotIn(
             '<option value="averbacao" selected>', self._card(html),
         )
+
+    def test_select_mostra_o_tipo_resolvido_do_ato(self):
+        # P2-2 (#322/PR #327): rótulo 'Av-5' × sugestão 'registro' sem
+        # decisão do revisor — o card mostra o MESMO tipo que pendências,
+        # prévia e importação resolvem (o rótulo vence), não o normalized
+        # cru: o card não pode exibir um tipo e a importação usar outro.
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['rotulo'] = {
+            'raw': 'Av-5', 'normalized': 'Av-5', 'confianca': 0.95,
+            'requer_revisao': False,
+        }
+        self._extracao(payload)
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value="averbacao" selected>', card)
+        self.assertNotIn('<option value="registro" selected>', card)
+
+    def test_select_com_tipo_limpo_nao_seleciona_opcao_nenhuma(self):
+        # P2-1 + P2-2 (#322/PR #327): ``valor_final=''`` é tipo APAGADO —
+        # decisão válida; nenhuma opção marcada (o navegador enviaria a
+        # vazia) e a pendência de ``tipo_sugerido`` volta a bloquear.
+        extracao = self._extracao()
+        extracao.campos.filter(chave='/acts/0/tipo_sugerido').update(
+            valor_final='', status_revisao='editado',
+        )
+
+        html = self._tela().content.decode()
+        card = self._card(html)
+
+        self.assertIn('<option value=""></option>', card)
+        self.assertIsNone(re.search(r'<option[^>]*\sselected', card))
 
     def test_somente_leitura_desabilita_o_select(self):
         extracao = self._extracao()

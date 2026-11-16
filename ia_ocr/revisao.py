@@ -669,6 +669,19 @@ def _tipos_efetivos(linhas, atos):
     return tipos_por_ato, configuracoes
 
 
+def tipos_efetivos(extracao):
+    """Tipo efetivo de cada ato da extração: {chave do ato: tipo | None}.
+
+    P2-2 (#322/PR #327): a tela de revisão precisa mostrar o MESMO tipo
+    que as pendências e a importação resolvem — este é o acesso público
+    da MESMA regra (``_contexto_revisao`` + ``_tipos_efetivos``) para a
+    view montar o ``tipo_exibido`` do card.
+    """
+    linhas, atos = _contexto_revisao(extracao)
+    tipos_por_ato, _configuracoes = _tipos_efetivos(linhas, atos)
+    return tipos_por_ato
+
+
 def _caminhos_do_tipo(tipo_efetivo, configuracao):
     """Campos que o tipo efetivo exige, pelos mesmos ``requer_*`` do modelo.
 

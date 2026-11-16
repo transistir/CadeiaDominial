@@ -212,20 +212,30 @@ def resolver_tipo(
 
     1. ``tipo_explicito`` em ``TIPOS_SUGERIDOS`` (usuário mudou o tipo na
        tela, inclusive via ``aplicar_linha``/fluxo "mudar tipo") — vence;
-    2. Rótulo efetivo com prefixo R/Av (lido como na rodada 6:
+    2. ``tipo_explicito`` ``''`` (usuário LIMPOU o <select> do tipo) é
+       decisão de "sem tipo", não ausência de decisão: devolve
+       ``(None, False, 'limpo')`` ANTES de olhar rótulo/sugestão — sem
+       isso o ``valor_final=''`` gravado caía no rótulo e o tipo apagado
+       era importado sem aviso (P2-1, #322/PR #327; a pendência de
+       ``tipo_sugerido`` volta a bloquear, como antes). ``None`` continua
+       significando "sem decisão" e mantém a precedência abaixo;
+    3. Rótulo efetivo com prefixo R/Av (lido como na rodada 6:
        ``valor_final`` → ``normalized`` → ``raw``, linha descartada
        ignorada);
-    3. ``tipo_sugerido`` em ``TIPOS_SUGERIDOS`` (sugestão normalizada do OCR).
+    4. ``tipo_sugerido`` em ``TIPOS_SUGERIDOS`` (sugestão normalizada do OCR).
 
     Devolve ``(tipo | None, divergencia: bool, origem: str)``.
-    ``origem`` é ``'explicito'``, ``'rotulo'``, ``'sugerido'`` ou ``'nenhum'``.
-    ``divergencia`` é True quando o rótulo R/Av resolve e difere do
-    ``tipo_sugerido`` válido. Módulo PURO, sem Django e sem I/O.
+    ``origem`` é ``'explicito'``, ``'limpo'``, ``'rotulo'``, ``'sugerido'``
+    ou ``'nenhum'``. ``divergencia`` é True quando o rótulo R/Av resolve e
+    difere do ``tipo_sugerido`` válido. Módulo PURO, sem Django e sem I/O.
     """
     if isinstance(tipo_explicito, str):
         tipo_exp = tipo_explicito.strip()
         if tipo_exp in TIPOS_SUGERIDOS:
             return tipo_exp, False, 'explicito'
+        if not tipo_exp:
+            # P2-1 (#322 / PR #327): '' explícito É decisão.
+            return None, False, 'limpo'
 
     analisado = (
         rotulo_texto
