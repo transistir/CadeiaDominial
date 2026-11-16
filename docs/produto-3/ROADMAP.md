@@ -24,6 +24,11 @@
 > **R4 item 11** — exibir "Anexar Arquivo" em documento importado e gravar o
 > arquivo no documento do **imóvel de origem** (mesmo padrão de redirect do
 > `novo_lancamento`; um único `DocumentoDigital`, compartilhado pelas cadeias).
+> **Enfileiramento 16/11/2026 (autorizado pelo Hiure):** **#334** — botão
+> "Baixar certidões" na `ver-cadeia-dominial`, gerando um ZIP com todos os
+> PDFs anexados (via `upload-digital`) aos documentos da cadeia — entra como
+> **primeiro item do R4 (item 0)**, executado **assim que a trilha F3 fechar
+> (I-7/I-8)**. Não reordena R1–R10: apenas antecede os demais itens do R4.
 > **Replanejamento 29/10/2026 (Hiure — issue #307):** a sprint da F3 é
 > reorganizada. A **#307** (UX/robustez do OCR no teste ponta a ponta:
 > expectativa de tempo, progresso quando `pages_done=0`, backoff do polling
@@ -449,16 +454,25 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > acréscimo de trabalho em R3/R3.5 desloca o início efetivo do R4 (e o
 > disparo) para ~29/09–03/10.
 
-0. **#193** UF nas sugestões digitadas de CRI ✅ **FECHADA 12/09** (PR #195,
-   commit `2677d9b7`; Codex 7/7 + Greptile 5/5; validada no test server —
-   Guairá/PR×SP distinguíveis). Débito apontado na revisão (preexistente):
-   XSS em innerHTML dos autocomplete — candidato a issue separada.
-   **Incidente de deploy 12/09:** disco do test server 100% (221 imagens
-   Docker, 52 GB) matou 2 deploys silenciosamente; resolvido com
-   `docker image prune` + re-run. Débitos de infra candidatos a issue:
-   (a) monitoramento/prune periódico de disco no test server,
-   (b) `immutable` 30d em estáticos sem hash de versão (ManifestStaticFiles),
-   (c) alerta quando deploy do CI falha.
+> **Fora da fila (concluído):** **#193** UF nas sugestões digitadas de CRI ✅
+> **FECHADA 12/09** (PR #195, commit `2677d9b7`; Codex 7/7 + Greptile 5/5;
+> validada no test server — Guairá/PR×SP distinguíveis). Débito apontado na
+> revisão (preexistente): XSS em innerHTML dos autocomplete — candidato a
+> issue separada. **Incidente de deploy 12/09:** disco do test server 100%
+> (221 imagens Docker, 52 GB) matou 2 deploys silenciosamente; resolvido com
+> `docker image prune` + re-run. Débitos de infra candidatos a issue:
+> (a) monitoramento/prune periódico de disco no test server,
+> (b) `immutable` 30d em estáticos sem hash de versão (ManifestStaticFiles),
+> (c) alerta quando deploy do CI falha.
+
+0. **#334 🆕 P1 — PRIMEIRO ITEM DO R4 (executar assim que a F3 fechar)**
+   botão **"Baixar certidões"** na `ver-cadeia-dominial`: ZIP com todos os PDFs
+   anexados aos documentos da cadeia, em um clique. Escopo na issue: reutiliza
+   `CadeiaCompletaService.get_cadeia_completa()` (inclui importados, cujo PDF
+   fica no imóvel de origem — #297), só `application/pdf`, sem ZIP vazio,
+   arquivo ausente não derruba o lote, segregação do #132 preservada. Geração
+   com `SpooledTemporaryFile` + `FileResponse` (o `X-Accel-Redirect` atual serve
+   um arquivo só). **Enfileirada 16/11 (Hiure).**
 1. **#168** TAB não parar no campo sigla ✅ **MERGEADO 17/09** (PR #216,
    squash `0de729ea`; em produção na v1.0.11)
 2. **#169** corrigir janela de fim de cadeia que **não** fecha *(P)*
@@ -762,7 +776,8 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > homologação — evidência de aceite na #277, 16/10/2026, `ocr-teste.transistir.com`).
 > **Decisão de fila 16/10/2026 (Hiure, opção (a)):** terminar **I-3 → I-8** e
 > só depois retomar o **R4**. Ao fechar o bloco, o R4 volta a ser o próximo
-> item executável deste roadmap.
+> bloco executável deste roadmap, **começando pela #334** (enfileirada em
+> 16/11 — primeiro item do R4, antes dos demais).
 >
 > **Replanejamento da sprint — 29/10/2026 (Hiure, issue #307):** a ordem de
 > execução passa a ser **I-9 (#307) → I-6 (#263) → I-7 (#264) → I-8 (#265)**.
@@ -1009,6 +1024,11 @@ fecham na validação do bloco, não no merge.
 > I-10, decidido pelo Hiure depois do teste real no servidor de testes — o
 > gargalo é a revisão, não a extração. O bloco F3 não fecha no prazo do
 > contrato (31/10); I-6 em diante escorrega.
+
+> **Atualizado 16/11:** com I-10 (#314) e I-6 (#263) em develop, restam **I-7
+> (#264) e I-8 (#265)** na trilha F3. Encerrado o bloco, o R4 começa pela
+> **#334** (botão "Baixar certidões" — ZIP dos PDFs da cadeia), enfileirada em
+> 16/11 pelo Hiure, e só depois seguem os itens 1–11 do R4.
 
 ```
 Sem 07/09–11/09  R1 fechar ciclo (parcial: validação+release ✅; #187 e
