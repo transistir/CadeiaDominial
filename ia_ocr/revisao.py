@@ -597,12 +597,19 @@ def identidade_parte(chave, linhas):
     return tuple(identidade)
 
 
-def _contexto_revisao(extracao):
+def _contexto_revisao(extracao, ignorar_descarte_de=None):
     """Indexa as linhas incluídas, respeitando o descarte dos ancestrais.
 
     Linhas com nome em ``LINHAS_IGNORADAS`` (extrações antigas já salvaram
     ``valor_transacao``) não entram: nem ``dados_revisados``, nem
     ``pendencias``, nem a importação as veem.
+
+    ``ignorar_descarte_de`` (chave de UM ato, ``/acts/N``): a caminhada de
+    ancestrais NÃO quebra no descarte DESSA chave — é o contexto com que a
+    rodada 12 resolve o tipo do ato DESCARTADO, cujo card continua na
+    tela. O descarte das linhas de DENTRO do ato continua valendo (a
+    caminhada testa cada linha, a própria inclusive) e os ancestrais
+    ACIMA da chave ignorada seguem sendo checados.
     """
     por_chave = {campo.chave: campo for campo in extracao.campos.all()}
     incluidas = {}
@@ -611,9 +618,13 @@ def _contexto_revisao(extracao):
             continue
         ancestral = chave
         while ancestral:
-            linha = por_chave.get(ancestral)
-            if linha is not None and linha.status_revisao == 'descartado':
-                break
+            if ancestral != ignorar_descarte_de:
+                linha = por_chave.get(ancestral)
+                if (
+                    linha is not None
+                    and linha.status_revisao == 'descartado'
+                ):
+                    break
             ancestral = ancestral.rsplit('/', 1)[0]
         else:
             incluidas[chave] = campo
@@ -691,12 +702,31 @@ def resolucoes_de_tipo(extracao):
     ``rotulos.resolver_tipo`` ('explicito', 'limpo', 'rotulo', 'sugerido',
     'nenhum'): só ela distingue o select APAGADO ('limpo' → o card exibe
     vazio, P2-1) do tipo resolvido que a importação vai usar.
+
+    Rodada 12 (review Opus r11): TODO ato tem entrada, inclusive o
+    DESCARTADO — o card dele continua na tela com o checkbox de
+    reinclusão, e o select precisa marcar o que a importação usaria ao
+    reincluir. A resolução é a do MESMO ``_resolver_tipo_do_ato``, no
+    contexto que ignora apenas o descarte do próprio ato: o fallback de
+    ``valor_final``/``normalized`` que a view fazia divergia do resolvedor
+    no rótulo divergente sem escolha, no valor explícito fora do contrato
+    e na linha de tipo descartada.
     """
     linhas, atos = _contexto_revisao(extracao)
-    return {
+    resolucoes = {
         ato.chave: _resolver_tipo_do_ato(linhas, ato)
         for ato in atos
     }
+    for ato in extracao.campos.all():
+        # Fora de ``resolucoes`` só resta o ato descartado: a caminhada de
+        # ``_contexto_revisao`` exclui o ramo inteiro dele.
+        if ato.tipo_valor != 'ato' or ato.chave in resolucoes:
+            continue
+        linhas_do_ato, _ = _contexto_revisao(
+            extracao, ignorar_descarte_de=ato.chave,
+        )
+        resolucoes[ato.chave] = _resolver_tipo_do_ato(linhas_do_ato, ato)
+    return resolucoes
 
 
 def tipos_efetivos(extracao):

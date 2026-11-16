@@ -606,7 +606,9 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     # revisão, AGORA COM A ORIGEM. Nada de recalcular a precedência aqui:
     # a cópia anterior divergia em dois estados alcançáveis (linha de tipo
     # descartada e valor explícito fora de TIPOS_SUGERIDOS criado pelo
-    # backfill da 0009).
+    # backfill da 0009). Rodada 12: a resolução cobre também o ato
+    # DESCARTADO (mesmo resolvedor, contexto que ignora só o descarte
+    # dele) — o fallback de valor_final/normalized da rodada 11 saiu.
     resolucoes = revisao.resolucoes_de_tipo(extracao)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
@@ -619,29 +621,16 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         if campo.eh_tipo_sugerido:
             # O que o <select> traz selecionado é o que a importação vai
             # usar — inclusive quando a linha de tipo está descartada (o
-            # resolvedor já pula a linha e cai no rótulo). Única exceção:
-            # origem 'limpo' = select APAGADO (P2-1), decisão de "sem
-            # tipo" — nenhuma opção marcada.
-            resolucao = resolucoes.get(campo.chave.rsplit('/', 1)[0])
-            if resolucao is None:
-                # P2 Greptile / P3-1 Opus (#322/PR #327, rodada 11): ato
-                # DESCARTADO sai de _contexto_revisao e não tem resolução —
-                # mas o card continua na tela (a view só filtra
-                # LINHAS_IGNORADAS) com o checkbox de reinclusão. Select em
-                # branco aqui faria o JS enviar valor='' no "Conferido" da
-                # reinclusão e APAGAR o tipo salvo (origem 'limpo' na
-                # resolução seguinte). Preserva a seleção salva:
-                # valor_final (inclusive '' — a decisão de "sem tipo"
-                # também é salva) antes do normalized (onde vive a escolha
-                # explícita gravada só na flag).
-                campo.tipo_exibido = (
-                    campo.valor_final
-                    if campo.valor_final is not None
-                    else campo.normalized
-                )
-            else:
-                tipo, origem = resolucao
-                campo.tipo_exibido = '' if origem == 'limpo' else tipo
+            # resolvedor já pula a linha e cai no rótulo) e quando o ATO
+            # está descartado. Única exceção: origem 'limpo' = select
+            # APAGADO (P2-1), decisão de "sem tipo" — nenhuma opção
+            # marcada. Sem linha estrutural do ato não há resolução
+            # (estado inalcançável: o desnormalizar sempre cria a linha do
+            # ato antes da de tipo) e o select fica em branco.
+            tipo, origem = resolucoes.get(
+                campo.chave.rsplit('/', 1)[0], (None, 'nenhum'),
+            )
+            campo.tipo_exibido = '' if origem == 'limpo' else tipo
     efetivos = {
         campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
         for campo in campos
