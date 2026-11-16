@@ -891,17 +891,35 @@ fecham na validação do bloco, não no merge.
    Greptile 5/5; 780 testes verdes em SQLite e em Postgres real.
    **Absorve o item 1 do #296** (limites contextuais: RG → `Pessoas.rg` 20,
    CPF → 11, cartório → `Cartorios.nome` 200).
-7b. **I-11 🆕 P0 — PRÓXIMO** #321–#325 — formulários de lançamento por ato
-   (substitui a grade de revisão como caminho principal):
+7b. **I-11 🆕 P0 — EM EXECUÇÃO** #321–#325 + #328 — formulários de lançamento
+   por ato (substitui a grade de revisão como caminho principal).
+   **Ordem aprovada pelo Hiure em 16/11/2026:** **I-10 (#314) → I-11b
+   (#322 + #328) → I-11c (#323) → I-11d (#324) → I-11e (#325)**, com I-12
+   (#331) e I-13 (#332) depois do bloco. Motivo: o dono classificou o fluxo
+   atual como complexo demais no teste de 31/10, e #323 depende de negociação
+   externa (`ocr-service` v1.2).
    - **I-11a (#321)** UI: um formulário por ato, pré-preenchido, empilhados, em
      ordem reversa, confirmação por ato pelo backend do I-6, progresso retomável;
    - **I-11b (#322)** parser: cabeçalho (1º, às vezes 2º parágrafo) → início de
-     matrícula; `R`/`Av` → lançamento; `M` é matrícula; bucket "não reconhecidos";
+     matrícula; `R`/`Av` → lançamento; `M` é matrícula; bucket "não reconhecidos".
+     **PR #327 aberto** (branch `feat/issue-322-rotulos`): rodadas 9 e 10
+     fecharam o P1 da migration 0009 (backfill de `escolha_explicita` para
+     `aceito`/`importado` **e** revisão já finalizada), o tipo limpo (`'limpo'`)
+     e a paridade do tipo exibido no card com a importação. Opus 5 **APROVA**
+     no head `c4e73d88`; segundo assento frontier na rodada 10 foi
+     `gpt-5.6-sol` via kiro-cli (Codex em limite de conta), sem P0/P1/P2;
+     983 testes, 1 falha de ambiente, zero regressões novas;
    - **I-11c (#323)** contrato OCR v1.2: livro/folha/data da **transmissão** no
      ato (hoje só existem na origem) — depende do `ocr-service`;
    - **I-11d (#324)** origem do ato preenchida + criação/vínculo do documento de
      origem, com livro/folha da origem como pendência explícita quando ausente;
-   - **I-11e (#325)** aceite no M237 + regressão dos fluxos existentes.
+   - **I-11e (#325)** aceite no M237 + regressão dos fluxos existentes. Item 4
+     do roteiro ajustado em 16/11: `valor` saiu da conferência (campo não existe
+     no formulário de lançamento; #327/#328);
+   - **I-11f (#328)** regra "o formulário de lançamento é a fonte de verdade":
+     campo fora do formulário não vira card nem é importado; select no
+     formulário = select na revisão; campo novo no schema exige destino no
+     formulário.
    Bloqueadores: #311 (schema v1.1) e #315; #320 entra junto.
 8. **I-7 ⏭ DESLIZADO (pós-I-11)** #264 — admin de acompanhamento dos
    processamentos + logs de auditoria mínimos (sem PII), exportáveis. **Escopo
@@ -911,6 +929,18 @@ fecham na validação do bloco, não no merge.
    smoke ponta a ponta com stubs — núcleo do Produto 5 (testes/documentação/
    entrega). Roda **depois do I-9**, cujo "como validar" (#307) é o roteiro do
    teste manual no test server.
+10. **I-12 🆕** #331 — prévia em planilha do que será importado (CSV/XLSX, um
+    registro por ato, colunas = campos do formulário de lançamento, status
+    novo/duplicado/pendência, **sem gravar**). Paridade obrigatória com
+    `importar()` (mesma função). Entra **depois do bloco I-11** (depende de
+    #322 e #328). Decidido pelo Hiure em 16/11.
+11. **I-13 🆕** #332 — separar pendência **bloqueante** de **informativa** e
+    liberar "importar e corrigir depois": hoje `revisao.py:862` marca tudo
+    bloqueante e `dados_revisados` recusa com qualquer pendência. Mapa de
+    motivos em fonte única; `dados_revisados` recusa só bloqueante; aviso
+    informativo fica visível no lançamento. Entra depois do I-12 (mesma região
+    de `revisao.py`). Decidido pelo Hiure em 16/11.
+
 
 > **Achados da validação do I-3 no ambiente dev (16/10/2026 — Hiure):**
 > - **#280 (bug, afeta prod):** PDF com criptografia AES morre em `INVALID_PDF` porque
