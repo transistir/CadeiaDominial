@@ -597,7 +597,7 @@ def identidade_parte(chave, linhas):
     return tuple(identidade)
 
 
-def _contexto_revisao(extracao, ignorar_descarte_de=None):
+def _contexto_revisao(extracao, ignorar_descarte_de=None, por_chave=None):
     """Indexa as linhas incluídas, respeitando o descarte dos ancestrais.
 
     Linhas com nome em ``LINHAS_IGNORADAS`` (extrações antigas já salvaram
@@ -610,8 +610,14 @@ def _contexto_revisao(extracao, ignorar_descarte_de=None):
     tela. O descarte das linhas de DENTRO do ato continua valendo (a
     caminhada testa cada linha, a própria inclusive) e os ancestrais
     ACIMA da chave ignorada seguem sendo checados.
+
+    ``por_chave`` (``{chave: campo}`` de ``extracao.campos``): quando vem
+    pronto, a leitura de ``extracao.campos.all()`` é pulada —
+    ``resolucoes_de_tipo`` monta o dicionário UMA vez e o reusa em todas
+    as caminhadas, uma leitura única do banco (rodada 13).
     """
-    por_chave = {campo.chave: campo for campo in extracao.campos.all()}
+    if por_chave is None:
+        por_chave = {campo.chave: campo for campo in extracao.campos.all()}
     incluidas = {}
     for chave, campo in por_chave.items():
         if linha_ignorada(chave):
@@ -711,19 +717,28 @@ def resolucoes_de_tipo(extracao):
     ``valor_final``/``normalized`` que a view fazia divergia do resolvedor
     no rótulo divergente sem escolha, no valor explícito fora do contrato
     e na linha de tipo descartada.
+
+    Custo (rodada 13, P2 Greptile): O(N + D × N) no pior caso de
+    caminhada — N linhas, D atos descartados, cada um rewalks os
+    ancestrais no contexto que ignora só o descarte dele — mas com UMA
+    leitura única de ``extracao.campos``: ``por_chave`` é montado uma
+    vez e reusado na caminhada inicial e nas D caminhadas dos
+    descartados. O ``assertNumQueries`` de ``ResolucoesDeTipoCustoTest``
+    trava essa leitura única (a contagem não cresce com D).
     """
-    linhas, atos = _contexto_revisao(extracao)
+    por_chave = {campo.chave: campo for campo in extracao.campos.all()}
+    linhas, atos = _contexto_revisao(extracao, por_chave=por_chave)
     resolucoes = {
         ato.chave: _resolver_tipo_do_ato(linhas, ato)
         for ato in atos
     }
-    for ato in extracao.campos.all():
+    for ato in por_chave.values():
         # Fora de ``resolucoes`` só resta o ato descartado: a caminhada de
         # ``_contexto_revisao`` exclui o ramo inteiro dele.
         if ato.tipo_valor != 'ato' or ato.chave in resolucoes:
             continue
         linhas_do_ato, _ = _contexto_revisao(
-            extracao, ignorar_descarte_de=ato.chave,
+            extracao, ignorar_descarte_de=ato.chave, por_chave=por_chave,
         )
         resolucoes[ato.chave] = _resolver_tipo_do_ato(linhas_do_ato, ato)
     return resolucoes
@@ -736,6 +751,11 @@ def tipos_efetivos(extracao):
     que as pendências e a importação resolvem — este é o acesso público
     da MESMA regra (``_contexto_revisao`` + ``_tipos_efetivos``) para a
     view montar o ``tipo_exibido`` do card.
+
+    P3-2 (review Opus, rodada 13): o mapa devolve também atos
+    DESCARTADOS (rodada 12) — a importação não os grava; consumidor
+    novo que só queira atos válidos precisa filtrar o
+    ``status_revisao`` da linha do ato.
     """
     return {
         chave: tipo
