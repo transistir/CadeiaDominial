@@ -156,36 +156,6 @@ class DocumentoService:
         return documento.imovel != imovel_atual
     
     @staticmethod
-    def obter_documentos_compartilhados(imovel, *, documentos_queryset=None):
-        """
-        Obtém documentos que são compartilhados com o imóvel
-
-        A FK ``documento_origem`` vale o escopo de quem LÊ (#324 rodada 4):
-        o documento só entra na lista se resolvido dentro de
-        ``documentos_queryset`` (o do usuário do request). Sem queryset
-        explícito não há resolução implícita de documento potencialmente
-        alheio — o mesmo guard de ``lancamento_campos_service``.
-        """
-        # Buscar documentos que são referenciados como origem em lançamentos deste imóvel
-        from ..models import Lancamento
-
-        lancamentos = Lancamento.objects.filter(
-            documento__imovel=imovel
-        )
-
-        documentos_compartilhados = []
-        for lancamento in lancamentos:
-            if lancamento.documento_origem_id is None or documentos_queryset is None:
-                continue
-            documento_origem = documentos_queryset.filter(
-                pk=lancamento.documento_origem_id
-            ).first()
-            if documento_origem and documento_origem.imovel != imovel:
-                documentos_compartilhados.append(documento_origem)
-
-        return list(set(documentos_compartilhados))  # Remove duplicatas
-    
-    @staticmethod
     def obter_info_compartilhamento(documento, imovel_atual):
         """
         Obtém informações sobre o compartilhamento de um documento

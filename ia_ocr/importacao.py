@@ -800,13 +800,20 @@ def _gravar_avisos_da_importacao(extracao, avisos_gravados):
     """
     if not avisos_gravados:
         return
-    extracao.payload[CHAVE_PAYLOAD_IMPORTACAO] = {
-        'versao': VERSAO_AVISOS_GRAVADOS,
-        'avisos': {
-            chave: list(registros)
-            for chave, registros in avisos_gravados.items()
+    # Cópia rasa montada à parte: o dict do chamador só é substituído de uma
+    # vez, imediatamente antes do save — nunca fica com ``_importacao``
+    # pela metade se algo falhar antes.
+    payload = {
+        **extracao.payload,
+        CHAVE_PAYLOAD_IMPORTACAO: {
+            'versao': VERSAO_AVISOS_GRAVADOS,
+            'avisos': {
+                chave: list(registros)
+                for chave, registros in avisos_gravados.items()
+            },
         },
     }
+    extracao.payload = payload
     extracao.save(update_fields=['payload'])
 
 
