@@ -42,8 +42,8 @@ from django.utils import timezone
 
 from dominial.managers import documentos_for_user
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, Lancamento, LancamentoPessoa,
-    LancamentoTipo, Pessoas,
+    Cartorios, Documento, DocumentoDigital, Lancamento, LancamentoOrigem,
+    LancamentoPessoa, LancamentoTipo, Pessoas,
 )
 from dominial.services.cache_service import CacheService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
@@ -466,6 +466,8 @@ def _importar_ato(
     texto_origem = None
     mapeamento = None
     cartorio_origem = None
+    # Avisos da origem (#324/#267): informam o revisor e nunca bloqueiam.
+    avisos_da_origem = []
     # O cartório da origem é resolvido SEMPRE que há origem — inclusive
     # quando ela só tem o cartório, sem número/tipo (#263 rodada 4,
     # CodeRabbit): o tipo do lançamento pode exigir cartório de origem e a
@@ -535,9 +537,20 @@ def _importar_ato(
                 # não vira 'M42' + 'M718') (#263 rodada 4, Codex P1).
                 'tipo_documento': tipo_documento,
                 'cartorio_id': cartorio_origem.pk,
-                'livro': origem.get('livro'),
-                'folha': origem.get('folha'),
+                'livro': _texto_ou_none(origem.get('livro')),
+                'folha': _texto_ou_none(origem.get('folha')),
             }]
+            # #267: ANTES de gravar — depois, o documento que a própria
+            # importação cria (início de matrícula) já seria a identidade
+            # declarada. Só o escopo do usuário; o homônimo nunca é vinculado.
+            homonimo = LancamentoOrigemService.homonimo_outro_tipo(
+                tipo_documento, numero, cartorio_origem,
+                documentos_queryset=documentos_usuario,
+            )
+            if homonimo is not None:
+                avisos_da_origem.append(
+                    _aviso_homonimo(tipo_documento, homonimo)
+                )
 
     lancamento = Lancamento(
         documento=documento,
@@ -564,8 +577,10 @@ def _importar_ato(
         livro_transacao=(ato.livro_transacao or '').strip() or None,
         folha_transacao=(ato.folha_transacao or '').strip() or None,
         data_transacao=ato.data_transacao,
-        livro_origem=origem.get('livro') if origem else None,
-        folha_origem=origem.get('folha') if origem else None,
+        # #324: o mesmo ``strip() or None`` da transmissão — livro/folha da
+        # origem em branco são NULL no lançamento e no mapeamento acima.
+        livro_origem=_texto_ou_none(origem.get('livro')) if origem else None,
+        folha_origem=_texto_ou_none(origem.get('folha')) if origem else None,
         data_origem=origem.get('data') if origem else None,
     )
     if texto_origem is not None:
@@ -604,6 +619,15 @@ def _importar_ato(
         # escritor (#263 rodada 3).
         documentos_origem = (
             LancamentoOrigemService.consumir_documentos_criados(lancamento)
+        )
+
+    # #324: só a importação grava ``documento_origem``. Resolve a origem
+    # estruturada no escopo do usuário e aceita só identidade ``encontrada``
+    # — nunca cria, nunca pelo número; fora do escopo/ambígua/sem documento
+    # a FK fica NULL (o aviso da origem restrita já saiu do serviço acima).
+    if mapeamento is not None:
+        LancamentoOrigemService.vincular_documento_origem(
+            lancamento, documentos_queryset=documentos_usuario,
         )
 
     registros = [('Lancamento', lancamento.pk, chave)]
@@ -647,11 +671,55 @@ def _importar_ato(
     # rótulo de matrícula sem número (P2-1) — aparecem para o revisor, sem
     # bloquear uma gravação válida.
     avisos.extend(avisos_do_rotulo)
+    if texto_origem is not None:
+        aviso_livro_folha = _aviso_livro_folha_da_origem(
+            lancamento.livro_origem, lancamento.folha_origem,
+        )
+        if aviso_livro_folha:
+            avisos_da_origem.append(aviso_livro_folha)
+    avisos.extend(avisos_da_origem)
     resposta = _linha_resposta(
         chave, _rotulo(chave, linhas), 'criado', lancamento=lancamento,
         avisos=avisos,
     )
     return resposta, erros
+
+
+def _texto_ou_none(valor):
+    """Texto sem bordas; vazio de verdade (``None``, ``''``, só espaços) é None."""
+    return (valor or '').strip() or None
+
+
+def _aviso_livro_folha_da_origem(livro, folha):
+    """Aviso do que o documento NÃO traz da origem (#324), ou ``None``.
+
+    Lê o que ficou GRAVADO no lançamento (já sem bordas): é o mesmo cálculo
+    da resposta da importação e do replay do job já importado. Cita só o
+    que falta; o status do ato segue ``criado``.
+    """
+    sem_livro = not (livro or '').strip()
+    sem_folha = not (folha or '').strip()
+    if sem_livro and sem_folha:
+        return 'Livro/folha da origem não constam no documento.'
+    if sem_livro:
+        return 'Livro da origem não consta no documento.'
+    if sem_folha:
+        return 'Folha da origem não consta no documento.'
+    return None
+
+
+_NOME_DO_TIPO_DA_ORIGEM = {'matricula': 'matrícula', 'transcricao': 'transcrição'}
+
+
+def _aviso_homonimo(tipo_declarado, homonimo):
+    """Aviso do #267: fala do TIPO do homônimo, nunca do número nem de ids."""
+    existente = _NOME_DO_TIPO_DA_ORIGEM.get(homonimo.tipo.tipo, 'documento')
+    declarado = _NOME_DO_TIPO_DA_ORIGEM.get(tipo_declarado, tipo_declarado)
+    return (
+        f'Já existe uma {existente} com o mesmo número neste cartório '
+        f'(outro tipo). A origem foi mantida como {declarado}, como '
+        'declarada; confira o tipo.'
+    )
 
 
 def _rg_normalizado(rg):
@@ -994,13 +1062,12 @@ def _resolver_cartorio(
 
 
 def _tipo_documento_da_origem(origem, numero):
-    """Tipo documental da origem: o revisado, ou inferido do prefixo M/T."""
-    tipo = origem.get('tipo_documento')
-    if tipo in PREFIXO_TIPO_DOCUMENTO:
-        return tipo
-    if numero[:1].upper() == 'T':
-        return 'transcricao'
-    return 'matricula'
+    """Tipo documental da origem: o revisado, ou inferido do prefixo M/T.
+
+    A regra mora em ``revisao.tipo_da_origem`` — a revisão (aviso de
+    homônimo, #267) e a importação não podem divergir no tipo da origem.
+    """
+    return revisao.tipo_da_origem(origem.get('tipo_documento'), numero)
 
 
 def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
@@ -1233,12 +1300,27 @@ def _resultado_gravado(extracao):
         chave for chave, campo in linhas.items()
         if campo.tipo_valor == 'ato'
     ]
+    # #324: o aviso de livro/folha da origem sai do que ficou GRAVADO, então
+    # o replay devolve o mesmo da primeira resposta (os demais avisos não são
+    # persistidos e continuam fora do replay).
+    com_origem = set(
+        LancamentoOrigem.objects.filter(
+            lancamento_id__in=[lanc.pk for lanc in por_ato.values()],
+        ).values_list('lancamento_id', flat=True)
+    )
     for chave in sorted(chaves_de_ato, key=_indice_do_ato):
         lancamento = por_ato.get(chave)
+        avisos = []
+        if lancamento is not None and lancamento.pk in com_origem:
+            aviso = _aviso_livro_folha_da_origem(
+                lancamento.livro_origem, lancamento.folha_origem,
+            )
+            if aviso:
+                avisos.append(aviso)
         respostas.append(_linha_resposta(
             chave, _rotulo(chave, linhas),
             'criado' if lancamento is not None else 'ignorado',
-            lancamento=lancamento,
+            lancamento=lancamento, avisos=avisos,
         ))
     return {'ok': True, 'linhas': respostas}
 

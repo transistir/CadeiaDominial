@@ -864,7 +864,7 @@ class ExtracaoViewsTest(TelaTextoBase):
                     for item in revisao.pendencias(vigente)
                 ])
                 self.assertEqual(contexto['avisos'], [
-                    dict(item, local=revisao._local_da_chave(item['chave']))
+                    revisao.descrever_aviso(item)
                     for item in revisao.avisos(vigente)
                 ])
                 self.assertEqual(contexto['versao'], services.versao_bloco(vigente))

@@ -68,7 +68,8 @@
         <ul class="revisao-lista">
             {% for item in avisos %}
             <li class="aviso">
-                {% if item.local %}{{ item.local }}: {% endif %}Campo recomendado não preenchido
+                {# #324: o rótulo vem do motivo (revisao._ROTULO_AVISO); motivo fora do mapa cai no texto de sempre. #}
+                {% if item.local %}{{ item.local }}: {% endif %}{{ item.rotulo }}
                 <details><summary>Detalhe técnico</summary><code>{{ item.chave }}</code> — <code>{{ item.motivo }}</code></details>
             </li>
             {% endfor %}
@@ -110,6 +111,8 @@
                     <div class="campo-linha">
                         {# Rótulo de negócio (revisao.ROTULOS_CAMPO); a chave completa fica no detalhe técnico. #}
                         <label class="campo-rotulo" for="campo-{{ campo.chave|slugify }}" data-campo-rotulo>{{ campo.rotulo_tela }}</label>
+                        {# #324: livro/folha da origem que o documento não traz — selo informativo; o campo segue vazio e editável. #}
+                        {% if campo.nao_consta %}<span class="badge-motivo" id="nao-consta-{{ campo.chave|slugify }}" data-campo-nao-consta>não consta no documento</span>{% endif %}
 
                         {% if campo.eh_tipo_sugerido %}
                         {# Tarefa B #322: tipo é <select>, como no formulário de lançamento. As opções e o enum aceito no save vêm da MESMA fonte (rotulos.TIPOS_SUGERIDOS); valor efetivo fora delas ganha opção extra selecionada em vez de cair na vazia e apagar a sugestão no save seguinte (revisão Opus). #}
@@ -130,13 +133,13 @@
                         {% elif campo.tipo_valor == 'texto' or campo.texto_longo %}
                         <textarea id="campo-{{ campo.chave|slugify }}"
                                   class="form-control campo-valor campo-valor-longo" rows="2"
-                                  data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>
+                                  data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.nao_consta %} aria-describedby="nao-consta-{{ campo.chave|slugify }}"{% endif %}{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>
                         {% else %}
                         <input id="campo-{{ campo.chave|slugify }}"
                                class="form-control campo-valor"
                                type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
                                value="{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}"
-                               data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                               data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.nao_consta %} aria-describedby="nao-consta-{{ campo.chave|slugify }}"{% endif %}{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
                         {% endif %}
 
                         <span class="campo-acoes">

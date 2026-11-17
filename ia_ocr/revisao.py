@@ -45,6 +45,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
+from dominial.services.lancamento_origem_service import LancamentoOrigemService
 
 from . import destinos, rotulos, valores
 from .models import CampoSugerido
@@ -67,6 +68,14 @@ _CHAVE_OBRIGATORIA_ATO = re.compile(r'/acts/\d+/(.+)')
 
 # Opcionais no formulário, inclusive quando o payload não resolve o tipo.
 CAMPOS_DA_TRANSMISSAO = ('livro_transacao', 'folha_transacao', 'data_transacao')
+
+# #324 (I-11d): campos da origem do ato que o formulário de lançamento tem e
+# o revisor precisa poder preencher mesmo quando o documento não os traz —
+# "não consta no documento" é uma informação, não um buraco sem controle.
+# O cartório fica de fora: quem o exige é o tipo (``_caminhos_do_tipo``).
+# Só viram linha vazia quando o ato TEM origem (``_ato_tem_origem``) ou o
+# tipo exige ``origem/cartorio``; averbação sem origem não ganha origem vazia.
+CAMPOS_DA_ORIGEM = ('tipo_documento', 'numero', 'livro', 'folha', 'data')
 
 # Tarefa C (#322/PR #327) e #328 (regra do Hiure, 11/11): o formulário de
 # lançamento manda — ``valor_transacao`` e ``detalhes`` não existem nele,
@@ -219,14 +228,7 @@ def dados_revisados(extracao) -> DadosRevisados:
         return valores.para_python(campo.tipo_valor, _valor_efetivo(campo))
 
     def cartorio_id(chave):
-        campo = linhas.get(chave)
-        if campo is None or campo.criar_novo:
-            return None
-        if campo.cartorio_escolhido_id is not None:
-            return campo.cartorio_escolhido_id
-        if len(campo.match_candidatos) == 1:
-            return campo.match_candidatos[0]
-        return None
+        return _cartorio_id_da_linha(linhas, chave)
 
     def cartorio_criar_novo(chave):
         campo = linhas.get(chave)
@@ -653,6 +655,34 @@ def _contexto_revisao(extracao, ignorar_descarte_de=None, por_chave=None):
     return incluidas, atos
 
 
+def _cartorio_id_da_linha(linhas, chave):
+    """Cadastro de cartório que a linha escolheu, ou ``None``.
+
+    Fonte única do ``cartorio_id`` da revisão (``dados_revisados`` e o aviso
+    de homônimo): "criar novo" não tem cadastro; escolha explícita vence;
+    sem escolha, só um candidato único decide.
+    """
+    campo = linhas.get(chave)
+    if campo is None or campo.criar_novo:
+        return None
+    if campo.cartorio_escolhido_id is not None:
+        return campo.cartorio_escolhido_id
+    if len(campo.match_candidatos) == 1:
+        return campo.match_candidatos[0]
+    return None
+
+
+def tipo_da_origem(tipo_informado, numero):
+    """Tipo documental da origem: o informado, ou inferido do prefixo M/T.
+
+    A MESMA regra da importação (que delega para cá): sem tipo válido, ``T…``
+    é transcrição e o resto — inclusive só dígitos — é matrícula.
+    """
+    if tipo_informado in ('matricula', 'transcricao'):
+        return tipo_informado
+    return 'transcricao' if (numero or '')[:1].upper() == 'T' else 'matricula'
+
+
 def _campo_ausente(linhas, chave):
     campo = linhas.get(chave)
     if campo is None:
@@ -957,6 +987,28 @@ def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
     }
 
 
+_TIPO_DA_ORIGEM = re.compile(r'/acts/\d+/origem/tipo_documento')
+
+
+def _tipo_da_origem_sem_leitura(campo, valor_efetivo):
+    """``origem/tipo_documento`` que a leitura nunca trouxe e segue vazio.
+
+    Enum vazio é ``valor_incompativel_destino`` para quem LEU um tipo e o
+    apagou (decisão do revisor, fixada pelos testes da tela). O campo que
+    nasceu vazio (#324: linha criada só para o revisor poder preencher) é
+    outra coisa: a importação infere o tipo pelo prefixo M/T do número
+    (``_tipo_documento_da_origem``), então vazio é ausência de informação.
+    """
+    return (
+        campo.normalized is None
+        and _TIPO_DA_ORIGEM.fullmatch(campo.chave) is not None
+        and (
+            valor_efetivo is None
+            or (isinstance(valor_efetivo, str) and not valor_efetivo.strip())
+        )
+    )
+
+
 def pendencias(extracao) -> list[dict]:
     """Bloqueios das linhas incluídas e dos destinos obrigatórios ausentes."""
     linhas, atos = _contexto_revisao(extracao)
@@ -1075,6 +1127,8 @@ def _pendencias_de_linhas(linhas, atos) -> list[dict]:
             or (isinstance(valor_efetivo, str) and not valor_efetivo.strip())
         ):
             motivo = None
+        elif _tipo_da_origem_sem_leitura(campo, valor_efetivo):
+            motivo = None
         else:
             motivo = valores.validar_destino(destino, valor_efetivo)
         if motivo:
@@ -1091,12 +1145,117 @@ def _pendencias_de_linhas(linhas, atos) -> list[dict]:
     return resultado
 
 
-def avisos(extracao) -> list[dict]:
-    """Campos recomendados pelo tipo efetivo; nunca impedem a revisão."""
+MOTIVO_LIVRO_ORIGEM_NAO_CONSTA = 'livro_origem_nao_consta'
+MOTIVO_FOLHA_ORIGEM_NAO_CONSTA = 'folha_origem_nao_consta'
+MOTIVOS_NAO_CONSTA = frozenset({
+    MOTIVO_LIVRO_ORIGEM_NAO_CONSTA, MOTIVO_FOLHA_ORIGEM_NAO_CONSTA,
+})
+MOTIVO_ORIGEM_HOMONIMA = 'origem_homonimo_outro_tipo'
+
+# Rótulo do aviso por motivo (#324). O padrão é o texto que todo aviso tinha
+# antes; motivo conhecido ganha a frase própria em vez do genérico.
+_ROTULO_AVISO = {
+    MOTIVO_LIVRO_ORIGEM_NAO_CONSTA: 'Livro da origem não consta no documento',
+    MOTIVO_FOLHA_ORIGEM_NAO_CONSTA: 'Folha da origem não consta no documento',
+    MOTIVO_ORIGEM_HOMONIMA: (
+        'Há um documento de outro tipo com este número no cartório da '
+        'origem — confira o tipo'
+    ),
+}
+_ROTULO_AVISO_PADRAO = 'Campo recomendado não preenchido'
+
+
+def descrever_aviso(item: dict) -> dict:
+    """Texto de negócio de um aviso; chave/motivo crus seguem para suporte.
+
+    Mesmo desenho de ``descrever_pendencia``: o ``local`` identifica o campo
+    e o ``rotulo`` diz o que há com ele (motivo fora do mapa → o genérico).
+    """
+    chave, motivo = item['chave'], item['motivo']
+    return dict(
+        item,
+        local=_local_da_chave(chave),
+        rotulo=_ROTULO_AVISO.get(motivo, _ROTULO_AVISO_PADRAO),
+    )
+
+
+def _origem_nao_consta(linhas, ato):
+    """Livro/folha da origem que o documento não traz (#324).
+
+    Só quando o ato cita uma origem COM número — sem número não há documento
+    de origem citado e a ausência de livro/folha não diz nada. Vale para
+    qualquer tipo de lançamento (não depende do ``requer_*_origem``) e é
+    informativo: nunca entra em ``pendencias`` nem desabilita o "Finalizar".
+    O campo não é pré-preenchido: o revisor informa ou segue sem.
+    """
+    if _campo_ausente(linhas, f'{ato.chave}/origem/numero'):
+        return []
+    achados = []
+    for nome, motivo in (
+        ('livro', MOTIVO_LIVRO_ORIGEM_NAO_CONSTA),
+        ('folha', MOTIVO_FOLHA_ORIGEM_NAO_CONSTA),
+    ):
+        chave = f'{ato.chave}/origem/{nome}'
+        if _campo_ausente(linhas, chave):
+            achados.append({
+                'chave': chave, 'motivo': motivo, 'bloqueante': False,
+            })
+    return achados
+
+
+def _origem_homonima(linhas, ato, documentos_queryset):
+    """Aviso de homônimo de outro tipo na origem do ato (#267), ou ``[]``.
+
+    Só com o escopo do chamador (``documentos_queryset``) e com o cartório da
+    origem JÁ cadastrado e escolhido: "criar novo" não tem documentos. O tipo
+    é o lido ou o inferido do prefixo — a mesma regra da importação.
+    """
+    chave_numero = f'{ato.chave}/origem/numero'
+    if _campo_ausente(linhas, chave_numero):
+        return []
+    cartorio_id = _cartorio_id_da_linha(linhas, f'{ato.chave}/origem/cartorio')
+    if cartorio_id is None:
+        return []
+    cartorio = Cartorios.objects.filter(pk=cartorio_id).first()
+    if cartorio is None:
+        return []
+    numero = _valor_efetivo(linhas[chave_numero]).strip()
+    tipo_linha = linhas.get(f'{ato.chave}/origem/tipo_documento')
+    tipo = tipo_da_origem(
+        _valor_efetivo(tipo_linha) if tipo_linha is not None else None, numero,
+    )
+    homonimo = LancamentoOrigemService.homonimo_outro_tipo(
+        tipo, numero, cartorio, documentos_queryset=documentos_queryset,
+    )
+    if homonimo is None:
+        return []
+    return [{
+        'chave': chave_numero, 'motivo': MOTIVO_ORIGEM_HOMONIMA,
+        'bloqueante': False,
+    }]
+
+
+def avisos(extracao, documentos_queryset=None) -> list[dict]:
+    """Campos recomendados pelo tipo efetivo; nunca impedem a revisão.
+
+    Um aviso só por chave: o "livro/folha da origem não consta" (#324) é o
+    fato específico e vence o genérico ``requer_*_origem`` da mesma linha.
+
+    ``documentos_queryset`` (o escopo do usuário, ``documentos_for_user``)
+    liga a checagem de homônimo de outro tipo (#267); sem ele ela é pulada —
+    nada de documento de outra TI participa do aviso.
+    """
     linhas, atos = _contexto_revisao(extracao)
     tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
     resultado = []
     for ato in atos:
+        nao_consta = _origem_nao_consta(linhas, ato)
+        resultado.extend(nao_consta)
+        if documentos_queryset is not None:
+            resultado.extend(
+                _origem_homonima(linhas, ato, documentos_queryset)
+            )
+        ja_avisadas = {item['chave'] for item in nao_consta}
         tipo = configuracoes.get(tipos_por_ato.get(ato.chave))
         if tipo is None:
             continue
@@ -1108,6 +1267,8 @@ def avisos(extracao) -> list[dict]:
             ('requer_data_origem', 'origem/data'),
         ):
             chave = f'{ato.chave}/{caminho}'
+            if chave in ja_avisadas:
+                continue
             if getattr(tipo, flag) and _campo_ausente(linhas, chave):
                 resultado.append({
                     'chave': chave, 'motivo': flag, 'bloqueante': False,
@@ -1457,6 +1618,20 @@ def _eh_folha(no):
     return isinstance(no, dict) and 'normalized' in no
 
 
+def _origem_do_payload(ato):
+    """Bloco ``origem`` do ato no payload A3 (objeto), ou ``{}``.
+
+    O schema aceita ``origem: null`` — nulo e ausente são o mesmo "sem origem".
+    """
+    origem = ato.get('origem')
+    return origem if isinstance(origem, dict) else {}
+
+
+def _ato_tem_origem(ato):
+    """O payload do ato traz ao menos uma folha da origem (#324)?"""
+    return any(_eh_folha(no) for no in _origem_do_payload(ato).values())
+
+
 def _folhas(extracao, ponteiro, no, texto_paginas):
     """Recursão genérica: uma linha por folha editável do ramo.
 
@@ -1508,10 +1683,19 @@ def _ato(extracao, ponteiro, ato, texto_paginas, configuracoes=None):
             ),
         ))
     configuracao = (configuracoes or {}).get(tipo_efetivo)
-    for caminho in _caminhos_do_tipo(tipo_efetivo, configuracao):
+    caminhos = _caminhos_do_tipo(tipo_efetivo, configuracao)
+    for caminho in caminhos:
         chave = f'{ponteiro}/{caminho}'
         if not _tem_folha(ato, caminho):
             linhas.append(_placeholder(extracao, chave, requer_revisao=False))
+    if 'origem/cartorio' in caminhos or _ato_tem_origem(ato):
+        origem = _origem_do_payload(ato)
+        for nome in CAMPOS_DA_ORIGEM:
+            if not _eh_folha(origem.get(nome)):
+                linhas.append(_placeholder(
+                    extracao, f'{ponteiro}/origem/{nome}',
+                    requer_revisao=False,
+                ))
     for nome in CAMPOS_DA_TRANSMISSAO:
         if not _eh_folha(ato.get(nome)):
             linhas.append(_placeholder(

@@ -12,7 +12,9 @@ from django.test import SimpleTestCase, override_settings
 from django.test.html import Element, parse_html
 from django.utils import timezone
 
-from dominial.models import Cartorios, LancamentoTipo, Pessoas
+from dominial.models import (
+    Cartorios, Documento, DocumentoTipo, Imovel, LancamentoTipo, Pessoas, TIs,
+)
 from ia_ocr import estados, revisao, rotulos, services, views
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
@@ -1519,6 +1521,181 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         campo = next(c for c in resposta.context['campos'] if c.eh_tipo_sugerido)
         self.assertEqual(_valor_do_select(select), campo.tipo_exibido)
         self.assertFalse(_descendentes(card, 'input', 'data-campo-valor'))
+
+    # --- #324 (I-11d): origem sem livro/folha ------------------------------
+
+    @staticmethod
+    def _card_da_origem(html, chave):
+        return next(
+            card for card in _elementos(
+                html, 'article', presentes=('data-campo',),
+            )
+            if _atributos(card)['data-chave'] == chave
+        )
+
+    def test_origem_sem_livro_e_folha_campo_vazio_editavel_com_selo(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        html = self._tela().content.decode()
+
+        for nome in ('livro', 'folha'):
+            chave = f'/acts/0/origem/{nome}'
+            with self.subTest(chave=chave):
+                card = self._card_da_origem(html, chave)
+                (entrada,) = _descendentes(card, 'textarea', 'data-campo-valor')
+                atributos = _atributos(entrada)
+                self.assertNotIn('disabled', atributos)
+                self.assertNotIn('readonly', atributos)
+                # Nunca pré-preenchido: o revisor informa ou segue sem.
+                self.assertEqual(''.join(
+                    filho for filho in entrada.children
+                    if isinstance(filho, str)
+                ).strip(), '')
+                (selo,) = _descendentes(card, 'span', 'data-campo-nao-consta')
+                self.assertEqual(
+                    _texto_fora_de_details(selo).strip(),
+                    'não consta no documento',
+                )
+                self.assertEqual(
+                    atributos['aria-describedby'], _atributos(selo)['id'],
+                )
+        # O selo é só de livro/folha: número lido, data e tipo não o ganham.
+        for nome in ('numero', 'data', 'tipo_documento', 'cartorio'):
+            with self.subTest(sem_selo=nome):
+                card = self._card_da_origem(html, f'/acts/0/origem/{nome}')
+                self.assertEqual(
+                    _descendentes(card, 'span', 'data-campo-nao-consta'), [],
+                )
+
+    def test_aviso_da_origem_tem_rotulo_proprio_e_nao_bloqueia(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertEqual(
+            sorted(
+                item['motivo'] for item in resposta.context['avisos']
+                if item['motivo'].endswith('_nao_consta')
+            ),
+            ['folha_origem_nao_consta', 'livro_origem_nao_consta'],
+        )
+        self.assertFalse([
+            item for item in resposta.context['pendencias']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+        bloco = _elementos(html, 'section', presentes=('data-ocr-avisos',))[0]
+        visivel = _texto_fora_de_details(bloco)
+        self.assertIn('Livro da origem não consta no documento', visivel)
+        self.assertIn('Folha da origem não consta no documento', visivel)
+        for interno in (
+            'livro_origem_nao_consta', 'folha_origem_nao_consta', '/acts/',
+        ):
+            with self.subTest(interno=interno):
+                self.assertNotIn(interno, visivel)
+        # Só o aviso da origem: nada de "recomendado não preenchido" no lugar.
+        self.assertNotIn('Campo recomendado não preenchido', visivel)
+        botao = re.search(r'<button[^>]*data-ocr-finalizar[^>]*>', html).group(0)
+        self.assertEqual(
+            'disabled' in botao, bool(resposta.context['pendencias']),
+        )
+
+    def test_selo_some_quando_o_documento_traz_livro_e_folha(self):
+        payload = self._payload_formulario()
+        payload['acts'][0]['origem']['livro'] = _campo('3-A', 'R-1/42.718')
+        payload['acts'][0]['origem']['folha'] = _campo('12', 'R-1/42.718')
+        self._extracao(payload, resolver=True)
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertFalse([
+            item for item in resposta.context['avisos']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+        self.assertNotIn('data-campo-nao-consta', html)
+
+
+class HomonimoNaTelaTest(TelaRevisaoBase):
+    """#267: o aviso de homônimo sai do escopo do USUÁRIO, nunca do global."""
+
+    def _preparar(self, imovel_do_homonimo):
+        cartorio = Cartorios.objects.create(
+            nome='CRI Origem 267', cns='CNS-267T', cidade='X', estado='SP',
+        )
+        tipo = DocumentoTipo.objects.create(tipo='matricula')
+        DocumentoTipo.objects.create(tipo='transcricao')
+        Documento.objects.create(
+            imovel=imovel_do_homonimo, tipo=tipo, numero='M366',
+            data=timezone.now().date(), cartorio=cartorio, livro='1',
+            folha='1',
+        )
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['origem'] = {
+            'numero': _campo('T366', 'R-1/42.718'),
+            'tipo_documento': _campo('transcricao', 'R-1/42.718'),
+            'cartorio': _campo('CRI Origem 267', 'CRI de Guaíra'),
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0/origem/cartorio').update(
+            criar_novo=False, cartorio_escolhido_id=cartorio.pk,
+        )
+
+    def _motivos(self):
+        return [item['motivo'] for item in self._tela().context['avisos']]
+
+    def test_homonimo_no_escopo_do_usuario_aparece_com_rotulo(self):
+        self._preparar(self.imovel)
+
+        resposta = self._tela()
+
+        self.assertIn('origem_homonimo_outro_tipo', self._motivos())
+        item = next(
+            i for i in resposta.context['avisos']
+            if i['motivo'] == 'origem_homonimo_outro_tipo'
+        )
+        self.assertEqual(item['chave'], '/acts/0/origem/numero')
+        self.assertContains(resposta, 'Há um documento de outro tipo')
+        self.assertNotContains(resposta, 'M366')
+
+    def test_homonimo_de_outra_ti_nao_aparece_nem_vaza(self):
+        outra = TIs.objects.create(nome='TI Alheia T267', codigo='TI-T267', etnia='X')
+        imovel_alheio = Imovel.objects.create(
+            nome='ImovelAlheioT267', matricula='ALHEIO-T267',
+            terra_indigena_id=outra, proprietario=self.imovel.proprietario,
+            cartorio=self.imovel.cartorio,
+        )
+        self._preparar(imovel_alheio)
+
+        resposta = self._tela()
+
+        self.assertNotIn('origem_homonimo_outro_tipo', self._motivos())
+        for segredo in ('M366', 'ImovelAlheioT267', 'TI Alheia T267'):
+            with self.subTest(segredo=segredo):
+                self.assertNotContains(resposta, segredo)
+
+
+class DescreverAvisoTest(SimpleTestCase):
+    def test_motivo_da_origem_ganha_rotulo_proprio(self):
+        for nome, rotulo in (
+            ('livro', 'Livro da origem não consta no documento'),
+            ('folha', 'Folha da origem não consta no documento'),
+        ):
+            with self.subTest(nome=nome):
+                item = {
+                    'chave': f'/acts/0/origem/{nome}',
+                    'motivo': f'{nome}_origem_nao_consta', 'bloqueante': False,
+                }
+                descrito = revisao.descrever_aviso(item)
+                self.assertEqual(descrito['rotulo'], rotulo)
+                self.assertEqual(descrito['local'], f'Ato 1 — {nome}')
+                for campo, valor in item.items():
+                    self.assertEqual(descrito[campo], valor)
+
+    def test_motivo_do_tipo_mantem_o_texto_de_sempre(self):
+        descrito = revisao.descrever_aviso({
+            'chave': '/acts/0/forma', 'motivo': 'requer_forma',
+            'bloqueante': False,
+        })
+        self.assertEqual(descrito['rotulo'], 'Campo recomendado não preenchido')
+        self.assertEqual(descrito['motivo'], 'requer_forma')
 
 
 class TipoSugeridoSelectTest(TelaRevisaoBase):

@@ -16,7 +16,9 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from dominial.models import Cartorios, LancamentoTipo, Pessoas
+from dominial.models import (
+    Cartorios, Documento, DocumentoTipo, LancamentoTipo, Pessoas,
+)
 from ia_ocr import destinos, valores
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
@@ -479,6 +481,239 @@ class PendenciasEAvisosTest(TestCase):
 
         self.assertEqual(pendencias(self.extracao), [])
         self.assertEqual(avisos(self.extracao), avisos_com_transmissao)
+
+    def test_origem_vazia_nao_altera_pendencias_nem_avisos(self):
+        # #324: o ato tem origem (só o cartório); os demais campos viram
+        # linhas vazias editáveis e NÃO criam pendência nem aviso.
+        linhas = self._persistir(self._registro_completo())
+        chaves = [
+            f'/acts/0/origem/{nome}' for nome in (
+                'tipo_documento', 'numero', 'livro', 'folha', 'data',
+            )
+        ]
+        for chave in chaves:
+            with self.subTest(chave=chave):
+                self.assertIn(chave, linhas)
+                self.assertFalse(campo_obrigatorio(chave))
+        self.assertEqual(pendencias(self.extracao), [])
+        avisos_com_origem = avisos(self.extracao)
+
+        self.extracao.campos.filter(chave__in=chaves).delete()
+
+        self.assertEqual(pendencias(self.extracao), [])
+        self.assertEqual(avisos(self.extracao), avisos_com_origem)
+
+    def test_tipo_documento_da_origem_nunca_lido_nao_bloqueia(self):
+        linhas = self._persistir(self._registro_completo())
+        chave = '/acts/0/origem/tipo_documento'
+        tipo = linhas[chave]
+        self.assertIsNone(tipo.normalized)
+
+        # Revisor passou pelo card sem escolher tipo: a importação infere o
+        # tipo pelo prefixo M/T, então o vazio não é valor incompatível.
+        aplicar_linha(tipo, incluir=True, valor='', conferido=True)
+        tipo.save()
+
+        self.assertEqual(tipo.valor_final, '')
+        self.assertEqual(pendencias(self.extracao), [])
+
+    def test_tipo_documento_da_origem_lido_e_limpo_continua_bloqueando(self):
+        payload = self._registro_completo()
+        payload['acts'][0]['origem']['tipo_documento'] = {
+            'raw': 'Matrícula', 'normalized': 'matricula', 'confianca': 0.95,
+            'requer_revisao': False,
+            'evidencia': {'pagina': 1, 'trecho': 'MATRÍCULA Nº 42.718'},
+        }
+        chave = '/acts/0/origem/tipo_documento'
+        tipo = self._persistir(payload)[chave]
+        self.assertEqual(pendencias(self.extracao), [])
+
+        aplicar_linha(tipo, incluir=True, valor='')
+        tipo.save()
+
+        self.assertIn({
+            'chave': chave, 'motivo': 'valor_incompativel_destino',
+            'bloqueante': True,
+        }, pendencias(self.extracao))
+
+    # --- #324: livro/folha da origem que o documento não traz ---------------
+
+    def _com_origem_numerada(self, payload=None):
+        payload = payload or self._registro_completo()
+        payload['acts'][0].setdefault('origem', {})['numero'] = {
+            'raw': 'M42.718', 'normalized': 'M42.718', 'confianca': 0.95,
+            'requer_revisao': False,
+            'evidencia': {'pagina': 1, 'trecho': 'Nº 42.718'},
+        }
+        return payload
+
+    @staticmethod
+    def _nao_consta(nome):
+        return {
+            'chave': f'/acts/0/origem/{nome}',
+            'motivo': f'{nome}_origem_nao_consta', 'bloqueante': False,
+        }
+
+    def test_origem_com_numero_sem_livro_e_folha_avisa_sem_bloquear(self):
+        self._persistir(self._com_origem_numerada())
+
+        self.assertCountEqual(avisos(self.extracao), [
+            self._nao_consta('livro'), self._nao_consta('folha'),
+        ])
+        self.assertEqual(pendencias(self.extracao), [])
+
+    def test_livro_e_folha_da_origem_preenchidos_saem_do_aviso(self):
+        linhas = self._persistir(self._com_origem_numerada())
+
+        for nome, valor, restantes in (
+            ('livro', '3-A', ['folha']), ('folha', '12', []),
+        ):
+            with self.subTest(nome=nome):
+                linha = linhas[f'/acts/0/origem/{nome}']
+                aplicar_linha(linha, incluir=True, valor=valor)
+                linha.save()
+                self.assertCountEqual(
+                    avisos(self.extracao),
+                    [self._nao_consta(resto) for resto in restantes],
+                )
+                self.assertEqual(pendencias(self.extracao), [])
+
+    def test_origem_sem_numero_nao_avisa_livro_nem_folha(self):
+        linhas = self._persistir(self._registro_completo())
+        self.assertEqual(avisos(self.extracao), [])
+
+        # Número descartado: a origem deixa de ser citada pelo ato.
+        linhas_numeradas = self._persistir(self._com_origem_numerada())
+        self.assertEqual(len(avisos(self.extracao)), 2)
+        numero = linhas_numeradas['/acts/0/origem/numero']
+        numero.status_revisao = 'descartado'
+        numero.save()
+        self.assertEqual(avisos(self.extracao), [])
+        self.assertEqual(pendencias(self.extracao), [])
+
+    def test_aviso_da_origem_vale_para_qualquer_tipo(self):
+        esperados = [self._nao_consta('livro'), self._nao_consta('folha')]
+        averbacao = payload_averbacao(self.job.job_id)
+        averbacao['acts'][0]['origem'] = {
+            'cartorio': averbacao['document']['cartorio'].copy(),
+        }
+        casos = {
+            'averbacao': self._com_origem_numerada(averbacao),
+            'registro': self._com_origem_numerada(),
+        }
+        for nome, payload in casos.items():
+            with self.subTest(tipo=nome):
+                self._persistir(payload)
+                self.assertCountEqual(avisos(self.extracao), esperados)
+                self.assertEqual(pendencias(self.extracao), [])
+        # Tipo sem configuração: o aviso não depende do ``LancamentoTipo``.
+        LancamentoTipo.objects.all().delete()
+        self.assertCountEqual(avisos(self.extracao), esperados)
+
+    def test_um_aviso_por_chave_mesmo_com_requer_origem_no_tipo(self):
+        for flag in ('requer_livro_origem', 'requer_folha_origem'):
+            setattr(self.registro, flag, True)
+        self.registro.save()
+        self._persistir(self._com_origem_numerada())
+
+        resultado = avisos(self.extracao)
+
+        self.assertCountEqual(resultado, [
+            self._nao_consta('livro'), self._nao_consta('folha'),
+        ])
+        chaves = [item['chave'] for item in resultado]
+        self.assertEqual(len(chaves), len(set(chaves)))
+
+    # --- #267 (parte IA): homônimo de outro tipo, só no escopo do usuário ----
+
+    def _origem_com_homonimo(self, numero='T366', tipo_documento='transcricao',
+                             cartorio_escolhido=True):
+        cartorio = Cartorios.objects.create(
+            nome='CRI Origem 267', cns='CNS-267', cidade='X', estado='SP',
+        )
+        self.homonimo = Documento.objects.create(
+            imovel=self.job.documento_digital.documento.imovel,
+            tipo=DocumentoTipo.objects.create(tipo='matricula'),
+            numero='M366', data=date(1990, 1, 1), cartorio=cartorio,
+            livro='1', folha='1',
+        )
+        DocumentoTipo.objects.create(tipo='transcricao')
+        payload = self._com_origem_numerada()
+        origem = payload['acts'][0]['origem']
+        origem['numero']['raw'] = origem['numero']['normalized'] = numero
+        if tipo_documento:
+            origem['tipo_documento'] = {
+                'raw': tipo_documento, 'normalized': tipo_documento,
+                'confianca': 0.95, 'requer_revisao': False,
+                'evidencia': {'pagina': 1, 'trecho': 'MATRÍCULA Nº 42.718'},
+            }
+        self._persistir(payload)
+        if cartorio_escolhido:
+            self.extracao.campos.filter(chave='/acts/0/origem/cartorio').update(
+                criar_novo=False, cartorio_escolhido_id=cartorio.pk,
+            )
+        return cartorio
+
+    @staticmethod
+    def _homonimo_avisado():
+        return {
+            'chave': '/acts/0/origem/numero',
+            'motivo': 'origem_homonimo_outro_tipo', 'bloqueante': False,
+        }
+
+    def test_homonimo_de_outro_tipo_so_avisa_com_o_escopo_do_usuario(self):
+        self._origem_com_homonimo()
+
+        # Sem queryset a checagem é pulada: nada de outra TI vaza.
+        self.assertNotIn(self._homonimo_avisado(), avisos(self.extracao))
+        self.assertIn(
+            self._homonimo_avisado(),
+            avisos(self.extracao, documentos_queryset=Documento.objects.all()),
+        )
+        self.assertNotIn(
+            self._homonimo_avisado(),
+            avisos(
+                self.extracao, documentos_queryset=Documento.objects.none(),
+            ),
+        )
+        self.assertEqual(pendencias(self.extracao), [])
+
+    def test_homonimo_so_com_cartorio_existente_escolhido(self):
+        self._origem_com_homonimo(cartorio_escolhido=False)
+
+        # "Criar novo": o cartório ainda não existe, não há o que comparar.
+        self.assertNotIn(
+            self._homonimo_avisado(),
+            avisos(self.extracao, documentos_queryset=Documento.objects.all()),
+        )
+
+    def test_homonimo_usa_o_tipo_inferido_do_prefixo_do_numero(self):
+        # Sem ``tipo_documento`` lido, 'T366' é transcrição — a mesma regra da
+        # importação; o homônimo é a matrícula M366.
+        self._origem_com_homonimo(tipo_documento=None)
+
+        self.assertIn(
+            self._homonimo_avisado(),
+            avisos(self.extracao, documentos_queryset=Documento.objects.all()),
+        )
+
+    def test_numero_declarado_igual_ao_existente_nao_avisa(self):
+        self._origem_com_homonimo(numero='M366', tipo_documento='matricula')
+
+        self.assertNotIn(
+            self._homonimo_avisado(),
+            avisos(self.extracao, documentos_queryset=Documento.objects.all()),
+        )
+
+    def test_requer_origem_sem_numero_continua_como_antes(self):
+        self.registro.requer_livro_origem = True
+        self.registro.save()
+        self._persistir(self._registro_completo())
+
+        self.assertEqual(avisos(self.extracao), [{
+            'chave': '/acts/0/origem/livro', 'motivo': 'requer_livro_origem',
+            'bloqueante': False,
+        }])
 
     def test_obrigatorio_descartado_bloqueia(self):
         linhas = self._persistir(self._registro_completo())
@@ -1623,6 +1858,99 @@ class DesnormalizarTest(TestCase):
                             linha.motivos_revisao,
                             ['normalizacao_invalida'] if revisao else [],
                         )
+
+    # --- #324 (I-11d): campos vazios da origem na revisão ------------------
+
+    def _payload_com_origem(self, **folhas):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['origem'] = folhas
+        return payload
+
+    def test_origem_preenchida_ganha_placeholders_dos_demais_campos(self):
+        payload = self._payload_com_origem(
+            numero=_campo('M42.718', 'Nº 42.718', raw='Nº 42.718'),
+            cartorio=payload_registro(self.job.job_id)['document']['cartorio'],
+        )
+
+        por_chave = self._por_chave(self._linhas(payload))
+
+        for nome, tipo in (
+            ('tipo_documento', 'enum'), ('livro', 'texto'),
+            ('folha', 'texto'), ('data', 'data'),
+        ):
+            chave = f'/acts/0/origem/{nome}'
+            with self.subTest(chave=chave):
+                linha = por_chave[chave]
+                self.assertIsNone(linha.raw)
+                self.assertIsNone(linha.normalized)
+                self.assertIsNone(linha.confianca)
+                self.assertFalse(linha.requer_revisao)
+                self.assertEqual(linha.motivos_revisao, [])
+                self.assertEqual(linha.tipo_valor, tipo)
+                self.assertFalse(campo_obrigatorio(chave))
+        # O que o payload trouxe continua sendo a folha real, uma só vez.
+        numero = por_chave['/acts/0/origem/numero']
+        self.assertEqual(numero.normalized, 'M42.718')
+        self.assertEqual(numero.confianca, 0.95)
+        self.assertEqual(
+            por_chave['/acts/0/origem/cartorio'].tipo_valor, 'cartorio',
+        )
+
+    def test_origem_placeholder_uma_linha_por_chave(self):
+        payload = self._payload_com_origem(
+            tipo_documento=_campo('matricula', 'MATRÍCULA Nº 42.718'),
+            numero=_campo('M42.718', 'Nº 42.718', raw='Nº 42.718'),
+            livro=_campo('2-RG', 'Livro 2-RG', raw='Livro 2-RG'),
+            folha=_campo('087', 'Folha 087', raw='Folha 087'),
+            data=_campo('2020-01-10', '10 de janeiro de 2020'),
+            cartorio=payload_registro(self.job.job_id)['document']['cartorio'],
+        )
+
+        linhas = self._linhas(payload)
+
+        chaves = [linha.chave for linha in linhas]
+        self.assertEqual(len(chaves), len(set(chaves)))
+        origem = {
+            linha.chave: linha for linha in linhas if '/origem/' in linha.chave
+        }
+        self.assertEqual(len(origem), 6)
+        # Folhas do payload preservadas: nenhuma virou placeholder vazio.
+        for nome in ('tipo_documento', 'numero', 'livro', 'folha', 'data'):
+            with self.subTest(nome=nome):
+                self.assertIsNotNone(origem[f'/acts/0/origem/{nome}'].normalized)
+
+    def test_ato_sem_origem_nao_ganha_linhas_da_origem(self):
+        casos = {
+            'sem_chave': payload_averbacao(self.job.job_id),
+            'nula': self._payload_com_origem(),
+            'vazia': self._payload_com_origem(),
+        }
+        casos['nula']['acts'][0]['origem'] = None
+        for nome, payload in casos.items():
+            with self.subTest(caso=nome):
+                chaves = [
+                    linha.chave for linha in self._linhas(payload)
+                    if '/origem' in linha.chave
+                ]
+                self.assertEqual(chaves, [])
+
+    def test_tipo_que_exige_cartorio_de_origem_ganha_todos_os_campos(self):
+        LancamentoTipo.objects.create(
+            tipo='registro', requer_cartorio_origem=True,
+        )
+        # Registro sem bloco ``origem`` no payload: o tipo exige o cartório.
+        payload = payload_registro(self.job.job_id)
+        self.assertNotIn('origem', payload['acts'][0])
+
+        por_chave = self._por_chave(self._linhas(payload))
+
+        for nome in (
+            'cartorio', 'tipo_documento', 'numero', 'livro', 'folha', 'data',
+        ):
+            with self.subTest(nome=nome):
+                linha = por_chave[f'/acts/0/origem/{nome}']
+                self.assertIsNone(linha.normalized)
+                self.assertFalse(linha.requer_revisao)
 
     def test_placeholders_dos_obrigatorios(self):
         completo = self._por_chave(self._linhas(payload_registro(self.job.job_id)))

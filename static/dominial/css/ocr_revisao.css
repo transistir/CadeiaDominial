@@ -87,6 +87,8 @@
 .badge-confianca.baixa { background: #f8d7da; color: #842029; }
 .badge-confianca.sem_confianca { background: #e9ecef; color: #495057; }
 .badge-motivo { background: #e7f1ff; color: #084298; }
+/* #324: selo "não consta no documento" no card; em grid, não estica a pílula. */
+.campo-linha > .badge-motivo { justify-self: start; }
 
 .campo-sub { display: block; margin-top: 0.5rem; font-size: 0.875rem; }
 .campo-conversao { margin-top: 0.5rem; }

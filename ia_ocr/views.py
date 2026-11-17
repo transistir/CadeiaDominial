@@ -24,6 +24,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 # Hierarquia TI→Imóvel→Documento: a mesma do upload digital (reuso, não cópia).
+from dominial.managers import documentos_for_user
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
 from dominial.views.documento_digital_views import _get_contexto_documento
 
@@ -649,11 +650,26 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     permitir_sem_atos = (
         services.pode_finalizar_sem_atos(extracao) and not somente_leitura
     )
+    # O escopo do USUÁRIO alimenta o aviso de homônimo (#267): documento de
+    # outra TI nunca participa dele.
+    avisos_descritos = [
+        revisao.descrever_aviso(item)
+        for item in revisao.avisos(
+            extracao, documentos_queryset=documentos_for_user(request.user),
+        )
+    ]
     # Detalhe técnico do card abre sozinho no campo com pendência, e o
-    # cabeçalho do ato conta as pendências que o bloqueiam.
+    # cabeçalho do ato conta as pendências que o bloqueiam. O selo "não
+    # consta no documento" (#324) marca o campo de livro/folha da origem que
+    # o documento não trouxe; o campo segue vazio e editável.
     chaves_pendentes = {item['chave'] for item in pendencias}
+    chaves_nao_consta = {
+        item['chave'] for item in avisos_descritos
+        if item['motivo'] in revisao.MOTIVOS_NAO_CONSTA
+    }
     for campo in campos:
         campo.pendente = campo.chave in chaves_pendentes
+        campo.nao_consta = campo.chave in chaves_nao_consta
     secoes = revisao.secoes_da_tela(
         campos,
         payload=extracao.payload_servico or extracao.payload,
@@ -701,10 +717,7 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'pendencias': pendencias_descritas,
         'pendencias_total': len(pendencias),
         'permitir_sem_atos': permitir_sem_atos,
-        'avisos': [
-            dict(item, local=revisao._local_da_chave(item['chave']))
-            for item in revisao.avisos(extracao)
-        ],
+        'avisos': avisos_descritos,
         'versao': versao,
         'somente_leitura': somente_leitura,
         'dpi': job.dpi or 200,

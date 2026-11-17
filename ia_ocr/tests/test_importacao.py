@@ -27,13 +27,14 @@ from django.utils import timezone
 
 from dominial.models import (
     Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, UserTI,
+    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.tests.test_issue_263_concorrencia_importacao import (
     travas_executadas,
 )
+from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ia_ocr import importacao as modulo_importacao
 from ia_ocr import services
 from ia_ocr.estados import TransicaoConcorrente
@@ -2362,4 +2363,443 @@ class OrigemSoCartorioTest(ImportacaoBase):
             {'chave': '/acts/0/origem/cartorio', 'motivo': 'obrigatorio_ausente'},
             modulo_importacao.pendencias_para_resposta(extracao),
         )
+        self.assertEqual(Lancamento.objects.count(), 0)
+
+
+class LivroFolhaDaOrigemTest(ImportacaoBase):
+    """#324 (I-11d): livro/folha da origem vazios gravam NULL, nunca espaços.
+
+    O formulário preserva espaços em texto; o mesmo ``strip() or None`` da
+    transmissão vale para os DOIS destinos da origem — a coluna do
+    lançamento e o mapeamento que alimenta a ``LancamentoOrigem``.
+    """
+
+    def _importar_com(self, livro, folha):
+        payload = self._payload_origem()
+        payload['acts'][0]['origem']['livro'] = self._campo(livro)
+        payload['acts'][0]['origem']['folha'] = self._campo(folha)
+        resultado = self._importar(self._extracao(payload))
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        return lancamento, LancamentoOrigem.objects.get(lancamento=lancamento)
+
+    def test_livro_e_folha_em_branco_gravam_none_nos_dois_destinos(self):
+        lancamento, origem = self._importar_com('  ', ' \t\n ')
+
+        self.assertIsNone(lancamento.livro_origem)
+        self.assertIsNone(lancamento.folha_origem)
+        self.assertIsNone(origem.livro)
+        self.assertIsNone(origem.folha)
+
+    def test_livro_e_folha_gravam_sem_bordas_nos_dois_destinos(self):
+        lancamento, origem = self._importar_com(' 3-A ', '\t12v ')
+
+        self.assertEqual(lancamento.livro_origem, '3-A')
+        self.assertEqual(lancamento.folha_origem, '12v')
+        self.assertEqual(origem.livro, '3-A')
+        self.assertEqual(origem.folha, '12v')
+
+    def test_sem_livro_e_folha_o_marcador_zero_fica_so_no_documento(self):
+        # Só início de matrícula cria o documento de origem (anti-órfão).
+        DocumentoTipo.objects.create(tipo='transcricao')
+        LancamentoTipo.objects.create(tipo='inicio_matricula')
+        payload = self._payload_origem()
+        for nome in ('livro', 'folha'):
+            del payload['acts'][0]['origem'][nome]
+        payload['acts'][0]['tipo_sugerido'] = self._campo(
+            'inicio_matricula', 'R-1/42.718',
+        )
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertIsNone(lancamento.livro_origem)
+        self.assertIsNone(lancamento.folha_origem)
+        origem = LancamentoOrigem.objects.get(lancamento=lancamento)
+        self.assertIsNone(origem.livro)
+        self.assertIsNone(origem.folha)
+        # As colunas do Documento são NOT NULL: só ele guarda o marcador '0'.
+        documento_origem = Documento.objects.exclude(pk=self.documento.pk).get()
+        self.assertEqual(documento_origem.livro, '0')
+        self.assertEqual(documento_origem.folha, '0')
+
+
+class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
+    """#324 (I-11d): livro/folha da origem que o documento não traz.
+
+    É aviso na resposta — o status do ato continua ``criado`` — e vale
+    também quando a importação é repetida (replay do job já importado).
+    """
+
+    AMBOS = 'Livro/folha da origem não constam no documento'
+    SO_LIVRO = 'Livro da origem não consta no documento'
+    SO_FOLHA = 'Folha da origem não consta no documento'
+
+    def _payload_sem(self, *nomes):
+        payload = self._payload_origem()
+        for nome in nomes:
+            payload['acts'][0]['origem'][nome] = self._campo('  ')
+        return payload
+
+    def _importar_e_avisos(self, payload):
+        extracao = self._extracao(payload)
+        resultado = self._importar(extracao)
+        (linha,) = resultado['linhas']
+        self.assertEqual(linha['status'], 'criado')
+        return extracao, linha['avisos']
+
+    @classmethod
+    def _textos_do_livro_e_folha(cls, avisos):
+        return [
+            aviso for aviso in avisos
+            if aviso.rstrip('.') in (cls.AMBOS, cls.SO_LIVRO, cls.SO_FOLHA)
+        ]
+
+    def test_sem_livro_e_folha_avisa_e_o_ato_continua_criado(self):
+        _, avisos = self._importar_e_avisos(self._payload_sem('livro', 'folha'))
+
+        self.assertEqual(
+            [a.rstrip('.') for a in self._textos_do_livro_e_folha(avisos)],
+            [self.AMBOS],
+        )
+
+    def test_so_o_livro_faltando_cita_so_o_livro(self):
+        _, avisos = self._importar_e_avisos(self._payload_sem('livro'))
+
+        self.assertEqual(
+            [a.rstrip('.') for a in self._textos_do_livro_e_folha(avisos)],
+            [self.SO_LIVRO],
+        )
+
+    def test_so_a_folha_faltando_cita_so_a_folha(self):
+        _, avisos = self._importar_e_avisos(self._payload_sem('folha'))
+
+        self.assertEqual(
+            [a.rstrip('.') for a in self._textos_do_livro_e_folha(avisos)],
+            [self.SO_FOLHA],
+        )
+
+    def test_com_livro_e_folha_nao_avisa(self):
+        _, avisos = self._importar_e_avisos(self._payload_origem())
+
+        self.assertEqual(self._textos_do_livro_e_folha(avisos), [])
+
+    def test_origem_so_com_cartorio_nao_avisa(self):
+        payload = self._payload_origem()
+        payload['acts'][0]['origem'] = {
+            'cartorio': self._campo('CRI de Origem', 'CRI de Guaíra'),
+        }
+        _, avisos = self._importar_e_avisos(payload)
+
+        self.assertEqual(self._textos_do_livro_e_folha(avisos), [])
+
+    def test_ato_sem_origem_nao_avisa(self):
+        _, avisos = self._importar_e_avisos(payload_registro(self.job.job_id))
+
+        self.assertEqual(self._textos_do_livro_e_folha(avisos), [])
+
+    def test_reimportar_devolve_o_mesmo_aviso(self):
+        extracao, avisos = self._importar_e_avisos(
+            self._payload_sem('livro', 'folha'),
+        )
+        versao = services.versao_bloco(extracao)
+
+        repetida = importar(extracao, self.usuario, versao, ['/acts/0'])
+
+        (linha,) = repetida['linhas']
+        self.assertEqual(linha['status'], 'criado')
+        self.assertEqual(
+            [a.rstrip('.') for a in self._textos_do_livro_e_folha(linha['avisos'])],
+            [self.AMBOS],
+        )
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_reimportar_com_livro_e_folha_nao_inventa_aviso(self):
+        extracao, _ = self._importar_e_avisos(self._payload_origem())
+        versao = services.versao_bloco(extracao)
+
+        repetida = importar(extracao, self.usuario, versao, ['/acts/0'])
+
+        (linha,) = repetida['linhas']
+        self.assertEqual(self._textos_do_livro_e_folha(linha['avisos']), [])
+
+    def test_reimportar_ato_sem_origem_nao_avisa(self):
+        extracao, _ = self._importar_e_avisos(payload_registro(self.job.job_id))
+        versao = services.versao_bloco(extracao)
+
+        repetida = importar(extracao, self.usuario, versao, ['/acts/0'])
+
+        (linha,) = repetida['linhas']
+        self.assertEqual(linha['avisos'], [])
+
+
+class VinculoDocumentoOrigemTest(ImportacaoBase):
+    """#324 (I-11d): a importação grava ``Lancamento.documento_origem``.
+
+    Só a importação assistida grava essa FK (o fluxo manual segue como
+    está). O documento só é CRIADO pela regra anti-órfão (início de
+    matrícula); nos demais tipos o vínculo vale quando a identidade
+    (tipo + número + cartório) já existe NO ESCOPO do usuário.
+    """
+
+    NUMERO = 'T366'
+
+    def setUp(self):
+        super().setUp()
+        self.tipo_transcricao = DocumentoTipo.objects.create(tipo='transcricao')
+        LancamentoTipo.objects.create(tipo='inicio_matricula')
+        self.cartorio_origem = Cartorios.objects.create(
+            nome='CRI de Origem', cns='CNS-324', cidade='Guaíra', estado='SP',
+        )
+
+    def _payload_inicio(self):
+        """Início de matrícula: único tipo que cria o documento de origem."""
+        payload = self._payload_origem()
+        payload['acts'][0]['tipo_sugerido'] = self._campo(
+            'inicio_matricula', 'R-1/42.718',
+        )
+        # O rótulo de matrícula evita que o 'R-1' do payload-base vença.
+        payload['acts'][0]['rotulo'] = self._campo('M-1', 'R-1/42.718')
+        return payload
+
+    def _imovel_em(self, ti, nome):
+        return Imovel.objects.create(
+            nome=nome, matricula=f'MAT-{nome}', terra_indigena_id=ti,
+            proprietario=self.imovel.proprietario, cartorio=self.imovel.cartorio,
+        )
+
+    def _documento_da_origem_em(self, imovel):
+        return Documento.objects.create(
+            imovel=imovel, tipo=self.tipo_transcricao, numero=self.NUMERO,
+            data=date(1990, 1, 1), cartorio=self.cartorio_origem,
+            livro='1', folha='1',
+        )
+
+    def _outros_documentos(self):
+        return Documento.objects.exclude(pk=self.documento.pk)
+
+    def test_origem_nova_cria_o_documento_e_vincula_a_fk(self):
+        extracao = self._extracao(self._payload_inicio())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        (documento_origem,) = self._outros_documentos()
+        self.assertEqual(lancamento.documento_origem, documento_origem)
+        self.assertEqual(documento_origem.imovel, self.imovel)
+        # A auditoria já registrava o documento criado e segue registrando.
+        vinculo = ImportacaoIA.objects.get(modelo='Documento')
+        self.assertEqual(vinculo.objeto_id, documento_origem.pk)
+        self.assertEqual(vinculo.campo.chave, '/acts/0/origem/numero')
+
+    def test_registro_com_origem_inexistente_nao_cria_nem_vincula(self):
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertIsNone(Lancamento.objects.get().documento_origem)
+        self.assertFalse(self._outros_documentos().exists())
+
+    def test_origem_existente_em_outro_imovel_do_usuario_vincula_sem_criar(self):
+        irmao = self._imovel_em(self.imovel.terra_indigena_id, 'Irmão')
+        existente = self._documento_da_origem_em(irmao)
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(
+            list(self._outros_documentos()), [existente],
+        )
+        self.assertEqual(Lancamento.objects.get().documento_origem, existente)
+        self.assertFalse(ImportacaoIA.objects.filter(modelo='Documento').exists())
+
+    def test_origem_em_ti_de_outro_usuario_nao_vincula_nem_vaza(self):
+        ti_alheia = TIs.objects.create(
+            nome='TI Alheia 324', codigo='TI-A324', etnia='Teste',
+        )
+        alheio = self._imovel_em(ti_alheia, 'ImovelAlheio324')
+        documento_alheio = self._documento_da_origem_em(alheio)
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        (linha,) = resultado['linhas']
+        self.assertEqual(linha['status'], 'criado')
+        lancamento = Lancamento.objects.get()
+        self.assertIsNone(lancamento.documento_origem)
+        # Nenhum documento novo: o alheio é o único além do do job.
+        self.assertEqual(list(self._outros_documentos()), [documento_alheio])
+        self.assertTrue(any(
+            MENSAGEM_ORIGEM_RESTRITA in aviso for aviso in linha['avisos']
+        ), linha['avisos'])
+        # Nada do documento/imóvel alheio no que o usuário recebe nem no
+        # rastro de auditoria (o número é de quem não tem acesso).
+        visivel = repr(resultado) + repr(list(
+            ImportacaoIA.objects.values()
+        ))
+        for segredo in (self.NUMERO, 'ImovelAlheio324', 'TI Alheia 324'):
+            with self.subTest(segredo=segredo):
+                self.assertNotIn(segredo, visivel)
+        # O id do documento alheio nunca vira vínculo de auditoria.
+        self.assertFalse(ImportacaoIA.objects.filter(modelo='Documento').exists())
+        self.assertFalse(
+            ImportacaoIA.objects.filter(objeto_id=documento_alheio.pk)
+            .exclude(modelo__in=('Lancamento', 'LancamentoOrigem', 'Cartorios',
+                                 'LancamentoPessoa', 'Pessoas'))
+            .exists()
+        )
+
+    def test_dois_atos_com_a_mesma_origem_geram_um_documento(self):
+        payload = self._payload_inicio()
+        segundo = deepcopy(payload['acts'][0])
+        segundo['ordem'] = 2
+        segundo['rotulo'] = self._campo('R-2', 'R-1/42.718')
+        segundo['tipo_sugerido'] = self._campo('registro', 'R-1/42.718')
+        payload['acts'].append(segundo)
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertEqual(Lancamento.objects.count(), 2)
+        (documento_origem,) = self._outros_documentos()
+        self.assertEqual(
+            set(Lancamento.objects.values_list('documento_origem', flat=True)),
+            {documento_origem.pk},
+        )
+        self.assertEqual(
+            ImportacaoIA.objects.filter(modelo='Documento').count(), 1,
+        )
+
+    def test_reimportar_nao_muda_documentos_nem_fk(self):
+        extracao = self._extracao(self._payload_inicio())
+        primeira = self._importar(extracao)
+        lancamento = Lancamento.objects.get()
+        (documento_origem,) = self._outros_documentos()
+        versao = services.versao_bloco(extracao)
+
+        segunda = importar(extracao, self.usuario, versao, ['/acts/0'])
+
+        self.assertEqual(segunda['linhas'][0]['lancamento_id'], lancamento.pk)
+        self.assertEqual(primeira['ok'], segunda['ok'])
+        self.assertEqual(Lancamento.objects.count(), 1)
+        self.assertEqual(list(self._outros_documentos()), [documento_origem])
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.documento_origem, documento_origem)
+
+    def test_ato_com_erro_desfaz_documento_e_vinculo(self):
+        payload = self._payload_inicio()
+        segundo = deepcopy(payload['acts'][0])
+        segundo['ordem'] = 2
+        segundo['rotulo'] = self._campo('R-2', 'R-1/42.718')
+        segundo['tipo_sugerido'] = self._campo('registro', 'R-1/42.718')
+        # Número da origem sem cartório: o ato 2 recusa e leva o bloco junto.
+        del segundo['origem']['cartorio']
+        payload['acts'].append(segundo)
+        extracao = self._extracao(payload)
+
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        status = {linha['chave']: linha['status'] for linha in contexto.exception.linhas}
+        self.assertEqual(status['/acts/1'], 'erro')
+        self.assertEqual(status['/acts/0'], 'nao_gravado')
+        self.assertEqual(Lancamento.objects.count(), 0)
+        self.assertFalse(self._outros_documentos().exists())
+        self.assertFalse(LancamentoOrigem.objects.exists())
+
+    # --- #267 (parte IA): homônimo de outro tipo no cartório da origem -------
+
+    def _matricula_homonima_em(self, imovel):
+        tipo, _ = DocumentoTipo.objects.get_or_create(tipo='matricula')
+        return Documento.objects.create(
+            imovel=imovel, tipo=tipo, numero='M366', data=date(1990, 1, 1),
+            cartorio=self.cartorio_origem, livro='1', folha='1',
+        )
+
+    @staticmethod
+    def _avisos_do_ato(resultado):
+        (linha,) = resultado['linhas']
+        return linha['avisos']
+
+    def test_homonimo_de_outro_tipo_avisa_e_nunca_vincula(self):
+        irmao = self._imovel_em(self.imovel.terra_indigena_id, 'Irmão')
+        matricula = self._matricula_homonima_em(irmao)
+        # A origem declara TRANSCRIÇÃO T366; no cartório só existe M366.
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertIsNone(Lancamento.objects.get().documento_origem)
+        self.assertEqual(list(self._outros_documentos()), [matricula])
+        avisos = self._avisos_do_ato(resultado)
+        (aviso,) = [texto for texto in avisos if 'outro tipo' in texto]
+        self.assertIn('matrícula', aviso)
+        self.assertIn('transcrição', aviso)
+        # O aviso fala do tipo, nunca do número nem de ids.
+        self.assertNotIn('366', aviso)
+
+    def test_inicio_de_matricula_cria_como_declarado_e_avisa_o_homonimo(self):
+        irmao = self._imovel_em(self.imovel.terra_indigena_id, 'Irmão')
+        matricula = self._matricula_homonima_em(irmao)
+        extracao = self._extracao(self._payload_inicio())
+
+        resultado = self._importar(extracao)
+
+        criado = Documento.objects.get(numero=self.NUMERO)
+        self.assertEqual(criado.tipo, self.tipo_transcricao)
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.documento_origem, criado)
+        self.assertNotEqual(lancamento.documento_origem, matricula)
+        self.assertEqual(
+            len([a for a in self._avisos_do_ato(resultado) if 'outro tipo' in a]),
+            1,
+        )
+
+    def test_sem_homonimo_nao_ha_aviso_de_outro_tipo(self):
+        resultado = self._importar(self._extracao(self._payload_origem()))
+
+        self.assertFalse([
+            a for a in self._avisos_do_ato(resultado) if 'outro tipo' in a
+        ])
+
+    def test_homonimo_em_ti_de_outro_usuario_nao_avisa_nem_vaza(self):
+        ti_alheia = TIs.objects.create(
+            nome='TI Alheia H267', codigo='TI-H267', etnia='Teste',
+        )
+        alheio = self._imovel_em(ti_alheia, 'ImovelAlheioH267')
+        self._matricula_homonima_em(alheio)
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        self.assertFalse([
+            a for a in self._avisos_do_ato(resultado) if 'outro tipo' in a
+        ])
+        visivel = repr(resultado) + repr(list(ImportacaoIA.objects.values()))
+        for segredo in ('M366', 'ImovelAlheioH267', 'TI Alheia H267'):
+            with self.subTest(segredo=segredo):
+                self.assertNotIn(segredo, visivel)
+
+    def test_numero_sem_cartorio_continua_valor_obrigatorio(self):
+        payload = self._payload_origem()
+        del payload['acts'][0]['origem']['cartorio']
+        extracao = self._extracao(payload)
+
+        with self.assertRaises(ImportacaoInvalida) as contexto:
+            self._importar(extracao)
+
+        (linha,) = contexto.exception.linhas
+        (erro,) = linha['erros']
+        self.assertEqual(erro['chave'], '/acts/0/origem/cartorio')
+        self.assertEqual(erro['codigo'], 'valor_obrigatorio')
         self.assertEqual(Lancamento.objects.count(), 0)

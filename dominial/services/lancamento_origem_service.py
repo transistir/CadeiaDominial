@@ -15,7 +15,9 @@ from ..utils.hierarquia_utils import (
 )
 from ..managers import identidade_existe_fora_do_escopo
 from ..utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
-from ..models import Cartorios, Documento, DocumentoTipo, LancamentoOrigem
+from ..models import (
+    Cartorios, Documento, DocumentoTipo, Lancamento, LancamentoOrigem,
+)
 from ..services.cri_service import CRIService
 from ..services.cache_service import CacheService
 from ..services.documento_identidade_service import DocumentoIdentidadeService
@@ -1155,6 +1157,107 @@ class LancamentoOrigemService:
             queryset=documentos_queryset,
         )
         return resultado.documento if resultado.status == 'encontrado' else None
+
+    @staticmethod
+    def vincular_documento_origem(lancamento, *, documentos_queryset):
+        """Grava ``Lancamento.documento_origem`` pela origem estruturada (#324).
+
+        Chamado só pela importação assistida — o fluxo manual não grava essa
+        FK (fora do escopo desta issue). Contrato:
+
+        - lê a ÚNICA ``origens_estruturadas`` do lançamento; sem origem, ou
+          com mais de uma, não há o que vincular;
+        - resolve pela identidade COMPLETA (tipo + número normalizado +
+          cartório da própria origem) dentro de ``documentos_queryset`` e
+          aceita só ``encontrado``: ``ambiguo`` e ``nao_encontrado`` ficam sem
+          vínculo — nunca cria documento, nunca resolve só pelo número e
+          nunca olha fora do escopo do chamador (``None`` → ``TypeError``,
+          contrato C2: nada de global implícito);
+        - grava com ``update()``: ``save()`` dispararia de novo o
+          ``post_save`` que reprocessa as origens;
+        - sem resolução NÃO desfaz um vínculo que já existe.
+
+        Devolve o ``Documento`` vinculado ou ``None``.
+        """
+        if documentos_queryset is None:
+            raise TypeError(
+                'vincular_documento_origem exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
+        origens = list(
+            lancamento.origens_estruturadas.select_related('cartorio')[:2]
+        )
+        if len(origens) != 1:
+            return None
+        origem = origens[0]
+        documento = LancamentoOrigemService._resolver_documento(
+            origem.tipo_documento, origem.numero, origem.cartorio,
+            documentos_queryset,
+        )
+        if documento is None:
+            return None
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            documento_origem=documento,
+        )
+        lancamento.documento_origem = documento
+        return documento
+
+    @staticmethod
+    def homonimo_outro_tipo(tipo, numero, cartorio, *, documentos_queryset):
+        """Documento de OUTRO tipo com o mesmo número no cartório (#267).
+
+        Cobre o caso "a origem declarada (tipo, número) não existe no
+        cartório, mas existe outro tipo com o mesmo número": ``M366``
+        declarada como ``T366``, por exemplo. Serve só para AVISAR — a origem
+        é gravada como declarada e nunca é vinculada ao homônimo.
+
+        Só enxerga ``documentos_queryset`` (``None`` → ``TypeError``,
+        contrato C2): homônimo de outra TI nunca aparece. Devolve ``None``
+        quando a identidade declarada já existe no escopo, quando ela só
+        existe FORA do escopo (a origem restrita tem aviso próprio e afirmar
+        "não existe no cartório" seria falso), quando não há cartório ou
+        número válido para o tipo, ou quando não há homônimo visível.
+        """
+        if documentos_queryset is None:
+            raise TypeError(
+                'homonimo_outro_tipo exige documentos_queryset. '
+                'None→global é proibido (contrato C2).'
+            )
+        if not cartorio:
+            return None
+        try:
+            identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
+        except (TypeError, ValueError):
+            return None
+        resolucao = DocumentoIdentidadeService.resolver(
+            identidade, queryset=documentos_queryset,
+        )
+        if resolucao.status != 'nao_encontrado':
+            return None
+        if LancamentoOrigemService._origem_restrita(
+            tipo, numero, cartorio, documentos_queryset,
+        ):
+            return None
+        candidatos = (
+            documentos_queryset
+            .filter(
+                cartorio_id=identidade.cartorio_id,
+                numero_normalizado=identidade.numero_normalizado,
+            )
+            .exclude(tipo__tipo=identidade.tipo)
+            .select_related('tipo')
+            .order_by('pk')
+        )
+        for candidato in candidatos:
+            try:
+                normalizado = normalizar_numero_documento(
+                    candidato.numero, candidato.tipo.tipo,
+                )
+            except (TypeError, ValueError):
+                continue
+            if normalizado == identidade.numero_normalizado:
+                return candidato
+        return None
 
     @staticmethod
     def _resolver_documento_estrito(tipo, numero, cartorio, documentos_queryset):
