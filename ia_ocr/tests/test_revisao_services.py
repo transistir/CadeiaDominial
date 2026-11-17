@@ -91,6 +91,24 @@ class RevisaoServicesTest(TestCase):
         self.assertEqual(campo.tipo_valor, 'data')
         self.assertEqual(campo.status_revisao, 'editado')
 
+    def test_salvar_bloco_recusa_livro_transacao_com_51_caracteres(self):
+        self._resolver_pendencias()
+        chave = '/acts/0/livro_transacao'
+        versao = services.versao_bloco(self.extracao)
+
+        with self.assertRaisesMessage(
+            valores.ValorInvalido,
+            'texto acima do limite de 50 caracteres do destino',
+        ):
+            services.salvar_bloco(
+                self.extracao, {
+                    chave: {'incluir': True, 'conferido': True, 'valor': 'X' * 51},
+                }, self.usuario, versao,
+            )
+
+        self.assertEqual(services.versao_bloco(self.extracao), versao)
+        self.assertIsNone(self.extracao.campos.get(chave=chave).valor_final)
+
     def test_salvar_bloco_aplica_e_persiste(self):
         carregada = ExtracaoSugerida.objects.prefetch_related('campos').get(
             pk=self.extracao.pk,
@@ -266,6 +284,11 @@ class RevisaoServicesTest(TestCase):
             sorted(campos_novos),
             ['/acts/0/origem/cartorio', '/acts/0/titulo'],
         )
+        for nome in ('livro_transacao', 'folha_transacao', 'data_transacao'):
+            chave = f'/acts/0/{nome}'
+            with self.subTest(chave=chave):
+                self.assertNotIn(chave, campos_novos)
+                self.assertEqual(self.extracao.campos.filter(chave=chave).count(), 1)
 
         campos = {campo.chave: campo for campo in self.extracao.campos.all()}
         for chave in ('/acts/0/titulo', '/acts/0/origem/cartorio'):

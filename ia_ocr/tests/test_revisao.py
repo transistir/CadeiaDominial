@@ -1571,29 +1571,58 @@ class DesnormalizarTest(TestCase):
                 self.assertFalse(encontradas[0].requer_revisao)
 
     def test_transmissao_folhas_do_payload_sem_duplicatas(self):
-        payload = payload_registro(self.job.job_id)
         esperados = {
             'livro_transacao': ('10-A', 'texto'),
             'folha_transacao': ('25v', 'texto'),
             'data_transacao': ('2019-12-20', 'data'),
         }
-        for nome, (valor, _tipo) in esperados.items():
-            payload['acts'][0][nome] = _campo(valor, 'R-1/42.718')
+        for caso in ('preenchida', 'nula', 'sem_normalized', 'normalized_nulo'):
+            with self.subTest(caso=caso):
+                self.extracao.campos.all().delete()
+                payload = payload_registro(self.job.job_id)
+                for nome, (valor, _tipo) in esperados.items():
+                    campo = _campo(valor, 'R-1/42.718')
+                    if caso == 'nula':
+                        campo = None
+                    elif caso == 'sem_normalized':
+                        campo.pop('normalized')
+                    elif caso == 'normalized_nulo':
+                        campo['normalized'] = None
+                    payload['acts'][0][nome] = campo
 
-        # Folhas futuras fabricadas: o schema v1.1 permanece intacto.
-        linhas = self._linhas(payload, validar=False)
-        CampoSugerido.objects.bulk_create(linhas)
+                # Folhas futuras fabricadas: o schema v1.1 permanece intacto.
+                linhas = self._linhas(payload, validar=False)
+                for nome in esperados:
+                    chave = f'/acts/0/{nome}'
+                    self.assertEqual(
+                        sum(linha.chave == chave for linha in linhas), 1, chave,
+                    )
+                CampoSugerido.objects.bulk_create(linhas)
 
-        for nome, (valor, tipo) in esperados.items():
-            chave = f'/acts/0/{nome}'
-            with self.subTest(chave=chave):
-                salvas = self.extracao.campos.filter(chave=chave)
-                self.assertEqual(salvas.count(), 1)
-                linha = salvas.get()
-                self.assertEqual(linha.normalized, valor)
-                self.assertEqual(linha.tipo_valor, tipo)
-                self.assertEqual(linha.confianca, 0.95)
-                self.assertFalse(linha.requer_revisao)
+                for nome, (valor, tipo) in esperados.items():
+                    chave = f'/acts/0/{nome}'
+                    with self.subTest(chave=chave):
+                        salvas = self.extracao.campos.filter(chave=chave)
+                        self.assertEqual(salvas.count(), 1)
+                        linha = salvas.get()
+                        if caso == 'preenchida':
+                            self.assertEqual(linha.normalized, valor)
+                        else:
+                            self.assertIsNone(linha.normalized)
+                        self.assertEqual(linha.tipo_valor, tipo)
+                        if caso in ('nula', 'sem_normalized'):
+                            self.assertIsNone(linha.raw)
+                            self.assertIsNone(linha.confianca)
+                        else:
+                            self.assertEqual(linha.confianca, 0.95)
+                        # Data explícita sem canônico exige revisão;
+                        # placeholder opcional continua sem pendência.
+                        revisao = caso == 'normalized_nulo' and tipo == 'data'
+                        self.assertEqual(linha.requer_revisao, revisao)
+                        self.assertEqual(
+                            linha.motivos_revisao,
+                            ['normalizacao_invalida'] if revisao else [],
+                        )
 
     def test_placeholders_dos_obrigatorios(self):
         completo = self._por_chave(self._linhas(payload_registro(self.job.job_id)))
