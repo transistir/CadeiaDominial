@@ -23,7 +23,7 @@ from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
     AtoRevisado, DadosRevisados, DocumentoRevisado, ParteRevisada,
     RevisaoInvalidada, _tipos_efetivos, _valor_explicito, aplicar_linha,
-    avisos, dados_revisados, desnormalizar,
+    avisos, campo_obrigatorio, dados_revisados, desnormalizar,
     garantir_placeholders_obrigatorios, linha_ignorada, pendencias,
     resolucoes_de_tipo, versao_linha,
 )
@@ -454,6 +454,31 @@ class PendenciasEAvisosTest(TestCase):
         return {
             'chave': chave, 'motivo': 'criar_novo_sem_nome', 'bloqueante': True,
         }
+
+    def test_transmissao_opcional_nao_altera_pendencias_nem_avisos(self):
+        self.registro.requer_forma = True
+        self.registro.save(update_fields=['requer_forma'])
+        linhas = self._persistir(self._registro_completo())
+        chaves = [
+            f'/acts/0/{nome}' for nome in (
+                'livro_transacao', 'folha_transacao', 'data_transacao',
+            )
+        ]
+        for chave in chaves:
+            with self.subTest(chave=chave):
+                self.assertIn(chave, linhas)
+                self.assertFalse(campo_obrigatorio(chave))
+        self.assertEqual(pendencias(self.extracao), [])
+        avisos_com_transmissao = avisos(self.extracao)
+        self.assertIn({
+            'chave': '/acts/0/forma', 'motivo': 'requer_forma',
+            'bloqueante': False,
+        }, avisos_com_transmissao)
+
+        self.extracao.campos.filter(chave__in=chaves).delete()
+
+        self.assertEqual(pendencias(self.extracao), [])
+        self.assertEqual(avisos(self.extracao), avisos_com_transmissao)
 
     def test_obrigatorio_descartado_bloqueia(self):
         linhas = self._persistir(self._registro_completo())
@@ -1126,6 +1151,54 @@ class DadosRevisadosTest(TestCase):
                     linha.criar_novo = True
         CampoSugerido.objects.bulk_create(linhas)
 
+    def test_transmissao_preenchida_tipadas_fora_da_conferencia(self):
+        esperados = {
+            'livro_transacao': '10-A',
+            'folha_transacao': '25v',
+            'data_transacao': date(2019, 12, 20),
+        }
+        for nome, valor in esperados.items():
+            atualizado = self.extracao.campos.filter(
+                chave=f'/acts/0/{nome}',
+            ).update(valor_final=str(valor))
+            self.assertEqual(atualizado, 1)
+
+        dados = dados_revisados(self.extracao)
+
+        for nome, esperado in esperados.items():
+            with self.subTest(nome=nome):
+                self.assertEqual(getattr(dados.atos[0], nome), esperado)
+                self.assertIsInstance(getattr(dados.atos[0], nome), type(esperado))
+                self.assertNotIn(f'/acts/0/{nome}', dados.conferencia)
+
+    def test_transmissao_vazia_e_none(self):
+        chaves = [
+            f'/acts/0/{nome}' for nome in (
+                'livro_transacao', 'folha_transacao', 'data_transacao',
+            )
+        ]
+        self.assertEqual(self.extracao.campos.filter(chave__in=chaves).count(), 3)
+        for vazio in (None, ''):
+            with self.subTest(vazio=vazio):
+                self.extracao.campos.filter(chave__in=chaves).update(valor_final=vazio)
+                dados = dados_revisados(self.extracao)
+                for chave in chaves:
+                    self.assertIsNone(getattr(dados.atos[0], chave.rsplit('/', 1)[1]))
+                    self.assertNotIn(chave, dados.conferencia)
+
+    def test_transmissao_sem_linhas_e_none(self):
+        nomes = ('livro_transacao', 'folha_transacao', 'data_transacao')
+        self.extracao.campos.filter(
+            chave__in=[f'/acts/0/{nome}' for nome in nomes],
+        ).delete()
+
+        dados = dados_revisados(self.extracao)
+
+        for nome in nomes:
+            with self.subTest(nome=nome):
+                self.assertIsNone(getattr(dados.atos[0], nome))
+                self.assertNotIn(f'/acts/0/{nome}', dados.conferencia)
+
     def test_dados_revisados_tipados(self):
         for chave, valor in (
             ('/document/data', '2020-01-11'),
@@ -1458,6 +1531,69 @@ class DesnormalizarTest(TestCase):
         self.assertFalse(
             [chave for chave in por_chave_av if '/partes' in chave]
         )
+
+    def test_transmissao_placeholder_unico_por_ato(self):
+        payload = payload_registro(self.job.job_id)
+        segundo = payload_averbacao(self.job.job_id)['acts'][0]
+        segundo['ordem'] = 2
+        payload['acts'].append(segundo)
+
+        linhas = self._linhas(payload)
+
+        for indice in range(2):
+            for nome, tipo in (
+                ('livro_transacao', 'texto'), ('folha_transacao', 'texto'),
+                ('data_transacao', 'data'),
+            ):
+                chave = f'/acts/{indice}/{nome}'
+                with self.subTest(chave=chave):
+                    encontradas = [linha for linha in linhas if linha.chave == chave]
+                    self.assertEqual(len(encontradas), 1)
+                    linha = encontradas[0]
+                    self.assertIsNone(linha.normalized)
+                    self.assertFalse(linha.requer_revisao)
+                    self.assertEqual(linha.motivos_revisao, [])
+                    self.assertEqual(linha.tipo_valor, tipo)
+
+    def test_transmissao_placeholder_mesmo_sem_tipo(self):
+        payload = payload_averbacao(self.job.job_id)
+        payload['acts'][0].pop('tipo_sugerido')
+        payload['acts'][0].pop('rotulo')
+
+        linhas = self._linhas(payload, validar=False)
+
+        for nome in ('livro_transacao', 'folha_transacao', 'data_transacao'):
+            chave = f'/acts/0/{nome}'
+            with self.subTest(chave=chave):
+                encontradas = [linha for linha in linhas if linha.chave == chave]
+                self.assertEqual(len(encontradas), 1)
+                self.assertIsNone(encontradas[0].normalized)
+                self.assertFalse(encontradas[0].requer_revisao)
+
+    def test_transmissao_folhas_do_payload_sem_duplicatas(self):
+        payload = payload_registro(self.job.job_id)
+        esperados = {
+            'livro_transacao': ('10-A', 'texto'),
+            'folha_transacao': ('25v', 'texto'),
+            'data_transacao': ('2019-12-20', 'data'),
+        }
+        for nome, (valor, _tipo) in esperados.items():
+            payload['acts'][0][nome] = _campo(valor, 'R-1/42.718')
+
+        # Folhas futuras fabricadas: o schema v1.1 permanece intacto.
+        linhas = self._linhas(payload, validar=False)
+        CampoSugerido.objects.bulk_create(linhas)
+
+        for nome, (valor, tipo) in esperados.items():
+            chave = f'/acts/0/{nome}'
+            with self.subTest(chave=chave):
+                salvas = self.extracao.campos.filter(chave=chave)
+                self.assertEqual(salvas.count(), 1)
+                linha = salvas.get()
+                self.assertEqual(linha.normalized, valor)
+                self.assertEqual(linha.tipo_valor, tipo)
+                self.assertEqual(linha.confianca, 0.95)
+                self.assertFalse(linha.requer_revisao)
 
     def test_placeholders_dos_obrigatorios(self):
         completo = self._por_chave(self._linhas(payload_registro(self.job.job_id)))

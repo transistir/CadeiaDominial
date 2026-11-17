@@ -51,6 +51,46 @@ class RevisaoServicesTest(TestCase):
         )
         self.assertEqual(pendencias(self.extracao), [])
 
+    def test_transmissao_vazia_salva_bloco_sem_campos_novos(self):
+        self._resolver_pendencias()
+        decisoes = {
+            campo.chave: {'incluir': True, 'conferido': True}
+            for campo in self.extracao.campos.filter(chave__startswith='/acts/0')
+        }
+        chaves = [
+            f'/acts/0/{nome}' for nome in (
+                'livro_transacao', 'folha_transacao', 'data_transacao',
+            )
+        ]
+        for chave in chaves:
+            decisoes[chave] = {'incluir': True, 'conferido': True, 'valor': ''}
+
+        salva, _versao, _partes, campos_novos = services.salvar_bloco(
+            self.extracao, decisoes, self.usuario,
+            services.versao_bloco(self.extracao),
+        )
+
+        self.assertEqual(salva.pk, self.extracao.pk)
+        self.assertEqual(campos_novos, [])
+        self.assertEqual(pendencias(salva), [])
+        for chave in chaves:
+            self.assertEqual(salva.campos.get(chave=chave).valor_final, '')
+
+    def test_transmissao_data_preenchida_persiste_sem_campos_novos(self):
+        chave = '/acts/0/data_transacao'
+
+        salva, _versao, _partes, campos_novos = services.salvar_bloco(
+            self.extracao, {
+                chave: {'incluir': True, 'conferido': True, 'valor': '2019-12-20'},
+            }, self.usuario, services.versao_bloco(self.extracao),
+        )
+
+        self.assertEqual(campos_novos, [])
+        campo = salva.campos.get(chave=chave)
+        self.assertEqual(campo.valor_final, '2019-12-20')
+        self.assertEqual(campo.tipo_valor, 'data')
+        self.assertEqual(campo.status_revisao, 'editado')
+
     def test_salvar_bloco_aplica_e_persiste(self):
         carregada = ExtracaoSugerida.objects.prefetch_related('campos').get(
             pk=self.extracao.pk,

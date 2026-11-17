@@ -65,6 +65,9 @@ _OBRIGATORIOS_DOCUMENTO = ('tipo', 'data', 'cartorio')
 _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
 _CHAVE_OBRIGATORIA_ATO = re.compile(r'/acts/\d+/(.+)')
 
+# Opcionais no formulário, inclusive quando o payload não resolve o tipo.
+CAMPOS_DA_TRANSMISSAO = ('livro_transacao', 'folha_transacao', 'data_transacao')
+
 # Tarefa C (#322/PR #327) e #328 (regra do Hiure, 11/11): o formulário de
 # lançamento manda — ``valor_transacao`` e ``detalhes`` não existem nele,
 # então não existem na revisão nem na importação. O schema A3 do Umbelino
@@ -161,6 +164,9 @@ class AtoRevisado:
     chave: str | None = None
     tipo_explicito: str | None = None
     tipo_sugerido: str | None = None
+    livro_transacao: str | None = None
+    folha_transacao: str | None = None
+    data_transacao: date | None = None
 
 
 @dataclass(frozen=True)
@@ -332,6 +338,9 @@ def dados_revisados(extracao) -> DadosRevisados:
             chave=chave,
             tipo_explicito=tipo_exp,
             tipo_sugerido=tipo_sug,
+            livro_transacao=valor(f'{chave}/livro_transacao'),
+            folha_transacao=valor(f'{chave}/folha_transacao'),
+            data_transacao=valor(f'{chave}/data_transacao'),
         )
         revisados.append((revisado.ordem, indice, revisado))
 
@@ -1134,6 +1143,9 @@ ROTULOS_CAMPO = {
     'area': 'Área (ha)',
     'observacoes': 'Observações',
     'cartorio_transmissao': 'Cartório da transmissão',
+    'livro_transacao': 'Livro da transmissão',
+    'folha_transacao': 'Folha da transmissão',
+    'data_transacao': 'Data da transmissão',
     'livro': 'Livro',
     'folha': 'Folha',
     'imovel_descricao': 'Descrição do imóvel',
@@ -1165,8 +1177,8 @@ CAMPOS_DO_FORMULARIO_DOCUMENTO = (
 )
 CAMPOS_DO_FORMULARIO_ATO = (
     'tipo_sugerido', 'numero_lancamento', 'data', 'forma', 'titulo',
-    'descricao', 'area', 'partes', 'cartorio_transmissao', 'origem',
-    'observacoes',
+    'descricao', 'area', 'partes', 'cartorio_transmissao',
+    'livro_transacao', 'folha_transacao', 'data_transacao', 'origem', 'observacoes',
 )
 
 _ORDEM_DOCUMENTO = {
@@ -1500,6 +1512,11 @@ def _ato(extracao, ponteiro, ato, texto_paginas, configuracoes=None):
         chave = f'{ponteiro}/{caminho}'
         if not _tem_folha(ato, caminho):
             linhas.append(_placeholder(extracao, chave, requer_revisao=False))
+    for nome in CAMPOS_DA_TRANSMISSAO:
+        if not _eh_folha(ato.get(nome)):
+            linhas.append(_placeholder(
+                extracao, f'{ponteiro}/{nome}', requer_revisao=False,
+            ))
     for nome, valor in ato.items():
         if nome != 'partes':
             linhas += _folhas(

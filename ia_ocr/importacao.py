@@ -560,6 +560,10 @@ def _importar_ato(
         eh_inicio_matricula=bool(ato.eh_inicio_matricula),
         cartorio_origem=cartorio_origem,
         cartorio_transmissao=cartorio_transmissao,
+        # O codec do formulário preserva espaços em texto: vazio grava NULL.
+        livro_transacao=(ato.livro_transacao or '').strip() or None,
+        folha_transacao=(ato.folha_transacao or '').strip() or None,
+        data_transacao=ato.data_transacao,
         livro_origem=origem.get('livro') if origem else None,
         folha_origem=origem.get('folha') if origem else None,
         data_origem=origem.get('data') if origem else None,

@@ -140,6 +140,29 @@ class DestinoDeArea(SimpleTestCase):
         self.assertIs(destino_de('/document/area'), SEM_DESTINO)
 
 
+class TransmissaoDoAto(SimpleTestCase):
+    def test_transmissao_livro(self):
+        destino = destino_de('/acts/0/livro_transacao')
+        self.assertEqual(destino.modelo, 'dominial.Lancamento')
+        self.assertEqual(destino.campo, 'livro_transacao')
+        self.assertEqual(destino.tipo_valor, 'texto')
+        self.assertEqual(destino.max_length, 50)
+
+    def test_transmissao_folha(self):
+        destino = destino_de('/acts/1/folha_transacao')
+        self.assertEqual(destino.modelo, 'dominial.Lancamento')
+        self.assertEqual(destino.campo, 'folha_transacao')
+        self.assertEqual(destino.tipo_valor, 'texto')
+        self.assertEqual(destino.max_length, 50)
+
+    def test_transmissao_data(self):
+        destino = destino_de('/acts/2/data_transacao')
+        self.assertEqual(destino.modelo, 'dominial.Lancamento')
+        self.assertEqual(destino.campo, 'data_transacao')
+        self.assertEqual(destino.tipo_valor, 'data')
+        self.assertIsNone(destino.max_length)
+
+
 class ChaveDesconhecidaLevanta(SimpleTestCase):
     def test_chave_desconhecida_levanta(self):
         for chave in (
