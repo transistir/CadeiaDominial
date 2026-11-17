@@ -2544,6 +2544,76 @@ class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
         self.assertEqual(linha['avisos'], [])
 
 
+class HerancaLivroFolhaDaOrigemTest(ImportacaoBase):
+    """#324 rodada 4 (P2 do Codex): a revisão vence a herança na importação IA.
+
+    O documento de origem JÁ EXISTE e o primeiro lançamento dele tem
+    ``livro_origem``/``folha_origem`` preenchidos. A herança legada copiava
+    esses valores para a ``LancamentoOrigem`` mesmo quando a revisão deixou
+    os campos VAZIOS — no caminho IA o valor revisado (inclusive a ausência)
+    prevalece. Sem listar o documento no MESMO imóvel do job: o sinal
+    ``post_save`` (escopo só do imóvel) herda primeiro e a chamada explícita
+    da importação reconcilia — o estado final é o revisado.
+    """
+
+    NUMERO = 'T366'
+
+    def setUp(self):
+        super().setUp()
+        self.tipo_transcricao = DocumentoTipo.objects.create(tipo='transcricao')
+        self.cartorio_origem = Cartorios.objects.create(
+            nome='CRI de Origem', cns='CNS-H324', cidade='Guaíra', estado='SP',
+        )
+
+    def _documento_de_origem_com_primeiro_lancamento(self):
+        documento = Documento.objects.create(
+            imovel=self.imovel, tipo=self.tipo_transcricao,
+            numero=self.NUMERO, data=date(1990, 1, 1),
+            cartorio=self.cartorio_origem, livro='1', folha='1',
+        )
+        Lancamento.objects.create(
+            documento=documento, tipo=self.tipo_registro,
+            livro_origem='HERDADO', folha_origem='99',
+        )
+        return documento
+
+    def test_origem_vazia_na_revisao_grava_null_na_lancamento_origem(self):
+        existente = self._documento_de_origem_com_primeiro_lancamento()
+        payload = self._payload_origem()
+        payload['acts'][0]['origem']['livro'] = self._campo('  ')
+        payload['acts'][0]['origem']['folha'] = self._campo('  ')
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get(documento=self.documento)
+        origem = LancamentoOrigem.objects.get(lancamento=lancamento)
+        # A herança ('HERDADO', '99') não preenche o que a revisão deixou vazio.
+        self.assertIsNone(origem.livro)
+        self.assertIsNone(origem.folha)
+        self.assertIsNone(lancamento.livro_origem)
+        self.assertIsNone(lancamento.folha_origem)
+        # O documento existente é reaproveitado e a FK vinculada a ele.
+        self.assertEqual(lancamento.documento_origem, existente)
+        self.assertFalse(ImportacaoIA.objects.filter(modelo='Documento').exists())
+
+    def test_origem_preenchida_na_revisao_grava_os_valores_informados(self):
+        existente = self._documento_de_origem_com_primeiro_lancamento()
+        # O payload-base traz livro '2' e folha '123' revisados.
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get(documento=self.documento)
+        origem = LancamentoOrigem.objects.get(lancamento=lancamento)
+        self.assertEqual(origem.livro, '2')
+        self.assertEqual(origem.folha, '123')
+        self.assertNotEqual(origem.livro, 'HERDADO')
+        self.assertEqual(lancamento.documento_origem, existente)
+
+
 class VinculoDocumentoOrigemTest(ImportacaoBase):
     """#324 (I-11d): a importação grava ``Lancamento.documento_origem``.
 
@@ -2771,6 +2841,63 @@ class VinculoDocumentoOrigemTest(ImportacaoBase):
         self.assertEqual(list(self._outros_documentos()), [documento_origem])
         lancamento.refresh_from_db()
         self.assertEqual(lancamento.documento_origem, documento_origem)
+
+    def test_leitor_sem_escopo_na_fk_nao_ve_o_documento_de_origem(self):
+        """P1 (rodada 4, Codex): a FK vale o escopo de QUEM LÊ.
+
+        O usuário A (TIs A+B) importa e o vínculo aponta para o documento de
+        origem que A tem na TI B. O usuário B (só a TI A) abre o detalhe do
+        lançamento: a página vem, mas o documento da TI B não chega ao
+        contexto — sem o card "Documento de Origem". O número declarado no
+        texto da origem segue na página: é dado do PRÓPRIO lançamento, não
+        do documento alheio. A FK não muda no banco.
+        """
+        ti_b = TIs.objects.create(
+            nome='TI B do A 324', codigo='TI-B324', etnia='Teste',
+        )
+        imovel_b = self._imovel_em(ti_b, 'ImovelDoA324')
+        UserTI.objects.create(user=self.usuario, tis=ti_b)
+        documento_ti_b = self._documento_da_origem_em(imovel_b)
+        extracao = self._extracao(self._payload_origem())
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        # O vínculo existe e aponta para o documento da TI B (escopo de A).
+        self.assertEqual(lancamento.documento_origem, documento_ti_b)
+        self.assertEqual(documento_ti_b.imovel, imovel_b)
+
+        url = reverse('lancamento_detail', kwargs={
+            'tis_id': self.imovel.terra_indigena_id_id,
+            'imovel_id': self.imovel.pk,
+            'lancamento_id': lancamento.pk,
+        })
+        leitor = criar_usuario()
+        UserTI.objects.create(
+            user=leitor, tis=self.imovel.terra_indigena_id,
+        )
+        self.client.force_login(leitor)
+
+        pagina_do_leitor = self.client.get(url)
+
+        self.assertEqual(pagina_do_leitor.status_code, 200)
+        conteudo = pagina_do_leitor.content.decode()
+        # O card só renderiza dentro de ``{% if lancamento.documento_origem %}``:
+        # sem escopo na FK, o documento da TI B não chega ao template.
+        self.assertNotIn('Documento de Origem', conteudo)
+        # Nada do imóvel alheio na página.
+        self.assertNotIn('ImovelDoA324', conteudo)
+
+        self.client.force_login(self.usuario)
+
+        pagina_do_a = self.client.get(url)
+
+        self.assertEqual(pagina_do_a.status_code, 200)
+        self.assertIn('Documento de Origem', pagina_do_a.content.decode())
+        # O banco não muda: a FK segue gravada para quem tem o escopo.
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.documento_origem, documento_ti_b)
 
     # --- FK PROTECT: o documento de origem importado não se exclui ----------
     # Comportamento ATUAL (``on_delete=PROTECT``), fixado sem mexer no modelo:

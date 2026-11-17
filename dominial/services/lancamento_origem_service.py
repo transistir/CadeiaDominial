@@ -193,10 +193,17 @@ class LancamentoOrigemService:
         origem,
         imovel,
         documentos_queryset=None,
+        *,
+        herdar_livro_folha_do_documento=True,
     ):
         """
         Processa origens para criar documentos automáticos
         NOVO: Fim de cadeia não cria documentos, apenas formata a origem
+
+        ``herdar_livro_folha_do_documento``: a importação assistida passa
+        ``False`` (#324 rodada 4) para o valor REVISADO prevalecer sobre a
+        herança do primeiro lançamento do documento de origem; os demais
+        chamadores (fluxo manual, sinal ``post_save``) mantêm o default.
         """
         # Chamadas originadas de requests passam documentos_for_user(user).
         # O fallback existe para signals/rotinas internas sem usuário e fica
@@ -234,6 +241,7 @@ class LancamentoOrigemService:
             origens_individuals,
             imovel,
             documentos_queryset,
+            herdar_livro_folha_do_documento=herdar_livro_folha_do_documento,
         )
 
         # Processar apenas origens normais (que criam documentos)
@@ -289,12 +297,17 @@ class LancamentoOrigemService:
         origens,
         imovel,
         documentos_queryset,
+        *,
+        herdar_livro_folha_do_documento=True,
     ):
         """
         Reconcilia o conjunto estruturado preservando IDs e o texto legado.
 
         Os índices existentes são movidos temporariamente para permitir troca
         de ordem sem colisão na constraint ``(lancamento, indice_origem)``.
+        ``herdar_livro_folha_do_documento=False`` (só a importação assistida,
+        #324 rodada 4) desliga a herança de livro/folha do primeiro
+        lançamento do documento de origem: o valor revisado prevalece.
         """
         desejadas = []
         identidades_vistas = {}
@@ -378,6 +391,7 @@ class LancamentoOrigemService:
                 documento_origem=documento_origem,
                 livro_origem_informado=dados_origem['livro'],
                 folha_origem_informada=dados_origem['folha'],
+                herdar_do_documento=herdar_livro_folha_do_documento,
             )
             desejadas.append({
                 'indice_origem': indice_origem,
@@ -1081,12 +1095,23 @@ class LancamentoOrigemService:
         documento_origem=None,
         livro_origem_informado=None,
         folha_origem_informada=None,
+        *,
+        herdar_do_documento=True,
     ):
-        """Aplica a mesma ordem de herança nos caminhos único e múltiplo."""
+        """Aplica a mesma ordem de herança nos caminhos único e múltiplo.
+
+        ``herdar_do_documento=False`` é exigido só pelo caminho da
+        importação assistida (#324 rodada 4, P2 do Codex): lá o valor
+        REVISADO na tela prevalece, inclusive a AUSÊNCIA — a herança do
+        primeiro lançamento do documento de origem não pode preencher
+        livro/folha que a revisão deixou vazio (a ``LancamentoOrigem``
+        nascia ``('HERDADO', '99')`` com o lançamento em ``(None, None)``).
+        Os demais chamadores mantêm a herança legada (default ``True``).
+        """
         livro_origem = None
         folha_origem = None
 
-        if documento_origem:
+        if herdar_do_documento and documento_origem:
             primeiro_lancamento = documento_origem.lancamentos.order_by('id').first()
             if primeiro_lancamento:
                 livro_origem = LancamentoOrigemService._normalizar_metadado_origem(

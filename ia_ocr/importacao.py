@@ -601,6 +601,11 @@ def _importar_ato(
         aviso = LancamentoOrigemService.processar_origens_automaticas(
             lancamento, lancamento.origem or '', imovel,
             documentos_queryset=documentos_usuario,
+            # #324 rodada 4 (P2 do Codex): o valor REVISADO prevalece,
+            # inclusive a AUSÊNCIA — a herança do primeiro lançamento do
+            # documento de origem não pode preencher livro/folha que a
+            # revisão deixou vazio. Só o caminho IA desliga a herança.
+            herdar_livro_folha_do_documento=False,
         )
     except ValidationError:
         # Defesa em profundidade: o serviço da origem ainda pode recusar
