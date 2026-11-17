@@ -145,6 +145,95 @@ class ImportacaoBase(ImportacaoFixture, TestCase):
 class CaminhoFelizTest(ImportacaoBase):
     """Cenário 1: o registro inteiro vira lançamento com pessoas."""
 
+    def test_transmissao_preenchida_grava_colunas_com_texto_sem_bordas(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        for nome, valor in (
+            ('livro_transacao', ' 10-A '), ('folha_transacao', ' 25v '),
+            ('data_transacao', '2019-12-20'),
+        ):
+            atualizado = extracao.campos.filter(chave=f'/acts/0/{nome}').update(
+                valor_final=valor, status_revisao='editado',
+            )
+            self.assertEqual(atualizado, 1)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.livro_transacao, '10-A')
+        self.assertEqual(lancamento.folha_transacao, '25v')
+        self.assertEqual(lancamento.data_transacao, date(2019, 12, 20))
+        self.assertEqual(lancamento.data, date(2020, 2, 15))
+
+    def test_transmissao_do_payload_grava_sem_confundir_com_origem(self):
+        payload = self._payload_origem()
+        for nome, valor in (
+            ('livro_transacao', '10-A'), ('folha_transacao', '25v'),
+            ('data_transacao', '2019-12-20'),
+        ):
+            payload['acts'][0][nome] = self._campo(valor)
+        payload['acts'][0]['origem']['data'] = self._campo('1990-01-02')
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertEqual(lancamento.livro_transacao, '10-A')
+        self.assertEqual(lancamento.folha_transacao, '25v')
+        self.assertEqual(lancamento.data_transacao, date(2019, 12, 20))
+        self.assertEqual(lancamento.livro_origem, '2')
+        self.assertEqual(lancamento.folha_origem, '123')
+        self.assertEqual(lancamento.data_origem, date(1990, 1, 2))
+
+    def test_transmissao_vazia_grava_none_sem_bloquear(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        for nome in ('livro_transacao', 'folha_transacao', 'data_transacao'):
+            atualizado = extracao.campos.filter(chave=f'/acts/0/{nome}').update(
+                valor_final='', status_revisao='editado',
+            )
+            self.assertEqual(atualizado, 1)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertIsNone(lancamento.livro_transacao)
+        self.assertIsNone(lancamento.folha_transacao)
+        self.assertIsNone(lancamento.data_transacao)
+
+    def test_transmissao_texto_so_com_espacos_grava_none(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        for nome in ('livro_transacao', 'folha_transacao'):
+            atualizado = extracao.campos.filter(chave=f'/acts/0/{nome}').update(
+                valor_final=' \t\n ', status_revisao='editado',
+            )
+            self.assertEqual(atualizado, 1)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertIsNone(lancamento.livro_transacao)
+        self.assertIsNone(lancamento.folha_transacao)
+        self.assertIsNone(lancamento.data_transacao)
+
+    def test_transmissao_extracao_legada_grava_none(self):
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        extracao.campos.filter(chave__in=[
+            f'/acts/0/{nome}' for nome in (
+                'livro_transacao', 'folha_transacao', 'data_transacao',
+            )
+        ]).delete()
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        self.assertIsNone(lancamento.livro_transacao)
+        self.assertIsNone(lancamento.folha_transacao)
+        self.assertIsNone(lancamento.data_transacao)
+
     def test_registro_vira_lancamento_com_partes_e_transicao(self):
         extracao = self._extracao(payload_registro(self.job.job_id))
 

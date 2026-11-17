@@ -141,6 +141,13 @@ DESTINOS = {
     '/acts/*/cartorio_transmissao': (
         'dominial.Lancamento', 'cartorio_transmissao', 'cartorio',
     ),
+    # Livro/folha/data usam *_transacao do formulário ao banco; usar
+    # *_transmissao criaria uma terceira grafia para o mesmo dado. Só o
+    # cartório tem variantes: cartorio_transmissao (novo) e cartorio_transacao
+    # (legado), conciliadas por cartorio_transmissao_compat.
+    '/acts/*/livro_transacao': ('dominial.Lancamento', 'livro_transacao', 'texto'),
+    '/acts/*/folha_transacao': ('dominial.Lancamento', 'folha_transacao', 'texto'),
+    '/acts/*/data_transacao': ('dominial.Lancamento', 'data_transacao', 'data'),
     '/acts/*/eh_inicio_matricula': (
         'dominial.Lancamento', 'eh_inicio_matricula', 'booleano',
     ),

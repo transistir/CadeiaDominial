@@ -1145,6 +1145,51 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         }
         return payload
 
+    def test_transmissao_ordem_rotulos_e_bloco_do_ato(self):
+        self._extracao(self._payload_formulario())
+        resposta = self._tela()
+        html = resposta.content.decode()
+        ato = _elementos(html, 'section', valores={'data-secao': 'ato'})[0]
+        chaves = self._chaves_do_html(str(ato))
+        sequencia = [
+            f'/acts/0/{nome}' for nome in (
+                'cartorio_transmissao', 'livro_transacao', 'folha_transacao',
+                'data_transacao', 'origem/cartorio',
+            )
+        ]
+        for chave in sequencia:
+            self.assertEqual(chaves.count(chave), 1)
+        posicoes = [chaves.index(chave) for chave in sequencia]
+        self.assertEqual(posicoes, sorted(posicoes))
+
+        cards = {
+            _atributos(card)['data-chave']: card
+            for card in _elementos(str(ato), 'article', presentes=('data-campo',))
+        }
+        outros = _elementos(html, 'section', valores={'data-secao': 'outros'})[0]
+        chaves_outros = self._chaves_do_html(str(outros))
+        for nome, rotulo in (
+            ('livro_transacao', 'Livro da transmissão'),
+            ('folha_transacao', 'Folha da transmissão'),
+            ('data_transacao', 'Data da transmissão'),
+        ):
+            chave = f'/acts/0/{nome}'
+            with self.subTest(chave=chave):
+                label = _descendentes(cards[chave], 'label', 'data-campo-rotulo')[0]
+                self.assertEqual(_texto_fora_de_details(label), rotulo)
+                self.assertNotIn(chave, chaves_outros)
+
+    def test_transmissao_data_tem_input_date(self):
+        self._extracao(self._payload_formulario())
+        html = self._tela().content.decode()
+        cards = _elementos(html, 'article', valores={
+            'data-chave': '/acts/0/data_transacao',
+        })
+        self.assertEqual(len(cards), 1)
+        controles = _descendentes(cards[0], 'input', 'data-campo-valor')
+        self.assertEqual(len(controles), 1)
+        self.assertEqual(_atributos(controles[0])['type'], 'date')
+
     def test_formulario_abre_pela_secao_documento(self):
         payload = self._payload_formulario()
         self._extracao(payload)
@@ -1280,7 +1325,8 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         grupos = list(dict.fromkeys(c.chave.split('/')[3] for c in ato['campos'][1:]))
         self.assertEqual(grupos, [
             'tipo_sugerido', 'numero_lancamento', 'data', 'forma', 'titulo',
-            'descricao', 'area', 'partes', 'cartorio_transmissao', 'origem',
+            'descricao', 'area', 'partes', 'cartorio_transmissao',
+            'livro_transacao', 'folha_transacao', 'data_transacao', 'origem',
             'observacoes',
         ])
         pendentes = {p['chave'] for p in resposta.context['pendencias']}
