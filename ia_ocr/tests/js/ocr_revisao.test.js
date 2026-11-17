@@ -48,7 +48,7 @@ function corresponde(el, seletor) {
     return esperado === undefined || el.attributes[nome] === esperado;
   }
   m = sel.match(/^([a-zA-Z][a-zA-Z0-9]*)$/);
-  if (m) return el.tagName === m[1].toLowerCase();
+  if (m) return el.tagName.toUpperCase() === m[1].toUpperCase();
   return false;
 }
 
@@ -71,7 +71,7 @@ function buscar(no, seletor, todos) {
 
 function criarElemento(tagName, atributos, pai) {
   const el = {
-    tagName: (tagName || 'div').toLowerCase(),
+    tagName: (tagName || 'div').toUpperCase(),
     attributes: Object.assign({}, atributos || {}),
     children: [],
     parent: pai || null,
@@ -129,7 +129,7 @@ function criarElemento(tagName, atributos, pai) {
     get tagNameUpper() { return this.tagName.toUpperCase(); },
   };
   Object.defineProperty(el, 'tagName', {
-    value: (tagName || 'div').toLowerCase(),
+    value: (tagName || 'div').toUpperCase(),
     writable: false,
   });
   if (pai) pai.children.push(el);
@@ -192,6 +192,53 @@ function criarCenario(opcoes) {
   const conferido = criarElemento('input', { 'data-campo-conferido': '' }, card);
   conferido.type = 'checkbox';
   conferido.checked = true;
+
+  // I-11a (PR #336): blocos de ato opcionais com seção, marcador, contagem e
+  // select de tipo — os MESMOS alvos estáveis do template (data-secao-*).
+  const atos = (opcoes.atos || []).map((desc) => {
+    const chaveAto = desc.chaveAto;
+    const secao = criarElemento('section', {
+      'data-secao': 'ato', 'data-chave-ato': chaveAto,
+    }, raiz);
+    if (desc.descartado) secao.classList.add('descartado');
+    const meta = criarElemento('p', { class: 'secao-meta' }, secao);
+    const descartadoAlvo = criarElemento('span', { 'data-secao-descartado': '' }, meta);
+    descartadoAlvo.textContent = 'Ato descartado · ';
+    descartadoAlvo.hidden = !desc.descartado;
+    const tipoAlvo = criarElemento('span', { 'data-secao-tipo': '' }, meta);
+    tipoAlvo.hidden = !desc.tipoDisplay;
+    tipoAlvo.textContent = desc.tipoDisplay ? desc.tipoDisplay + ' · ' : '';
+    const pendenciasAlvo = criarElemento('span', { 'data-secao-pendencias': '' }, meta);
+    const totalInicial = desc.pendenciasIniciais || 0;
+    pendenciasAlvo.textContent = totalInicial + ' '
+      + (totalInicial === 1 ? 'pendência' : 'pendências') + ' do ato';
+
+    const cardAto = criarElemento('article', {
+      'data-campo': '', 'data-chave': chaveAto, 'data-versao': 'v1',
+    }, secao);
+    const incluirAto = criarElemento('input', { 'data-campo-incluir': '' }, cardAto);
+    incluirAto.type = 'checkbox';
+    incluirAto.checked = !desc.descartado;
+
+    let cardTipo = null;
+    let selectTipo = null;
+    if (!desc.semTipo) {
+      cardTipo = criarElemento('article', {
+        'data-campo': '', 'data-chave': chaveAto + '/tipo_sugerido', 'data-versao': 'v1',
+      }, secao);
+      selectTipo = criarElemento('select', { 'data-campo-valor': '', 'data-tipo': 'enum' }, cardTipo);
+      [['averbacao', 'Averbação'], ['registro', 'Registro']].forEach((dupla) => {
+        const opt = criarElemento('option', { value: dupla[0] }, selectTipo);
+        opt.textContent = dupla[1];
+      });
+      selectTipo.value = desc.tipoCodigo || 'averbacao';
+    }
+
+    return {
+      chaveAto, secao, pendenciasAlvo, descartadoAlvo, tipoAlvo,
+      cardAto, incluirAto, cardTipo, selectTipo,
+    };
+  });
 
   const timeouts = [];
   const alertas = [];
@@ -259,7 +306,7 @@ function criarCenario(opcoes) {
 
   return {
     raiz, form, botao, msg, contador, rotulo, checkbox, card, valor, conferido,
-    timeouts, alertas, navegacoes, chamadas,
+    timeouts, alertas, navegacoes, chamadas, atos,
     dispararInput() {
       (raiz.listeners.input || []).forEach((fn) => fn({ target: valor }));
     },
@@ -496,6 +543,77 @@ caso('obrigatório sem checkbox: payload incluir true e card não descartado', a
   const salvar = c.chamadas.find((item) => item.url === '/salvar/');
   afirmar(!!salvar, 'change deve agendar o save');
   afirmarIgual(salvar.corpo.decisoes[0].incluir, true, 'payload do obrigatório deve ter incluir true');
+});
+
+// 10. I-11a (PR #336): um save que devolve ``pendencias`` sem a chave do ato
+//     zera o contador da seção (recalculado do array, não do DOM).
+caso('seção do ato: save sem a chave do ato zera o contador da seção', async () => {
+  const c = criarCenario({
+    semAtos: false,
+    atos: [{ chaveAto: '/acts/0', descartado: false, tipoDisplay: 'Averbação', pendenciasIniciais: 1 }],
+    pendenciasSalvas: [{ chave: '/document/data', motivo: 'obrigatorio_ausente' }],
+  });
+  const ato = c.atos[0];
+  afirmarIgual(ato.pendenciasAlvo.textContent, '1 pendência do ato', 'seção começa com 1 pendência');
+
+  c.dispararInput();
+  c.executarTimeout(0);
+  await esperar();
+
+  afirmarIgual(
+    ato.pendenciasAlvo.textContent,
+    '0 pendências do ato',
+    'save sem a chave do ato deve zerar o contador da seção'
+  );
+});
+
+// 11. I-11a (PR #336): reincluir o ato (marcar o Incluir da linha /acts/N)
+//     remove o marcador "Ato descartado" e a classe da seção após o save.
+caso('seção do ato: reincluir o ato remove o marcador "Ato descartado"', async () => {
+  const c = criarCenario({
+    semAtos: false,
+    atos: [{ chaveAto: '/acts/0', descartado: true, semTipo: true, pendenciasIniciais: 1 }],
+    pendenciasSalvas: [],
+  });
+  const ato = c.atos[0];
+  afirmar(ato.secao.classList.contains('descartado'), 'seção começa descartada');
+  afirmarIgual(ato.descartadoAlvo.hidden, false, 'marcador visível no início');
+  afirmarIgual(ato.incluirAto.checked, false, 'Incluir começa desmarcado');
+
+  ato.incluirAto.checked = true;
+  c.dispararChange(ato.incluirAto);
+  c.executarTimeout(0);
+  await esperar();
+
+  afirmar(
+    !ato.secao.classList.contains('descartado'),
+    'seção deve perder a classe descartado após reincluir'
+  );
+  afirmarIgual(ato.descartadoAlvo.hidden, true, 'marcador deve sumir após reincluir');
+});
+
+// 12. I-11a (PR #336): trocar o tipo no <select> do ato atualiza o tipo exibido
+//     no cabeçalho da seção, a partir do texto da opção selecionada.
+caso('seção do ato: trocar o tipo atualiza o cabeçalho', async () => {
+  const c = criarCenario({
+    semAtos: false,
+    atos: [{ chaveAto: '/acts/0', descartado: false, tipoDisplay: 'Averbação', pendenciasIniciais: 1 }],
+    pendenciasSalvas: [],
+  });
+  const ato = c.atos[0];
+  afirmarIgual(ato.tipoAlvo.textContent, 'Averbação · ', 'cabeçalho começa com o tipo atual');
+
+  ato.selectTipo.value = 'registro';
+  c.dispararChange(ato.selectTipo);
+  c.executarTimeout(0);
+  await esperar();
+
+  afirmarIgual(
+    ato.tipoAlvo.textContent,
+    'Registro · ',
+    'tipo do cabeçalho deve acompanhar a opção selecionada'
+  );
+  afirmarIgual(ato.tipoAlvo.hidden, false, 'tipo deve ficar visível');
 });
 
 (async () => {

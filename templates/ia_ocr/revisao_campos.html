@@ -83,9 +83,10 @@
 
             {% if secao.tipo == 'ato' %}
             <p class="secao-meta">
-                {% if secao.descartado %}Ato descartado · {% endif %}
-                {% if secao.tipo_display %}{{ secao.tipo_display }} · {% endif %}
-                {{ secao.pendencias_do_ato }} pendência{{ secao.pendencias_do_ato|pluralize }} do ato
+                {# I-11a (§321 / PR #336): alvos estáveis para o save 200 atualizar a seção sem reload. #}
+                <span data-secao-descartado{% if not secao.descartado %} hidden{% endif %}>Ato descartado · </span>
+                <span data-secao-tipo{% if not secao.tipo_display %} hidden{% endif %}>{% if secao.tipo_display %}{{ secao.tipo_display }} · {% endif %}</span>
+                <span data-secao-pendencias>{{ secao.pendencias_do_ato }} pendência{{ secao.pendencias_do_ato|pluralize }} do ato</span>
             </p>
             {% elif secao.tipo == 'nao_reconhecidos' %}
             <ul class="revisao-lista nao-reconhecidos">
