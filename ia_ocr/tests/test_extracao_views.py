@@ -10,6 +10,7 @@ from django.shortcuts import resolve_url
 from django.test import Client, override_settings
 from django.urls import reverse
 
+from dominial.managers import documentos_for_user
 from dominial.models import LancamentoTipo, Pessoas
 from ia_ocr import estados, revisao, services
 from ia_ocr.estados import TransicaoInvalida
@@ -281,9 +282,15 @@ class ExtracaoViewsTest(TelaTextoBase):
         })
 
         self.assertEqual(resposta.status_code, 200, resposta.content)
+        # #324 rodada 2: título + cartório de origem + as 5 linhas da origem.
         self.assertEqual(
             sorted(resposta.json()['campos_novos']),
-            ['/acts/0/origem/cartorio', '/acts/0/titulo'],
+            [
+                '/acts/0/origem/cartorio', '/acts/0/origem/data',
+                '/acts/0/origem/folha', '/acts/0/origem/livro',
+                '/acts/0/origem/numero', '/acts/0/origem/tipo_documento',
+                '/acts/0/titulo',
+            ],
         )
 
         repetido = self._post_json('salvar_bloco_ocr', {
@@ -863,9 +870,15 @@ class ExtracaoViewsTest(TelaTextoBase):
                     revisao.descrever_pendencia(item)
                     for item in revisao.pendencias(vigente)
                 ])
+                # O MESMO escopo que a view passa (``documentos_for_user`` do
+                # usuário logado): sem ele a comparação seguia outro caminho
+                # (a checagem de homônimo ficava desligada).
                 self.assertEqual(contexto['avisos'], [
                     revisao.descrever_aviso(item)
-                    for item in revisao.avisos(vigente)
+                    for item in revisao.avisos(
+                        vigente,
+                        documentos_queryset=documentos_for_user(self.dono),
+                    )
                 ])
                 self.assertEqual(contexto['versao'], services.versao_bloco(vigente))
                 self.assertEqual(contexto['somente_leitura'], status == estados.REVISADO)

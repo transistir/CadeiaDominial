@@ -1,5 +1,6 @@
 """Persistência transacional e finalização da revisão com dados sintéticos."""
 
+from collections import Counter
 from hashlib import sha256
 
 from django.test import TestCase, override_settings
@@ -9,7 +10,8 @@ from dominial.models import LancamentoTipo
 from ia_ocr import estados, services, valores
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
-    desnormalizar, pendencias, pendencias_sem_atos, versao_linha,
+    CAMPOS_DA_ORIGEM, desnormalizar, pendencias, pendencias_sem_atos,
+    versao_linha,
 )
 
 from .factories import criar_documento_digital, criar_usuario
@@ -280,9 +282,15 @@ class RevisaoServicesTest(TestCase):
             {'/acts/0/tipo_sugerido': {'incluir': True, 'valor': 'registro'}},
             self.usuario, versao,
         )
+        # #324 rodada 2: título + cartório de origem + as 5 linhas da origem.
         self.assertEqual(
             sorted(campos_novos),
-            ['/acts/0/origem/cartorio', '/acts/0/titulo'],
+            [
+                '/acts/0/origem/cartorio', '/acts/0/origem/data',
+                '/acts/0/origem/folha', '/acts/0/origem/livro',
+                '/acts/0/origem/numero', '/acts/0/origem/tipo_documento',
+                '/acts/0/titulo',
+            ],
         )
         for nome in ('livro_transacao', 'folha_transacao', 'data_transacao'):
             chave = f'/acts/0/{nome}'
@@ -313,6 +321,107 @@ class RevisaoServicesTest(TestCase):
         campos = {campo.chave: campo for campo in self.extracao.campos.all()}
         self.assertEqual(campos['/acts/0/titulo'].valor_final, 'Escritura Pública')
         self.assertTrue(campos['/acts/0/origem/cartorio'].criar_novo)
+
+    # --- #324 rodada 2 (P1): trocar o tipo cria a origem INTEIRA ---------------
+
+    CHAVES_DA_ORIGEM = [
+        f'/acts/0/origem/{nome}' for nome in ('cartorio', *CAMPOS_DA_ORIGEM)
+    ]
+
+    def _trocar_tipo(self, tipo):
+        return services.salvar_bloco(
+            self.extracao,
+            {'/acts/0/tipo_sugerido': {'incluir': True, 'valor': tipo}},
+            self.usuario, services.versao_bloco(self.extracao),
+        )
+
+    def _chaves_da_origem_no_banco(self):
+        return Counter(
+            self.extracao.campos.filter(chave__startswith='/acts/0/origem/')
+            .values_list('chave', flat=True)
+        )
+
+    def _confere_origem_completa_uma_vez(self, tipo):
+        """A IA sugeriu averbação SEM origem; o revisor troca para ``tipo``.
+
+        Antes da correção só nascia ``origem/cartorio``: o formulário não tinha
+        onde declarar número/tipo/livro/folha/data e a importação gravava sem
+        ``LancamentoOrigem``, sem Documento de origem e sem a FK.
+        """
+        self.assertEqual(self._chaves_da_origem_no_banco(), Counter())
+
+        _salva, _versao, _partes, campos_novos = self._trocar_tipo(tipo)
+
+        # As seis chaves, exatamente, cada uma UMA vez — no retorno e no banco.
+        origem_nova = [c for c in campos_novos if '/origem/' in c]
+        self.assertEqual(
+            Counter(origem_nova), Counter(self.CHAVES_DA_ORIGEM),
+        )
+        self.assertEqual(
+            self._chaves_da_origem_no_banco(), Counter(self.CHAVES_DA_ORIGEM),
+        )
+        for campo in self.extracao.campos.filter(
+            chave__in=self.CHAVES_DA_ORIGEM,
+        ):
+            with self.subTest(chave=campo.chave):
+                self.assertFalse(campo.requer_revisao)
+                self.assertIsNone(campo.raw)
+                self.assertIsNone(campo.normalized)
+        # Só o cartório (exigido pelo tipo) gera pendência; as outras cinco são
+        # linhas vazias editáveis, sem bloquear nem poluir a tela.
+        da_origem = [
+            p for p in pendencias(self.extracao) if '/origem/' in p['chave']
+        ]
+        self.assertEqual(
+            {p['chave'] for p in da_origem}, {'/acts/0/origem/cartorio'},
+        )
+        self.assertIn({
+            'chave': '/acts/0/origem/cartorio',
+            'motivo': 'obrigatorio_ausente', 'bloqueante': True,
+        }, da_origem)
+
+        # Repetir o save com o mesmo tipo não recria nem duplica nada.
+        _salva, _versao, _partes, repetidos = self._trocar_tipo(tipo)
+        self.assertEqual(repetidos, [])
+        self.assertEqual(
+            self._chaves_da_origem_no_banco(), Counter(self.CHAVES_DA_ORIGEM),
+        )
+
+    def test_trocar_para_tipo_com_cartorio_de_origem_cria_as_seis_linhas(self):
+        LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+        LancamentoTipo.objects.create(
+            tipo='registro', requer_titulo=True,
+            requer_cartorio_origem=True, requer_observacao=False,
+        )
+
+        self._confere_origem_completa_uma_vez('registro')
+
+    def test_trocar_para_inicio_de_matricula_cria_as_seis_linhas(self):
+        # Início de matrícula exige o cartório de origem mesmo com o flag
+        # desligado na configuração (``_caminhos_do_tipo``).
+        LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+        LancamentoTipo.objects.create(
+            tipo='inicio_matricula', requer_cartorio_origem=False,
+            requer_observacao=False,
+        )
+
+        self._confere_origem_completa_uma_vez('inicio_matricula')
+
+    def test_trocar_para_tipo_sem_origem_nao_cria_linhas_de_origem(self):
+        # Averbação sem origem segue sem origem vazia: só o tipo que exige o
+        # cartório de origem desmonta o bloco inteiro.
+        LancamentoTipo.objects.create(
+            tipo='averbacao', requer_descricao=True, requer_observacao=False,
+        )
+
+        _salva, _versao, _partes, campos_novos = self._trocar_tipo('averbacao')
+
+        self.assertEqual([c for c in campos_novos if '/origem/' in c], [])
+        self.assertEqual(self._chaves_da_origem_no_banco(), Counter())
 
     def test_salvar_recusa_sugestao_acima_do_limite_na_linha_enviada(self):
         self._resolver_pendencias()

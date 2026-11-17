@@ -74,7 +74,9 @@ CAMPOS_DA_TRANSMISSAO = ('livro_transacao', 'folha_transacao', 'data_transacao')
 # "não consta no documento" é uma informação, não um buraco sem controle.
 # O cartório fica de fora: quem o exige é o tipo (``_caminhos_do_tipo``).
 # Só viram linha vazia quando o ato TEM origem (``_ato_tem_origem``) ou o
-# tipo exige ``origem/cartorio``; averbação sem origem não ganha origem vazia.
+# tipo exige ``origem/cartorio`` — no desmonte inicial (``_ato``) e também ao
+# trocar o tipo na revisão (``garantir_placeholders_obrigatorios``);
+# averbação sem origem não ganha origem vazia.
 CAMPOS_DA_ORIGEM = ('tipo_documento', 'numero', 'livro', 'folha', 'data')
 
 # Tarefa C (#322/PR #327) e #328 (regra do Hiure, 11/11): o formulário de
@@ -998,9 +1000,14 @@ def _tipo_da_origem_sem_leitura(campo, valor_efetivo):
     nasceu vazio (#324: linha criada só para o revisor poder preencher) é
     outra coisa: a importação infere o tipo pelo prefixo M/T do número
     (``_tipo_documento_da_origem``), então vazio é ausência de informação.
+
+    "Nunca trouxe" é ``raw`` E ``normalized`` ausentes: um tipo que a IA LEU
+    (``raw`` presente) mas não conseguiu normalizar não é isento — esvaziá-lo
+    cai na regra normal, não num placeholder vazio silencioso.
     """
     return (
-        campo.normalized is None
+        campo.raw is None
+        and campo.normalized is None
         and _TIPO_DA_ORIGEM.fullmatch(campo.chave) is not None
         and (
             valor_efetivo is None
@@ -1152,11 +1159,19 @@ MOTIVOS_NAO_CONSTA = frozenset({
 })
 MOTIVO_ORIGEM_HOMONIMA = 'origem_homonimo_outro_tipo'
 
+# Texto CANÔNICO do "não consta" por campo (#324): UMA frase por motivo, usada
+# nos dois caminhos — a tela (``descrever_aviso``) e a resposta da importação
+# (``importacao._avisos_livro_folha_da_origem``, um aviso por campo ausente).
+# Mudar a frase aqui muda as duas; os testes comparam com igualdade exata.
+TEXTO_NAO_CONSTA = {
+    MOTIVO_LIVRO_ORIGEM_NAO_CONSTA: 'Livro da origem não consta no documento',
+    MOTIVO_FOLHA_ORIGEM_NAO_CONSTA: 'Folha da origem não consta no documento',
+}
+
 # Rótulo do aviso por motivo (#324). O padrão é o texto que todo aviso tinha
 # antes; motivo conhecido ganha a frase própria em vez do genérico.
 _ROTULO_AVISO = {
-    MOTIVO_LIVRO_ORIGEM_NAO_CONSTA: 'Livro da origem não consta no documento',
-    MOTIVO_FOLHA_ORIGEM_NAO_CONSTA: 'Folha da origem não consta no documento',
+    **TEXTO_NAO_CONSTA,
     MOTIVO_ORIGEM_HOMONIMA: (
         'Há um documento de outro tipo com este número no cartório da '
         'origem — confira o tipo'
@@ -1892,6 +1907,14 @@ def garantir_placeholders_obrigatorios(extracao):
     exigir título/descrição/cartório de origem. ``requer_revisao=False``
     porque a ausência já é bloqueada por ``obrigatorio_ausente``; duplicar a
     pendência só polui a tela. Devolve as linhas não salvas.
+
+    Tipo que exige ``origem/cartorio`` leva a origem INTEIRA (#324): as cinco
+    chaves de ``CAMPOS_DA_ORIGEM`` que ainda não existirem nascem vazias, como
+    no desmonte inicial (``_ato``). Sem elas, um ato que a IA leu sem origem e
+    o revisor passou a início de matrícula ficaria só com o cartório — sem onde
+    declarar número/tipo/livro/folha/data — e a importação gravaria sem
+    ``LancamentoOrigem``, sem Documento de origem e sem a FK. Só o cartório é
+    exigido (``_caminhos_do_tipo``); as outras cinco são opcionais.
     """
     linhas, atos = _contexto_revisao(extracao)
     tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
@@ -1902,7 +1925,10 @@ def garantir_placeholders_obrigatorios(extracao):
     for ato in atos:
         tipo_efetivo = tipos_por_ato.get(ato.chave)
         configuracao = configuracoes.get(tipo_efetivo)
-        for caminho in _caminhos_do_tipo(tipo_efetivo, configuracao):
+        caminhos = _caminhos_do_tipo(tipo_efetivo, configuracao)
+        if 'origem/cartorio' in caminhos:
+            caminhos += tuple(f'origem/{nome}' for nome in CAMPOS_DA_ORIGEM)
+        for caminho in caminhos:
             chave = f'{ato.chave}/{caminho}'
             if chave in existentes:
                 continue

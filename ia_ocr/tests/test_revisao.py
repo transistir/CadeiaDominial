@@ -7,6 +7,7 @@ voltam sem pk; ``desnormalizar`` faz uma query por payload para resolver os
 ``LancamentoTipo`` dos atos (assertNumQueries(2) para dois payloads).
 """
 
+from collections import Counter
 from copy import deepcopy
 from datetime import date, timedelta
 from decimal import Decimal
@@ -23,8 +24,9 @@ from ia_ocr import destinos, valores
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
-    AtoRevisado, DadosRevisados, DocumentoRevisado, ParteRevisada,
-    RevisaoInvalidada, _tipos_efetivos, _valor_explicito, aplicar_linha,
+    AtoRevisado, CAMPOS_DA_ORIGEM, DadosRevisados, DocumentoRevisado,
+    ParteRevisada, RevisaoInvalidada, _tipos_efetivos, _valor_explicito,
+    aplicar_linha,
     avisos, campo_obrigatorio, dados_revisados, desnormalizar,
     garantir_placeholders_obrigatorios, linha_ignorada, pendencias,
     resolucoes_de_tipo, versao_linha,
@@ -536,6 +538,73 @@ class PendenciasEAvisosTest(TestCase):
             'bloqueante': True,
         }, pendencias(self.extracao))
 
+    def test_tipo_documento_da_origem_lido_sem_normalizar_nao_e_isento(self):
+        # #324 rodada 2: a isenção é para o tipo que a leitura NUNCA trouxe
+        # (``raw`` E ``normalized`` ausentes). Um tipo que a IA LEU
+        # ('Matrícula') mas não soube normalizar não é isento: esvaziá-lo cai
+        # na regra normal, em vez de virar um placeholder vazio silencioso.
+        payload = self._registro_completo()
+        payload['acts'][0]['origem']['tipo_documento'] = {
+            'raw': 'Matrícula', 'normalized': None, 'confianca': 0.95,
+            'requer_revisao': False,
+            'evidencia': {'pagina': 1, 'trecho': 'MATRÍCULA Nº 42.718'},
+        }
+        chave = '/acts/0/origem/tipo_documento'
+        tipo = self._persistir(payload)[chave]
+        self.assertEqual(tipo.raw, 'Matrícula')
+        self.assertIsNone(tipo.normalized)
+
+        aplicar_linha(tipo, incluir=True, valor='', conferido=True)
+        tipo.save()
+
+        self.assertIn({
+            'chave': chave, 'motivo': 'valor_incompativel_destino',
+            'bloqueante': True,
+        }, pendencias(self.extracao))
+
+    def test_garantir_placeholders_nao_duplica_a_origem_que_ja_veio(self):
+        # #324 rodada 2 (P1): o número da origem veio no payload (as outras
+        # quatro linhas nasceram vazias no desmonte) e o revisor descartou o
+        # livro. Trocar para um tipo que exige o cartório de origem cria só
+        # o que falta: nunca repete uma chave — nem a descartada, que segue
+        # ocupando a chave única.
+        payload = self._com_origem_numerada(payload_averbacao(self.job.job_id))
+        linhas = self._persistir(payload)
+        chaves = [f'/acts/0/origem/{nome}' for nome in CAMPOS_DA_ORIGEM]
+        for chave in chaves:
+            self.assertIn(chave, linhas)
+        self.assertNotIn('/acts/0/origem/cartorio', linhas)
+        livro = linhas['/acts/0/origem/livro']
+        aplicar_linha(livro, incluir=False)
+        livro.save()
+        tipo = linhas['/acts/0/tipo_sugerido']
+        aplicar_linha(tipo, incluir=True, valor='registro')
+        tipo.save()
+
+        novas = garantir_placeholders_obrigatorios(self.extracao)
+
+        self.assertCountEqual(
+            [campo.chave for campo in novas],
+            ['/acts/0/titulo', '/acts/0/origem/cartorio'],
+        )
+        self.assertEqual(
+            Counter(self.extracao.campos.filter(
+                chave__startswith='/acts/0/origem/',
+            ).values_list('chave', flat=True)),
+            Counter([*chaves, '/acts/0/origem/cartorio']),
+        )
+        self.assertEqual(
+            self.extracao.campos.get(chave='/acts/0/origem/numero').normalized,
+            'M42.718',
+        )
+        self.assertEqual(
+            self.extracao.campos.get(chave='/acts/0/origem/livro')
+            .status_revisao,
+            'descartado',
+        )
+        # Idempotente: a segunda chamada não encontra mais nada a criar.
+        self.assertEqual(garantir_placeholders_obrigatorios(self.extracao), [])
+
     # --- #324: livro/folha da origem que o documento não traz ---------------
 
     def _com_origem_numerada(self, payload=None):
@@ -922,9 +991,16 @@ class PendenciasEAvisosTest(TestCase):
         aplicar_linha(tipo, incluir=True, valor='registro')
         tipo.save()
         novas = garantir_placeholders_obrigatorios(self.extracao)
+        # #324 rodada 2: o tipo que exige o cartório de origem leva a origem
+        # inteira (cartório + tipo/número/livro/folha/data), não só o cartório.
         self.assertCountEqual(
             [campo.chave for campo in novas],
-            ['/acts/0/titulo', '/acts/0/origem/cartorio'],
+            [
+                '/acts/0/titulo', '/acts/0/origem/cartorio',
+                '/acts/0/origem/tipo_documento', '/acts/0/origem/numero',
+                '/acts/0/origem/livro', '/acts/0/origem/folha',
+                '/acts/0/origem/data',
+            ],
         )
         pends = pendencias(self.extracao)
         self.assertIn(self._obrigatorio('/acts/0/titulo'), pends)

@@ -672,11 +672,9 @@ def _importar_ato(
     # bloquear uma gravação válida.
     avisos.extend(avisos_do_rotulo)
     if texto_origem is not None:
-        aviso_livro_folha = _aviso_livro_folha_da_origem(
+        avisos_da_origem.extend(_avisos_livro_folha_da_origem(
             lancamento.livro_origem, lancamento.folha_origem,
-        )
-        if aviso_livro_folha:
-            avisos_da_origem.append(aviso_livro_folha)
+        ))
     avisos.extend(avisos_da_origem)
     resposta = _linha_resposta(
         chave, _rotulo(chave, linhas), 'criado', lancamento=lancamento,
@@ -690,22 +688,24 @@ def _texto_ou_none(valor):
     return (valor or '').strip() or None
 
 
-def _aviso_livro_folha_da_origem(livro, folha):
-    """Aviso do que o documento NÃO traz da origem (#324), ou ``None``.
+def _avisos_livro_folha_da_origem(livro, folha):
+    """Avisos do que o documento NÃO traz da origem (#324): um por campo.
 
     Lê o que ficou GRAVADO no lançamento (já sem bordas): é o mesmo cálculo
     da resposta da importação e do replay do job já importado. Cita só o
-    que falta; o status do ato segue ``criado``.
+    que falta, com a MESMA frase por campo que a tela mostra
+    (``revisao.TEXTO_NAO_CONSTA``); o status do ato segue ``criado``.
     """
-    sem_livro = not (livro or '').strip()
-    sem_folha = not (folha or '').strip()
-    if sem_livro and sem_folha:
-        return 'Livro/folha da origem não constam no documento.'
-    if sem_livro:
-        return 'Livro da origem não consta no documento.'
-    if sem_folha:
-        return 'Folha da origem não consta no documento.'
-    return None
+    avisos = []
+    if not (livro or '').strip():
+        avisos.append(
+            revisao.TEXTO_NAO_CONSTA[revisao.MOTIVO_LIVRO_ORIGEM_NAO_CONSTA]
+        )
+    if not (folha or '').strip():
+        avisos.append(
+            revisao.TEXTO_NAO_CONSTA[revisao.MOTIVO_FOLHA_ORIGEM_NAO_CONSTA]
+        )
+    return avisos
 
 
 _NOME_DO_TIPO_DA_ORIGEM = {'matricula': 'matrícula', 'transcricao': 'transcrição'}
@@ -1312,11 +1312,9 @@ def _resultado_gravado(extracao):
         lancamento = por_ato.get(chave)
         avisos = []
         if lancamento is not None and lancamento.pk in com_origem:
-            aviso = _aviso_livro_folha_da_origem(
+            avisos.extend(_avisos_livro_folha_da_origem(
                 lancamento.livro_origem, lancamento.folha_origem,
-            )
-            if aviso:
-                avisos.append(aviso)
+            ))
         respostas.append(_linha_resposta(
             chave, _rotulo(chave, linhas),
             'criado' if lancamento is not None else 'ignorado',

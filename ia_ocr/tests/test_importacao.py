@@ -16,8 +16,12 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.messages import get_messages
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, connection, transaction
+from django.db.models import ProtectedError
+from django.http import HttpResponse
 from django.test import (
     RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature,
 )
@@ -35,6 +39,7 @@ from dominial.tests.test_issue_263_concorrencia_importacao import (
     travas_executadas,
 )
 from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
+from dominial.views.documento_views import excluir_documento
 from ia_ocr import importacao as modulo_importacao
 from ia_ocr import services
 from ia_ocr.estados import TransicaoConcorrente
@@ -42,6 +47,7 @@ from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
     ParteRevisada, RevisaoInvalidada, dados_revisados, desnormalizar,
+    descrever_aviso,
 )
 
 from .factories import criar_documento_digital, criar_usuario
@@ -2434,9 +2440,10 @@ class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
     também quando a importação é repetida (replay do job já importado).
     """
 
-    AMBOS = 'Livro/folha da origem não constam no documento'
-    SO_LIVRO = 'Livro da origem não consta no documento'
-    SO_FOLHA = 'Folha da origem não consta no documento'
+    # Texto canônico POR CAMPO (``revisao.TEXTO_NAO_CONSTA``): o mesmo da tela.
+    # Um aviso por campo ausente — nada de frase combinada "livro/folha".
+    LIVRO = 'Livro da origem não consta no documento'
+    FOLHA = 'Folha da origem não consta no documento'
 
     def _payload_sem(self, *nomes):
         payload = self._payload_origem()
@@ -2451,41 +2458,25 @@ class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
         self.assertEqual(linha['status'], 'criado')
         return extracao, linha['avisos']
 
-    @classmethod
-    def _textos_do_livro_e_folha(cls, avisos):
-        return [
-            aviso for aviso in avisos
-            if aviso.rstrip('.') in (cls.AMBOS, cls.SO_LIVRO, cls.SO_FOLHA)
-        ]
-
-    def test_sem_livro_e_folha_avisa_e_o_ato_continua_criado(self):
+    def test_sem_livro_e_folha_avisa_um_por_campo_e_o_ato_continua_criado(self):
         _, avisos = self._importar_e_avisos(self._payload_sem('livro', 'folha'))
 
-        self.assertEqual(
-            [a.rstrip('.') for a in self._textos_do_livro_e_folha(avisos)],
-            [self.AMBOS],
-        )
+        self.assertEqual(avisos, [self.LIVRO, self.FOLHA])
 
     def test_so_o_livro_faltando_cita_so_o_livro(self):
         _, avisos = self._importar_e_avisos(self._payload_sem('livro'))
 
-        self.assertEqual(
-            [a.rstrip('.') for a in self._textos_do_livro_e_folha(avisos)],
-            [self.SO_LIVRO],
-        )
+        self.assertEqual(avisos, [self.LIVRO])
 
     def test_so_a_folha_faltando_cita_so_a_folha(self):
         _, avisos = self._importar_e_avisos(self._payload_sem('folha'))
 
-        self.assertEqual(
-            [a.rstrip('.') for a in self._textos_do_livro_e_folha(avisos)],
-            [self.SO_FOLHA],
-        )
+        self.assertEqual(avisos, [self.FOLHA])
 
     def test_com_livro_e_folha_nao_avisa(self):
         _, avisos = self._importar_e_avisos(self._payload_origem())
 
-        self.assertEqual(self._textos_do_livro_e_folha(avisos), [])
+        self.assertEqual(avisos, [])
 
     def test_origem_so_com_cartorio_nao_avisa(self):
         payload = self._payload_origem()
@@ -2494,12 +2485,31 @@ class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
         }
         _, avisos = self._importar_e_avisos(payload)
 
-        self.assertEqual(self._textos_do_livro_e_folha(avisos), [])
+        self.assertEqual(avisos, [])
 
     def test_ato_sem_origem_nao_avisa(self):
         _, avisos = self._importar_e_avisos(payload_registro(self.job.job_id))
 
-        self.assertEqual(self._textos_do_livro_e_folha(avisos), [])
+        self.assertEqual(avisos, [])
+
+    @staticmethod
+    def _rotulo_da_tela(nome):
+        return descrever_aviso({
+            'chave': f'/acts/0/origem/{nome}',
+            'motivo': f'{nome}_origem_nao_consta', 'bloqueante': False,
+        })['rotulo']
+
+    # Fonte única: o rótulo que a tela dá ao motivo é, letra por letra, o
+    # aviso que a importação devolve para o mesmo campo.
+    def test_o_texto_do_livro_e_o_mesmo_da_tela(self):
+        _, avisos = self._importar_e_avisos(self._payload_sem('livro'))
+
+        self.assertEqual(avisos, [self._rotulo_da_tela('livro')])
+
+    def test_o_texto_da_folha_e_o_mesmo_da_tela(self):
+        _, avisos = self._importar_e_avisos(self._payload_sem('folha'))
+
+        self.assertEqual(avisos, [self._rotulo_da_tela('folha')])
 
     def test_reimportar_devolve_o_mesmo_aviso(self):
         extracao, avisos = self._importar_e_avisos(
@@ -2511,10 +2521,8 @@ class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
 
         (linha,) = repetida['linhas']
         self.assertEqual(linha['status'], 'criado')
-        self.assertEqual(
-            [a.rstrip('.') for a in self._textos_do_livro_e_folha(linha['avisos'])],
-            [self.AMBOS],
-        )
+        self.assertEqual(linha['avisos'], [self.LIVRO, self.FOLHA])
+        self.assertEqual(linha['avisos'], avisos)
         self.assertEqual(Lancamento.objects.count(), 1)
 
     def test_reimportar_com_livro_e_folha_nao_inventa_aviso(self):
@@ -2524,7 +2532,7 @@ class AvisoLivroFolhaDaOrigemTest(ImportacaoBase):
         repetida = importar(extracao, self.usuario, versao, ['/acts/0'])
 
         (linha,) = repetida['linhas']
-        self.assertEqual(self._textos_do_livro_e_folha(linha['avisos']), [])
+        self.assertEqual(linha['avisos'], [])
 
     def test_reimportar_ato_sem_origem_nao_avisa(self):
         extracao, _ = self._importar_e_avisos(payload_registro(self.job.job_id))
@@ -2691,6 +2699,76 @@ class VinculoDocumentoOrigemTest(ImportacaoBase):
         self.assertEqual(primeira['ok'], segunda['ok'])
         self.assertEqual(Lancamento.objects.count(), 1)
         self.assertEqual(list(self._outros_documentos()), [documento_origem])
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.documento_origem, documento_origem)
+
+    # --- FK PROTECT: o documento de origem importado não se exclui ----------
+    # Comportamento ATUAL (``on_delete=PROTECT``), fixado sem mexer no modelo:
+    # trocar o ``on_delete`` é decisão de modelo/migration, fora desta rodada.
+
+    def _importar_inicio_e_pegar_o_documento_de_origem(self):
+        extracao = self._extracao(self._payload_inicio())
+        self.assertTrue(self._importar(extracao)['ok'])
+        lancamento = Lancamento.objects.get()
+        (documento_origem,) = self._outros_documentos()
+        self.assertEqual(lancamento.documento_origem, documento_origem)
+        return lancamento, documento_origem
+
+    def test_excluir_o_documento_de_origem_importado_levanta_protected_error(self):
+        lancamento, documento_origem = (
+            self._importar_inicio_e_pegar_o_documento_de_origem()
+        )
+
+        with self.assertRaises(ProtectedError) as contexto:
+            documento_origem.delete()
+
+        # O que bloqueia é o lançamento importado pela IA; nada foi apagado.
+        self.assertEqual(
+            list(contexto.exception.protected_objects), [lancamento],
+        )
+        self.assertTrue(
+            Documento.objects.filter(pk=documento_origem.pk).exists()
+        )
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.documento_origem, documento_origem)
+
+    def test_view_de_exclusao_mostra_a_mensagem_em_vez_de_500(self):
+        lancamento, documento_origem = (
+            self._importar_inicio_e_pegar_o_documento_de_origem()
+        )
+        request = RequestFactory().post('/exclusao-protegida/')
+        request.user = self.usuario
+        request.session = {}
+        request._messages = FallbackStorage(request)
+
+        # ``excluir_documento`` não tem rota em urls.py: chamada direta da
+        # view (mesmo padrão de dominial/tests/test_issue_258_protected_error).
+        with patch(
+            'dominial.views.documento_views.render',
+            return_value=HttpResponse('confirmação sintética'),
+        ), self.assertLogs(
+            'dominial.views.documento_views', level='WARNING',
+        ) as logs:
+            resposta = excluir_documento(
+                request,
+                tis_id=self.imovel.terra_indigena_id_id,
+                imovel_id=self.imovel.pk,
+                documento_id=documento_origem.pk,
+            )
+
+        # Volta à tela de confirmação com a mensagem — nenhuma exceção sobe.
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(
+            [str(mensagem) for mensagem in get_messages(request)],
+            [
+                'Documento possui vínculos que impedem a exclusão '
+                '(lançamentos). Remova esses vínculos antes de excluir.'
+            ],
+        )
+        self.assertIn(f'documento id={documento_origem.pk}', logs.output[0])
+        self.assertTrue(
+            Documento.objects.filter(pk=documento_origem.pk).exists()
+        )
         lancamento.refresh_from_db()
         self.assertEqual(lancamento.documento_origem, documento_origem)
 
