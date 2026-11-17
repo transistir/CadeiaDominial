@@ -9,6 +9,7 @@ o aceite humano.
 """
 
 import io
+import json
 import threading
 from contextlib import redirect_stdout
 from copy import deepcopy
@@ -29,6 +30,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.managers import documentos_for_user
 from dominial.models import (
     Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
     LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
@@ -2571,8 +2573,11 @@ class HerancaLivroFolhaDaOrigemTest(ImportacaoBase):
             numero=self.NUMERO, data=date(1990, 1, 1),
             cartorio=self.cartorio_origem, livro='1', folha='1',
         )
+        # ``data`` é NOT NULL no lançamento: sem ela o fixture nem chega ao
+        # que o teste quer provar (a herança do primeiro lançamento).
         Lancamento.objects.create(
             documento=documento, tipo=self.tipo_registro,
+            data=date(1990, 1, 2),
             livro_origem='HERDADO', folha_origem='99',
         )
         return documento
@@ -2842,29 +2847,44 @@ class VinculoDocumentoOrigemTest(ImportacaoBase):
         lancamento.refresh_from_db()
         self.assertEqual(lancamento.documento_origem, documento_origem)
 
+    # Número do documento da TI B gravado COM espaço interno: a mesma
+    # identidade da origem declarada 'T366' (a normalização só tira o prefixo
+    # e as bordas), mas um texto que só o card do DOCUMENTO imprime. O 'T366'
+    # da origem declarada é dado do PRÓPRIO lançamento e segue na página de
+    # quem não tem o escopo; sem esta diferença o teste não distinguiria o
+    # que vem do documento alheio do que é do lançamento.
+    NUMERO_DO_DOCUMENTO_NA_TI_B = 'T 366'
+
     def test_leitor_sem_escopo_na_fk_nao_ve_o_documento_de_origem(self):
         """P1 (rodada 4, Codex): a FK vale o escopo de QUEM LÊ.
 
-        O usuário A (TIs A+B) importa e o vínculo aponta para o documento de
-        origem que A tem na TI B. O usuário B (só a TI A) abre o detalhe do
-        lançamento: a página vem, mas o documento da TI B não chega ao
-        contexto — sem o card "Documento de Origem". O número declarado no
-        texto da origem segue na página: é dado do PRÓPRIO lançamento, não
-        do documento alheio. A FK não muda no banco.
+        O usuário A (TIs A+B) importa um início de matrícula cuja origem já
+        existe na TI B: a importação reaproveita o documento e grava a FK. O
+        usuário B (só a TI A) abre o detalhe do lançamento — a página vem,
+        mas sem o card "Documento de Origem" e sem nada do documento da TI B
+        (número, imóvel, TI, link). Para A, que tem as duas TIs, o card
+        aparece. A view nunca salva: a FK segue gravada no banco depois das
+        duas leituras.
         """
         ti_b = TIs.objects.create(
             nome='TI B do A 324', codigo='TI-B324', etnia='Teste',
         )
         imovel_b = self._imovel_em(ti_b, 'ImovelDoA324')
         UserTI.objects.create(user=self.usuario, tis=ti_b)
-        documento_ti_b = self._documento_da_origem_em(imovel_b)
-        extracao = self._extracao(self._payload_origem())
+        documento_ti_b = Documento.objects.create(
+            imovel=imovel_b, tipo=self.tipo_transcricao,
+            numero=self.NUMERO_DO_DOCUMENTO_NA_TI_B, data=date(1990, 1, 1),
+            cartorio=self.cartorio_origem, livro='1', folha='1',
+        )
+        extracao = self._extracao(self._payload_inicio())
 
         resultado = self._importar(extracao)
 
         self.assertTrue(resultado['ok'])
         lancamento = Lancamento.objects.get()
-        # O vínculo existe e aponta para o documento da TI B (escopo de A).
+        # O documento da TI B é o único além do do job: a importação o
+        # reaproveitou (escopo de A) e a FK aponta para ele.
+        self.assertEqual(list(self._outros_documentos()), [documento_ti_b])
         self.assertEqual(lancamento.documento_origem, documento_ti_b)
         self.assertEqual(documento_ti_b.imovel, imovel_b)
 
@@ -2882,22 +2902,32 @@ class VinculoDocumentoOrigemTest(ImportacaoBase):
         pagina_do_leitor = self.client.get(url)
 
         self.assertEqual(pagina_do_leitor.status_code, 200)
-        conteudo = pagina_do_leitor.content.decode()
-        # O card só renderiza dentro de ``{% if lancamento.documento_origem %}``:
-        # sem escopo na FK, o documento da TI B não chega ao template.
-        self.assertNotIn('Documento de Origem', conteudo)
-        # Nada do imóvel alheio na página.
-        self.assertNotIn('ImovelDoA324', conteudo)
+        conteudo_do_leitor = pagina_do_leitor.content.decode()
+        # O card do documento de origem some e com ele o que é só do
+        # documento alheio: número, imóvel, TI e o link por id.
+        self.assertNotIn('Documento de Origem', conteudo_do_leitor)
+        for alheio in (
+            self.NUMERO_DO_DOCUMENTO_NA_TI_B, 'ImovelDoA324', 'TI B do A 324',
+            f'/documento/{documento_ti_b.pk}/',
+        ):
+            with self.subTest(alheio=alheio):
+                self.assertNotIn(alheio, conteudo_do_leitor)
+        # O que é do PRÓPRIO lançamento continua na página do leitor.
+        self.assertIn('T366', conteudo_do_leitor)
+        # A leitura de quem não tem o escopo não grava nada no vínculo.
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.documento_origem_id, documento_ti_b.pk)
 
         self.client.force_login(self.usuario)
 
         pagina_do_a = self.client.get(url)
 
         self.assertEqual(pagina_do_a.status_code, 200)
-        self.assertIn('Documento de Origem', pagina_do_a.content.decode())
-        # O banco não muda: a FK segue gravada para quem tem o escopo.
+        conteudo_do_a = pagina_do_a.content.decode()
+        self.assertIn('Documento de Origem', conteudo_do_a)
+        self.assertIn(self.NUMERO_DO_DOCUMENTO_NA_TI_B, conteudo_do_a)
         lancamento.refresh_from_db()
-        self.assertEqual(lancamento.documento_origem, documento_ti_b)
+        self.assertEqual(lancamento.documento_origem_id, documento_ti_b.pk)
 
     # --- FK PROTECT: o documento de origem importado não se exclui ----------
     # Comportamento ATUAL (``on_delete=PROTECT``), fixado sem mexer no modelo:
@@ -3064,6 +3094,193 @@ class VinculoDocumentoOrigemTest(ImportacaoBase):
         for segredo in ('M366', 'ImovelAlheioH267', 'TI Alheia H267'):
             with self.subTest(segredo=segredo):
                 self.assertNotIn(segredo, visivel)
+
+    # --- #267 no replay: o aviso de homônimo é GRAVADO, não recalculado -----
+    # (#324 rodada 4, P2 do Codex). Depois da importação o documento declarado
+    # (T366) existe, e ``homonimo_outro_tipo`` devolve ``None``: a única fonte
+    # do aviso do replay é o registro que a primeira resposta gravou.
+
+    def _payload_inicio_sem_rotulo(self):
+        """Início de matrícula sem rótulo: o rótulo 'M-1' do ``_payload_inicio``
+        gera um aviso próprio que o replay nunca devolveu (os avisos de rótulo
+        não são gravados) e sujaria a comparação dos avisos da ORIGEM."""
+        payload = self._payload_inicio()
+        del payload['acts'][0]['rotulo']
+        return payload
+
+    def _importar_inicio_com_homonimo(self, sem_livro_e_folha=False):
+        irmao = self._imovel_em(self.imovel.terra_indigena_id, 'Irmão')
+        self._matricula_homonima_em(irmao)
+        payload = self._payload_inicio_sem_rotulo()
+        if sem_livro_e_folha:
+            for nome in ('livro', 'folha'):
+                del payload['acts'][0]['origem'][nome]
+        extracao = self._extracao(payload)
+        return extracao, self._importar(extracao)
+
+    def _repetir_a_importacao(self, extracao):
+        return importar(
+            extracao, self.usuario, services.versao_bloco(extracao),
+            ['/acts/0'],
+        )
+
+    @staticmethod
+    def _so_os_de_homonimo(avisos):
+        return [aviso for aviso in avisos if 'outro tipo' in aviso]
+
+    def test_replay_devolve_o_mesmo_aviso_de_homonimo_uma_vez(self):
+        # Sem livro/folha: a primeira resposta traz os TRÊS avisos, e o replay
+        # tem de devolver a mesma lista, na mesma ordem.
+        extracao, primeira = self._importar_inicio_com_homonimo(
+            sem_livro_e_folha=True,
+        )
+        avisos_da_primeira = self._avisos_do_ato(primeira)
+        self.assertEqual(
+            len(self._so_os_de_homonimo(avisos_da_primeira)), 1,
+        )
+        self.assertEqual(len(avisos_da_primeira), 3)
+        # A premissa que obriga a gravar: o documento declarado já existe,
+        # então o aviso não sai mais da checagem.
+        self.assertIsNone(LancamentoOrigemService.homonimo_outro_tipo(
+            'transcricao', self.NUMERO, self.cartorio_origem,
+            documentos_queryset=documentos_for_user(self.usuario),
+        ))
+
+        for repeticao in (1, 2):
+            with self.subTest(repeticao=repeticao):
+                repetida = self._repetir_a_importacao(extracao)
+
+                self.assertEqual(
+                    self._avisos_do_ato(repetida), avisos_da_primeira,
+                )
+                self.assertEqual(
+                    len(self._so_os_de_homonimo(self._avisos_do_ato(repetida))),
+                    1,
+                )
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_replays_nao_aumentam_o_que_esta_gravado(self):
+        extracao, _ = self._importar_inicio_com_homonimo()
+        chave = modulo_importacao.CHAVE_PAYLOAD_IMPORTACAO
+        extracao.refresh_from_db()
+        gravado = deepcopy(extracao.payload[chave])
+
+        self._repetir_a_importacao(extracao)
+        self._repetir_a_importacao(extracao)
+
+        extracao.refresh_from_db()
+        self.assertEqual(extracao.payload[chave], gravado)
+        self.assertEqual(len(gravado['avisos']['/acts/0']), 1)
+
+    def test_aviso_gravado_so_tem_codigo_e_tipos(self):
+        extracao, _ = self._importar_inicio_com_homonimo()
+
+        extracao.refresh_from_db()
+        self.assertEqual(
+            extracao.payload['_importacao'],
+            {
+                'versao': 1,
+                'avisos': {'/acts/0': [{
+                    'codigo': 'homonimo_outro_tipo',
+                    'tipo_declarado': 'transcricao',
+                    'tipo_existente': 'matricula',
+                }]},
+            },
+        )
+        # Nada que identifique pessoa, cartório, imóvel ou documento.
+        gravado = json.dumps(extracao.payload['_importacao'])
+        for segredo in (
+            '366', 'CRI de Origem', 'CNS-324', 'Irmão', self.usuario.username,
+        ):
+            with self.subTest(segredo=segredo):
+                self.assertNotIn(segredo, gravado)
+        # O contrato do serviço (de onde a revisão lê) não é tocado.
+        self.assertNotIn('_importacao', extracao.payload_servico)
+
+    def test_importacao_desfeita_nao_grava_aviso_e_a_proxima_grava_uma_vez(self):
+        irmao = self._imovel_em(self.imovel.terra_indigena_id, 'Irmão')
+        self._matricula_homonima_em(irmao)
+        payload = self._payload_inicio_sem_rotulo()
+        segundo = deepcopy(payload['acts'][0])
+        segundo['ordem'] = 2
+        segundo['rotulo'] = self._campo('R-2', 'R-1/42.718')
+        segundo['tipo_sugerido'] = self._campo('registro', 'R-1/42.718')
+        # Ato 2 sem cartório da origem: recusa e leva o bloco inteiro junto.
+        del segundo['origem']['cartorio']
+        payload['acts'].append(segundo)
+        extracao = self._extracao(payload)
+
+        with self.assertRaises(ImportacaoInvalida):
+            self._importar(extracao)
+
+        extracao.refresh_from_db()
+        self.assertNotIn('_importacao', extracao.payload)
+        self.assertEqual(OcrJob.objects.get(pk=self.job.pk).status, 'revisado')
+
+        # Nova tentativa só com o ato bom: o aviso nasce uma vez.
+        resultado = self._repetir_a_importacao(extracao)
+
+        status = {linha['chave']: linha['status'] for linha in resultado['linhas']}
+        self.assertEqual(status, {'/acts/0': 'criado', '/acts/1': 'ignorado'})
+        (primeiro,) = [
+            linha for linha in resultado['linhas'] if linha['chave'] == '/acts/0'
+        ]
+        self.assertEqual(len(self._so_os_de_homonimo(primeiro['avisos'])), 1)
+        extracao.refresh_from_db()
+        self.assertEqual(
+            list(extracao.payload['_importacao']['avisos']), ['/acts/0'],
+        )
+        self.assertEqual(
+            len(extracao.payload['_importacao']['avisos']['/acts/0']), 1,
+        )
+        replay = self._repetir_a_importacao(extracao)
+        (primeiro_do_replay,) = [
+            linha for linha in replay['linhas'] if linha['chave'] == '/acts/0'
+        ]
+        self.assertEqual(primeiro_do_replay['avisos'], primeiro['avisos'])
+
+    def test_sem_homonimo_o_payload_da_extracao_nao_e_tocado(self):
+        extracao = self._extracao(self._payload_origem())
+        antes = ExtracaoSugerida.objects.values_list(
+            'payload', flat=True,
+        ).get(pk=extracao.pk)
+
+        primeira = self._importar(extracao)
+        repetida = self._repetir_a_importacao(extracao)
+
+        depois = ExtracaoSugerida.objects.values_list(
+            'payload', flat=True,
+        ).get(pk=extracao.pk)
+        self.assertEqual(depois, antes)
+        self.assertNotIn('_importacao', depois)
+        self.assertFalse(self._so_os_de_homonimo(self._avisos_do_ato(repetida)))
+        self.assertEqual(
+            self._avisos_do_ato(repetida), self._avisos_do_ato(primeira),
+        )
+
+    def test_registro_gravado_desconhecido_ou_malformado_nao_vira_aviso(self):
+        extracao, primeira = self._importar_inicio_com_homonimo()
+        self.assertEqual(
+            len(self._so_os_de_homonimo(self._avisos_do_ato(primeira))), 1,
+        )
+        for registros in (
+            [{'codigo': 'inventado', 'tipo_declarado': 'transcricao',
+              'tipo_existente': 'matricula'}],
+            [{'codigo': 'homonimo_outro_tipo', 'tipo_declarado': None,
+              'tipo_existente': 'matricula'}],
+            ['texto solto'],
+            'nao-e-lista',
+        ):
+            with self.subTest(registros=registros):
+                carimbado = ExtracaoSugerida.objects.get(pk=extracao.pk)
+                carimbado.payload['_importacao']['avisos']['/acts/0'] = registros
+                carimbado.save(update_fields=['payload'])
+
+                repetida = self._repetir_a_importacao(extracao)
+
+                self.assertFalse(
+                    self._so_os_de_homonimo(self._avisos_do_ato(repetida)),
+                )
 
     def test_numero_sem_cartorio_continua_valor_obrigatorio(self):
         payload = self._payload_origem()
