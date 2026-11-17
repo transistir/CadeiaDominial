@@ -1888,11 +1888,12 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
 class LinhaIgnoradaSaveTest(TelaRevisaoBase):
     """Tarefa C #322 (revisão Opus): decisão sobre linha ignorada não é 500.
 
-    Extração antiga já salvou ``/acts/0/valor_transacao``; a folha não tem
-    mais destino (Tarefa C). Aba aberta antes do deploy pode reenviar o
-    card: o save recusa com 422 ``linha_inexistente``, sem gravar nada — e
-    o token da tela segue valendo para salvar OUTRO card (o token cobre
-    todas as linhas, inclusive a ignorada).
+    Extração antiga já salvou ``/acts/0/valor_transacao`` ou
+    ``/acts/0/detalhes`` (#328); as folhas não têm mais destino (Tarefa C).
+    Aba aberta antes do deploy pode reenviar o card: o save recusa com 422
+    ``linha_inexistente``, sem gravar nada — e o token da tela segue valendo
+    para salvar OUTRO card (o token cobre todas as linhas, inclusive a
+    ignorada).
     """
 
     def _extracao_antiga(self):
@@ -1905,30 +1906,45 @@ class LinhaIgnoradaSaveTest(TelaRevisaoBase):
             tipo_valor='decimal',
             status_revisao='aceito',
         )
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/detalhes',
+            raw='Detalhes antigos do ato',
+            normalized='Detalhes antigos do ato',
+            tipo_valor='texto',
+            status_revisao='aceito',
+        )
         return extracao
 
     def test_post_na_linha_ignorada_e_422_sem_gravar(self):
+        # #328 rodada 2 (Opus N-2): a recusa vale para as duas folhas sem
+        # destino — valor_transacao (#322) e detalhes (#328).
         extracao = self._extracao_antiga()
         versao = self._tela().context['versao']
 
-        salvar = self.client.post(
-            self.url('salvar_bloco_ocr'),
-            data=json.dumps({
-                'versao': versao,
-                'decisoes': [{
-                    'chave': '/acts/0/valor_transacao',
-                    'incluir': True, 'conferido': True, 'valor': '150000.00',
-                }],
-            }),
-            content_type='application/json',
-        )
+        for chave, valor in (
+            ('/acts/0/valor_transacao', '150000.00'),
+            ('/acts/0/detalhes', 'Detalhes antigos do ato'),
+        ):
+            with self.subTest(chave=chave):
+                salvar = self.client.post(
+                    self.url('salvar_bloco_ocr'),
+                    data=json.dumps({
+                        'versao': versao,
+                        'decisoes': [{
+                            'chave': chave,
+                            'incluir': True, 'conferido': True, 'valor': valor,
+                        }],
+                    }),
+                    content_type='application/json',
+                )
 
-        self.assertEqual(salvar.status_code, 422, salvar.content)
-        self.assertEqual(salvar.json()['erro'], 'linha_inexistente')
-        campo = extracao.campos.get(chave='/acts/0/valor_transacao')
-        self.assertIsNone(campo.valor_final)
-        # Nada foi gravado: o token da tela continua sendo o vigente.
-        self.assertEqual(services.versao_bloco(extracao), versao)
+                self.assertEqual(salvar.status_code, 422, salvar.content)
+                self.assertEqual(salvar.json()['erro'], 'linha_inexistente')
+                campo = extracao.campos.get(chave=chave)
+                self.assertIsNone(campo.valor_final)
+                # Nada foi gravado: o token da tela continua sendo o vigente.
+                self.assertEqual(services.versao_bloco(extracao), versao)
 
     def test_salvar_outro_card_com_o_token_da_tela_e_200(self):
         self._extracao_antiga()

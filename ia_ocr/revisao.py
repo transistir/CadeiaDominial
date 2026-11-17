@@ -77,7 +77,13 @@ LINHAS_IGNORADAS = frozenset({'valor_transacao', 'detalhes'})
 # ``/acts/N/valor_transacao`` etc. (e o ponteiro de padrão ``/acts/*/…``
 # que a cobertura §25 compara) —, não qualquer folha homônima em outra
 # profundidade (``/document/detalhes``, ``/acts/0/partes/0/…``).
-_LINHA_IGNORADA = re.compile(r'/acts/(?:\d+|\*)/(?:valor_transacao|detalhes)')
+# Rodada 2 (Opus N-3): os nomes saem de ``LINHAS_IGNORADAS`` (fonte única,
+# sem repetir a lista aqui); as fronteiras acima seguem provadas em
+# ``DesnormalizarTest.test_fronteiras_da_linha_ignorada``.
+_LINHA_IGNORADA = re.compile(
+    r'/acts/(?:\d+|\*)/(?:%s)'
+    % '|'.join(re.escape(nome) for nome in sorted(LINHAS_IGNORADAS))
+)
 
 
 def linha_ignorada(chave) -> bool:

@@ -24,8 +24,8 @@ from ia_ocr.revisao import (
     AtoRevisado, DadosRevisados, DocumentoRevisado, ParteRevisada,
     RevisaoInvalidada, _tipos_efetivos, _valor_explicito, aplicar_linha,
     avisos, dados_revisados, desnormalizar,
-    garantir_placeholders_obrigatorios, pendencias, resolucoes_de_tipo,
-    versao_linha,
+    garantir_placeholders_obrigatorios, linha_ignorada, pendencias,
+    resolucoes_de_tipo, versao_linha,
 )
 
 from .factories import criar_documento_digital
@@ -778,6 +778,11 @@ class PendenciasEAvisosTest(TestCase):
                 'chave': f'/acts/0/{caminho}', 'motivo': flag,
                 'bloqueante': False,
             })
+        # #328 rodada 2: a flag segue no tipo e fica ligada JUNTO das
+        # outras, mas ``detalhes`` não entra em ``esperados`` — devolver a
+        # tupla ``('requer_detalhes', 'detalhes')`` a ``avisos()`` quebra
+        # o teste abaixo.
+        self.averbacao.requer_detalhes = True
         self.averbacao.save()
         self.assertCountEqual(avisos(self.extracao), esperados)
         self.assertEqual(pendencias(self.extracao), [])
@@ -1635,6 +1640,31 @@ class DesnormalizarTest(TestCase):
         linhas = self._por_chave(self._linhas(payload))
 
         self.assertNotIn('/acts/0/detalhes', linhas)
+
+    def test_fronteiras_da_linha_ignorada(self):
+        """#328 rodada 2 (Opus N-3): a regex derivada mantém a fronteira.
+
+        Só a FOLHA do ato é ignorada — índice real (um ou vários dígitos)
+        ou o ponteiro de padrão ``*`` (nit #322, cobertura §25). Homônima
+        em outra profundidade, prefixo (``detalhes_x``) e caminho maior
+        não são alcançados.
+        """
+        de_ato = (
+            '/acts/0/detalhes', '/acts/10/detalhes', '/acts/*/detalhes',
+            '/acts/0/valor_transacao',
+        )
+        for chave in de_ato:
+            with self.subTest(ignorada=chave):
+                self.assertTrue(linha_ignorada(chave))
+
+        fora_do_ato = (
+            '/document/detalhes', '/acts/0/partes/0/detalhes',
+            '/acts/0/detalhes_x', '/acts/0/valor_transacao_x',
+            '/actss/0/detalhes',
+        )
+        for chave in fora_do_ato:
+            with self.subTest(ignorada=chave):
+                self.assertFalse(linha_ignorada(chave))
 
     def test_evidencia_usa_texto_corrigido(self):
         """Trecho é conferido contra o texto vigente: o corrigido (#290).
