@@ -253,12 +253,39 @@ class ConferirConfiguracaoExtracaoTests(SimpleTestCase):
         self.assertIn('ia_ocr.E013', _ids(problemas))
 
     def test_schema_vendorizado_invalido_e_erro(self):
-        def schema_quebrado():
-            return {'type': 123}
+        def schemas_quebrados():
+            return [('quebrado.json', {'type': 123})]
 
-        with mock.patch('ia_ocr.checks.schema_vendorizado', schema_quebrado):
+        with mock.patch('ia_ocr.checks.schemas_vendorizados', schemas_quebrados):
             problemas = self._check_extracao()
         self.assertIn('ia_ocr.E014', _ids(problemas))
+
+    def test_e014_vale_para_cada_contrato_vendorizado(self):
+        """Há dois contratos vendorizados (v1.1 e v1.2): o check olha os dois
+        e aponta, pelo nome do arquivo, só o que violou o meta-schema."""
+        from ia_ocr.checks import schemas_vendorizados
+
+        validos = schemas_vendorizados()
+        self.assertEqual(
+            sorted(nome for nome, _schema in validos),
+            [
+                'umbelino-extracao-matricula-v1.1.json',
+                'umbelino-extracao-matricula-v1.2.json',
+            ],
+        )
+        for indice in range(len(validos)):
+            with self.subTest(quebrado=validos[indice][0]):
+                lista = list(validos)
+                lista[indice] = (validos[indice][0], {'type': 123})
+
+                with mock.patch(
+                    'ia_ocr.checks.schemas_vendorizados', return_value=lista,
+                ):
+                    problemas = self._check_extracao()
+
+                e014 = [p for p in problemas if p.id == 'ia_ocr.E014']
+                self.assertEqual(len(e014), 1)
+                self.assertIn(validos[indice][0], e014[0].msg)
 
     def test_requirements_pina_jsonschema(self):
         raiz = Path(__file__).resolve().parents[2]

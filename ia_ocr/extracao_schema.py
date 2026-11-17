@@ -1,10 +1,28 @@
 """Validação do payload de extração estruturada contra o schema A3.
 
-O schema em ia_ocr/schemas/ é o contrato byte a byte com o serviço de
-OCR (umbelino-extracao-matricula-v1.1, commit 39161ed); nunca editar à
-mão. A versão deriva do próprio JSON vendorizado (``const`` de
-``properties.schema_version``): ``SCHEMA_VERSION`` é esse valor e é o
-que vai na requisição (services).
+Os schemas em ia_ocr/schemas/ são o contrato byte a byte com o serviço de
+OCR (hoje v1.1 e v1.2); nunca editar à mão. Há MAIS DE UM contrato
+vendorizado de propósito, por compatibilidade de rollout: serviço e app não
+sobem juntos, então durante a virada o app recebe payload do serviço antigo
+(v1.1) e do novo (v1.2) e aceita os dois. Antes, dois arquivos juntos eram
+erro (troca mal feita: o antigo não saiu no PR); agora é decisão explícita —
+aposentar um contrato é apagar o arquivo e o sha256 pinado nos testes.
+
+A identidade de cada contrato é o ``const`` de ``properties.schema_version``
+(nunca o literal no código, o nome do arquivo ou o ``$id``: o ``$id`` do v1.2
+do serviço ainda diz v1.1, descuido de lá que não se conserta aqui).
+``CONTRATOS`` mapeia versão → (caminho, schema, validador), e o loader recusa
+arquivo cujo nome não seja o próprio ``const`` (o que também impede a mesma
+versão em dois arquivos).
+
+- ``SCHEMA_VERSION`` é a versão MAIS NOVA (ordenada como versão, não como
+  texto) e é o que vai na requisição (services); ``SCHEMA_PATH`` é o arquivo
+  dela.
+- ``validar_payload`` escolhe o contrato pelo ``schema_version`` DO PAYLOAD:
+  serviço antigo (v1.1) segue funcionando, novo (v1.2) é aceito, e versão
+  ausente ou desconhecida é ``schema_versao_desconhecida``. Cada payload vale
+  pelo contrato que declara: nada é afrouxado (o v1.1 continua rejeitando o
+  que só o v1.2 conhece).
 
 A validação estrutural roda SEM format_checker: em campo de valor o
 `format` do A3 é anotação, não checagem — data inválida em campo de valor
@@ -15,10 +33,20 @@ formato só existe em ``meta``.
 
 import datetime
 import json
+import re
 import uuid
 from pathlib import Path
+from typing import NamedTuple
 
 from jsonschema import Draft202012Validator
+
+
+class Contrato(NamedTuple):
+    """Um contrato vendorizado: arquivo, schema lido e validador pronto."""
+
+    caminho: Path
+    schema: dict
+    validador: Draft202012Validator
 
 
 def _versao_do_schema(schema):
@@ -26,25 +54,55 @@ def _versao_do_schema(schema):
     return schema['properties']['schema_version']['const']
 
 
-def _carregar_contrato(diretorio):
-    """Localiza e lê o contrato vendorizado (um arquivo por vez).
+_SUFIXO_DE_VERSAO = re.compile(r'-v(\d+(?:\.\d+)*)$')
 
-    Dois arquivos juntos é troca mal feita (o antigo não saiu no PR):
-    erro em vez de validar contra o contrato errado.
-    """
-    arquivos = sorted(diretorio.glob('umbelino-extracao-matricula-*.json'))
-    if len(arquivos) != 1:
-        raise FileNotFoundError(
-            f'esperado 1 contrato vendorizado em {diretorio}, '
-            f'encontrei {[caminho.name for caminho in arquivos]}'
+
+def _chave_de_versao(versao):
+    """Ordem de versão: ``v1.10`` > ``v1.2`` (como texto, seria o contrário)."""
+    achado = _SUFIXO_DE_VERSAO.search(versao)
+    if achado is None:
+        raise ValueError(
+            f'versão de contrato sem sufixo -vN[.M]: {versao!r}'
         )
-    with open(arquivos[0], encoding='utf-8') as arquivo:
-        return arquivos[0], json.load(arquivo)
+    return tuple(int(parte) for parte in achado.group(1).split('.'))
 
 
-SCHEMA_PATH, _SCHEMA = _carregar_contrato(Path(__file__).parent / 'schemas')
-SCHEMA_VERSION = _versao_do_schema(_SCHEMA)
-_VALIDADOR = Draft202012Validator(_SCHEMA)
+def _carregar_contratos(diretorio):
+    """Lê TODOS os contratos vendorizados: versão (``const``) → Contrato.
+
+    Cada arquivo tem de ser coerente com o próprio ``const``: versão com
+    sufixo numérico e nome do arquivo igual à versão. Cópia renomeada sem
+    trocar o ``const`` (ou o contrário) é troca mal feita — erro, em vez de
+    validar contra o contrato errado; e, como o nome é único na pasta, duas
+    versões iguais nunca coexistem no mapa.
+    """
+    contratos = {}
+    for caminho in sorted(diretorio.glob('umbelino-extracao-matricula-*.json')):
+        with open(caminho, encoding='utf-8') as arquivo:
+            schema = json.load(arquivo)
+        versao = _versao_do_schema(schema)
+        _chave_de_versao(versao)
+        if caminho.stem != versao:
+            raise ValueError(
+                f'{caminho.name} declara {versao!r} em schema_version: o '
+                'nome do arquivo tem de ser a própria versão'
+            )
+        contratos[versao] = Contrato(caminho, schema, Draft202012Validator(schema))
+    if not contratos:
+        raise FileNotFoundError(
+            f'nenhum contrato vendorizado em {diretorio}'
+        )
+    return contratos
+
+
+def _mais_nova(contratos):
+    """A versão mais nova do mapa (por número de versão, não por nome)."""
+    return max(contratos, key=_chave_de_versao)
+
+
+CONTRATOS = _carregar_contratos(Path(__file__).parent / 'schemas')
+SCHEMA_VERSION = _mais_nova(CONTRATOS)
+SCHEMA_PATH = CONTRATOS[SCHEMA_VERSION].caminho
 
 # Limites anti-lixo de contorno (I-5): uma matrícula real tem dezenas de
 # atos, meia dúzia de partes por ato e campos legíveis. Payload acima disso
@@ -85,6 +143,14 @@ def _caminho(path):
     return texto
 
 
+# O nome de uma chave extra só entra no caminho se tiver cara de campo do A3
+# (ASCII snake_case, ex.: ``data_transacao``): é o que torna o diagnóstico
+# possível. Texto livre vindo do serviço — possível PII numa chave inventada —
+# não: o caminho alimenta logs e a mensagem da exceção.
+_NOME_DE_CAMPO = re.compile(r'[A-Za-z_][A-Za-z0-9_]{0,63}')
+_CHAVE_EXTRA_OPACA = '<chave_extra>'
+
+
 def _erro_estrutural_para_excecao(erro):
     codigo = _CODIGOS_ESTRUTURAIS.get(erro.validator, 'schema_violado')
     caminho = _caminho(erro.absolute_path)
@@ -94,7 +160,9 @@ def _erro_estrutural_para_excecao(erro):
         permitidas = set(erro.schema.get('properties', {}))
         extras = sorted(set(erro.instance) - permitidas)
         if extras:
-            caminho = f'{caminho}.{extras[0]}'
+            extra = extras[0]
+            nome_seguro = isinstance(extra, str) and _NOME_DE_CAMPO.fullmatch(extra)
+            caminho = f'{caminho}.{extra if nome_seguro else _CHAVE_EXTRA_OPACA}'
     return PayloadExtracaoInvalido(codigo, caminho)
 
 
@@ -142,9 +210,28 @@ def _varrer(valor, caminho):
     return 0
 
 
+def _contrato_do_payload(payload):
+    """O contrato que o PAYLOAD declara em ``schema_version``.
+
+    Ausente, não-texto ou fora de ``CONTRATOS`` → ``schema_versao_desconhecida``:
+    sem contrato conhecido não há contra o que validar, e escolher um por
+    palpite (o mais novo, o mais antigo) esconderia a divergência. O
+    ``isinstance`` evita ``TypeError`` com valor não-hashable (``[]``, ``{}``).
+    """
+    versao = payload.get('schema_version')
+    contrato = CONTRATOS.get(versao) if isinstance(versao, str) else None
+    if contrato is None:
+        raise PayloadExtracaoInvalido(
+            'schema_versao_desconhecida', '$.schema_version'
+        )
+    return contrato
+
+
 def validar_payload(payload, job_id, paginas):
     """Valida o payload do job contra o A3 e as regras de contorno do I-5.
 
+    - Contrato: o do ``schema_version`` do próprio payload (v1.1 ou v1.2);
+      versão ausente/desconhecida → ``schema_versao_desconhecida``.
     - Estrutura: Draft 2020-12 (additionalProperties, required, enums e
       confiança 0–1) SEM format_checker (ver docstring do módulo).
     - ``meta`` estrita: job_id do job ou UUID válido (qualquer forma aceita
@@ -158,7 +245,8 @@ def validar_payload(payload, job_id, paginas):
     if not isinstance(payload, dict):
         raise PayloadExtracaoInvalido('tipo_invalido', '$')
 
-    primeiro_erro = next(_VALIDADOR.iter_errors(payload), None)
+    contrato = _contrato_do_payload(payload)
+    primeiro_erro = next(contrato.validador.iter_errors(payload), None)
     if primeiro_erro is not None:
         raise _erro_estrutural_para_excecao(primeiro_erro)
 

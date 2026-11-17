@@ -1,15 +1,16 @@
-"""Testes do validador do payload de extração (schema A3 vendorizado).
+"""Testes do validador do payload de extração (schemas A3 vendorizados).
 
-O contrato é o JSON em ia_ocr/schemas/, cópia byte a byte do serviço de
-OCR — nunca editado à mão. A validação estrutural usa Draft 2020-12 SEM
-format_checker: `format` em campo de valor é anotação (data inválida vira
-normalized=NULL + requer_revisao na desnormalização, não rejeição).
+Os contratos são os JSONs em ia_ocr/schemas/ (v1.1 e v1.2), cópias byte a
+byte do serviço de OCR — nunca editados à mão. A validação estrutural usa
+Draft 2020-12 SEM format_checker: `format` em campo de valor é anotação (data
+inválida vira normalized=NULL + requer_revisao na desnormalização, não
+rejeição). Cada payload é validado pelo contrato que ELE declara em
+``schema_version``.
 """
 
 import hashlib
 import json
 import logging
-import shutil
 import tempfile
 from pathlib import Path
 
@@ -19,12 +20,24 @@ from jsonschema import Draft202012Validator
 
 from ia_ocr import extracao_schema
 from ia_ocr.extracao_schema import (
+    CONTRATOS,
     SCHEMA_PATH,
     SCHEMA_VERSION,
     PayloadExtracaoInvalido,
     validar_payload,
 )
 from ia_ocr.tests.payloads_extracao import payload_registro
+
+V1_1 = 'umbelino-extracao-matricula-v1.1'
+V1_2 = 'umbelino-extracao-matricula-v1.2'
+PASTA_SCHEMAS = Path(extracao_schema.__file__).parent / 'schemas'
+# Pinado de propósito (não derivado do módulo): trocar um contrato é decisão
+# explícita, com o novo sha256 do ocr-service.
+SHA256_DOS_CONTRATOS = {
+    V1_1: 'ae296837b964f180c8f80ac1a77815a43ff05eca52b6f3586a237129b9b2caff',
+    V1_2: '8be9b56ff0c7a073c151d7c58e80efb7ed97c97ff0ff9f71b7488477c7940bc5',
+}
+CAMPOS_DE_TRANSMISSAO = ('livro_transacao', 'folha_transacao', 'data_transacao')
 
 
 def campo(normalized=None, raw=None, confianca=0.9, evidencia=None):
@@ -61,10 +74,23 @@ def ato(ordem=1, partes=0):
     }
 
 
-def payload_minimo(job_id='11111111-1111-1111-1111-111111111111', paginas=(1,)):
+def ato_com_transmissao(ordem=1):
+    """Ato do contrato v1.2: livro/folha/data da transmissão (`*_transacao`)."""
+    return {
+        **ato(ordem),
+        'livro_transacao': campo('10-A', raw='Livro 10-A'),
+        'folha_transacao': campo('25v', raw='fl. 25v'),
+        'data_transacao': campo('2019-12-20', raw='20/12/2019'),
+    }
+
+
+def payload_minimo(
+    job_id='11111111-1111-1111-1111-111111111111', paginas=(1,),
+    versao=SCHEMA_VERSION,
+):
     """Payload que satisfaz o A3 por inteiro (âncora dos testes)."""
     return {
-        'schema_version': SCHEMA_VERSION,
+        'schema_version': versao,
         'document': {
             'tipo': campo('matricula'),
             'numero': campo(
@@ -84,66 +110,163 @@ def payload_minimo(job_id='11111111-1111-1111-1111-111111111111', paginas=(1,)):
 
 
 class SchemaVendorizado(SimpleTestCase):
-    def test_schema_vendorizado_identico_ao_contrato(self):
-        """Byte a byte com o contrato do serviço de OCR (dispatch 1/5)."""
-        sha256 = hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest()
-        self.assertEqual(
-            sha256,
-            'ae296837b964f180c8f80ac1a77815a43ff05eca52b6f3586a237129b9b2caff',
-        )
+    def test_schemas_vendorizados_identicos_ao_contrato(self):
+        """Byte a byte com o contrato do serviço de OCR: os DOIS arquivos."""
+        for versao, esperado in SHA256_DOS_CONTRATOS.items():
+            with self.subTest(versao=versao):
+                arquivo = PASTA_SCHEMAS / f'{versao}.json'
+                self.assertEqual(
+                    hashlib.sha256(arquivo.read_bytes()).hexdigest(), esperado,
+                )
 
-    def test_versao_unica_derivada_do_vendorizado(self):
-        """SCHEMA_VERSION é a fonte única da versão: o nome do arquivo e o
-        $id/const do vendorizado derivam dela — e a requisição (services)
-        envia essa mesma constante."""
-        schema = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
-        self.assertEqual(SCHEMA_VERSION, 'umbelino-extracao-matricula-v1.1')
-        self.assertEqual(SCHEMA_PATH.name, f'{SCHEMA_VERSION}.json')
-        self.assertEqual(schema['$id'], SCHEMA_VERSION)
-        self.assertEqual(
-            schema['properties']['schema_version']['const'], SCHEMA_VERSION,
+    def test_so_ha_os_contratos_v1_1_e_v1_2(self):
+        """Contrato novo (ou aposentadoria de um) é decisão explícita: o
+        conjunto vendorizado é pinado, com o sha256 de cada um acima."""
+        arquivos = sorted(
+            caminho.name
+            for caminho in PASTA_SCHEMAS.glob('umbelino-extracao-matricula-*.json')
         )
+        self.assertEqual(arquivos, [f'{V1_1}.json', f'{V1_2}.json'])
+        self.assertEqual(set(CONTRATOS), {V1_1, V1_2})
+        for versao, esperado in SHA256_DOS_CONTRATOS.items():
+            with self.subTest(versao=versao):
+                self.assertEqual(
+                    CONTRATOS[versao].caminho, PASTA_SCHEMAS / f'{versao}.json',
+                )
+                self.assertEqual(
+                    hashlib.sha256(CONTRATOS[versao].caminho.read_bytes()).hexdigest(),
+                    esperado,
+                )
+
+    def test_cada_contrato_e_coerente_com_o_proprio_const(self):
+        """A identidade do contrato é o `const` de `schema_version`: a chave
+        do mapa, o nome do arquivo e o schema carregado concordam com ele."""
+        for versao, contrato in CONTRATOS.items():
+            with self.subTest(versao=versao):
+                schema = json.loads(contrato.caminho.read_text(encoding='utf-8'))
+                self.assertEqual(
+                    schema['properties']['schema_version']['const'], versao,
+                )
+                self.assertEqual(contrato.caminho.name, f'{versao}.json')
+                self.assertEqual(contrato.schema, schema)
+                self.assertIsInstance(contrato.validador, Draft202012Validator)
+
+    def test_id_do_v1_2_ainda_diz_v1_1_por_descuido_do_servico(self):
+        """O `$id` do v1.1 é a própria versão, mas o do v1.2 do serviço
+        continua `...-v1.1` (descuido de lá). O JSON é byte a byte e NÃO se
+        conserta aqui: a identidade do contrato é o `const`, nunca o `$id`
+        (por isso nenhum código ou teste compara `$id` com a versão)."""
+        self.assertEqual(CONTRATOS[V1_1].schema['$id'], V1_1)
+        self.assertEqual(CONTRATOS[V1_2].schema['$id'], V1_1)
+
+    def test_schema_version_e_o_contrato_mais_novo(self):
+        """A requisição pede a versão mais nova (services envia SCHEMA_VERSION)
+        e SCHEMA_PATH aponta para o arquivo dela."""
+        self.assertEqual(SCHEMA_VERSION, V1_2)
+        self.assertEqual(SCHEMA_PATH, CONTRATOS[V1_2].caminho)
+
+    def test_schemas_sao_2020_12_validos(self):
+        """Cada JSON vendorizado é um schema Draft 2020-12 válido."""
+        for versao, contrato in CONTRATOS.items():
+            with self.subTest(versao=versao):
+                Draft202012Validator.check_schema(
+                    json.loads(contrato.caminho.read_text(encoding='utf-8'))
+                )
+
+    def test_v1_2_so_acrescenta_os_campos_de_transmissao_ao_ato(self):
+        """O v1.2 é o v1.1 + livro/folha/data da transmissão no ato (opcionais)
+        e o novo `const`: nada mais mudou, nada ficou obrigatório."""
+        ato_v1_1 = CONTRATOS[V1_1].schema['$defs']['act']
+        ato_v1_2 = CONTRATOS[V1_2].schema['$defs']['act']
+        self.assertEqual(
+            set(ato_v1_2['properties']) - set(ato_v1_1['properties']),
+            set(CAMPOS_DE_TRANSMISSAO),
+        )
+        self.assertEqual(ato_v1_2['required'], ato_v1_1['required'])
+        self.assertIs(ato_v1_2['additionalProperties'], False)
+
+
+class CarregarContratos(SimpleTestCase):
+    """O loader lê TODOS os contratos da pasta, identificando cada um pelo
+    `const` — nenhum literal de versão no código."""
+
+    @staticmethod
+    def _gravar(diretorio, versao, nome=None):
+        """Cópia do v1.2 com o `const` trocado para `versao`."""
+        schema = json.loads(CONTRATOS[V1_2].caminho.read_text(encoding='utf-8'))
+        schema['properties']['schema_version']['const'] = versao
+        arquivo = diretorio / (nome or f'{versao}.json')
+        arquivo.write_text(json.dumps(schema), encoding='utf-8')
+        return arquivo
 
     def test_versao_deriva_do_const_do_vendorizado(self):
-        """Derivação de verdade: numa cópia do contrato com o `const` da
-        versão seguinte (v1.2), a versão derivada segue o JSON — nenhum
-        literal de versão na mão no módulo."""
+        """Derivação de verdade: numa pasta com só uma versão futura, o mapa
+        e a versão mais nova seguem o `const` do JSON."""
+        futura = 'umbelino-extracao-matricula-v1.3'
         with tempfile.TemporaryDirectory() as tmp:
             diretorio = Path(tmp)
-            const_seguinte = 'umbelino-extracao-matricula-v1.2'
-            schema = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
-            schema['$id'] = const_seguinte
-            schema['properties']['schema_version']['const'] = const_seguinte
-            (diretorio / f'{const_seguinte}.json').write_text(
-                json.dumps(schema), encoding='utf-8'
-            )
+            arquivo = self._gravar(diretorio, futura)
 
-            caminho, carregado = extracao_schema._carregar_contrato(diretorio)
+            contratos = extracao_schema._carregar_contratos(diretorio)
 
-            self.assertEqual(caminho.name, f'{const_seguinte}.json')
+            self.assertEqual(list(contratos), [futura])
+            self.assertEqual(contratos[futura].caminho, arquivo)
             self.assertEqual(
-                extracao_schema._versao_do_schema(carregado), const_seguinte
+                extracao_schema._versao_do_schema(contratos[futura].schema),
+                futura,
             )
+            self.assertEqual(extracao_schema._mais_nova(contratos), futura)
 
-    def test_carregar_contrato_exige_arquivo_unico(self):
-        """Dois contratos vendorizados juntos é troca mal feita (o antigo
-        não saiu no PR) → erro, em vez de validar contra o errado."""
+    def test_aceita_varios_contratos_ao_mesmo_tempo(self):
+        """Antes dois arquivos juntos eram erro (troca mal feita); agora são
+        intencionais — compatibilidade de rollout serviço/app."""
         with tempfile.TemporaryDirectory() as tmp:
             diretorio = Path(tmp)
-            shutil.copy(SCHEMA_PATH, diretorio / SCHEMA_PATH.name)
-            shutil.copy(
-                SCHEMA_PATH,
-                diretorio / 'umbelino-extracao-matricula-v1.2.json',
-            )
+            self._gravar(diretorio, V1_1)
+            self._gravar(diretorio, V1_2)
 
+            contratos = extracao_schema._carregar_contratos(diretorio)
+
+            self.assertEqual(set(contratos), {V1_1, V1_2})
+            self.assertEqual(extracao_schema._mais_nova(contratos), V1_2)
+
+    def test_versao_mais_nova_ordena_como_versao_nao_como_texto(self):
+        """v1.10 é mais nova que v1.2 (como texto, 'v1.10' < 'v1.2')."""
+        dez = 'umbelino-extracao-matricula-v1.10'
+        self.assertLess(dez, V1_2)  # a armadilha: como texto, v1.10 < v1.2
+        with tempfile.TemporaryDirectory() as tmp:
+            diretorio = Path(tmp)
+            self._gravar(diretorio, V1_2)
+            self._gravar(diretorio, dez)
+
+            contratos = extracao_schema._carregar_contratos(diretorio)
+
+            self.assertEqual(extracao_schema._mais_nova(contratos), dez)
+
+    def test_versao_sem_sufixo_numerico_e_recusada(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diretorio = Path(tmp)
+            self._gravar(diretorio, 'umbelino-extracao-matricula-final')
+
+            with self.assertRaises(ValueError):
+                extracao_schema._carregar_contratos(diretorio)
+
+    def test_recusa_arquivo_com_nome_diferente_do_proprio_const(self):
+        """Cópia renomeada sem trocar o `const` (o v1.1 posando de v1.2) é
+        troca mal feita: erro, em vez de validar contra o contrato errado —
+        e é o que impede a mesma versão em dois arquivos."""
+        with tempfile.TemporaryDirectory() as tmp:
+            diretorio = Path(tmp)
+            self._gravar(diretorio, V1_1)
+            self._gravar(diretorio, V1_1, nome=f'{V1_2}.json')
+
+            with self.assertRaises(ValueError):
+                extracao_schema._carregar_contratos(diretorio)
+
+    def test_pasta_sem_contratos_levanta(self):
+        with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(FileNotFoundError):
-                extracao_schema._carregar_contrato(diretorio)
-
-    def test_schema_e_2020_12_valido(self):
-        """O JSON vendorizado é um schema Draft 2020-12 válido."""
-        Draft202012Validator.check_schema(
-            json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
-        )
+                extracao_schema._carregar_contratos(Path(tmp))
 
 
 class ValidarPayload(SimpleTestCase):
@@ -177,16 +300,132 @@ class ValidarPayload(SimpleTestCase):
         self.assertEqual(ctx.exception.codigo, 'propriedade_extra')
         self.assertEqual(ctx.exception.caminho, '$.surpresa')
 
-    def test_rejeita_schema_version(self):
-        """schema_version diferente do contrato (const) → rejeita."""
+    def test_chave_extra_so_entra_no_caminho_se_tiver_cara_de_campo(self):
+        """O caminho alimenta log e exceção: o nome de uma chave extra é
+        estrutura quando é um identificador (`data_transacao`), mas texto
+        livre do serviço — possível PII numa chave inventada — vira marcador."""
+        for chave in (
+            'João da Silva CPF 123.456.789-00',
+            'chave com espaço',
+            'x' * 65,
+            '1comecaComDigito',
+        ):
+            with self.subTest(chave=chave):
+                payload = payload_minimo()
+                payload[chave] = True
+
+                with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+                    validar_payload(payload, self.JOB_ID, (1,))
+
+                self.assertEqual(ctx.exception.codigo, 'propriedade_extra')
+                self.assertEqual(ctx.exception.caminho, '$.<chave_extra>')
+                self.assertNotIn(chave, str(ctx.exception))
+
+    def test_rejeita_schema_version_desconhecida(self):
+        """schema_version fora dos contratos vendorizados → rejeita: não há
+        contrato contra o qual validar."""
         payload = payload_minimo()
         payload['schema_version'] = 'umbelino-extracao-matricula-v2'
 
         with self.assertRaises(PayloadExtracaoInvalido) as ctx:
             validar_payload(payload, self.JOB_ID, (1,))
 
-        self.assertEqual(ctx.exception.codigo, 'valor_const_inesperado')
+        self.assertEqual(ctx.exception.codigo, 'schema_versao_desconhecida')
         self.assertEqual(ctx.exception.caminho, '$.schema_version')
+        self.assertEqual(
+            str(ctx.exception), 'schema_versao_desconhecida ($.schema_version)',
+        )
+
+    def test_rejeita_schema_version_ausente_ou_de_tipo_errado(self):
+        """Ausente, não-texto (inclusive não-hashável) ou vazio: mesmo código
+        e caminho — nunca TypeError no lookup do contrato."""
+        ausente = payload_minimo()
+        del ausente['schema_version']
+        casos = [('ausente', ausente)]
+        for valor in (None, 123, True, [], {}, '', 'v1.2', V1_2.upper()):
+            payload = payload_minimo()
+            payload['schema_version'] = valor
+            casos.append((repr(valor), payload))
+
+        for nome, payload in casos:
+            with self.subTest(schema_version=nome):
+                with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+                    validar_payload(payload, self.JOB_ID, (1,))
+
+                self.assertEqual(ctx.exception.codigo, 'schema_versao_desconhecida')
+                self.assertEqual(ctx.exception.caminho, '$.schema_version')
+
+    def test_aceita_v1_2_com_livro_folha_data_da_transmissao_no_ato(self):
+        """Contrato novo (o que o serviço já responde): as três folhas do ato
+        passam sem rejeição."""
+        payload = payload_minimo(versao=V1_2)
+        payload['acts'] = [ato_com_transmissao()]
+
+        validar_payload(payload, self.JOB_ID, (1,))  # não levanta
+
+    def test_aceita_v1_2_sem_os_campos_de_transmissao(self):
+        """No v1.2 as três folhas são opcionais: ato sem elas segue válido."""
+        payload = payload_minimo(versao=V1_2)
+        payload['acts'] = [ato()]
+
+        validar_payload(payload, self.JOB_ID, (1,))  # não levanta
+
+    def test_aceita_v1_1_de_servico_antigo(self):
+        """Serviço ainda no v1.1 (sem as três folhas): continua aceito, pelo
+        contrato que o payload declara."""
+        payload = payload_minimo(versao=V1_1)
+        payload['acts'] = [ato()]
+
+        validar_payload(payload, self.JOB_ID, (1,))  # não levanta
+
+    def test_v1_1_continua_rejeitando_as_folhas_que_so_o_v1_2_conhece(self):
+        """O contrato antigo NÃO é afrouxado: payload que se declara v1.1 e
+        traz `data_transacao` é o incidente original (propriedade_extra) —
+        cada payload vale pelo contrato que ele próprio declara."""
+        payload = payload_minimo(versao=V1_1)
+        payload['acts'] = [ato_com_transmissao()]
+
+        with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+            validar_payload(payload, self.JOB_ID, (1,))
+
+        self.assertEqual(ctx.exception.codigo, 'propriedade_extra')
+        self.assertEqual(ctx.exception.caminho, '$.acts[0].data_transacao')
+
+    def test_v1_2_continua_rejeitando_propriedade_desconhecida_no_ato(self):
+        """Sem validação frouxa: o v1.2 só conhece as três folhas novas."""
+        payload = payload_minimo(versao=V1_2)
+        payload['acts'] = [{**ato_com_transmissao(), 'folha_inventada': campo('x')}]
+
+        with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+            validar_payload(payload, self.JOB_ID, (1,))
+
+        self.assertEqual(ctx.exception.codigo, 'propriedade_extra')
+        self.assertEqual(ctx.exception.caminho, '$.acts[0].folha_inventada')
+
+    def test_v1_2_exige_o_formato_de_campo_nas_folhas_de_transmissao(self):
+        """As folhas novas são campos A3 (objeto), não texto solto."""
+        for nome in CAMPOS_DE_TRANSMISSAO:
+            with self.subTest(campo=nome):
+                payload = payload_minimo(versao=V1_2)
+                payload['acts'] = [{**ato_com_transmissao(), nome: 'texto solto'}]
+
+                with self.assertRaises(PayloadExtracaoInvalido) as ctx:
+                    validar_payload(payload, self.JOB_ID, (1,))
+
+                self.assertEqual(ctx.exception.codigo, 'schema_violado')
+                self.assertEqual(ctx.exception.caminho, f'$.acts[0].{nome}')
+
+    def test_v1_2_data_da_transmissao_invalida_nao_derruba_payload(self):
+        """Como em todo campo de valor, `format: date` é anotação: quem trata
+        data impossível é a desnormalização, não a validação estrutural."""
+        for normalizado in ('2024-02-30', '31/12/2024'):
+            with self.subTest(normalized=normalizado):
+                payload = payload_minimo(versao=V1_2)
+                transmissao = ato_com_transmissao()
+                transmissao['data_transacao'] = campo(normalizado, raw=normalizado)
+                payload['acts'] = [transmissao]
+
+                validar_payload(payload, self.JOB_ID, (1,))  # não levanta
 
     def test_rejeita_confianca_fora_de_0_1(self):
         """Confiança fora do intervalo [0, 1] → rejeita (minimum/maximum)."""
