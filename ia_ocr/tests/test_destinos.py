@@ -167,6 +167,10 @@ class LimitesVemDeMeta(SimpleTestCase):
         with self.assertRaises(ChaveDesconhecida):
             destino_de('/acts/2/valor_transacao')
 
+        # #328 (regra 11/11): detalhes também não existe no formulário.
+        with self.assertRaises(ChaveDesconhecida):
+            destino_de('/acts/2/detalhes')
+
         area = destino_de('/acts/2/area')
         self.assertEqual((area.max_digits, area.decimal_places), (12, 4))
 

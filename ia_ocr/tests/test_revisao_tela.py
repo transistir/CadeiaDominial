@@ -874,6 +874,47 @@ class RevisaoTelaTest(TelaRevisaoBase):
         )
         self.assertEqual(finalizar.status_code, 200, finalizar.content)
 
+    def test_detalhes_do_payload_nao_vira_card_e_finaliza(self):
+        """#328: o campo não existe no formulário de lançamento."""
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['detalhes'] = _campo(
+            'Detalhes do ato', 'Escritura Pública de Compra e Venda',
+        )
+        extracao = self._extracao(payload, resolver=True)
+        self.assertEqual(revisao.pendencias(extracao), [])
+        self.assertNotIn('/acts/0/detalhes', self._chaves_na_tela())
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+
+    def test_linha_antiga_de_detalhes_nao_aparece_na_tela(self):
+        """#328: extração antiga com a linha salva — sem card."""
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/detalhes',
+            raw='Detalhes antigos',
+            normalized='Detalhes antigos',
+            tipo_valor='texto',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        self.assertNotIn('/acts/0/detalhes', self._chaves_na_tela())
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+
     def test_obrigatorio_vazio_continua_bloqueando_finalizacao(self):
         extracao = self._extracao(
             payload_registro(self.job.job_id), resolver=True,
@@ -1227,7 +1268,7 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         self.assertNotIn('open', _atributos(detalhe))
         chaves_outros = self._chaves_do_html(str(detalhe))
         for chave in (
-            '/acts/0/detalhes', '/acts/0/eh_inicio_matricula', '/acts/0/rotulo',
+            '/acts/0/eh_inicio_matricula', '/acts/0/rotulo',
             '/document/cri_atual',
             '/closure/indicio_fim_cadeia',
         ):
@@ -1284,7 +1325,9 @@ class FormularioPorAtoTest(TelaRevisaoBase):
 
     def test_pendencia_em_outros_abre_o_detalhe(self):
         extracao = self._extracao(self._payload_formulario(), resolver=True)
-        chave = '/acts/0/detalhes'
+        # #328: ``detalhes`` nem vira linha — a pendência exemplar em
+        # "outros dados" usa outra folha fora do formulário (``rotulo``).
+        chave = '/acts/0/rotulo'
         extracao.campos.filter(chave=chave).update(
             status_revisao='sugerido', requer_revisao=True,
         )

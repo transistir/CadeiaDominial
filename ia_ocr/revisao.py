@@ -65,18 +65,19 @@ _OBRIGATORIOS_DOCUMENTO = ('tipo', 'data', 'cartorio')
 _OBRIGATORIOS_ATO = ('tipo_sugerido', 'data')
 _CHAVE_OBRIGATORIA_ATO = re.compile(r'/acts/\d+/(.+)')
 
-# Tarefa C (#322/PR #327, decisão 11/11): o formulário de lançamento manda —
-# ``valor_transacao`` não existe nele, então não existe na revisão nem na
-# importação. O schema A3 do Umbelino (v1.1) continua mandando a folha; o
-# payload segue com ela, mas nenhuma linha é criada (payload novo) e linhas
-# antigas já salvas são ignoradas na leitura (_contexto_revisao) e na tela.
-LINHAS_IGNORADAS = frozenset({'valor_transacao'})
+# Tarefa C (#322/PR #327) e #328 (regra do Hiure, 11/11): o formulário de
+# lançamento manda — ``valor_transacao`` e ``detalhes`` não existem nele,
+# então não existem na revisão nem na importação. O schema A3 do Umbelino
+# (v1.1) continua mandando as folhas; o payload segue com elas, mas nenhuma
+# linha é criada (payload novo) e linhas antigas já salvas são ignoradas na
+# leitura (_contexto_revisao) e na tela.
+LINHAS_IGNORADAS = frozenset({'valor_transacao', 'detalhes'})
 
 # Revisão Opus (nit #322): o nome só ignora a FOLHA do A3 —
-# ``/acts/N/valor_transacao`` (e o ponteiro de padrão ``/acts/*/…`` que a
-# cobertura §25 compara) —, não qualquer folha homônima em outra
-# profundidade (``/document/valor_transacao``, ``/acts/0/partes/0/…``).
-_LINHA_IGNORADA = re.compile(r'/acts/(?:\d+|\*)/valor_transacao')
+# ``/acts/N/valor_transacao`` etc. (e o ponteiro de padrão ``/acts/*/…``
+# que a cobertura §25 compara) —, não qualquer folha homônima em outra
+# profundidade (``/document/detalhes``, ``/acts/0/partes/0/…``).
+_LINHA_IGNORADA = re.compile(r'/acts/(?:\d+|\*)/(?:valor_transacao|detalhes)')
 
 
 def linha_ignorada(chave) -> bool:
@@ -139,7 +140,6 @@ class AtoRevisado:
     titulo: str | None
     forma: str | None
     descricao: str | None
-    detalhes: str | None
     observacoes: str | None
     cartorio_origem_id: int | None
     cartorio_transmissao_id: int | None
@@ -311,7 +311,6 @@ def dados_revisados(extracao) -> DadosRevisados:
             titulo=valor(f'{chave}/titulo'),
             forma=valor(f'{chave}/forma'),
             descricao=valor(f'{chave}/descricao'),
-            detalhes=valor(f'{chave}/detalhes'),
             observacoes=valor(f'{chave}/observacoes'),
             cartorio_origem_id=origem_cartorio_id,
             cartorio_transmissao_id=cartorio_id(f'{chave}/cartorio_transmissao'),
@@ -602,8 +601,8 @@ def _contexto_revisao(extracao, ignorar_descarte_de=None, por_chave=None):
     """Indexa as linhas incluídas, respeitando o descarte dos ancestrais.
 
     Linhas com nome em ``LINHAS_IGNORADAS`` (extrações antigas já salvaram
-    ``valor_transacao``) não entram: nem ``dados_revisados``, nem
-    ``pendencias``, nem a importação as veem.
+    ``valor_transacao``/``detalhes``) não entram: nem ``dados_revisados``,
+    nem ``pendencias``, nem a importação as veem.
 
     ``ignorar_descarte_de`` (chave de UM ato, ``/acts/N``): a caminhada de
     ancestrais NÃO quebra no descarte DESSA chave — é o contexto com que a
@@ -1088,7 +1087,6 @@ def avisos(extracao) -> list[dict]:
             continue
         for flag, caminho in (
             ('requer_forma', 'forma'),
-            ('requer_detalhes', 'detalhes'),
             ('requer_observacao', 'observacoes'),
             ('requer_livro_origem', 'origem/livro'),
             ('requer_folha_origem', 'origem/folha'),
@@ -1144,7 +1142,6 @@ ROTULOS_CAMPO = {
     # A3: rótulo humano em vez do fallback mecânico.
     'cri_atual': 'CRI atual',
     'rotulo': 'Rótulo do ato',
-    'detalhes': 'Detalhes',
     'eh_inicio_matricula': 'Início de matrícula',
     'valor': 'Documento da parte',
     'indicio_fim_cadeia': 'Indício de fim de cadeia',
@@ -1153,9 +1150,9 @@ ROTULOS_CAMPO = {
 }
 
 # Campos que o formulário de lançamento tem (§2 do #321): abrem linha na
-# seção própria; todo o resto (``cri_atual``, ``rotulo``, ``detalhes``,
+# seção própria; todo o resto (``cri_atual``, ``rotulo``,
 # ``eh_inicio_matricula``, ``closure/*``, desconhecidos) vai para "Outros
-# dados lidos".
+# dados lidos" — e as folhas de ``LINHAS_IGNORADAS`` nem isso (#328).
 CAMPOS_DO_FORMULARIO_DOCUMENTO = (
     'tipo', 'numero', 'data', 'cartorio', 'livro', 'folha',
     'imovel_descricao', 'area',
@@ -1189,7 +1186,7 @@ _TEXTO_NAO_RECONHECIDO = {
     'sem_numero': 'sem número do ato',
 }
 _TEXTO_LONGO = frozenset(
-    {'descricao', 'detalhes', 'observacoes', 'imovel_descricao'},
+    {'descricao', 'observacoes', 'imovel_descricao'},
 )
 
 # Linha estrutural no fim da chave: ``/acts/{n}`` ou ``.../partes/{m}``.

@@ -218,6 +218,46 @@ class CaminhoFelizTest(ImportacaoBase):
         self.assertIsNone(lancamento.valor_transacao)
         self.assertEqual(lancamento.area, Decimal('12.50'))
 
+    def test_detalhes_do_payload_nao_e_importado(self):
+        """#328: detalhes não existe no formulário de lançamento — não é
+        importado, mesmo vindo no payload do A3."""
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['detalhes'] = self._campo(
+            'Detalhes do ato', 'Escritura Pública de Compra e Venda',
+        )
+        extracao = self._extracao(payload)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        (lancamento,) = Lancamento.objects.all()
+        self.assertIsNone(lancamento.detalhes)
+
+    def test_linha_antiga_de_detalhes_e_ignorada(self):
+        """#328: extração antiga salva com a linha importa sem erro.
+
+        Sem o filtro, a linha pendente com ``requer_revisao=True`` viraria
+        ``revisao_pendente`` e ``dados_revisados`` recusaria a extração
+        (mesmo caso do valor_transacao, Tarefa C #322).
+        """
+        extracao = self._extracao(payload_registro(self.job.job_id))
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/detalhes',
+            raw='Detalhes antigos',
+            normalized='Detalhes antigos',
+            tipo_valor='texto',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        (lancamento,) = Lancamento.objects.all()
+        self.assertIsNone(lancamento.detalhes)
+        self.assertEqual(lancamento.area, Decimal('12.50'))
+
 
 class VinculoOrigemTest(ImportacaoBase):
     """Cenário 2: origem estruturada + vínculo de auditoria com PDF."""

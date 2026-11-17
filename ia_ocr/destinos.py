@@ -120,14 +120,13 @@ DESTINOS = {
         'dominial.Lancamento', 'numero_lancamento', 'texto',
     ),
     '/acts/*/data': ('dominial.Lancamento', 'data', 'data'),
-    # '/acts/*/valor_transacao' sem destino (Tarefa C #322): o campo não
-    # existe no formulário de lançamento; a folha do schema A3 é ignorada
-    # (revisao.LINHAS_IGNORADAS).
+    # '/acts/*/valor_transacao' e '/acts/*/detalhes' sem destino (Tarefa C
+    # #322 e #328): os campos não existem no formulário de lançamento; as
+    # folhas do schema A3 são ignoradas (revisao.LINHAS_IGNORADAS).
     '/acts/*/area': ('dominial.Lancamento', 'area', 'area'),
     '/acts/*/titulo': ('dominial.Lancamento', 'titulo', 'texto'),
     '/acts/*/forma': ('dominial.Lancamento', 'forma', 'texto'),
     '/acts/*/descricao': ('dominial.Lancamento', 'descricao', 'texto'),
-    '/acts/*/detalhes': ('dominial.Lancamento', 'detalhes', 'texto'),
     '/acts/*/observacoes': ('dominial.Lancamento', 'observacoes', 'texto'),
     '/acts/*/origem/tipo_documento': (
         'dominial.LancamentoOrigem', 'tipo_documento', 'enum',
