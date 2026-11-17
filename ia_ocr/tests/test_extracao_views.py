@@ -847,18 +847,26 @@ class ExtracaoViewsTest(TelaTextoBase):
                 chaves = [campo.chave for campo in contexto['campos']]
                 self.assertEqual(chaves, sorted(chaves))
                 agrupados = [
-                    campo for grupo in contexto['por_destino'].values() for campo in grupo
+                    campo for secao in contexto['secoes']
+                    if secao['tipo'] != 'nao_reconhecidos'
+                    for campo in secao['campos']
                 ]
                 self.assertCountEqual(agrupados, contexto['campos'])
+                documento = contexto['secoes'][0]
+                self.assertEqual(documento['tipo'], 'documento')
                 self.assertEqual(
-                    contexto['por_destino']['dominial.Documento.data'],
+                    [campo for campo in documento['campos']
+                     if campo.chave == '/document/data'],
                     [vigente.campos.get(chave='/document/data')],
                 )
                 self.assertEqual(contexto['pendencias'], [
                     revisao.descrever_pendencia(item)
                     for item in revisao.pendencias(vigente)
                 ])
-                self.assertEqual(contexto['avisos'], revisao.avisos(vigente))
+                self.assertEqual(contexto['avisos'], [
+                    dict(item, local=revisao._local_da_chave(item['chave']))
+                    for item in revisao.avisos(vigente)
+                ])
                 self.assertEqual(contexto['versao'], services.versao_bloco(vigente))
                 self.assertEqual(contexto['somente_leitura'], status == estados.REVISADO)
                 self.assertEqual(contexto['dpi'], dpi or 200)

@@ -42,10 +42,11 @@ from datetime import date
 from decimal import Decimal
 
 from django.utils import timezone
+from django.utils.text import slugify
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
 
-from . import destinos, valores
+from . import destinos, rotulos, valores
 from .models import CampoSugerido
 from .rotulos import resolver_tipo, tipo_do_rotulo
 
@@ -830,8 +831,10 @@ _ACAO_PENDENCIA = {
 }
 _ACAO_OBRIGATORIO = {
     'tipo': 'informe o tipo do documento',
+    'tipo_sugerido': 'informe o tipo do lançamento',
     'data': 'informe a data',
     'cartorio': 'escolha o cartório',
+    'cartorio_transmissao': 'escolha o cadastro do cartório da transmissão',
 }
 
 # Onde está o campo citado pela pendência (Greptile P2 #317): índices 1-based.
@@ -920,12 +923,23 @@ def descrever_pendencia(item: dict, sem_atos_liberado: bool = False) -> dict:
     if rotulo is None:
         # Motivo fora do mapa: o código cru fica só no <details> (``motivo``).
         rotulo, acao = 'Pendência a revisar', 'revise o campo'
+    # Âncora da pendência (I-11a #321, §5): o ``id`` do input do campo na
+    # tela — ``campo-<chave slugificada>``, o MESMO que o template gera.
+    # ``nenhum_ato`` aponta para o checkbox de confirmação, que só existe
+    # com a flag ligada; sem ela (ou sem chave) não há link.
+    if motivo == 'nenhum_ato':
+        alvo = 'campo-sem-atos' if sem_atos_liberado else None
+    elif isinstance(chave, str) and chave:
+        alvo = 'campo-' + slugify(chave)
+    else:
+        alvo = None
     return {
         'chave': chave,
         'motivo': motivo,
         'local': _local_da_chave(chave),
         'rotulo': rotulo,
         'acao': acao,
+        'alvo': alvo,
     }
 
 
@@ -1097,6 +1111,268 @@ def avisos(extracao) -> list[dict]:
                     'motivo': 'requer_transmissao', 'bloqueante': False,
                 })
     return resultado
+
+
+# ---------------------------------------------------------------------------
+# Tela de revisão como formulário de lançamento (I-11a / #321)
+# ---------------------------------------------------------------------------
+
+# Rótulo de negócio pela FOLHA da chave (último segmento): o formulário de
+# lançamento manda — a chave crua nunca vira rótulo visível. ``partes`` e
+# ``origem`` rotulam os GRUPOS da seção do ato, não uma linha.
+ROTULOS_CAMPO = {
+    'tipo_sugerido': 'Tipo do lançamento',
+    'numero_lancamento': 'Número',
+    'data': 'Data',
+    'forma': 'Forma',
+    'titulo': 'Título',
+    'descricao': 'Descrição',
+    'area': 'Área (ha)',
+    'observacoes': 'Observações',
+    'cartorio_transmissao': 'Cartório da transmissão',
+    'livro': 'Livro',
+    'folha': 'Folha',
+    'imovel_descricao': 'Descrição do imóvel',
+    'numero': 'Número do documento',
+    'cartorio': 'Cartório',
+    'tipo': 'Tipo do documento',
+    'tipo_documento': 'Tipo do documento',
+    'nome': 'Nome',
+    'partes': 'Partes',
+    'origem': 'Origem',
+    # Folhas fora do formulário (seção "Outros dados lidos") conhecidas do
+    # A3: rótulo humano em vez do fallback mecânico.
+    'cri_atual': 'CRI atual',
+    'rotulo': 'Rótulo do ato',
+    'detalhes': 'Detalhes',
+    'eh_inicio_matricula': 'Início de matrícula',
+    'valor': 'Documento da parte',
+    'indicio_fim_cadeia': 'Indício de fim de cadeia',
+    'origem_publica_sugerida': 'Origem pública sugerida',
+    'classificacao_sugerida': 'Classificação sugerida',
+}
+
+# Campos que o formulário de lançamento tem (§2 do #321): abrem linha na
+# seção própria; todo o resto (``cri_atual``, ``rotulo``, ``detalhes``,
+# ``eh_inicio_matricula``, ``closure/*``, desconhecidos) vai para "Outros
+# dados lidos".
+CAMPOS_DO_FORMULARIO_DOCUMENTO = (
+    'tipo', 'numero', 'data', 'cartorio', 'livro', 'folha',
+    'imovel_descricao', 'area',
+)
+CAMPOS_DO_FORMULARIO_ATO = (
+    'tipo_sugerido', 'numero_lancamento', 'data', 'forma', 'titulo',
+    'descricao', 'area', 'partes', 'cartorio_transmissao', 'origem',
+    'observacoes',
+)
+
+_ORDEM_DOCUMENTO = {
+    nome: ordem for ordem, nome in enumerate(CAMPOS_DO_FORMULARIO_DOCUMENTO)
+}
+_ORDEM_ATO = {
+    nome: ordem for ordem, nome in enumerate(CAMPOS_DO_FORMULARIO_ATO)
+}
+_ORDEM_PARTE = {
+    None: -1,
+    'nome': 0,
+    'documento_identificacao/tipo': 1,
+    'documento_identificacao/valor': 2,
+}
+_ORDEM_ORIGEM = {
+    'cartorio': 0, 'tipo_documento': 1, 'numero': 2, 'livro': 3,
+    'folha': 4, 'data': 5,
+}
+_TEXTO_NAO_RECONHECIDO = {
+    'vazio': 'rótulo vazio',
+    'sem_prefixo': 'não começa com R ou Av',
+    'prefixo_desconhecido': 'prefixo desconhecido',
+    'sem_numero': 'sem número do ato',
+}
+_TEXTO_LONGO = frozenset(
+    {'descricao', 'detalhes', 'observacoes', 'imovel_descricao'},
+)
+
+# Linha estrutural no fim da chave: ``/acts/{n}`` ou ``.../partes/{m}``.
+_ESTRUTURAL_NUMERADO = re.compile(r'(?:^|/)(acts|partes)/(\d+)$')
+_PARTE_NUMERADA = re.compile(r'partes/(\d+)(?:/(.*))?')
+
+
+def rotulo_de_campo(chave) -> str:
+    """Rótulo de negócio da linha: ``ROTULOS_CAMPO`` pela folha da chave.
+
+    Linha estrutural de ato (``/acts/{n}``) e de parte
+    (``/acts/{n}/partes/{m}``) não têm folha nominal: viram ``Ato {n+1}``
+    e ``Parte {m+1}``. Folha desconhecida cai no fallback — último
+    segmento com ``_`` por espaço e inicial maiúscula, NUNCA a chave
+    inteira. Chave ausente/não-string → ``''`` (a tela não derruba).
+    """
+    if not isinstance(chave, str) or not chave:
+        return ''
+    estrutural = _ESTRUTURAL_NUMERADO.search(chave)
+    if estrutural is not None:
+        nome, numero = estrutural.groups()
+        artigo = 'Ato' if nome == 'acts' else 'Parte'
+        return f'{artigo} {int(numero) + 1}'
+    folha = chave.rstrip('/').rsplit('/', 1)[-1]
+    if folha in ROTULOS_CAMPO:
+        return ROTULOS_CAMPO[folha]
+    if not folha:
+        return ''
+    texto = folha.replace('_', ' ')
+    return texto[:1].upper() + texto[1:]
+
+
+def _ordem_no_formulario_do_ato(resto):
+    """Chave de ordenação da linha na seção do ato; ``None`` se não é campo.
+
+    A ordem é a do formulário (§2): ``tipo_sugerido`` … ``observacoes``,
+    com ``partes/{m}`` ordenada por índice NUMÉRICO (a ordenação por chave
+    em texto colocaria ``partes/10`` antes de ``partes/2``) e ``origem``
+    na ordem cartório → documento → número → livro → folha → data.
+    """
+    nome = resto.split('/', 1)[0]
+    ordem = _ORDEM_ATO.get(nome)
+    if ordem is None or ('/' in resto and nome not in ('partes', 'origem')):
+        return None
+    if nome == 'partes':
+        achado = _PARTE_NUMERADA.fullmatch(resto)
+        if achado is None:
+            return (ordem, 10**6, 999, resto)
+        indice, sub = achado.groups()
+        return (ordem, int(indice), _ORDEM_PARTE.get(sub, 99), sub or '')
+    if nome == 'origem':
+        sub = resto[len('origem/'):]
+        return (ordem, _ORDEM_ORIGEM.get(sub, 99), resto, '')
+    return (ordem, 0, resto, '')
+
+
+def secoes_da_tela(campos, payload=None, tipos_display=None):
+    """Linhas da revisão agrupadas como o formulário de lançamento (#321).
+
+    Ordem das seções: **Documento** (campos do cabeçalho que o formulário
+    tem), um bloco por **ato** em ordem REVERSA de ``/acts/{n}`` (título
+    ``Ato {rotulo}`` pelo ``rotulo_efetivo``, senão ``Ato {n+1}``),
+    **Não reconhecidos** (só quando
+    ``rotulos.classificar_atos(payload)`` devolve itens — informativo,
+    sem card) e **Outros dados lidos** (o que não é campo do formulário,
+    recolhido por padrão na tela). Cada seção devolve
+    ``{'tipo', 'titulo', 'chave_ato', 'campos'}``; a de ato ainda traz
+    ``tipo_codigo``/``tipo_display`` do ``tipo_exibido`` do resolvedor e
+    ``descartado`` da linha estrutural, sempre a primeira do bloco.
+
+    Função PURA — nenhuma query nem alteração das linhas recebidas.
+    ``campos`` entra como a view prepara (com ``tipo_exibido`` na linha
+    de tipo); além de agrupar, anota em uma cópia de cada
+    linha ``rotulo_tela`` (rótulo de negócio), ``grupo_rotulo``
+    (``'Partes'``/``'Origem'`` para o cabeçalho do grupo no template) e
+    ``texto_longo`` (descrições e campos de texto viram ``<textarea>``).
+    """
+    documento, outros = [], []
+    atos = {}
+    linhas = {}
+    for campo in campos:
+        campo = copy.copy(campo)
+        chave = getattr(campo, 'chave', '')
+        if isinstance(chave, str):
+            linhas[chave] = campo
+        campo.rotulo_tela = rotulo_de_campo(chave)
+        campo.grupo_rotulo = None
+        campo.texto_longo = (
+            isinstance(chave, str)
+            and chave.rstrip('/').rsplit('/', 1)[-1] in _TEXTO_LONGO
+        )
+        if isinstance(chave, str) and chave.startswith('/document/'):
+            if chave[len('/document/'):] in _ORDEM_DOCUMENTO:
+                documento.append(campo)
+            else:
+                outros.append(campo)
+            continue
+        achado = (
+            _CHAVE_ATO_LOCAL.fullmatch(chave)
+            if isinstance(chave, str) else None
+        )
+        if achado is None:
+            outros.append(campo)
+            continue
+        indice, resto = achado.groups()
+        ato = atos.setdefault(
+            f'/acts/{indice}', {'tipo': None, 'campos': [], 'descartado': False},
+        )
+        if not resto:
+            # O Incluir desta linha decide o descarte do ato inteiro.
+            campo.ordem_formulario = (-1, 0, '', '')
+            ato['campos'].append(campo)
+            ato['descartado'] = campo.status_revisao == 'descartado'
+            continue
+        ordem = _ordem_no_formulario_do_ato(resto)
+        if ordem is None:
+            outros.append(campo)
+            continue
+        if resto == 'tipo_sugerido':
+            ato['tipo'] = getattr(campo, 'tipo_exibido', None) or None
+        if resto.startswith('partes/'):
+            campo.grupo_rotulo = ROTULOS_CAMPO['partes']
+        elif resto == 'origem' or resto.startswith('origem/'):
+            campo.grupo_rotulo = ROTULOS_CAMPO['origem']
+        campo.ordem_formulario = ordem
+        ato['campos'].append(campo)
+
+    secoes = [{
+        'tipo': 'documento',
+        'titulo': 'Documento',
+        'chave_ato': None,
+        'campos': sorted(
+            documento,
+            key=lambda campo: _ORDEM_DOCUMENTO[
+                campo.chave[len('/document/'):]
+            ],
+        ),
+    }]
+    for chave_ato in sorted(
+        atos, key=lambda chave: int(chave.rsplit('/', 1)[1]), reverse=True,
+    ):
+        ato = atos[chave_ato]
+        numero = int(chave_ato.rsplit('/', 1)[1]) + 1
+        rotulo = rotulo_efetivo(chave_ato, linhas)
+        secoes.append({
+            'tipo': 'ato',
+            'titulo': f'Ato {rotulo}' if rotulo else f'Ato {numero}',
+            'chave_ato': chave_ato,
+            'descartado': ato['descartado'],
+            'tipo_codigo': ato['tipo'],
+            'tipo_display': (
+                (tipos_display or {}).get(ato['tipo'])
+                if ato['tipo'] else None
+            ),
+            'campos': sorted(ato['campos'], key=lambda c: c.ordem_formulario),
+        })
+    if payload is not None:
+        nao_reconhecidos = rotulos.classificar_atos(payload).nao_reconhecidos
+        if nao_reconhecidos:
+            secoes.append({
+                'tipo': 'nao_reconhecidos',
+                'titulo': 'Não reconhecidos',
+                'chave_ato': None,
+                'campos': [
+                    {
+                        'ordem': item.get('ordem'),
+                        'rotulo': item.get('rotulo'),
+                        'motivo': _TEXTO_NAO_RECONHECIDO.get(
+                            item.get('motivo'), 'rótulo não reconhecido',
+                        ),
+                    }
+                    for item in nao_reconhecidos
+                ],
+            })
+    if outros:
+        secoes.append({
+            'tipo': 'outros',
+            'titulo': 'Outros dados lidos',
+            'chave_ato': None,
+            'campos': outros,
+            'pendente': any(getattr(campo, 'pendente', False) for campo in outros),
+        })
+    return secoes
 
 
 def desnormalizar(extracao, payload, paginas) -> list[CampoSugerido]:

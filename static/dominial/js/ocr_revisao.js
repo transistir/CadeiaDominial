@@ -58,29 +58,6 @@
             : [];
         // Último envio de cada card falhou: finalizar não pode ignorá-los.
         var falhas = new Set();
-        // Chaves de atos distintos na mesma tela: sem o prefixo, "tipo" ou
-        // "data" de atos diferentes ficam com o mesmo rótulo.
-        var atosNaTela = new Set();
-        cards.forEach(function (card) {
-            var ato = /\/acts\/(\d+)(?:\/|$)/.exec(card.getAttribute('data-chave') || '');
-            if (ato) atosNaTela.add(ato[1]);
-        });
-
-        function rotular(card) {
-            var rotulo = card.querySelector('[data-campo-rotulo]');
-            if (!rotulo) return;
-            var chave = card.getAttribute('data-chave') || '';
-            var partes = chave.split('/').filter(Boolean);
-            var ultimo = partes.length ? partes[partes.length - 1] : '';
-            if (!ultimo) return;
-            var texto = ultimo.replace(/_/g, ' ');
-            var ato = /\/acts\/(\d+)(?:\/|$)/.exec(chave);
-            if (ato && atosNaTela.size > 1) {
-                texto = 'Ato ' + (parseInt(ato[1], 10) + 1) + ' · ' + texto;
-            }
-            rotulo.textContent = texto;
-        }
-
         function controlesDaRevisao() {
             return Array.prototype.slice.call(
                 raiz.querySelectorAll('input, select, textarea, button')
@@ -167,6 +144,75 @@
                     ? (semAtosElegivel && !modoSemAtos() ? AVISO_SEM_ATOS : AVISO_RECARGA)
                     : '';
             }
+        }
+
+        // Texto da opção selecionada no <select> de tipo do ato. Só o texto
+        // entra no DOM (nunca HTML), e o alvo fica oculto quando não há tipo.
+        function textoDaOpcaoSelecionada(select) {
+            if (!select || select.value === '' || select.value === null
+                    || select.value === undefined) {
+                return null;
+            }
+            var opcoes = select.querySelectorAll
+                ? Array.prototype.slice.call(select.querySelectorAll('option'))
+                : [];
+            for (var i = 0; i < opcoes.length; i += 1) {
+                if (opcoes[i].getAttribute('value') === select.value) {
+                    return opcoes[i].textContent || null;
+                }
+            }
+            return null;
+        }
+
+        // I-11a (§321 / PR #336): o save 200 só recarregava o contador global
+        // da página; a seção do ato mantinha contagem, marcador "Ato
+        // descartado" e tipo congelados. Recalcula cada alvo da seção a
+        // partir do array ``pendencias`` já devolvido pelo endpoint (chave
+        // ``/acts/N`` ou prefixo ``/acts/N/``) — nada de contar no DOM. O
+        // marcador/descarte sai do checkbox ``data-campo-incluir`` da linha
+        // ``/acts/N`` e o tipo do texto da opção selecionada no select.
+        function atualizarSecoes(pendencias) {
+            Array.prototype.slice.call(
+                raiz.querySelectorAll('[data-secao="ato"]')
+            ).forEach(function (secao) {
+                var chaveAto = secao.getAttribute('data-chave-ato');
+                if (!chaveAto) return;
+
+                var total = 0;
+                pendencias.forEach(function (item) {
+                    var chave = item && item.chave;
+                    if (typeof chave === 'string'
+                            && (chave === chaveAto
+                                || chave.indexOf(chaveAto + '/') === 0)) {
+                        total += 1;
+                    }
+                });
+                var alvoPendencias = secao.querySelector('[data-secao-pendencias]');
+                if (alvoPendencias) {
+                    alvoPendencias.textContent = total + ' '
+                        + (total === 1 ? 'pendência' : 'pendências') + ' do ato';
+                }
+
+                var linhaAto = secao.querySelector('[data-chave="' + chaveAto + '"]');
+                var incluirAto = linhaAto
+                    && linhaAto.querySelector('[data-campo-incluir]');
+                var descartado = incluirAto ? !incluirAto.checked : false;
+                var alvoDescartado = secao.querySelector('[data-secao-descartado]');
+                if (alvoDescartado) alvoDescartado.hidden = !descartado;
+                secao.classList.toggle('descartado', descartado);
+
+                var alvoTipo = secao.querySelector('[data-secao-tipo]');
+                if (alvoTipo) {
+                    var linhaTipo = secao.querySelector(
+                        '[data-chave="' + chaveAto + '/tipo_sugerido"]'
+                    );
+                    var selectTipo = linhaTipo
+                        && linhaTipo.querySelector('[data-campo-valor]');
+                    var tipo = textoDaOpcaoSelecionada(selectTipo);
+                    alvoTipo.hidden = !tipo;
+                    alvoTipo.textContent = tipo ? tipo + ' · ' : '';
+                }
+            });
         }
 
         function modoSemAtos() {
@@ -318,6 +364,7 @@
                         }
                         if (Array.isArray(dados.pendencias)) {
                             atualizarPendencias(dados.pendencias);
+                            atualizarSecoes(dados.pendencias);
                         }
                         // A identidade de uma parte mudou e a escolha antiga
                         // foi zerada no servidor. Não recarrega no meio da
@@ -386,8 +433,6 @@
             if (tag !== 'INPUT') return false;
             return ['checkbox', 'radio', 'button', 'submit'].indexOf(elemento.type) === -1;
         }
-
-        cards.forEach(rotular);
 
         raiz.addEventListener('input', function (evento) {
             var card = cardDe(evento.target);

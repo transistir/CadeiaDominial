@@ -19,6 +19,7 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import decorator_from_middleware
+from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -26,7 +27,7 @@ from django.views.decorators.http import require_GET, require_POST
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
 from dominial.views.documento_digital_views import _get_contexto_documento
 
-from . import destinos, estados, revisao, rotulos, services, valores
+from . import estados, revisao, rotulos, services, valores
 from . import importacao
 from .diff import segmentos_diff
 from .estados import TransicaoConcorrente, TransicaoInvalida
@@ -631,20 +632,13 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
                 campo.chave.rsplit('/', 1)[0], (None, 'nenhum'),
             )
             campo.tipo_exibido = '' if origem == 'limpo' else tipo
-    efetivos = {
-        campo.chave: campo.valor_final if campo.valor_final is not None else campo.normalized
-        for campo in campos
-    }
-    por_destino = {}
-    for campo in campos:
-        contexto = [efetivos[campo.chave]]
-        if campo.chave.endswith('/documento_identificacao/valor'):
-            contexto.insert(0, efetivos.get(campo.chave.rsplit('/', 1)[0] + '/tipo'))
-        try:
-            destino = destinos.destino_de(campo.chave, *contexto)
-        except destinos.ChaveDesconhecida:
-            destino = destinos.SEM_DESTINO
-        por_destino.setdefault(destino.campo_modelo or 'SEM_DESTINO', []).append(campo)
+    # I-11a (#321): a tela agrupa como o FORMULÁRIO de lançamento — seção
+    # Documento, um bloco por ato em ordem reversa, não reconhecidos e
+    # "Outros dados lidos" —, não mais por destino técnico
+    # (``dominial.Lancamento.tipo``/``SEM_DESTINO``). As opções do <select>
+    # são calculadas UMA vez: o display do subtítulo do ato sai da mesma
+    # fonte que desenha as opções.
+    opcoes_tipo = _opcoes_tipo_sugerido()
     somente_leitura = job.status == estados.REVISADO
     pendencias = services._com_bloqueios_de_campo(
         revisao.pendencias(extracao), extracao,
@@ -655,6 +649,42 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     permitir_sem_atos = (
         services.pode_finalizar_sem_atos(extracao) and not somente_leitura
     )
+    # Detalhe técnico do card abre sozinho no campo com pendência, e o
+    # cabeçalho do ato conta as pendências que o bloqueiam.
+    chaves_pendentes = {item['chave'] for item in pendencias}
+    for campo in campos:
+        campo.pendente = campo.chave in chaves_pendentes
+    secoes = revisao.secoes_da_tela(
+        campos,
+        payload=extracao.payload_servico or extracao.payload,
+        tipos_display={
+            opcao['codigo']: opcao['display'] for opcao in opcoes_tipo
+        },
+    )
+    for secao in secoes:
+        if secao['tipo'] != 'ato':
+            continue
+        prefixo = secao['chave_ato']
+        secao['pendencias_do_ato'] = sum(
+            1 for item in pendencias
+            if item['chave'] == prefixo
+            or (
+                isinstance(item['chave'], str)
+                and item['chave'].startswith(prefixo + '/')
+            )
+        )
+    # Âncora da pendência só quando o alvo existe na tela: linha sem card
+    # (estado antigo) não vira link morto (#321 §5).
+    ids_da_tela = {'campo-' + slugify(campo.chave) for campo in campos}
+    if permitir_sem_atos:
+        ids_da_tela.add('campo-sem-atos')
+    pendencias_descritas = [
+        revisao.descrever_pendencia(item, permitir_sem_atos)
+        for item in pendencias
+    ]
+    for item in pendencias_descritas:
+        if item['alvo'] is not None and item['alvo'] not in ids_da_tela:
+            item['alvo'] = None
     return render(request, 'ia_ocr/revisao_campos.html', {
         'tis': tis,
         'imovel': imovel,
@@ -663,18 +693,18 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'job': job,
         'extracao': extracao,
         'campos': campos,
-        'por_destino': por_destino,
+        'secoes': secoes,
         # Tarefa B #322: o tipo é <select> como no formulário de lançamento;
         # as opções e o enum aceito no save vêm da MESMA fonte (contrato A3).
-        'opcoes_tipo_sugerido': _opcoes_tipo_sugerido(),
+        'opcoes_tipo_sugerido': opcoes_tipo,
         'codigos_tipo_sugerido': list(rotulos.TIPOS_SUGERIDOS),
-        'pendencias': [
-            revisao.descrever_pendencia(item, permitir_sem_atos)
-            for item in pendencias
-        ],
+        'pendencias': pendencias_descritas,
         'pendencias_total': len(pendencias),
         'permitir_sem_atos': permitir_sem_atos,
-        'avisos': revisao.avisos(extracao),
+        'avisos': [
+            dict(item, local=revisao._local_da_chave(item['chave']))
+            for item in revisao.avisos(extracao)
+        ],
         'versao': versao,
         'somente_leitura': somente_leitura,
         'dpi': job.dpi or 200,

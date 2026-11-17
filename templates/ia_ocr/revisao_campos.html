@@ -31,11 +31,12 @@
 
     {% if pendencias %}
     <section class="revisao-bloco" aria-labelledby="ocr-pendencias-titulo" data-ocr-pendencias>
-        <h2 class="h6" id="ocr-pendencias-titulo">Pendências</h2>
+        {# I-11a (#321): h3 — o primeiro h2 da página é a seção "Documento" do formulário. #}
+        <h3 class="h6" id="ocr-pendencias-titulo">Pendências</h3>
         <ul class="revisao-lista">
             {% for item in pendencias %}
-            <li class="pendencia" title="{{ item.chave }} — {{ item.motivo }}">
-                {% if item.local %}{{ item.local }}: {% endif %}{{ item.rotulo }}{% if item.acao %} — {{ item.acao }}{% endif %}
+            <li class="pendencia">
+                {% if item.alvo %}<a href="#{{ item.alvo }}">{% endif %}{% if item.local %}{{ item.local }}: {% endif %}{{ item.rotulo }}{% if item.acao %} — {{ item.acao }}{% endif %}{% if item.alvo %}</a>{% endif %}
                 <details><summary>Detalhe técnico</summary><code>{{ item.chave }}</code> — <code>{{ item.motivo }}</code></details>
             </li>
             {% endfor %}
@@ -49,13 +50,13 @@
        explícita do revisor, sem fabricar atos nem esconder a ausência.
     {% endcomment %}
     <section class="revisao-bloco" aria-labelledby="ocr-sem-atos-titulo" data-ocr-aviso-sem-atos>
-        <h2 class="h6" id="ocr-sem-atos-titulo">0 atos reconhecidos</h2>
+        <h3 class="h6" id="ocr-sem-atos-titulo">0 atos reconhecidos</h3>
         <p class="mb-2">
             Nenhum ato foi reconhecido neste documento. Se isso estiver correto,
             confirme abaixo para concluir a revisão sem importar atos.
         </p>
-        <label class="campo-check">
-            <input type="checkbox" data-ocr-sem-atos{% if somente_leitura %} disabled{% endif %}>
+        <label class="campo-check" for="campo-sem-atos">
+            <input type="checkbox" id="campo-sem-atos" data-ocr-sem-atos{% if somente_leitura %} disabled{% endif %}>
             Confirmo que este documento não tem atos a importar
         </label>
     </section>
@@ -63,139 +64,169 @@
 
     {% if avisos %}
     <section class="revisao-bloco" aria-labelledby="ocr-avisos-titulo" data-ocr-avisos>
-        <h2 class="h6" id="ocr-avisos-titulo">Avisos</h2>
+        <h3 class="h6" id="ocr-avisos-titulo">Avisos</h3>
         <ul class="revisao-lista">
             {% for item in avisos %}
-            <li class="aviso"><code>{{ item.chave }}</code> — {{ item.motivo }}</li>
+            <li class="aviso">
+                {% if item.local %}{{ item.local }}: {% endif %}Campo recomendado não preenchido
+                <details><summary>Detalhe técnico</summary><code>{{ item.chave }}</code> — <code>{{ item.motivo }}</code></details>
+            </li>
             {% endfor %}
         </ul>
     </section>
     {% endif %}
 
     <div id="revisao">
-        {% for destino, grupo in por_destino.items %}
-        <section class="revisao-destino" aria-labelledby="ocr-destino-{{ forloop.counter }}">
-            <h2 class="h5" id="ocr-destino-{{ forloop.counter }}">
-                {% if destino == 'SEM_DESTINO' %}Sem destino — só conferência{% else %}{{ destino|cut:'dominial.' }}{% endif %}
-            </h2>
+        {% for secao in secoes %}
+        <section class="revisao-secao{% if secao.descartado %} descartado{% endif %}" data-secao="{{ secao.tipo }}"{% if secao.chave_ato %} data-chave-ato="{{ secao.chave_ato }}"{% endif %}>
+            <h2 class="h5">{{ secao.titulo }}</h2>
 
-            {% for campo in grupo %}
-            <article class="campo{% if campo.status_revisao == 'descartado' and not campo.obrigatorio %} descartado{% endif %}"
-                     data-chave="{{ campo.chave }}"
-                     data-versao="{{ versao }}"
-                     data-campo
-                     tabindex="-1">
-                <header class="campo-cabecalho">
-                    {# O JS troca o texto pelo último segmento da chave; a chave completa fica no title. #}
-                    <label class="campo-rotulo" for="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" title="{{ campo.chave }}" data-campo-rotulo>{{ campo.chave }}</label>
+            {% if secao.tipo == 'ato' %}
+            <p class="secao-meta">
+                {# I-11a (§321 / PR #336): alvos estáveis para o save 200 atualizar a seção sem reload. #}
+                <span data-secao-descartado{% if not secao.descartado %} hidden{% endif %}>Ato descartado · </span>
+                <span data-secao-tipo{% if not secao.tipo_display %} hidden{% endif %}>{% if secao.tipo_display %}{{ secao.tipo_display }} · {% endif %}</span>
+                <span data-secao-pendencias>{{ secao.pendencias_do_ato }} pendência{{ secao.pendencias_do_ato|pluralize }} do ato</span>
+            </p>
+            {% elif secao.tipo == 'nao_reconhecidos' %}
+            <ul class="revisao-lista nao-reconhecidos">
+                {% for item in secao.campos %}
+                <li class="nao-reconhecido">Ato {{ item.ordem }}: {{ item.rotulo|default:"—"|truncatechars:80 }} <small>({{ item.motivo }})</small></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
 
-                    {% if campo.confianca is None %}
-                    <span class="badge-confianca sem_confianca">Sem confiança</span>
-                    {% elif campo.confianca >= 0.95 %}
-                    <span class="badge-confianca alta">Confiança alta</span>
-                    {% elif campo.confianca >= 0.70 %}
-                    <span class="badge-confianca media">Confiança média</span>
-                    {% else %}
-                    <span class="badge-confianca baixa">Confiança baixa</span>
-                    {% endif %}
+            {% if secao.tipo != 'nao_reconhecidos' %}
+            {% if secao.tipo == 'outros' %}<details class="outros-dados"{% if secao.pendente %} open{% endif %}>
+                <summary>{{ secao.campos|length }} dado{{ secao.campos|length|pluralize }} lido{{ secao.campos|length|pluralize }} que não {{ secao.campos|length|pluralize:"faz,fazem" }} parte do formulário</summary>{% endif %}
+            <div class="revisao-campos">
+                {% for campo in secao.campos %}
+                {% ifchanged campo.grupo_rotulo %}{% if campo.grupo_rotulo %}<h3 class="campo-grupo">{{ campo.grupo_rotulo }}</h3>{% endif %}{% endifchanged %}
+                <article class="campo{% if campo.status_revisao == 'descartado' and not campo.obrigatorio %} descartado{% endif %}"
+                         data-chave="{{ campo.chave }}"
+                         data-versao="{{ versao }}"
+                         data-campo
+                         tabindex="-1">
+                    <div class="campo-linha">
+                        {# Rótulo de negócio (revisao.ROTULOS_CAMPO); a chave completa fica no detalhe técnico. #}
+                        <label class="campo-rotulo" for="campo-{{ campo.chave|slugify }}" data-campo-rotulo>{{ campo.rotulo_tela }}</label>
 
-                    {% for motivo in campo.motivos_revisao %}
-                    <span class="badge-motivo">{% if motivo == 'baixa_confianca' %}Baixa confiança{% elif motivo == 'normalizacao_invalida' %}Formato não reconhecido{% elif motivo == 'unidade_area' %}Converter unidade{% elif motivo == 'closure' %}Fim de cadeia{% elif motivo == 'evidencia_invalida' %}Evidência inválida{% elif motivo == 'trecho_ausente' %}Trecho não localizado{% elif motivo == 'match_invalidado' %}Vínculo invalidado{% elif motivo == 'criar_novo_sem_nome' %}Informe o nome do novo cartório{% else %}{{ motivo }}{% endif %}</span>
-                    {% endfor %}
-                </header>
-
-                <p class="campo-ocr">OCR: <span class="campo-raw">{{ campo.raw|default:"—" }}</span></p>
-
-                {% if campo.evidencia_pagina %}
-                <p class="campo-evidencia">
-                    <a href="{{ url_arquivo }}#page={{ campo.evidencia_pagina }}" target="_blank" rel="noopener">Página {{ campo.evidencia_pagina }}</a>
-                    {% if campo.evidencia_trecho %}<span class="campo-trecho" title="{{ campo.evidencia_trecho }}">{{ campo.evidencia_trecho|truncatechars:120 }}</span>{% endif %}
-                </p>
-                {% endif %}
-
-                {% if campo.eh_tipo_sugerido %}
-                {# Tarefa B #322: tipo é <select>, como no formulário de lançamento. As opções e o enum aceito no save vêm da MESMA fonte (rotulos.TIPOS_SUGERIDOS); valor efetivo fora delas ganha opção extra selecionada em vez de cair na vazia e apagar a sugestão no save seguinte (revisão Opus). #}
-                {# P2-2 (#322/PR #327, rodada 10): o selecionado é o campo.tipo_exibido vindo DO RESOLVEDOR da revisão (o mesmo de pendências/importação, inclusive linha descartada); origem 'limpo' (select apagado) exibe vazio. Nunca o normalized cru contra um rótulo divergente. #}
-                <select id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
-                        class="form-select campo-valor"
-                        data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>
-                    <option value=""></option>
-                    {% with atual=campo.tipo_exibido %}
-                    {% for opcao in opcoes_tipo_sugerido %}
-                    <option value="{{ opcao.codigo }}"{% if opcao.codigo == atual %} selected{% endif %}>{{ opcao.display }}</option>
-                    {% endfor %}
-                    {% if atual and not atual in codigos_tipo_sugerido %}
-                    <option value="{{ atual }}" selected>{{ atual }}</option>
-                    {% endif %}
-                    {% endwith %}
-                </select>
-                {% elif campo.tipo_valor == 'texto' %}
-                <textarea id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
-                          class="form-control campo-valor" rows="3"
-                          data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>
-                {% else %}
-                <input id="campo-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
-                       class="form-control campo-valor"
-                       type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
-                       value="{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}"
-                       data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
-                {% endif %}
-
-                {% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' %}
-                {# Parte vincula pessoa; cartório vincula cartório. Único match já vem selecionado. #}
-                {% with escolhido=campo.pessoa_escolhida_id|default:campo.cartorio_escolhido_id %}
-                <div class="campo-escolha">
-                    {% if campo.opcoes_cadastro %}
-                    <label class="campo-sub">Cadastro correspondente
-                        <select class="form-select" data-ocr-escolha="{% if campo.tipo_valor == 'parte' %}pessoa_id{% else %}cartorio_id{% endif %}"{% if somente_leitura %} disabled{% endif %}>
-                            <option value="">— escolha —</option>
-                            {% for opcao in campo.opcoes_cadastro %}
-                            <option value="{{ opcao.id }}"{% if opcao.id == escolhido %} selected{% endif %}>{{ opcao.rotulo }}</option>
+                        {% if campo.eh_tipo_sugerido %}
+                        {# Tarefa B #322: tipo é <select>, como no formulário de lançamento. As opções e o enum aceito no save vêm da MESMA fonte (rotulos.TIPOS_SUGERIDOS); valor efetivo fora delas ganha opção extra selecionada em vez de cair na vazia e apagar a sugestão no save seguinte (revisão Opus). #}
+                        {# P2-2 (#322/PR #327, rodada 10): o selecionado é o campo.tipo_exibido vindo DO RESOLVEDOR da revisão (o mesmo de pendências/importação, inclusive linha descartada); origem 'limpo' (select apagado) exibe vazio. Nunca o normalized cru contra um rótulo divergente. #}
+                        <select id="campo-{{ campo.chave|slugify }}"
+                                class="form-select campo-valor"
+                                data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>
+                            <option value=""></option>
+                            {% with atual=campo.tipo_exibido %}
+                            {% for opcao in opcoes_tipo_sugerido %}
+                            <option value="{{ opcao.codigo }}"{% if opcao.codigo == atual %} selected{% endif %}>{{ opcao.display }}</option>
                             {% endfor %}
+                            {% if atual and not atual in codigos_tipo_sugerido %}
+                            <option value="{{ atual }}" selected>{{ atual }}</option>
+                            {% endif %}
+                            {% endwith %}
                         </select>
-                    </label>
-                    {% endif %}
-                    <label class="campo-check">
-                        <input type="checkbox" data-ocr-criar-novo{% if campo.criar_novo %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
-                        Criar novo cadastro
-                    </label>
-                </div>
-                {% endwith %}
-                {% endif %}
+                        {% elif campo.tipo_valor == 'texto' or campo.texto_longo %}
+                        <textarea id="campo-{{ campo.chave|slugify }}"
+                                  class="form-control campo-valor campo-valor-longo" rows="2"
+                                  data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>
+                        {% else %}
+                        <input id="campo-{{ campo.chave|slugify }}"
+                               class="form-control campo-valor"
+                               type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
+                               value="{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}"
+                               data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                        {% endif %}
 
-                {# area_convertida: sem os campos, um novo salvamento do card desfaria a conversão. #}
-                {% if 'unidade_area' in campo.motivos_revisao or campo.area_convertida %}
-                <div class="campo-conversao">
-                    <label class="campo-sub">Área convertida (ha)
-                        <input class="form-control" type="text" inputmode="decimal" name="ha_convertido"
-                               value="{% if campo.area_convertida %}{{ campo.valor_final|default:'' }}{% endif %}"
-                               data-campo-ha{% if somente_leitura %} disabled{% endif %}>
-                    </label>
-                    <label class="campo-check">
-                        <input type="checkbox" name="confirmo_conversao" data-campo-confirmo{% if campo.area_convertida %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
-                        Confirmo a conversão para hectares
-                    </label>
-                </div>
-                {% endif %}
+                        <span class="campo-acoes">
+                            {% if campo.obrigatorio %}
+                            <span class="badge-confianca alta">Obrigatório</span>
+                            {% else %}
+                            <label class="campo-check">
+                                <input type="checkbox" data-campo-incluir{% if campo.status_revisao != 'descartado' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                                Incluir
+                            </label>
+                            {% endif %}
+                            <label class="campo-check">
+                                <input type="checkbox" data-campo-conferido{% if campo.status_revisao == 'aceito' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                                Conferido
+                            </label>
+                            <small class="campo-estado" data-campo-estado role="status" aria-live="polite"></small>
+                        </span>
+                    </div>
 
-                <div class="campo-acoes">
-                    {% if campo.obrigatorio %}
-                    <span class="badge-confianca alta">Obrigatório</span>
-                    {% else %}
-                    <label class="campo-check">
-                        <input type="checkbox" data-campo-incluir{% if campo.status_revisao != 'descartado' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
-                        Incluir
-                    </label>
+                    {% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'cartorio' %}
+                    {# Parte vincula pessoa; cartório vincula cartório. Único match já vem selecionado. #}
+                    {% with escolhido=campo.pessoa_escolhida_id|default:campo.cartorio_escolhido_id %}
+                    <div class="campo-escolha">
+                        {% if campo.opcoes_cadastro %}
+                        <label class="campo-sub">Cadastro correspondente
+                            <select class="form-select" data-ocr-escolha="{% if campo.tipo_valor == 'parte' %}pessoa_id{% else %}cartorio_id{% endif %}"{% if somente_leitura %} disabled{% endif %}>
+                                <option value="">— escolha —</option>
+                                {% for opcao in campo.opcoes_cadastro %}
+                                <option value="{{ opcao.id }}"{% if opcao.id == escolhido %} selected{% endif %}>{{ opcao.rotulo }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                        <label class="campo-check">
+                            <input type="checkbox" data-ocr-criar-novo{% if campo.criar_novo %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                            Criar novo cadastro
+                        </label>
+                    </div>
+                    {% endwith %}
                     {% endif %}
-                    <label class="campo-check">
-                        <input type="checkbox" data-campo-conferido{% if campo.status_revisao == 'aceito' %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
-                        Conferido
-                    </label>
-                    <small class="campo-estado" data-campo-estado role="status" aria-live="polite"></small>
-                </div>
-                <p class="campo-erro" data-campo-erro role="alert" hidden></p>
-            </article>
-            {% endfor %}
+
+                    {# area_convertida: sem os campos, um novo salvamento do card desfaria a conversão. #}
+                    {% if 'unidade_area' in campo.motivos_revisao or campo.area_convertida %}
+                    <div class="campo-conversao">
+                        <label class="campo-sub">Área convertida (ha)
+                            <input class="form-control" type="text" inputmode="decimal" name="ha_convertido"
+                                   value="{% if campo.area_convertida %}{{ campo.valor_final|default:'' }}{% endif %}"
+                                   data-campo-ha{% if somente_leitura %} disabled{% endif %}>
+                        </label>
+                        <label class="campo-check">
+                            <input type="checkbox" name="confirmo_conversao" data-campo-confirmo{% if campo.area_convertida %} checked{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                            Confirmo a conversão para hectares
+                        </label>
+                    </div>
+                    {% endif %}
+
+                    <p class="campo-erro" data-campo-erro role="alert" hidden></p>
+
+                    {# I-11a (#321): OCR bruto, evidência e badges recolhidos por campo; abrem sozinhos quando há pendência. #}
+                    <details class="campo-detalhe"{% if campo.pendente %} open{% endif %}>
+                        <summary>Dados da leitura</summary>
+                        <p class="campo-chave"><code>{{ campo.chave }}</code></p>
+                        <p class="campo-ocr">OCR: <span class="campo-raw">{{ campo.raw|default:"—" }}</span></p>
+                        {% if campo.evidencia_pagina %}
+                        <p class="campo-evidencia">
+                            <a href="{{ url_arquivo }}#page={{ campo.evidencia_pagina }}" target="_blank" rel="noopener">Página {{ campo.evidencia_pagina }}</a>
+                            {% if campo.evidencia_trecho %}<span class="campo-trecho" title="{{ campo.evidencia_trecho }}">{{ campo.evidencia_trecho|truncatechars:120 }}</span>{% endif %}
+                        </p>
+                        {% endif %}
+                        <p class="campo-badges">
+                            {% if campo.confianca is None %}
+                            <span class="badge-confianca sem_confianca">Sem confiança</span>
+                            {% elif campo.confianca >= 0.95 %}
+                            <span class="badge-confianca alta">Confiança alta</span>
+                            {% elif campo.confianca >= 0.70 %}
+                            <span class="badge-confianca media">Confiança média</span>
+                            {% else %}
+                            <span class="badge-confianca baixa">Confiança baixa</span>
+                            {% endif %}
+
+                            {% for motivo in campo.motivos_revisao %}
+                            <span class="badge-motivo">{% if motivo == 'baixa_confianca' %}Baixa confiança{% elif motivo == 'normalizacao_invalida' %}Formato não reconhecido{% elif motivo == 'unidade_area' %}Converter unidade{% elif motivo == 'closure' %}Fim de cadeia{% elif motivo == 'evidencia_invalida' %}Evidência inválida{% elif motivo == 'trecho_ausente' %}Trecho não localizado{% elif motivo == 'match_invalidado' %}Vínculo invalidado{% elif motivo == 'criar_novo_sem_nome' %}Informe o nome do novo cartório{% else %}{{ motivo }}{% endif %}</span>
+                            {% endfor %}
+                        </p>
+                    </details>
+                </article>
+                {% endfor %}
+            </div>
+            {% if secao.tipo == 'outros' %}</details>{% endif %}
+            {% endif %}
         </section>
         {% endfor %}
     </div>
