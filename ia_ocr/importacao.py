@@ -550,13 +550,12 @@ def _importar_ato(
         # rodada 6) e vazio de verdade é None, não '' (#263 rodada 8).
         numero_lancamento=numero_lancamento or None,
         data=ato.data,
-        # valor_transacao não é importado (Tarefa C #322): o campo não
-        # existe no formulário de lançamento.
+        # valor_transacao e detalhes não são importados (Tarefa C #322 e
+        # #328): os campos não existem no formulário de lançamento.
         area=ato.area,
         titulo=ato.titulo,
         forma=ato.forma,
         descricao=ato.descricao,
-        detalhes=ato.detalhes,
         observacoes=ato.observacoes,
         eh_inicio_matricula=bool(ato.eh_inicio_matricula),
         cartorio_origem=cartorio_origem,

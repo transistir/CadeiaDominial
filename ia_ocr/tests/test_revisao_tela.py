@@ -874,6 +874,47 @@ class RevisaoTelaTest(TelaRevisaoBase):
         )
         self.assertEqual(finalizar.status_code, 200, finalizar.content)
 
+    def test_detalhes_do_payload_nao_vira_card_e_finaliza(self):
+        """#328: o campo não existe no formulário de lançamento."""
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['detalhes'] = _campo(
+            'Detalhes do ato', 'Escritura Pública de Compra e Venda',
+        )
+        extracao = self._extracao(payload, resolver=True)
+        self.assertEqual(revisao.pendencias(extracao), [])
+        self.assertNotIn('/acts/0/detalhes', self._chaves_na_tela())
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+
+    def test_linha_antiga_de_detalhes_nao_aparece_na_tela(self):
+        """#328: extração antiga com a linha salva — sem card."""
+        extracao = self._extracao(
+            payload_registro(self.job.job_id), resolver=True,
+        )
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/detalhes',
+            raw='Detalhes antigos',
+            normalized='Detalhes antigos',
+            tipo_valor='texto',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        self.assertNotIn('/acts/0/detalhes', self._chaves_na_tela())
+
+        finalizar = self.client.post(
+            self.url('finalizar_revisao_ocr'),
+            data=json.dumps({'versao': self._tela().context['versao']}),
+            content_type='application/json',
+        )
+        self.assertEqual(finalizar.status_code, 200, finalizar.content)
+
     def test_obrigatorio_vazio_continua_bloqueando_finalizacao(self):
         extracao = self._extracao(
             payload_registro(self.job.job_id), resolver=True,
@@ -1227,7 +1268,7 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         self.assertNotIn('open', _atributos(detalhe))
         chaves_outros = self._chaves_do_html(str(detalhe))
         for chave in (
-            '/acts/0/detalhes', '/acts/0/eh_inicio_matricula', '/acts/0/rotulo',
+            '/acts/0/eh_inicio_matricula', '/acts/0/rotulo',
             '/document/cri_atual',
             '/closure/indicio_fim_cadeia',
         ):
@@ -1284,7 +1325,9 @@ class FormularioPorAtoTest(TelaRevisaoBase):
 
     def test_pendencia_em_outros_abre_o_detalhe(self):
         extracao = self._extracao(self._payload_formulario(), resolver=True)
-        chave = '/acts/0/detalhes'
+        # #328: ``detalhes`` nem vira linha — a pendência exemplar em
+        # "outros dados" usa outra folha fora do formulário (``rotulo``).
+        chave = '/acts/0/rotulo'
         extracao.campos.filter(chave=chave).update(
             status_revisao='sugerido', requer_revisao=True,
         )
@@ -1845,11 +1888,12 @@ class TipoSugeridoSelectTest(TelaRevisaoBase):
 class LinhaIgnoradaSaveTest(TelaRevisaoBase):
     """Tarefa C #322 (revisão Opus): decisão sobre linha ignorada não é 500.
 
-    Extração antiga já salvou ``/acts/0/valor_transacao``; a folha não tem
-    mais destino (Tarefa C). Aba aberta antes do deploy pode reenviar o
-    card: o save recusa com 422 ``linha_inexistente``, sem gravar nada — e
-    o token da tela segue valendo para salvar OUTRO card (o token cobre
-    todas as linhas, inclusive a ignorada).
+    Extração antiga já salvou ``/acts/0/valor_transacao`` ou
+    ``/acts/0/detalhes`` (#328); as folhas não têm mais destino (Tarefa C).
+    Aba aberta antes do deploy pode reenviar o card: o save recusa com 422
+    ``linha_inexistente``, sem gravar nada — e o token da tela segue valendo
+    para salvar OUTRO card (o token cobre todas as linhas, inclusive a
+    ignorada).
     """
 
     def _extracao_antiga(self):
@@ -1862,30 +1906,45 @@ class LinhaIgnoradaSaveTest(TelaRevisaoBase):
             tipo_valor='decimal',
             status_revisao='aceito',
         )
+        CampoSugerido.objects.create(
+            extracao=extracao,
+            chave='/acts/0/detalhes',
+            raw='Detalhes antigos do ato',
+            normalized='Detalhes antigos do ato',
+            tipo_valor='texto',
+            status_revisao='aceito',
+        )
         return extracao
 
     def test_post_na_linha_ignorada_e_422_sem_gravar(self):
+        # #328 rodada 2 (Opus N-2): a recusa vale para as duas folhas sem
+        # destino — valor_transacao (#322) e detalhes (#328).
         extracao = self._extracao_antiga()
         versao = self._tela().context['versao']
 
-        salvar = self.client.post(
-            self.url('salvar_bloco_ocr'),
-            data=json.dumps({
-                'versao': versao,
-                'decisoes': [{
-                    'chave': '/acts/0/valor_transacao',
-                    'incluir': True, 'conferido': True, 'valor': '150000.00',
-                }],
-            }),
-            content_type='application/json',
-        )
+        for chave, valor in (
+            ('/acts/0/valor_transacao', '150000.00'),
+            ('/acts/0/detalhes', 'Detalhes antigos do ato'),
+        ):
+            with self.subTest(chave=chave):
+                salvar = self.client.post(
+                    self.url('salvar_bloco_ocr'),
+                    data=json.dumps({
+                        'versao': versao,
+                        'decisoes': [{
+                            'chave': chave,
+                            'incluir': True, 'conferido': True, 'valor': valor,
+                        }],
+                    }),
+                    content_type='application/json',
+                )
 
-        self.assertEqual(salvar.status_code, 422, salvar.content)
-        self.assertEqual(salvar.json()['erro'], 'linha_inexistente')
-        campo = extracao.campos.get(chave='/acts/0/valor_transacao')
-        self.assertIsNone(campo.valor_final)
-        # Nada foi gravado: o token da tela continua sendo o vigente.
-        self.assertEqual(services.versao_bloco(extracao), versao)
+                self.assertEqual(salvar.status_code, 422, salvar.content)
+                self.assertEqual(salvar.json()['erro'], 'linha_inexistente')
+                campo = extracao.campos.get(chave=chave)
+                self.assertIsNone(campo.valor_final)
+                # Nada foi gravado: o token da tela continua sendo o vigente.
+                self.assertEqual(services.versao_bloco(extracao), versao)
 
     def test_salvar_outro_card_com_o_token_da_tela_e_200(self):
         self._extracao_antiga()

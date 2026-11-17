@@ -171,30 +171,36 @@ class RevisaoServicesTest(TestCase):
         # Tarefa C #322 (revisão Opus): a chave EXISTE numa extração antiga,
         # mas a folha não tem mais destino — aplicar a decisão levantaria
         # ChaveDesconhecida (500). Recusa 4xx antes de gravar qualquer linha.
-        CampoSugerido.objects.create(
-            extracao=self.extracao,
-            chave='/acts/0/valor_transacao',
-            raw='R$ 150.000,00',
-            normalized='150000.00',
-            tipo_valor='decimal',
-            status_revisao='aceito',
-        )
-        versao = services.versao_bloco(self.extracao)
+        # #328 rodada 2 (Opus N-2): vale para as duas folhas sem destino.
+        for chave, raw, valor, tipo_valor in (
+            ('/acts/0/valor_transacao', 'R$ 150.000,00', '150000.00', 'decimal'),
+            ('/acts/0/detalhes', 'Detalhes antigos', 'Detalhes antigos', 'texto'),
+        ):
+            with self.subTest(chave=chave):
+                CampoSugerido.objects.create(
+                    extracao=self.extracao,
+                    chave=chave,
+                    raw=raw,
+                    normalized=valor,
+                    tipo_valor=tipo_valor,
+                    status_revisao='aceito',
+                )
+                versao = services.versao_bloco(self.extracao)
 
-        with self.assertRaises(services.ExtracaoRecusada) as contexto:
-            services.salvar_bloco(
-                self.extracao, {
-                    '/acts/0/valor_transacao': {
-                        'incluir': True, 'conferido': True,
-                        'valor': '150000.00',
-                    },
-                }, self.usuario, versao,
-            )
+                with self.assertRaises(services.ExtracaoRecusada) as contexto:
+                    services.salvar_bloco(
+                        self.extracao, {
+                            chave: {
+                                'incluir': True, 'conferido': True,
+                                'valor': valor,
+                            },
+                        }, self.usuario, versao,
+                    )
 
-        self.assertEqual(contexto.exception.code, 'linha_inexistente')
-        self.assertEqual(services.versao_bloco(self.extracao), versao)
-        campo = self.extracao.campos.get(chave='/acts/0/valor_transacao')
-        self.assertIsNone(campo.valor_final)
+                self.assertEqual(contexto.exception.code, 'linha_inexistente')
+                self.assertEqual(services.versao_bloco(self.extracao), versao)
+                campo = self.extracao.campos.get(chave=chave)
+                self.assertIsNone(campo.valor_final)
 
     def test_mudar_tipo_cria_linhas_exigidas_e_salva_nelas(self):
         LancamentoTipo.objects.create(

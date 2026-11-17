@@ -24,14 +24,15 @@ from ia_ocr.revisao import (
     AtoRevisado, DadosRevisados, DocumentoRevisado, ParteRevisada,
     RevisaoInvalidada, _tipos_efetivos, _valor_explicito, aplicar_linha,
     avisos, dados_revisados, desnormalizar,
-    garantir_placeholders_obrigatorios, pendencias, resolucoes_de_tipo,
-    versao_linha,
+    garantir_placeholders_obrigatorios, linha_ignorada, pendencias,
+    resolucoes_de_tipo, versao_linha,
 )
 
 from .factories import criar_documento_digital
 from .payloads_extracao import (
     SCHEMA_VERSION,
     TEXTO_PAGINA_1,
+    _campo,
     payload_averbacao,
     payload_com_closure,
     payload_registro,
@@ -767,7 +768,6 @@ class PendenciasEAvisosTest(TestCase):
         self.assertEqual(pendencias(self.extracao), [])
 
         for flag, caminho in (
-            ('requer_detalhes', 'detalhes'),
             ('requer_transmissao', 'partes'),
             ('requer_livro_origem', 'origem/livro'),
             ('requer_folha_origem', 'origem/folha'),
@@ -778,12 +778,17 @@ class PendenciasEAvisosTest(TestCase):
                 'chave': f'/acts/0/{caminho}', 'motivo': flag,
                 'bloqueante': False,
             })
+        # #328 rodada 2: a flag segue no tipo e fica ligada JUNTO das
+        # outras, mas ``detalhes`` não entra em ``esperados`` — devolver a
+        # tupla ``('requer_detalhes', 'detalhes')`` a ``avisos()`` quebra
+        # o teste abaixo.
+        self.averbacao.requer_detalhes = True
         self.averbacao.save()
         self.assertCountEqual(avisos(self.extracao), esperados)
         self.assertEqual(pendencias(self.extracao), [])
 
         ato = payload['acts'][0]
-        for campo in ('forma', 'detalhes', 'observacoes'):
+        for campo in ('forma', 'observacoes'):
             ato[campo] = ato['descricao'].copy()
         ato['origem'] = {
             campo: payload['document'][campo].copy()
@@ -1077,7 +1082,6 @@ class DadosRevisadosTest(TestCase):
             ('titulo', 'Compra e venda'),
             ('forma', 'Escritura pública'),
             ('descricao', 'Descrição revisada'),
-            ('detalhes', 'Detalhes revisados'),
             ('observacoes', 'Observações revisadas'),
             ('eh_inicio_matricula', True),
         ):
@@ -1161,7 +1165,6 @@ class DadosRevisadosTest(TestCase):
         self.assertEqual(ato.titulo, 'Compra e venda')
         self.assertEqual(ato.forma, 'Escritura pública')
         self.assertEqual(ato.descricao, 'Descrição revisada')
-        self.assertEqual(ato.detalhes, 'Detalhes revisados')
         self.assertEqual(ato.observacoes, 'Observações revisadas')
         self.assertEqual(ato.cartorio_origem_id, self.cartorio.pk)
         self.assertEqual(ato.cartorio_transmissao_id, self.cartorio.pk)
@@ -1283,6 +1286,28 @@ class DadosRevisadosTest(TestCase):
 
         citadas = {item['chave'] for item in pendencias(self.extracao)}
         self.assertNotIn('/acts/0/valor_transacao', citadas)
+
+        dados = dados_revisados(self.extracao)
+        self.assertEqual(len(dados.atos), 1)
+
+    def test_linha_antiga_de_detalhes_e_ignorada(self):
+        """#328 (regra 11/11): extração antiga salva com a linha não bloqueia.
+
+        O formulário de lançamento não tem detalhes: a linha antiga, mesmo
+        pendente, não vira pendência nem impede a leitura revisada.
+        """
+        self._finalizar(self.payload)
+        self.extracao.campos.create(
+            chave='/acts/0/detalhes',
+            raw='Detalhes antigos',
+            normalized='Detalhes antigos',
+            tipo_valor='texto',
+            status_revisao='sugerido',
+            requer_revisao=True,
+        )
+
+        citadas = {item['chave'] for item in pendencias(self.extracao)}
+        self.assertNotIn('/acts/0/detalhes', citadas)
 
         dados = dados_revisados(self.extracao)
         self.assertEqual(len(dados.atos), 1)
@@ -1599,6 +1624,47 @@ class DesnormalizarTest(TestCase):
         linhas = self._por_chave(self._linhas(payload))
 
         self.assertNotIn('/acts/0/valor_transacao', linhas)
+
+    def test_detalhes_do_payload_nao_gera_linha(self):
+        """#328: o formulário de lançamento não tem detalhes.
+
+        O schema A3 (Umbelino v1.1) continua mandando a folha — o payload
+        aceita, mas nenhuma linha de revisão é criada (o app não tem onde
+        mostrar nem para onde importar o campo).
+        """
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['detalhes'] = _campo(
+            'Detalhes do ato', 'Escritura Pública de Compra e Venda',
+        )
+
+        linhas = self._por_chave(self._linhas(payload))
+
+        self.assertNotIn('/acts/0/detalhes', linhas)
+
+    def test_fronteiras_da_linha_ignorada(self):
+        """#328 rodada 2 (Opus N-3): a regex derivada mantém a fronteira.
+
+        Só a FOLHA do ato é ignorada — índice real (um ou vários dígitos)
+        ou o ponteiro de padrão ``*`` (nit #322, cobertura §25). Homônima
+        em outra profundidade, prefixo (``detalhes_x``) e caminho maior
+        não são alcançados.
+        """
+        de_ato = (
+            '/acts/0/detalhes', '/acts/10/detalhes', '/acts/*/detalhes',
+            '/acts/0/valor_transacao',
+        )
+        for chave in de_ato:
+            with self.subTest(ignorada=chave):
+                self.assertTrue(linha_ignorada(chave))
+
+        fora_do_ato = (
+            '/document/detalhes', '/acts/0/partes/0/detalhes',
+            '/acts/0/detalhes_x', '/acts/0/valor_transacao_x',
+            '/actss/0/detalhes',
+        )
+        for chave in fora_do_ato:
+            with self.subTest(ignorada=chave):
+                self.assertFalse(linha_ignorada(chave))
 
     def test_evidencia_usa_texto_corrigido(self):
         """Trecho é conferido contra o texto vigente: o corrigido (#290).
