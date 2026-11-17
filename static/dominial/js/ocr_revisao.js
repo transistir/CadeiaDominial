@@ -58,29 +58,6 @@
             : [];
         // Último envio de cada card falhou: finalizar não pode ignorá-los.
         var falhas = new Set();
-        // Chaves de atos distintos na mesma tela: sem o prefixo, "tipo" ou
-        // "data" de atos diferentes ficam com o mesmo rótulo.
-        var atosNaTela = new Set();
-        cards.forEach(function (card) {
-            var ato = /\/acts\/(\d+)(?:\/|$)/.exec(card.getAttribute('data-chave') || '');
-            if (ato) atosNaTela.add(ato[1]);
-        });
-
-        function rotular(card) {
-            var rotulo = card.querySelector('[data-campo-rotulo]');
-            if (!rotulo) return;
-            var chave = card.getAttribute('data-chave') || '';
-            var partes = chave.split('/').filter(Boolean);
-            var ultimo = partes.length ? partes[partes.length - 1] : '';
-            if (!ultimo) return;
-            var texto = ultimo.replace(/_/g, ' ');
-            var ato = /\/acts\/(\d+)(?:\/|$)/.exec(chave);
-            if (ato && atosNaTela.size > 1) {
-                texto = 'Ato ' + (parseInt(ato[1], 10) + 1) + ' · ' + texto;
-            }
-            rotulo.textContent = texto;
-        }
-
         function controlesDaRevisao() {
             return Array.prototype.slice.call(
                 raiz.querySelectorAll('input, select, textarea, button')
@@ -386,8 +363,6 @@
             if (tag !== 'INPUT') return false;
             return ['checkbox', 'radio', 'button', 'submit'].indexOf(elemento.type) === -1;
         }
-
-        cards.forEach(rotular);
 
         raiz.addEventListener('input', function (evento) {
             var card = cardDe(evento.target);
