@@ -564,6 +564,29 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
         self.assertNotIn(marcador, str(contexto.exception))
         self.assertNotIn(marcador, repr(contexto.exception))
 
+    def test_payload_com_chave_inventada_loga_caminho_sanitizado(self):
+        """P1 (#339 r2): os campos A3 aceitam chaves extras, então uma chave
+        inventada (nome+CPF) com valor gigante passa na validação estrutural
+        e explode na varredura — o caminho vai SANITIZADO ao log e à exceção;
+        nem a chave nem o valor aparecem."""
+        chave = 'JOAO_DA_SILVA_CPF_12345678900'
+        self.envelope['extracao']['document']['numero'][chave] = 'x' * 10001
+
+        with self.assertLogs('ia_ocr.services', level='WARNING') as registros:
+            with self.assertRaises(services.ExtracaoPayloadInvalido) as contexto:
+                services.solicitar_extracao(self.job, self.usuario)
+
+        saida = '\n'.join(registros.output)
+        self.assertIn('campo_muito_longo', saida)
+        self.assertIn('$.document.numero.<campo>', saida)
+        self.assertNotIn(chave, saida)
+        self.assertNotIn('x' * 100, saida)
+        erro = contexto.exception
+        self.assertEqual(erro.codigo, 'campo_muito_longo')
+        self.assertEqual(erro.caminho, '$.document.numero.<campo>')
+        self.assertNotIn(chave, str(erro))
+        self.assertSemPersistencia()
+
     def test_falha_do_backend_loga_codigo_sem_mensagem_e_segue_indisponivel(self):
         """Falha da chamada (transporte/autenticação/tamanho) continua sendo
         `ExtracaoIndisponivel` para a tela — o código estável vai ao log, a
@@ -581,6 +604,28 @@ class SolicitarExtracaoTest(ExtracaoFixtureMixin, TestCase):
         self.assertIn('PRAZO_ESGOTADO', saida)
         self.assertIn(str(self.job.job_id), saida)
         self.assertNotIn('Mensagem externa', saida)
+        self.assertNotIsInstance(contexto.exception, services.ExtracaoPayloadInvalido)
+        self.assertSemPersistencia()
+
+    def test_incompativel_do_backend_vira_extracao_incompativel(self):
+        """422 do serviço (EXTRACAO_INCOMPATIVEL): o serviço respondeu e
+        recusou o formato da requisição — exceção própria em vez de
+        `ExtracaoIndisponivel` ("não respondeu" mentiria); a reserva é
+        limpa e nada é gravado."""
+        self.extrair.side_effect = ExtracaoBackendError(
+            'EXTRACAO_INCOMPATIVEL', 'Mensagem externa não deve vazar',
+        )
+
+        with self.assertLogs('ia_ocr.services', level='WARNING') as registros:
+            with self.assertRaises(services.ExtracaoIncompativel) as contexto:
+                services.solicitar_extracao(self.job, self.usuario)
+
+        saida = '\n'.join(registros.output)
+        self.assertIn('EXTRACAO_INCOMPATIVEL', saida)
+        self.assertIn(str(self.job.job_id), saida)
+        self.assertNotIn('Mensagem externa', saida)
+        self.assertEqual(contexto.exception.code, 'extracao_incompativel')
+        self.assertNotIsInstance(contexto.exception, services.ExtracaoIndisponivel)
         self.assertNotIsInstance(contexto.exception, services.ExtracaoPayloadInvalido)
         self.assertSemPersistencia()
 

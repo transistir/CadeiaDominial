@@ -135,20 +135,54 @@ class PayloadExtracaoInvalido(Exception):
         super().__init__(f'{codigo} ({caminho})')
 
 
+def _coletar_nomes_de_campo(contratos):
+    """Nomes de campo que os contratos vendorizados conhecem.
+
+    Percorre cada schema inteiro (``properties`` de todo nível, ``$defs``
+    incluso) e junta as chaves: é a lista branca do caminho de um erro —
+    só nome de campo CONHECIDO é estrutura; chave inventada pelo serviço
+    é texto livre (possível PII) e vira marcador.
+    """
+    conhecidos = set()
+    pilha = [contrato.schema for contrato in contratos.values()]
+    while pilha:
+        no = pilha.pop()
+        if isinstance(no, dict):
+            propriedades = no.get('properties')
+            if isinstance(propriedades, dict):
+                conhecidos.update(propriedades)
+            pilha.extend(no.values())
+        elif isinstance(no, list):
+            pilha.extend(no)
+    return conhecidos
+
+
+_CAMPOS_CONHECIDOS = _coletar_nomes_de_campo(CONTRATOS)
+# Marcador fixo para o segmento de caminho que não é campo conhecido.
+_CAMPO_OPACO = '<campo>'
+
+
+def _nome_de_campo(nome):
+    """Segmento de caminho: só passa nome conhecido dos contratos."""
+    if isinstance(nome, str) and nome in _CAMPOS_CONHECIDOS:
+        return nome
+    return _CAMPO_OPACO
+
+
 def _caminho(path):
-    """absolute_path do jsonschema → notação enxuta: ``acts[3].partes``."""
+    """absolute_path do jsonschema → notação enxuta: ``acts[3].partes``.
+
+    Nome só entra se for campo dos contratos vendorizados: o caminho
+    alimenta logs e a mensagem da exceção, e chave de payload é texto
+    livre do serviço — ``JOAO_DA_SILVA_CPF_12345678900`` é identificador
+    válido e mesmo assim é possível PII, então vira ``<campo>``.
+    """
     texto = '$'
     for item in path:
-        texto += f'[{item}]' if isinstance(item, int) else f'.{item}'
+        texto += (
+            f'[{item}]' if isinstance(item, int) else f'.{_nome_de_campo(item)}'
+        )
     return texto
-
-
-# O nome de uma chave extra só entra no caminho se tiver cara de campo do A3
-# (ASCII snake_case, ex.: ``data_transacao``): é o que torna o diagnóstico
-# possível. Texto livre vindo do serviço — possível PII numa chave inventada —
-# não: o caminho alimenta logs e a mensagem da exceção.
-_NOME_DE_CAMPO = re.compile(r'[A-Za-z_][A-Za-z0-9_]{0,63}')
-_CHAVE_EXTRA_OPACA = '<chave_extra>'
 
 
 def _erro_estrutural_para_excecao(erro):
@@ -156,13 +190,13 @@ def _erro_estrutural_para_excecao(erro):
     caminho = _caminho(erro.absolute_path)
     if erro.validator == 'additionalProperties':
         # instance/schema só para derivar o NOME da chave extra (estrutura,
-        # não valor) — nenhum dos dois vai para a exceção.
+        # não valor) — nenhum dos dois vai para a exceção. E o nome só entra
+        # no caminho se for campo conhecido dos contratos: identificador
+        # arbitrário inventado pelo serviço é possível PII.
         permitidas = set(erro.schema.get('properties', {}))
         extras = sorted(set(erro.instance) - permitidas)
         if extras:
-            extra = extras[0]
-            nome_seguro = isinstance(extra, str) and _NOME_DE_CAMPO.fullmatch(extra)
-            caminho = f'{caminho}.{extra if nome_seguro else _CHAVE_EXTRA_OPACA}'
+            caminho = f'{caminho}.{_nome_de_campo(extras[0])}'
     return PayloadExtracaoInvalido(codigo, caminho)
 
 
@@ -189,12 +223,17 @@ def _varrer(valor, caminho):
     - mais de LIMITE_LINHAS objetos (cada objeto do payload desnormaliza
       em uma linha de CampoSugerido/evidência) → `limite_excedido`.
 
+    Os campos A3 (``field*`` em ``$defs``) aceitam chaves extras, então
+    aqui chega chave inventada pelo serviço: cada chave passa pela lista
+    branca de ``_nome_de_campo`` — nome conhecido entra, o resto vira
+    ``<campo>``.
+
     Retorna o número de objetos vistos; levanta na primeira violação.
     """
     if isinstance(valor, dict):
         total = 1
         for chave, item in valor.items():
-            total += _varrer(item, f'{caminho}.{chave}')
+            total += _varrer(item, f'{caminho}.{_nome_de_campo(chave)}')
             if total > LIMITE_LINHAS:
                 raise PayloadExtracaoInvalido('limite_excedido', '$')
         return total

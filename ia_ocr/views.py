@@ -408,6 +408,14 @@ def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
             request,
             'A extração veio em formato inesperado. Avise o suporte.',
         )
+    except services.ExtracaoIncompativel:
+        # O serviço respondeu 422: recusou o formato/versão da requisição.
+        # Repetir não resolve — é para o suporte, não "tente de novo".
+        messages.error(
+            request,
+            'O serviço de extração não aceitou o formato desta versão. '
+            'Avise o suporte.',
+        )
     except (services.ExtracaoIndisponivel, ExtracaoBackendError):
         messages.error(
             request,

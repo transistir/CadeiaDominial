@@ -195,6 +195,18 @@ class ExtracaoPayloadInvalido(Exception):
         super().__init__(f'{self.code}: {codigo} ({caminho})')
 
 
+class ExtracaoIncompativel(Exception):
+    """O serviço recusou o formato da requisição — versão de contrato (422).
+
+    Distinta de ``ExtracaoIndisponivel`` (transporte, 429, 5xx, prazo: o
+    serviço não respondeu): aqui o serviço respondeu e recusou, então a
+    mensagem de "não respondeu" mentiria e repetir não resolve — como
+    ``ExtracaoPayloadInvalido``, é divergência de versão a levar ao suporte.
+    """
+
+    code = 'extracao_incompativel'
+
+
 # Código estável do backend (MAIUSCULAS_E_UNDERLINE): é o único formato que
 # vai ao log. O backend é plugável (EXTRACAO_BACKEND); texto livre, quebra de
 # linha ou código gigante não entram.
@@ -606,7 +618,8 @@ def solicitar_extracao(
     Falhas da chamada ao serviço (``ExtracaoBackendError``) e erros
     inesperados viram ``ExtracaoIndisponivel``; resposta fora do contrato
     (``PayloadExtracaoInvalido``) vira ``ExtracaoPayloadInvalido``, com
-    código e caminho. Nenhum dado do serviço vai para log ou exceção.
+    código e caminho; 422 do serviço (formato da requisição recusado) vira
+    ``ExtracaoIncompativel``. Nenhum dado do serviço vai para log ou exceção.
     """
     atual = OcrJob.objects.get(pk=job.pk)
     _validar_solicitacao_extracao(atual, extracao_id, somente_se_inexistente)
@@ -715,13 +728,18 @@ def solicitar_extracao(
         if isinstance(erro, ExtracaoBackendError):
             # Falha da CHAMADA (transporte, autenticação, tamanho, status HTTP
             # inesperado): não há payload para comparar com o contrato, então
-            # segue ExtracaoIndisponivel ("não respondeu"). O que distingue
-            # uma falha da outra é o código estável, que agora vai ao log; a
-            # mensagem do backend (texto livre) não.
+            # segue ExtracaoIndisponivel ("não respondeu"). Exceção: o 422 do
+            # serviço (EXTRACAO_INCOMPATIVEL) — o serviço respondeu e recusou
+            # o formato da requisição, o que merece diagnóstico próprio em
+            # vez de "não respondeu". O que distingue uma falha da outra é o
+            # código estável, que vai ao log; a mensagem do backend (texto
+            # livre) não.
             logger.warning(
                 'job_id=%s extracao_backend_falhou codigo=%s',
                 job.job_id, _codigo_backend_para_log(erro.codigo),
             )
+            if erro.codigo == 'EXTRACAO_INCOMPATIVEL':
+                raise ExtracaoIncompativel() from None
             raise ExtracaoIndisponivel() from None
         if isinstance(erro, (ExtracaoRecusada, ExtracaoConcorrente, ExtracaoIndisponivel)):
             raise

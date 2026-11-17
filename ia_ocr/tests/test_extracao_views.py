@@ -30,6 +30,10 @@ MENSAGEM_INDISPONIVEL = (
 MENSAGEM_FORMATO_INESPERADO = (
     'A extração veio em formato inesperado. Avise o suporte.'
 )
+MENSAGEM_INCOMPATIVEL = (
+    'O serviço de extração não aceitou o formato desta versão. '
+    'Avise o suporte.'
+)
 
 
 @override_settings(EXTRACAO_HTTP_TIMEOUT_SECONDS=30)
@@ -230,6 +234,7 @@ class ExtracaoViewsTest(TelaTextoBase):
             ),
             (services.ExtracaoIndisponivel(), indisponivel),
             (ExtracaoBackendError('FALHA', 'detalhe que não deve aparecer'), indisponivel),
+            (services.ExtracaoIncompativel(), MENSAGEM_INCOMPATIVEL),
             (
                 services.ExtracaoPayloadInvalido(
                     'propriedade_extra', '$.acts[0].data_transacao',
@@ -296,6 +301,29 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.CONCLUIDO)
         self.assertFalse(self.job.extracoes.exists())
+
+    def test_extrair_incompativel_mostra_mensagem_propria_e_limpa_reserva(self):
+        """422 do serviço: mensagem própria (não a de 'não respondeu', que
+        mentiria — o serviço respondeu) e a reserva da extração volta a
+        NULL, como em toda falha do fluxo."""
+        self.backend.extrair.side_effect = ExtracaoBackendError(
+            'EXTRACAO_INCOMPATIVEL', 'detalhe que não deve aparecer',
+        )
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(
+            self.mensagens(resposta)[-1], ('error', MENSAGEM_INCOMPATIVEL),
+        )
+        texto = ' '.join(mensagem for _nivel, mensagem in self.mensagens(resposta))
+        self.assertNotIn('EXTRACAO_INCOMPATIVEL', texto)
+        self.assertNotIn('detalhe que não deve aparecer', texto)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+        self.assertFalse(self.job.extracoes.exists())
+        self.assertIsNone(self.job.extracao_reserva)
+        self.assertIsNone(self.job.extracao_reservada_ate)
 
     def test_extrair_aceita_payload_v1_2_com_transmissao_do_ato(self):
         """O incidente de ponta a ponta: o serviço responde v1.2 com
