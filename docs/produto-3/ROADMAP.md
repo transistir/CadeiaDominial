@@ -24,6 +24,17 @@
 > **R4 item 11** — exibir "Anexar Arquivo" em documento importado e gravar o
 > arquivo no documento do **imóvel de origem** (mesmo padrão de redirect do
 > `novo_lancamento`; um único `DocumentoDigital`, compartilhado pelas cadeias).
+> **Reestruturação 17/11/2026 (autorizada pelo Hiure no teste do servidor de
+> testes):** a revisão da extração deixa de ser tela própria com um card por
+> ato e passa a ser **o formulário de lançamento**, um ato por aba na sidebar,
+> **sem gravar nada até o usuário confirmar o formulário daquele ato**. A tela
+> de cards é aposentada. Isso entra como **I-14 (#341)**, **P0 da trilha F3**,
+> depois de fechar o **I-11d (#324)** e antes do I-7/I-8. Consequências na
+> fila: **#331 (I-12)** é reescopado para "exportar o que foi importado" (a
+> prévia em planilha deixa de ser a forma de conferir); **#332 (I-13)** fica
+> **absorvido** no I-14 (pendência bloqueia o salvar daquele ato, não o
+> documento). O I-14 também fecha a regressão do **#271** (Forma/Título com
+> vocabulário e sugestões), porque esses campos passam a ser os do formulário.
 > **Enfileiramento 16/11/2026 (autorizado pelo Hiure):** **#334** — botão
 > "Baixar certidões" na `ver-cadeia-dominial`, gerando um ZIP com todos os
 > PDFs anexados (via `upload-digital`) aos documentos da cadeia — entra como
@@ -896,6 +907,31 @@ fecham na validação do bloco, não no merge.
    existir).
    Depende de `ocr-service#37` para o caso real do teste (cartório não
    extraído), mas o desenho não pode depender dele.
+6c. **I-11 ✅ a–c, I-11d em revisão** — #321 (a: formulários por ato em ordem
+   reversa), #322 (b: parser de cabeçalho/R-Av e bucket de não reconhecidos),
+   #323 (c: contrato v1.2 com livro/folha/data da transmissão no ato; PR #338)
+   e **#324 (d: origem do ato + vínculo com o documento de origem)** — branch
+   em rodada final de review no fechamento desta entrada. #328 (formulário
+   como fonte de verdade; remove `valor_transacao`/`detalhes`) já em develop.
+   O contrato v1.2 do lado do app entrou no PR #340 (#339).
+6d. **I-14 🆕 P0 — PRÓXIMO DEPOIS DO #324** #341 — **revisão dentro do
+   formulário de lançamento**: um ato por aba na sidebar (padrão
+   `js-lancamento-resumo`), campos na ordem e com os rótulos do formulário,
+   **gravação só no "Salvar lançamento" daquele ato** (`criar_lancamento_completo`,
+   mesmo caminho do fluxo manual), estado por aba derivado de `ImportacaoIA`
+   (sem migration). Abrir/navegar **não escreve nada**. A tela de cards
+   (`/campos/`) e o POST de importação em lote são aposentados. Evidência por
+   campo migra para o formulário. Fecha o **#271** (Forma/Título com
+   vocabulário canônico + sugestões).
+   **Decisão do dono, 17/11/2026:** "a tela de cards some, os dados vão para o
+   form e serão revisados lá; só serão salvos no banco depois que o usuário
+   confirmar cada form de lançamento."
+6e. **I-12 🔁 reescopado** #331 — deixa de ser "prévia para conferir" e passa
+   a **"exportar o que foi importado"** (CSV/XLSX a partir do que já está no
+   banco), depois do I-14.
+6f. **I-13 ✅ absorvido** #332 — pendência bloqueante × informativa vira regra
+   do I-14: o que é obrigatório impede o salvar **daquele ato**; os demais atos
+   seguem.
 7. **I-6 ✅** #263 — importação assistida: gravação transacional de
    Lançamento/Pessoas com prevenção de duplicidade e vínculo ao PDF — Produto 4.
    **PR #310 mergeado em `develop` em 09/11** (squash `e4f77a4c`), depois de
