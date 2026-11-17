@@ -6,12 +6,10 @@ operando sem serviço configurado. O mesmo gatilho vale para a validação
 de lease do worker (`process_ocr_queue`), que reaproveita os helpers daqui.
 """
 
-import json
-
 from django.conf import settings
 from django.core import checks
 
-from ia_ocr.extracao_schema import SCHEMA_PATH
+from ia_ocr.extracao_schema import CONTRATOS
 
 CAMINHO_BACKEND_REAL = 'ia_ocr.backends.OcrServiceBackend'
 # Default de EXTRACAO_BACKEND (D3 cria o módulo): nunca opinar com ele.
@@ -157,10 +155,16 @@ def backend_extracao_real():
     )
 
 
-def schema_vendorizado():
-    """O schema A3 do contrato de extração (ia_ocr/schemas/)."""
-    with open(SCHEMA_PATH, encoding='utf-8') as arquivo:
-        return json.load(arquivo)
+def schemas_vendorizados():
+    """Os schemas A3 de cada contrato de extração (ia_ocr/schemas/).
+
+    Pares (nome do arquivo, schema): há mais de um contrato vendorizado por
+    compatibilidade de rollout (ver ``extracao_schema``).
+    """
+    return [
+        (contrato.caminho.name, contrato.schema)
+        for contrato in CONTRATOS.values()
+    ]
 
 
 def conferir_configuracao_extracao(app_configs=None, **kwargs):
@@ -222,19 +226,18 @@ def conferir_configuracao_extracao(app_configs=None, **kwargs):
             id='ia_ocr.E013',
         ))
     else:
-        try:
-            jsonschema.validators.validator_for(
-                schema_vendorizado()
-            ).check_schema(schema_vendorizado())
-        except jsonschema.exceptions.SchemaError as erro:
-            erros.append(checks.Error(
-                f'O schema vendorizado de extração ({SCHEMA_PATH.name}) '
-                f'violou o meta-schema: {erro.message}.',
-                hint=(
-                    'Não edite o schema à mão: ele é o contrato byte a '
-                    'byte com o serviço de extração.'
-                ),
-                id='ia_ocr.E014',
-            ))
+        for nome, schema in schemas_vendorizados():
+            try:
+                jsonschema.validators.validator_for(schema).check_schema(schema)
+            except jsonschema.exceptions.SchemaError as erro:
+                erros.append(checks.Error(
+                    f'O schema vendorizado de extração ({nome}) '
+                    f'violou o meta-schema: {erro.message}.',
+                    hint=(
+                        'Não edite o schema à mão: ele é o contrato byte a '
+                        'byte com o serviço de extração.'
+                    ),
+                    id='ia_ocr.E014',
+                ))
 
     return erros

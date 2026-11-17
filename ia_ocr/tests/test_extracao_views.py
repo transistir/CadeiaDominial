@@ -14,11 +14,25 @@ from dominial.models import LancamentoTipo, Pessoas
 from ia_ocr import estados, revisao, services
 from ia_ocr.estados import TransicaoInvalida
 from ia_ocr.extracao_backends import ExtracaoBackendError
+from ia_ocr.extracao_schema import PayloadExtracaoInvalido
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 
 from .base_texto import TelaTextoBase
 from .payloads_extracao import (
-    PROVIDER, SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_registro,
+    PROVIDER, SCHEMA_VERSION, TEXTO_PAGINA_1, _campo, payload_averbacao,
+    payload_registro,
+)
+
+V1_1 = 'umbelino-extracao-matricula-v1.1'
+MENSAGEM_INDISPONIVEL = (
+    'O serviço de extração não respondeu. Tente novamente em instantes.'
+)
+MENSAGEM_FORMATO_INESPERADO = (
+    'A extração veio em formato inesperado. Avise o suporte.'
+)
+MENSAGEM_INCOMPATIVEL = (
+    'O serviço de extração não aceitou o formato desta versão. '
+    'Avise o suporte.'
 )
 
 
@@ -203,7 +217,8 @@ class ExtracaoViewsTest(TelaTextoBase):
         self.assertNotEqual(self.job.extracao_vigente(), vigente)
 
     def test_extrair_erros_exibem_mensagens_seguras(self):
-        indisponivel = 'O serviço de extração não respondeu. Tente novamente em instantes.'
+        indisponivel = MENSAGEM_INDISPONIVEL
+        inesperado = MENSAGEM_FORMATO_INESPERADO
         casos = (
             (
                 services.ExtracaoRecusada('sem_texto_ocr'),
@@ -219,6 +234,21 @@ class ExtracaoViewsTest(TelaTextoBase):
             ),
             (services.ExtracaoIndisponivel(), indisponivel),
             (ExtracaoBackendError('FALHA', 'detalhe que não deve aparecer'), indisponivel),
+            (services.ExtracaoIncompativel(), MENSAGEM_INCOMPATIVEL),
+            (
+                services.ExtracaoPayloadInvalido(
+                    'propriedade_extra', '$.acts[0].data_transacao',
+                ),
+                inesperado,
+            ),
+            # O serviço converte, mas a view cobre também a exceção crua da
+            # validação — como já faz com ExtracaoBackendError.
+            (
+                PayloadExtracaoInvalido(
+                    'propriedade_extra', '$.acts[0].data_transacao',
+                ),
+                inesperado,
+            ),
             (
                 TransicaoInvalida('detalhe interno', code='estado_invalido'),
                 'Este processamento não permite extrair campos no estado atual.',
@@ -232,6 +262,97 @@ class ExtracaoViewsTest(TelaTextoBase):
 
                 self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
                 self.assertEqual(self.mensagens(resposta)[-1], ('error', mensagem))
+
+    def test_extrair_payload_fora_do_contrato_mostra_formato_inesperado(self):
+        """Serviço respondeu, mas o payload (declarado v1.1) traz
+        `data_transacao`: mensagem própria, sem código/caminho/valor na tela,
+        e nada é gravado."""
+        payload = payload_averbacao(self.job.job_id)
+        payload['schema_version'] = V1_1
+        payload['acts'][0]['data_transacao'] = _campo('2019-12-20', 'Av-1/42.718')
+        self.backend.extrair.return_value['extracao'] = payload
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(
+            self.mensagens(resposta)[-1], ('error', MENSAGEM_FORMATO_INESPERADO),
+        )
+        texto = ' '.join(mensagem for _nivel, mensagem in self.mensagens(resposta))
+        for interno in ('propriedade_extra', 'data_transacao', '$.acts'):
+            self.assertNotIn(interno, texto)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+        self.assertFalse(self.job.extracoes.exists())
+
+    def test_extrair_falha_de_transporte_mantem_a_mensagem_de_indisponivel(self):
+        """O que é falha da chamada (não do conteúdo) segue com a mensagem
+        antiga, sem vazar o detalhe do backend."""
+        self.backend.extrair.side_effect = ExtracaoBackendError(
+            'EXTRACAO_INDISPONIVEL', 'detalhe que não deve aparecer',
+        )
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(
+            self.mensagens(resposta)[-1], ('error', MENSAGEM_INDISPONIVEL),
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+        self.assertFalse(self.job.extracoes.exists())
+
+    def test_extrair_incompativel_mostra_mensagem_propria_e_limpa_reserva(self):
+        """422 do serviço: mensagem própria (não a de 'não respondeu', que
+        mentiria — o serviço respondeu) e a reserva da extração volta a
+        NULL, como em toda falha do fluxo."""
+        self.backend.extrair.side_effect = ExtracaoBackendError(
+            'EXTRACAO_INCOMPATIVEL', 'detalhe que não deve aparecer',
+        )
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(
+            self.mensagens(resposta)[-1], ('error', MENSAGEM_INCOMPATIVEL),
+        )
+        texto = ' '.join(mensagem for _nivel, mensagem in self.mensagens(resposta))
+        self.assertNotIn('EXTRACAO_INCOMPATIVEL', texto)
+        self.assertNotIn('detalhe que não deve aparecer', texto)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+        self.assertFalse(self.job.extracoes.exists())
+        self.assertIsNone(self.job.extracao_reserva)
+        self.assertIsNone(self.job.extracao_reservada_ate)
+
+    def test_extrair_aceita_payload_v1_2_com_transmissao_do_ato(self):
+        """O incidente de ponta a ponta: o serviço responde v1.2 com
+        livro/folha/data da transmissão e o clique em 'Extrair campos' chega
+        à revisão em vez de 'O serviço de extração não respondeu'."""
+        payload = payload_averbacao(self.job.job_id)
+        ato = payload['acts'][0]
+        ato['livro_transacao'] = _campo('10-A', 'Av-1/42.718')
+        ato['folha_transacao'] = _campo('25v', 'Av-1/42.718')
+        ato['data_transacao'] = _campo('2019-12-20', 'Av-1/42.718')
+        self.backend.extrair.return_value['extracao'] = payload
+
+        resposta = self.client.post(self.url('extrair_campos_ocr'))
+
+        self.assertRedirects(
+            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+        )
+        self.assertIn(
+            ('success', 'Extração concluída. Revise os campos.'),
+            self.mensagens(resposta),
+        )
+        extracao = self.job.extracao_vigente()
+        self.assertEqual(
+            extracao.campos.get(chave='/acts/0/livro_transacao').normalized, '10-A',
+        )
+        self.assertEqual(
+            extracao.campos.get(chave='/acts/0/data_transacao').normalized,
+            '2019-12-20',
+        )
 
     def test_salvar_bloco_ok_e_versao_nova(self):
         extracao = self._extracao()

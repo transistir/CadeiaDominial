@@ -132,6 +132,21 @@ class ExtracaoServiceClientTests(SimpleTestCase):
         self.assertEqual(erro.codigo, 'EXTRACAO_INDISPONIVEL')
         self.assertEqual(len(stub429.recebidas), 1)
 
+    def test_422_vira_extracao_incompativel_sem_corpo_da_resposta(self):
+        """422 do serviço: recusou o formato da requisição (versão do
+        contrato) — código próprio, distinto do genérico RESPOSTA_INVALIDA,
+        e o corpo da resposta não vaza para a exceção."""
+        stub = self._stub('422')
+
+        erro = self._capturar_erro(
+            lambda: self._cliente(stub).extrair(dict(REQUISICAO_PADRAO))
+        )
+
+        self.assertEqual(erro.codigo, 'EXTRACAO_INCOMPATIVEL')
+        self.assertNotIn('SCHEMA_VERSION_UNKNOWN', str(erro))
+        self.assertNotIn('detalhe interno', str(erro))
+        self.assertEqual(len(stub.recebidas), 1)
+
     def test_redirect_nao_seguido_e_sem_credencial(self):
         stub = self._stub('302')
 

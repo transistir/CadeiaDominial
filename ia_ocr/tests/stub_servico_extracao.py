@@ -14,7 +14,7 @@ CAMINHO_ISCA = '/isca-login'
 class StubServicoExtracao:
     """Stub do serviço de extração, restrito à interface loopback.
 
-    Um modo fixo por instância: ``ok``, ``500``, ``429``, ``302``,
+    Um modo fixo por instância: ``ok``, ``500``, ``429``, ``422``, ``302``,
     ``gotejante`` (1 byte/s), ``grande``, ``nao_json``, ``reset`` (fecha o
     socket sem responder) e ``bloqueante`` (aguarda um ``Event``).
     """
@@ -105,6 +105,17 @@ class StubServicoExtracao:
             def _modo_429(self):
                 corpo = json.dumps({'error': {'code': 'QUEUE_FULL'}})
                 self._responder(429, corpo, 'application/json')
+
+            def _modo_422(self):
+                # Corpo com detalhe de depuração: NÃO pode vazar para log
+                # nem exceção do cliente — só o código estável conta.
+                corpo = json.dumps(
+                    {'error': {
+                        'code': 'SCHEMA_VERSION_UNKNOWN',
+                        'message': 'detalhe interno do serviço',
+                    }}
+                )
+                self._responder(422, corpo, 'application/json')
 
             def _modo_302(self):
                 self.send_response(302)

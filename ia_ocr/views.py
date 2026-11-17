@@ -32,6 +32,7 @@ from . import importacao
 from .diff import segmentos_diff
 from .estados import TransicaoConcorrente, TransicaoInvalida
 from .extracao_backends import ExtracaoBackendError
+from .extracao_schema import PayloadExtracaoInvalido
 from .models import (
     ESTADO_CONFIRMADA, ESTADO_EDITADA, ESTADO_NAO_CONFIRMADA, OcrJob,
     OcrJobTransicao, PaginaOcr,
@@ -399,6 +400,21 @@ def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
     except services.ExtracaoConcorrente:
         messages.error(
             request, 'Já existe uma extração em andamento para este documento.',
+        )
+    except (services.ExtracaoPayloadInvalido, PayloadExtracaoInvalido):
+        # O serviço respondeu, mas fora do contrato: repetir não resolve. Sem
+        # código, caminho ou valor na tela (o serviço já os deixou no log).
+        messages.error(
+            request,
+            'A extração veio em formato inesperado. Avise o suporte.',
+        )
+    except services.ExtracaoIncompativel:
+        # O serviço respondeu 422: recusou o formato/versão da requisição.
+        # Repetir não resolve — é para o suporte, não "tente de novo".
+        messages.error(
+            request,
+            'O serviço de extração não aceitou o formato desta versão. '
+            'Avise o suporte.',
         )
     except (services.ExtracaoIndisponivel, ExtracaoBackendError):
         messages.error(

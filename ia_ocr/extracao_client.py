@@ -86,6 +86,14 @@ class ExtracaoServiceClient(_ClienteHttpComPrazo):
                 'ENTRADA_GRANDE_DEMAIS',
                 'O serviço de extração recusou a requisição (413).',
             )
+        if status == 422:
+            # O serviço respondeu e recusou o FORMATO da requisição (versão do
+            # contrato): código próprio, sem carregar o corpo da resposta —
+            # texto livre do serviço não vai para log nem exceção.
+            raise ExtracaoBackendError(
+                'EXTRACAO_INCOMPATIVEL',
+                'Serviço de extração rejeitou o formato da requisição (422).',
+            )
         if status == 429 or 500 <= status < 600:
             raise ExtracaoBackendError(
                 'EXTRACAO_INDISPONIVEL', 'Serviço de extração indisponível.'
