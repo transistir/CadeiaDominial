@@ -46,8 +46,8 @@ from ia_ocr.estados import TransicaoConcorrente
 from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
-    ParteRevisada, RevisaoInvalidada, dados_revisados, desnormalizar,
-    descrever_aviso,
+    CAMPOS_DA_ORIGEM, ParteRevisada, RevisaoInvalidada, dados_revisados,
+    desnormalizar, descrever_aviso,
 )
 
 from .factories import criar_documento_digital, criar_usuario
@@ -2603,6 +2603,76 @@ class VinculoDocumentoOrigemTest(ImportacaoBase):
         vinculo = ImportacaoIA.objects.get(modelo='Documento')
         self.assertEqual(vinculo.objeto_id, documento_origem.pk)
         self.assertEqual(vinculo.campo.chave, '/acts/0/origem/numero')
+
+    def test_troca_de_tipo_na_revisao_leva_a_origem_declarada_ate_a_fk(self):
+        """P1 (rodada 2) ponta a ponta: a origem declarada NA REVISÃO chega à FK.
+
+        O serviço sugeriu AVERBAÇÃO sem bloco de origem no payload. O revisor
+        troca o tipo para início de matrícula pelo caminho real de salvar o
+        bloco (o mesmo ``services.salvar_bloco`` da view — as linhas da
+        origem nascem AÍ, não no desmonte), preenche a origem, finaliza e
+        importa: ``LancamentoOrigem``, ``Documento`` criado com o
+        tipo+número+cartório declarados e a ``documento_origem`` vinculada.
+        """
+        # O fixture cria o job já ``revisado`` e a extração finalizada; a
+        # revisão real roda com o job ``extraido`` e a extração aberta.
+        OcrJob.objects.filter(pk=self.job.pk).update(status='extraido')
+        extracao = self._extracao(payload_averbacao(self.job.job_id))
+        ExtracaoSugerida.objects.filter(pk=extracao.pk).update(
+            finalizada_em=None,
+        )
+
+        _, versao, _, _ = services.salvar_bloco(
+            extracao,
+            {'/acts/0/tipo_sugerido': {
+                'incluir': True, 'valor': 'inicio_matricula', 'conferido': True,
+            }},
+            self.usuario, services.versao_bloco(extracao),
+        )
+        for nome in CAMPOS_DA_ORIGEM:
+            with self.subTest(nome=nome):
+                self.assertEqual(
+                    extracao.campos.filter(
+                        chave=f'/acts/0/origem/{nome}',
+                    ).count(),
+                    1,
+                )
+
+        decisoes = {
+            f'/acts/0/origem/{nome}': {
+                'incluir': True, 'valor': valor, 'conferido': True,
+            }
+            for nome, valor in (
+                ('tipo_documento', 'transcricao'),
+                ('numero', self.NUMERO),
+                ('livro', '2'),
+                ('folha', '123'),
+                ('data', '1990-01-02'),
+            )
+        }
+        # O cartório da origem já existe no cadastro: o revisor o escolhe.
+        decisoes['/acts/0/origem/cartorio'] = {
+            'incluir': True, 'conferido': True,
+            'escolha': {'cartorio_escolhido_id': self.cartorio_origem.pk},
+        }
+        services.salvar_bloco(extracao, decisoes, self.usuario, versao)
+
+        extracao = services.finalizar_revisao(extracao, self.usuario)
+
+        resultado = self._importar(extracao)
+
+        self.assertTrue(resultado['ok'])
+        lancamento = Lancamento.objects.get()
+        origem = LancamentoOrigem.objects.get(lancamento=lancamento)
+        self.assertEqual(origem.tipo_documento, 'transcricao')
+        self.assertEqual(origem.numero, self.NUMERO)
+        self.assertEqual(origem.cartorio, self.cartorio_origem)
+        (documento_origem,) = self._outros_documentos()
+        self.assertEqual(documento_origem.tipo, self.tipo_transcricao)
+        self.assertEqual(documento_origem.numero, self.NUMERO)
+        self.assertEqual(documento_origem.cartorio, self.cartorio_origem)
+        self.assertIsNotNone(lancamento.documento_origem)
+        self.assertEqual(lancamento.documento_origem, documento_origem)
 
     def test_registro_com_origem_inexistente_nao_cria_nem_vincula(self):
         extracao = self._extracao(self._payload_origem())
