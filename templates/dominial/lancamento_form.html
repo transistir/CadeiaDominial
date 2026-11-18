@@ -3,7 +3,7 @@
 {% load dominial_extras %}
 
 {% block title %}
-    {% if modo_edicao %}Editar Lançamento{% else %}Novo Lançamento{% endif %} - {{ imovel.nome }}
+    {% if revisao_ia %}Revisar Lançamento{% elif modo_edicao %}Editar Lançamento{% else %}Novo Lançamento{% endif %} - {{ imovel.nome }}
 {% endblock %}
 
 {% block extra_css %}
@@ -14,12 +14,19 @@
 
 {% block content %}
 <div class="container-fluid lancamento-form-page">
-    <h1>{% if modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
+    {# Na revisão, ``modo_edicao`` só carrega a herança de cartório (como no 2º lançamento manual): o título é de revisão #}
+    <h1>{% if revisao_ia %}📄 Revisar{% elif modo_edicao %}✏️ Editar{% else %}➕ Novo{% endif %} Lançamento</h1>
 
 <div class="lancamento-layout">
-    {% include "dominial/components/_lancamento_sidebar.html" %}
+    {# I-14 (#341): na revisão da extração a sidebar lista os ATOS do documento #}
+    {% if revisao_ia %}
+        {% include "ia_ocr/_revisao_sidebar.html" %}
+    {% else %}
+        {% include "dominial/components/_lancamento_sidebar.html" %}
+    {% endif %}
 
     <main class="lancamento-main">
+    {% if revisao_ia %}{% include "ia_ocr/_revisao_banner.html" %}{% endif %}
     <!-- Seção de Documento Importado -->
     {% if is_documento_importado %}
     <div class="alert alert-info documento-importado-alert">
@@ -185,6 +192,12 @@
 {{ fim_cadeia_opcoes|json_script:"fim-cadeia-opcoes-data" }}
 <script src="{% static 'dominial/js/lancamento_form.js' %}"></script>
 <script src="{% static 'dominial/js/origem_simples.js' %}"></script>
+{% if revisao_ia %}
+{# I-14 (#341): evidência por campo, navegação entre atos e número de origem #}
+{# com ponto — JS próprio, carregado DEPOIS dos do formulário manual.        #}
+{{ evidencias|json_script:"ia-evidencias" }}
+<script src="{% static 'dominial/js/ocr_revisao_formulario.js' %}"></script>
+{% endif %}
 <script>
     // Variáveis para detecção de tipo de documento
     window.isTranscricao = {% if documento.tipo.tipo == 'transcricao' %}true{% else %}false{% endif %};

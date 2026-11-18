@@ -82,9 +82,12 @@ _ROTULO_DA_FOLHA_IGNORADA = {
     'detalhes': 'Detalhes',
 }
 
-# Mesmo critério de ``_origens_separadas_do_post`` para separar o tipo (M/T)
-# do número do texto da origem.
-_TEXTO_DA_ORIGEM = re.compile(r'^([MT])(\d+)')
+# Separa o tipo (M/T) do número no texto da origem. Igual ao critério de
+# ``_origens_separadas_do_post``, mas o número aceita o ponto de milhar que o
+# OCR traz (``M42.718``): com ``\d+`` o input visível perdia o ``.718`` e o
+# usuário salvava outra matrícula sem perceber (#341, fase 2). Mesma forma de
+# "número puro" do parser de rótulos (``importacao._NUMERO_SIMPLES``).
+TEXTO_DA_ORIGEM = re.compile(r'^([MT])(\d+(?:\.\d+)*)')
 
 
 class AtoInexistente(LookupError):
@@ -327,7 +330,7 @@ def _origens_separadas(ato, linhas, nomes_cartorios, evidencias):
         if evidencia is not None:
             evidencias[f'{input_do_campo(chave)}[0]'] = evidencia
 
-    achado = _TEXTO_DA_ORIGEM.match(texto)
+    achado = TEXTO_DA_ORIGEM.match(texto)
     return [{
         'texto': texto,
         'index': 0,

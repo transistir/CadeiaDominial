@@ -35,6 +35,14 @@ urlpatterns = [
         _BASE + 'texto/extrair-campos/',
         views.extrair_campos_ocr, name='extrair_campos_ocr',
     ),
+    # I-14 (#341): a revisão é o formulário de lançamento, um ato por vez.
+    # ``revisar/`` leva ao primeiro ato pendente; ``revisar/<indice>/`` é o
+    # formulário do ato (GET mostra, POST salva ou navega — nunca grava no GET).
+    path(_BASE + 'revisar/', views.revisar_job_ocr, name='revisar_job_ocr'),
+    path(
+        _BASE + 'revisar/<int:indice>/',
+        views.revisar_ato_ocr, name='revisar_ato_ocr',
+    ),
     path(_BASE + 'campos/', views.campos_job_ocr, name='campos_job_ocr'),
     path(_BASE + 'campos/salvar/', views.salvar_bloco_ocr, name='salvar_bloco_ocr'),
     path(

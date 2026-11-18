@@ -1,0 +1,40 @@
+{% comment %}
+  Sidebar da revisão da extração (I-14 / #341): uma aba por ATO do documento.
+  Substitui a sidebar de sequência do formulário manual só quando a view
+  entrega ``revisao_ia``. Contexto: revisao_ia.atos = [{indice, posicao,
+  rotulo, estado, atual, url, url_lancamento}].
+
+  - salvo: o ato já virou lançamento (ImportacaoIA) → link para a edição dele;
+  - pendente: link para o ato. O JS (ocr_revisao_formulario.js) troca o clique
+    por um envio do formulário com ``_ir_para``, para guardar o que foi
+    digitado (rascunho na sessão). Sem JS o link só navega (GET);
+  - atual: a aba em edição.
+  Não usa a classe ``js-lancamento-resumo`` do formulário manual.
+{% endcomment %}
+<aside class="lancamento-sidebar ia-revisao-sidebar" aria-label="Atos da extração">
+    <div class="sidebar-section-title">Atos da extração</div>
+    <nav class="sidebar-tabs">
+        {% for ato in revisao_ia.atos %}
+            {% if ato.atual %}
+                <span class="sidebar-tab active ia-ato" aria-current="step"
+                      title="Ato em edição">{{ ato.posicao }}. {{ ato.rotulo }}
+                    <small class="ia-ato-estado">em edição</small></span>
+            {% elif ato.estado == "importado" and ato.url_lancamento %}
+                <a href="{{ ato.url_lancamento }}" class="sidebar-tab ia-ato ia-ato-importado"
+                   title="Ato já salvo como lançamento">{{ ato.posicao }}. {{ ato.rotulo }}
+                    <small class="ia-ato-estado">✔ salvo</small></a>
+            {% else %}
+                <a href="{{ ato.url }}" class="sidebar-tab ia-ato ia-ato-pendente"
+                   data-ir-para="{{ ato.indice }}"
+                   title="Ato ainda não salvo">{{ ato.posicao }}. {{ ato.rotulo }}
+                    <small class="ia-ato-estado">pendente</small></a>
+            {% endif %}
+        {% endfor %}
+    </nav>
+</aside>
+<style>
+    .ia-revisao-sidebar .ia-ato { display: block; }
+    .ia-revisao-sidebar .ia-ato-estado { display: block; font-size: 0.75em; opacity: 0.8; }
+    .ia-revisao-sidebar .ia-ato-importado { border-left: 3px solid #198754; }
+    .ia-revisao-sidebar .ia-ato-pendente { border-left: 3px solid #ffc107; }
+</style>
