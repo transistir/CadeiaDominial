@@ -1218,36 +1218,61 @@ def _origem_nao_consta(linhas, ato):
     return achados
 
 
-def _origem_homonima(linhas, ato, documentos_queryset):
-    """Aviso de homônimo de outro tipo na origem do ato (#267), ou ``[]``.
+def _origens_homonimas(linhas, atos, documentos_queryset):
+    """Avisos de homônimo de outro tipo na origem, por ato, em LOTE (#267).
 
     Só com o escopo do chamador (``documentos_queryset``) e com o cartório da
     origem JÁ cadastrado e escolhido: "criar novo" não tem documentos. O tipo
     é o lido ou o inferido do prefixo — a mesma regra da importação.
+
+    O item a item fazia 5 consultas POR ATO (cartório, resolução da
+    identidade, origem restrita e candidatos): o recálculo dos avisos no
+    save da revisão crescia com o número de atos (#324, PR #343, MUST-FIX do
+    review). Agora é uma leitura dos cartórios escolhidos e o lote do
+    ``homonimos_outro_tipo`` — o total não depende do número de atos.
+    Devolve ``{chave do ato: aviso}`` só dos atos com homônimo.
     """
-    chave_numero = f'{ato.chave}/origem/numero'
-    if _campo_ausente(linhas, chave_numero):
-        return []
-    cartorio_id = _cartorio_id_da_linha(linhas, f'{ato.chave}/origem/cartorio')
-    if cartorio_id is None:
-        return []
-    cartorio = Cartorios.objects.filter(pk=cartorio_id).first()
-    if cartorio is None:
-        return []
-    numero = _valor_efetivo(linhas[chave_numero]).strip()
-    tipo_linha = linhas.get(f'{ato.chave}/origem/tipo_documento')
-    tipo = tipo_da_origem(
-        _valor_efetivo(tipo_linha) if tipo_linha is not None else None, numero,
+    consultas = {}
+    chave_numero_por_ato = {}
+    cartorios_ids = set()
+    for ato in atos:
+        chave_numero = f'{ato.chave}/origem/numero'
+        if _campo_ausente(linhas, chave_numero):
+            continue
+        cartorio_id = _cartorio_id_da_linha(linhas, f'{ato.chave}/origem/cartorio')
+        if cartorio_id is None:
+            continue
+        numero = _valor_efetivo(linhas[chave_numero]).strip()
+        tipo_linha = linhas.get(f'{ato.chave}/origem/tipo_documento')
+        tipo = tipo_da_origem(
+            _valor_efetivo(tipo_linha) if tipo_linha is not None else None,
+            numero,
+        )
+        consultas[ato.chave] = (tipo, numero, cartorio_id)
+        chave_numero_por_ato[ato.chave] = chave_numero
+        cartorios_ids.add(cartorio_id)
+    if not consultas:
+        return {}
+    # Uma leitura para todos os cartórios escolhidos: id que não existe mais
+    # (FK obsoleta) fica de fora, como o ``.first()`` que devolvia None.
+    cartorios = Cartorios.objects.in_bulk(cartorios_ids)
+    homonimos = LancamentoOrigemService.homonimos_outro_tipo(
+        {
+            chave: (tipo, numero, cartorios[cartorio_id])
+            for chave, (tipo, numero, cartorio_id) in consultas.items()
+            if cartorio_id in cartorios
+        },
+        documentos_queryset=documentos_queryset,
     )
-    homonimo = LancamentoOrigemService.homonimo_outro_tipo(
-        tipo, numero, cartorio, documentos_queryset=documentos_queryset,
-    )
-    if homonimo is None:
-        return []
-    return [{
-        'chave': chave_numero, 'motivo': MOTIVO_ORIGEM_HOMONIMA,
-        'bloqueante': False,
-    }]
+    return {
+        chave: {
+            'chave': chave_numero_por_ato[chave],
+            'motivo': MOTIVO_ORIGEM_HOMONIMA,
+            'bloqueante': False,
+        }
+        for chave, homonimo in homonimos.items()
+        if homonimo is not None
+    }
 
 
 def avisos(extracao, documentos_queryset=None) -> list[dict]:
@@ -1262,14 +1287,20 @@ def avisos(extracao, documentos_queryset=None) -> list[dict]:
     """
     linhas, atos = _contexto_revisao(extracao)
     tipos_por_ato, configuracoes = _tipos_efetivos(linhas, atos)
+    # Homônimo em lote ANTES do laço: a ordem dos avisos por ato segue a
+    # mesma do item a item (logo depois do "não consta" da origem).
+    homonimos = (
+        _origens_homonimas(linhas, atos, documentos_queryset)
+        if documentos_queryset is not None else {}
+    )
     resultado = []
     for ato in atos:
         nao_consta = _origem_nao_consta(linhas, ato)
         resultado.extend(nao_consta)
         if documentos_queryset is not None:
-            resultado.extend(
-                _origem_homonima(linhas, ato, documentos_queryset)
-            )
+            aviso_homonimo = homonimos.get(ato.chave)
+            if aviso_homonimo is not None:
+                resultado.append(aviso_homonimo)
         ja_avisadas = {item['chave'] for item in nao_consta}
         tipo = configuracoes.get(tipos_por_ato.get(ato.chave))
         if tipo is None:

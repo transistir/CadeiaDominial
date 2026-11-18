@@ -72,20 +72,46 @@ function buscar(no, seletor, todos) {
   return todos ? achados : achados[0] || null;
 }
 
+function criarNoTexto(texto) {
+  const no = {
+    nodeType: 3,
+    nodeName: '#text',
+    parent: null,
+    data: String(texto),
+    get parentNode() { return this.parent; },
+    get textContent() { return this.data; },
+    set textContent(valor) { this.data = String(valor); },
+    get nextSibling() {
+      if (!this.parent) return null;
+      const irmaos = this.parent.childNodes;
+      return irmaos[irmaos.indexOf(this) + 1] || null;
+    },
+  };
+  return no;
+}
+
 function criarElemento(tagName, atributos, pai) {
   const el = {
-    tagName: (tagName || 'div').toUpperCase(),
+    nodeType: 1,
+    nodeName: (tagName || 'div').toUpperCase(),
     attributes: Object.assign({}, atributos || {}),
-    children: [],
-    parent: pai || null,
+    childNodes: [],
+    parent: null,
     hidden: false,
     disabled: false,
     checked: false,
     value: '',
     type: '',
-    textContent: '',
     listeners: {},
     classes: new Set(),
+    get children() { return this.childNodes.filter((no) => no.nodeType === 1); },
+    get textContent() { return this.childNodes.map((no) => no.textContent).join(''); },
+    set textContent(valor) {
+      this.childNodes.forEach((no) => { no.parent = null; });
+      this.childNodes.length = 0;
+      const texto = String(valor);
+      if (texto) this.appendChild(criarNoTexto(texto));
+    },
     get className() { return Array.from(this.classes).join(' '); },
     classList: {
       add(classe) { el.classes.add(classe); },
@@ -114,25 +140,32 @@ function criarElemento(tagName, atributos, pai) {
     dispatchEvent(evento) {
       (this.listeners[evento.type] || []).slice().forEach((fn) => fn(evento));
     },
-    appendChild(filho) { filho.parent = this; this.children.push(filho); return filho; },
+    appendChild(filho) {
+      if (filho.parent) filho.parent.removeChild(filho);
+      filho.parent = this;
+      this.childNodes.push(filho);
+      return filho;
+    },
     // #324 (PR #343): o save redesenha a lista de avisos e os selos.
     removeChild(filho) {
-      const indice = this.children.indexOf(filho);
-      if (indice !== -1) this.children.splice(indice, 1);
+      const indice = this.childNodes.indexOf(filho);
+      if (indice !== -1) this.childNodes.splice(indice, 1);
       filho.parent = null;
       return filho;
     },
     insertBefore(novo, referencia) {
-      const indice = referencia ? this.children.indexOf(referencia) : -1;
+      if (novo.parent) novo.parent.removeChild(novo);
+      const indice = referencia ? this.childNodes.indexOf(referencia) : -1;
       novo.parent = this;
-      if (indice === -1) this.children.push(novo); else this.children.splice(indice, 0, novo);
+      if (indice === -1) this.childNodes.push(novo); else this.childNodes.splice(indice, 0, novo);
       return novo;
     },
     get parentNode() { return this.parent; },
-    get firstChild() { return this.children[0] || null; },
+    get firstChild() { return this.childNodes[0] || null; },
     get nextSibling() {
       if (!this.parent) return null;
-      return this.parent.children[this.parent.children.indexOf(this) + 1] || null;
+      const irmaos = this.parent.childNodes;
+      return irmaos[irmaos.indexOf(this) + 1] || null;
     },
     querySelector(seletor) { return buscar(this, seletor, false); },
     querySelectorAll(seletor) { return buscar(this, seletor, true); },
@@ -154,7 +187,7 @@ function criarElemento(tagName, atributos, pai) {
     value: (tagName || 'div').toUpperCase(),
     writable: false,
   });
-  if (pai) pai.children.push(el);
+  if (pai) pai.appendChild(el);
   return el;
 }
 
@@ -320,11 +353,7 @@ function criarCenario(opcoes) {
       },
       querySelector(seletor) { return corresponde(raiz, seletor) ? raiz : null; },
       createElement(tag) { return criarElemento(tag); },
-      createTextNode(texto) {
-        const no = criarElemento('#text');
-        no.textContent = texto;
-        return no;
-      },
+      createTextNode(texto) { return criarNoTexto(texto); },
     },
     window: {
       setTimeout(fn, atraso) {
@@ -777,9 +806,9 @@ caso('avisos: preencher só o livro tira só o aviso e o selo do livro', async (
   afirmarIgual(ui.bloco.hidden, false, 'seção segue visível');
   afirmarIgual(ui.lista.children.length, 1, 'só o aviso da folha sobra na lista');
   afirmarIgual(
-    ui.lista.children[0].textContent,
+    ui.lista.children[0].childNodes[0].textContent,
     'Ato 1 — folha: Folha da origem não consta no documento',
-    'texto do item: local + rótulo, como no template'
+    'texto inicial do item: local + rótulo, como no template'
   );
   afirmarIgual(selosDoCard(livro).length, 0, 'selo do livro sai');
   afirmarIgual(livro.entrada.getAttribute('aria-describedby'), null, 'livro sem aria-describedby');
@@ -818,16 +847,20 @@ caso('avisos: aviso novo mostra a seção, desenha o item e cria o selo', async 
   afirmarIgual(item.tagName, 'LI', 'item é <li>');
   afirmar(item.classList.contains('aviso'), 'item leva a classe aviso');
   afirmarIgual(
-    item.textContent, 'Ato 1 — livro: Livro da origem não consta no documento',
-    'texto do item'
+    item.childNodes[0].textContent,
+    'Ato 1 — livro: Livro da origem não consta no documento',
+    'texto inicial do item'
   );
+  afirmarIgual(item.childNodes[0].nodeType, 3, 'texto inicial é nó de texto');
   const detalhe = item.children[0];
   afirmarIgual(detalhe.tagName, 'DETAILS', 'detalhe técnico em <details>');
   afirmarIgual(
     detalhe.children.map((filho) => filho.tagName + ':' + filho.textContent).join('|'),
-    'SUMMARY:Detalhe técnico|CODE:' + AVISO_LIVRO.chave + '|#TEXT: — |CODE:' + AVISO_LIVRO.motivo,
-    'detalhe técnico: resumo, chave, separador e motivo'
+    'SUMMARY:Detalhe técnico|CODE:' + AVISO_LIVRO.chave + '|CODE:' + AVISO_LIVRO.motivo,
+    'children contém apenas os elementos do detalhe técnico'
   );
+  afirmarIgual(detalhe.childNodes[2].nodeType, 3, 'separador é nó de texto');
+  afirmarIgual(detalhe.childNodes[2].textContent, ' — ', 'texto do separador técnico');
 
   ui.cards.forEach((card) => {
     const selos = selosDoCard(card);
@@ -910,7 +943,12 @@ caso('avisos: texto do servidor entra por textContent', async () => {
   await salvarUmaVez(c);
 
   const item = c.avisosUi.lista.children[0];
-  afirmarIgual(item.textContent, '<b>Ato 1</b>: <img src=x onerror=1>', 'vai como texto, sem virar tag');
+  afirmarIgual(
+    item.childNodes[0].textContent,
+    '<b>Ato 1</b>: <img src=x onerror=1>',
+    'vai como nó de texto, sem virar tag'
+  );
+  afirmarIgual(item.childNodes[0].nodeType, 3, 'conteúdo hostil é nó de texto');
   afirmarIgual(
     item.children.map((filho) => filho.tagName).join(','), 'DETAILS',
     'só o <details> técnico é elemento filho'

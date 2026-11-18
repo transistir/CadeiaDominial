@@ -3,13 +3,16 @@
 import copy
 import json
 import re
+from datetime import date
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.db import connection
 from django.shortcuts import resolve_url
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, override_settings
 from django.test.html import Element, parse_html
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from dominial.models import (
@@ -1848,6 +1851,111 @@ class HomonimoNaTelaTest(TelaRevisaoBase):
         for segredo in ('M366', 'ImovelAlheioS267', 'TI Alheia S267'):
             with self.subTest(segredo=segredo):
                 self.assertNotIn(segredo, conteudo)
+
+
+class HomonimoEmLoteNoSaveTest(TelaRevisaoBase):
+    """#324 (PR #343, MUST-FIX do review): o save recalcula os avisos de
+    TODOS os atos, e o número de consultas NÃO cresce com eles — o homônimo
+    da origem é checado em lote (era um bloco de consultas por ato)."""
+
+    # O endpoint tem custo fixo próprio (auth, contexto, lock, persistência e
+    # pendências). O teto baixo incide na fatia que o homônimo pode multiplicar:
+    # leituras de documentos/cartórios. A igualdade abaixo também cobre o POST
+    # inteiro para impedir que outro N+1 por ato passe despercebido.
+    LIMITE_CONSULTAS_HOMONIMO = 12
+
+    def _extracao_com_origens(self, total):
+        """``total`` atos, cada um com origem numerada, cartório escolhido e
+        o seu homônimo M… no escopo do usuário — o caminho do homônimo roda
+        para todos. A faixa de números sai do ``total``: duas chamadas no
+        mesmo teste (50 e 100) não esbarram na identidade única do documento."""
+        cartorio, _criado = Cartorios.objects.get_or_create(
+            cns='CNS-324L',
+            defaults={'nome': 'CRI Lote 324', 'cidade': 'X', 'estado': 'SP'},
+        )
+        base = 3000 + total
+        Documento.objects.bulk_create([
+            Documento(
+                imovel=self.imovel, tipo=self.documento.tipo,
+                numero=f'M{base + indice}', data=date(1990, 1, 1),
+                cartorio=cartorio, livro='1', folha='1',
+            )
+            for indice in range(total)
+        ])
+        payload = payload_registro(self.job.job_id)
+        payload['acts'] = [
+            {
+                'ordem': indice + 1,
+                'rotulo': _campo(f'R-{indice + 1}', 'R-1/42.718', raw='R-1'),
+                'tipo_sugerido': _campo('registro', 'R-1/42.718', raw='R-1'),
+                'data': _campo('2020-02-15', '15 de fevereiro de 2020'),
+                'origem': {
+                    'numero': _campo(f'T{base + indice}', 'R-1/42.718'),
+                    'tipo_documento': _campo('transcricao', 'R-1/42.718'),
+                    'cartorio': _campo('CRI Lote 324', 'CRI de Guaíra'),
+                },
+            }
+            for indice in range(total)
+        ]
+        extracao = self._extracao(payload)
+        # Cartório JÁ cadastrado e escolhido em todos os atos: sem isso a
+        # checagem do homônimo nem roda ("criar novo" não tem documentos).
+        extracao.campos.filter(chave__endswith='/origem/cartorio').update(
+            criar_novo=False, cartorio_escolhido_id=cartorio.pk,
+        )
+        return extracao
+
+    def _consultas_do_save(self, total):
+        """POST que muda só um campo do documento (como o review mediu) com
+        ``total`` atos; devolve consultas do POST e da fatia de homônimos."""
+        self._extracao_com_origens(total)
+        versao = self._tela().context['versao']
+        with CaptureQueriesContext(connection) as capturado:
+            resposta = self.client.post(
+                self.url('salvar_bloco_ocr'),
+                data=json.dumps({
+                    'versao': versao,
+                    'decisoes': [{
+                        'chave': '/document/data', 'incluir': True,
+                        'valor': '2020-01-10',
+                    }],
+                }),
+                content_type='application/json',
+            )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        # Premissa do teste: o aviso de homônimo foi calculado para TODOS os
+        # atos (cada origem T… tem a matrícula M… no cartório escolhido) —
+        # dobrar os atos dobrou o trabalho do lote, não as consultas.
+        avisos = resposta.json()['avisos']
+        self.assertEqual(total, len([
+            item for item in avisos
+            if item['motivo'] == 'origem_homonimo_outro_tipo'
+        ]))
+        consultas_homonimo = [
+            consulta for consulta in capturado.captured_queries
+            if any(
+                tabela in consulta['sql']
+                for tabela in ('"dominial_documento"', '"dominial_cartorios"')
+            )
+        ]
+        return len(capturado), len(consultas_homonimo)
+
+    def test_consultas_do_save_nao_crescem_com_o_numero_de_atos(self):
+        todas_com_50, homonimo_com_50 = self._consultas_do_save(50)
+        todas_com_100, homonimo_com_100 = self._consultas_do_save(100)
+
+        self.assertLess(
+            homonimo_com_100, self.LIMITE_CONSULTAS_HOMONIMO,
+            'a resolução em lote deve ter um teto baixo e fixo',
+        )
+        self.assertEqual(
+            homonimo_com_100, homonimo_com_50,
+            'dobrar os atos não pode multiplicar consultas de homônimos',
+        )
+        self.assertEqual(
+            todas_com_100, todas_com_50,
+            'dobrar os atos não pode aumentar as consultas do POST inteiro',
+        )
 
 
 class DescreverAvisoTest(SimpleTestCase):

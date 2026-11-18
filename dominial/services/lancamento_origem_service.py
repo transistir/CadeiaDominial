@@ -4,6 +4,7 @@ Service para processamento de origens automáticas dos lançamentos
 import logging
 import re
 import uuid
+from collections import defaultdict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -1243,46 +1244,119 @@ class LancamentoOrigemService:
         "não existe no cartório" seria falso), quando não há cartório ou
         número válido para o tipo, ou quando não há homônimo visível.
         """
+        # Um item do lote: a decisão é a MESMA (uma implementação só — o item
+        # e o lote não podem divergir), só as consultas mudam.
+        return LancamentoOrigemService.homonimos_outro_tipo(
+            {None: (tipo, numero, cartorio)},
+            documentos_queryset=documentos_queryset,
+        )[None]
+
+    @staticmethod
+    def homonimos_outro_tipo(consultas, *, documentos_queryset):
+        """Lote de ``homonimo_outro_tipo``: a mesma decisão, sem N+1 (#267).
+
+        ``consultas`` mapeia uma chave do chamador (a chave do ato, na
+        revisão) à tripla ``(tipo, numero, cartorio)``; devolve
+        ``{chave: Documento | None}`` com a decisão que
+        ``homonimo_outro_tipo`` daria a cada item isolado. O recálculo dos
+        avisos no save da revisão (#324, PR #343) chamava o item 5 vezes por
+        ato — o lote resolve 1 ou 100 atos com DUAS consultas: os candidatos
+        em escopo da janela (cartório + número normalizado) do lote e quem
+        existe fora dela.
+
+        A consulta global segue o contrato de ``identidade_existe_fora_do_escopo``
+        (D1/D3): as linhas viram um conjunto de identidades usado só para o
+        booleano "a origem declarada existe fora do escopo" — nenhum
+        documento de fora do escopo sai daqui.
+        """
         if documentos_queryset is None:
             raise TypeError(
-                'homonimo_outro_tipo exige documentos_queryset. '
+                'homonimos_outro_tipo exige documentos_queryset. '
                 'None→global é proibido (contrato C2).'
             )
-        if not cartorio:
-            return None
-        try:
-            identidade = DocumentoIdentidade(tipo, numero, cartorio.pk)
-        except (TypeError, ValueError):
-            return None
-        resolucao = DocumentoIdentidadeService.resolver(
-            identidade, queryset=documentos_queryset,
-        )
-        if resolucao.status != 'nao_encontrado':
-            return None
-        if LancamentoOrigemService._origem_restrita(
-            tipo, numero, cartorio, documentos_queryset,
-        ):
-            return None
-        candidatos = (
-            documentos_queryset
-            .filter(
-                cartorio_id=identidade.cartorio_id,
-                numero_normalizado=identidade.numero_normalizado,
-            )
-            .exclude(tipo__tipo=identidade.tipo)
-            .select_related('tipo')
-            .order_by('pk')
-        )
-        for candidato in candidatos:
+        resultado = {chave: None for chave in consultas}
+        identidades = {}
+        for chave, (tipo, numero, cartorio) in consultas.items():
+            if not cartorio:
+                continue
             try:
-                normalizado = normalizar_numero_documento(
-                    candidato.numero, candidato.tipo.tipo,
-                )
+                identidades[chave] = DocumentoIdentidade(tipo, numero, cartorio.pk)
             except (TypeError, ValueError):
                 continue
-            if normalizado == identidade.numero_normalizado:
-                return candidato
-        return None
+        if not identidades:
+            return resultado
+        cartorios_ids = {i.cartorio_id for i in identidades.values()}
+        numeros = {i.numero_normalizado for i in identidades.values()}
+        # Janela em escopo do lote inteiro, em ordem de pk (a mesma ordem da
+        # varredura de candidatos do item): cobre a busca da identidade
+        # declarada e a dos homônimos de outro tipo.
+        em_escopo = defaultdict(list)
+        for documento in (
+            documentos_queryset
+            .filter(cartorio_id__in=cartorios_ids, numero_normalizado__in=numeros)
+            .select_related('tipo')
+            .order_by('pk')
+        ):
+            em_escopo[(documento.cartorio_id, documento.numero_normalizado)].append(
+                documento
+            )
+        # Quem existe FORA do escopo, uma consulta só (D1/D3): a identidade
+        # declarada que só existe fora tem aviso próprio de origem restrita —
+        # afirmar "não existe no cartório" seria falso.
+        fora_do_escopo = set(
+            Documento.objects
+            .filter(cartorio_id__in=cartorios_ids, numero_normalizado__in=numeros)
+            .values_list('tipo__tipo', 'numero_normalizado', 'cartorio_id')
+        )
+        for chave, identidade in identidades.items():
+            janela = em_escopo.get(
+                (identidade.cartorio_id, identidade.numero_normalizado), (),
+            )
+            # 1) A identidade declarada existe no escopo? Vale o candidato
+            #    VÁLIDO do ``DocumentoIdentidadeService.resolver``: o número
+            #    renormalizado pelo tipo confere com o da identidade.
+            if any(
+                documento.tipo.tipo == identidade.tipo
+                and LancamentoOrigemService._numero_confere(documento, identidade)
+                for documento in janela
+            ):
+                continue
+            # 2) Origem restrita: como ``identidade_existe_fora_do_escopo``,
+            #    a existência EM escopo é a comparação crua do ``.exists()``
+            #    (sem renormalizar); a global diz se ela existe fora.
+            existe_em_escopo = any(
+                documento.tipo.tipo == identidade.tipo for documento in janela
+            )
+            if not existe_em_escopo and (
+                (
+                    identidade.tipo, identidade.numero_normalizado,
+                    identidade.cartorio_id,
+                ) in fora_do_escopo
+            ):
+                continue
+            # 3) O primeiro homônimo de outro tipo da janela, em ordem de pk.
+            for documento in janela:
+                if documento.tipo.tipo != identidade.tipo and (
+                    LancamentoOrigemService._numero_confere(documento, identidade)
+                ):
+                    resultado[chave] = documento
+                    break
+        return resultado
+
+    @staticmethod
+    def _numero_confere(documento, identidade):
+        """O número do candidato renormalizado pelo seu tipo é o da identidade?
+
+        A mesma checagem da varredura de candidatos do ``homonimo_outro_tipo``
+        original: número inválido para o tipo do candidato é ignorado.
+        """
+        try:
+            return (
+                normalizar_numero_documento(documento.numero, documento.tipo.tipo)
+                == identidade.numero_normalizado
+            )
+        except (TypeError, ValueError):
+            return False
 
     @staticmethod
     def _resolver_documento_estrito(tipo, numero, cartorio, documentos_queryset):
