@@ -5,8 +5,10 @@
  * Cada alteração num card (valor, incluir, conferido, escolha de cadastro,
  * conversão de área) agenda, com debounce de 300 ms, um POST só daquele card
  * para url_salvar. Os POSTs saem em fila, um por vez, cada um com a versão
- * devolvida pelo anterior. 200 atualiza a versão e o contador/botão de
- * pendências; 409 recarrega a página (outra aba ou usuário mudou a revisão);
+ * devolvida pelo anterior. 200 atualiza a versão, o contador/botão de
+ * pendências e os avisos (lista, contagem e selos "não consta no documento",
+ * recalculados pelo servidor, #324); 409 recarrega a página (outra aba ou
+ * usuário mudou a revisão);
  * 422 mostra o erro no próprio card. Cards cujo último envio falhou ficam
  * registrados e são reenviados antes de finalizar. O finalizar também vai em
  * JSON, porque o endpoint não aceita formulário.
@@ -31,6 +33,8 @@
         decisao_invalida: 'Decisão inválida para este campo.',
         sem_extracao: 'Extração indisponível.'
     };
+    // Mesmo texto do selo que o template desenha na abertura (#324).
+    var TEXTO_SELO_NAO_CONSTA = 'não consta no documento';
     var AVISO_RECARGA = 'Identidade alterada: a tela será atualizada quando você sair dos campos.';
     var AVISO_SEM_ATOS = 'Pendências resolvidas: a tela será atualizada para liberar o finalizar sem atos.';
 
@@ -215,6 +219,93 @@
             });
         }
 
+        // #324 (PR #343): os avisos e os selos "não consta no documento" só
+        // eram calculados na abertura da página. O save 200 devolve a lista
+        // recalculada pelo servidor (a MESMA fonte da abertura) e aqui só se
+        // desenha: a lista, a contagem do cabeçalho e o selo de cada card.
+        // Dado do servidor entra por textContent, nunca como HTML.
+        function itemDeAviso(item) {
+            var li = document.createElement('li');
+            li.classList.add('aviso');
+            li.textContent = (item.local ? item.local + ': ' : '')
+                + (item.rotulo || '');
+            var detalhe = document.createElement('details');
+            var resumo = document.createElement('summary');
+            resumo.textContent = 'Detalhe técnico';
+            var chave = document.createElement('code');
+            chave.textContent = item.chave || '';
+            var motivo = document.createElement('code');
+            motivo.textContent = item.motivo || '';
+            detalhe.appendChild(resumo);
+            detalhe.appendChild(chave);
+            detalhe.appendChild(document.createTextNode(' — '));
+            detalhe.appendChild(motivo);
+            li.appendChild(detalhe);
+            return li;
+        }
+
+        // O selo é um <span> logo depois do rótulo do card; o campo aponta
+        // para ele por aria-describedby enquanto ele existir. O id do selo
+        // sai do id do próprio campo (campo-<slug> → nao-consta-<slug>), a
+        // mesma regra do template, sem repetir o slugify do servidor.
+        function marcarSelo(card, comSelo) {
+            var selo = card.querySelector('[data-campo-nao-consta]');
+            var valor = card.querySelector('[data-campo-valor]');
+            if (!comSelo) {
+                if (!selo) return;
+                if (valor && valor.getAttribute('aria-describedby') === selo.getAttribute('id')) {
+                    valor.removeAttribute('aria-describedby');
+                }
+                if (selo.parentNode) selo.parentNode.removeChild(selo);
+                return;
+            }
+            if (!selo) {
+                var rotulo = card.querySelector('[data-campo-rotulo]');
+                if (!rotulo || !rotulo.parentNode) return;
+                selo = document.createElement('span');
+                selo.classList.add('badge-motivo');
+                selo.setAttribute('data-campo-nao-consta', '');
+                var idCampo = valor && valor.getAttribute('id');
+                if (idCampo) {
+                    selo.setAttribute('id', 'nao-consta-' + idCampo.replace(/^campo-/, ''));
+                }
+                selo.textContent = TEXTO_SELO_NAO_CONSTA;
+                rotulo.parentNode.insertBefore(selo, rotulo.nextSibling);
+            }
+            var idSelo = selo.getAttribute('id');
+            if (valor && idSelo) valor.setAttribute('aria-describedby', idSelo);
+        }
+
+        function atualizarAvisos(avisos) {
+            var total = avisos.length;
+            var contador = raiz.querySelector('[data-ocr-contador-avisos]');
+            var rotulo = raiz.querySelector('[data-ocr-contador-avisos-texto]');
+            if (contador) contador.textContent = String(total);
+            if (rotulo) rotulo.textContent = total === 1 ? 'aviso' : 'avisos';
+
+            var bloco = raiz.querySelector('[data-ocr-avisos]');
+            var lista = raiz.querySelector('[data-ocr-avisos-lista]');
+            if (lista) {
+                while (lista.firstChild) lista.removeChild(lista.firstChild);
+                avisos.forEach(function (item) {
+                    if (item) lista.appendChild(itemDeAviso(item));
+                });
+            }
+            if (bloco) bloco.hidden = total === 0;
+
+            // Só o servidor diz qual aviso é de "não consta" (item.nao_consta):
+            // o cliente não repete a lista de motivos.
+            var comSelo = {};
+            avisos.forEach(function (item) {
+                if (item && item.nao_consta === true && typeof item.chave === 'string') {
+                    comSelo[item.chave] = true;
+                }
+            });
+            cards.forEach(function (card) {
+                marcarSelo(card, comSelo[card.getAttribute('data-chave')] === true);
+            });
+        }
+
         function modoSemAtos() {
             return raiz.getAttribute('data-permitir-sem-atos') === '1';
         }
@@ -365,6 +456,11 @@
                         if (Array.isArray(dados.pendencias)) {
                             atualizarPendencias(dados.pendencias);
                             atualizarSecoes(dados.pendencias);
+                        }
+                        // #324: o aviso recalculado do estado recém-salvo
+                        // (livro/folha preenchidos, número da origem mudado).
+                        if (Array.isArray(dados.avisos)) {
+                            atualizarAvisos(dados.avisos);
                         }
                         // A identidade de uma parte mudou e a escolha antiga
                         // foi zerada no servidor. Não recarrega no meio da

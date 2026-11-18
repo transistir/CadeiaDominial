@@ -377,6 +377,22 @@ class ExtracaoViewsTest(TelaTextoBase):
                 for item in revisao.pendencias(extracao)
             ],
             'sem_atos_elegivel': False,
+            # #324: os avisos recalculados do estado recém-salvo, da mesma
+            # fonte da abertura da tela (revisao.avisos + descrever_aviso).
+            'avisos': [
+                {
+                    'chave': item['chave'], 'motivo': item['motivo'],
+                    'local': item['local'], 'rotulo': item['rotulo'],
+                    'nao_consta': item['motivo'].endswith('_origem_nao_consta'),
+                }
+                for item in map(
+                    revisao.descrever_aviso,
+                    revisao.avisos(
+                        extracao,
+                        documentos_queryset=documentos_for_user(self.dono),
+                    ),
+                )
+            ],
         })
         self.assertNotEqual(resposta.json()['versao'], versao)
         campo = extracao.campos.get(chave='/document/data')

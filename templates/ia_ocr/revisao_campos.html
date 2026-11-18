@@ -14,7 +14,7 @@
         <div class="imovel-info">
             <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
             <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
-            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias_total }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias_total|pluralize }}</span> · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
+            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias_total }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias_total|pluralize }}</span> · <strong data-ocr-contador-avisos>{{ avisos|length }}</strong> <span data-ocr-contador-avisos-texto>aviso{{ avisos|length|pluralize }}</span></div>
         </div>
     </div>
 
@@ -62,10 +62,10 @@
     </section>
     {% endif %}
 
-    {% if avisos %}
-    <section class="revisao-bloco" aria-labelledby="ocr-avisos-titulo" data-ocr-avisos>
+    {# #324 (PR #343): a seção fica sempre no DOM (oculta sem avisos) — o save recalcula os avisos e o ocr_revisao.js troca a lista; um aviso novo (ex.: o número da origem foi preenchido) não pode depender de recarregar a página. #}
+    <section class="revisao-bloco" aria-labelledby="ocr-avisos-titulo" data-ocr-avisos{% if not avisos %} hidden{% endif %}>
         <h3 class="h6" id="ocr-avisos-titulo">Avisos</h3>
-        <ul class="revisao-lista">
+        <ul class="revisao-lista" data-ocr-avisos-lista>
             {% for item in avisos %}
             <li class="aviso">
                 {# #324: o rótulo vem do motivo (revisao._ROTULO_AVISO); motivo fora do mapa cai no texto de sempre. #}
@@ -75,7 +75,6 @@
             {% endfor %}
         </ul>
     </section>
-    {% endif %}
 
     <div id="revisao">
         {% for secao in secoes %}

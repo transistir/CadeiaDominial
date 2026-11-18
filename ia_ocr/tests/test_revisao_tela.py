@@ -1612,6 +1612,133 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         ])
         self.assertNotIn('data-campo-nao-consta', html)
 
+    # --- #324 (PR #343, P2): o save devolve os avisos RECALCULADOS ----------
+    # Os avisos e os selos "não consta no documento" só eram calculados na
+    # abertura da página: preencher livro/folha deixava o aviso na tela, e
+    # mudar o número da origem podia esconder ou criar um. A resposta do save
+    # traz a lista do estado recém-salvo, da MESMA fonte da abertura.
+
+    CHAVES_LIVRO_FOLHA = ('/acts/0/origem/livro', '/acts/0/origem/folha')
+
+    def _salvar_decisoes(self, decisoes):
+        return self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [
+                    {'chave': chave, 'incluir': True, 'valor': valor}
+                    for chave, valor in decisoes.items()
+                ],
+            }),
+            content_type='application/json',
+        )
+
+    @staticmethod
+    def _chaves_dos_avisos(avisos):
+        return sorted((item['chave'], item['motivo']) for item in avisos)
+
+    def test_salvar_livro_e_folha_da_origem_tira_os_avisos_do_ato(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        abertura = self._tela().context['avisos']
+        self.assertEqual(
+            sorted(
+                item['chave'] for item in abertura
+                if item['motivo'].endswith('_nao_consta')
+            ),
+            sorted(self.CHAVES_LIVRO_FOLHA),
+        )
+
+        resposta = self._salvar_decisoes({
+            '/acts/0/origem/livro': '3-A', '/acts/0/origem/folha': '12',
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        avisos = resposta.json()['avisos']
+        # Os avisos de livro/folha DAQUELE ato saíram da resposta, e com eles
+        # o selo (nenhum item "não consta" sobrou).
+        self.assertFalse([
+            item for item in avisos if item['chave'] in self.CHAVES_LIVRO_FOLHA
+        ])
+        self.assertFalse([item for item in avisos if item['nao_consta']])
+        # É o MESMO cálculo da abertura: reabrir a tela mostra a mesma lista.
+        self.assertEqual(
+            self._chaves_dos_avisos(avisos),
+            self._chaves_dos_avisos(self._tela().context['avisos']),
+        )
+
+    def test_salvar_so_o_livro_mantem_o_aviso_da_folha(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/livro': '3-A'})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        (aviso,) = [
+            item for item in resposta.json()['avisos'] if item['nao_consta']
+        ]
+        self.assertEqual(aviso, {
+            'chave': '/acts/0/origem/folha',
+            'motivo': 'folha_origem_nao_consta',
+            'local': 'Ato 1 — folha',
+            'rotulo': 'Folha da origem não consta no documento',
+            'nao_consta': True,
+        })
+
+    def test_esvaziar_o_livro_depois_de_salvo_volta_o_aviso(self):
+        payload = self._payload_formulario()
+        payload['acts'][0]['origem']['livro'] = _campo('3-A', 'R-1/42.718')
+        self._extracao(payload, resolver=True)
+        self.assertFalse([
+            item for item in self._tela().context['avisos']
+            if item['chave'] == '/acts/0/origem/livro'
+        ])
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/livro': ''})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(
+            [
+                (item['chave'], item['motivo'], item['nao_consta'])
+                for item in resposta.json()['avisos']
+                if item['chave'] == '/acts/0/origem/livro'
+            ],
+            [('/acts/0/origem/livro', 'livro_origem_nao_consta', True)],
+        )
+
+    def test_preencher_o_numero_da_origem_cria_os_avisos_de_livro_e_folha(self):
+        """Sem número não há documento de origem citado: nada a avisar."""
+        payload = self._payload_formulario()
+        del payload['acts'][0]['origem']['numero']
+        self._extracao(payload, resolver=True)
+        self.assertFalse([
+            item for item in self._tela().context['avisos']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/numero': '42'})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(
+            sorted(
+                item['chave'] for item in resposta.json()['avisos']
+                if item['nao_consta']
+            ),
+            sorted(self.CHAVES_LIVRO_FOLHA),
+        )
+
+    def test_apagar_o_numero_da_origem_esconde_os_avisos_de_livro_e_folha(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        self.assertTrue([
+            item for item in self._tela().context['avisos']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/numero': ''})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertFalse([
+            item for item in resposta.json()['avisos'] if item['nao_consta']
+        ])
+
 
 class HomonimoNaTelaTest(TelaRevisaoBase):
     """#267: o aviso de homônimo sai do escopo do USUÁRIO, nunca do global."""
@@ -1670,6 +1797,57 @@ class HomonimoNaTelaTest(TelaRevisaoBase):
         for segredo in ('M366', 'ImovelAlheioT267', 'TI Alheia T267'):
             with self.subTest(segredo=segredo):
                 self.assertNotContains(resposta, segredo)
+
+    # #324 (PR #343): a resposta do save usa o MESMO escopo da abertura.
+
+    def _salvar_e_ler_avisos(self):
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/origem/livro', 'incluir': True,
+                    'valor': '3-A',
+                }],
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        return salvar
+
+    def test_save_devolve_o_homonimo_do_escopo_do_usuario(self):
+        self._preparar(self.imovel)
+
+        salvar = self._salvar_e_ler_avisos()
+
+        (aviso,) = [
+            item for item in salvar.json()['avisos']
+            if item['motivo'] == 'origem_homonimo_outro_tipo'
+        ]
+        self.assertEqual(aviso['chave'], '/acts/0/origem/numero')
+        self.assertFalse(aviso['nao_consta'])
+        # O texto fala do tipo; nunca do número do documento homônimo.
+        self.assertNotIn('M366', salvar.content.decode())
+
+    def test_save_nao_devolve_homonimo_de_outra_ti_nem_vaza(self):
+        outra = TIs.objects.create(nome='TI Alheia S267', codigo='TI-S267', etnia='X')
+        imovel_alheio = Imovel.objects.create(
+            nome='ImovelAlheioS267', matricula='ALHEIO-S267',
+            terra_indigena_id=outra, proprietario=self.imovel.proprietario,
+            cartorio=self.imovel.cartorio,
+        )
+        self._preparar(imovel_alheio)
+
+        salvar = self._salvar_e_ler_avisos()
+
+        self.assertNotIn(
+            'origem_homonimo_outro_tipo',
+            [item['motivo'] for item in salvar.json()['avisos']],
+        )
+        conteudo = salvar.content.decode()
+        for segredo in ('M366', 'ImovelAlheioS267', 'TI Alheia S267'):
+            with self.subTest(segredo=segredo):
+                self.assertNotIn(segredo, conteudo)
 
 
 class DescreverAvisoTest(SimpleTestCase):

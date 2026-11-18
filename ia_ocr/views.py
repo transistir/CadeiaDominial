@@ -64,6 +64,51 @@ def _contexto_job(request, tis_id, imovel_id, documento_id, job_id):
     return tis, imovel, documento, job
 
 
+def _avisos_descritos(request, extracao) -> list[dict]:
+    """Avisos da revisão com o texto de negócio de cada um (#324).
+
+    A MESMA fonte para a abertura da tela (``campos_job_ocr``) e para a
+    resposta do save (``salvar_bloco_ocr``): o aviso (e o selo "não consta no
+    documento") nasce do estado salvo da extração, então depois de um save a
+    tela precisa do cálculo novo — nada de reimplementar a regra no cliente.
+    O escopo do USUÁRIO alimenta o aviso de homônimo (#267): documento de
+    outra TI nunca participa dele.
+    """
+    return [
+        revisao.descrever_aviso(item)
+        for item in revisao.avisos(
+            extracao, documentos_queryset=documentos_for_user(request.user),
+        )
+    ]
+
+
+def _aviso_nao_consta(item) -> bool:
+    """O aviso é de "não consta no documento" (livro/folha da origem, #324).
+
+    É ele que dá o selo ao card; a abertura da tela e a resposta do save usam
+    este mesmo predicado, então o cliente não repete a lista de motivos.
+    """
+    return item['motivo'] in revisao.MOTIVOS_NAO_CONSTA
+
+
+def _avisos_da_resposta(request, extracao) -> list[dict]:
+    """Os avisos recalculados no formato da resposta do save (#324).
+
+    Só o que a tela desenha: chave (alvo do selo), motivo (detalhe técnico),
+    ``local``/``rotulo`` (texto de negócio) e ``nao_consta`` (o selo).
+    """
+    return [
+        {
+            'chave': item['chave'],
+            'motivo': item['motivo'],
+            'local': item['local'],
+            'rotulo': item['rotulo'],
+            'nao_consta': _aviso_nao_consta(item),
+        }
+        for item in _avisos_descritos(request, extracao)
+    ]
+
+
 def _kwargs_job(tis, imovel, documento, job):
     return {
         'tis_id': tis.pk,
@@ -666,22 +711,14 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     permitir_sem_atos = (
         services.pode_finalizar_sem_atos(extracao) and not somente_leitura
     )
-    # O escopo do USUÁRIO alimenta o aviso de homônimo (#267): documento de
-    # outra TI nunca participa dele.
-    avisos_descritos = [
-        revisao.descrever_aviso(item)
-        for item in revisao.avisos(
-            extracao, documentos_queryset=documentos_for_user(request.user),
-        )
-    ]
+    avisos_descritos = _avisos_descritos(request, extracao)
     # Detalhe técnico do card abre sozinho no campo com pendência, e o
     # cabeçalho do ato conta as pendências que o bloqueiam. O selo "não
     # consta no documento" (#324) marca o campo de livro/folha da origem que
     # o documento não trouxe; o campo segue vazio e editável.
     chaves_pendentes = {item['chave'] for item in pendencias}
     chaves_nao_consta = {
-        item['chave'] for item in avisos_descritos
-        if item['motivo'] in revisao.MOTIVOS_NAO_CONSTA
+        item['chave'] for item in avisos_descritos if _aviso_nao_consta(item)
     }
     for campo in campos:
         campo.pendente = campo.chave in chaves_pendentes
@@ -939,6 +976,15 @@ def salvar_bloco_ocr(request, tis_id, imovel_id, documento_id, job_id):
         # ``pendencias`` (sem atos ela é sempre nenhum_ato); a tela precisa
         # saber que a confirmação sem atos deixou de ser suficiente.
         'sem_atos_elegivel': _sem_atos_elegivel(_salva),
+        # #324 (PR #343, P2): os avisos e os selos "não consta no documento"
+        # só eram calculados na abertura da página — preencher livro/folha
+        # deixava o aviso na tela, e mudar o número da origem podia esconder
+        # ou criar um. A lista inteira vem da MESMA fonte da abertura
+        # (``_avisos_descritos``) sobre o estado recém-salvo; a tela troca a
+        # lista, a contagem e os selos por ela. Só chave, motivo, o texto de
+        # negócio e se o aviso é de "não consta" (o selo do card) — nada do
+        # valor revisado.
+        'avisos': _avisos_da_resposta(request, _salva),
     })
 
 
