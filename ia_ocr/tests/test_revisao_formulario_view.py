@@ -593,6 +593,74 @@ class SalvarAtoTest(RevisaoFormularioBase):
         )
 
 
+class AreaEmOutraUnidadeSalvarTest(RevisaoFormularioBase):
+    """M3: área não-ha exige uma decisão explícita no POST que salva o ato."""
+
+    def setUp(self):
+        super().setUp()
+        payload = self._payload_de_tres_atos()
+        payload['acts'] = [payload['acts'][0]]
+        payload['acts'][0]['area'] = {
+            **self._campo('120.00', 'área construída 120,00 m2'),
+            'unidade': 'm2',
+            'raw': '120,00 m2',
+        }
+        self.job.extracoes.all().delete()
+        self.extracao = self._aberta(payload)
+
+    def test_area_preenchida_em_hectares_salva_e_importa_o_ato(self):
+        resposta = self.salvar(0, area='0.012')
+
+        self.assertRedirects(
+            resposta, self.url_documento(), fetch_redirect_response=False,
+        )
+        lancamento = Lancamento.objects.get(documento=self.documento)
+        self.assertEqual(str(lancamento.area), '0.0120')
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, 'importado')
+
+    def test_descarte_explicito_salva_sem_area_e_importa_o_ato(self):
+        resposta = self.salvar(0, area='', descartar_area='1')
+
+        self.assertRedirects(
+            resposta, self.url_documento(), fetch_redirect_response=False,
+        )
+        lancamento = Lancamento.objects.get(documento=self.documento)
+        self.assertIsNone(lancamento.area)
+        campo = self.extracao.campos.get(chave='/acts/0/area')
+        self.assertEqual(campo.status_revisao, 'importado')
+        self.assertFalse(campo.area_convertida)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, 'importado')
+
+    def test_sem_area_nem_descarte_volta_com_erro_e_nao_grava(self):
+        antes = self.contagens()
+
+        resposta = self.salvar(0, area='')
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(self.contagens(), antes)
+        self.assertFalse(
+            Lancamento.objects.filter(documento=self.documento).exists(),
+        )
+        self.assertFalse(ImportacaoIA.objects.filter(ocr_job=self.job).exists())
+        self.assertIn(
+            'A área foi lida em unidade diferente de hectare',
+            ' '.join(self.mensagens(resposta)),
+        )
+        html = resposta.content.decode()
+        self.assertRegex(
+            html,
+            r'name="descartar_area"[^>]*form="lancamento-form"',
+        )
+        self.assertIn('Área lida em m², descartada pelo revisor.', html)
+        campo = self.extracao.campos.get(chave='/acts/0/area')
+        self.assertEqual(campo.status_revisao, 'sugerido')
+        self.assertFalse(campo.area_convertida)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, 'extraido')
+
+
 class DuplicataTest(RevisaoFormularioBase):
     def test_salvar_duas_vezes_grava_um_lancamento_so(self):
         pagina = self.client.get(self.url_ato(0))

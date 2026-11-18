@@ -91,8 +91,8 @@ ROTULO_DA_AREA = 'Área'
 UNIDADES_DE_AREA = {'ha': 'ha', 'm2': 'm²', 'alqueires': 'alqueires', 'ares': 'ares'}
 TEXTO_AREA_EM_OUTRA_UNIDADE = (
     '{lido} no documento{complemento} — o campo Área (em hectares) ficou '
-    'vazio: converta o valor para hectares e preencha o campo, ou preencha '
-    'manualmente. Nada é convertido sem a sua decisão.'
+    'vazio: converta o valor e preencha o campo, ou marque o descarte '
+    'explícito abaixo. Nada é convertido ou descartado sem a sua decisão.'
 )
 
 # Folhas do A3 que o formulário não tem (``revisao.LINHAS_IGNORADAS``, #328):
@@ -377,8 +377,22 @@ def _area_em_outra_unidade(extracao, indice, linhas, chave):
         'texto': TEXTO_AREA_EM_OUTRA_UNIDADE.format(
             lido=lido, complemento=complemento,
         ),
-        'bloqueante': False,
+        'rotulo_descarte': (
+            f'Área lida em {unidade or "unidade não identificada"}, '
+            'descartada pelo revisor.'
+        ),
+        'bloqueante': True,
     }
+
+
+def area_exige_decisao(extracao, indice, linhas=None):
+    """Se o ato tem área não-ha que exige preenchimento ou descarte explícito."""
+    linhas = (
+        linhas if linhas is not None
+        else importacao._linhas_por_chave(extracao)
+    )
+    chave = f'/acts/{int(indice)}'
+    return _area_em_outra_unidade(extracao, int(indice), linhas, chave) is not None
 
 
 def _cartorio(cartorio_id, nome_da_linha, nomes):

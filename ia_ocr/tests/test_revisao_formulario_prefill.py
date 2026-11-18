@@ -640,7 +640,12 @@ class AreaEmOutraUnidadeTest(PrefillBase):
         self.assertEqual(aviso['rotulo'], 'Área')
         self.assertIn('120 m² no documento', aviso['texto'])
         self.assertIn('converta', aviso['texto'])
-        self.assertIn('preencha manualmente', aviso['texto'])
+        self.assertIn('descarte explícito', aviso['texto'])
+        self.assertEqual(
+            aviso['rotulo_descarte'],
+            'Área lida em m², descartada pelo revisor.',
+        )
+        self.assertTrue(aviso['bloqueante'])
         self.assertNotIn('/acts/', json.dumps(aviso, ensure_ascii=False))
 
     def test_a_pendencia_da_area_vem_antes_dos_avisos_informativos(self):

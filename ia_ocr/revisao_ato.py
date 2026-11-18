@@ -32,7 +32,7 @@ from dominial.views.lancamento_views import (
 )
 
 from . import estados, importacao, revisao, services
-from .formulario import TEXTO_DA_ORIGEM
+from .formulario import TEXTO_DA_ORIGEM, area_exige_decisao
 from .models import ImportacaoIA
 from .rotulos import analisar_rotulo
 
@@ -59,6 +59,10 @@ MENSAGEM_ATO_FORA_DA_REVISAO = (
 MENSAGEM_CARTORIO_NAO_CADASTRADO = (
     "❌ O cartório da transmissão '{nome}' não está cadastrado. Selecione um "
     'cartório da lista ou cadastre-o antes de salvar. Nada foi gravado.'
+)
+MENSAGEM_AREA_SEM_DECISAO = (
+    '❌ A área foi lida em unidade diferente de hectare. Preencha a área em '
+    'hectares ou marque o descarte explícito. Nada foi gravado.'
 )
 
 _PREFIXO_DA_ABA = {'registro': 'R', 'averbacao': 'Av'}
@@ -284,6 +288,15 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice):
                 'ja_salvo', lancamento_id=atual['lancamento_id'],
                 restantes=_restantes(atos, indice),
             )
+
+        area_preenchida = bool((request.POST.get('area') or '').strip())
+        descarte_explicito = request.POST.get('descartar_area') == '1'
+        if (
+            area_exige_decisao(extracao, indice, linhas)
+            and not area_preenchida
+            and not descarte_explicito
+        ):
+            return Resultado('invalido', mensagem=MENSAGEM_AREA_SEM_DECISAO)
 
         desconhecido = _cartorio_da_transmissao_nao_cadastrado(request.POST)
         if desconhecido:

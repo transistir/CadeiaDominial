@@ -42,6 +42,15 @@ caso('registro em modo de edição (herança): composto intacto e simples preser
     assert.deepEqual(resultado.erros, []);
 });
 
+caso('matrícula sem prefixo em modo de edição não duplica no POST da averbação', () => {
+    const resultado = executar({
+        tipo: 'registro', simples: '1', composto: 'R1 237', sigla: '237',
+        modoEdicao: true, revisao: true, tipoDepois: 'averbacao',
+    });
+
+    assert.deepEqual(resultado, { simples: '1', composto: 'AV1 237', erros: [] });
+});
+
 caso('sem o composto no HTML o JS gruda só a sigla — é isso que a fase 1 entregava', () => {
     // Documentação do bug no harness (o guard de regressão é o teste Django
     // que renderiza a página de verdade): campo vazio no load → o JS do

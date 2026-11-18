@@ -1417,6 +1417,10 @@ def _mostrar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
                 for item in atos
             ],
             'avisos': prefill['pendencias'],
+            'descartar_area': bool(
+                rascunho is not None
+                and rascunho.get('descartar_area') == '1'
+            ),
             'restaurado': restaurado,
             'url_texto': _url_tela(kwargs_job),
             'url_documento': _url_documento(tis, imovel, documento),
