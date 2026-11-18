@@ -7,6 +7,7 @@ job_id, status, tentativa e códigos de erro estáveis. O que vem de fora
 
 import hashlib
 import logging
+import re
 import uuid
 from datetime import timedelta
 
@@ -20,8 +21,10 @@ from dominial.models import DocumentoDigital
 from . import estados, valores
 from .backends import OcrBackendError, ResultadoOcr
 from .estados import TransicaoConcorrente
-from .extracao_backends import ResultadoExtracao, get_extracao_backend
-from .extracao_schema import SCHEMA_VERSION, validar_payload
+from .extracao_backends import (
+    ExtracaoBackendError, ResultadoExtracao, get_extracao_backend,
+)
+from .extracao_schema import SCHEMA_VERSION, PayloadExtracaoInvalido, validar_payload
 from .models import (
     ORIGEM_CHOICES, CampoSugerido, ExtracaoSugerida, OcrJob, OcrJobTransicao, PaginaOcr,
     PendenciaLimpezaArquivo,
@@ -172,6 +175,48 @@ class ExtracaoIndisponivel(Exception):
     """Falha de processamento sem expor dados do serviço (HTTP 503)."""
 
     code = 'extracao_indisponivel'
+
+
+class ExtracaoPayloadInvalido(Exception):
+    """O serviço respondeu, mas o payload está fora do contrato vendorizado.
+
+    Distinta de ``ExtracaoIndisponivel`` (falha da CHAMADA — transporte,
+    autenticação, tamanho): aqui a chamada deu certo e repetir não resolve;
+    é divergência de contrato, a levar ao suporte. Carrega só ``codigo`` e
+    ``caminho`` do ``PayloadExtracaoInvalido`` — estrutura, nunca o valor
+    lido (payload de matrícula é PII).
+    """
+
+    code = 'extracao_payload_invalido'
+
+    def __init__(self, codigo, caminho):
+        self.codigo = codigo
+        self.caminho = caminho
+        super().__init__(f'{self.code}: {codigo} ({caminho})')
+
+
+class ExtracaoIncompativel(Exception):
+    """O serviço recusou o formato da requisição — versão de contrato (422).
+
+    Distinta de ``ExtracaoIndisponivel`` (transporte, 429, 5xx, prazo: o
+    serviço não respondeu): aqui o serviço respondeu e recusou, então a
+    mensagem de "não respondeu" mentiria e repetir não resolve — como
+    ``ExtracaoPayloadInvalido``, é divergência de versão a levar ao suporte.
+    """
+
+    code = 'extracao_incompativel'
+
+
+# Código estável do backend (MAIUSCULAS_E_UNDERLINE): é o único formato que
+# vai ao log. O backend é plugável (EXTRACAO_BACKEND); texto livre, quebra de
+# linha ou código gigante não entram.
+_CODIGO_BACKEND_ESTAVEL = re.compile(r'[A-Z][A-Z0-9_]{0,63}')
+
+
+def _codigo_backend_para_log(codigo):
+    if isinstance(codigo, str) and _CODIGO_BACKEND_ESTAVEL.fullmatch(codigo):
+        return codigo
+    return 'DESCONHECIDO'
 
 
 class ExtracaoRecusada(Exception):
@@ -569,6 +614,12 @@ def solicitar_extracao(
     vigente — inclusive na releitura sob ``select_for_update``, que fecha a
     janela entre a leitura otimista e a transação. Sem o flag, a reextração
     manual funciona como antes.
+
+    Falhas da chamada ao serviço (``ExtracaoBackendError``) e erros
+    inesperados viram ``ExtracaoIndisponivel``; resposta fora do contrato
+    (``PayloadExtracaoInvalido``) vira ``ExtracaoPayloadInvalido``, com
+    código e caminho; 422 do serviço (formato da requisição recusado) vira
+    ``ExtracaoIncompativel``. Nenhum dado do serviço vai para log ou exceção.
     """
     atual = OcrJob.objects.get(pk=job.pk)
     _validar_solicitacao_extracao(atual, extracao_id, somente_se_inexistente)
@@ -666,8 +717,37 @@ def solicitar_extracao(
             )
         if isinstance(erro, (IntegrityError, TransicaoConcorrente)):
             raise ExtracaoConcorrente() from None
+        if isinstance(erro, PayloadExtracaoInvalido):
+            # Resposta fora do contrato: código + caminho são estrutura (nunca
+            # o valor lido), então podem ir ao log e à exceção.
+            logger.warning(
+                'job_id=%s extracao_payload_invalido codigo=%s caminho=%s',
+                job.job_id, erro.codigo, erro.caminho,
+            )
+            raise ExtracaoPayloadInvalido(erro.codigo, erro.caminho) from None
+        if isinstance(erro, ExtracaoBackendError):
+            # Falha da CHAMADA (transporte, autenticação, tamanho, status HTTP
+            # inesperado): não há payload para comparar com o contrato, então
+            # segue ExtracaoIndisponivel ("não respondeu"). Exceção: o 422 do
+            # serviço (EXTRACAO_INCOMPATIVEL) — o serviço respondeu e recusou
+            # o formato da requisição, o que merece diagnóstico próprio em
+            # vez de "não respondeu". O que distingue uma falha da outra é o
+            # código estável, que vai ao log; a mensagem do backend (texto
+            # livre) não.
+            logger.warning(
+                'job_id=%s extracao_backend_falhou codigo=%s',
+                job.job_id, _codigo_backend_para_log(erro.codigo),
+            )
+            if erro.codigo == 'EXTRACAO_INCOMPATIVEL':
+                raise ExtracaoIncompativel() from None
+            raise ExtracaoIndisponivel() from None
         if isinstance(erro, (ExtracaoRecusada, ExtracaoConcorrente, ExtracaoIndisponivel)):
             raise
+        # Inesperado: só o TIPO da exceção (str(erro)/traceback podem trazer
+        # valor lido do serviço).
+        logger.error(
+            'job_id=%s extracao_falhou tipo_erro=%s', job.job_id, type(erro).__name__,
+        )
         raise ExtracaoIndisponivel() from None
 
     job.status = travado.status

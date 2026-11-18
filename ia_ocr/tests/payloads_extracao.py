@@ -6,7 +6,9 @@ registro com closure preenchido — todos válidos contra
 evidência cujo trecho é substring literal de ``TEXTO_PAGINA_1`` (o texto
 OCR sintético da página 1 dos testes); nada aqui vem de documento real.
 
-A versão do contrato vem de ``ia_ocr.extracao_schema`` (fonte única).
+A versão do contrato vem de ``ia_ocr.extracao_schema`` (fonte única): a MAIS
+NOVA (hoje v1.2), a que o app pede ao serviço. Teste que precisa de outro
+contrato (v1.1 de serviço antigo) declara o ``schema_version`` à mão.
 """
 
 from ia_ocr.extracao_schema import SCHEMA_VERSION

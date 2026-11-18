@@ -1901,7 +1901,8 @@ class DesnormalizarTest(TestCase):
                         campo['normalized'] = None
                     payload['acts'][0][nome] = campo
 
-                # Folhas futuras fabricadas: o schema v1.1 permanece intacto.
+                # Formas degeneradas (folha nula, sem `normalized`...) que o
+                # contrato v1.2 nem sempre aceita: aqui só a desnormalização.
                 linhas = self._linhas(payload, validar=False)
                 for nome in esperados:
                     chave = f'/acts/0/{nome}'
@@ -2027,6 +2028,69 @@ class DesnormalizarTest(TestCase):
                 linha = por_chave[f'/acts/0/origem/{nome}']
                 self.assertIsNone(linha.normalized)
                 self.assertFalse(linha.requer_revisao)
+
+    def test_transmissao_do_contrato_v1_2_validada_e_desnormalizada(self):
+        """Payload v1.2 com livro/folha/data da transmissão em cada ato passa
+        pela validação do contrato novo (`validar=True`) e vira UMA linha por
+        chave /acts/N/* — com o valor lido do PRÓPRIO ato, não com o
+        placeholder vazio e sem cruzar valores entre atos."""
+        payload = payload_registro(self.job.job_id)
+        self.assertEqual(
+            payload['schema_version'], 'umbelino-extracao-matricula-v1.2',
+        )
+        segundo = payload_averbacao(self.job.job_id)['acts'][0]
+        segundo['ordem'] = 2
+        payload['acts'].append(segundo)
+        # índice do ato → (trecho de evidência, {folha: (valor, tipo_valor)})
+        esperados = {
+            0: ('R-1/42.718', {
+                'livro_transacao': ('10-A', 'texto'),
+                'folha_transacao': ('25v', 'texto'),
+                'data_transacao': ('2019-12-20', 'data'),
+            }),
+            1: ('Av-1/42.718', {
+                'livro_transacao': ('11-B', 'texto'),
+                'folha_transacao': ('7', 'texto'),
+                'data_transacao': ('2021-03-20', 'data'),
+            }),
+        }
+        for indice, (trecho, folhas) in esperados.items():
+            for nome, (valor, _tipo) in folhas.items():
+                payload['acts'][indice][nome] = _campo(valor, trecho)
+
+        linhas = self._linhas(payload)  # valida pelo contrato declarado (v1.2)
+
+        for indice, (trecho, folhas) in esperados.items():
+            for nome, (valor, tipo) in folhas.items():
+                chave = f'/acts/{indice}/{nome}'
+                with self.subTest(chave=chave):
+                    encontradas = [linha for linha in linhas if linha.chave == chave]
+                    self.assertEqual(len(encontradas), 1)
+                    linha = encontradas[0]
+                    self.assertEqual(linha.normalized, valor)
+                    self.assertEqual(linha.raw, valor)
+                    self.assertEqual(linha.tipo_valor, tipo)
+                    self.assertEqual(linha.confianca, 0.95)
+                    self.assertFalse(linha.requer_revisao)
+                    self.assertEqual(linha.motivos_revisao, [])
+                    self.assertEqual(linha.evidencia_trecho, trecho)
+
+    def test_transmissao_payload_v1_1_de_servico_antigo_segue_com_placeholders(self):
+        """Serviço ainda no v1.1: o payload valida pelo contrato antigo e as
+        três folhas de transmissão nascem como placeholders vazios editáveis."""
+        payload = payload_registro(self.job.job_id)
+        payload['schema_version'] = 'umbelino-extracao-matricula-v1.1'
+
+        linhas = self._linhas(payload)  # valida pelo contrato declarado (v1.1)
+
+        for nome in ('livro_transacao', 'folha_transacao', 'data_transacao'):
+            chave = f'/acts/0/{nome}'
+            with self.subTest(chave=chave):
+                encontradas = [linha for linha in linhas if linha.chave == chave]
+                self.assertEqual(len(encontradas), 1)
+                self.assertIsNone(encontradas[0].normalized)
+                self.assertIsNone(encontradas[0].confianca)
+                self.assertFalse(encontradas[0].requer_revisao)
 
     def test_placeholders_dos_obrigatorios(self):
         completo = self._por_chave(self._linhas(payload_registro(self.job.job_id)))
