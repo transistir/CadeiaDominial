@@ -78,13 +78,52 @@
 
     // --- 1. Evidência por campo -------------------------------------------
 
+    // O formulário repete o bloco de partes em cada seção do tipo do ato (os
+    // três têm `transmitente_nome[]`), e só a seção do tipo selecionado fica
+    // ativa. A posição "i" vale DENTRO de cada seção: pegar o i-ésimo da página
+    // inteira caía na cópia do bloco de Averbação mesmo ao revisar um Registro.
+    var SECOES_DE_PARTES = ['campos-averbacao', 'campos-registro', 'campos-inicio-matricula'];
+    // Inputs da origem sem "[]": o índice vem no id (`numero_origem_0`), não no nome.
+    var ORIGEM_PELO_ID = /^(?:tipo_origem|numero_origem)$/;
+
+    function secaoDoCampo(campo) {
+        for (var no = campo.parentNode; no; no = no.parentNode) {
+            if (SECOES_DE_PARTES.indexOf(no.id) >= 0) return no.id;
+        }
+        return '';
+    }
+
+    // Um campo por seção (o da posição pedida): o selo acompanha o input
+    // certo seja qual for o tipo selecionado, inclusive se o revisor o trocar.
+    function camposDeLista(form, base, posicao) {
+        var lista = form.querySelectorAll('[name="' + base + '[]"]');
+        var grupos = {};
+        var ordem = [];
+        for (var i = 0; i < lista.length; i++) {
+            var secao = secaoDoCampo(lista[i]);
+            if (!grupos[secao]) {
+                grupos[secao] = [];
+                ordem.push(secao);
+            }
+            grupos[secao].push(lista[i]);
+        }
+        var campos = [];
+        ordem.forEach(function (secao) {
+            if (grupos[secao][posicao]) campos.push(grupos[secao][posicao]);
+        });
+        return campos;
+    }
+
     function camposDoInput(form, nome) {
         if (!NOME_DE_INPUT.test(nome)) return [];
         var posicao = /^(.*)\[(\d+)\]$/.exec(nome);
         if (posicao) {
-            var lista = form.querySelectorAll('[name="' + posicao[1] + '[]"]');
-            var campo = lista[parseInt(posicao[2], 10)];
-            return campo ? [campo] : [];
+            var indice = parseInt(posicao[2], 10);
+            if (ORIGEM_PELO_ID.test(posicao[1])) {
+                var campo = form.querySelector('#' + posicao[1] + '_' + indice);
+                return campo ? [campo] : [];
+            }
+            return camposDeLista(form, posicao[1], indice);
         }
         // O `area` do POST é o hidden preenchido no envio; quem o usuário vê
         // são os campos area_<id> de cada seção.

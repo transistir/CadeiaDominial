@@ -10,12 +10,14 @@ destino, mais o round-trip do ``origens_separadas`` pelo
 
 import json
 from copy import deepcopy
+from types import SimpleNamespace
 
 from django.db import connection
 from django.test import RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
 
 from dominial.models import Cartorios, Documento, LancamentoTipo, Pessoas
+from dominial.services.lancamento_form_service import LancamentoFormService
 from dominial.views.lancamento_views import _origens_separadas_do_post
 from ia_ocr import destinos
 from ia_ocr.formulario import (
@@ -87,7 +89,48 @@ class TipoENumeroTest(PrefillBase):
         self.assertEqual(form_data['tipo_lancamento'], str(self.tipo_registro.pk))
         self.assertEqual(form_data['numero_lancamento_simples'], '1')
 
-    def test_numero_composto_nunca_e_preenchido(self):
+    def test_numero_composto_sai_do_gerador_do_formulario_manual(self):
+        # M1 (#341): o HTML precisa carregar o composto. Sem ele, o JS do
+        # formulário manual preenche só a sigla ("M237") e o POST salva isso
+        # em vez de "R1 M237" (ou apaga o número simples, em modo de edição).
+        form_data = self._prefill(payload_registro(self.job.job_id))['form_data']
+
+        self.assertEqual(form_data['numero_lancamento_simples'], '1')
+        self.assertEqual(form_data['numero_lancamento'], 'R1 M237')
+        # É o resultado do gerador do POST manual, não uma segunda regra.
+        pedido = SimpleNamespace(POST={'sigla_matricula': self.documento.numero})
+        self.assertEqual(
+            form_data['numero_lancamento'],
+            LancamentoFormService._gerar_numero_lancamento(
+                '1', self.tipo_registro, pedido,
+            ),
+        )
+
+    def test_numero_composto_da_averbacao_e_do_inicio_de_matricula(self):
+        averbacao = self._prefill(self._averbacao(
+            rotulo=self._campo('Av-6', 'Av-1/42.718'),
+        ))['form_data']
+        inicio = self._prefill(self._registro(
+            tipo_sugerido=self._campo('inicio_matricula', 'R-1/42.718'),
+            rotulo=self._campo('M-1', 'R-1/42.718'),
+        ))['form_data']
+
+        self.assertEqual(averbacao['numero_lancamento'], 'AV6 M237')
+        # Início de matrícula: o número completo é a própria sigla.
+        self.assertEqual(inicio['tipo_lancamento'], str(self.tipo_inicio.pk))
+        self.assertEqual(inicio['numero_lancamento'], 'M237')
+
+    def test_sem_numero_de_ato_nao_inventa_composto(self):
+        form_data = self._prefill(self._registro(
+            rotulo=self._campo('M-3-14511', 'R-1/42.718'),
+        ))['form_data']
+
+        self.assertNotIn('numero_lancamento_simples', form_data)
+        self.assertNotIn('numero_lancamento', form_data)
+
+    def test_sem_tipo_configurado_nao_ha_composto(self):
+        LancamentoTipo.objects.filter(tipo='registro').delete()
+
         form_data = self._prefill(payload_registro(self.job.job_id))['form_data']
 
         self.assertNotIn('numero_lancamento', form_data)
@@ -560,6 +603,115 @@ class EvidenciaTest(PrefillBase):
         for padrao in CHAVE_PARA_INPUT:
             with self.subTest(padrao=padrao):
                 self.assertIn(padrao, destinos.DESTINOS)
+
+
+class AreaEmOutraUnidadeTest(PrefillBase):
+    """M3 (#341): o input da área é em HECTARES — 120 m² nunca vira 120 ha."""
+
+    def _com_area(self, normalizado, trecho, unidade, raw=None):
+        area = {
+            **self._campo(normalizado, trecho), 'unidade': unidade,
+            'raw': raw or trecho,
+        }
+        return self._registro(area=area)
+
+    def _pendencias_da_area(self, resultado):
+        return [
+            aviso for aviso in resultado['pendencias']
+            if aviso['motivo'] == 'unidade_area'
+        ]
+
+    def test_metro_quadrado_nao_entra_no_campo_em_hectares(self):
+        resultado = self._prefill(self._com_area(
+            '120.00', 'área construída 120,00 m2', 'm2', raw='120,00 m2',
+        ))
+
+        self.assertNotIn('area', resultado['form_data'])
+        self.assertNotIn('area', resultado['evidencias'])
+        for valor in resultado['form_data'].values():
+            self.assertNotEqual(valor, '120.00')
+
+    def test_valor_original_com_a_unidade_vira_pendencia_do_revisor(self):
+        resultado = self._prefill(self._com_area(
+            '120.00', 'área construída 120,00 m2', 'm2', raw='120,00 m2',
+        ))
+
+        (aviso,) = self._pendencias_da_area(resultado)
+        self.assertEqual(aviso['rotulo'], 'Área')
+        self.assertIn('120 m² no documento', aviso['texto'])
+        self.assertIn('converta', aviso['texto'])
+        self.assertIn('preencha manualmente', aviso['texto'])
+        self.assertNotIn('/acts/', json.dumps(aviso, ensure_ascii=False))
+
+    def test_a_pendencia_da_area_vem_antes_dos_avisos_informativos(self):
+        resultado = self._prefill(self._com_area(
+            '120.00', 'área construída 120,00 m2', 'm2',
+        ))
+
+        self.assertEqual(resultado['pendencias'][0]['motivo'], 'unidade_area')
+        self.assertEqual(
+            [aviso['rotulo'] for aviso in resultado['pendencias']],
+            ['Área', 'CPF/RG das partes', 'Valor da transação'],
+        )
+
+    def test_cada_unidade_aparece_com_o_proprio_nome(self):
+        for codigo, nome in (
+            ('alqueires', '12,5 alqueires'), ('ares', '12,5 ares'),
+            ('m2', '12,5 m²'),
+        ):
+            with self.subTest(unidade=codigo):
+                resultado = self._prefill(self._com_area(
+                    '12.50', 'área 12,50 ha', codigo,
+                ))
+
+                (aviso,) = self._pendencias_da_area(resultado)
+                self.assertIn(f'{nome} no documento', aviso['texto'])
+                self.assertNotIn('area', resultado['form_data'])
+
+    def test_unidade_nao_identificada_tambem_nao_vira_hectare(self):
+        resultado = self._prefill(self._com_area('120.00', 'área 12,50 ha', None))
+
+        (aviso,) = self._pendencias_da_area(resultado)
+        self.assertIn('120 no documento (unidade não identificada)', aviso['texto'])
+        self.assertNotIn('area', resultado['form_data'])
+
+    def test_hectare_preenche_normalmente(self):
+        resultado = self._prefill(self._com_area(
+            '12.50', 'área 12,50 ha', 'ha', raw='12,50 ha',
+        ))
+
+        self.assertEqual(resultado['form_data']['area'], '12.50')
+        self.assertEqual(resultado['evidencias']['area']['trecho'], 'área 12,50 ha')
+        self.assertEqual(self._pendencias_da_area(resultado), [])
+
+    def test_conversao_confirmada_pelo_revisor_preenche_o_valor_em_hectares(self):
+        extracao = self._aberta(self._com_area(
+            '120.00', 'área construída 120,00 m2', 'm2',
+        ))
+        # O que a conversão confirmada na revisão antiga deixa na linha:
+        # valor em ha, flag ligada e o motivo da unidade resolvido.
+        extracao.campos.filter(chave='/acts/0/area').update(
+            valor_final='0.01', area_convertida=True, status_revisao='editado',
+            motivos_revisao=[],
+        )
+
+        resultado = prefill_do_ato(extracao, 0, self.documento)
+
+        self.assertEqual(resultado['form_data']['area'], '0.01')
+        self.assertEqual(self._pendencias_da_area(resultado), [])
+
+    def test_area_descartada_nao_gera_pendencia(self):
+        extracao = self._aberta(self._com_area(
+            '120.00', 'área construída 120,00 m2', 'm2',
+        ))
+        extracao.campos.filter(chave='/acts/0/area').update(
+            status_revisao='descartado',
+        )
+
+        resultado = prefill_do_ato(extracao, 0, self.documento)
+
+        self.assertNotIn('area', resultado['form_data'])
+        self.assertEqual(self._pendencias_da_area(resultado), [])
 
 
 class SemLugarNoFormularioTest(PrefillBase):

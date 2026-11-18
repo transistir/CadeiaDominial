@@ -167,6 +167,63 @@ caso('o selo mostra a página, abre o trecho por textContent e linka a página',
     assert.equal(selo.classes.has('ia-evidencia-foco'), false);
 });
 
+caso('partes: a posição vale DENTRO da seção — o selo acompanha o campo de cada uma (#341, M5)', () => {
+    // O formulário repete o bloco de partes nas três seções de tipo; a
+    // primeira cópia da página é a da AVERBAÇÃO mesmo revisando um Registro.
+    const secoes = {
+        'campos-averbacao': new Falso({ id: 'campos-averbacao' }),
+        'campos-registro': new Falso({ id: 'campos-registro' }),
+        'campos-inicio-matricula': new Falso({ id: 'campos-inicio-matricula' }),
+    };
+    const nomeDaAverbacao = new Falso();
+    const nomeDoRegistro = new Falso();
+    secoes['campos-averbacao'].appendChild(nomeDaAverbacao);
+    secoes['campos-registro'].appendChild(nomeDoRegistro);
+    const form = new Falso();
+    form.consultas = { '[name="transmitente_nome[]"]': [nomeDaAverbacao, nomeDoRegistro] };
+
+    // Um campo por seção (o da posição pedida) — não só o da Averbação.
+    const alvos = api.camposDoInput(form, 'transmitente_nome[0]');
+    assert.deepEqual(alvos, [nomeDaAverbacao, nomeDoRegistro]);
+
+    // O selo entra ao lado do campo de CADA seção: trocar o tipo do ato
+    // não deixa a evidência para trás.
+    api.anexarEvidencias(documentoFalso(), form, {
+        'transmitente_nome[0]': { pagina: 4, trecho: 'Transmitente: JOÃO', confianca_baixa: false },
+    }, '');
+    for (const nome of [nomeDaAverbacao, nomeDoRegistro]) {
+        const [, selo] = nome.parentNode.filhos;
+        assert.equal(selo.textContent, 'p. 4');
+    }
+    // A segunda transmitente da página inteira não existe em seção nenhuma.
+    assert.deepEqual(api.camposDoInput(form, 'transmitente_nome[1]'), []);
+});
+
+caso('origem: evidência pelo id real (numero_origem_0), não pelo name com [] (#341, M5)', () => {
+    // Os inputs da origem são numero_origem_0/tipo_origem_0 — o índice vem
+    // no id, o name não tem "[]".
+    const paiDoNumero = new Falso();
+    const numero = new Falso({ id: 'numero_origem_0' });
+    paiDoNumero.appendChild(numero);
+    const paiDoTipo = new Falso();
+    const tipo = new Falso({ id: 'tipo_origem_0' });
+    paiDoTipo.appendChild(tipo);
+    const form = new Falso();
+    form.consultas = { '#numero_origem_0': [numero], '#tipo_origem_0': [tipo] };
+
+    assert.deepEqual(api.camposDoInput(form, 'numero_origem[0]'), [numero]);
+    assert.deepEqual(api.camposDoInput(form, 'tipo_origem[0]'), [tipo]);
+    assert.deepEqual(api.camposDoInput(form, 'numero_origem[9]'), []);
+
+    api.anexarEvidencias(documentoFalso(), form, {
+        'numero_origem[0]': { pagina: 2, trecho: 'origem M42.718', confianca_baixa: false },
+    }, '');
+
+    const [, selo] = paiDoNumero.filhos;
+    assert.equal(selo.textContent, 'p. 2');  // selo no input do número
+    assert.equal(paiDoTipo.filhos.length, 1);  // e só nele
+});
+
 caso('navegar para outro ato dispara os handlers de envio, silencia o alert e envia pelo submit()', () => {
     const form = new Falso();
     const ordem = [];

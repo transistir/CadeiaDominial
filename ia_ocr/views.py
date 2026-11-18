@@ -15,6 +15,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1105,9 +1106,6 @@ def finalizar_revisao_ocr(request, tis_id, imovel_id, documento_id, job_id):
 # ---------------------------------------------------------------------------
 
 MENSAGEM_ERRO_INTERNO_DO_ATO = '❌ Erro interno ao salvar o ato. Tente novamente.'
-MENSAGEM_EXTRACAO_SUBSTITUIDA = (
-    'Esta extração foi substituída por outra. Nada foi gravado.'
-)
 MENSAGEM_ATO_JA_SALVO = (
     'Este ato já foi salvo como lançamento. Nada foi gravado de novo.'
 )
@@ -1119,10 +1117,17 @@ MENSAGEM_DUPLICATA_NA_REVISAO = (
 MENSAGEM_REVISAO_CONCLUIDA = (
     '✅ Revisão concluída: todos os atos desta extração foram resolvidos.'
 )
+MENSAGEM_EXTRACAO_TROCOU = (
+    '⚠️ A extração deste documento mudou; recarregue a revisão. Nada foi gravado.'
+)
 
 
 def _url_ato(kwargs_job, indice):
     return reverse('revisar_ato_ocr', kwargs={**kwargs_job, 'indice': indice})
+
+
+def _url_entrada(kwargs_job):
+    return reverse('revisar_job_ocr', kwargs=kwargs_job)
 
 
 def _url_documento(tis, imovel, documento):
@@ -1148,6 +1153,35 @@ def _destino_da_navegacao(bruto, atos):
         return None
     pedido = int(bruto)
     return pedido if any(ato['indice'] == pedido for ato in atos) else None
+
+
+def _extracao_trocada_no_post(request, job, extracao, kwargs_job):
+    """Redirect quando o POST vem de página renderizada sobre outra extração.
+
+    A reextração troca a vigente no meio da revisão e o navegador segue com
+    o formulário da ANTIGA aberto: sem esta checagem, o POST gravava os
+    dados dela e marcava como importado o ato da mesma posição na extração
+    nova (#341, M2). A identidade da extração vai no hidden ``extracao_id``
+    e é validada contra a vigente SOB TRAVA (``select_for_update`` no job,
+    a mesma ordem da reextração). Esta checagem preliminar acontece antes de
+    resolver o índice, para uma página antiga não virar 404; salvar e navegar
+    repetem a validação dentro da transação que grava o ato ou guarda o
+    rascunho, mantendo a trava até o fim da operação. Trocada (ou sem a
+    identidade, que todo POST da revisão carrega): nada é gravado, nem
+    rascunho guardado — a entrada da revisão recarrega a extração vigente.
+    """
+    posted = (request.POST.get('extracao_id') or '').strip()
+    with transaction.atomic():
+        vigente = OcrJob.objects.select_for_update().get(
+            pk=job.pk,
+        ).extracao_vigente()
+    if (
+        vigente is not None and vigente.pk == extracao.pk
+        and posted == str(vigente.pk)
+    ):
+        return None
+    messages.warning(request, MENSAGEM_EXTRACAO_TROCOU)
+    return redirect(_url_entrada(kwargs_job))
 
 
 @login_required
@@ -1194,6 +1228,15 @@ def revisar_ato_ocr(request, tis_id, imovel_id, documento_id, job_id, indice):
     extracao = job.extracao_vigente()
     if extracao is None:
         raise Http404('Extração indisponível.')
+
+    # Antes de montar os atos: um POST de página antiga pode nem corresponder
+    # a um ato da extração nova (o índice sumiu) — a recusa pela identidade
+    # da extração vem primeiro, sem 404 (#341, M2).
+    if request.method == 'POST':
+        trocada = _extracao_trocada_no_post(request, job, extracao, kwargs_job)
+        if trocada is not None:
+            return trocada
+
     atos = revisao_ato.atos_da_revisao(extracao)
     ato = next((item for item in atos if item['indice'] == indice), None)
     if ato is None:
@@ -1201,7 +1244,7 @@ def revisar_ato_ocr(request, tis_id, imovel_id, documento_id, job_id, indice):
 
     if request.method == 'POST':
         if '_ir_para' in request.POST:
-            return _navegar_entre_atos(request, extracao, kwargs_job, atos, indice)
+            return _navegar_entre_atos(request, extracao, kwargs_job, indice)
         return _salvar_ato(
             request, tis, imovel, documento, job, extracao, kwargs_job, atos, ato,
         )
@@ -1222,10 +1265,24 @@ def revisar_ato_ocr(request, tis_id, imovel_id, documento_id, job_id, indice):
     )
 
 
-def _navegar_entre_atos(request, extracao, kwargs_job, atos, indice):
-    """Guarda o que foi digitado (sessão) e vai para o ato pedido. Não grava no banco."""
-    revisao_ato.guardar_rascunho(request, extracao, indice)
-    destino = _destino_da_navegacao(request.POST.get('_ir_para'), atos)
+def _navegar_entre_atos(request, extracao, kwargs_job, indice):
+    """Guarda o rascunho somente se a extração postada ainda for a vigente.
+
+    A checagem e ``guardar_rascunho`` ficam sob a mesma trava do job. A
+    reextração não pode entrar entre as duas e fazer uma página antiga
+    navegar como se ainda pertencesse à revisão atual (#341, M2).
+    """
+    try:
+        with transaction.atomic():
+            extracao = services._travar_extracao_revisao(extracao)
+            if (request.POST.get('extracao_id') or '').strip() != str(extracao.pk):
+                raise services.ExtracaoRecusada('extracao_nao_vigente')
+            atos = revisao_ato.atos_da_revisao(extracao)
+            revisao_ato.guardar_rascunho(request, extracao, indice)
+            destino = _destino_da_navegacao(request.POST.get('_ir_para'), atos)
+    except services.ExtracaoRecusada:
+        messages.warning(request, MENSAGEM_EXTRACAO_TROCOU)
+        return redirect(_url_entrada(kwargs_job))
     return redirect(_url_ato(kwargs_job, indice if destino is None else destino))
 
 
@@ -1237,8 +1294,8 @@ def _salvar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
             request, tis, imovel, documento, job, extracao, indice,
         )
     except services.ExtracaoRecusada:
-        messages.error(request, MENSAGEM_EXTRACAO_SUBSTITUIDA)
-        return redirect(_url_tela(kwargs_job))
+        messages.warning(request, MENSAGEM_EXTRACAO_TROCOU)
+        return redirect(_url_entrada(kwargs_job))
     except Exception:
         # Traceback só no log do servidor (mesma regra do novo_lancamento,
         # #162): nunca ``str(e)`` na tela, que vazaria documento/matrícula.
@@ -1247,6 +1304,12 @@ def _salvar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
             indice, job.pk, documento.pk,
         )
         messages.error(request, MENSAGEM_ERRO_INTERNO_DO_ATO)
+        # O ``atomic`` do ``salvar_ato`` desfaz o banco, mas esta instância
+        # segue em memória com o livro/folha que o service escreveu ANTES de
+        # a falha acontecer: sem o refresh, o re-render travava (disabled)
+        # um livro que o banco não tem (#341, M4 — mesmo fix do
+        # ``ValidationError`` do service manual).
+        documento.refresh_from_db(fields=['livro', 'folha'])
         return _mostrar_ato(
             request, tis, imovel, documento, job, extracao, kwargs_job, atos,
             ato, rascunho=request.POST,
@@ -1331,6 +1394,7 @@ def _mostrar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
         'evidencias': prefill['evidencias'],
         'revisao_ia': {
             'indice': indice,
+            'extracao_id': extracao.pk,
             'posicao': ato['posicao'],
             'total': len(atos),
             'rotulo': ato['rotulo'],

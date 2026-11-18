@@ -45,9 +45,10 @@ MOTIVO_TRANSICAO = 'revisao_formulario'
 # ``LIMITE_EXTRACOES_NO_RASCUNHO`` documentos em revisão ficam guardados.
 CHAVE_SESSAO = 'ia_ocr_rascunhos'
 LIMITE_EXTRACOES_NO_RASCUNHO = 3
-# Campos do POST que nunca entram no rascunho: o token CSRF é do pedido, e o
-# destino da navegação é uma instrução, não um dado do ato.
-FORA_DO_RASCUNHO = frozenset({'csrfmiddlewaretoken', '_ir_para'})
+# Campos do POST que nunca entram no rascunho: o token CSRF é do pedido, o
+# destino da navegação é uma instrução e a identidade da extração é do
+# POST que a mandou — nada disso é dado do ato.
+FORA_DO_RASCUNHO = frozenset({'csrfmiddlewaretoken', '_ir_para', 'extracao_id'})
 
 MENSAGEM_JOB_FORA_DE_REVISAO = (
     'Esta extração não está mais em revisão. Nada foi gravado.'
@@ -259,6 +260,12 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice):
             pk=job.documento_digital_id,
         )
         extracao = services._travar_extracao_revisao(extracao)
+        # A identidade que preencheu a página é validada DEPOIS das travas e
+        # permanece protegida até o fim desta transação. Assim, um POST antigo
+        # não pode aplicar R1 à extração vigente R9, mesmo que a troca ocorra
+        # entre a checagem preliminar da view e este save (#341, M2).
+        if (request.POST.get('extracao_id') or '').strip() != str(extracao.pk):
+            raise services.ExtracaoRecusada('extracao_nao_vigente')
         job = extracao.ocr_job
         if job.status not in (estados.EXTRAIDO, estados.REVISADO):
             return Resultado('recusado', mensagem=MENSAGEM_JOB_FORA_DE_REVISAO)
@@ -358,9 +365,19 @@ def _registros_do_ato(lancamento, ato, chave):
     """
     chave_origem = f'{chave}/origem/numero'
     registros = [('Lancamento', lancamento.pk, chave)]
-    estruturada = lancamento.origens_estruturadas.first()
-    if estruturada is not None:
-        registros.append(('LancamentoOrigem', estruturada.pk, chave_origem))
+    # O A3 oferece no máximo uma origem, renderizada na posição zero. O
+    # revisor pode editar esse valor e acrescentar outras linhas: a posição
+    # continua identificando a origem extraída, enquanto casar pelo texto
+    # atribuiria a evidência a uma linha manual que repetisse o valor antigo.
+    tem_origem_extraida = bool(
+        str((ato.origem or {}).get('numero') or '').strip()
+    )
+    for origem in lancamento.origens_estruturadas.order_by('indice_origem'):
+        eh_a_extraida = tem_origem_extraida and origem.indice_origem == 0
+        registros.append((
+            'LancamentoOrigem', origem.pk,
+            chave_origem if eh_a_extraida else None,
+        ))
     registros.extend(
         ('Documento', pk, chave_origem)
         for pk in LancamentoOrigemService.consumir_documentos_criados(lancamento)

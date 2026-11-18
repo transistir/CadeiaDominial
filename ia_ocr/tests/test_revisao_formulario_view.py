@@ -681,6 +681,189 @@ class DuplicataTest(RevisaoFormularioBase):
         self.assertTrue(any('já existe em outra cadeia' in t for t in self.mensagens(resposta)))
 
 
+class ExtracaoTrocadaTest(RevisaoFormularioBase):
+    """M2 (#341): POST de página renderizada sobre outra extração não grava.
+
+    A reextração troca a vigente no meio da revisão; o navegador segue com o
+    formulário da ANTIGA aberto. Sem o hidden ``extracao_id`` validado sob
+    trava, o POST gravava os dados da extração antiga e marcava como
+    importado o ato da MESMA posição na nova.
+    """
+
+    def _reextrair(self):
+        """Extração nova (R9) no lugar da vigente, como a reextração faria."""
+        payload = self._payload_de_tres_atos()
+        payload['acts'][0]['rotulo'] = self._campo('R-9', 'R-9/M237')
+        payload['acts'][0]['observacoes'] = self._campo(
+            'lido pela reextração', 'reextraído',
+        )
+        return self._aberta(payload)
+
+    def test_post_da_pagina_antiga_nao_grava_nem_marca_ato_da_extracao_nova(self):
+        pagina = self.client.get(self.url_ato(0))
+        post = post_do_html(pagina)
+        self.assertEqual(post['extracao_id'], [str(self.extracao.pk)])
+        nova = self._reextrair()
+        antes = self.contagens()
+
+        resposta = self.client.post(self.url_ato(0), post)
+
+        self.assertRedirects(
+            resposta, self.url_entrada(), fetch_redirect_response=False,
+        )
+        self.assertTrue(any(
+            'A extração deste documento mudou' in texto
+            for texto in self.mensagens(resposta)
+        ))
+        self.assertEqual(self.contagens(), antes)
+        # O ato 0 da extração NOVA segue pendente — nada marcado como importado.
+        from ia_ocr import revisao_ato
+
+        atos = revisao_ato.atos_da_revisao(nova)
+        self.assertEqual(atos[0]['estado'], revisao_ato.ESTADO_PENDENTE)
+        self.assertEqual(
+            CampoSugerido.objects.filter(
+                extracao=nova, status_revisao='importado',
+            ).count(),
+            0,
+        )
+
+    def test_save_revalida_hidden_dentro_da_transacao_autoritativa(self):
+        """Mesmo se a checagem preliminar não vir a troca, o save recusa."""
+        from unittest import mock
+
+        pagina = self.client.get(self.url_ato(0))  # HTML da R1
+        post = post_do_html(pagina)
+        nova = self._reextrair()  # vigente agora começa por R9
+        antes = self.contagens()
+
+        # Simula a janela entre a guarda preliminar e o save. Sem a validação
+        # do hidden dentro de ``revisao_ato.salvar_ato``, os dados R1 seriam
+        # gravados e o ato R9 da extração nova seria marcado como importado.
+        with mock.patch(
+            'ia_ocr.views._extracao_trocada_no_post', return_value=None,
+        ):
+            resposta = self.client.post(self.url_ato(0), post)
+
+        self.assertRedirects(
+            resposta, self.url_entrada(), fetch_redirect_response=False,
+        )
+        self.assertTrue(any(
+            'A extração deste documento mudou' in texto
+            for texto in self.mensagens(resposta)
+        ))
+        self.assertEqual(self.contagens(), antes)
+        self.assertEqual(
+            CampoSugerido.objects.filter(
+                extracao=nova, status_revisao='importado',
+            ).count(),
+            0,
+        )
+
+    def test_navegacao_guarda_rascunho_dentro_da_transacao_da_trava(self):
+        """A trava não pode ser solta entre validar o hidden e o rascunho."""
+        from unittest import mock
+
+        from ia_ocr import revisao_ato
+
+        pagina = self.client.get(self.url_ato(0))
+        profundidade_externa = len(connection.atomic_blocks)
+        profundidades = []
+        guardar_real = revisao_ato.guardar_rascunho
+
+        def observar_transacao(*args, **kwargs):
+            profundidades.append(len(connection.atomic_blocks))
+            return guardar_real(*args, **kwargs)
+
+        with mock.patch.object(
+            revisao_ato, 'guardar_rascunho', side_effect=observar_transacao,
+        ):
+            resposta = self.client.post(self.url_ato(0), post_do_html(
+                pagina, _ir_para='1', observacoes='rascunho atual',
+            ))
+
+        self.assertRedirects(
+            resposta, self.url_ato(1), fetch_redirect_response=False,
+        )
+        self.assertEqual(len(profundidades), 1)
+        self.assertGreater(profundidades[0], profundidade_externa)
+
+    def test_navegacao_da_pagina_antiga_nao_guarda_rascunho(self):
+        pagina = self.client.get(self.url_ato(0))
+        self._reextrair()
+
+        resposta = self.client.post(self.url_ato(0), post_do_html(
+            pagina, _ir_para='1', observacoes='digitado na página antiga',
+        ))
+
+        self.assertRedirects(
+            resposta, self.url_entrada(), fetch_redirect_response=False,
+        )
+        # O digitado era da extração antiga: nada guardado na sessão — nem
+        # sob a nova (onde envenenaria o ato 0), nem sob a antiga.
+        self.assertEqual(self.client.session.get('ia_ocr_rascunhos') or {}, {})
+
+    def test_post_sem_a_identidade_da_extracao_e_recusado(self):
+        pagina = self.client.get(self.url_ato(0))
+        post = post_do_html(pagina)
+        del post['extracao_id']
+        antes = self.contagens()
+
+        resposta = self.client.post(self.url_ato(0), post)
+
+        self.assertRedirects(
+            resposta, self.url_entrada(), fetch_redirect_response=False,
+        )
+        self.assertTrue(any(
+            'A extração deste documento mudou' in texto
+            for texto in self.mensagens(resposta)
+        ))
+        self.assertEqual(self.contagens(), antes)
+
+    def test_post_da_pagina_da_extracao_atual_salva_normalmente(self):
+        nova = self._reextrair()
+
+        pagina = self.client.get(self.url_ato(0))
+        post = post_do_html(pagina)
+        self.assertEqual(post['extracao_id'], [str(nova.pk)])
+
+        resposta = self.client.post(self.url_ato(0), post)
+
+        self.assertEqual(resposta.status_code, 302, self.mensagens(resposta))
+        self.assertEqual(
+            Lancamento.objects.filter(documento=self.documento).count(), 1,
+        )
+
+
+class RollbackDoErroInternoTest(RevisaoFormularioBase):
+    """M4 (#341): depois do rollback, o livro/folha falsamente definidos somem."""
+
+    def test_re_render_do_erro_interno_nao_trava_livro_que_o_banco_nao_tem(self):
+        from unittest import mock
+
+        pagina = self.client.get(self.url_ato(0))
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.livro, '')
+
+        with mock.patch(
+            'ia_ocr.revisao_ato.importacao._vincular', side_effect=RuntimeError('falhou'),
+        ), self.assertLogs('ia_ocr.views', level='ERROR'):
+            resposta = self.client.post(
+                self.url_ato(0), post_do_html(pagina, livro_documento='99'),
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        # O banco voltou ao estado anterior (rollback)…
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.livro, '')
+        # …e a tela também: o input segue editável e com o que foi digitado,
+        # não travado (disabled) com o '99' que só existia em memória.
+        html = resposta.content.decode()
+        entrada = re.search(r'<input[^>]*name="livro_documento"[^>]*>', html).group(0)
+        self.assertNotIn('disabled', entrada)
+        self.assertIn('value="99"', entrada)
+
+
 class PermissaoTest(RevisaoFormularioBase):
     def setUp(self):
         super().setUp()
@@ -805,6 +988,79 @@ class OrigemComPontoTest(RevisaoFormularioBase):
         html = resposta.content.decode()
         self.assertRegex(html, r'<input[^>]*name="numero_origem_0"[^>]*value="42.718"')
         self.assertRegex(html, r'name="origem_completa\[\]"[^>]*value="M42.718"')
+
+
+class OrigemAcrescentadaANaoTest(OrigemComPontoTest):
+    """N1 (#341): TODAS as origens persistidas ganham vínculo de auditoria.
+
+    O ``.first()`` auditava só a primeira — com a origem lida MAIS uma
+    acrescentada no formulário, a segunda nascia sem ``ImportacaoIA``.
+    """
+
+    def test_origem_acrescentada_a_mao_tambem_recebe_vinculo(self):
+        segunda = self._cartorio('CRI da Segunda Origem')
+        pagina = self.client.get(self.url_ato(0))
+        post = post_do_html(pagina)
+        post['origem_completa[]'] = post['origem_completa[]'] + ['T366']
+        post['cartorio_origem_nome[]'] = (
+            post['cartorio_origem_nome[]'] + [segunda.nome]
+        )
+        post['cartorio_origem[]'] = post['cartorio_origem[]'] + [str(segunda.pk)]
+        post['livro_origem[]'] = post.get('livro_origem[]', ['']) + ['']
+        post['folha_origem[]'] = post.get('folha_origem[]', ['']) + ['']
+
+        resposta = self.client.post(self.url_ato(0), post)
+
+        self.assertEqual(resposta.status_code, 302, self.mensagens(resposta))
+        lancamento = Lancamento.objects.get(documento=self.documento)
+        origens = list(
+            lancamento.origens_estruturadas.order_by('indice_origem')
+        )
+        self.assertEqual([origem.numero for origem in origens], ['M42.718', 'T366'])
+
+        vinculos = ImportacaoIA.objects.filter(modelo='LancamentoOrigem')
+        # Uma por origem persistida — nenhuma fica sem vínculo.
+        self.assertEqual(
+            set(vinculos.values_list('objeto_id', flat=True)),
+            {origem.pk for origem in origens},
+        )
+        # Só a origem que o OCR leu carrega a linha dela; a digitada à mão
+        # não vem de linha nenhuma.
+        lida = vinculos.get(objeto_id=origens[0].pk)
+        self.assertEqual(lida.campo.chave, '/acts/0/origem/numero')
+        manual = vinculos.get(objeto_id=origens[1].pk)
+        self.assertIsNone(manual.campo)
+
+    def test_origem_extraida_editada_mantem_a_linha_e_manual_nao_a_herda(self):
+        segunda = self._cartorio('Cartório Manual com Valor Antigo')
+        pagina = self.client.get(self.url_ato(0))
+        post = post_do_html(pagina)
+        # A linha zero veio do OCR, mas o revisor corrigiu M42.718 para T777.
+        # A segunda foi acrescentada à mão e reutiliza o texto OCR antigo.
+        post['origem_completa[]'][0] = 'T777'
+        post['origem_completa[]'].append('M42.718')
+        post['cartorio_origem_nome[]'].append(segunda.nome)
+        post['cartorio_origem[]'].append(str(segunda.pk))
+        post['livro_origem[]'] = post.get('livro_origem[]', ['']) + ['']
+        post['folha_origem[]'] = post.get('folha_origem[]', ['']) + ['']
+
+        resposta = self.client.post(self.url_ato(0), post)
+
+        self.assertEqual(resposta.status_code, 302, self.mensagens(resposta))
+        origens = list(
+            Lancamento.objects.get(documento=self.documento)
+            .origens_estruturadas.order_by('indice_origem')
+        )
+        self.assertEqual([origem.numero for origem in origens], ['T777', 'M42.718'])
+        vinculos = ImportacaoIA.objects.filter(modelo='LancamentoOrigem')
+        self.assertEqual(
+            set(vinculos.values_list('objeto_id', flat=True)),
+            {origem.pk for origem in origens},
+        )
+        extraida = vinculos.get(objeto_id=origens[0].pk)
+        self.assertEqual(extraida.campo.chave, '/acts/0/origem/numero')
+        manual = vinculos.get(objeto_id=origens[1].pk)
+        self.assertIsNone(manual.campo)
 
 
 class ParidadeComOFormularioManualTest(RevisaoFormularioBase):

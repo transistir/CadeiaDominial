@@ -182,6 +182,11 @@
             <a href="{% url 'documento_detalhado' tis_id=tis.id imovel_id=imovel.id documento_id=documento.id %}" class="btn btn-secondary">Cancelar</a>
         </div>
         <input type="hidden" name="area" id="area_hidden" value="{% if form_data and form_data.area is not None %}{{ form_data.area }}{% elif modo_edicao and lancamento.area is not None %}{{ lancamento.area }}{% endif %}">
+        {% if revisao_ia %}
+        {# #341, M2: identidade da extração que preencheu ESTA página — o POST #}
+        {# é recusado se a vigente já for outra (reextração no meio da revisão). #}
+        <input type="hidden" name="extracao_id" value="{{ revisao_ia.extracao_id }}">
+        {% endif %}
     </form>
 </main>
 </div>  <!-- /.lancamento-layout -->

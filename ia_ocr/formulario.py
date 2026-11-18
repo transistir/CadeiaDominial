@@ -18,25 +18,33 @@ formato que os templates do formulário manual já esperam, o que preencher:
   nome do input; nos inputs repetidos (``transmitente_nome[]``,
   ``cartorio_origem_nome[]``...) é o nome SEM os colchetes mais a posição na
   lista, ``transmitente_nome[0]``. O trecho sai mascarado (CPF/RG);
-- ``pendencias``: avisos informativos do que foi lido e não tem campo no
-  lançamento. Nunca bloqueiam e nunca citam a chave ``/acts/...``.
+- ``pendencias``: avisos do que foi lido e não entrou no formulário: o que
+  não tem campo no lançamento (informativo) e a área lida em unidade que não
+  é hectare (decisão do revisor: o input é em ha e nada é convertido em
+  silêncio). Nunca citam a chave ``/acts/...``.
 
 Nada daqui grava ou cria cadastro: cartório que a revisão marcou "criar
-novo" entra só com o nome e o id vazio — o bloqueio é da fase 2. Também não
-há ``numero_lancamento`` (o composto): quem gera é o serviço do formulário a
-partir de ``sigla_matricula`` + ``numero_lancamento_simples``.
+novo" entra só com o nome e o id vazio — o bloqueio é da fase 2.
+
+O número composto (``numero_lancamento``, "R1 M237") sai do MESMO gerador do
+POST manual (``LancamentoFormService._gerar_numero_lancamento``, com a sigla
+da matrícula): o JS do formulário manual só preenche esse campo com a sigla
+pura ("M237") — e, em modo de edição, apaga o número simples a partir dele —,
+então o HTML já tem que chegar com o composto certo (#341, M1).
 """
 
 import re
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from types import SimpleNamespace
 
 from dominial.models import Cartorios, Pessoas
+from dominial.services.lancamento_form_service import LancamentoFormService
 from dominial.utils.documento_identidade_utils import normalizar_numero_documento
 
 from . import importacao, revisao
 from .destinos import _normalizar
-from .revisao import MOTIVO_BAIXA_CONFIANCA, _montar_dados
+from .revisao import MOTIVO_BAIXA_CONFIANCA, MOTIVO_UNIDADE_AREA, _montar_dados
 from .rotulos import analisar_rotulo
 
 # Chave da linha (o padrão de ``destinos.DESTINOS``, índices como ``*``) →
@@ -74,6 +82,18 @@ INPUT_FORMA_DA_AVERBACAO = 'forma_averbacao'
 
 MOTIVO_LIDO_SEM_CAMPO = 'lido_sem_campo'
 TEXTO_LIDO_SEM_CAMPO = 'lido, sem campo no lançamento'
+
+# Área lida em unidade que não é hectare: o input é em ha, então o valor NÃO
+# entra nele (120 m² viraria 120 ha). Mesmo motivo estável da revisão antiga.
+MOTIVO_AREA_EM_OUTRA_UNIDADE = MOTIVO_UNIDADE_AREA
+ROTULO_DA_AREA = 'Área'
+# Enum ``unidade`` do A3 → como o revisor lê a unidade.
+UNIDADES_DE_AREA = {'ha': 'ha', 'm2': 'm²', 'alqueires': 'alqueires', 'ares': 'ares'}
+TEXTO_AREA_EM_OUTRA_UNIDADE = (
+    '{lido} no documento{complemento} — o campo Área (em hectares) ficou '
+    'vazio: converta o valor para hectares e preencha o campo, ou preencha '
+    'manualmente. Nada é convertido sem a sua decisão.'
+)
 
 # Folhas do A3 que o formulário não tem (``revisao.LINHAS_IGNORADAS``, #328):
 # a linha não existe, mas o payload segue com o valor lido.
@@ -136,8 +156,8 @@ def prefill_do_ato(extracao, indice, documento):
     linhas = importacao._linhas_por_chave(extracao)
 
     # Tipo: a MESMA resolução da gravação (escolha explícita > rótulo >
-    # sugestão). O número composto que ela devolve NÃO entra: o formulário
-    # gera o seu a partir de ``sigla_matricula``.
+    # sugestão). O formulário recebe o número composto calculado abaixo pelo
+    # mesmo gerador usado no POST manual.
     rotulo = analisar_rotulo(importacao._rotulo_efetivo(chave, linhas))
     tipo, _composto, _avisos = importacao._resolver_tipo_e_numero(
         ato, rotulo, documento,
@@ -181,8 +201,14 @@ def prefill_do_ato(extracao, indice, documento):
     colocar(f'{chave}/tipo_sugerido', str(tipo.pk) if tipo is not None else None)
     chave_do_numero, numero = _numero_simples(chave, rotulo, ato)
     colocar(chave_do_numero, numero)
+    composto = _numero_composto(tipo, numero, documento)
+    if composto is not None:
+        form_data['numero_lancamento'] = composto
     colocar(f'{chave}/data', ato.data)
-    colocar(f'{chave}/area', ato.area)
+    # M3: área em m²/alqueires/ares não entra no input em hectares.
+    area_em_outra_unidade = _area_em_outra_unidade(extracao, indice, linhas, chave)
+    if area_em_outra_unidade is None:
+        colocar(f'{chave}/area', ato.area)
     colocar(f'{chave}/descricao', ato.descricao)
     colocar(f'{chave}/observacoes', ato.observacoes)
     colocar(f'{chave}/forma', ato.forma)
@@ -204,13 +230,18 @@ def prefill_do_ato(extracao, indice, documento):
     )
     transmitentes, adquirentes = _partes(ato, linhas, nomes_pessoas, evidencias)
 
+    pendencias = _lidos_sem_campo(extracao, indice, ato)
+    if area_em_outra_unidade is not None:
+        # Antes dos avisos informativos: é a única que pede decisão.
+        pendencias.insert(0, area_em_outra_unidade)
+
     return {
         'form_data': form_data,
         'origens_separadas': origens_separadas,
         'transmitentes': transmitentes,
         'adquirentes': adquirentes,
         'evidencias': evidencias,
-        'pendencias': _lidos_sem_campo(extracao, indice, ato),
+        'pendencias': pendencias,
     }
 
 
@@ -267,6 +298,87 @@ def _numero_simples(chave, rotulo, ato):
         f'{chave}/numero_lancamento',
         importacao._numero_de_ato_do_campo(ato.numero_lancamento),
     )
+
+
+def _numero_composto(tipo, numero, documento):
+    """Número completo ("R1 M237"), ou ``None`` quando não há o que compor.
+
+    Chama o gerador do POST do formulário manual com a sigla da matrícula
+    (``documento.numero``, o mesmo que o template põe em ``sigla_matricula``)
+    — não repete a regra aqui. Só os três tipos que o JS do formulário
+    compõe (registro, averbação, início de matrícula); registro/averbação
+    sem número de ato ficam sem composto, como no formulário manual, onde o
+    revisor ainda vai digitar o número simples.
+    """
+    if tipo is None or tipo.tipo not in ('registro', 'averbacao', 'inicio_matricula'):
+        return None
+    if tipo.tipo != 'inicio_matricula' and not numero:
+        return None
+    pedido = SimpleNamespace(POST={'sigla_matricula': documento.numero or ''})
+    composto = LancamentoFormService._gerar_numero_lancamento(
+        numero or '', tipo, pedido,
+    )
+    return composto.strip() or None
+
+
+def _numero_legivel(normalizado):
+    """Decimal canônico → "120" / "12,5" (pt-BR, sem zeros à direita); senão ''."""
+    try:
+        numero = Decimal(str(normalizado))
+    except (InvalidOperation, ValueError):
+        return ''
+    if not numero.is_finite():
+        return ''
+    return format(numero.normalize(), 'f').replace('.', ',')
+
+
+def _unidade_da_area_no_payload(extracao, indice):
+    """Código da unidade (``m2``, ``alqueires``...) da área do ato, ou ``None``."""
+    payload = extracao.payload_servico or extracao.payload or {}
+    atos = payload.get('acts') or []
+    ato = atos[indice] if indice < len(atos) else {}
+    folha = ato.get('area') if isinstance(ato, dict) else None
+    unidade = folha.get('unidade') if isinstance(folha, dict) else None
+    return unidade if isinstance(unidade, str) else None
+
+
+def _area_em_outra_unidade(extracao, indice, linhas, chave):
+    """Pendência da área lida em unidade que não é hectare; ``None`` se não há.
+
+    O input do formulário é em hectares. A linha de área marcada com
+    ``unidade_area`` (e ainda sem conversão confirmada) traz o número na
+    unidade do documento: colocá-lo no input trocaria a unidade em silêncio
+    — 120 m² seriam gravados como 120 ha (#341, M3). Aqui o valor original
+    vira pendência com a unidade; quem converte (ou preenche à mão) é o
+    revisor. Linha descartada, ou convertida na revisão (``area_convertida``,
+    cujo ``valor_final`` já está em ha), segue o caminho normal.
+    """
+    campo = linhas.get(f'{chave}/area')
+    if (
+        campo is None or campo.status_revisao == 'descartado'
+        or campo.area_convertida
+        or MOTIVO_UNIDADE_AREA not in (campo.motivos_revisao or ())
+    ):
+        return None
+    numero = _numero_legivel(campo.normalized)
+    unidade = UNIDADES_DE_AREA.get(_unidade_da_area_no_payload(extracao, indice))
+    if numero:
+        lido = f'{numero} {unidade}' if unidade else numero
+        complemento = '' if unidade else ' (unidade não identificada)'
+    else:
+        # Sem canônico (normalização inválida): o texto como foi lido.
+        lido = (campo.raw or '').strip()
+        complemento = ''
+    if not lido:
+        return None
+    return {
+        'motivo': MOTIVO_AREA_EM_OUTRA_UNIDADE,
+        'rotulo': ROTULO_DA_AREA,
+        'texto': TEXTO_AREA_EM_OUTRA_UNIDADE.format(
+            lido=lido, complemento=complemento,
+        ),
+        'bloqueante': False,
+    }
 
 
 def _cartorio(cartorio_id, nome_da_linha, nomes):
