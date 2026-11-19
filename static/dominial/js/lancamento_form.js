@@ -137,29 +137,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 const selectedTipo = selectedOption ? selectedOption.getAttribute('data-tipo') : '';
                 
                 if (siglaCompleta && selectedTipo) {
+                    function removerSufixoDoDocumento(texto) {
+                        let numero = texto.trim();
+                        const siglaMatriculaInput = document.querySelector('input[name="sigla_matricula"]');
+                        const siglaMatricula = siglaMatriculaInput
+                            ? siglaMatriculaInput.value.trim() : '';
+                        const sufixoExato = siglaMatricula ? ` ${siglaMatricula}` : '';
+
+                        // O número do documento pode não ter prefixo M/T
+                        // ("R1 237"). Remover o sufixo exato evita transformar
+                        // o simples em "1 237" e depois gerar "AV1 237 237".
+                        if (sufixoExato && numero.endsWith(sufixoExato)) {
+                            return numero.slice(0, -sufixoExato.length).trim();
+                        }
+
+                        // Compatibilidade com compostos legados cuja sigla no
+                        // fim não coincide exatamente com o hidden atual.
+                        const indexM = numero.indexOf('M');
+                        const indexT = numero.indexOf('T');
+                        if (indexM > 0 && (indexT === -1 || indexM < indexT)) {
+                            numero = numero.substring(0, indexM);
+                        } else if (indexT > 0 && (indexM === -1 || indexT < indexM)) {
+                            numero = numero.substring(0, indexT);
+                        }
+                        return numero.trim();
+                    }
+
                     let numero = '';
                     if (selectedTipo === 'averbacao' && siglaCompleta.startsWith('AV')) {
                         // Para averbação: AV + número + sigla_matricula
-                        numero = siglaCompleta.substring(2);
-                        // Remover a sigla da matrícula/transcrição do final (pode começar com M ou T)
-                        const indexM = numero.indexOf('M');
-                        const indexT = numero.indexOf('T');
-                        if (indexM > 0 && (indexT === -1 || indexM < indexT)) {
-                            numero = numero.substring(0, indexM);
-                        } else if (indexT > 0 && (indexM === -1 || indexT < indexM)) {
-                            numero = numero.substring(0, indexT);
-                        }
+                        numero = removerSufixoDoDocumento(siglaCompleta.substring(2));
                     } else if (selectedTipo === 'registro' && siglaCompleta.startsWith('R')) {
                         // Para registro: R + número + sigla_matricula
-                        numero = siglaCompleta.substring(1);
-                        // Remover a sigla da matrícula/transcrição do final (pode começar com M ou T)
-                        const indexM = numero.indexOf('M');
-                        const indexT = numero.indexOf('T');
-                        if (indexM > 0 && (indexT === -1 || indexM < indexT)) {
-                            numero = numero.substring(0, indexM);
-                        } else if (indexT > 0 && (indexM === -1 || indexT < indexM)) {
-                            numero = numero.substring(0, indexT);
-                        }
+                        numero = removerSufixoDoDocumento(siglaCompleta.substring(1));
                     }
                     numeroSimplesInput.value = numero;
                 }

@@ -1,0 +1,48 @@
+{% comment %}
+  Banner da revisão da extração (I-14 / #341). Contexto: ``revisao_ia``.
+  Só texto de negócio: nenhuma chave técnica de linha (``/acts/...``) e
+  nenhum CPF/RG aparece aqui.
+{% endcomment %}
+<section class="alert alert-info ia-revisao-banner" id="ia-revisao-banner"
+         data-url-texto="{{ revisao_ia.url_texto }}" aria-label="Revisão da extração">
+    <p class="ia-revisao-titulo">
+        <strong>Revisão da extração · ato {{ revisao_ia.posicao }} de {{ revisao_ia.total }}</strong>
+        <span>({{ revisao_ia.rotulo }}) — {{ revisao_ia.salvos }} de {{ revisao_ia.total }} salvo{{ revisao_ia.salvos|pluralize }}</span>
+    </p>
+    <p>
+        Os valores abaixo foram lidos do documento e <strong>nada é gravado até você salvar este ato</strong>.
+        Confira cada campo; o selo “p. N” ao lado do campo mostra de onde o valor foi lido.
+    </p>
+    <p>
+        <a href="{{ revisao_ia.url_texto }}" target="_blank" rel="noopener">Abrir o texto lido do documento</a>
+        · <a href="{{ revisao_ia.url_documento }}">Voltar ao documento</a>
+    </p>
+    {% if revisao_ia.restaurado %}
+    <p class="ia-revisao-rascunho">Suas alterações não salvas deste ato foram restauradas.</p>
+    {% endif %}
+    {% if revisao_ia.avisos %}
+    <ul class="ia-revisao-avisos">
+        {% for aviso in revisao_ia.avisos %}
+        <li>
+            <strong>{{ aviso.rotulo }}</strong>: {{ aviso.texto }}
+            {% if aviso.motivo == "unidade_area" %}
+            <label class="ia-revisao-descarte-area">
+                <input type="checkbox" name="descartar_area" value="1"
+                       form="lancamento-form"
+                       {% if revisao_ia.descartar_area %}checked{% endif %}>
+                {{ aviso.rotulo_descarte }}
+            </label>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+<style>
+    .ia-evidencia-selo { margin-left: 6px; padding: 0 6px; font-size: 0.75em; line-height: 1.6;
+        border: 1px solid #0d6efd; border-radius: 10px; background: #e7f1ff; color: #0a58ca; cursor: pointer; }
+    .ia-evidencia-selo.ia-evidencia-baixa { border-color: #b02a37; background: #fdecea; color: #842029; }
+    .ia-evidencia-selo.ia-evidencia-foco { box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.4); }
+    .ia-evidencia-detalhe { display: block; margin-top: 2px; font-size: 0.8em; color: #495057; }
+    .ia-evidencia-detalhe[hidden] { display: none; }
+</style>

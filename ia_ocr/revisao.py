@@ -220,6 +220,23 @@ def dados_revisados(extracao) -> DadosRevisados:
     if pendencias(extracao):
         raise RevisaoInvalidada('A revisão possui pendências.')
 
+    return _montar_dados(extracao)
+
+
+def _montar_dados(extracao) -> DadosRevisados:
+    """Monta a estrutura tipada da revisão, SEM exigir revisão concluída.
+
+    É o miolo de ``dados_revisados`` sem a guarda: não olha o status do
+    job, se a extração é a vigente/finalizada nem se há pendências — lê o
+    estado ATUAL das linhas (``valor_final`` → ``normalized``) mesmo com o
+    job em ``extraido``. Quem precisa do contrato "revisão fechada" (a
+    importação) continua em ``dados_revisados``; o formulário de lançamento
+    (I-14 / #341) pré-preenche um ato antes de a revisão terminar.
+
+    Só lê o banco: nenhuma gravação, nenhuma transição. As linhas
+    descartadas (e o ramo inteiro de um ato descartado) ficam de fora,
+    como em ``dados_revisados``.
+    """
     linhas, atos = _contexto_revisao(extracao)
     tipos_por_ato, _ = _tipos_efetivos(linhas, atos)
 

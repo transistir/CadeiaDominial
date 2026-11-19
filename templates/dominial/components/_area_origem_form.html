@@ -26,7 +26,7 @@
                             <option value="T" {% if origem.tipo_origem == 'T' %}selected{% endif %}>Transcrição (T)</option>
                         </select>
                         <input type="text" name="numero_origem_{{ origem.index }}" id="numero_origem_{{ origem.index }}" class="origem-numero-input" 
-                               placeholder="123" maxlength="10" pattern="[0-9]+" title="Apenas números"
+                               placeholder="123" maxlength="13" pattern="[0-9]+([.][0-9]+)*" title="Apenas números (ponto de milhar aceito, ex.: 42.718)"
                                value="{{ origem.numero_origem }}">
                     </div>
                     <!-- Campo oculto para compatibilidade com backend -->
@@ -121,7 +121,7 @@
                             <option value="T">Transcrição (T)</option>
                         </select>
                         <input type="text" name="numero_origem_0" id="numero_origem_0" class="origem-numero-input" 
-                               placeholder="123" maxlength="10" pattern="[0-9]+" title="Apenas números">
+                               placeholder="123" maxlength="13" pattern="[0-9]+([.][0-9]+)*" title="Apenas números (ponto de milhar aceito, ex.: 42.718)">
                     </div>
                     <!-- Campo oculto para compatibilidade com backend -->
                     <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_0" value="">
@@ -208,7 +208,7 @@
                             <option value="T">Transcrição (T)</option>
                         </select>
                         <input type="text" name="numero_origem_0" id="numero_origem_0" class="origem-numero-input" 
-                               placeholder="123" maxlength="10" pattern="[0-9]+" title="Apenas números">
+                               placeholder="123" maxlength="13" pattern="[0-9]+([.][0-9]+)*" title="Apenas números (ponto de milhar aceito, ex.: 42.718)">
                     </div>
                     <!-- Campo oculto para compatibilidade com backend -->
                     <input type="hidden" name="origem_completa[]" id="origem_completa_hidden_0" value="">
