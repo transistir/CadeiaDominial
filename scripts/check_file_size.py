@@ -4,10 +4,20 @@
 Varre os arquivos VERSIONADOS do repositório (`git ls-files`; sem git, cai no
 os.walk) com extensão .py, .js, .html, .css, e falha se algum arquivo:
   a) passa do limite sem estar no baseline (novo arquivo acima do limite);
-  b) está no baseline e cresceu (baseline do estado atual só pode encolher);
-  c) está no baseline mas não existe mais (entrada órfã).
+  b) está no baseline e difere do estado atual — o baseline exige igualdade
+     exata: cresceu OU encolheu, ambos violam (a catraca aperta sozinha);
+  c) está no baseline mas caiu para dentro do limite (remova a entrada);
+  d) está no baseline mas não existe mais (entrada órfã).
 
-Arquivo do baseline que encolheu é OK — o check sugere atualizar o baseline.
+Com --base-ref REF, o baseline do disco é comparado com o da ref base
+(`git show REF:scripts/file_size_baseline.json`): chave nova ou valor maior
+viola — o PR não pode abençoar o próprio baseline. Se `git show` falhar,
+aviso em stderr e a comparação é ignorada (o hook local não tem a ref; o CI
+tem).
+
+--write-baseline só reduz ou remove entradas: se o estado atual adicionaria
+chave ou aumentaria valor em relação ao JSON que já está no disco, falha com
+exit 2 sem gravar nada.
 
 Baseline: scripts/file_size_baseline.json, contando só arquivos acima do limite.
 Só stdlib; requer Python 3.11+.
@@ -16,7 +26,10 @@ Uso:
     python scripts/check_file_size.py                 # check (exit 1 se violar)
     python scripts/check_file_size.py --quiet         # só imprime violações
     python scripts/check_file_size.py --write-baseline
+    python scripts/check_file_size.py --base-ref origin/develop
     python scripts/check_file_size.py --limit 300     # limite ad hoc
+
+Exit: 0 ok; 1 violações; 2 recusa do --write-baseline.
 """
 
 from __future__ import annotations
@@ -118,36 +131,98 @@ def contar_linhas(raiz: Path, relativo: str) -> int:
     return len(texto.splitlines())
 
 
+def carregar_json_baseline(texto: str) -> dict[str, int]:
+    dados = json.loads(texto)
+    return {str(k): int(v) for k, v in dados.get("files", {}).items()}
+
+
 def carregar_baseline(raiz: Path) -> dict[str, int]:
     caminho = caminho_baseline(raiz)
     if not caminho.exists():
         return {}
-    dados = json.loads(caminho.read_text(encoding="utf-8"))
-    return {str(k): int(v) for k, v in dados.get("files", {}).items()}
+    return carregar_json_baseline(caminho.read_text(encoding="utf-8"))
 
 
-def escrever_baseline(raiz: Path, limite: int) -> int:
-    """Regrava o baseline com o estado atual; devolve quantos arquivos gravou."""
+def baseline_da_base(raiz: Path, base_ref: str) -> dict[str, int] | None:
+    """Baseline da ref base via `git show REF:scripts/<nome>`; None se falhar."""
+    try:
+        resultado = subprocess.run(
+            ["git", "-C", str(raiz), "show", f"{base_ref}:scripts/{BASELINE_NOME}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    try:
+        return carregar_json_baseline(resultado.stdout.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def comparar_baseline_com_base(
+    baseline: dict[str, int], base: dict[str, int]
+) -> list[str]:
+    """Violações do baseline do disco contra o da base: só pode encolher.
+
+    Chave nova ou valor maior em relação à base viola; valor menor ou chave
+    removida é OK.
+    """
+    violacoes: list[str] = []
+    for relativo, valor_atual in baseline.items():
+        if relativo not in base:
+            violacoes.append(
+                f"VIOLACAO: entrada nova no baseline: {relativo} "
+                f"({valor_atual} linhas)"
+            )
+        elif valor_atual > base[relativo]:
+            violacoes.append(
+                f"VIOLACAO: baseline cresceu em {relativo} "
+                f"(base {base[relativo]} → atual {valor_atual})"
+            )
+    return violacoes
+
+
+def _acima_do_limite_agora(raiz: Path, limite: int) -> dict[str, int]:
+    """Estado atual: arquivos acima do limite e suas contagens de linha."""
     acima: dict[str, int] = {}
     for relativo in coletar_arquivos(raiz):
         linhas = contar_linhas(raiz, relativo)
         if linhas > limite:
             acima[relativo] = linhas
+    return acima
+
+
+def escrever_baseline(raiz: Path, limite: int) -> tuple[int, list[str]]:
+    """Regrava o baseline com o estado atual, se ele só reduzir o existente.
+
+    O estado atual não pode ADICIONAR chave nem AUMENTAR valor em relação ao
+    JSON que já está no disco; se puder, devolve (0, recusados) sem gravar
+    nada. Devolve (quantos_gravou, []) quando grava.
+    """
+    acima = _acima_do_limite_agora(raiz, limite)
+    no_disco = carregar_baseline(raiz)
+    recusados = [
+        relativo
+        for relativo in sorted(acima)
+        if relativo not in no_disco or acima[relativo] > no_disco[relativo]
+    ]
+    if recusados:
+        return 0, recusados
     caminho = caminho_baseline(raiz)
     caminho.parent.mkdir(parents=True, exist_ok=True)
     dados = {"limit": limite, "files": dict(sorted(acima.items()))}
     caminho.write_text(json.dumps(dados, indent=2) + "\n", encoding="utf-8")
-    return len(acima)
+    return len(acima), []
 
 
 def avaliar(raiz: Path, limite: int, baseline: dict[str, int]):
-    """Compara o estado atual com o baseline.
+    """Compara o estado atual com o baseline (igualdade exata exigida).
 
-    Devolve (violacoes, sugestoes, total_varridos, acima_do_limite) onde
-    violacoes é lista de strings prefixadas com "VIOLACAO:".
+    Devolve (violacoes, total_varridos, acima_do_limite) onde violacoes é
+    lista de strings prefixadas com "VIOLACAO:".
     """
     violacoes: list[str] = []
-    sugestoes: list[str] = []
     atuais: dict[str, int] = {}
     acima_do_limite = 0
 
@@ -155,6 +230,11 @@ def avaliar(raiz: Path, limite: int, baseline: dict[str, int]):
         linhas = contar_linhas(raiz, relativo)
         atuais[relativo] = linhas
         if linhas <= limite:
+            if relativo in baseline:
+                violacoes.append(
+                    f"VIOLACAO: {relativo} não passa mais do limite; "
+                    f"remova a entrada do baseline"
+                )
             continue
         acima_do_limite += 1
         if relativo not in baseline:
@@ -167,23 +247,22 @@ def avaliar(raiz: Path, limite: int, baseline: dict[str, int]):
                 f"VIOLACAO: {relativo}: arquivo legado cresceu "
                 f"(baseline {baseline[relativo]} → atual {linhas})"
             )
+        elif linhas < baseline[relativo]:
+            violacoes.append(
+                f"VIOLACAO: baseline desatualizado em {relativo} "
+                f"(baseline {baseline[relativo]} → atual {linhas}); "
+                f"rode --write-baseline"
+            )
 
-    for relativo, linhas_baseline in baseline.items():
+    for relativo in baseline:
         if relativo not in atuais:
             violacoes.append(
                 f"VIOLACAO: {relativo}: entrada órfã no baseline; "
                 f"rode --write-baseline"
             )
-            continue
-        if atuais[relativo] < linhas_baseline:
-            sugestoes.append(
-                f"OK: {relativo} pode atualizar o baseline "
-                f"({linhas_baseline} → {atuais[relativo]})"
-            )
 
     violacoes.sort()
-    sugestoes.sort()
-    return violacoes, sugestoes, len(atuais), acima_do_limite
+    return violacoes, len(atuais), acima_do_limite
 
 
 def main(argv: list[str] | None = None, raiz: Path | None = None) -> int:
@@ -194,7 +273,14 @@ def main(argv: list[str] | None = None, raiz: Path | None = None) -> int:
     parser.add_argument(
         "--write-baseline",
         action="store_true",
-        help="regrava o baseline com o estado atual (só arquivos acima do limite)",
+        help="regrava o baseline com o estado atual (só reduz ou remove; "
+        "exit 2 se recusado)",
+    )
+    parser.add_argument(
+        "--base-ref",
+        default=None,
+        help="ref base (ex.: origin/develop) para comparar o baseline via "
+        "`git show REF:scripts/<baseline>`",
     )
     parser.add_argument(
         "--quiet", action="store_true", help="imprime somente violações"
@@ -204,7 +290,14 @@ def main(argv: list[str] | None = None, raiz: Path | None = None) -> int:
     raiz = Path(raiz).resolve() if raiz is not None else descobrir_raiz()
 
     if args.write_baseline:
-        gravados = escrever_baseline(raiz, args.limit)
+        gravados, recusados = escrever_baseline(raiz, args.limit)
+        if recusados:
+            for relativo in recusados:
+                print(
+                    "recusado: --write-baseline só reduz ou remove entradas; "
+                    f"{relativo} precisa ser refatorado"
+                )
+            return 2
         print(
             f"baseline gravado: scripts/{BASELINE_NOME} "
             f"({gravados} arquivo(s) acima do limite de {args.limit})"
@@ -212,11 +305,20 @@ def main(argv: list[str] | None = None, raiz: Path | None = None) -> int:
         return 0
 
     baseline = carregar_baseline(raiz)
-    violacoes, sugestoes, total, acima = avaliar(raiz, args.limit, baseline)
+    violacoes, total, acima = avaliar(raiz, args.limit, baseline)
+
+    if args.base_ref:
+        base = baseline_da_base(raiz, args.base_ref)
+        if base is None:
+            print(
+                "aviso: base-ref indisponível; comparação de baseline ignorada",
+                file=sys.stderr,
+            )
+        else:
+            violacoes.extend(comparar_baseline_com_base(baseline, base))
+            violacoes.sort()
 
     if not args.quiet:
-        for sugestao in sugestoes:
-            print(sugestao)
         print(f"arquivos: {total}, acima do limite: {acima}, violacoes: {len(violacoes)}")
     for violacao in violacoes:
         print(violacao)

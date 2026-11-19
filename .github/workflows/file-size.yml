@@ -2,7 +2,7 @@ name: file-size
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
   workflow_dispatch:
 
 permissions:
@@ -13,13 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Verifica limite de 400 linhas por arquivo
-        run: python scripts/check_file_size.py
+        run: python scripts/check_file_size.py --base-ref "origin/${{ github.base_ref }}"
 
       - name: Testes do verificador
         run: python -m unittest discover -s scripts/tests -v
