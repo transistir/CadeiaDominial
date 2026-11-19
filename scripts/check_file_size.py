@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Trava de 400 linhas por arquivo — Etapa 0 do plano de refatoração.
 
-Varre o repositório (.py, .js, .html, .css) e falha se algum arquivo:
+Varre os arquivos VERSIONADOS do repositório (`git ls-files`; sem git, cai no
+os.walk) com extensão .py, .js, .html, .css, e falha se algum arquivo:
   a) passa do limite sem estar no baseline (novo arquivo acima do limite);
   b) está no baseline e cresceu (baseline do estado atual só pode encolher);
   c) está no baseline mas não existe mais (entrada órfã).
@@ -23,15 +24,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 LIMITE = 400
 
 #: Extensões vigiadas pelo limite.
 EXTENSOES = {".py", ".js", ".html", ".css"}
 
-#: Diretórios nunca varridos (VCS, dependências, artefatos, migrações Django).
+#: Diretórios nunca varridos (VCS, dependências, artefatos, migrações Django,
+#: checkouts aninhados e configurações de agente).
 DIRETORIOS_IGNORADOS = {
     ".git",
     "node_modules",
@@ -43,6 +46,9 @@ DIRETORIOS_IGNORADOS = {
     "dist",
     "build",
     "__pycache__",
+    "worktrees",
+    ".hermes",
+    ".claude",
 }
 
 BASELINE_NOME = "file_size_baseline.json"
@@ -57,17 +63,54 @@ def caminho_baseline(raiz: Path) -> Path:
     return raiz / "scripts" / BASELINE_NOME
 
 
-def coletar_arquivos(raiz: Path) -> list[str]:
-    """Caminhos relativos (posix) dos arquivos vigiados, ordenados."""
+def _diretorio_ignorado(nome: str) -> bool:
+    """Nome de diretório a pular: na lista fixa ou qualquer `.venv*`."""
+    return nome in DIRETORIOS_IGNORADOS or nome.startswith(".venv")
+
+
+def _aceitavel(relativo: str) -> bool:
+    """Filtros comuns: extensão vigiada e nenhum diretório ignorado no caminho."""
+    if PurePosixPath(relativo).suffix not in EXTENSOES:
+        return False
+    partes = PurePosixPath(relativo).parts
+    return all(not _diretorio_ignorado(parte) for parte in partes[:-1])
+
+
+def _caminhos_versionados(raiz: Path) -> list[str] | None:
+    """Caminhos relativos versionados (`git ls-files`); None se git falhar."""
+    try:
+        resultado = subprocess.run(
+            ["git", "-C", str(raiz), "ls-files", "-z"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return [os.fsdecode(bruto) for bruto in resultado.stdout.split(b"\0") if bruto]
+
+
+def _caminhos_do_walk(raiz: Path) -> list[str]:
+    """Fallback para árvore sem git: os.walk pulando diretórios ignorados."""
     encontrados: list[str] = []
     for dirpath, nomes_dir, nomes_arq in os.walk(raiz):
-        nomes_dir[:] = sorted(d for d in nomes_dir if d not in DIRETORIOS_IGNORADOS)
+        nomes_dir[:] = sorted(d for d in nomes_dir if not _diretorio_ignorado(d))
         for nome in sorted(nomes_arq):
-            if Path(nome).suffix not in EXTENSOES:
-                continue
-            caminho = Path(dirpath) / nome
-            encontrados.append(caminho.relative_to(raiz).as_posix())
-    return sorted(encontrados)
+            encontrados.append((Path(dirpath) / nome).relative_to(raiz).as_posix())
+    return encontrados
+
+
+def coletar_arquivos(raiz: Path) -> list[str]:
+    """Caminhos relativos (posix) dos arquivos vigiados, ordenados.
+
+    Prefere a lista de arquivos VERSIONADOS (`git ls-files`), para não entrar
+    em checkouts aninhados (worktrees/, .venv*/); sem git disponível, cai no
+    os.walk. Os filtros de extensão e de diretório valem nos dois caminhos.
+    """
+    caminhos = _caminhos_versionados(raiz)
+    if caminhos is None:
+        caminhos = _caminhos_do_walk(raiz)
+    return sorted(caminho for caminho in caminhos if _aceitavel(caminho))
 
 
 def contar_linhas(raiz: Path, relativo: str) -> int:

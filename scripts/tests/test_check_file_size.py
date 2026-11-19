@@ -6,6 +6,8 @@ Sem dependências externas — só stdlib.
 
 import io
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -187,6 +189,46 @@ class TestQuiet(VerificacaoTamanhoBase):
         codigo, saida = self.rodar("--quiet")
         self.assertEqual(codigo, 0)
         self.assertNotIn("pode atualizar o baseline", saida)
+
+
+class TestArquivosVersionados(VerificacaoTamanhoBase):
+    """coletar_arquivos deve olhar só o que está versionado no git."""
+
+    @unittest.skipUnless(shutil.which("git"), "git não disponível")
+    def test_repo_git_somente_versionados_contam(self):
+        def _git(*args):
+            subprocess.run(
+                ["git", "-C", str(self.raiz), *args],
+                check=True,
+                capture_output=True,
+            )
+
+        _git("init", "-q")
+        _git("config", "user.email", "teste@local")
+        _git("config", "user.name", "Teste")
+
+        # Versionado de 401 linhas → violação. Árvores não versionadas de
+        # 900 linhas → não aparecem em coletar_arquivos.
+        self.escrever("app/versionado.py", 401)
+        self.escrever("worktrees/x/enorme.js", 900)
+        self.escrever(".venv-ish/lib/dependencia.py", 900)
+        _git("add", "app/versionado.py")
+
+        coletados = check_file_size.coletar_arquivos(self.raiz)
+        self.assertEqual(coletados, ["app/versionado.py"])
+
+        codigo, saida = self.rodar()
+        self.assertEqual(codigo, 1)
+        self.assertEqual(saida.count("VIOLACAO:"), 1)
+        self.assertIn("app/versionado.py", saida)
+        self.assertNotIn("worktrees/", saida)
+        self.assertNotIn(".venv-ish", saida)
+
+        # Mesmo se os diretórios ignorados fossem versionados, seguem fora.
+        _git("add", "-A")
+        self.assertEqual(
+            check_file_size.coletar_arquivos(self.raiz), ["app/versionado.py"]
+        )
 
 
 class TestConstantes(unittest.TestCase):
