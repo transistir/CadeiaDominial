@@ -40,7 +40,6 @@
     "ia_ocr/importacao.py": 1557,
     "ia_ocr/models.py": 558,
     "ia_ocr/ocr_client.py": 662,
-    "ia_ocr/revisao.py": 2446,
     "ia_ocr/revisao_ato.py": 408,
     "ia_ocr/rotulos.py": 413,
     "ia_ocr/services.py": 1248,
