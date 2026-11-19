@@ -14,7 +14,7 @@
         <div class="imovel-info">
             <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
             <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
-            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias_total }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias_total|pluralize }}</span> · <strong>{{ avisos|length }}</strong> aviso{{ avisos|length|pluralize }}</div>
+            <div data-ocr-contador><strong data-ocr-contador-pendencias>{{ pendencias_total }}</strong> <span data-ocr-contador-pendencias-texto>pendência{{ pendencias_total|pluralize }}</span> · <strong data-ocr-contador-avisos>{{ avisos|length }}</strong> <span data-ocr-contador-avisos-texto>aviso{{ avisos|length|pluralize }}</span></div>
         </div>
     </div>
 
@@ -62,19 +62,19 @@
     </section>
     {% endif %}
 
-    {% if avisos %}
-    <section class="revisao-bloco" aria-labelledby="ocr-avisos-titulo" data-ocr-avisos>
+    {# #324 (PR #343): a seção fica sempre no DOM (oculta sem avisos) — o save recalcula os avisos e o ocr_revisao.js troca a lista; um aviso novo (ex.: o número da origem foi preenchido) não pode depender de recarregar a página. #}
+    <section class="revisao-bloco" aria-labelledby="ocr-avisos-titulo" data-ocr-avisos{% if not avisos %} hidden{% endif %}>
         <h3 class="h6" id="ocr-avisos-titulo">Avisos</h3>
-        <ul class="revisao-lista">
+        <ul class="revisao-lista" data-ocr-avisos-lista>
             {% for item in avisos %}
             <li class="aviso">
-                {% if item.local %}{{ item.local }}: {% endif %}Campo recomendado não preenchido
+                {# #324: o rótulo vem do motivo (revisao._ROTULO_AVISO); motivo fora do mapa cai no texto de sempre. #}
+                {% if item.local %}{{ item.local }}: {% endif %}{{ item.rotulo }}
                 <details><summary>Detalhe técnico</summary><code>{{ item.chave }}</code> — <code>{{ item.motivo }}</code></details>
             </li>
             {% endfor %}
         </ul>
     </section>
-    {% endif %}
 
     <div id="revisao">
         {% for secao in secoes %}
@@ -110,6 +110,8 @@
                     <div class="campo-linha">
                         {# Rótulo de negócio (revisao.ROTULOS_CAMPO); a chave completa fica no detalhe técnico. #}
                         <label class="campo-rotulo" for="campo-{{ campo.chave|slugify }}" data-campo-rotulo>{{ campo.rotulo_tela }}</label>
+                        {# #324: livro/folha da origem que o documento não traz — selo informativo; o campo segue vazio e editável. #}
+                        {% if campo.nao_consta %}<span class="badge-motivo" id="nao-consta-{{ campo.chave|slugify }}" data-campo-nao-consta>não consta no documento</span>{% endif %}
 
                         {% if campo.eh_tipo_sugerido %}
                         {# Tarefa B #322: tipo é <select>, como no formulário de lançamento. As opções e o enum aceito no save vêm da MESMA fonte (rotulos.TIPOS_SUGERIDOS); valor efetivo fora delas ganha opção extra selecionada em vez de cair na vazia e apagar a sugestão no save seguinte (revisão Opus). #}
@@ -130,13 +132,13 @@
                         {% elif campo.tipo_valor == 'texto' or campo.texto_longo %}
                         <textarea id="campo-{{ campo.chave|slugify }}"
                                   class="form-control campo-valor campo-valor-longo" rows="2"
-                                  data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>
+                                  data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.nao_consta %} aria-describedby="nao-consta-{{ campo.chave|slugify }}"{% endif %}{% if somente_leitura %} disabled{% endif %}>{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}</textarea>
                         {% else %}
                         <input id="campo-{{ campo.chave|slugify }}"
                                class="form-control campo-valor"
                                type="{% if campo.tipo_valor == 'data' %}date{% else %}text{% endif %}"{% if campo.tipo_valor == 'decimal' or campo.tipo_valor == 'area' %} inputmode="decimal"{% endif %}
                                value="{{ campo.valor_final|default_if_none:campo.normalized|default:'' }}"
-                               data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
+                               data-campo-valor data-tipo="{{ campo.tipo_valor }}"{% if campo.nao_consta %} aria-describedby="nao-consta-{{ campo.chave|slugify }}"{% endif %}{% if campo.tipo_valor == 'parte' or campo.tipo_valor == 'ato' %} readonly{% endif %}{% if somente_leitura %} disabled{% endif %}>
                         {% endif %}
 
                         <span class="campo-acoes">

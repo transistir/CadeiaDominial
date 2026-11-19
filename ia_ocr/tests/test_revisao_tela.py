@@ -3,16 +3,21 @@
 import copy
 import json
 import re
+from datetime import date
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.db import connection
 from django.shortcuts import resolve_url
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, override_settings
 from django.test.html import Element, parse_html
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from dominial.models import Cartorios, LancamentoTipo, Pessoas
+from dominial.models import (
+    Cartorios, Documento, DocumentoTipo, Imovel, LancamentoTipo, Pessoas, TIs,
+)
 from ia_ocr import estados, revisao, rotulos, services, views
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
 from ia_ocr.revisao import IndiceCartorios, IndicePessoas, enriquecer_payload
@@ -1519,6 +1524,464 @@ class FormularioPorAtoTest(TelaRevisaoBase):
         campo = next(c for c in resposta.context['campos'] if c.eh_tipo_sugerido)
         self.assertEqual(_valor_do_select(select), campo.tipo_exibido)
         self.assertFalse(_descendentes(card, 'input', 'data-campo-valor'))
+
+    # --- #324 (I-11d): origem sem livro/folha ------------------------------
+
+    @staticmethod
+    def _card_da_origem(html, chave):
+        return next(
+            card for card in _elementos(
+                html, 'article', presentes=('data-campo',),
+            )
+            if _atributos(card)['data-chave'] == chave
+        )
+
+    def test_origem_sem_livro_e_folha_campo_vazio_editavel_com_selo(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        html = self._tela().content.decode()
+
+        for nome in ('livro', 'folha'):
+            chave = f'/acts/0/origem/{nome}'
+            with self.subTest(chave=chave):
+                card = self._card_da_origem(html, chave)
+                (entrada,) = _descendentes(card, 'textarea', 'data-campo-valor')
+                atributos = _atributos(entrada)
+                self.assertNotIn('disabled', atributos)
+                self.assertNotIn('readonly', atributos)
+                # Nunca pré-preenchido: o revisor informa ou segue sem.
+                self.assertEqual(''.join(
+                    filho for filho in entrada.children
+                    if isinstance(filho, str)
+                ).strip(), '')
+                (selo,) = _descendentes(card, 'span', 'data-campo-nao-consta')
+                self.assertEqual(
+                    _texto_fora_de_details(selo).strip(),
+                    'não consta no documento',
+                )
+                self.assertEqual(
+                    atributos['aria-describedby'], _atributos(selo)['id'],
+                )
+        # O selo é só de livro/folha: número lido, data e tipo não o ganham.
+        for nome in ('numero', 'data', 'tipo_documento', 'cartorio'):
+            with self.subTest(sem_selo=nome):
+                card = self._card_da_origem(html, f'/acts/0/origem/{nome}')
+                self.assertEqual(
+                    _descendentes(card, 'span', 'data-campo-nao-consta'), [],
+                )
+
+    def test_aviso_da_origem_tem_rotulo_proprio_e_nao_bloqueia(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertEqual(
+            sorted(
+                item['motivo'] for item in resposta.context['avisos']
+                if item['motivo'].endswith('_nao_consta')
+            ),
+            ['folha_origem_nao_consta', 'livro_origem_nao_consta'],
+        )
+        self.assertFalse([
+            item for item in resposta.context['pendencias']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+        bloco = _elementos(html, 'section', presentes=('data-ocr-avisos',))[0]
+        visivel = _texto_fora_de_details(bloco)
+        self.assertIn('Livro da origem não consta no documento', visivel)
+        self.assertIn('Folha da origem não consta no documento', visivel)
+        for interno in (
+            'livro_origem_nao_consta', 'folha_origem_nao_consta', '/acts/',
+        ):
+            with self.subTest(interno=interno):
+                self.assertNotIn(interno, visivel)
+        # Só o aviso da origem: nada de "recomendado não preenchido" no lugar.
+        self.assertNotIn('Campo recomendado não preenchido', visivel)
+        botao = re.search(r'<button[^>]*data-ocr-finalizar[^>]*>', html).group(0)
+        self.assertEqual(
+            'disabled' in botao, bool(resposta.context['pendencias']),
+        )
+
+    def test_selo_some_quando_o_documento_traz_livro_e_folha(self):
+        payload = self._payload_formulario()
+        payload['acts'][0]['origem']['livro'] = _campo('3-A', 'R-1/42.718')
+        payload['acts'][0]['origem']['folha'] = _campo('12', 'R-1/42.718')
+        self._extracao(payload, resolver=True)
+        resposta = self._tela()
+        html = resposta.content.decode()
+
+        self.assertFalse([
+            item for item in resposta.context['avisos']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+        self.assertNotIn('data-campo-nao-consta', html)
+
+    # --- #324 (PR #343, P2): o save devolve os avisos RECALCULADOS ----------
+    # Os avisos e os selos "não consta no documento" só eram calculados na
+    # abertura da página: preencher livro/folha deixava o aviso na tela, e
+    # mudar o número da origem podia esconder ou criar um. A resposta do save
+    # traz a lista do estado recém-salvo, da MESMA fonte da abertura.
+
+    CHAVES_LIVRO_FOLHA = ('/acts/0/origem/livro', '/acts/0/origem/folha')
+
+    def _salvar_decisoes(self, decisoes):
+        return self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [
+                    {'chave': chave, 'incluir': True, 'valor': valor}
+                    for chave, valor in decisoes.items()
+                ],
+            }),
+            content_type='application/json',
+        )
+
+    @staticmethod
+    def _chaves_dos_avisos(avisos):
+        return sorted((item['chave'], item['motivo']) for item in avisos)
+
+    def test_salvar_livro_e_folha_da_origem_tira_os_avisos_do_ato(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        abertura = self._tela().context['avisos']
+        self.assertEqual(
+            sorted(
+                item['chave'] for item in abertura
+                if item['motivo'].endswith('_nao_consta')
+            ),
+            sorted(self.CHAVES_LIVRO_FOLHA),
+        )
+
+        resposta = self._salvar_decisoes({
+            '/acts/0/origem/livro': '3-A', '/acts/0/origem/folha': '12',
+        })
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        avisos = resposta.json()['avisos']
+        # Os avisos de livro/folha DAQUELE ato saíram da resposta, e com eles
+        # o selo (nenhum item "não consta" sobrou).
+        self.assertFalse([
+            item for item in avisos if item['chave'] in self.CHAVES_LIVRO_FOLHA
+        ])
+        self.assertFalse([item for item in avisos if item['nao_consta']])
+        # É o MESMO cálculo da abertura: reabrir a tela mostra a mesma lista.
+        self.assertEqual(
+            self._chaves_dos_avisos(avisos),
+            self._chaves_dos_avisos(self._tela().context['avisos']),
+        )
+
+    def test_salvar_so_o_livro_mantem_o_aviso_da_folha(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/livro': '3-A'})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        (aviso,) = [
+            item for item in resposta.json()['avisos'] if item['nao_consta']
+        ]
+        self.assertEqual(aviso, {
+            'chave': '/acts/0/origem/folha',
+            'motivo': 'folha_origem_nao_consta',
+            'local': 'Ato 1 — folha',
+            'rotulo': 'Folha da origem não consta no documento',
+            'nao_consta': True,
+        })
+
+    def test_esvaziar_o_livro_depois_de_salvo_volta_o_aviso(self):
+        payload = self._payload_formulario()
+        payload['acts'][0]['origem']['livro'] = _campo('3-A', 'R-1/42.718')
+        self._extracao(payload, resolver=True)
+        self.assertFalse([
+            item for item in self._tela().context['avisos']
+            if item['chave'] == '/acts/0/origem/livro'
+        ])
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/livro': ''})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(
+            [
+                (item['chave'], item['motivo'], item['nao_consta'])
+                for item in resposta.json()['avisos']
+                if item['chave'] == '/acts/0/origem/livro'
+            ],
+            [('/acts/0/origem/livro', 'livro_origem_nao_consta', True)],
+        )
+
+    def test_preencher_o_numero_da_origem_cria_os_avisos_de_livro_e_folha(self):
+        """Sem número não há documento de origem citado: nada a avisar."""
+        payload = self._payload_formulario()
+        del payload['acts'][0]['origem']['numero']
+        self._extracao(payload, resolver=True)
+        self.assertFalse([
+            item for item in self._tela().context['avisos']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/numero': '42'})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(
+            sorted(
+                item['chave'] for item in resposta.json()['avisos']
+                if item['nao_consta']
+            ),
+            sorted(self.CHAVES_LIVRO_FOLHA),
+        )
+
+    def test_apagar_o_numero_da_origem_esconde_os_avisos_de_livro_e_folha(self):
+        self._extracao(self._payload_formulario(), resolver=True)
+        self.assertTrue([
+            item for item in self._tela().context['avisos']
+            if item['motivo'].endswith('_nao_consta')
+        ])
+
+        resposta = self._salvar_decisoes({'/acts/0/origem/numero': ''})
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertFalse([
+            item for item in resposta.json()['avisos'] if item['nao_consta']
+        ])
+
+
+class HomonimoNaTelaTest(TelaRevisaoBase):
+    """#267: o aviso de homônimo sai do escopo do USUÁRIO, nunca do global."""
+
+    def _preparar(self, imovel_do_homonimo):
+        cartorio = Cartorios.objects.create(
+            nome='CRI Origem 267', cns='CNS-267T', cidade='X', estado='SP',
+        )
+        tipo = DocumentoTipo.objects.create(tipo='matricula')
+        DocumentoTipo.objects.create(tipo='transcricao')
+        Documento.objects.create(
+            imovel=imovel_do_homonimo, tipo=tipo, numero='M366',
+            data=timezone.now().date(), cartorio=cartorio, livro='1',
+            folha='1',
+        )
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['origem'] = {
+            'numero': _campo('T366', 'R-1/42.718'),
+            'tipo_documento': _campo('transcricao', 'R-1/42.718'),
+            'cartorio': _campo('CRI Origem 267', 'CRI de Guaíra'),
+        }
+        extracao = self._extracao(payload)
+        extracao.campos.filter(chave='/acts/0/origem/cartorio').update(
+            criar_novo=False, cartorio_escolhido_id=cartorio.pk,
+        )
+
+    def _motivos(self):
+        return [item['motivo'] for item in self._tela().context['avisos']]
+
+    def test_homonimo_no_escopo_do_usuario_aparece_com_rotulo(self):
+        self._preparar(self.imovel)
+
+        resposta = self._tela()
+
+        self.assertIn('origem_homonimo_outro_tipo', self._motivos())
+        item = next(
+            i for i in resposta.context['avisos']
+            if i['motivo'] == 'origem_homonimo_outro_tipo'
+        )
+        self.assertEqual(item['chave'], '/acts/0/origem/numero')
+        self.assertContains(resposta, 'Há um documento de outro tipo')
+        self.assertNotContains(resposta, 'M366')
+
+    def test_homonimo_de_outra_ti_nao_aparece_nem_vaza(self):
+        outra = TIs.objects.create(nome='TI Alheia T267', codigo='TI-T267', etnia='X')
+        imovel_alheio = Imovel.objects.create(
+            nome='ImovelAlheioT267', matricula='ALHEIO-T267',
+            terra_indigena_id=outra, proprietario=self.imovel.proprietario,
+            cartorio=self.imovel.cartorio,
+        )
+        self._preparar(imovel_alheio)
+
+        resposta = self._tela()
+
+        self.assertNotIn('origem_homonimo_outro_tipo', self._motivos())
+        for segredo in ('M366', 'ImovelAlheioT267', 'TI Alheia T267'):
+            with self.subTest(segredo=segredo):
+                self.assertNotContains(resposta, segredo)
+
+    # #324 (PR #343): a resposta do save usa o MESMO escopo da abertura.
+
+    def _salvar_e_ler_avisos(self):
+        salvar = self.client.post(
+            self.url('salvar_bloco_ocr'),
+            data=json.dumps({
+                'versao': self._tela().context['versao'],
+                'decisoes': [{
+                    'chave': '/acts/0/origem/livro', 'incluir': True,
+                    'valor': '3-A',
+                }],
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(salvar.status_code, 200, salvar.content)
+        return salvar
+
+    def test_save_devolve_o_homonimo_do_escopo_do_usuario(self):
+        self._preparar(self.imovel)
+
+        salvar = self._salvar_e_ler_avisos()
+
+        (aviso,) = [
+            item for item in salvar.json()['avisos']
+            if item['motivo'] == 'origem_homonimo_outro_tipo'
+        ]
+        self.assertEqual(aviso['chave'], '/acts/0/origem/numero')
+        self.assertFalse(aviso['nao_consta'])
+        # O texto fala do tipo; nunca do número do documento homônimo.
+        self.assertNotIn('M366', salvar.content.decode())
+
+    def test_save_nao_devolve_homonimo_de_outra_ti_nem_vaza(self):
+        outra = TIs.objects.create(nome='TI Alheia S267', codigo='TI-S267', etnia='X')
+        imovel_alheio = Imovel.objects.create(
+            nome='ImovelAlheioS267', matricula='ALHEIO-S267',
+            terra_indigena_id=outra, proprietario=self.imovel.proprietario,
+            cartorio=self.imovel.cartorio,
+        )
+        self._preparar(imovel_alheio)
+
+        salvar = self._salvar_e_ler_avisos()
+
+        self.assertNotIn(
+            'origem_homonimo_outro_tipo',
+            [item['motivo'] for item in salvar.json()['avisos']],
+        )
+        conteudo = salvar.content.decode()
+        for segredo in ('M366', 'ImovelAlheioS267', 'TI Alheia S267'):
+            with self.subTest(segredo=segredo):
+                self.assertNotIn(segredo, conteudo)
+
+
+class HomonimoEmLoteNoSaveTest(TelaRevisaoBase):
+    """#324 (PR #343, MUST-FIX do review): o save recalcula os avisos de
+    TODOS os atos, e o número de consultas NÃO cresce com eles — o homônimo
+    da origem é checado em lote (era um bloco de consultas por ato)."""
+
+    # O endpoint tem custo fixo próprio (auth, contexto, lock, persistência e
+    # pendências). O teto baixo incide na fatia que o homônimo pode multiplicar:
+    # leituras de documentos/cartórios. A igualdade abaixo também cobre o POST
+    # inteiro para impedir que outro N+1 por ato passe despercebido.
+    LIMITE_CONSULTAS_HOMONIMO = 12
+
+    def _extracao_com_origens(self, total):
+        """``total`` atos, cada um com origem numerada, cartório escolhido e
+        o seu homônimo M… no escopo do usuário — o caminho do homônimo roda
+        para todos. A faixa de números sai do ``total``: duas chamadas no
+        mesmo teste (50 e 100) não esbarram na identidade única do documento."""
+        cartorio, _criado = Cartorios.objects.get_or_create(
+            cns='CNS-324L',
+            defaults={'nome': 'CRI Lote 324', 'cidade': 'X', 'estado': 'SP'},
+        )
+        base = 3000 + total
+        Documento.objects.bulk_create([
+            Documento(
+                imovel=self.imovel, tipo=self.documento.tipo,
+                numero=f'M{base + indice}', data=date(1990, 1, 1),
+                cartorio=cartorio, livro='1', folha='1',
+            )
+            for indice in range(total)
+        ])
+        payload = payload_registro(self.job.job_id)
+        payload['acts'] = [
+            {
+                'ordem': indice + 1,
+                'rotulo': _campo(f'R-{indice + 1}', 'R-1/42.718', raw='R-1'),
+                'tipo_sugerido': _campo('registro', 'R-1/42.718', raw='R-1'),
+                'data': _campo('2020-02-15', '15 de fevereiro de 2020'),
+                'origem': {
+                    'numero': _campo(f'T{base + indice}', 'R-1/42.718'),
+                    'tipo_documento': _campo('transcricao', 'R-1/42.718'),
+                    'cartorio': _campo('CRI Lote 324', 'CRI de Guaíra'),
+                },
+            }
+            for indice in range(total)
+        ]
+        extracao = self._extracao(payload)
+        # Cartório JÁ cadastrado e escolhido em todos os atos: sem isso a
+        # checagem do homônimo nem roda ("criar novo" não tem documentos).
+        extracao.campos.filter(chave__endswith='/origem/cartorio').update(
+            criar_novo=False, cartorio_escolhido_id=cartorio.pk,
+        )
+        return extracao
+
+    def _consultas_do_save(self, total):
+        """POST que muda só um campo do documento (como o review mediu) com
+        ``total`` atos; devolve consultas do POST e da fatia de homônimos."""
+        self._extracao_com_origens(total)
+        versao = self._tela().context['versao']
+        with CaptureQueriesContext(connection) as capturado:
+            resposta = self.client.post(
+                self.url('salvar_bloco_ocr'),
+                data=json.dumps({
+                    'versao': versao,
+                    'decisoes': [{
+                        'chave': '/document/data', 'incluir': True,
+                        'valor': '2020-01-10',
+                    }],
+                }),
+                content_type='application/json',
+            )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        # Premissa do teste: o aviso de homônimo foi calculado para TODOS os
+        # atos (cada origem T… tem a matrícula M… no cartório escolhido) —
+        # dobrar os atos dobrou o trabalho do lote, não as consultas.
+        avisos = resposta.json()['avisos']
+        self.assertEqual(total, len([
+            item for item in avisos
+            if item['motivo'] == 'origem_homonimo_outro_tipo'
+        ]))
+        consultas_homonimo = [
+            consulta for consulta in capturado.captured_queries
+            if any(
+                tabela in consulta['sql']
+                for tabela in ('"dominial_documento"', '"dominial_cartorios"')
+            )
+        ]
+        return len(capturado), len(consultas_homonimo)
+
+    def test_consultas_do_save_nao_crescem_com_o_numero_de_atos(self):
+        todas_com_50, homonimo_com_50 = self._consultas_do_save(50)
+        todas_com_100, homonimo_com_100 = self._consultas_do_save(100)
+
+        self.assertLess(
+            homonimo_com_100, self.LIMITE_CONSULTAS_HOMONIMO,
+            'a resolução em lote deve ter um teto baixo e fixo',
+        )
+        self.assertEqual(
+            homonimo_com_100, homonimo_com_50,
+            'dobrar os atos não pode multiplicar consultas de homônimos',
+        )
+        self.assertEqual(
+            todas_com_100, todas_com_50,
+            'dobrar os atos não pode aumentar as consultas do POST inteiro',
+        )
+
+
+class DescreverAvisoTest(SimpleTestCase):
+    def test_motivo_da_origem_ganha_rotulo_proprio(self):
+        for nome, rotulo in (
+            ('livro', 'Livro da origem não consta no documento'),
+            ('folha', 'Folha da origem não consta no documento'),
+        ):
+            with self.subTest(nome=nome):
+                item = {
+                    'chave': f'/acts/0/origem/{nome}',
+                    'motivo': f'{nome}_origem_nao_consta', 'bloqueante': False,
+                }
+                descrito = revisao.descrever_aviso(item)
+                self.assertEqual(descrito['rotulo'], rotulo)
+                self.assertEqual(descrito['local'], f'Ato 1 — {nome}')
+                for campo, valor in item.items():
+                    self.assertEqual(descrito[campo], valor)
+
+    def test_motivo_do_tipo_mantem_o_texto_de_sempre(self):
+        descrito = revisao.descrever_aviso({
+            'chave': '/acts/0/forma', 'motivo': 'requer_forma',
+            'bloqueante': False,
+        })
+        self.assertEqual(descrito['rotulo'], 'Campo recomendado não preenchido')
+        self.assertEqual(descrito['motivo'], 'requer_forma')
 
 
 class TipoSugeridoSelectTest(TelaRevisaoBase):

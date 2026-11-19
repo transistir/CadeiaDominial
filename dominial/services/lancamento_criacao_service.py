@@ -462,6 +462,12 @@ class LancamentoCriacaoService:
                     documentos_queryset=documentos_autorizados,
                 )
 
+                # #324: o manual não cria o vínculo ``documento_origem``, mas
+                # não pode deixar vivo o que a edição da origem tornou falso.
+                LancamentoCriacaoService._invalidar_documento_origem_obsoleto(
+                    lancamento
+                )
+
                 # Limpar pessoas existentes do lançamento
                 lancamento.pessoas.all().delete()
 
@@ -509,6 +515,55 @@ class LancamentoCriacaoService:
             # mesmo quando a atualização falha, para o re-render não herdar
             # dados de um POST que não foi salvo (P1-2).
             LancamentoOrigemService.limpar_mapeamento(lancamento)
+
+    @staticmethod
+    def _invalidar_documento_origem_obsoleto(lancamento):
+        """Zera ``documento_origem`` quando nenhuma origem atual o identifica (#324).
+
+        Só a importação assistida GRAVA essa FK (``vincular_documento_origem``):
+        o caminho manual não cria vínculo, apenas LIMPA o que a edição tornou
+        falso. Sem isto, trocar ou apagar a origem de um lançamento importado
+        deixava a FK no documento antigo — a tela mostrava um "Documento de
+        Origem" errado e o ``PROTECT`` impedia apagar um documento que já não
+        tem relação com o lançamento.
+
+        Depois de reprocessar as origens, compara a identidade (tipo + número
+        normalizado + cartório) do documento apontado com a de cada origem
+        estruturada ATUAL. Havendo correspondência exata (ex.: só o livro
+        mudou), a FK fica como está; sem ela, vai a ``NULL``. A identidade é a
+        da constraint ``unique_documento_identidade_canonica`` — as duas
+        pontas usam a mesma expressão de banco para o número normalizado.
+
+        Chamado DENTRO do ``atomic`` da atualização, depois do
+        ``processar_origens_automaticas``: as ``origens_estruturadas`` já são
+        as do POST, e uma falha adiante desfaz também a limpeza.
+
+        Grava com ``update()``, como ``vincular_documento_origem``: um
+        ``save(update_fields=...)`` ainda dispara o ``post_save``, que não
+        olha ``update_fields`` e reprocessaria as origens à toa.
+
+        Devolve ``True`` quando limpou a FK.
+        """
+        if not lancamento.documento_origem_id:
+            return False
+        identidade_do_documento = (
+            Documento.objects
+            .filter(pk=lancamento.documento_origem_id)
+            .values_list('tipo__tipo', 'numero_normalizado', 'cartorio_id')
+            .first()
+        )
+        identidades_das_origens = set(
+            lancamento.origens_estruturadas.values_list(
+                'tipo_documento', 'numero_normalizado', 'cartorio_id',
+            )
+        )
+        if identidade_do_documento in identidades_das_origens:
+            return False
+        Lancamento.objects.filter(pk=lancamento.pk).update(
+            documento_origem=None,
+        )
+        lancamento.documento_origem = None
+        return True
 
     @staticmethod
     def _avisar_divergencias(request, divergencias):

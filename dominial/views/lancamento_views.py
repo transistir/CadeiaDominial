@@ -1185,7 +1185,17 @@ def lancamento_detail(request, tis_id, imovel_id, lancamento_id):
     tis = get_object_or_404(TIs, id=tis_id)
     imovel = get_object_or_404(Imovel.objects.for_user(request.user), id=imovel_id, terra_indigena_id=tis)
     lancamento = get_object_or_404(Lancamento, id=lancamento_id, documento__imovel=imovel)
-    
+
+    # #324 rodada 4 (P1 do Codex): a FK ``documento_origem`` é gravada com o
+    # escopo de QUEM IMPORTA; a leitura resolve o documento pelo escopo do
+    # LEITOR. Fora do escopo ele não chega ao contexto — o número do
+    # documento de outra TI não pode vazar no detalhe do lançamento. Só em
+    # memória: a view nunca salva a instância (o vínculo segue no banco).
+    if lancamento.documento_origem_id and not documentos_for_user(
+        request.user
+    ).filter(pk=lancamento.documento_origem_id).exists():
+        lancamento.documento_origem = None
+
     # Obter pessoas do lançamento
     transmitentes = lancamento.pessoas.filter(tipo='transmitente')
     adquirentes = lancamento.pessoas.filter(tipo='adquirente')

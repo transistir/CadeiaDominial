@@ -156,25 +156,6 @@ class DocumentoService:
         return documento.imovel != imovel_atual
     
     @staticmethod
-    def obter_documentos_compartilhados(imovel):
-        """
-        Obtém documentos que são compartilhados com o imóvel
-        """
-        # Buscar documentos que são referenciados como origem em lançamentos deste imóvel
-        from ..models import Lancamento
-        
-        lancamentos = Lancamento.objects.filter(
-            documento__imovel=imovel
-        ).select_related('documento_origem')
-        
-        documentos_compartilhados = []
-        for lancamento in lancamentos:
-            if lancamento.documento_origem and lancamento.documento_origem.imovel != imovel:
-                documentos_compartilhados.append(lancamento.documento_origem)
-        
-        return list(set(documentos_compartilhados))  # Remove duplicatas
-    
-    @staticmethod
     def obter_info_compartilhamento(documento, imovel_atual):
         """
         Obtém informações sobre o compartilhamento de um documento
