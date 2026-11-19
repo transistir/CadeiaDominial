@@ -37,7 +37,6 @@
     "dominial/views/documento_views.py": 423,
     "dominial/views/lancamento_views.py": 1213,
     "ia_ocr/formulario.py": 543,
-    "ia_ocr/importacao.py": 1557,
     "ia_ocr/models.py": 558,
     "ia_ocr/ocr_client.py": 662,
     "ia_ocr/revisao_ato.py": 408,
