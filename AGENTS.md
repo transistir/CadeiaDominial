@@ -116,10 +116,15 @@ O estado atual que já excede o limite está congelado em
 - Rodar o check: `python scripts/check_file_size.py` (exit 1 se violar;
   `--quiet` imprime só as violações).
 - Rodar os testes do verificador: `python -m unittest discover -s scripts/tests -v`.
-- Atualizar o baseline: **somente quando um arquivo legado diminuiu**
-  (o check avisa com "pode atualizar o baseline"). Rode
-  `python scripts/check_file_size.py --write-baseline` e revise o diff.
+- Atualizar o baseline: **obrigatório quando um arquivo legado diminuiu** —
+  encolher sem atualizar o baseline é violação ("baseline desatualizado;
+  rode --write-baseline"). Rode
+  `python scripts/check_file_size.py --write-baseline` e revise o diff;
+  `--write-baseline` só reduz ou remove entradas (nunca adiciona ou aumenta).
   Nunca rode `--write-baseline` para "calar" um arquivo novo acima do limite.
+- Comparar o baseline com a base do PR (o PR não pode abençoar o próprio
+  baseline; funciona mesmo quando a base ainda não tem o JSON):
+  `python scripts/check_file_size.py --base-ref origin/develop`.
 - Hook opcional de pre-commit: `git config core.hooksPath .githooks`.
 - Contexto e plano de redução: `docs/refatoracao/PLANO_400_LINHAS.md`.
 

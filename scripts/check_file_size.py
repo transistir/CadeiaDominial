@@ -11,9 +11,14 @@ os.walk) com extensão .py, .js, .html, .css, e falha se algum arquivo:
 
 Com --base-ref REF, o baseline do disco é comparado com o da ref base
 (`git show REF:scripts/file_size_baseline.json`): chave nova ou valor maior
-viola — o PR não pode abençoar o próprio baseline. Se `git show` falhar,
-aviso em stderr e a comparação é ignorada (o hook local não tem a ref; o CI
-tem).
+viola — o PR não pode abençoar o próprio baseline. Dois casos especiais:
+  - REF não existe (`git rev-parse --verify` falha): aviso em stderr e a
+    comparação é ignorada (o hook local não tem a ref; o CI tem).
+  - REF existe mas o JSON não (base anterior ao baseline): bootstrap — o
+    baseline da base é reconstruído medindo cada arquivo do baseline atual
+    na árvore da REF (`git show REF:<caminho>`); entrada só é legítima se o
+    arquivo existia na base e já passava do limite lá. Sem caminho
+    silencioso: violações saem pelo mesmo exit 1.
 
 --write-baseline só reduz ou remove entradas: se o estado atual adicionaria
 chave ou aumentaria valor em relação ao JSON que já está no disco, falha com
@@ -89,18 +94,24 @@ def _aceitavel(relativo: str) -> bool:
     return all(not _diretorio_ignorado(parte) for parte in partes[:-1])
 
 
+def _git_out(raiz: Path, argumentos: list[str]) -> bytes:
+    """Saída bruta de um comando git; levanta OSError/CalledProcessError."""
+    resultado = subprocess.run(
+        ["git", "-C", str(raiz), *argumentos],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return resultado.stdout
+
+
 def _caminhos_versionados(raiz: Path) -> list[str] | None:
     """Caminhos relativos versionados (`git ls-files`); None se git falhar."""
     try:
-        resultado = subprocess.run(
-            ["git", "-C", str(raiz), "ls-files", "-z"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
+        bruto = _git_out(raiz, ["ls-files", "-z"])
     except (OSError, subprocess.CalledProcessError):
         return None
-    return [os.fsdecode(bruto) for bruto in resultado.stdout.split(b"\0") if bruto]
+    return [os.fsdecode(parte) for parte in bruto.split(b"\0") if parte]
 
 
 def _caminhos_do_walk(raiz: Path) -> list[str]:
@@ -143,21 +154,64 @@ def carregar_baseline(raiz: Path) -> dict[str, int]:
     return carregar_json_baseline(caminho.read_text(encoding="utf-8"))
 
 
-def baseline_da_base(raiz: Path, base_ref: str) -> dict[str, int] | None:
-    """Baseline da ref base via `git show REF:scripts/<nome>`; None se falhar."""
+def ref_existe(raiz: Path, base_ref: str) -> bool:
+    """A ref base existe no repositório? (`git rev-parse --verify`.)"""
     try:
-        resultado = subprocess.run(
-            ["git", "-C", str(raiz), "show", f"{base_ref}:scripts/{BASELINE_NOME}"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
+        _git_out(raiz, ["rev-parse", "--verify", base_ref])
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return True
+
+
+def baseline_da_base(raiz: Path, base_ref: str) -> dict[str, int] | None:
+    """Baseline da ref base via `git show REF:scripts/<nome>`; None se a ref
+    não o tiver (ou o JSON for ilegível)."""
+    try:
+        bruto = _git_out(raiz, ["show", f"{base_ref}:scripts/{BASELINE_NOME}"])
     except (OSError, subprocess.CalledProcessError):
         return None
     try:
-        return carregar_json_baseline(resultado.stdout.decode("utf-8"))
+        return carregar_json_baseline(bruto.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
         return None
+
+
+def linhas_na_ref(raiz: Path, base_ref: str, relativo: str) -> int | None:
+    """Linhas do arquivo na árvore da ref; None se o arquivo não existir lá."""
+    try:
+        bruto = _git_out(raiz, ["show", f"{base_ref}:{relativo}"])
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return len(bruto.decode("utf-8", errors="replace").splitlines())
+
+
+def violacoes_bootstrap_da_base(
+    raiz: Path, base_ref: str, baseline: dict[str, int], limite: int
+) -> list[str]:
+    """Violações quando a ref base existe mas o JSON de baseline não.
+
+    Bootstrap: o baseline da base é reconstruído medindo cada arquivo do
+    baseline atual na árvore da ref (`git show REF:<caminho>`); entrada
+    legítima só se o arquivo existia na base e já passava do limite lá —
+    o valor da base é essa contagem. Entrada para arquivo ausente ou pequeno
+    na base é "entrada nova" (o PR não abençoa o próprio baseline).
+    """
+    violacoes: list[str] = []
+    for relativo, valor_atual in baseline.items():
+        linhas = linhas_na_ref(raiz, base_ref, relativo)
+        if linhas is None:
+            violacoes.append(f"VIOLACAO: entrada nova no baseline: {relativo}")
+        elif linhas <= limite:
+            violacoes.append(
+                f"VIOLACAO: entrada nova no baseline: {relativo} "
+                f"(na base tinha {linhas} linhas)"
+            )
+        elif valor_atual > linhas:
+            violacoes.append(
+                f"VIOLACAO: baseline cresceu em {relativo} "
+                f"(base {linhas} → atual {valor_atual})"
+            )
+    return violacoes
 
 
 def comparar_baseline_com_base(
@@ -308,14 +362,23 @@ def main(argv: list[str] | None = None, raiz: Path | None = None) -> int:
     violacoes, total, acima = avaliar(raiz, args.limit, baseline)
 
     if args.base_ref:
-        base = baseline_da_base(raiz, args.base_ref)
-        if base is None:
+        if not ref_existe(raiz, args.base_ref):
             print(
                 "aviso: base-ref indisponível; comparação de baseline ignorada",
                 file=sys.stderr,
             )
         else:
-            violacoes.extend(comparar_baseline_com_base(baseline, base))
+            base = baseline_da_base(raiz, args.base_ref)
+            if base is None:
+                # A ref existe mas não tem JSON de baseline (base anterior ao
+                # baseline): bootstrap mede a árvore da ref.
+                violacoes.extend(
+                    violacoes_bootstrap_da_base(
+                        raiz, args.base_ref, baseline, args.limit
+                    )
+                )
+            else:
+                violacoes.extend(comparar_baseline_com_base(baseline, base))
             violacoes.sort()
 
     if not args.quiet:

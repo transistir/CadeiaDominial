@@ -75,6 +75,17 @@ class VerificacaoTamanhoBase(unittest.TestCase):
         _git("commit", "-qm", "base")
         return _git
 
+    def commit_base_sem_baseline(self, linhas=450):
+        """Commit "base" com app/legado.py e SEM o JSON de baseline.
+
+        Simula a base anterior à introdução do baseline (caso de bootstrap).
+        """
+        _git = self.iniciar_git()
+        self.escrever("app/legado.py", linhas)
+        _git("add", "-A")
+        _git("commit", "-qm", "base")
+        return _git
+
 
 class TestLimiteBasico(VerificacaoTamanhoBase):
     def test_arquivo_novo_de_401_linhas_falha(self):
@@ -201,8 +212,10 @@ class TestWriteBaseline(VerificacaoTamanhoBase):
         self.assertNotIn("app/removido.py", baseline["files"])
 
 
+@unittest.skipUnless(shutil.which("git"), "git não disponível")
 class TestBaseRef(VerificacaoTamanhoBase):
-    """--base-ref compara o baseline do disco com o da ref base (git show)."""
+    """--base-ref compara o baseline do disco com o da ref base (git show),
+    inclusive o bootstrap quando a base ainda não tem o JSON de baseline."""
 
     def test_chave_nova_no_baseline_viola(self):
         _git = self.commit_base({"app/legado.py": 450})
@@ -247,6 +260,45 @@ class TestBaseRef(VerificacaoTamanhoBase):
         self.assertNotIn("VIOLACAO:", saida)
         self.assertIn(
             "aviso: base-ref indisponível; comparação de baseline ignorada", erro
+        )
+
+    def test_bootstrap_entrada_legitima_passa(self):
+        # Base sem JSON: entrada vale se o arquivo já passava do limite na ref.
+        self.commit_base_sem_baseline(linhas=401)
+        self.gravar_baseline({"app/legado.py": 401})
+        codigo, saida, _ = self.rodar("--base-ref", "HEAD")
+        self.assertEqual(codigo, 0)
+        self.assertNotIn("VIOLACAO:", saida)
+
+    def test_bootstrap_arquivo_pequeno_na_base_viola(self):
+        self.commit_base_sem_baseline(linhas=120)
+        self.escrever("app/legado.py", 450)
+        self.gravar_baseline({"app/legado.py": 450})
+        codigo, saida, _ = self.rodar("--base-ref", "HEAD")
+        self.assertEqual(codigo, 1)
+        self.assertIn(
+            "VIOLACAO: entrada nova no baseline: app/legado.py "
+            "(na base tinha 120 linhas)",
+            saida,
+        )
+
+    def test_bootstrap_arquivo_inexistente_na_base_viola(self):
+        self.commit_base_sem_baseline(linhas=450)
+        self.escrever("app/novo.py", 401)
+        self.gravar_baseline({"app/legado.py": 450, "app/novo.py": 401})
+        codigo, saida, _ = self.rodar("--base-ref", "HEAD")
+        self.assertEqual(codigo, 1)
+        self.assertIn("VIOLACAO: entrada nova no baseline: app/novo.py", saida)
+
+    def test_bootstrap_crescimento_viola(self):
+        self.commit_base_sem_baseline(linhas=500)
+        self.escrever("app/legado.py", 501)
+        self.gravar_baseline({"app/legado.py": 501})
+        codigo, saida, _ = self.rodar("--base-ref", "HEAD")
+        self.assertEqual(codigo, 1)
+        self.assertIn(
+            "VIOLACAO: baseline cresceu em app/legado.py (base 500 → atual 501)",
+            saida,
         )
 
 
