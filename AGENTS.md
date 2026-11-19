@@ -107,6 +107,22 @@ with `--no-verify`.** Hook failures:
 - Typecheck: usually missing import or wrong type for a removed column (Q5)
 - Tests: re-run with `pnpm --dir <pkg> test -- <pattern>` to scope
 
+## Tamanho de arquivo — 400 linhas (imposto por CI)
+
+Nenhum arquivo `.py`, `.js`, `.html` ou `.css` pode passar de **400 linhas**.
+O estado atual que já excede o limite está congelado em
+`scripts/file_size_baseline.json` — o baseline **só pode encolher**.
+
+- Rodar o check: `python scripts/check_file_size.py` (exit 1 se violar;
+  `--quiet` imprime só as violações).
+- Rodar os testes do verificador: `python -m unittest discover -s scripts/tests -v`.
+- Atualizar o baseline: **somente quando um arquivo legado diminuiu**
+  (o check avisa com "pode atualizar o baseline"). Rode
+  `python scripts/check_file_size.py --write-baseline` e revise o diff.
+  Nunca rode `--write-baseline` para "calar" um arquivo novo acima do limite.
+- Hook opcional de pre-commit: `git config core.hooksPath .githooks`.
+- Contexto e plano de redução: `docs/refatoracao/PLANO_400_LINHAS.md`.
+
 ## Code style
 
 - **TypeScript strict** — no `any` unless wrapped in a comment explaining why
