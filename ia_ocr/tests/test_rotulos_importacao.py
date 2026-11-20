@@ -51,7 +51,7 @@ from ia_ocr.revisao import RevisaoInvalidada
 from ia_ocr.rotulos import analisar_rotulo
 
 from .payloads_extracao import payload_registro
-from .test_importacao import ImportacaoFixture
+from .test_importacao_base import ImportacaoFixture
 
 DATA_DO_ATO = date(2020, 2, 15)
 TEXTO_SEM_ROTULO = 'O imóvel rural denominado Sítio Boa Vista'
