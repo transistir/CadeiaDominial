@@ -19,7 +19,7 @@ from dominial.models import (
 from ia_ocr.models import ImportacaoIA, OcrJobTransicao
 
 from .payloads_extracao import payload_averbacao, payload_registro
-from .test_revisao_formulario_prefill import PrefillBase
+from .test_revisao_formulario_prefill_base import PrefillBase
 
 
 class _Formulario(HTMLParser):
