@@ -1,13 +1,11 @@
 import uuid
 
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
-from .estados import (
+from ..estados import (
     CONCLUIDO, EM_EXECUCAO, EXTRAIDO, FALHOU, PENDENTE, STATUS_CHOICES,
     TEXTO_CONFIRMADO, TRANSICOES_VALIDAS, TransicaoConcorrente,
     TransicaoInvalida,
@@ -16,14 +14,6 @@ from .estados import (
 ORIGEM_CHOICES = [
     ('ocr', 'OCR'),
     ('texto_embutido', 'Texto embutido'),
-]
-
-STATUS_REVISAO_CHOICES = [
-    ('sugerido', 'Sugerido'),
-    ('aceito', 'Aceito'),
-    ('editado', 'Editado'),
-    ('descartado', 'Descartado'),
-    ('importado', 'Importado'),
 ]
 
 # Estados de revisão do texto de uma página (I-4 / #261). Não são coluna:
@@ -334,132 +324,11 @@ class PaginaOcr(models.Model):
         )
 
 
-TIPO_VALOR_CHOICES = [
-    ('texto', 'Texto'),
-    ('data', 'Data'),
-    ('decimal', 'Decimal'),
-    ('area', 'Área'),
-    ('booleano', 'Booleano'),
-    ('enum', 'Enum'),
-    ('cartorio', 'Cartório'),
-    ('parte', 'Parte'),
-    ('ato', 'Ato'),
-]
-
-
-class ExtracaoSugerida(models.Model):
-    ocr_job = models.ForeignKey(
-        OcrJob, on_delete=models.CASCADE, related_name='extracoes'
-    )
-    schema_version = models.CharField(max_length=50)
-    payload = models.JSONField()
-    provider = models.CharField(max_length=100)
-    # Cópia do payload conforme devolvido pelo serviço de extração: o
-    # desdobramento em CampoSugerido parte dela, não do payload bruto.
-    payload_servico = models.JSONField()
-    solicitada_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='+',
-    )
-    finalizada_em = models.DateTimeField(null=True, blank=True)
-    finalizada_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='+',
-    )
-    criado_em = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Extração sugerida'
-        verbose_name_plural = 'Extrações sugeridas'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['ocr_job'],
-                condition=Q(finalizada_em__isnull=False),
-                name='uniq_extracao_finalizada_por_job',
-            ),
-        ]
-
-    def __str__(self):
-        return f'Extração {self.schema_version} do job {self.ocr_job_id}'
-
-
-class CampoSugerido(models.Model):
-    extracao = models.ForeignKey(
-        ExtracaoSugerida, on_delete=models.CASCADE, related_name='campos'
-    )
-    chave = models.CharField(max_length=255)
-    raw = models.TextField(null=True, blank=True)
-    normalized = models.TextField(null=True, blank=True)
-    tipo_valor = models.CharField(
-        max_length=20, choices=TIPO_VALOR_CHOICES, default='texto'
-    )
-    confianca = models.FloatField(
-        null=True, blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(1)],
-    )
-    requer_revisao = models.BooleanField(default=False)
-    motivos_revisao = models.JSONField(default=list, blank=True)
-    match_candidatos = models.JSONField(default=list, blank=True)
-    pessoa_escolhida = models.ForeignKey(
-        'dominial.Pessoas',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='+',
-    )
-    cartorio_escolhido = models.ForeignKey(
-        'dominial.Cartorios',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='+',
-    )
-    criar_novo = models.BooleanField(default=False)
-    area_convertida = models.BooleanField(default=False)
-    evidencia_pagina = models.PositiveIntegerField(null=True, blank=True)
-    evidencia_trecho = models.TextField(blank=True)
-    # bbox do trecho na página, em pixels do OCR (decisão #290/17-10):
-    # [x0, y0, x1, y1] quando o serviço fornece; NULL quando não fornece ou
-    # o formato não é reconhecível. A conversão pixel→ponto de PDF é do
-    # template (usa o dpi do job), não desta camada.
-    evidencia_bbox = models.JSONField(null=True, blank=True)
-    status_revisao = models.CharField(
-        max_length=20, choices=STATUS_REVISAO_CHOICES, default='sugerido'
-    )
-    valor_final = models.TextField(null=True, blank=True)
-    # Separa "qual é o valor" (``valor_final``) de "o revisor ESCOLHEU esse
-    # valor": conferir/reenviar o mesmo valor do OCR limpa o ``valor_final``
-    # (canonico == normalized) sem apagar a decisão — a precedência do tipo
-    # (#322) precisa enxergar a escolha explícita mesmo com o valor nulo.
-    escolha_explicita = models.BooleanField(default=False)
-    revisado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='+',
-    )
-    revisado_em = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        verbose_name = 'Campo sugerido'
-        verbose_name_plural = 'Campos sugeridos'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['extracao', 'chave'],
-                name='uniq_campo_por_extracao_chave',
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.chave} ({self.get_status_revisao_display()})"
-
-
 class OcrJobTransicao(models.Model):
+    # No monólito este modelo vinha depois de OcrJob no MESMO módulo:
+    # `OcrJob.transicionar()/retry()` criam transições pelo nome global, então
+    # ele precisa continuar visível no namespace deste módulo (registro.py
+    # importaria de volta, o que é ciclo).
     ocr_job = models.ForeignKey(
         OcrJob, on_delete=models.CASCADE, related_name='transicoes'
     )
@@ -481,78 +350,3 @@ class OcrJobTransicao(models.Model):
 
     def __str__(self):
         return f'{self.de_status} → {self.para_status} (job {self.ocr_job_id})'
-
-
-class PendenciaLimpezaArquivo(models.Model):
-    # Sem FK: a intenção é gravada na mesma transação que exclui o
-    # DocumentoDigital, antes da remoção física. Ela é removida quando a limpeza
-    # conclui e permanece para o suporte somente se a limpeza falhar; nesse
-    # momento, o DocumentoDigital já foi excluído.
-    documento_digital_id = models.PositiveBigIntegerField()
-    documento_id = models.PositiveBigIntegerField(null=True, blank=True)
-    caminho_storage = models.CharField(max_length=500)
-    criado_em = models.DateTimeField(auto_now_add=True)
-    resolvido_em = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        verbose_name = 'Pendência de limpeza de arquivo'
-        verbose_name_plural = 'Pendências de limpeza de arquivo'
-        ordering = ['-criado_em']
-
-    def __str__(self):
-        # O caminho e o nome do arquivo podem conter PII e não entram no repr.
-        return f'Pendência {self.pk} (documento_digital {self.documento_digital_id})'
-
-
-class ImportacaoIA(models.Model):
-    """Vínculo de auditoria entre a revisão importada e o registro gravado (I-6).
-
-    Um vínculo por objeto criado na importação (``unique_together`` modelo +
-    objeto_id). As FKs são ``SET_NULL`` de propósito: excluir o PDF apaga o
-    job (e com ele extrações e linhas) mas NÃO pode apagar a prova de que o
-    lançamento veio da importação assistida — ``documento_digital_id`` é uma
-    cópia sem FK (mesmo padrão de ``PendenciaLimpezaArquivo``) e ``pagina``
-    sobrevive desnormalizada. O lançamento também pode ser excluído depois:
-    o vínculo permanece como rastro.
-    """
-
-    MODELO_CHOICES = [
-        ('Lancamento', 'Lançamento'),
-        ('LancamentoPessoa', 'Pessoa do lançamento'),
-        ('LancamentoOrigem', 'Origem de lançamento'),
-        ('Documento', 'Documento de origem'),
-        ('Pessoas', 'Pessoa'),
-        ('Cartorios', 'Cartório'),
-    ]
-
-    ocr_job = models.ForeignKey(
-        OcrJob, on_delete=models.SET_NULL, null=True,
-        related_name='importacoes',
-    )
-    documento_digital_id = models.PositiveBigIntegerField()
-    campo = models.ForeignKey(
-        CampoSugerido, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='+',
-    )
-    pagina = models.PositiveIntegerField(null=True, blank=True)
-    modelo = models.CharField(max_length=30, choices=MODELO_CHOICES)
-    objeto_id = models.PositiveBigIntegerField()
-    lancamento = models.ForeignKey(
-        'dominial.Lancamento', on_delete=models.SET_NULL, null=True,
-        blank=True, related_name='importacoes_ia',
-    )
-    criado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
-        related_name='+',
-    )
-    criado_em = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Importação assistida (IA)'
-        verbose_name_plural = 'Importações assistidas (IA)'
-        ordering = ['-criado_em']
-        unique_together = ('modelo', 'objeto_id')
-
-    def __str__(self):
-        # Sem nome de pessoa/cartório no repr: o __str__ vive em tracebacks.
-        return f'{self.modelo} {self.objeto_id} (job {self.ocr_job_id})'
