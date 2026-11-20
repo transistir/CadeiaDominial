@@ -1,6 +1,5 @@
-"""Infraestrutura compartilhada de CartorioFallbackTest."""
-
-"""Seletor de cartório nunca vazio (#315): fallback pela comarca do texto."""
+"""Infraestrutura compartilhada de CartorioFallbackTest (seletor de cartório
+nunca vazio, #315: fallback pela comarca do texto)."""
 
 import json
 
