@@ -161,23 +161,24 @@ class CamposPendenteViewTestParte:
 
         O caminho novo (POST em `concluido` → `extraido`) está em
         `test_extracao_views.ExtrairCamposViewTest`; aqui só se garante que o
-        estado legado não abre a revisão de campos.
+        estado legado não abre a revisão. #341 fase 3: `campos/` só
+        encaminha — quem recusa o estado e manda para a tela é a revisão.
         """
         services.confirmar_todas_paginas(self.job, self.dono)
         services.confirmar_texto(self.job, self.dono)
         self.client.force_login(self.dono)
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
-        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(resposta.redirect_chain[-1][0], self.url_tela())
         self.assertIn('info', [n for n, _m in self.mensagens(resposta)])
 
     def test_job_ainda_nao_confirmado_volta_para_a_tela_do_texto(self):
         self.client.force_login(self.dono)
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
-        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(resposta.redirect_chain[-1][0], self.url_tela())
         self.assertIn('info', [n for n, _m in self.mensagens(resposta)])
 
     def test_permissoes(self):

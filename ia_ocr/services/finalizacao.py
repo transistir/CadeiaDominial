@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .. import estados
 from ..models import ExtracaoSugerida
-from ..revisao import pendencias, pendencias_sem_atos
+from ..revisao import pendencias
 from .blocos import (
     _com_bloqueios_de_campo, _travar_extracao_revisao, versao_bloco,
 )
@@ -21,6 +21,12 @@ def pode_finalizar_sem_atos(extracao, bloqueios=None) -> bool:
     ``payload_servico`` traz atos, a ausência na tela vem de descarte do
     revisor — finalizar "sem atos" seria falso — e atos descartados pelo
     revisor não contam para liberar a finalização.
+
+    Decisão do dono (#341, PR #366, opção a): a conclusão NÃO exige a
+    revisão dos campos de cabeçalho. Sem atos nada é gravado em
+    ``Documento``/``Lancamento``, então campo de cabeçalho não revisado (ou
+    sem escolha de cadastro) não é dado perdido. A revisão do cabeçalho vale
+    para o caminho COM atos (formulário do ato).
     """
     if not getattr(settings, 'OCR_PERMITIR_FINALIZAR_SEM_ATOS', False):
         return False
@@ -32,7 +38,6 @@ def pode_finalizar_sem_atos(extracao, bloqueios=None) -> bool:
     return (
         bool(bloqueios)
         and all(item['motivo'] == 'nenhum_ato' for item in bloqueios)
-        and not pendencias_sem_atos(extracao)
     )
 
 

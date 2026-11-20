@@ -45,7 +45,8 @@ from .. import estados, formulario, revisao_ato, services, views
 from ..models import OcrJob
 from .jobs import _contexto_job, _kwargs_job
 from .resposta import _url_tela
-from .revisar_extras import mostrar_duplicata
+from .revisar_extras import _url_documento, mostrar_duplicata
+from .revisar_sem_atos import destino_sem_atos
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,6 @@ def _url_ato(kwargs_job, indice):
 
 def _url_entrada(kwargs_job):
     return reverse('revisar_job_ocr', kwargs=kwargs_job)
-
-
-def _url_documento(tis, imovel, documento):
-    return reverse('documento_detalhado', kwargs={
-        'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
-    })
 
 
 def _fora_da_revisao(request, tis, imovel, documento, job, kwargs_job):
@@ -131,7 +126,14 @@ def _extracao_trocada_no_post(request, job, extracao, kwargs_job):
 @login_required
 @require_GET
 def revisar_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
-    """Entrada da revisão: leva ao primeiro ato pendente. Só redireciona."""
+    """Entrada da revisão: leva ao primeiro ato pendente.
+
+    Sem atos, o destino é a confirmação "concluir sem atos" (#262) quando a
+    flag destra — a página não revisa o cabeçalho, porque nada é importado
+    nesse caminho (decisão do dono, PR #366). O POST só finaliza a partir de
+    ``extraido`` (contrato do ``finalizar_revisao``), então a confirmação
+    não é oferecida em estado algum outro.
+    """
     tis, imovel, documento, job = _contexto_job(
         request, tis_id, imovel_id, documento_id, job_id
     )
@@ -144,6 +146,11 @@ def revisar_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         raise Http404('Extração indisponível.')
     atos = revisao_ato.atos_da_revisao(extracao)
     if not atos:
+        sem_atos = destino_sem_atos(
+            request, tis, imovel, documento, job, extracao, kwargs_job,
+        )
+        if sem_atos is not None:
+            return sem_atos
         messages.info(request, 'A extração não trouxe nenhum ato para revisar.')
         return redirect(_url_tela(kwargs_job))
     alvo = revisao_ato.proximo_pendente(atos)

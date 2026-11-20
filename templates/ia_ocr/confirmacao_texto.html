@@ -149,7 +149,7 @@
                 O texto agora é somente leitura.
             </p>
             <div class="d-flex gap-2 flex-wrap align-items-center">
-                <a href="{{ url_campos }}" class="btn btn-primary" data-ocr-campos-link>Revisar campos →</a>
+                <a href="{{ url_revisar }}" class="btn btn-primary" data-ocr-campos-link>Revisar campos →</a>
                 {% if job.status == 'texto_confirmado' %}
                 <form method="post" action="{{ url_extrair_campos }}" data-ocr-form-global>
                     {% csrf_token %}

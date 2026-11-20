@@ -1,4 +1,9 @@
-"""Complementos da revisão por ato: tela e confirmação da duplicata (#341)."""
+"""Complementos da revisão por ato: importação da cadeia duplicada (#341).
+
+A conclusão sem atos saiu deste módulo no MUST-FIX do review Codex da
+#341: está em ``revisar_sem_atos`` (limite de 400 linhas), que importa
+daqui só ``_url_documento``.
+"""
 
 import logging
 
@@ -113,6 +118,13 @@ def revisar_ato_duplicata_ocr(request, tis_id, imovel_id, documento_id, job_id,
     revisao_ato.limpar_rascunho(request, extracao, indice)
     messages.success(request, '✅ Cadeia duplicada importada e ato salvo como lançamento.')
     return redirect(reverse('revisar_job_ocr', kwargs=kwargs_job))
+
+
+def _url_documento(tis, imovel, documento):
+    """URL da tela do documento — mesma forma do módulo ``revisar``."""
+    return reverse('documento_detalhado', kwargs={
+        'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
+    })
 
 
 def _dados_do_formulario(post):

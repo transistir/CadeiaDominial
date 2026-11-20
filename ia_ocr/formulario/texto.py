@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
+from ..mascaras import _mascarar_evidencia
 from ..revisao import MOTIVO_BAIXA_CONFIANCA
 
 
@@ -28,10 +29,6 @@ def _como_texto(valor):
 
 def _evidencia(linhas, chave):
     """``{pagina, trecho, confianca_baixa}`` da linha, ou ``None`` sem evidência."""
-    # Importação tardia: ``views`` vai consumir este módulo (fase 2) e a
-    # máscara de CPF/RG mora lá.
-    from ..views import _mascarar_evidencia
-
     campo = linhas.get(chave)
     if campo is None or campo.status_revisao == 'descartado':
         return None

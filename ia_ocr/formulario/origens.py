@@ -42,7 +42,7 @@ def _cartorio(cartorio_id, nome_da_linha, nomes):
 def _texto_da_origem(origem, numero):
     """``'M123'``/``'T45'``: prefixo do tipo documental + número normalizado.
 
-    A mesma montagem da gravação (``importacao._importar_ato``). Número
+    A mesma montagem da gravação (``revisao_ato.salvar_ato``). Número
     vazio ou incompatível com o tipo (``'T45'`` numa matrícula) não vira
     texto: o campo fica vazio e quem decide é o revisor.
     """

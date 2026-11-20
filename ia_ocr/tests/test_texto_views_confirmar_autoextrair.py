@@ -242,10 +242,10 @@ class AutoExtrairCliqueManualTestParte:
         resposta = self.client.post(self.url('extrair_campos_ocr'))
 
         self.assertRedirects(
-            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+            resposta, self.url('revisar_job_ocr'), fetch_redirect_response=False,
         )
         self.assertIn((
-            'success', 'Extração concluída. Revise os campos.',
+            'success', 'Extração concluída. Revise cada ato no formulário.',
         ), self.mensagens(resposta))
         self.assertNotIn(
             ('info', 'Os campos já foram extraídos.'), self.mensagens(resposta),

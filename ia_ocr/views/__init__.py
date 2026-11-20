@@ -12,12 +12,11 @@ Pacote desde a etapa 3 do limite de 400 linhas por arquivo —
 
 - ``jobs`` — tela do texto OCR e contexto da hierarquia;
 - ``paginas`` — ações de página (confirmar/editar/bulk/reprocessar/extração);
-- ``campos`` — tela de revisão dos campos e rótulos/máscaras de PII;
-- ``decisoes`` — save do bloco de decisões e contrato JSON do POST;
-- ``importar`` — importação (I-6) e finalização da revisão (#262);
+- ``campos`` — entrada legada da tela de cards, agora redirect à revisão;
 - ``revisar`` — formulário do ato (I-14/#341);
-- ``resposta`` — avisos, URLs, paginação e o decorator JSON;
-- ``middleware`` — CSRF em JSON.
+- ``revisar_extras`` — complementos da revisão (duplicata);
+- ``revisar_sem_atos`` — conclusão sem atos (#262);
+- ``resposta`` — URLs e paginação.
 
 Regra sobre patches de teste — SÓ os nomes que os testes resolvem via
 ``ia_ocr.views.<nome>`` passam pelo pacote; todo o resto é chamada direta
@@ -40,7 +39,7 @@ mesma forma do monólito:
   ``services.<op>(...)``/``revisao.<op>(...)`` no MESMO objeto, importado
   de ``..``. Por isso nenhum submódulo deste pacote se chama
   ``services`` ou ``revisao`` — as telas de revisão do I-14 estão em
-  ``revisar.py`` e as de importação em ``importar.py``.
+  ``revisar.py``.
 - ``assertLogs('ia_ocr.views', ...)`` pega os logs dos módulos acima por
   PROPAGAÇÃO: cada um loga com ``getLogger(__name__)``
   (``ia_ocr.views.<módulo>``, filho de ``ia_ocr.views``).
@@ -57,16 +56,11 @@ from django.shortcuts import render  # noqa: F401 — alvo de patch: ia_ocr.view
 # Módulos irmãos reexportados: alvos de patch via ia_ocr.views.<módulo>.
 from .. import revisao, services  # noqa: F401
 
-from .middleware import _CsrfJsonMiddleware  # noqa: F401
 from .resposta import (  # noqa: F401
-    _aviso_nao_consta,
-    _avisos_da_resposta,
-    _avisos_descritos,
     _destino,
     _disponibilidade_extracao,
     _numero_pagina,
     _pagina_pedida,
-    _respostas_json_ocr,
     _url_tela,
     _versao_do_formulario,
 )
@@ -79,25 +73,19 @@ from .paginas import (  # noqa: F401
     extrair_campos_ocr,
     reprocessar_job_ocr,
 )
-from .campos import (  # noqa: F401
-    _anexar_opcoes_cadastro,
+from ..mascaras import (  # noqa: F401 — alvos de patch/uso: ia_ocr.views._mascarar_*
     _mascarar_cpf,
     _mascarar_evidencia,
     _mascarar_rg,
-    _opcoes_tipo_sugerido,
-    _preencher_fallback_cartorio,
-    _rotulo_cartorio,
-    _rotulo_pessoa,
-    campos_job_ocr,
 )
-from .decisoes import (  # noqa: F401
-    _chave_valor_invalido,
-    _decisoes_bloco,
-    _recusar_decisao,
-    salvar_bloco_ocr,
+from .campos import campos_job_ocr  # noqa: F401
+from .revisar_extras import (  # noqa: F401
+    revisar_ato_duplicata_ocr,
 )
-from .importar import finalizar_revisao_ocr, importar_job_ocr  # noqa: F401
-from .revisar_extras import revisar_ato_duplicata_ocr  # noqa: F401
+from .revisar_sem_atos import (  # noqa: F401
+    renderizar_sem_atos,
+    revisar_sem_atos_ocr,
+)
 from .revisar import (  # noqa: F401
     MENSAGEM_ATO_JA_SALVO,
     MENSAGEM_DUPLICATA_NA_REVISAO,

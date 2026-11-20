@@ -1,14 +1,17 @@
-"""Tipo, número e duplicata do ato: rótulo efetivo × tipo_sugerido (#322)."""
+"""Tipo e número do ato: rótulo efetivo × tipo_sugerido (#322).
+
+A duplicata do ato (``_lancamento_duplicado``/``_existente``/``_url_lancamento``)
+servia ao motor em lote e ao ``resumo`` — aposentados na fase 4 da #341; a
+colisão agora é do service manual (``LancamentoDuplicataService``).
+"""
 import re
 
-from django.urls import reverse
-
-from dominial.models import Lancamento, LancamentoTipo
+from dominial.models import LancamentoTipo
 
 from .. import revisao
 from ..rotulos import (
     analisar_rotulo, compor_numero_lancamento, normalizar_numero_lancamento,
-    resolver_tipo, tipo_do_rotulo,
+    resolver_tipo,
 )
 
 
@@ -123,90 +126,6 @@ def _tipo_documento_da_origem(origem, numero):
     homônimo, #267) e a importação não podem divergir no tipo da origem.
     """
     return revisao.tipo_da_origem(origem.get('tipo_documento'), numero)
-
-
-def _lancamento_duplicado(documento, tipo, data, numero, lancamentos=None):
-    """Lançamento existente que colide com o ato, ou None.
-
-    O número é comparado com a MESMA função dos DOIS lados — o parser de
-    rótulos, que é também o que grava: 'R5 M237' (formato do fluxo
-    manual), 'R-5' e 'Av: 6-237' (legado do importador) e '5' normalizam
-    para o número do ato e casam entre si (#322); ' R-1 ' é duplicata de
-    'R-1' (#263 rodada 6, Codex P2) e o ``'\\n'`` que texto de OCR deixa
-    na borda do número também escapava sob o ``TRIM()`` do SQL da rodada
-    7 (#263 rodada 8, review Opus P2). A tupla (documento, tipo, data,
-    número) — com número nulo casando null e gravado vazio (null, '' e só
-    espaços) — e ainda o número sozinho dentro do documento, mudando tipo
-    ou data.
-
-    O número sozinho (#322 rodada 3, P2-1) exige rótulos COMPATÍVEIS: os
-    DOIS lados com prefixo R/Av reconhecido e tipos DIFERENTES ('R-5' ×
-    'AV5 M237') NÃO são duplicata — a numeração é por tipo (transcrição,
-    numeração antiga, erro de OCR passam a importar). Lado sem rótulo
-    reconhecido (número puro, texto comum) mantém a comparação antiga de
-    texto, incluindo o ' R-1 ' × 'R-1' do #263. ``lancamentos`` restringe
-    onde procurar (padrão: todos).
-    """
-    tipo_recebido = tipo_do_rotulo(numero)
-    numero = normalizar_numero_lancamento(numero)
-    if lancamentos is None:
-        lancamentos = Lancamento.objects.all()
-    # A busca é por documento (poucas linhas) e a decisão é no Python:
-    # além da normalização igual à que grava, TRIM com outro caractere não
-    # é portátil entre SQLite e Postgres. ``order_by('pk')`` mantém o
-    # determinismo que o ``.first()`` anterior dava.
-    candidatos = (
-        lancamentos.filter(documento=documento)
-        .select_related('documento__imovel')
-        .order_by('pk')
-    )
-    mesmo_numero = None
-    for lancamento in candidatos:
-        gravado = normalizar_numero_lancamento(
-            lancamento.numero_lancamento,
-        ) or ''
-        if numero:
-            if gravado != numero:
-                continue
-            # P2-1: os dois lados com rótulo R/Av conhecido e tipos
-            # DIFERENTES não colidem no fallback do número sozinho.
-            tipo_gravado = tipo_do_rotulo(lancamento.numero_lancamento)
-            if (
-                tipo_recebido is not None and tipo_gravado is not None
-                and tipo_recebido != tipo_gravado
-            ):
-                continue
-            # (b) número sozinho dentro do documento, mudando tipo/data —
-            # fallback: a tupla completa (a) tem prioridade.
-            mesmo_numero = mesmo_numero or lancamento
-            if lancamento.tipo_id == tipo.pk and lancamento.data == data:
-                return lancamento
-        elif not gravado and lancamento.tipo_id == tipo.pk and (
-            lancamento.data == data
-        ):
-            # null, '' e só-espaços casam como vazio — gravado só com
-            # espaços faz o strip virar '', como um ''.
-            return lancamento
-    return mesmo_numero
-
-
-def _existente(lancamento):
-    """``{id, url}`` do lançamento duplicado, sem expor outros dados."""
-    return {
-        'id': lancamento.pk,
-        'url': _url_lancamento(lancamento),
-    }
-
-
-def _url_lancamento(lancamento):
-    # O FK do Imovel se chama literalmente ``terra_indigena_id``: o attname
-    # do id é ``terra_indigena_id_id`` (herança de nomes do schema legado).
-    imovel = lancamento.documento.imovel
-    return reverse('editar_lancamento', kwargs={
-        'tis_id': imovel.terra_indigena_id_id,
-        'imovel_id': imovel.pk,
-        'lancamento_id': lancamento.pk,
-    })
 
 
 def _numero_do_campo(texto):

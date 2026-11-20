@@ -144,5 +144,6 @@ def texto_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'url_confirmar_todas': reverse('confirmar_paginas_ocr', kwargs=kwargs_job),
         'url_reprocessar': reverse('reprocessar_job_ocr', kwargs=kwargs_job),
         'url_extrair_campos': reverse('extrair_campos_ocr', kwargs=kwargs_job),
-        'url_campos': reverse('campos_job_ocr', kwargs=kwargs_job),
+        # #341: o link "Revisar campos" entra na revisão por formulário.
+        'url_revisar': reverse('revisar_job_ocr', kwargs=kwargs_job),
     })

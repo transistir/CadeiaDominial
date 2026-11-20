@@ -140,7 +140,8 @@ def _restantes(atos, indice):
 def _registros_do_ato(lancamento, ato, chave):
     """Objetos gravados pelo ato → ``(modelo, pk, chave da linha)`` da auditoria.
 
-    O mesmo formato de ``importacao._importar_ato``. Cadastros de pessoa
+    O mesmo formato dos objetos que o ``salvar_ato`` acabou de gravar no ato.
+    Cadastros de pessoa
     criados pelo formulário não entram (o service manual não diz quais são
     novos); o vínculo do lançamento com cada pessoa, sim.
     """
