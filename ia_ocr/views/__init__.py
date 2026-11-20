@@ -13,12 +13,9 @@ Pacote desde a etapa 3 do limite de 400 linhas por arquivo —
 - ``jobs`` — tela do texto OCR e contexto da hierarquia;
 - ``paginas`` — ações de página (confirmar/editar/bulk/reprocessar/extração);
 - ``campos`` — entrada legada da tela de cards, agora redirect à revisão;
-- ``decisoes`` — save do bloco de decisões e contrato JSON do POST;
-- ``importar`` — importação (I-6) e finalização da revisão (#262);
 - ``revisar`` — formulário do ato (I-14/#341);
 - ``revisar_extras`` — complementos da revisão (duplicata, sem atos);
-- ``resposta`` — avisos, URLs, paginação e o decorator JSON;
-- ``middleware`` — CSRF em JSON.
+- ``resposta`` — URLs e paginação.
 
 Regra sobre patches de teste — SÓ os nomes que os testes resolvem via
 ``ia_ocr.views.<nome>`` passam pelo pacote; todo o resto é chamada direta
@@ -41,7 +38,7 @@ mesma forma do monólito:
   ``services.<op>(...)``/``revisao.<op>(...)`` no MESMO objeto, importado
   de ``..``. Por isso nenhum submódulo deste pacote se chama
   ``services`` ou ``revisao`` — as telas de revisão do I-14 estão em
-  ``revisar.py`` e as de importação em ``importar.py``.
+  ``revisar.py``.
 - ``assertLogs('ia_ocr.views', ...)`` pega os logs dos módulos acima por
   PROPAGAÇÃO: cada um loga com ``getLogger(__name__)``
   (``ia_ocr.views.<módulo>``, filho de ``ia_ocr.views``).
@@ -58,16 +55,11 @@ from django.shortcuts import render  # noqa: F401 — alvo de patch: ia_ocr.view
 # Módulos irmãos reexportados: alvos de patch via ia_ocr.views.<módulo>.
 from .. import revisao, services  # noqa: F401
 
-from .middleware import _CsrfJsonMiddleware  # noqa: F401
 from .resposta import (  # noqa: F401
-    _aviso_nao_consta,
-    _avisos_da_resposta,
-    _avisos_descritos,
     _destino,
     _disponibilidade_extracao,
     _numero_pagina,
     _pagina_pedida,
-    _respostas_json_ocr,
     _url_tela,
     _versao_do_formulario,
 )
@@ -86,13 +78,6 @@ from ..mascaras import (  # noqa: F401 — alvos de patch/uso: ia_ocr.views._mas
     _mascarar_rg,
 )
 from .campos import campos_job_ocr  # noqa: F401
-from .decisoes import (  # noqa: F401
-    _chave_valor_invalido,
-    _decisoes_bloco,
-    _recusar_decisao,
-    salvar_bloco_ocr,
-)
-from .importar import finalizar_revisao_ocr, importar_job_ocr  # noqa: F401
 from .revisar_extras import (  # noqa: F401
     revisar_ato_duplicata_ocr,
     revisar_sem_atos_ocr,

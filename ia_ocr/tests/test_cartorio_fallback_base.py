@@ -1,15 +1,10 @@
 """Infraestrutura compartilhada de CartorioFallbackTest (seletor de cartório
 nunca vazio, #315: fallback pela comarca do texto)."""
 
-import json
-
 from dominial.models import Cartorios
-from ia_ocr import revisao, services
+from ia_ocr import revisao
 from ia_ocr.models import CampoSugerido
 from ia_ocr.revisao import IndiceCartorios
-
-from .test_revisao_tela_base import _descendentes
-from .test_ui_card_ocr import _atributos, _elementos
 
 CHAVE = '/document/cartorio'
 CABECALHO = (
@@ -61,25 +56,6 @@ class CartorioFallbackBase:
         ]
 
 
-    def _salvar(self, extracao, cartorio_id):
-        # #341 fase 3: o toolbar da tela exibia o mesmo `versao_bloco` da
-        # extração; calculado direto agora que o GET não renderiza mais.
-        return self.client.post(
-            self.url('salvar_bloco_ocr'),
-            data=json.dumps({
-                'versao': services.versao_bloco(extracao),
-                'decisoes': [{
-                    'chave': CHAVE, 'incluir': True,
-                    'escolha': {
-                        'pessoa_id': None, 'cartorio_id': cartorio_id,
-                        'criar_novo': False,
-                    },
-                }],
-            }),
-            content_type='application/json',
-        )
-
-
     def _povoar_501_na_uf(self):
         """501 cartórios na BA com o alvo na posição 501 — a última.
 
@@ -112,19 +88,3 @@ class CartorioFallbackBase:
             nome='Z Cartório Sem Comarca', cidade='PORTO SEGURO',
             estado='BA', cns='9599999',
         )
-
-
-    def _opcoes_cartorio(self):
-        """Ids oferecidos no ``<select>`` do card de cartório, pela tela."""
-        html = self._tela().content.decode()
-        card = next(
-            c for c in _elementos(html, 'article', presentes=('data-campo',))
-            if _atributos(c)['data-chave'] == CHAVE
-        )
-        select = _descendentes(card, 'select', 'data-ocr-escolha')[0]
-        return [
-            _atributos(o)['value']
-            for o in _descendentes(select, 'option', 'value')
-            if _atributos(o)['value']
-        ]
-

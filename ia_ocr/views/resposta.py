@@ -1,6 +1,5 @@
-"""Peças compartilhadas de resposta das telas: avisos da revisão, URLs,
-paginação, versão do formulário e o decorator que mantém 404/405/CSRF em
-JSON.
+"""Peças compartilhadas de resposta das telas: URLs, paginação e versão do
+formulário.
 
 Extraídas do monólito ``ia_ocr/views.py`` (etapa 3, limite de 400 linhas).
 ``_disponibilidade_extracao`` é alvo de ``mock.patch`` via o pacote
@@ -8,65 +7,18 @@ Extraídas do monólito ``ia_ocr/views.py`` (etapa 3, limite de 400 linhas).
 execução resolve o nome NO OBJETO DO PACOTE (``views._disponibilidade_
 extracao``), senão o patch deixa de agir e o teste passa sem testar — ver
 o docstring do ``ia_ocr/views/__init__.py``.
+
+Os helpers de aviso e o decorator JSON que só a tela de cards usava
+(``_avisos_descritos``, ``_aviso_nao_consta``, ``_avisos_da_resposta``,
+``_respostas_json_ocr``) saíram com ela na fase 4 da #341.
 """
 import re
-from functools import wraps
 
-from django.http import Http404, JsonResponse
+from django.http import Http404
 from django.urls import reverse
-from django.utils.decorators import decorator_from_middleware
-from django.views.decorators.csrf import csrf_exempt
 
-from dominial.managers import documentos_for_user
-
-from .. import estados, revisao
+from .. import estados
 from ..models import ESTADO_CONFIRMADA
-from .middleware import _CsrfJsonMiddleware
-
-
-def _avisos_descritos(request, extracao) -> list[dict]:
-    """Avisos da revisão com o texto de negócio de cada um (#324).
-
-    A MESMA fonte para a abertura da tela (``campos_job_ocr``) e para a
-    resposta do save (``salvar_bloco_ocr``): o aviso (e o selo "não consta no
-    documento") nasce do estado salvo da extração, então depois de um save a
-    tela precisa do cálculo novo — nada de reimplementar a regra no cliente.
-    O escopo do USUÁRIO alimenta o aviso de homônimo (#267): documento de
-    outra TI nunca participa dele.
-    """
-    return [
-        revisao.descrever_aviso(item)
-        for item in revisao.avisos(
-            extracao, documentos_queryset=documentos_for_user(request.user),
-        )
-    ]
-
-
-def _aviso_nao_consta(item) -> bool:
-    """O aviso é de "não consta no documento" (livro/folha da origem, #324).
-
-    É ele que dá o selo ao card; a abertura da tela e a resposta do save usam
-    este mesmo predicado, então o cliente não repete a lista de motivos.
-    """
-    return item['motivo'] in revisao.MOTIVOS_NAO_CONSTA
-
-
-def _avisos_da_resposta(request, extracao) -> list[dict]:
-    """Os avisos recalculados no formato da resposta do save (#324).
-
-    Só o que a tela desenha: chave (alvo do selo), motivo (detalhe técnico),
-    ``local``/``rotulo`` (texto de negócio) e ``nao_consta`` (o selo).
-    """
-    return [
-        {
-            'chave': item['chave'],
-            'motivo': item['motivo'],
-            'local': item['local'],
-            'rotulo': item['rotulo'],
-            'nao_consta': _aviso_nao_consta(item),
-        }
-        for item in _avisos_descritos(request, extracao)
-    ]
 
 
 def _url_tela(kwargs_job, numero=None):
@@ -132,25 +84,3 @@ def _disponibilidade_extracao(job, paginas):
     if not paginas or any(pagina.texto_ocr is None for pagina in paginas):
         return False, 'O OCR não devolveu texto para todas as páginas.'
     return True, ''
-
-
-def _respostas_json_ocr(view):
-    """Mantém 404, 405 e rejeições CSRF em JSON, sem mudar o login_required."""
-    protegida = decorator_from_middleware(_CsrfJsonMiddleware)(view)
-
-    # A checagem CSRF é feita pela middleware local acima, com a mesma
-    # proteção do Django. Evita apenas a resposta HTML da middleware global.
-    @csrf_exempt
-    @wraps(view)
-    def resposta_json(request, *args, **kwargs):
-        try:
-            resposta = protegida(request, *args, **kwargs)
-        except Http404:
-            return JsonResponse({'erro': 'nao_encontrado'}, status=404)
-        if resposta.status_code == 405:
-            erro = JsonResponse({'erro': 'metodo_nao_permitido'}, status=405)
-            erro['Allow'] = resposta['Allow']
-            return erro
-        return resposta
-
-    return resposta_json

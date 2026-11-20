@@ -1,25 +1,15 @@
-"""Testes da importação assistida da revisão finalizada (I-6 / #263).
+"""Fixture compartilhada dos testes que montam job + extração do OCR.
 
-O serviço grava os atos marcados de uma extração finalizada em lançamentos
-do dominial, com savepoint por ato e rollback total ao primeiro erro. Os
-payloads são os mesmos sintéticos da revisão (nada de documento real), e a
-decisão B (#263-I6-B) está em jogo no caminho feliz: linha ``sugerido`` sem
-``requer_revisao`` entra na importação porque a finalização da revisão já é
-o aceite humano.
+O motor da importação em lote (I-6/#263) foi aposentado na fase 4 da
+#341; a montagem continua servindo à família
+``test_revisao_formulario_prefill_*`` (pré-preenchimento do formulário)
+e aos testes do fallback de rótulo (``test_rotulos_importacao_*``).
 """
 
-# Etapa 9 (400 linhas): migração verbatim — nenhum teste aqui.
-
-from django.test import (
-    TestCase,
-)
-from django.urls import reverse
 from django.utils import timezone
 from dominial.models import (
     LancamentoTipo, UserTI,
 )
-from ia_ocr import services
-from ia_ocr.importacao import importar
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
     desnormalizar,
@@ -31,11 +21,7 @@ from .payloads_extracao import (
 
 
 class ImportacaoFixture:
-    """Job ``revisado`` com extração finalizada, pronto para importar.
-
-    Mixin (sem ``TestCase``) para a mesma montagem servir à classe de
-    concorrência real em PostgreSQL (``TransactionTestCase``).
-    """
+    """Job ``revisado`` com extração pronta (fixture, sem testes)."""
 
     def setUp(self):
         self.usuario = criar_usuario()
@@ -78,18 +64,6 @@ class ImportacaoFixture:
         extracao.save(update_fields=['finalizada_em'])
         return extracao
 
-    def _todos_os_atos(self, extracao):
-        return [
-            f'/acts/{indice}' for indice in range(len(extracao.payload['acts']))
-        ]
-
-    def _importar(self, extracao, atos=None, versao=None):
-        return importar(
-            extracao, self.usuario,
-            versao if versao is not None else services.versao_bloco(extracao),
-            atos if atos is not None else self._todos_os_atos(extracao),
-        )
-
     def _payload_origem(self):
         payload = payload_registro(self.job.job_id)
         payload['acts'][0]['origem'] = {
@@ -100,38 +74,3 @@ class ImportacaoFixture:
             'folha': self._campo('123', 'Folha 087'),
         }
         return payload
-
-    def _payload_com_numero(self):
-        payload = payload_registro(self.job.job_id)
-        payload['acts'][0]['numero_lancamento'] = self._campo('R-1', 'R-1/42.718')
-        return payload
-
-    def url_lancamento(self, lancamento):
-        return reverse('editar_lancamento', kwargs={
-            'tis_id': self.imovel.terra_indigena_id_id,
-            'imovel_id': self.imovel.pk,
-            'lancamento_id': lancamento.pk,
-        })
-
-
-class ImportacaoBase(ImportacaoFixture, TestCase):
-    """Job ``revisado`` com extração finalizada, pronto para importar."""
-
-
-class _DesfazImportacao(Exception):
-    """Desfaz, no fim do ``atomic``, a importação que o teste só observa."""
-
-
-def _post_cadastro_manual(tipo_registro):
-    """POST mínimo do cadastro manual: gera o número ``R1 M42``."""
-    return {
-        'tipo_lancamento': str(tipo_registro.pk),
-        'sigla_matricula': 'M42',
-        'numero_lancamento_simples': '1',
-        'data': '2020-02-15',
-        'observacoes': '',
-    }
-
-
-ESPERA_S = 10
-BLOQUEIO_S = 1.0

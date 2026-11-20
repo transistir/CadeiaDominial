@@ -7,14 +7,13 @@ Classe SIMPLES (sem ``TestCase``); quem coleta é a fachada em
 """
 
 import json
-import uuid
 from unittest import mock
 
 from django.conf import settings
 from django.shortcuts import resolve_url
 from django.urls import reverse
 
-from ia_ocr import estados, revisao, services
+from ia_ocr import estados, services
 from ia_ocr.estados import TransicaoInvalida
 from ia_ocr.extracao_backends import ExtracaoBackendError
 from ia_ocr.extracao_schema import PayloadExtracaoInvalido
@@ -78,18 +77,6 @@ class ExtracaoViewsTestParte1:
             'documento_id': self.documento.pk,
         })
 
-    def _resolver_pendencias(self, extracao):
-        decisoes = {}
-        for campo in extracao.campos.all():
-            decisao = {'incluir': True, 'conferido': True}
-            if campo.tipo_valor in ('cartorio', 'parte'):
-                decisao['escolha'] = {'criar_novo': True}
-            decisoes[campo.chave] = decisao
-        services.salvar_bloco(
-            extracao, decisoes, self.dono, services.versao_bloco(extracao),
-        )
-        self.assertEqual(revisao.pendencias(extracao), [])
-
     def test_get_extrair_recusa_405(self):
         resposta = self.client.get(self.url('extrair_campos_ocr'))
 
@@ -99,7 +86,7 @@ class ExtracaoViewsTestParte1:
 
     def test_post_sem_login_redireciona(self):
         self.client.logout()
-        for nome in ('extrair_campos_ocr', 'salvar_bloco_ocr', 'finalizar_revisao_ocr'):
+        for nome in ('extrair_campos_ocr',):
             with self.subTest(endpoint=nome):
                 resposta = self._post_json(nome, {})
 
@@ -112,19 +99,11 @@ class ExtracaoViewsTestParte1:
 
     def test_documento_de_outro_usuario_404(self):
         self.client.force_login(self.sem_acesso)
-        for nome in ('extrair_campos_ocr', 'salvar_bloco_ocr', 'finalizar_revisao_ocr'):
+        for nome in ('extrair_campos_ocr',):
             with self.subTest(endpoint=nome):
                 resposta = self._post_json(nome, {})
 
                 self.assertEqual(resposta.status_code, 404)
-                if nome != 'extrair_campos_ocr':
-                    self.assertEqual(resposta.json(), {'erro': 'nao_encontrado'})
-                    inexistente = self.client.post(
-                        self.url(nome, job_id=uuid.uuid4()),
-                        data='{}', content_type='application/json',
-                    )
-                    self.assertEqual(inexistente.status_code, 404)
-                    self.assertEqual(inexistente.json(), resposta.json())
         self.assertEqual(self.client.get(self.url('campos_job_ocr')).status_code, 404)
         self.backend.extrair.assert_not_called()
         self.assertFalse(self.job.extracoes.exists())

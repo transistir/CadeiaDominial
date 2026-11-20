@@ -54,13 +54,4 @@ urlpatterns = [
         views.revisar_ato_duplicata_ocr, name='revisar_ato_duplicata_ocr',
     ),
     path(_BASE + 'campos/', views.campos_job_ocr, name='campos_job_ocr'),
-    path(_BASE + 'campos/salvar/', views.salvar_bloco_ocr, name='salvar_bloco_ocr'),
-    path(
-        _BASE + 'campos/finalizar/',
-        views.finalizar_revisao_ocr, name='finalizar_revisao_ocr',
-    ),
-    path(
-        _BASE + 'campos/importar/',
-        views.importar_job_ocr, name='importar_job_ocr',
-    ),
 ]

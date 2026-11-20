@@ -1,17 +1,16 @@
-"""Infraestrutura da tela de revisão de campos (I-5) — migração VERBATIM de
-``ia_ocr/tests/test_revisao_tela.py`` (Etapa 10 do plano de 400 linhas).
+"""Infraestrutura de teste do job em ``extraido`` (I-5) — migração VERBATIM
+de ``ia_ocr/tests/test_revisao_tela.py`` (Etapa 10 do plano de 400 linhas).
 
-Nenhum teste aqui: ``TelaRevisaoBase`` (setUp + helpers da tela) e os
-helpers de módulo compartilhados pelas partes (``_descendentes``,
-``_valor_do_select``, ``_decisao_do_card``, ``_texto_fora_de_details``).
+Nenhum teste aqui: só ``TelaRevisaoBase`` (setUp + ``_extracao``). Os
+helpers da tela de cards (``_tela``, ``_descendentes``, ``_valor_do_select``,
+``_decisao_do_card``, ``_texto_fora_de_details``) saíram junto com a tela,
+aposentada na fase 4 da #341 — quem segue usando esta base é a família do
+fallback de cartório (``test_cartorio_fallback_*``), que só precisa da
+montagem do job.
 """
-
-from django.test import RequestFactory
-from django.test.html import Element
 
 from ia_ocr import estados, revisao
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
-from ia_ocr.views.campos import _renderizar_tela
 
 from .base_texto import TelaTextoBase
 from .payloads_extracao import (
@@ -20,11 +19,10 @@ from .payloads_extracao import (
     TEXTO_PAGINA_1,
     payload_averbacao,
 )
-from .test_ui_card_ocr import _atributos, _elementos
 
 
 class TelaRevisaoBase(TelaTextoBase):
-    """Infraestrutura da tela de revisão; sem testes (reutilizável)."""
+    """Infraestrutura do job em ``extraido``; sem testes (reutilizável)."""
 
     def setUp(self):
         super().setUp()
@@ -49,119 +47,3 @@ class TelaRevisaoBase(TelaTextoBase):
                     linha.criar_novo = True
         CampoSugerido.objects.bulk_create(linhas)
         return extracao
-
-    def _tela(self):
-        """Renderiza a tela de cards pelo MESMO caminho de antes.
-
-        #341 fase 3: a rota ``campos_job_ocr`` virou redirect à revisão por
-        formulário, então o GET pelo cliente não chega mais à tela. Os
-        testes desta família exercitam o renderizador direto (a rota nova é
-        coberta por ``test_revisao_formulario_*.py``) até a aposentadoria
-        da tela apagar os dois lados (fase 4).
-        """
-        request = RequestFactory().get(self.url('campos_job_ocr'))
-        request.user = self.dono
-        # O GET passava por `_contexto_job`, que buscava o job de novo —
-        # testes que mudam o status com `.update()` dependem dessa leitura.
-        self.job.refresh_from_db()
-        return _renderizar_tela(
-            request, self.ti, self.imovel, self.documento, self.job,
-        )
-
-    @staticmethod
-    def _chaves_do_html(html):
-        return [
-            _atributos(card)['data-chave']
-            for card in _elementos(html, 'article', presentes=('data-campo',))
-        ]
-
-    def _chaves_na_tela(self):
-        return self._chaves_do_html(self._tela().content.decode())
-
-
-
-def _texto_fora_de_details(no):
-    """Texto visível sem atributos nem detalhes, inclusive os aninhados."""
-    if isinstance(no, str):
-        return no
-    if no.name in ('details', 'script', 'style'):
-        return ''
-    return ' '.join(_texto_fora_de_details(filho) for filho in no.children)
-
-
-def _descendentes(no, nome_tag, atributo):
-    """Elementos `nome_tag` com `atributo` na subárvore de `no`."""
-    achados = []
-    for filho in no.children:
-        if not isinstance(filho, Element):
-            continue
-        if filho.name == nome_tag and atributo in _atributos(filho):
-            achados.append(filho)
-        achados += _descendentes(filho, nome_tag, atributo)
-    return achados
-
-
-def _valor_do_select(select):
-    """O que o navegador enviaria: a opção selected, senão a primeira."""
-    opcoes = _descendentes(select, 'option', 'value')
-    selecionadas = [
-        opcao for opcao in opcoes if 'selected' in _atributos(opcao)
-    ]
-    escolhida = (selecionadas or opcoes or [None])[0]
-    if escolhida is None:
-        return ''
-    return _atributos(escolhida).get('value', '')
-
-
-def _decisao_do_card(card):
-    """A decisão que o ocr_revisao.js mandaria com o card conferido.
-
-    Card sem valor fica de fora (nada a conferir); cards de parte/cartório
-    levam ``escolha`` com a opção selecionada, a primeira candidata quando
-    nenhuma vem selecionada, ou criar novo quando não há candidata.
-    """
-    valor = None
-    for tag in ('input', 'textarea', 'select'):
-        for elemento in _descendentes(card, tag, 'data-campo-valor'):
-            atributos = _atributos(elemento)
-            if tag == 'input':
-                valor = atributos.get('value')
-            elif tag == 'select':
-                valor = _valor_do_select(elemento)
-            else:
-                valor = ''.join(
-                    filho for filho in elemento.children
-                    if isinstance(filho, str)
-                )
-            tipo = atributos['data-tipo']
-    if not valor:
-        return None
-    decisao = {
-        'chave': _atributos(card)['data-chave'],
-        'incluir': True,
-        'conferido': True,
-    }
-    # Espelha TIPOS_SEM_VALOR do ocr_revisao.js: sem conversor de formulário.
-    if tipo not in ('parte', 'ato'):
-        decisao['valor'] = valor
-    selects = _descendentes(card, 'select', 'data-ocr-escolha')
-    criar = _descendentes(card, 'input', 'data-ocr-criar-novo')
-    if selects or criar:
-        escolhido = None
-        alvo = None
-        if selects:
-            alvo = _atributos(selects[0])['data-ocr-escolha']
-            opcoes = [
-                opcao for opcao in _descendentes(selects[0], 'option', 'value')
-                if _atributos(opcao)['value']
-            ]
-            selecionadas = [o for o in opcoes if 'selected' in _atributos(o)]
-            escolhida = (selecionadas or opcoes or [None])[0]
-            if escolhida is not None:
-                escolhido = int(_atributos(escolhida)['value'])
-        decisao['escolha'] = {
-            'pessoa_id': escolhido if alvo == 'pessoa_id' else None,
-            'cartorio_id': escolhido if alvo == 'cartorio_id' else None,
-            'criar_novo': escolhido is None and bool(criar),
-        }
-    return decisao

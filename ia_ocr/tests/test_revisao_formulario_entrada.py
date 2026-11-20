@@ -32,6 +32,24 @@ class EntradaETelaTest(RevisaoFormularioBase):
             resposta, self.url_entrada(), fetch_redirect_response=False,
         )
 
+    def test_rotas_da_tela_de_cards_aposentadas_dao_404(self):
+        """#341 fase 4: `campos/salvar|finalizar|importar/` saem do tree.
+
+        O POST JSON que a tela de cards enviava vira 404 — aba velha aberta no
+        servidor de testes não grava nada; `campos/` segue redirecionando.
+        """
+        entrada = self.url_entrada()  # .../ocr-job/<uuid>/revisar/
+        for caminho in ('campos/salvar/', 'campos/finalizar/', 'campos/importar/'):
+            resposta = self.client.post(
+                entrada.replace('revisar/', caminho),
+                data='{}', content_type='application/json',
+            )
+            self.assertEqual(resposta.status_code, 404, caminho)
+        self.assertRedirects(
+            self.client.get(entrada.replace('revisar/', 'campos/')),
+            self.url_entrada(), fetch_redirect_response=False,
+        )
+
     def test_formulario_do_ato_vem_preenchido(self):
         resposta = self.client.get(self.url_ato(0))
 
