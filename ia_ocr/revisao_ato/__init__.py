@@ -18,7 +18,9 @@ módulo reúne o que a view precisa além do pré-preenchimento (``formulario``)
 
 Pacote desde a Etapa 8 do imposto de 400 linhas: o antigo
 ``ia_ocr/revisao_ato.py`` virou módulos por responsabilidade e este
-``__init__`` reexporta tudo que o módulo único tinha no nível de topo.
+``__init__`` reexporta a API pública do módulo único no nível de topo —
+incluindo as constantes ``MENSAGEM_*`` do ``salvar`` (consumidas por
+views e testes como ``ia_ocr.revisao_ato.MENSAGEM_…``).
 
 - Os call sites dos nomes que os testes patcham no pacote
   (``importacao._vincular``, ``LancamentoService.criar_lancamento_completo``)
@@ -52,8 +54,12 @@ from .rascunho import (
     limpar_rascunho,
     rascunho_do_ato,
 )
-from .formulario import _pessoas_do_post, estado_do_formulario
+from .estado_post import _pessoas_do_post, estado_do_formulario
 from .salvar import (
+    MENSAGEM_AREA_SEM_DECISAO,
+    MENSAGEM_ATO_FORA_DA_REVISAO,
+    MENSAGEM_CARTORIO_NAO_CADASTRADO,
+    MENSAGEM_JOB_FORA_DE_REVISAO,
     MOTIVO_TRANSICAO,
     _cartorio_da_transmissao_nao_cadastrado,
     _registros_do_ato,
@@ -68,6 +74,10 @@ __all__ = [
     'FORA_DO_RASCUNHO',
     'LIMITE_EXTRACOES_NO_RASCUNHO',
     'LancamentoService',
+    'MENSAGEM_AREA_SEM_DECISAO',
+    'MENSAGEM_ATO_FORA_DA_REVISAO',
+    'MENSAGEM_CARTORIO_NAO_CADASTRADO',
+    'MENSAGEM_JOB_FORA_DE_REVISAO',
     'MOTIVO_TRANSICAO',
     'Resultado',
     '_PREFIXO_DA_ABA',

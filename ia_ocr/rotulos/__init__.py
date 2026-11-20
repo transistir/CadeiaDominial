@@ -18,13 +18,19 @@ do payload + 1 — a mesma regra da revisão) e os não reconhecidos.
 
 Pacote desde a Etapa 8 do imposto de 400 linhas: o antigo
 ``ia_ocr/rotulos.py`` virou módulos por responsabilidade e este
-``__init__`` reexporta tudo que o módulo único tinha no nível de topo.
+``__init__`` reexporta a API pública do módulo único no nível de topo —
+incluindo as constantes de parsing (``_ROTULO``, ``_NUMERO``,
+``_SEPARADOR_DE_NUMEROS``, ``_PREFIXOS``).
 Módulo PURO, sem alvo de ``patch`` nos testes (``grep "patch.*rotulos"``
 vazio) — todos os consumidores podem seguir importando do pacote
 (``from ia_ocr.rotulos import analisar_rotulo``) sem mudança nenhuma.
 """
 
 from .analise import (
+    _NUMERO,
+    _PREFIXOS,
+    _ROTULO,
+    _SEPARADOR_DE_NUMEROS,
     _dois_numeros,
     analisar_rotulo,
     resolver_tipo,
@@ -44,6 +50,10 @@ __all__ = [
     'Classificacao',
     'Rotulo',
     'TIPOS_SUGERIDOS',
+    '_NUMERO',
+    '_PREFIXOS',
+    '_ROTULO',
+    '_SEPARADOR_DE_NUMEROS',
     '_dois_numeros',
     '_nao_reconhecido',
     '_ordem_ordenavel',
