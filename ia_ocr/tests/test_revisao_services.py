@@ -120,8 +120,10 @@ class FinalizarSemAtosTest(TestCase):
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_pode_finalizar_sem_atos_so_no_cenario_limpo(self):
-        # Issue #262: a regra fica num lugar só; só o cenário limpo (flag
-        # ligada + apenas nenhum_ato + nenhum bloqueio de campo) é elegível.
+        # Issue #262: a regra fica num lugar só; elegível com a flag ligada,
+        # ``acts: []`` do serviço e apenas ``nenhum_ato``. Opção (a) do dono
+        # (#341, PR #366): campo de cabeçalho pendente NÃO bloqueia — sem
+        # atos nada é gravado em Documento/Lancamento.
         extracao = self._extracao_sem_atos()
         self.assertTrue(services.pode_finalizar_sem_atos(extracao))
 
@@ -135,16 +137,18 @@ class FinalizarSemAtosTest(TestCase):
         payload = payload_averbacao(self.job.job_id)
         payload['acts'] = []
         payload['document'].pop('data')
-        com_bloqueio = self._extracao(payload)
-        self.assertEqual(pendencias(com_bloqueio), [{
+        com_cabecalho_pendente = self._extracao(payload)
+        self.assertEqual(pendencias(com_cabecalho_pendente), [{
             'chave': '/acts', 'motivo': 'nenhum_ato', 'bloqueante': True,
         }])
-        self.assertFalse(services.pode_finalizar_sem_atos(com_bloqueio))
+        self.assertTrue(
+            services.pode_finalizar_sem_atos(com_cabecalho_pendente),
+        )
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
-    def test_campo_obrigatorio_pendente_sem_atos_ainda_bloqueia(self):
-        # Issue #262: sem atos, ``pendencias`` só enxerga ``nenhum_ato``; o
-        # campo obrigatório ausente precisa bloquear a confirmação mesmo assim.
+    def test_campo_obrigatorio_pendente_sem_atos_nao_bloqueia(self):
+        # Opção (a) do dono (#341, PR #366): sem atos nada é importado, então
+        # o obrigatório ausente do cabeçalho não segura a conclusão sem atos.
         payload = payload_averbacao(self.job.job_id)
         payload['acts'] = []
         payload['document'].pop('data')
@@ -161,12 +165,7 @@ class FinalizarSemAtosTest(TestCase):
             pendencias_sem_atos(extracao),
         )
 
-        with self.assertRaises(services.RevisaoIncompleta):
-            services.finalizar_revisao(
-                extracao, self.usuario, confirmar_sem_atos=True,
-            )
-
-        self._assert_nao_finalizada(extracao)
+        self.assertTrue(services.pode_finalizar_sem_atos(extracao))
 
         # Payload normal de averbação, sem decisões: não há nenhum_ato, mas
         # sobram obrigatórios pendentes — a confirmação não pode ignorá-los.
