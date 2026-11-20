@@ -1,7 +1,7 @@
 """Infraestrutura dos testes de fila — migração VERBATIM de
 ``ia_ocr/tests/test_fila.py`` (Etapa 13 do plano de 400 linhas).
 
-Nenhum teste aqui: constantes de PII, ``_resultado``, os 11 backends
+Nenhum teste aqui: constantes de PII, ``_resultado``, os 10 backends
 ``Backend*`` e a sentinela ``_Pare``. Os backends são nomeados por caminho
 pontuado (``ia_ocr.tests.test_fila.<Backend>``) nas ``override_settings`` —
 a fachada ``test_fila.py`` os reexporta.
