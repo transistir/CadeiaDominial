@@ -1,0 +1,199 @@
+"""Permissões, confirmação e reprocessamento da tela de texto, migrados verbatim."""
+
+from ia_ocr import estados, services
+from ia_ocr.models import ESTADO_CONFIRMADA, ESTADO_EDITADA, OcrJob
+
+from .factories import criar_job_concluido
+from .test_texto_acoes_views_base import _botao
+from .test_ui_card_ocr import _atributos, _elementos
+from .base_texto import TEXTOS, _texto_completo
+
+
+class PermissaoAcoesGeraisTestParte:
+    ACOES = ('confirmar_paginas_ocr', 'reprocessar_job_ocr', 'extrair_campos_ocr')
+
+    def test_nao_autenticado_redireciona_para_login_e_nao_muda_nada(self):
+        for nome in self.ACOES:
+            with self.subTest(acao=nome):
+                resposta = self.client.post(self.url(nome))
+
+                self.assertEqual(resposta.status_code, 302)
+                self.assertIn('/accounts/login/', resposta['Location'])
+        self.assertEqual(OcrJob.objects.count(), 1)
+        self.assertEqual(self.job.paginas.filter(confirmado_em__isnull=False).count(), 0)
+
+    def test_usuario_sem_acesso_recebe_404_e_nao_muda_nada(self):
+        self.client.force_login(self.sem_acesso)
+
+        for nome in self.ACOES:
+            with self.subTest(acao=nome):
+                resposta = self.client.post(self.url(nome))
+
+                self.assertEqual(resposta.status_code, 404)
+        self.assertEqual(OcrJob.objects.count(), 1)
+        self.assertEqual(self.job.paginas.filter(confirmado_em__isnull=False).count(), 0)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+
+    def test_get_recebe_405(self):
+        self.client.force_login(self.dono)
+
+        for nome in self.ACOES:
+            with self.subTest(acao=nome):
+                self.assertEqual(self.client.get(self.url(nome)).status_code, 405)
+
+
+class ConfirmarTodasViewTestParte:
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.dono)
+
+    def test_post_confirma_todas_as_pendentes_e_volta_para_a_mesma_pagina(self):
+        resposta = self.client.post(self.url('confirmar_paginas_ocr'), {'pagina': '2'})
+
+        self.assertRedirects(
+            resposta, self.url_tela(pagina=2), fetch_redirect_response=False
+        )
+        for numero in (1, 2, 3):
+            pagina = self.pagina(numero)
+            self.assertEqual(pagina.estado, ESTADO_CONFIRMADA)
+            self.assertEqual(pagina.confirmado_por, self.dono)
+            self.assertEqual(pagina.texto_confirmado, TEXTOS[numero - 1])
+        self.assertIn('success', [n for n, _m in self.mensagens(resposta)])
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+
+    def test_mensagem_de_sucesso_concorda_com_o_numero_de_paginas(self):
+        plural = self.client.post(self.url('confirmar_paginas_ocr'))
+        self.assertIn(
+            ('success', '3 páginas confirmadas sem alteração.'), self.mensagens(plural)
+        )
+
+        unico = criar_job_concluido(self.arquivo, textos=['única página'])
+        singular = self.client.post(self.url('confirmar_paginas_ocr', unico))
+        self.assertIn(
+            ('success', '1 página confirmada sem alteração.'), self.mensagens(singular)
+        )
+
+    def test_pagina_invalida_no_post_cai_na_tela_sem_parametro(self):
+        for valor in ('../../x', '-1', '9' * 5000):
+            with self.subTest(pagina=valor[:20]):
+                resposta = self.client.post(
+                    self.url('confirmar_paginas_ocr'), {'pagina': valor}
+                )
+
+                self.assertRedirects(
+                    resposta, self.url_tela(), fetch_redirect_response=False
+                )
+
+    def test_post_com_pagina_editada_nao_confirma_nada_e_avisa(self):
+        services.editar_pagina(self.job, 2, 'segunda mexida')
+
+        resposta = self.client.post(self.url('confirmar_paginas_ocr'))
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIn('error', [n for n, _m in self.mensagens(resposta)])
+        self.assertEqual(self.job.paginas.filter(confirmado_em__isnull=False).count(), 0)
+        self.assertEqual(self.pagina(2).estado, ESTADO_EDITADA)
+
+    def test_post_em_job_fora_de_concluido_avisa_e_nao_grava(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.TEXTO_CONFIRMADO)
+
+        resposta = self.client.post(self.url('confirmar_paginas_ocr'))
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIn('error', [n for n, _m in self.mensagens(resposta)])
+        self.assertEqual(self.job.paginas.filter(confirmado_em__isnull=False).count(), 0)
+
+    def test_botao_habilitado_quando_ha_pendentes_e_nenhuma_edicao(self):
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        botao = _botao(conteudo, 'data-ocr-confirmar-todas')
+        self.assertIsNotNone(botao)
+        self.assertNotIn('disabled', _atributos(botao))
+
+    def test_botao_desabilitado_com_pagina_editada_e_explica_o_motivo(self):
+        services.editar_pagina(self.job, 2, 'segunda mexida')
+
+        resposta = self.client.get(self.url_tela(pagina=1))
+        conteudo = resposta.content.decode()
+
+        self.assertIn('disabled', _atributos(_botao(conteudo, 'data-ocr-confirmar-todas')))
+        motivo = _elementos(conteudo, 'small', presentes=('data-ocr-confirmar-todas-motivo',))
+        self.assertEqual(len(motivo), 1)
+        self.assertIn('editada', _texto_completo(motivo[0]))
+
+    def test_botao_desabilitado_quando_nao_ha_pendentes(self):
+        services.confirmar_todas_paginas(self.job, self.dono)
+
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        self.assertIn('disabled', _atributos(_botao(conteudo, 'data-ocr-confirmar-todas')))
+
+
+class ReprocessarViewTestParte:
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.dono)
+
+    def test_post_cria_novo_job_pendente_e_preserva_o_historico_do_anterior(self):
+        services.confirmar_pagina(self.job, 1, self.dono, texto='primeira corrigida')
+        services.confirmar_pagina(self.job, 2, self.dono)
+        pagina_antes = self.pagina(1)
+        transicoes_antes = list(self.job.transicoes.values_list('pk', flat=True))
+
+        resposta = self.client.post(self.url('reprocessar_job_ocr'))
+
+        self.assertRedirects(resposta, self.url_upload(), fetch_redirect_response=False)
+        # Novo ciclo: outro job, pendente, para o mesmo arquivo, forçando OCR.
+        novo = OcrJob.objects.exclude(pk=self.job.pk).get()
+        self.assertEqual(novo.status, estados.PENDENTE)
+        self.assertEqual(novo.documento_digital_id, self.arquivo.pk)
+        self.assertEqual(novo.criado_por, self.dono)
+        self.assertTrue(novo.forcar_ocr)
+        self.assertNotEqual(novo.job_id, self.job.job_id)
+        self.assertEqual(novo.paginas.count(), 0)
+        # Histórico: o job anterior, suas páginas e sua auditoria ficam intactos.
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.CONCLUIDO)
+        self.assertEqual(self.job.paginas.count(), 3)
+        pagina = self.pagina(1)
+        self.assertEqual(pagina.texto_confirmado, 'primeira corrigida')
+        self.assertEqual(pagina.confirmado_por, self.dono)
+        self.assertEqual(pagina.confirmado_em, pagina_antes.confirmado_em)
+        self.assertEqual(self.pagina(2).estado, ESTADO_CONFIRMADA)
+        self.assertEqual(
+            list(self.job.transicoes.values_list('pk', flat=True)), transicoes_antes
+        )
+        self.assertIn('success', [n for n, _m in self.mensagens(resposta)])
+
+    def test_com_job_ativo_no_documento_nao_cria_outro(self):
+        ativo, _criado = services.criar_job(self.arquivo, criado_por=self.dono)
+
+        resposta = self.client.post(self.url('reprocessar_job_ocr'))
+
+        self.assertRedirects(resposta, self.url_upload(), fetch_redirect_response=False)
+        self.assertEqual(OcrJob.objects.count(), 2)
+        self.assertIn('info', [n for n, _m in self.mensagens(resposta)])
+        self.assertTrue(OcrJob.objects.filter(pk=ativo.pk).exists())
+
+    def test_job_fora_de_concluido_recusa_e_nao_cria_job(self):
+        OcrJob.objects.filter(pk=self.job.pk).update(status=estados.TEXTO_CONFIRMADO)
+
+        resposta = self.client.post(self.url('reprocessar_job_ocr'))
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIn('error', [n for n, _m in self.mensagens(resposta)])
+        self.assertEqual(OcrJob.objects.count(), 1)
+
+    def test_tela_avisa_que_o_texto_confirmado_so_e_substituido_apos_o_novo_ciclo(self):
+        conteudo = self.client.get(self.url_tela(pagina=1)).content.decode()
+
+        botao = _botao(conteudo, 'data-ocr-reprocessar')
+        self.assertIsNotNone(botao)
+        self.assertNotIn('disabled', _atributos(botao))
+        aviso = _elementos(conteudo, 'small', presentes=('data-ocr-reprocessar-aviso',))
+        self.assertEqual(len(aviso), 1)
+        texto = ' '.join(_texto_completo(aviso[0]).split())
+        self.assertIn('só será substituído', texto)
+        self.assertIn('histórico', texto)
