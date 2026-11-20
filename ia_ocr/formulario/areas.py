@@ -1,0 +1,80 @@
+"""Área lida em unidade que não é hectare (M3): pendência que exige decisão."""
+
+from .. import importacao
+from .numeros import _numero_legivel
+from ..revisao import MOTIVO_UNIDADE_AREA
+
+# Área lida em unidade que não é hectare: o input é em ha, então o valor NÃO
+# entra nele (120 m² viraria 120 ha). Mesmo motivo estável da revisão antiga.
+MOTIVO_AREA_EM_OUTRA_UNIDADE = MOTIVO_UNIDADE_AREA
+ROTULO_DA_AREA = 'Área'
+# Enum ``unidade`` do A3 → como o revisor lê a unidade.
+UNIDADES_DE_AREA = {'ha': 'ha', 'm2': 'm²', 'alqueires': 'alqueires', 'ares': 'ares'}
+TEXTO_AREA_EM_OUTRA_UNIDADE = (
+    '{lido} no documento{complemento} — o campo Área (em hectares) ficou '
+    'vazio: converta o valor e preencha o campo, ou marque o descarte '
+    'explícito abaixo. Nada é convertido ou descartado sem a sua decisão.'
+)
+
+
+def _unidade_da_area_no_payload(extracao, indice):
+    """Código da unidade (``m2``, ``alqueires``...) da área do ato, ou ``None``."""
+    payload = extracao.payload_servico or extracao.payload or {}
+    atos = payload.get('acts') or []
+    ato = atos[indice] if indice < len(atos) else {}
+    folha = ato.get('area') if isinstance(ato, dict) else None
+    unidade = folha.get('unidade') if isinstance(folha, dict) else None
+    return unidade if isinstance(unidade, str) else None
+
+
+def _area_em_outra_unidade(extracao, indice, linhas, chave):
+    """Pendência da área lida em unidade que não é hectare; ``None`` se não há.
+
+    O input do formulário é em hectares. A linha de área marcada com
+    ``unidade_area`` (e ainda sem conversão confirmada) traz o número na
+    unidade do documento: colocá-lo no input trocaria a unidade em silêncio
+    — 120 m² seriam gravados como 120 ha (#341, M3). Aqui o valor original
+    vira pendência com a unidade; quem converte (ou preenche à mão) é o
+    revisor. Linha descartada, ou convertida na revisão (``area_convertida``,
+    cujo ``valor_final`` já está em ha), segue o caminho normal.
+    """
+    campo = linhas.get(f'{chave}/area')
+    if (
+        campo is None or campo.status_revisao == 'descartado'
+        or campo.area_convertida
+        or MOTIVO_UNIDADE_AREA not in (campo.motivos_revisao or ())
+    ):
+        return None
+    numero = _numero_legivel(campo.normalized)
+    unidade = UNIDADES_DE_AREA.get(_unidade_da_area_no_payload(extracao, indice))
+    if numero:
+        lido = f'{numero} {unidade}' if unidade else numero
+        complemento = '' if unidade else ' (unidade não identificada)'
+    else:
+        # Sem canônico (normalização inválida): o texto como foi lido.
+        lido = (campo.raw or '').strip()
+        complemento = ''
+    if not lido:
+        return None
+    return {
+        'motivo': MOTIVO_AREA_EM_OUTRA_UNIDADE,
+        'rotulo': ROTULO_DA_AREA,
+        'texto': TEXTO_AREA_EM_OUTRA_UNIDADE.format(
+            lido=lido, complemento=complemento,
+        ),
+        'rotulo_descarte': (
+            f'Área lida em {unidade or "unidade não identificada"}, '
+            'descartada pelo revisor.'
+        ),
+        'bloqueante': True,
+    }
+
+
+def area_exige_decisao(extracao, indice, linhas=None):
+    """Se o ato tem área não-ha que exige preenchimento ou descarte explícito."""
+    linhas = (
+        linhas if linhas is not None
+        else importacao._linhas_por_chave(extracao)
+    )
+    chave = f'/acts/{int(indice)}'
+    return _area_em_outra_unidade(extracao, int(indice), linhas, chave) is not None
