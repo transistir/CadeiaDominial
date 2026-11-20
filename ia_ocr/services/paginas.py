@@ -1,9 +1,11 @@
 """Confirmação e edição do texto das páginas, sob a trava do job.
 
-``_normalizar_quebras_de_linha`` é definida e chamada aqui diretamente,
-como no ``services.py`` monolítico. Os alvos de patch via pacote
-(``get_extracao_backend``, ``IndicePessoas``, ``versao_linha``,
-``timezone``) pertencem aos outros módulos do pacote.
+``_normalizar_quebras_de_linha`` é definida aqui e chamada VIA O PACOTE
+(``services.<nome>``): o teste de concorrência em PostgreSQL faz
+``mock.patch.object(services, '_normalizar_quebras_de_linha')`` para injetar
+lentidão dentro de ``editar_pagina``, depois da trava do job. Os demais alvos
+de patch via pacote (``versao_linha``, ``IndicePessoas``,
+``get_extracao_backend``) pertencem aos outros módulos do pacote.
 """
 
 import logging
@@ -12,7 +14,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from .. import estados
+from .. import estados, services
 from ..models import OcrJob, PaginaOcr
 from .erros import EdicaoPendente, PaginaDesatualizada, TextoNaoEditavel
 
@@ -80,7 +82,7 @@ def confirmar_pagina(job, numero_pagina, usuario, texto=None, versao_esperada=No
         )
         texto_final = (
             pagina.texto_exibido if texto is None
-            else _normalizar_quebras_de_linha(texto)
+            else services._normalizar_quebras_de_linha(texto)
         )
         if pagina.confirmado_em is not None and pagina.texto_exibido == texto_final:
             return pagina, False
@@ -114,7 +116,7 @@ def editar_pagina(job, numero_pagina, texto, versao_esperada=None):
         pagina = PaginaOcr.objects.get(
             ocr_job=travado, numero_pagina=numero_pagina,
         )
-        texto_final = _normalizar_quebras_de_linha(texto)
+        texto_final = services._normalizar_quebras_de_linha(texto)
         if pagina.texto_exibido == texto_final:
             return pagina, False
         _exigir_versao(travado, pagina, versao_esperada)
