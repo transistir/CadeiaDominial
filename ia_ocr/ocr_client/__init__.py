@@ -7,12 +7,12 @@ este ``__init__`` reexporta o que os consumidores importam hoje
 ``management/commands/ocr_smoke.py`` e os testes) sem mudança nenhuma.
 
 - ``time`` é o alvo de patch via pacote: ``patch('ia_ocr.ocr_client.time',
-  relogio)`` substitui o atributo AQUI, e os call sites de ``_restante`` e
-  ``_aguardar_backoff`` resolvem ``ocr_client.time`` a cada chamada
-  (``from .. import ocr_client`` em ``http.py``/``cliente.py``) — então o
-  patch continua valendo depois do split. Os demais usos de ``time``
-  (``multipart``, ``prazo``) ficam com o ``import time`` local do próprio
-  módulo.
+  relogio)`` substitui o atributo AQUI, e TODOS os call sites de relógio
+  (``_restante`` em ``http.py``, ``_aguardar_backoff`` em ``cliente.py``,
+  ``_PrazoAbsoluto`` em ``prazo.py`` e ``_conferir_prazo`` em
+  ``multipart.py``) resolvem ``ocr_client.time`` a cada chamada
+  (``from .. import ocr_client``) — então o patch alcança o pacote inteiro,
+  como alcançava o monólito.
 - ``patch('ia_ocr.ocr_client.time.sleep')`` muta o módulo ``time``
   compartilhado e vale para o pacote inteiro.
 - ``assertLogs('ia_ocr.ocr_client', ...)`` pega os logs por PROPAGAÇÃO: o

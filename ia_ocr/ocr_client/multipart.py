@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import os
-import time
 
+from .. import ocr_client  # alvo de patch: ia_ocr.ocr_client.time
 from ..backends import OrcamentoEsgotado
 
 
 class _MultipartEncoder:
-    """Corpo multipart reabrível, lido em blocos sob o mesmo prazo."""
+    """Corpo multipart reabrível, lido em blocos sob o mesmo prazo.
+
+    ``_conferir_prazo`` lê ``ocr_client.time`` via pacote a cada chamada —
+    o mesmo namespace alvo de ``patch('ia_ocr.ocr_client.time', relogio)``
+    (que no monólito alcançava este módulo e segue alcançando; ver
+    ``cliente.py``/``http.py``).
+    """
 
     TAMANHO_CHUNK = 64 * 1024
 
@@ -96,5 +102,5 @@ class _MultipartEncoder:
         return ''.join(partes).encode('utf-8')
 
     def _conferir_prazo(self):
-        if time.monotonic() >= self.prazo:
+        if ocr_client.time.monotonic() >= self.prazo:
             raise OrcamentoEsgotado('Prazo do job esgotado durante o upload.')

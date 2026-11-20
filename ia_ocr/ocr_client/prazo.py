@@ -4,18 +4,24 @@ O prazo do job é um ``time.monotonic()`` absoluto; estas classes registram
 o socket corrente numa guarda por requisição e o interrompem por
 ``shutdown`` quando o prazo estoura, acordando um ``recv`` bloqueado em
 outra thread.
+
+``_PrazoAbsoluto`` lê ``ocr_client.time`` via pacote na montagem do timer —
+o mesmo namespace alvo de ``patch('ia_ocr.ocr_client.time', relogio)``
+(que no monólito alcançava este módulo e segue alcançando; ver
+``cliente.py``/``http.py``).
 """
 
 from __future__ import annotations
 
 import socket
 import threading
-import time
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+
+from .. import ocr_client  # alvo de patch: ia_ocr.ocr_client.time
 
 
 _contexto_prazo = threading.local()
@@ -44,7 +50,7 @@ class _PrazoAbsoluto:
         self._ativo = True
         self.estourou = False
         self._timer = threading.Timer(
-            max(0.0, prazo - time.monotonic()), self._estourar
+            max(0.0, prazo - ocr_client.time.monotonic()), self._estourar
         )
         self._timer.daemon = True
         self._timer.start()
