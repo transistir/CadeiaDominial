@@ -111,6 +111,7 @@ class SolicitarExtracaoTest(
     """Nome preservado para os ids de teste; corpo nas partes."""
 
 
+@override_settings(**CONFIG_EXTRACAO)
 class SomenteSeInexistenteTest(ExtracaoFixtureMixin, TestCase):
     """Guarda da auto-extração (PR #319, Greptile P1 "second tab").
 
