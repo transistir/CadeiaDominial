@@ -187,7 +187,7 @@ def _decisao_da_escolha(campo, bruto, nome, marcar):
     escolha = {'criar_novo': False}
     if marcar or bruto == SENTINELA_CRIAR_NOVO:
         escolha['criar_novo'] = True
-        decisao = {'incluir': True, 'escolha': escolha}
+        decisao = {'incluir': True, 'conferido': True, 'escolha': escolha}
         if campo.tipo_valor == 'cartorio':
             # O nome do novo cartório vai no próprio campo; sem ele nada
             # nasce (a pendência ``criar_novo_sem_nome`` continuaria). Para
@@ -204,7 +204,7 @@ def _decisao_da_escolha(campo, bruto, nome, marcar):
         else:
             escolha['cartorio_escolhido_id'] = id_escolhido
         return {
-            'incluir': True, 'escolha': escolha,
+            'incluir': True, 'conferido': True, 'escolha': escolha,
             'versao': services.versao_linha(campo),
         }, False
     return None, False

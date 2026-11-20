@@ -267,6 +267,62 @@ class RevisarSemAtosComEscolhaPendenteTest(RevisarSemAtosBase):
         self.assertFalse(campo.criar_novo)
         self.assertIsNone(campo.cartorio_escolhido_id)
 
+    def _marcar_cartorio_que_exigia_revisao(self):
+        # 2º MUST-FIX do Codex: campo já aceito na revisão, faltando só a
+        # escolha. Sem ``conferido`` na decisão, ``aplicar_linha`` o devolvia
+        # a ``sugerido`` e o job ficava preso em ``extraido``.
+        self.extracao.campos.filter(chave='/document/cartorio').update(
+            requer_revisao=True, status_revisao='aceito',
+        )
+        self.extracao.campos.get(chave='/document/cartorio').refresh_from_db()
+        self.extracao.refresh_from_db()
+
+    def _assert_concluiu_sem_atos(self, resposta):
+        self.assertRedirects(
+            resposta, self.url_documento(), fetch_redirect_response=False,
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.REVISADO)
+        transicao = self.job.transicoes.get()
+        self.assertEqual(transicao.motivo, 'revisao_finalizada_sem_atos')
+        self.assertFalse(ImportacaoIA.objects.exists())
+
+    def test_escolha_de_campo_que_exigia_revisao_conclui(self):
+        self._marcar_cartorio_que_exigia_revisao()
+        resposta_get = self.client.get(self.url_entrada())
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertIn(
+            'name="escolha:/document/cartorio"', resposta_get.content.decode(),
+        )
+
+        resposta = self.post_escolhas(**{
+            'escolha:/document/cartorio': str(self.cartorio.pk),
+            'escolha:/document/cri_atual': str(self.cartorio.pk),
+        })
+
+        self._assert_concluiu_sem_atos(resposta)
+        campo = self.extracao.campos.get(chave='/document/cartorio')
+        self.assertEqual(campo.cartorio_escolhido_id, self.cartorio.pk)
+
+    def test_criar_novo_de_campo_que_exigia_revisao_conclui(self):
+        self._marcar_cartorio_que_exigia_revisao()
+
+        resposta = self.post_escolhas(**{
+            'criar_novo:/document/cartorio': 'on',
+            'nome:/document/cartorio': 'CRI Novo de Terra Roxa',
+            'escolha:/document/cri_atual': str(self.cartorio.pk),
+        })
+
+        self._assert_concluiu_sem_atos(resposta)
+        # Sem atos nada é importado: o "criar novo" fica registrado no campo
+        # (o nome novo deixa o campo ``editado``), sem cadastrar ``Cartorios``.
+        campo = self.extracao.campos.get(chave='/document/cartorio')
+        self.assertTrue(campo.criar_novo)
+        self.assertEqual(campo.status_revisao, 'editado')
+        self.assertFalse(
+            Cartorios.objects.filter(nome='CRI Novo de Terra Roxa').exists(),
+        )
+
     def test_pendencia_que_a_pagina_nao_resolve_mantem_o_redirect(self):
         # Além das escolhas, um campo de outro tipo pede revisão: a página
         # não resolve isso, então vale o ramo antigo (mensagem + texto).
