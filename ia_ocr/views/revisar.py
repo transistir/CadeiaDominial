@@ -129,8 +129,8 @@ def revisar_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     """Entrada da revisão: leva ao primeiro ato pendente.
 
     Sem atos, o destino é a confirmação "concluir sem atos" (#262) quando a
-    flag destra — simples, ou com o formulário das escolhas de cadastro do
-    cabeçalho (MUST-FIX do review da #341). O POST só finaliza a partir de
+    flag destra — a página não revisa o cabeçalho, porque nada é importado
+    nesse caminho (decisão do dono, PR #366). O POST só finaliza a partir de
     ``extraido`` (contrato do ``finalizar_revisao``), então a confirmação
     não é oferecida em estado algum outro.
     """

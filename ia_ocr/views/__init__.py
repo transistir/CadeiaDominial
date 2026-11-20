@@ -15,7 +15,7 @@ Pacote desde a etapa 3 do limite de 400 linhas por arquivo —
 - ``campos`` — entrada legada da tela de cards, agora redirect à revisão;
 - ``revisar`` — formulário do ato (I-14/#341);
 - ``revisar_extras`` — complementos da revisão (duplicata);
-- ``revisar_sem_atos`` — conclusão sem atos e escolhas de cabeçalho (#262/#341);
+- ``revisar_sem_atos`` — conclusão sem atos (#262);
 - ``resposta`` — URLs e paginação.
 
 Regra sobre patches de teste — SÓ os nomes que os testes resolvem via
