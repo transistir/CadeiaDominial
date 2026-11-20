@@ -6,14 +6,19 @@ helpers de módulo compartilhados pelas partes (``_descendentes``,
 ``_valor_do_select``, ``_decisao_do_card``, ``_texto_fora_de_details``).
 """
 
+from django.test import RequestFactory
 from django.test.html import Element
 
 from ia_ocr import estados, revisao
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob
+from ia_ocr.views.campos import _renderizar_tela
 
 from .base_texto import TelaTextoBase
 from .payloads_extracao import (
-    PROVIDER, SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao,
+    PROVIDER,
+    SCHEMA_VERSION,
+    TEXTO_PAGINA_1,
+    payload_averbacao,
 )
 from .test_ui_card_ocr import _atributos, _elementos
 
@@ -46,7 +51,22 @@ class TelaRevisaoBase(TelaTextoBase):
         return extracao
 
     def _tela(self):
-        return self.client.get(self.url('campos_job_ocr'))
+        """Renderiza a tela de cards pelo MESMO caminho de antes.
+
+        #341 fase 3: a rota ``campos_job_ocr`` virou redirect à revisão por
+        formulário, então o GET pelo cliente não chega mais à tela. Os
+        testes desta família exercitam o renderizador direto (a rota nova é
+        coberta por ``test_revisao_formulario_*.py``) até a aposentadoria
+        da tela apagar os dois lados (fase 4).
+        """
+        request = RequestFactory().get(self.url('campos_job_ocr'))
+        request.user = self.dono
+        # O GET passava por `_contexto_job`, que buscava o job de novo —
+        # testes que mudam o status com `.update()` dependem dessa leitura.
+        self.job.refresh_from_db()
+        return _renderizar_tela(
+            request, self.ti, self.imovel, self.documento, self.job,
+        )
 
     @staticmethod
     def _chaves_do_html(html):

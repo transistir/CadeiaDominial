@@ -47,7 +47,13 @@ class DescreverAvisoTest(SimpleTestCase):
 
 
 class RevisaoSemAtosTelaTest(TelaTextoBase):
-    """Issue #262: a tela oferece confirmação sem atos só com a flag ligada."""
+    """Issue #262: a saída sem atos só abre com a flag ligada.
+
+    #341 fase 3: a oferta morou na tela de cards e agora é a página de
+    confirmação da revisão (``revisao_sem_atos.html``); a entrada ``campos/``
+    só encaminha. O comportamento novo por formulário tem cobertura integral
+    em ``test_revisao_formulario_sem_atos.py``.
+    """
 
     def setUp(self):
         super().setUp()
@@ -76,33 +82,31 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
     def test_flag_ligada_mostra_aviso_e_mantem_pendencia(self):
         self._extracao_sem_atos()
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
         html = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn('data-permitir-sem-atos="1"', html)
-        self.assertIn('0 atos reconhecidos', html)
-        self.assertIn('data-ocr-sem-atos', html)
-        # A pendência continua visível: nunca é escondida.
-        self.assertIn('Nenhum ato reconhecido neste documento', html)
+        self.assertTemplateUsed(resposta, 'ia_ocr/revisao_sem_atos.html')
+        self.assertIn('Concluir sem atos', html)
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=False)
     def test_flag_desligada_renderiza_como_hoje(self):
         self._extracao_sem_atos()
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
         html = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertNotIn('data-permitir-sem-atos', html)
-        self.assertNotIn('0 atos reconhecidos', html)
-        self.assertNotIn('data-ocr-sem-atos', html)
-        self.assertIn('Nenhum ato reconhecido neste documento', html)
+        self.assertNotIn('Concluir sem atos', html)
+        self.assertIn(
+            ('info', 'A extração não trouxe nenhum ato para revisar.'),
+            self.mensagens(resposta),
+        )
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_campo_obrigatorio_pendente_nao_mostra_confirmacao(self):
-        # Issue #262: sem atos e com campo do documento pendente, a tela não
-        # pode oferecer a confirmação que destravaria a finalização.
+        # Issue #262: sem atos e com campo do documento pendente, a revisão
+        # não pode oferecer a confirmação que destravaria a finalização.
         payload = payload_averbacao(self.job.job_id)
         payload['acts'] = []
         payload['document'].pop('data')
@@ -114,13 +118,15 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
             revisao.desnormalizar(extracao, payload, list(self.job.paginas.all())),
         )
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
         html = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertNotIn('data-permitir-sem-atos', html)
-        self.assertNotIn('data-ocr-sem-atos', html)
-        self.assertIn('Nenhum ato reconhecido neste documento', html)
+        self.assertNotIn('Concluir sem atos', html)
+        self.assertIn(
+            ('info', 'A extração não trouxe nenhum ato para revisar.'),
+            self.mensagens(resposta),
+        )
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_comentario_do_template_nao_vaza_no_html(self):
@@ -128,11 +134,11 @@ class RevisaoSemAtosTelaTest(TelaTextoBase):
         # aparecer como conteúdo da página.
         self._extracao_sem_atos()
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
         html = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn('data-permitir-sem-atos="1"', html)
+        self.assertIn('Concluir sem atos', html)
         self.assertNotIn('sem fabricar atos nem esconder a ausência', html)
 
 

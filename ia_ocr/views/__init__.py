@@ -12,10 +12,11 @@ Pacote desde a etapa 3 do limite de 400 linhas por arquivo —
 
 - ``jobs`` — tela do texto OCR e contexto da hierarquia;
 - ``paginas`` — ações de página (confirmar/editar/bulk/reprocessar/extração);
-- ``campos`` — tela de revisão dos campos e rótulos/máscaras de PII;
+- ``campos`` — entrada legada da tela de cards, agora redirect à revisão;
 - ``decisoes`` — save do bloco de decisões e contrato JSON do POST;
 - ``importar`` — importação (I-6) e finalização da revisão (#262);
 - ``revisar`` — formulário do ato (I-14/#341);
+- ``revisar_extras`` — complementos da revisão (duplicata, sem atos);
 - ``resposta`` — avisos, URLs, paginação e o decorator JSON;
 - ``middleware`` — CSRF em JSON.
 
@@ -79,17 +80,12 @@ from .paginas import (  # noqa: F401
     extrair_campos_ocr,
     reprocessar_job_ocr,
 )
-from .campos import (  # noqa: F401
-    _anexar_opcoes_cadastro,
+from ..mascaras import (  # noqa: F401 — alvos de patch/uso: ia_ocr.views._mascarar_*
     _mascarar_cpf,
     _mascarar_evidencia,
     _mascarar_rg,
-    _opcoes_tipo_sugerido,
-    _preencher_fallback_cartorio,
-    _rotulo_cartorio,
-    _rotulo_pessoa,
-    campos_job_ocr,
 )
+from .campos import campos_job_ocr  # noqa: F401
 from .decisoes import (  # noqa: F401
     _chave_valor_invalido,
     _decisoes_bloco,
@@ -97,7 +93,10 @@ from .decisoes import (  # noqa: F401
     salvar_bloco_ocr,
 )
 from .importar import finalizar_revisao_ocr, importar_job_ocr  # noqa: F401
-from .revisar_extras import revisar_ato_duplicata_ocr  # noqa: F401
+from .revisar_extras import (  # noqa: F401
+    revisar_ato_duplicata_ocr,
+    revisar_sem_atos_ocr,
+)
 from .revisar import (  # noqa: F401
     MENSAGEM_ATO_JA_SALVO,
     MENSAGEM_DUPLICATA_NA_REVISAO,

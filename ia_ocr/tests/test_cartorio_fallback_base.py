@@ -4,7 +4,7 @@ nunca vazio, #315: fallback pela comarca do texto)."""
 import json
 
 from dominial.models import Cartorios
-from ia_ocr import revisao
+from ia_ocr import revisao, services
 from ia_ocr.models import CampoSugerido
 from ia_ocr.revisao import IndiceCartorios
 
@@ -62,12 +62,12 @@ class CartorioFallbackBase:
 
 
     def _salvar(self, extracao, cartorio_id):
-        html = self._tela().content.decode()
-        toolbar = _elementos(html, 'div', presentes=('data-ocr-toolbar',))[0]
+        # #341 fase 3: o toolbar da tela exibia o mesmo `versao_bloco` da
+        # extração; calculado direto agora que o GET não renderiza mais.
         return self.client.post(
             self.url('salvar_bloco_ocr'),
             data=json.dumps({
-                'versao': _atributos(toolbar)['data-versao'],
+                'versao': services.versao_bloco(extracao),
                 'decisoes': [{
                     'chave': CHAVE, 'incluir': True,
                     'escolha': {

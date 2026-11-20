@@ -45,8 +45,10 @@ class LinhaIgnoradaSaveTest(TelaRevisaoBase):
     def test_post_na_linha_ignorada_e_422_sem_gravar(self):
         # #328 rodada 2 (Opus N-2): a recusa vale para as duas folhas sem
         # destino — valor_transacao (#322) e detalhes (#328).
+        # #341 fase 3: o token da tela era o mesmo `versao_bloco` da
+        # extração — calculado direto agora que o GET não renderiza mais.
         extracao = self._extracao_antiga()
-        versao = self._tela().context['versao']
+        versao = services.versao_bloco(extracao)
 
         for chave, valor in (
             ('/acts/0/valor_transacao', '150000.00'),
@@ -73,8 +75,8 @@ class LinhaIgnoradaSaveTest(TelaRevisaoBase):
                 self.assertEqual(services.versao_bloco(extracao), versao)
 
     def test_salvar_outro_card_com_o_token_da_tela_e_200(self):
-        self._extracao_antiga()
-        versao = self._tela().context['versao']
+        extracao = self._extracao_antiga()
+        versao = services.versao_bloco(extracao)
 
         salvar = self.client.post(
             self.url('salvar_bloco_ocr'),

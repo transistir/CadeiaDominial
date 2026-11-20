@@ -147,10 +147,10 @@ class ExtracaoViewsTestParte1:
         resposta = self.client.post(self.url('extrair_campos_ocr'))
 
         self.assertRedirects(
-            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+            resposta, self.url('revisar_job_ocr'), fetch_redirect_response=False,
         )
         self.assertIn((
-            'success', 'Extração concluída. Revise os campos.',
+            'success', 'Extração concluída. Revise cada ato no formulário.',
         ), self.mensagens(resposta))
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.EXTRAIDO)
@@ -169,10 +169,10 @@ class ExtracaoViewsTestParte1:
         )
 
         self.assertRedirects(
-            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+            resposta, self.url('revisar_job_ocr'), fetch_redirect_response=False,
         )
         self.assertIn((
-            'success', 'Extração concluída. Revise os campos.',
+            'success', 'Extração concluída. Revise cada ato no formulário.',
         ), self.mensagens(resposta))
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, estados.EXTRAIDO)
@@ -189,7 +189,7 @@ class ExtracaoViewsTestParte1:
         )
 
         self.assertRedirects(
-            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+            resposta, self.url('revisar_job_ocr'), fetch_redirect_response=False,
         )
         self.assertIn(
             ('info', 'Os campos já foram extraídos.'), self.mensagens(resposta),
@@ -205,10 +205,10 @@ class ExtracaoViewsTestParte1:
         resposta = self.client.post(self.url('extrair_campos_ocr'))
 
         self.assertRedirects(
-            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+            resposta, self.url('revisar_job_ocr'), fetch_redirect_response=False,
         )
         self.assertIn((
-            'success', 'Extração concluída. Revise os campos.',
+            'success', 'Extração concluída. Revise cada ato no formulário.',
         ), self.mensagens(resposta))
         self.job.refresh_from_db()
         self.assertEqual(self.job.extracoes.count(), 2)
@@ -337,10 +337,10 @@ class ExtracaoViewsTestParte1:
         resposta = self.client.post(self.url('extrair_campos_ocr'))
 
         self.assertRedirects(
-            resposta, self.url('campos_job_ocr'), fetch_redirect_response=False,
+            resposta, self.url('revisar_job_ocr'), fetch_redirect_response=False,
         )
         self.assertIn(
-            ('success', 'Extração concluída. Revise os campos.'),
+            ('success', 'Extração concluída. Revise cada ato no formulário.'),
             self.mensagens(resposta),
         )
         extracao = self.job.extracao_vigente()

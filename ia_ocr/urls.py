@@ -39,6 +39,12 @@ urlpatterns = [
     # ``revisar/`` leva ao primeiro ato pendente; ``revisar/<indice>/`` é o
     # formulário do ato (GET mostra, POST salva ou navega — nunca grava no GET).
     path(_BASE + 'revisar/', views.revisar_job_ocr, name='revisar_job_ocr'),
+    # #262 pela revisão (#341): conclusão sem atos em formulário HTML —
+    # substitui o JSON de ``campos/finalizar/`` para este caso.
+    path(
+        _BASE + 'revisar/sem-atos/',
+        views.revisar_sem_atos_ocr, name='revisar_sem_atos_ocr',
+    ),
     path(
         _BASE + 'revisar/<int:indice>/',
         views.revisar_ato_ocr, name='revisar_ato_ocr',

@@ -1,59 +1,64 @@
-"""Tela de revisão dos campos sugeridos (``campos_job_ocr``) e os helpers
-de máscara de PII, rótulos de cadastro, fallback de cartório e opções do
-tipo sugerido.
+"""``campos_job_ocr`` — entrada legada da revisão (#341).
 
-Extraídos do monólito de views (etapa 3, limite de 400 linhas). Só
-``render`` é chamado VIA O PACOTE (``views.render``): o teste faz
-``mock.patch('ia_ocr.views.render')``, que só vale se o call site
-resolver o nome no objeto do pacote, a cada chamada.
-``mock.patch('ia_ocr.views.revisao.pendencias')`` age no MÓDULO
-``ia_ocr.revisao``, que o call site segue usando como atributo de módulo
-(``revisao.pendencias(...)``). Todo outro helper de outro módulo do
-pacote vem por import direto do dono e é chamada direta. Ver o docstring
-do ``__init__.py``.
+A rota é um redirect: a tela de cards (``revisao_campos.html`` +
+``ocr_revisao.js``) foi substituída pela revisão dentro do formulário de
+lançamento (``views/revisar.py``). Favoritos e abas abertas no servidor de
+testes continuam chegando aqui e são encaminhados à entrada da revisão.
+
+O RESTO do módulo é a tela antiga, ainda no tree até a aposentadoria
+(fase 4 apaga o corpo, o template e o JS num diff só de remoção): os
+helpers de rótulo/máscara/opções e ``_renderizar_tela``, que a rota NÃO
+chama mais — existe para os testes de ``test_revisao_tela_*`` exercitarem
+o MESMO caminho de renderização de antes, sem rota. Não é código morto
+para sempre: morre junto com a tela no passo 3–5 da §5 do plano.
+
+Extraídos do monólito de views (etapa 3, limite de 400 linhas). As
+máscaras de PII que viviam aqui foram para ``ia_ocr/mascaras.py``.
 """
 import re
 
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import Http404
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_GET
 
 from dominial.models import Cartorios, LancamentoTipo, Pessoas
 
-from .. import estados, revisao, rotulos, services, views
+from .. import estados, revisao, rotulos, services
+from ..mascaras import _mascarar_cpf, _mascarar_evidencia, _mascarar_rg
 from .jobs import _contexto_job, _kwargs_job
 from .resposta import _aviso_nao_consta, _avisos_descritos, _url_tela
 
 
-def _mascarar_cpf(cpf):
-    digitos = re.sub(r'\D', '', cpf or '')
-    return f'CPF ***.***.***-{digitos[-2:]}' if len(digitos) >= 2 else 'CPF ***'
+@login_required
+@require_GET
+def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
+    """Encaminha à revisão por formulário; a hierarquia segue valendo 404."""
+    tis, imovel, documento, job = _contexto_job(
+        request, tis_id, imovel_id, documento_id, job_id
+    )
+    return redirect('revisar_job_ocr', **_kwargs_job(tis, imovel, documento, job))
 
 
-_CPF = re.compile(r'\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}\b')
-_RG = re.compile(r'\b\d{1,2}\.\d{3}\.\d{3}-?[\dXx]\b')
-_RG_ROTULO = re.compile(
-    r'(?i)(\bR\.?G\.?(?:\s*n\.?\s*[º°o]?\.?)?\s*[:\-]?\s*)'
-    r'\d(?:[.\-/\s]?\d){4,11}(?:[-\s]?[\dXx])?'
-)
+class _TelaCampos:
+    """Resposta-like da tela de cards para os testes (sem rota desde a fase 3).
 
+    O que ``test_revisao_tela_*`` consome da resposta do cliente: conteúdo,
+    contexto e status. ``render``/``is_rendered`` existe porque o
+    ``assertContains`` do Django renderiza respostas tardias.
+    """
 
-def _mascarar_evidencia(trecho):
-    """Esconde CPF/RG no trecho exibido; datas, valores e CNS ficam intactos."""
-    if not trecho:
-        return trecho
-    mascarado = _CPF.sub('***', trecho)
-    mascarado = _RG.sub('***', mascarado)
-    return _RG_ROTULO.sub(r'\1***', mascarado)
+    def __init__(self, context, content):
+        self.context = context
+        self.content = content
+        self.status_code = 200
+        self.is_rendered = True
+        self.streaming = False
+        self.charset = 'utf-8'
 
-
-def _mascarar_rg(rg):
-    digitos = re.sub(r'\D', '', rg or '')
-    return f'RG ***{digitos[-2:]}' if len(digitos) >= 2 else 'RG ***'
+    def render(self):
+        return self
 
 
 def _rotulo_pessoa(pessoa):
@@ -110,12 +115,12 @@ def _anexar_opcoes_cadastro(campos):
         ).only('nome', 'cidade', 'estado', 'cns')
     }
 
-    def opcoes(ids, escolhido, rotulos):
+    def opcoes(ids, escolhido, rotulos_fn):
         lista = list(ids or [])
         if escolhido and escolhido not in lista:
             lista.append(escolhido)
         return [
-            {'id': pk, 'rotulo': rotulos.get(pk, 'Cadastro indisponível')}
+            {'id': pk, 'rotulo': rotulos_fn.get(pk, 'Cadastro indisponível')}
             for pk in lista
         ]
 
@@ -188,20 +193,12 @@ def _opcoes_tipo_sugerido():
     ]
 
 
-@login_required
-@require_GET
-def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
-    """Revisão da extração vigente; após finalizar, a tela é somente leitura."""
-    tis, imovel, documento, job = _contexto_job(
-        request, tis_id, imovel_id, documento_id, job_id
-    )
-    kwargs_job = _kwargs_job(tis, imovel, documento, job)
-    if job.status not in (estados.EXTRAIDO, estados.REVISADO):
-        messages.info(request, 'Extraia os campos antes de revisá-los.')
-        return redirect(_url_tela(kwargs_job))
+def _renderizar_tela(request, tis, imovel, documento, job):
+    """Corpo da tela de cards, SEM a rota (#341 fase 3) — ver o docstring do
+    módulo. Mesmo contrato de antes: job em ``extraido``/``revisado``,
+    extração vigente presente; devolve ``_TelaCampos`` com o contexto.
+    """
     extracao = job.extracao_vigente()
-    if extracao is None:
-        raise Http404('Extração indisponível.')
     todas_as_linhas = list(extracao.campos.order_by('chave'))
     # Token do estado salvo: os candidatos abaixo são só de exibição. O
     # token cobre TODAS as linhas salvas — inclusive as ignoradas na tela
@@ -218,12 +215,8 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     _anexar_opcoes_cadastro(campos)
     # P2-2 (#322/PR #327, rodada 10): o card tem que mostrar o tipo que
     # pendências, prévia e importação vão usar — o resolvedor único da
-    # revisão, AGORA COM A ORIGEM. Nada de recalcular a precedência aqui:
-    # a cópia anterior divergia em dois estados alcançáveis (linha de tipo
-    # descartada e valor explícito fora de TIPOS_SUGERIDOS criado pelo
-    # backfill da 0009). Rodada 12: a resolução cobre também o ato
-    # DESCARTADO (mesmo resolvedor, contexto que ignora só o descarte
-    # dele) — o fallback de valor_final/normalized da rodada 11 saiu.
+    # revisão, AGORA COM A ORIGEM. Rodada 12: a resolução cobre também o ato
+    # DESCARTADO (mesmo resolvedor, contexto que ignora só o descarte dele).
     resolucoes = revisao.resolucoes_de_tipo(extracao)
     for campo in campos:
         campo.evidencia_trecho = _mascarar_evidencia(campo.evidencia_trecho)
@@ -235,23 +228,19 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         ) is not None
         if campo.eh_tipo_sugerido:
             # O que o <select> traz selecionado é o que a importação vai
-            # usar — inclusive quando a linha de tipo está descartada (o
-            # resolvedor já pula a linha e cai no rótulo) e quando o ATO
-            # está descartado. Única exceção: origem 'limpo' = select
-            # APAGADO (P2-1), decisão de "sem tipo" — nenhuma opção
-            # marcada. Sem linha estrutural do ato não há resolução
-            # (estado inalcançável: o desnormalizar sempre cria a linha do
-            # ato antes da de tipo) e o select fica em branco.
+            # usar — inclusive quando a linha de tipo está descartada e
+            # quando o ATO está descartado. Única exceção: origem 'limpo' =
+            # select APAGADO (P2-1), decisão de "sem tipo" — nenhuma opção
+            # marcada. Sem linha estrutural do ato não há resolução (estado
+            # inalcançável: o desnormalizar sempre cria a linha do ato antes
+            # da de tipo) e o select fica em branco.
             tipo, origem = resolucoes.get(
                 campo.chave.rsplit('/', 1)[0], (None, 'nenhum'),
             )
             campo.tipo_exibido = '' if origem == 'limpo' else tipo
     # I-11a (#321): a tela agrupa como o FORMULÁRIO de lançamento — seção
     # Documento, um bloco por ato em ordem reversa, não reconhecidos e
-    # "Outros dados lidos" —, não mais por destino técnico
-    # (``dominial.Lancamento.tipo``/``SEM_DESTINO``). As opções do <select>
-    # são calculadas UMA vez: o display do subtítulo do ato sai da mesma
-    # fonte que desenha as opções.
+    # "Outros dados lidos" —, não mais por destino técnico.
     opcoes_tipo = _opcoes_tipo_sugerido()
     somente_leitura = job.status == estados.REVISADO
     pendencias = services._com_bloqueios_de_campo(
@@ -307,7 +296,8 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
     for item in pendencias_descritas:
         if item['alvo'] is not None and item['alvo'] not in ids_da_tela:
             item['alvo'] = None
-    return views.render(request, 'ia_ocr/revisao_campos.html', {
+    kwargs_job = _kwargs_job(tis, imovel, documento, job)
+    context = {
         'tis': tis,
         'imovel': imovel,
         'documento': documento,
@@ -339,4 +329,6 @@ def campos_job_ocr(request, tis_id, imovel_id, documento_id, job_id):
         'url_documento': reverse('documento_detalhado', kwargs={
             'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
         }),
-    })
+    }
+    resposta = render(request, 'ia_ocr/revisao_campos.html', context)
+    return _TelaCampos(context, resposta.content)

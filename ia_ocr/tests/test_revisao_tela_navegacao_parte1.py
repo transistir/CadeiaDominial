@@ -55,12 +55,14 @@ class RevisaoTelaTestParte1:
         return None
 
     def test_tela_exige_extraido(self):
+        # #341 fase 3: `campos/` só encaminha; quem recusa o estado é a
+        # entrada da revisão, com o mesmo aviso de antes.
         self._extracao()
         OcrJob.objects.filter(pk=self.job.pk).update(status=estados.CONCLUIDO)
 
-        resposta = self._tela()
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
-        self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+        self.assertEqual(resposta.redirect_chain[-1], (self.url_tela(), 302))
         self.assertTrue(self.mensagens(resposta))
 
     def test_tela_renderiza_campos_e_versao(self):
@@ -69,7 +71,6 @@ class RevisaoTelaTestParte1:
         resposta = self._tela()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertTemplateUsed(resposta, 'ia_ocr/revisao_campos.html')
         self.assertContains(resposta, 'data-ocr-revisao')
         self.assertContains(resposta, f'data-versao="{resposta.context["versao"]}"')
         self.assertContains(resposta, ' data-campo\n', count=extracao.campos.count())

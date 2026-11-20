@@ -24,6 +24,14 @@ class EntradaETelaTest(RevisaoFormularioBase):
 
         self.assertRedirects(resposta, self.url_ato(0), fetch_redirect_response=False)
 
+    def test_campos_redireciona_para_a_revisao(self):
+        """#341 fase 3: a tela de cards se aposenta — `campos/` entra na revisão."""
+        resposta = self.client.get(reverse('campos_job_ocr', kwargs=self.kwargs()))
+
+        self.assertRedirects(
+            resposta, self.url_entrada(), fetch_redirect_response=False,
+        )
+
     def test_formulario_do_ato_vem_preenchido(self):
         resposta = self.client.get(self.url_ato(0))
 

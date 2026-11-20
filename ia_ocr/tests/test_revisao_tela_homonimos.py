@@ -10,16 +10,27 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from dominial.managers import documentos_for_user
 from dominial.models import (
-    Cartorios, Documento, DocumentoTipo, Imovel, TIs,
+    Cartorios,
+    Documento,
+    DocumentoTipo,
+    Imovel,
+    TIs,
 )
+from ia_ocr import revisao, services
 
 from .payloads_extracao import _campo, payload_registro
 from .test_revisao_tela_base import TelaRevisaoBase
 
 
 class HomonimoNaTelaTest(TelaRevisaoBase):
-    """#267: o aviso de homônimo sai do escopo do USUÁRIO, nunca do global."""
+    """#267: o aviso de homônimo sai do escopo do USUÁRIO, nunca do global.
+
+    #341 fase 3: a tela de cards se foi; o cálculo que ela exibia é o MESMO
+    que a resposta do save (viva até a aposentadoria) devolve — o escopo é
+    asserido direto em ``revisao.avisos`` com ``documentos_for_user``.
+    """
 
     def _preparar(self, imovel_do_homonimo):
         cartorio = Cartorios.objects.create(
@@ -42,23 +53,32 @@ class HomonimoNaTelaTest(TelaRevisaoBase):
         extracao.campos.filter(chave='/acts/0/origem/cartorio').update(
             criar_novo=False, cartorio_escolhido_id=cartorio.pk,
         )
+        return extracao
 
-    def _motivos(self):
-        return [item['motivo'] for item in self._tela().context['avisos']]
+    def _avisos_do_escopo(self, extracao):
+        return [
+            revisao.descrever_aviso(item)
+            for item in revisao.avisos(
+                extracao, documentos_queryset=documentos_for_user(self.dono),
+            )
+        ]
+
+    def _motivos(self, extracao):
+        return [item['motivo'] for item in self._avisos_do_escopo(extracao)]
 
     def test_homonimo_no_escopo_do_usuario_aparece_com_rotulo(self):
-        self._preparar(self.imovel)
+        extracao = self._preparar(self.imovel)
 
-        resposta = self._tela()
+        descritos = self._avisos_do_escopo(extracao)
 
-        self.assertIn('origem_homonimo_outro_tipo', self._motivos())
+        self.assertIn('origem_homonimo_outro_tipo', self._motivos(extracao))
         item = next(
-            i for i in resposta.context['avisos']
+            i for i in descritos
             if i['motivo'] == 'origem_homonimo_outro_tipo'
         )
         self.assertEqual(item['chave'], '/acts/0/origem/numero')
-        self.assertContains(resposta, 'Há um documento de outro tipo')
-        self.assertNotContains(resposta, 'M366')
+        self.assertIn('Há um documento de outro tipo', item['rotulo'])
+        self.assertNotIn('M366', item['rotulo'])
 
     def test_homonimo_de_outra_ti_nao_aparece_nem_vaza(self):
         outra = TIs.objects.create(nome='TI Alheia T267', codigo='TI-T267', etnia='X')
@@ -67,22 +87,24 @@ class HomonimoNaTelaTest(TelaRevisaoBase):
             terra_indigena_id=outra, proprietario=self.imovel.proprietario,
             cartorio=self.imovel.cartorio,
         )
-        self._preparar(imovel_alheio)
+        extracao = self._preparar(imovel_alheio)
 
-        resposta = self._tela()
+        descritos = self._avisos_do_escopo(extracao)
 
-        self.assertNotIn('origem_homonimo_outro_tipo', self._motivos())
+        self.assertNotIn('origem_homonimo_outro_tipo', self._motivos(extracao))
         for segredo in ('M366', 'ImovelAlheioT267', 'TI Alheia T267'):
             with self.subTest(segredo=segredo):
-                self.assertNotContains(resposta, segredo)
+                self.assertNotIn(
+                    segredo, json.dumps(descritos, ensure_ascii=False),
+                )
 
     # #324 (PR #343): a resposta do save usa o MESMO escopo da abertura.
 
-    def _salvar_e_ler_avisos(self):
+    def _salvar_e_ler_avisos(self, extracao):
         salvar = self.client.post(
             self.url('salvar_bloco_ocr'),
             data=json.dumps({
-                'versao': self._tela().context['versao'],
+                'versao': services.versao_bloco(extracao),
                 'decisoes': [{
                     'chave': '/acts/0/origem/livro', 'incluir': True,
                     'valor': '3-A',
@@ -94,9 +116,9 @@ class HomonimoNaTelaTest(TelaRevisaoBase):
         return salvar
 
     def test_save_devolve_o_homonimo_do_escopo_do_usuario(self):
-        self._preparar(self.imovel)
+        extracao = self._preparar(self.imovel)
 
-        salvar = self._salvar_e_ler_avisos()
+        salvar = self._salvar_e_ler_avisos(extracao)
 
         (aviso,) = [
             item for item in salvar.json()['avisos']
@@ -114,9 +136,9 @@ class HomonimoNaTelaTest(TelaRevisaoBase):
             terra_indigena_id=outra, proprietario=self.imovel.proprietario,
             cartorio=self.imovel.cartorio,
         )
-        self._preparar(imovel_alheio)
+        extracao = self._preparar(imovel_alheio)
 
-        salvar = self._salvar_e_ler_avisos()
+        salvar = self._salvar_e_ler_avisos(extracao)
 
         self.assertNotIn(
             'origem_homonimo_outro_tipo',
@@ -183,8 +205,8 @@ class HomonimoEmLoteNoSaveTest(TelaRevisaoBase):
     def _consultas_do_save(self, total):
         """POST que muda só um campo do documento (como o review mediu) com
         ``total`` atos; devolve consultas do POST e da fatia de homônimos."""
-        self._extracao_com_origens(total)
-        versao = self._tela().context['versao']
+        extracao = self._extracao_com_origens(total)
+        versao = services.versao_bloco(extracao)
         with CaptureQueriesContext(connection) as capturado:
             resposta = self.client.post(
                 self.url('salvar_bloco_ocr'),

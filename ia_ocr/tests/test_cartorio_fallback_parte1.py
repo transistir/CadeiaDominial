@@ -6,8 +6,6 @@ from ia_ocr.models import CampoSugerido
 from ia_ocr.revisao import IndiceCartorios
 
 from .test_cartorio_fallback_base import CHAVE
-from .test_revisao_tela_base import _descendentes
-from .test_ui_card_ocr import _atributos, _elementos
 
 
 class CartorioFallbackTestParte1:
@@ -285,21 +283,10 @@ class CartorioFallbackTestParte1:
 
     def test_tela_lista_opcao_sem_preselecionar(self):
         extracao = self._com_cartorio_sem_candidatos()
-        html = self._tela().content.decode()
-        card = next(
-            c for c in _elementos(html, 'article', presentes=('data-campo',))
-            if _atributos(c)['data-chave'] == CHAVE
-        )
-        select = _descendentes(card, 'select', 'data-ocr-escolha')[0]
-        opcoes = [
-            o for o in _descendentes(select, 'option', 'value')
-            if _atributos(o)['value']
-        ]
-        self.assertEqual(
-            [_atributos(o)['value'] for o in opcoes], [str(self.itamaraju.pk)],
-        )
-        self.assertTrue(all('selected' not in _atributos(o) for o in opcoes))
-        # Exibição apenas: nada foi gravado.
+        # #341 fase 3: o fallback é cálculo de exibição (o GET da tela
+        # oferecia a lista sem pré-seleção e sem gravar nada) — resolvido
+        # direto no resolvedor agora que a tela se foi.
+        self.assertEqual(self._candidatos(extracao), [self.itamaraju.pk])
         campo = extracao.campos.get(chave=CHAVE)
         self.assertEqual(campo.match_candidatos, [])
         self.assertIsNone(campo.cartorio_escolhido_id)

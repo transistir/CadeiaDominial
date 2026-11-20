@@ -108,10 +108,10 @@ class CartorioFallbackTestParte2:
         )
         resposta = self._salvar(extracao, self.itamaraju.pk)
         self.assertEqual(resposta.status_code, 200, resposta.content)
-        # Trocar de cartório depende do seletor continuar oferecendo o
-        # fallback inteiro depois de uma escolha salva.
+        # Trocar de cartório depende do fallback continuar oferecendo os
+        # outros cartórios da comarca depois de uma escolha salva.
         self.assertEqual(
-            self._opcoes_cartorio(),
+            [str(pk) for pk in self._candidatos(extracao)],
             [str(self.itamaraju.pk), str(self.outro.pk)],
         )
 

@@ -1,10 +1,12 @@
-"""Complementos da revisão por ato: tela e confirmação da duplicata (#341)."""
+"""Complementos da revisão por ato: tela e confirmação da duplicata e a
+conclusão sem atos (#341)."""
 
 import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -13,9 +15,15 @@ from dominial.models import Documento, DocumentoDigital
 from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
 
 from .. import estados, revisao_ato, services, views
+from ..estados import TransicaoConcorrente, TransicaoInvalida
 from .jobs import _contexto_job, _kwargs_job
+from .resposta import _url_tela
 
 logger = logging.getLogger(__name__)
+
+MENSAGEM_SEM_ATOS_CONCLUIDA = (
+    '✅ Revisão concluída: a extração foi finalizada sem atos.'
+)
 
 
 class _DuplicataRecusada(Exception):
@@ -113,6 +121,86 @@ def revisar_ato_duplicata_ocr(request, tis_id, imovel_id, documento_id, job_id,
     revisao_ato.limpar_rascunho(request, extracao, indice)
     messages.success(request, '✅ Cadeia duplicada importada e ato salvo como lançamento.')
     return redirect(reverse('revisar_job_ocr', kwargs=kwargs_job))
+
+
+def _url_documento(tis, imovel, documento):
+    """URL da tela do documento — mesma forma do módulo ``revisar``."""
+    return reverse('documento_detalhado', kwargs={
+        'tis_id': tis.pk, 'imovel_id': imovel.pk, 'documento_id': documento.pk,
+    })
+
+
+def renderizar_sem_atos(request, tis, imovel, documento, job, extracao,
+                        kwargs_job):
+    """GET da confirmação "concluir sem atos" (#262) pela revisão (#341).
+
+    O chamador já garantiu ``job.status == estados.EXTRAIDO`` e
+    ``services.pode_finalizar_sem_atos(extracao)``; o POST desta página é
+    ``revisar_sem_atos_ocr``, que revalida o ``versao`` sob trava.
+    """
+    return views.render(request, 'ia_ocr/revisao_sem_atos.html', {
+        'tis': tis,
+        'imovel': imovel,
+        'documento': documento,
+        'job': job,
+        'extracao': extracao,
+        'versao': services.versao_bloco(extracao),
+        'url_sem_atos': reverse('revisar_sem_atos_ocr', kwargs=kwargs_job),
+        'url_texto': _url_tela(kwargs_job),
+        'url_documento': _url_documento(tis, imovel, documento),
+    })
+
+
+@login_required
+@require_POST
+def revisar_sem_atos_ocr(request, tis_id, imovel_id, documento_id, job_id):
+    """Conclui a revisão sem atos (#262) pela revisão por formulário (#341).
+
+    Formulário HTML — não JSON — que substitui ``campos/finalizar/`` para
+    este caso: o ``versao`` exibido no GET valida o estado sob trava e o
+    serviço recusa quando a revisão mudou, quando há pendência além de
+    ``nenhum_ato`` ou quando o estado do job não permite finalizar. Em tudo
+    isso nada é gravado e a entrada da revisão recarrega o estado atual.
+    """
+    tis, imovel, documento, job = _contexto_job(
+        request, tis_id, imovel_id, documento_id, job_id,
+    )
+    kwargs_job = _kwargs_job(tis, imovel, documento, job)
+    entrada = reverse('revisar_job_ocr', kwargs=kwargs_job)
+    # Sem o token que a tela exibiu, não há como saber se a revisão mudou:
+    # ``finalizar_revisao`` com ``versao_cliente=None`` dispensaria a
+    # comparação — exatamente o que um POST malformado não pode ganhar.
+    versao = request.POST.get('versao')
+    if not isinstance(versao, str) or not versao:
+        return HttpResponseBadRequest('Campo "versao" ausente ou inválido.')
+    extracao = job.extracao_vigente()
+    if extracao is None:
+        raise Http404('Extração indisponível.')
+    try:
+        services.finalizar_revisao(
+            extracao, request.user, versao_cliente=versao,
+            confirmar_sem_atos=True,
+        )
+    except services.ConflitoVersao:
+        messages.warning(request, (
+            '⚠️ A revisão mudou depois que esta página foi aberta; '
+            'recarregue. Nada foi gravado.'
+        ))
+        return redirect(entrada)
+    except services.RevisaoIncompleta:
+        messages.warning(request, (
+            '⚠️ Esta extração tem pendências além da ausência de atos; '
+            'revise o documento antes de concluir. Nada foi gravado.'
+        ))
+        return redirect(entrada)
+    except (services.ExtracaoRecusada, TransicaoInvalida, TransicaoConcorrente):
+        messages.error(
+            request,
+            'Este processamento não permite concluir no estado atual.',
+        )
+        return redirect(entrada)
+    messages.success(request, MENSAGEM_SEM_ATOS_CONCLUIDA)
+    return redirect(_url_documento(tis, imovel, documento))
 
 
 def _dados_do_formulario(post):

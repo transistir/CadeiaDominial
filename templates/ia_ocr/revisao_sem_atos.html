@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Revisão sem atos - {{ documento.numero }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="cadeia-header">
+        <h1>Revisão da extração</h1>
+        <div class="imovel-info">
+            <div><strong>Imóvel:</strong> {{ imovel.nome }}</div>
+            <div><strong>Documento:</strong> {{ documento.tipo.get_tipo_display }} {{ documento.numero }}</div>
+        </div>
+    </div>
+
+    <div class="alert alert-warning" role="status">
+        <p class="mb-2">
+            A extração não reconheceu nenhum ato (lançamento) neste documento.
+        </p>
+        <p class="mb-0">
+            Se o documento realmente não traz lançamento a registrar, conclua a
+            revisão sem atos abaixo. Se deveria trazer, volte ao texto, confirme
+            as páginas e reextraia os campos.
+        </p>
+    </div>
+
+    <form method="post" action="{{ url_sem_atos }}" class="d-flex gap-2 flex-wrap">
+        {% csrf_token %}
+        {# Token do estado da revisão: mudou desde o GET, o serviço recusa. #}
+        <input type="hidden" name="versao" value="{{ versao }}">
+        <button type="submit" class="btn btn-primary">Concluir sem atos</button>
+        <a href="{{ url_texto }}" class="btn btn-secondary">← Voltar ao texto</a>
+    </form>
+</div>
+{% endblock %}

@@ -9,10 +9,9 @@ import json
 from unittest import mock
 
 from django.conf import settings
-from django.http import HttpResponse
 from django.test import Client
+from django.urls import reverse
 
-from dominial.managers import documentos_for_user
 from ia_ocr import estados, revisao, services
 from ia_ocr.estados import TransicaoInvalida
 from ia_ocr.models import OcrJob
@@ -267,100 +266,69 @@ class ExtracaoViewsTestParte3:
                 self.assertEqual(resposta.json(), {'erro': 'estado_invalido'})
 
     def test_campos_exige_extraido_ou_revisado(self):
+        # #341 fase 3: `campos/` virou encaminhamento; quem recusa o estado
+        # é a entrada da revisão — de volta à tela do texto (que, sem texto
+        # pronto, segue para o upload) ou ao documento quando a revisão já
+        # foi concluída (importado).
+        upload = reverse('upload_documento_digital', kwargs={
+            'tis_id': self.ti.pk, 'imovel_id': self.imovel.pk,
+            'documento_id': self.documento.pk,
+        })
+        destinos = {
+            'pendente': upload,
+            'em_execucao': upload,
+            'falhou': upload,
+            'concluido': self.url_tela(),
+            'texto_confirmado': self.url_tela(),
+            'importado': self._url_documento(),
+        }
         for status, _rotulo in estados.STATUS_CHOICES:
             if status in (estados.EXTRAIDO, estados.REVISADO):
                 continue
             with self.subTest(status=status):
                 OcrJob.objects.filter(pk=self.job.pk).update(status=status)
 
-                resposta = self.client.get(self.url('campos_job_ocr'))
+                resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
-                self.assertRedirects(resposta, self.url_tela(), fetch_redirect_response=False)
+                self.assertEqual(resposta.status_code, 200)
+                self.assertEqual(
+                    resposta.redirect_chain[0],
+                    (self.url('revisar_job_ocr'), 302),
+                )
+                self.assertEqual(resposta.redirect_chain[-1][0], destinos[status])
                 self.assertEqual(self.mensagens(resposta)[-1][0], 'info')
 
     def test_campos_contexto_da_extracao_vigente_e_somente_leitura(self):
+        # #341 fase 3: a tela de cards se aposentou e `campos/` só encaminha
+        # à revisão por formulário — em EXTRAIDO e em REVISADO igualmente
+        # (quem diferencia os estados é a entrada da revisão).
         self._extracao()
         vigente = self._extracao()
         for status, dpi in ((estados.EXTRAIDO, 300), (estados.REVISADO, None)):
-            with self.subTest(status=status), mock.patch(
-                'ia_ocr.views.render', return_value=HttpResponse(),
-            ) as renderizar:
+            with self.subTest(status=status):
                 OcrJob.objects.filter(pk=self.job.pk).update(status=status, dpi=dpi)
 
                 resposta = self.client.get(self.url('campos_job_ocr'))
 
-                self.assertEqual(resposta.status_code, 200)
-                self.assertEqual(renderizar.call_args.args[1], 'ia_ocr/revisao_campos.html')
-                contexto = renderizar.call_args.args[2]
-                self.assertEqual(contexto['extracao'], vigente)
-                chaves = [campo.chave for campo in contexto['campos']]
-                self.assertEqual(chaves, sorted(chaves))
-                agrupados = [
-                    campo for secao in contexto['secoes']
-                    if secao['tipo'] != 'nao_reconhecidos'
-                    for campo in secao['campos']
-                ]
-                self.assertCountEqual(agrupados, contexto['campos'])
-                documento = contexto['secoes'][0]
-                self.assertEqual(documento['tipo'], 'documento')
-                self.assertEqual(
-                    [campo for campo in documento['campos']
-                     if campo.chave == '/document/data'],
-                    [vigente.campos.get(chave='/document/data')],
+                self.assertRedirects(
+                    resposta, self.url('revisar_job_ocr'),
+                    fetch_redirect_response=False,
                 )
-                self.assertEqual(contexto['pendencias'], [
-                    revisao.descrever_pendencia(item)
-                    for item in revisao.pendencias(vigente)
-                ])
-                # O MESMO escopo que a view passa (``documentos_for_user`` do
-                # usuário logado): sem ele a comparação seguia outro caminho
-                # (a checagem de homônimo ficava desligada).
-                self.assertEqual(contexto['avisos'], [
-                    revisao.descrever_aviso(item)
-                    for item in revisao.avisos(
-                        vigente,
-                        documentos_queryset=documentos_for_user(self.dono),
-                    )
-                ])
-                self.assertEqual(contexto['versao'], services.versao_bloco(vigente))
-                self.assertEqual(contexto['somente_leitura'], status == estados.REVISADO)
-                self.assertEqual(contexto['dpi'], dpi or 200)
-                self.assertEqual(contexto['url_salvar'], self.url('salvar_bloco_ocr'))
-                self.assertEqual(contexto['url_finalizar'], self.url('finalizar_revisao_ocr'))
-                self.assertEqual(contexto['url_texto'], self.url_tela())
-                self.assertEqual(contexto['url_documento'], self._url_documento())
+                self.assertEqual(self.job.extracao_vigente(), vigente)
 
     def test_campos_versao_vem_da_mesma_lista_exibida(self):
+        # #341 fase 3: a tela de cards se foi; o token de versão que o
+        # revisor carrega continua protegendo a gravação — um save do outro
+        # revisor entre a leitura e o POST recusa o token velho com 409.
         extracao = self._extracao()
-        pendencias = revisao.pendencias
+        tela_versao = services.versao_bloco(extracao)
+        services.salvar_bloco(extracao, {
+            '/document/livro': {'incluir': False},
+        }, self.dono, tela_versao)
 
-        def outro_revisor_grava_durante_o_get(*args, **kwargs):
-            # Commit concorrente depois de a view já ter lido as linhas.
-            services.salvar_bloco(extracao, {
-                '/document/livro': {'incluir': False},
-            }, self.dono, services.versao_bloco(extracao))
-            return pendencias(*args, **kwargs)
-
-        with mock.patch(
-            'ia_ocr.views.render', return_value=HttpResponse(),
-        ) as renderizar, mock.patch(
-            'ia_ocr.views.revisao.pendencias',
-            side_effect=outro_revisor_grava_durante_o_get,
-        ):
-            resposta = self.client.get(self.url('campos_job_ocr'))
-
-        self.assertEqual(resposta.status_code, 200)
-        contexto = renderizar.call_args.args[2]
-        exibido = {campo.chave: campo for campo in contexto['campos']}
-        self.assertNotEqual(exibido['/document/livro'].status_revisao, 'descartado')
-        self.assertEqual(
-            contexto['versao'],
-            services.versao_bloco(extracao, campos=contexto['campos']),
-        )
-        self.assertNotEqual(contexto['versao'], services.versao_bloco(extracao))
-        # Com o token da tela, a gravação seguinte esbarra no save do outro.
         resposta = self._post_json('salvar_bloco_ocr', {
-            'versao': contexto['versao'],
+            'versao': tela_versao,
             'decisoes': [{'chave': '/document/livro', 'incluir': True}],
         })
+
         self.assertEqual(resposta.status_code, 409)

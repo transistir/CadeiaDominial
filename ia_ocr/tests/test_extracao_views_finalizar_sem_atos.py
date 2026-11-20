@@ -255,17 +255,21 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_get_com_bloqueio_de_campo_nao_oferece_sem_atos(self):
         # Issue #262: o bloqueio de campo fica escondido atrás de nenhum_ato,
-        # mas a tela precisa exibi-lo e não oferecer a confirmação.
+        # mas a confirmação só é oferecida quando ele é a ÚNICA pendência.
+        # #341 fase 3: quem oferece é a revisão por formulário; com o
+        # bloqueio, a entrada da revisão nem chega a oferecê-la.
         extracao = self._extracao_sem_atos()
         self._descartar_data(extracao)
+        self.assertFalse(services.pode_finalizar_sem_atos(extracao))
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
-        html = resposta.content.decode()
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
+        self.assertEqual(resposta.redirect_chain[-1][0], self.url_tela())
         self.assertEqual(resposta.status_code, 200)
-        self.assertNotIn('data-permitir-sem-atos', html)
-        self.assertNotIn('data-ocr-sem-atos', html)
-        self.assertIn('Campo obrigatório não preenchido — informe a data', html)
+        self.assertIn(
+            ('info', 'A extração não trouxe nenhum ato para revisar.'),
+            self.mensagens(resposta),
+        )
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_post_sem_atos_com_bloqueio_de_campo_422_explica(self):
@@ -292,16 +296,19 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=False)
     def test_flag_desligada_mescla_bloqueio_de_campo_na_tela_e_no_422(self):
         # Issue #262: a mesclagem de bloqueios de campo não depende da flag;
-        # sem atos, a tela e o 422 listam /acts e a chave do campo descartado.
+        # sem atos e com flag desligada, a entrada da revisão volta à tela do
+        # texto e o 422 lista /acts e a chave do campo descartado.
         extracao = self._extracao_sem_atos()
         self._descartar_data(extracao)
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
-        html = resposta.content.decode()
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
+        self.assertEqual(resposta.redirect_chain[-1][0], self.url_tela())
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn('Nenhum ato reconhecido neste documento', html)
-        self.assertIn('Campo obrigatório não preenchido — informe a data', html)
+        self.assertIn(
+            ('info', 'A extração não trouxe nenhum ato para revisar.'),
+            self.mensagens(resposta),
+        )
 
         resposta = self._post_finalizar({
             'versao': services.versao_bloco(extracao),
@@ -340,12 +347,15 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
             'chave': '/acts', 'motivo': 'nenhum_ato', 'bloqueante': True,
         }])
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
-        html = resposta.content.decode()
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertNotIn('data-permitir-sem-atos', html)
-        self.assertNotIn('data-ocr-sem-atos', html)
+        # #341 fase 3: atos descartados não aparecem na revisão (a saída é
+        # a mesma mensagem de "nenhum ato") e não liberam a finalização.
+        self.assertEqual(resposta.redirect_chain[-1][0], self.url_tela())
+        self.assertIn(
+            ('info', 'A extração não trouxe nenhum ato para revisar.'),
+            self.mensagens(resposta),
+        )
 
         resposta = self._post_finalizar({
             'versao': services.versao_bloco(extracao),
@@ -359,15 +369,20 @@ class FinalizarSemAtosViewsTest(TelaTextoBase):
 
     @override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
     def test_get_somente_leitura_nao_perde_title(self):
-        # Issue #262: job já REVISADO não pode reabrir a confirmação sem atos
-        # nem perder o title que explica o modo somente leitura.
+        # Issue #262: job já REVISADO não reabre a confirmação sem atos —
+        # `finalizar_revisao` só parte de `extraido`, então a entrada da
+        # revisão (#341) nem oferece o botão: volta à tela do texto.
         self._extracao_sem_atos()
         OcrJob.objects.filter(pk=self.job.pk).update(status=estados.REVISADO)
 
-        resposta = self.client.get(self.url('campos_job_ocr'))
-        html = resposta.content.decode()
+        resposta = self.client.get(self.url('campos_job_ocr'), follow=True)
 
+        self.assertEqual(resposta.redirect_chain[-1][0], self.url_tela())
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn('title="Esta extração já foi revisada."', html)
-        self.assertNotIn('data-permitir-sem-atos', html)
-        self.assertNotIn('data-ocr-sem-atos', html)
+        self.assertNotIn('revisao_sem_atos.html', [
+            t.name for t in resposta.templates
+        ])
+        self.assertIn(
+            ('info', 'A extração não trouxe nenhum ato para revisar.'),
+            self.mensagens(resposta),
+        )

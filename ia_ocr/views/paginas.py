@@ -191,7 +191,7 @@ def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
             # O POST atrasado de uma segunda aba: já há revisão vigente com
             # as correções de quem chegou primeiro — não é falha.
             messages.info(request, 'Os campos já foram extraídos.')
-            return redirect('campos_job_ocr', **kwargs_job)
+            return redirect('revisar_job_ocr', **kwargs_job)
         mensagens = {
             'sem_texto_ocr': 'O OCR ainda não devolveu texto para todas as páginas.',
             'extracao_desatualizada': 'A extração mudou. Recarregue a tela.',
@@ -228,6 +228,6 @@ def extrair_campos_ocr(request, tis_id, imovel_id, documento_id, job_id):
             request, 'Este processamento não permite extrair campos no estado atual.',
         )
     else:
-        messages.success(request, 'Extração concluída. Revise os campos.')
-        return redirect('campos_job_ocr', **kwargs_job)
+        messages.success(request, 'Extração concluída. Revise cada ato no formulário.')
+        return redirect('revisar_job_ocr', **kwargs_job)
     return redirect(_destino(request, kwargs_job))
