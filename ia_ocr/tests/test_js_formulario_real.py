@@ -23,7 +23,9 @@ from pathlib import Path
 
 from dominial.models import Lancamento
 
-from .test_revisao_formulario_view import RevisaoFormularioBase, _Formulario, post_do_html
+from .test_revisao_formulario_view_base import (
+    RevisaoFormularioBase, _Formulario, post_do_html,
+)
 
 TESTE_JS = Path(__file__).resolve().parent / "js" / "formulario_real.test.js"
 HARNESS_JS = Path(__file__).resolve().parent / "js" / "formulario_real.js"
