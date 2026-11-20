@@ -20,6 +20,13 @@
     {% if revisao_ia.restaurado %}
     <p class="ia-revisao-rascunho">Suas alterações não salvas deste ato foram restauradas.</p>
     {% endif %}
+    {% if revisao_ia.bloqueios %}
+    <ul class="ia-revisao-bloqueios">
+        {% for bloqueio in revisao_ia.bloqueios %}
+        <li>{{ bloqueio }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
     {% if revisao_ia.avisos %}
     <ul class="ia-revisao-avisos">
         {% for aviso in revisao_ia.avisos %}

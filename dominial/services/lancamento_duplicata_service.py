@@ -177,7 +177,8 @@ class LancamentoDuplicataService:
                 return {
                     'sucesso': True,
                     'mensagem': f"Importação realizada com sucesso! {resultado['documentos_importados']} documentos importados.",
-                    'documentos_importados': resultado['documentos_importados']
+                    'documentos_importados': resultado['documentos_importados'],
+                    'erros': resultado.get('erros', []),
                 }
             else:
                 erro_msg = resultado.get('erro', resultado.get('mensagem', 'Erro desconhecido na importação'))

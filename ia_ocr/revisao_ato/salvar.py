@@ -2,13 +2,15 @@
 
 from django.db import transaction
 
-from dominial.models import Cartorios, DocumentoDigital
+from dominial.managers import documentos_for_user
+from dominial.models import DocumentoDigital
 from dominial.services.cache_service import CacheService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.services.lancamento_service import LancamentoService
+from dominial.utils.criacao_automatica import sem_criacao_automatica
 
 from .. import estados, importacao, revisao, services
-from ..formulario import area_exige_decisao
+from .bloqueios import bloqueios_do_post
 from .consulta import (
     ESTADO_IMPORTADO,
     ESTADO_PENDENTE,
@@ -24,30 +26,23 @@ MENSAGEM_JOB_FORA_DE_REVISAO = (
 MENSAGEM_ATO_FORA_DA_REVISAO = (
     'Este ato não faz mais parte da revisão. Nada foi gravado.'
 )
-MENSAGEM_CARTORIO_NAO_CADASTRADO = (
-    "❌ O cartório da transmissão '{nome}' não está cadastrado. Selecione um "
-    'cartório da lista ou cadastre-o antes de salvar. Nada foi gravado.'
-)
-MENSAGEM_AREA_SEM_DECISAO = (
-    '❌ A área foi lida em unidade diferente de hectare. Preencha a área em '
-    'hectares ou marque o descarte explícito. Nada foi gravado.'
-)
 
 
 # ---------------------------------------------------------------------------
 # Salvar o ato
 # ---------------------------------------------------------------------------
 
-def salvar_ato(request, tis, imovel, documento, job, extracao, indice):
+def salvar_ato(request, tis, imovel, documento, job, extracao, indice, *,
+               apos_importacao=False):
     """Grava o ato ``indice`` pelo caminho do formulário manual.
 
     Tudo numa transação, com a ordem de travas da importação
     (``DocumentoDigital`` → job/extração → ``Documento``, esta última dentro
     do próprio service): o clique duplo e a reextração concorrente se
     serializam em vez de correr. A regra de validação e de duplicidade é a
-    do formulário manual (herdada, não copiada). Não cria cartório — o nome
-    da transmissão sem cadastro é recusado antes do service, que o criaria —
-    nem grava CPF/RG.
+    do formulário manual (herdada, não copiada). A revisão não cria documento
+    de origem; cartório digitado sem cadastro segue o comportamento do
+    formulário manual — nem grava CPF/RG.
 
     Levanta ``services.ExtracaoRecusada`` quando a extração deixou de ser a
     vigente; qualquer outra exceção volta à view, que desfaz tudo (o ``with``
@@ -84,32 +79,29 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice):
                 restantes=_restantes(atos, indice),
             )
 
-        area_preenchida = bool((request.POST.get('area') or '').strip())
-        descarte_explicito = request.POST.get('descartar_area') == '1'
-        if (
-            area_exige_decisao(extracao, indice, linhas)
-            and not area_preenchida
-            and not descarte_explicito
-        ):
-            return Resultado('invalido', mensagem=MENSAGEM_AREA_SEM_DECISAO)
+        bloqueios = bloqueios_do_post(request.POST, extracao, indice, linhas)
+        if bloqueios:
+            return Resultado('invalido', mensagem='\n'.join(bloqueios))
 
-        desconhecido = _cartorio_da_transmissao_nao_cadastrado(request.POST)
-        if desconhecido:
-            return Resultado(
-                'invalido',
-                mensagem=MENSAGEM_CARTORIO_NAO_CADASTRADO.format(nome=desconhecido),
+        with sem_criacao_automatica():
+            resultado = LancamentoService.criar_lancamento_completo(
+                request, tis, imovel, documento, apos_importacao=apos_importacao,
             )
-
-        resultado = LancamentoService.criar_lancamento_completo(
-            request, tis, imovel, documento,
-        )
         primeiro, segundo = resultado
         if isinstance(primeiro, dict) and primeiro.get('tipo') == 'duplicata_encontrada':
-            return Resultado('duplicata', mensagem=segundo or '')
+            return Resultado(
+                'duplicata', mensagem=segundo or '',
+                duplicata_info=primeiro.get('duplicata_info'),
+            )
         if not primeiro:
             return Resultado('invalido', mensagem=segundo or '')
 
         lancamento = primeiro
+        # #324/#341: identidade única encontrada no escopo do usuário vincula
+        # a FK, sem criar documento e ainda dentro desta mesma transação.
+        LancamentoOrigemService.vincular_documento_origem(
+            lancamento, documentos_queryset=documentos_for_user(request.user),
+        )
         ato = next(item for item in dados.atos if item.chave == chave)
         importacao._vincular(
             job, request.user, lancamento,
@@ -135,25 +127,6 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice):
             'salvo', mensagem_origens=segundo, lancamento=lancamento,
             lancamento_id=lancamento.pk, restantes=restantes,
         )
-
-
-def _cartorio_da_transmissao_nao_cadastrado(post):
-    """Nome lido pelo OCR, sem cadastro escolhido, que o service CRIARIA.
-
-    O formulário manual é rígido com o cartório da origem ("selecione da
-    lista"), mas no bloco Transmissão um nome sem id vira ``Cartorios`` novo
-    (``lancamento_campos_service``). Quem digita sabe o que está criando; o
-    texto que o OCR leu, não: a revisão pré-preenche só o NOME quando o
-    cartório não foi escolhido e não pode gravar cadastro por esse caminho
-    (#341: nada de cartório criado pelo fluxo da IA). Nome que já existe no
-    cadastro (``iexact``, a mesma busca do service) segue normalmente.
-    """
-    nome = (post.get('cartorio_transmissao_nome') or '').strip()
-    if not nome or (post.get('cartorio_transmissao') or '').strip():
-        return None
-    if Cartorios.objects.filter(nome__iexact=nome).exists():
-        return None
-    return nome
 
 
 def _restantes(atos, indice):

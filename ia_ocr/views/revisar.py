@@ -45,6 +45,7 @@ from .. import estados, formulario, revisao_ato, services, views
 from ..models import OcrJob
 from .jobs import _contexto_job, _kwargs_job
 from .resposta import _url_tela
+from .revisar_extras import mostrar_duplicata
 
 logger = logging.getLogger(__name__)
 
@@ -273,11 +274,13 @@ def _salvar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
         messages.error(request, resultado.mensagem)
         return redirect(_url_tela(kwargs_job))
 
-    # ``invalido``/``duplicata``: o service recusou e nada foi gravado — o
-    # formulário volta com os erros e com tudo o que foi digitado.
     if resultado.situacao == 'duplicata':
         messages.warning(request, MENSAGEM_DUPLICATA_NA_REVISAO)
-    else:
+        return mostrar_duplicata(
+            request, tis, imovel, documento, extracao, kwargs_job, indice,
+            resultado.duplicata_info,
+        )
+    if resultado.situacao == 'invalido':
         messages.error(request, resultado.mensagem)
     return _mostrar_ato(
         request, tis, imovel, documento, job, extracao, kwargs_job, atos, ato,
@@ -360,6 +363,7 @@ def _mostrar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
                 for item in atos
             ],
             'avisos': prefill['pendencias'],
+            'bloqueios': revisao_ato.bloqueios_do_prefill(prefill),
             'descartar_area': bool(
                 rascunho is not None
                 and rascunho.get('descartar_area') == '1'
