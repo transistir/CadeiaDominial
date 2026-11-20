@@ -161,8 +161,9 @@
                 <strong>Importante:</strong> Antes de importar a cadeia dominial, verifique se os documentos abaixo estão coerentes..
             </div>
             
-            <form method="post" action="{% url 'importar_duplicata' tis.id imovel.id documento.id %}">
+            <form method="post" action="{% if url_importar_duplicata %}{{ url_importar_duplicata }}{% else %}{% url 'importar_duplicata' tis.id imovel.id documento.id %}{% endif %}">
                 {% csrf_token %}
+                {% if extracao_id %}<input type="hidden" name="extracao_id" value="{{ extracao_id }}">{% endif %}
                 <input type="hidden" name="documento_origem_id" value="{{ duplicata_info.documento_origem.id }}">
                 
                 <!-- Enviar todos os documentos da cadeia -->
@@ -171,6 +172,11 @@
                 {% endfor %}
                 
                 <!-- Preservar dados do formulário original -->
+                {% if campos_preservados %}
+                {% for nome, valor in campos_preservados %}
+                <input type="hidden" name="{{ nome }}" value="{{ valor }}">
+                {% endfor %}
+                {% else %}
                 {% if form_data %}
                 <input type="hidden" name="tipo_lancamento" value="{{ form_data.tipo_lancamento|default_if_none:'' }}">
                 <input type="hidden" name="numero_lancamento" value="{{ form_data.numero_lancamento|default_if_none:'' }}">
@@ -249,12 +255,13 @@
                 <input type="hidden" name="especificacao_fim_cadeia[]" value="{{ especificacao_fim_cadeia }}">
                 {% endfor %}
                 {% endif %}
+                {% endif %}
                 
                 <div class="mt-3">
                     <button type="submit" class="btn-importar">
                         <i class="fas fa-download"></i> Importar Cadeia Dominial Completa
                     </button>
-                    <a href="{% url 'cancelar_importacao_duplicata' tis.id imovel.id documento.id %}?origem={{ form_data.origem_completa.0|default:'' }}&cartorio={{ form_data.cartorio|default:'' }}" 
+                    <a href="{% if url_cancelar_duplicata %}{{ url_cancelar_duplicata }}{% else %}{% url 'cancelar_importacao_duplicata' tis.id imovel.id documento.id %}?origem={{ form_data.origem_completa.0|default:'' }}&cartorio={{ form_data.cartorio|default:'' }}{% endif %}"
                        class="btn-cancelar">
                         <i class="fas fa-times"></i> Cancelar e Alterar Dados
                     </a>

@@ -24,6 +24,7 @@ class Resultado:
     situacao: str
     mensagem: str = ''
     mensagem_origens: str | None = None
+    duplicata_info: dict | None = None
     lancamento: object = None
     lancamento_id: int | None = None
     # Índices dos atos que continuam pendentes depois deste POST, na ordem

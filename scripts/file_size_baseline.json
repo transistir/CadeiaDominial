@@ -30,7 +30,7 @@
     "dominial/tests/test_issue_230_documento_automatico_tipo.py": 414,
     "dominial/tests/test_relatorio_cartorios_suspeitos.py": 445,
     "dominial/tests/test_segregacao_usuario.py": 5202,
-    "dominial/utils/hierarquia_utils.py": 693,
+    "dominial/utils/hierarquia_utils.py": 677,
     "dominial/views/api_views.py": 534,
     "dominial/views/cadeia_dominial_views.py": 882,
     "dominial/views/documento_digital_views.py": 533,

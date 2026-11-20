@@ -43,6 +43,10 @@ urlpatterns = [
         _BASE + 'revisar/<int:indice>/',
         views.revisar_ato_ocr, name='revisar_ato_ocr',
     ),
+    path(
+        _BASE + 'revisar/<int:indice>/duplicata/',
+        views.revisar_ato_duplicata_ocr, name='revisar_ato_duplicata_ocr',
+    ),
     path(_BASE + 'campos/', views.campos_job_ocr, name='campos_job_ocr'),
     path(_BASE + 'campos/salvar/', views.salvar_bloco_ocr, name='salvar_bloco_ocr'),
     path(

@@ -6,6 +6,7 @@ import re
 from typing import NamedTuple
 
 from ..models import Documento, DocumentoTipo
+from .criacao_automatica import criacao_automatica_esta_bloqueada
 from .documento_identidade_utils import DocumentoIdentidade
 from .ordenacao_cadeia import eh_documento_do_imovel, ordenar_cadeia
 
@@ -615,7 +616,7 @@ def _validar_origem_existente(
     1. REGRA PÉTREA: Se é lançamento de início de matrícula, sempre permitir
     2. Se não é início de matrícula: documento deve existir em outro imóvel
     3. O documento não deve existir no imóvel atual
-    4. O documento deve ter pelo menos um lançamento real (se existir)
+    4. Fora do início de matrícula, a origem nunca é criada automaticamente
     
     Args:
         numero_documento (str): Número do documento (ex: "M123")
@@ -627,7 +628,9 @@ def _validar_origem_existente(
     Returns:
         bool: True se a origem deve ser criada, False caso contrário
     """
-    from ..models import Documento, Lancamento
+    # #341: a revisão assistida vincula a origem sem criar documento.
+    if criacao_automatica_esta_bloqueada():
+        return False
 
     cartorio_origem = cartorio or (lancamento.cartorio_origem if lancamento else None)
 
@@ -672,22 +675,3 @@ def _validar_origem_existente(
     # (já verificamos se existe em outros imóveis acima)
     if not documento_existente:
         return False
-
-    # Verificar se o documento tem lançamentos reais
-    lancamentos_count = Lancamento.objects.filter(
-        documento=documento_existente
-    ).count()
-
-    if lancamentos_count == 0:
-        return False
-
-    # Verificar se não existe no imóvel atual
-    documento_no_imovel_atual = documentos_queryset.filter(
-        numero=numero_documento,
-        imovel=imovel_atual
-    ).exists()
-
-    if documento_no_imovel_atual:
-        return False
-
-    return True

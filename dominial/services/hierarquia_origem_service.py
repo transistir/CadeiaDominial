@@ -3,6 +3,7 @@ Service especializado para processamento de origens na hierarquia
 """
 
 from ..models import Documento, Lancamento, Cartorios, DocumentoTipo
+from ..utils.criacao_automatica import criacao_automatica_esta_bloqueada
 from ..utils.documento_identidade_utils import DocumentoIdentidade
 from .documento_identidade_service import DocumentoIdentidadeService
 from .cache_service import CacheService
@@ -118,7 +119,7 @@ class HierarquiaOrigemService:
         )
 
         if not documento_existente:
-            if criar_documentos_automaticos:
+            if criar_documentos_automaticos and not criacao_automatica_esta_bloqueada():
                 # Criar o documento automaticamente com CRI da origem
                 return HierarquiaOrigemService._criar_documento_automatico(
                     imovel, lancamento, origem_info, cartorio_origem, documentos_queryset

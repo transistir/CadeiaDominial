@@ -3,7 +3,7 @@ Service consolidado para operações de lançamento
 Consolida funcionalidades de múltiplos services menores em um único service coeso
 """
 
-from ..models import Lancamento, LancamentoTipo, Documento, Cartorios
+from ..models import Lancamento, LancamentoTipo
 from .lancamento_criacao_service import LancamentoCriacaoService
 from .lancamento_form_service import LancamentoFormService
 from .lancamento_validacao_service import LancamentoValidacaoService
@@ -142,11 +142,14 @@ class LancamentoService:
         return LancamentoCriacaoService._criar_lancamento_basico(documento_ativo, dados_lancamento, tipo_lanc)
     
     @staticmethod
-    def criar_lancamento_completo(request, tis, imovel, documento_ativo):
-        """
-        Cria um lançamento completo com todas as validações e processamentos
-        """
-        return LancamentoCriacaoService.criar_lancamento_completo(request, tis, imovel, documento_ativo)
+    def criar_lancamento_completo(
+        request, tis, imovel, documento_ativo, *, apos_importacao=False,
+    ):
+        """Cria um lançamento completo com todas as validações e processamentos."""
+        return LancamentoCriacaoService.criar_lancamento_completo(
+            request, tis, imovel, documento_ativo,
+            apos_importacao=apos_importacao,
+        )
     
     @staticmethod
     def atualizar_lancamento_completo(request, lancamento, imovel):

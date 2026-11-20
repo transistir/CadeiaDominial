@@ -55,13 +55,17 @@ from .rascunho import (
     rascunho_do_ato,
 )
 from .estado_post import _pessoas_do_post, estado_do_formulario
-from .salvar import (
+from .bloqueios import (
     MENSAGEM_AREA_SEM_DECISAO,
-    MENSAGEM_ATO_FORA_DA_REVISAO,
     MENSAGEM_CARTORIO_NAO_CADASTRADO,
+    MENSAGEM_INICIO_SEM_ORIGEM,
+    bloqueios_do_post,
+    bloqueios_do_prefill,
+)
+from .salvar import (
+    MENSAGEM_ATO_FORA_DA_REVISAO,
     MENSAGEM_JOB_FORA_DE_REVISAO,
     MOTIVO_TRANSICAO,
-    _cartorio_da_transmissao_nao_cadastrado,
     _registros_do_ato,
     _restantes,
     salvar_ato,
@@ -77,16 +81,18 @@ __all__ = [
     'MENSAGEM_AREA_SEM_DECISAO',
     'MENSAGEM_ATO_FORA_DA_REVISAO',
     'MENSAGEM_CARTORIO_NAO_CADASTRADO',
+    'MENSAGEM_INICIO_SEM_ORIGEM',
     'MENSAGEM_JOB_FORA_DE_REVISAO',
     'MOTIVO_TRANSICAO',
     'Resultado',
     '_PREFIXO_DA_ABA',
-    '_cartorio_da_transmissao_nao_cadastrado',
     '_pessoas_do_post',
     '_registros_do_ato',
     '_restantes',
     '_rotulo_da_aba',
     'atos_da_revisao',
+    'bloqueios_do_post',
+    'bloqueios_do_prefill',
     'estado_do_formulario',
     'estados',
     'guardar_rascunho',

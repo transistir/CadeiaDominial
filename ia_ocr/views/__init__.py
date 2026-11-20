@@ -58,7 +58,7 @@ from django.shortcuts import render  # noqa: F401 — alvo de patch: ia_ocr.view
 from .. import revisao, services  # noqa: F401
 
 from .middleware import _CsrfJsonMiddleware  # noqa: F401
-from .resposta import (
+from .resposta import (  # noqa: F401
     _aviso_nao_consta,
     _avisos_da_resposta,
     _avisos_descritos,
@@ -70,8 +70,8 @@ from .resposta import (
     _url_tela,
     _versao_do_formulario,
 )
-from .jobs import _contexto_job, _kwargs_job, _sem_atos_elegivel, texto_job_ocr
-from .paginas import (
+from .jobs import _contexto_job, _kwargs_job, _sem_atos_elegivel, texto_job_ocr  # noqa: F401
+from .paginas import (  # noqa: F401
     MENSAGEM_PAGINA_DESATUALIZADA,
     confirmar_pagina_ocr,
     confirmar_paginas_ocr,
@@ -79,7 +79,7 @@ from .paginas import (
     extrair_campos_ocr,
     reprocessar_job_ocr,
 )
-from .campos import (
+from .campos import (  # noqa: F401
     _anexar_opcoes_cadastro,
     _mascarar_cpf,
     _mascarar_evidencia,
@@ -90,14 +90,15 @@ from .campos import (
     _rotulo_pessoa,
     campos_job_ocr,
 )
-from .decisoes import (
+from .decisoes import (  # noqa: F401
     _chave_valor_invalido,
     _decisoes_bloco,
     _recusar_decisao,
     salvar_bloco_ocr,
 )
-from .importar import finalizar_revisao_ocr, importar_job_ocr
-from .revisar import (
+from .importar import finalizar_revisao_ocr, importar_job_ocr  # noqa: F401
+from .revisar_extras import revisar_ato_duplicata_ocr  # noqa: F401
+from .revisar import (  # noqa: F401
     MENSAGEM_ATO_JA_SALVO,
     MENSAGEM_DUPLICATA_NA_REVISAO,
     MENSAGEM_ERRO_INTERNO_DO_ATO,
