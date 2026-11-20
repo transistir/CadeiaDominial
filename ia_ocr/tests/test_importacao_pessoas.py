@@ -8,18 +8,16 @@ from copy import deepcopy
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Lancamento,
+    LancamentoPessoa, Pessoas,
 )
 from ia_ocr import importacao as modulo_importacao
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.importacao import ImportacaoInvalida
+from ia_ocr.models import CampoSugerido
 from ia_ocr.revisao import (
-    CAMPOS_DA_ORIGEM, ParteRevisada, RevisaoInvalidada, dados_revisados,
-    desnormalizar, descrever_aviso,
+    ParteRevisada, dados_revisados,
 )
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
     payload_registro,
 )
 from .test_importacao_base import ImportacaoBase

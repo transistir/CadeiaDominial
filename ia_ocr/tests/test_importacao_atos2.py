@@ -9,16 +9,15 @@ from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Documento, DocumentoTipo, Lancamento,
+    LancamentoTipo, Pessoas,
 )
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
-from .factories import criar_documento_digital, criar_usuario
+from ia_ocr.importacao import ImportacaoInvalida, resumo
+from ia_ocr.models import CampoSugerido, ImportacaoIA
+from .factories import criar_usuario
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
-    payload_registro,
+    payload_averbacao, payload_registro,
 )
 from .test_importacao_base import ImportacaoBase
 

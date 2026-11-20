@@ -17,19 +17,19 @@ from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.http import HttpResponse
 from django.test import (
-    RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature,
+    RequestFactory,
 )
 from dominial.managers import documentos_for_user
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Documento, DocumentoTipo, Lancamento,
+    LancamentoOrigem, TIs,
 )
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 from dominial.views.documento_views import excluir_documento
 from ia_ocr import importacao as modulo_importacao
 from ia_ocr import services
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.importacao import ImportacaoInvalida, importar
+from ia_ocr.models import ExtracaoSugerida, ImportacaoIA, OcrJob
 
 
 class VinculoDocumentoOrigemParte2:

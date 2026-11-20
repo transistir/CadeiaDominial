@@ -14,21 +14,19 @@ from datetime import date
 from django.db.models import ProtectedError
 from django.urls import reverse
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Cartorios, Documento, DocumentoTipo, Imovel, Lancamento,
+    LancamentoOrigem, LancamentoTipo, TIs, UserTI,
 )
 from dominial.utils.segregacao_utils import MENSAGEM_ORIGEM_RESTRITA
 from ia_ocr import services
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.importacao import importar
+from ia_ocr.models import ExtracaoSugerida, ImportacaoIA, OcrJob
 from ia_ocr.revisao import (
-    CAMPOS_DA_ORIGEM, ParteRevisada, RevisaoInvalidada, dados_revisados,
-    desnormalizar, descrever_aviso,
+    CAMPOS_DA_ORIGEM,
 )
-from .factories import criar_documento_digital, criar_usuario
+from .factories import criar_usuario
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
-    payload_registro,
+    payload_averbacao,
 )
 
 

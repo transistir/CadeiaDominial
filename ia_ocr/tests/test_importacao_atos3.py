@@ -6,14 +6,14 @@ mesmas classes, mesmos nomes de teste; só mudam os imports e a linha
 
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, transaction
+from django.db import connection
 from django.test import (
-    RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature,
+    RequestFactory, skipUnlessDBFeature,
 )
 from django.test.utils import CaptureQueriesContext
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Cartorios, Documento, DocumentoDigital, Lancamento,
+    LancamentoOrigem, LancamentoPessoa, Pessoas,
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
@@ -21,10 +21,9 @@ from dominial.tests.test_issue_263_concorrencia_importacao import (
     travas_executadas,
 )
 from ia_ocr.estados import TransicaoConcorrente
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.importacao import ImportacaoInvalida
+from ia_ocr.models import ExtracaoSugerida, ImportacaoIA, OcrJob
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
     payload_registro,
 )
 from .test_importacao_base import ImportacaoBase, _post_cadastro_manual

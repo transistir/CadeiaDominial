@@ -6,16 +6,15 @@ mesmas classes, mesmos nomes de teste; só mudam os imports e a linha
 
 from copy import deepcopy
 from unittest.mock import patch
-from django.db import DatabaseError, connection, transaction
+from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Cartorios, Lancamento,
+    Pessoas,
 )
 from ia_ocr import importacao as modulo_importacao
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.models import ImportacaoIA
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
     payload_registro,
 )
 from .test_importacao_base import ImportacaoBase, _DesfazImportacao

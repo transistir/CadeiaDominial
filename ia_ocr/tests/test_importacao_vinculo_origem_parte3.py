@@ -11,14 +11,14 @@ o discovery do Django não a coleta; quem coleta é a fachada em
 
 from datetime import date
 from django.test import (
-    RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature,
+    RequestFactory,
 )
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Cartorios, Documento, DocumentoTipo, Lancamento,
+    LancamentoOrigem,
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
+from ia_ocr.importacao import ImportacaoInvalida
 
 
 class VinculoDocumentoOrigemParte3:

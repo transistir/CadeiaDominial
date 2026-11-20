@@ -11,25 +11,22 @@ o aceite humano.
 # Etapa 9 (400 linhas): migração verbatim — nenhum teste aqui.
 
 from django.test import (
-    RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature,
+    TestCase,
 )
 from django.urls import reverse
 from django.utils import timezone
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    LancamentoTipo, UserTI,
 )
 from ia_ocr import services
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.importacao import importar
+from ia_ocr.models import CampoSugerido, ExtracaoSugerida, OcrJob, PaginaOcr
 from ia_ocr.revisao import (
-    CAMPOS_DA_ORIGEM, ParteRevisada, RevisaoInvalidada, dados_revisados,
-    desnormalizar, descrever_aviso,
+    desnormalizar,
 )
 from .factories import criar_documento_digital, criar_usuario
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
-    payload_registro,
+    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_registro,
 )
 
 

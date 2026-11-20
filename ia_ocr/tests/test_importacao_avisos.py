@@ -10,25 +10,23 @@ from contextlib import redirect_stdout
 from copy import deepcopy
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, transaction
+from django.db import DatabaseError, transaction
 from django.test import (
-    RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature,
+    RequestFactory, TransactionTestCase, skipUnlessDBFeature,
 )
 from dominial.models import (
-    Cartorios, Documento, DocumentoDigital, DocumentoTipo, Imovel, Lancamento,
-    LancamentoOrigem, LancamentoPessoa, LancamentoTipo, Pessoas, TIs, UserTI,
+    Cartorios, Documento, Imovel, Lancamento,
+    Pessoas,
 )
 from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from ia_ocr import importacao as modulo_importacao
 from ia_ocr import services
-from ia_ocr.importacao import ImportacaoInvalida, importar, resumo
-from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA, OcrJob, PaginaOcr
+from ia_ocr.importacao import ImportacaoInvalida, importar
+from ia_ocr.models import CampoSugerido
 from ia_ocr.revisao import (
-    CAMPOS_DA_ORIGEM, ParteRevisada, RevisaoInvalidada, dados_revisados,
-    desnormalizar, descrever_aviso,
+    RevisaoInvalidada,
 )
 from .payloads_extracao import (
-    SCHEMA_VERSION, TEXTO_PAGINA_1, payload_averbacao, payload_com_closure,
     payload_registro,
 )
 from .test_texto_concorrencia_pg import _rodar
