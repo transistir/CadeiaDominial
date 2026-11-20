@@ -41,7 +41,6 @@
     "ia_ocr/ocr_client.py": 662,
     "ia_ocr/revisao_ato.py": 408,
     "ia_ocr/rotulos.py": 413,
-    "ia_ocr/services.py": 1248,
     "ia_ocr/tests/js/ocr_card.test.js": 1275,
     "ia_ocr/tests/js/ocr_revisao.test.js": 975,
     "ia_ocr/tests/test_backend_ocr_servico.py": 1332,
