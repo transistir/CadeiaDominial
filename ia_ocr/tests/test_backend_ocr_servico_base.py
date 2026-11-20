@@ -6,7 +6,6 @@ Nenhum teste aqui: ``OcrServiceBackendBase`` (setUp + helpers) é herdada
 pela fachada em ``test_backend_ocr_servico_processar.py``.
 """
 
-import hashlib
 import io
 import tempfile
 from datetime import timedelta
@@ -185,26 +184,3 @@ class OcrServiceBackendBase:
         with self.assertRaises(OcrBackendError) as contexto:
             self._processar(job, stub)
         self.assertEqual(contexto.exception.codigo, codigo)
-
-    def _finalizar_resultado_invalido(self, paginas):
-        from ia_ocr import services
-        from ia_ocr.backends import ResultadoOcr
-
-        pdf = self._pdf(textos=[None, None])
-        job = self._job_pendente(pdf)
-        claimado = services.claim_proximo_job()
-        self.assertEqual(claimado.pk, job.pk)
-        aplicado = services.finalizar(
-            claimado,
-            ResultadoOcr(
-                paginas=paginas,
-                sha256_pdf=hashlib.sha256(pdf).hexdigest(),
-                page_count=2,
-                timings_ms={'total': 10},
-                origem='ocr',
-            ),
-            tentativa=claimado.tentativa,
-        )
-        self.assertTrue(aplicado)
-        job.refresh_from_db()
-        return job
