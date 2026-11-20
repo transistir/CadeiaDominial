@@ -38,7 +38,6 @@
     "dominial/views/lancamento_views.py": 1213,
     "ia_ocr/formulario.py": 543,
     "ia_ocr/models.py": 558,
-    "ia_ocr/ocr_client.py": 662,
     "ia_ocr/revisao_ato.py": 408,
     "ia_ocr/rotulos.py": 413,
     "ia_ocr/tests/js/ocr_card.test.js": 1275,
