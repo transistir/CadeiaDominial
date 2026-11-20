@@ -7,8 +7,8 @@ from ia_ocr import revisao
 from ia_ocr.models import CampoSugerido
 from ia_ocr.revisao import IndiceCartorios
 
-from . import test_revisao_tela as tela
-from .test_revisao_tela import _atributos, _descendentes, _elementos
+from .test_revisao_tela_base import _descendentes, TelaRevisaoBase
+from .test_ui_card_ocr import _atributos, _elementos
 
 CHAVE = '/document/cartorio'
 CABECALHO = (
@@ -17,7 +17,7 @@ CABECALHO = (
 )
 
 
-class CartorioFallbackTest(tela.TelaRevisaoBase):
+class CartorioFallbackTest(TelaRevisaoBase):
     def setUp(self):
         super().setUp()
         self.itamaraju = Cartorios.objects.create(
