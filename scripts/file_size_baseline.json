@@ -49,7 +49,6 @@
     "ia_ocr/tests/test_ocr_client.py": 1204,
     "ia_ocr/tests/test_ocr_smoke.py": 407,
     "ia_ocr/tests/test_pii.py": 409,
-    "ia_ocr/tests/test_revisao.py": 2661,
     "ia_ocr/tests/test_revisao_formulario_prefill.py": 883,
     "ia_ocr/tests/test_revisao_formulario_view.py": 1307,
     "ia_ocr/tests/test_revisao_services.py": 820,
