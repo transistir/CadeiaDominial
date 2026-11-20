@@ -30,7 +30,7 @@ from ia_ocr.revisao import desnormalizar
 from .payloads_extracao import (
     SCHEMA_VERSION, payload_averbacao, payload_registro,
 )
-from .test_importacao import ImportacaoFixture
+from .test_importacao_base import ImportacaoFixture
 
 
 class PrefillBase(ImportacaoFixture, TestCase):
