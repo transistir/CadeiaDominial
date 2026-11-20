@@ -53,7 +53,6 @@
     "ia_ocr/tests/test_revisao_formulario_prefill.py": 883,
     "ia_ocr/tests/test_revisao_formulario_view.py": 1307,
     "ia_ocr/tests/test_revisao_services.py": 820,
-    "ia_ocr/tests/test_revisao_tela.py": 2793,
     "ia_ocr/tests/test_rotulos.py": 547,
     "ia_ocr/tests/test_rotulos_importacao.py": 801,
     "ia_ocr/tests/test_texto_acoes_views.py": 401,
