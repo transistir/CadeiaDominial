@@ -15,6 +15,7 @@ cria ``ImportacaoIA`` nem vai a ``IMPORTADO`` (não há ato algum a importar).
 from django.test import override_settings
 from django.urls import reverse
 
+from dominial.models import Cartorios
 from ia_ocr import estados, revisao, services
 from ia_ocr.models import CampoSugerido, ExtracaoSugerida, ImportacaoIA
 
@@ -125,7 +126,8 @@ class RevisarSemAtosTest(RevisarSemAtosBase):
             resposta, self.url_ato(0), fetch_redirect_response=False,
         )
 
-    def test_post_com_atos_nao_finaliza(self):
+    def test_escolha_de_cabecalho_nao_afeta_job_com_atos(self):
+        # Guarda do review (Opus): a rota sem atos é só do caso sem atos.
         self.job.extracoes.all().delete()
         self.extracao = self._aberta(payload_averbacao(self.job.job_id))
 
@@ -133,9 +135,7 @@ class RevisarSemAtosTest(RevisarSemAtosBase):
             'versao': services.versao_bloco(self.extracao),
         })
 
-        self.assertRedirects(
-            resposta, self.url_entrada(), fetch_redirect_response=False,
-        )
+        self.assertEqual(resposta.status_code, 404)
         self._assert_nao_finalizada()
 
     def test_get_com_bloqueio_de_campo_nao_renderiza_a_confirmacao(self):
@@ -176,6 +176,112 @@ class RevisarSemAtosTest(RevisarSemAtosBase):
         resposta = self.client.get(self.url_entrada())
 
         self.assertEqual(resposta.status_code, 302)
+        self.assertNotIn('revisao_sem_atos.html', [
+            t.name for t in resposta.templates
+        ])
+
+
+@override_settings(OCR_PERMITIR_FINALIZAR_SEM_ATOS=True)
+class RevisarSemAtosComEscolhaPendenteTest(RevisarSemAtosBase):
+    """MUST-FIX do review Codex da #341: cabeçalho sem correspondência.
+
+    ``acts: []`` com ``/document/cartorio`` (ou ``cri_atual``) SEM escolha:
+    ``pode_finalizar_sem_atos`` recusa e — sem a tela de cards, aposentada
+    na fase 4 — não havia controle nenhum para resolver a pendência; o job
+    ficava preso em ``extraido`` para sempre. A confirmação passa a oferecer
+    o formulário dessas escolhas (e só delas).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.cartorio = Cartorios.objects.create(
+            nome='CRI de Guaíra', cns='CNS-42', estado='PR',
+        )
+        # Desfaz o ``update(criar_novo=True)`` do setUp: é o cenário do bug —
+        # nenhum cadastro escolhido, só candidatos possíveis.
+        self.extracao.campos.filter(tipo_valor='cartorio').update(
+            criar_novo=False, match_candidatos=[self.cartorio.pk],
+        )
+        self.extracao.refresh_from_db()
+        self.assertFalse(services.pode_finalizar_sem_atos(self.extracao))
+
+    def post_escolhas(self, **extra):
+        dados = {'versao': services.versao_bloco(self.extracao)}
+        dados.update(extra)
+        return self.client.post(self.url_sem_atos(), dados)
+
+    def test_sem_atos_com_cartorio_sem_match_oferece_escolha(self):
+        resposta = self.client.get(self.url_entrada())
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, 'ia_ocr/revisao_sem_atos.html')
+        html = resposta.content.decode()
+        self.assertIn('name="escolha:/document/cartorio"', html)
+        self.assertIn('name="escolha:/document/cri_atual"', html)
+        self.assertIn(f'value="{self.cartorio.pk}"', html)
+        self.assertIn('value="criar_novo"', html)
+        self.assertIn('name="criar_novo:/document/cartorio"', html)
+        self.assertIn('name="nome:/document/cartorio"', html)
+        self.assertIn(f'value="{services.versao_bloco(self.extracao)}"', html)
+
+    def test_escolher_cartorio_existente_conclui_sem_atos(self):
+        antes = self.contagens()
+        resposta = self.post_escolhas(**{
+            'escolha:/document/cartorio': str(self.cartorio.pk),
+            'escolha:/document/cri_atual': str(self.cartorio.pk),
+        })
+
+        self.assertRedirects(
+            resposta, self.url_documento(), fetch_redirect_response=False,
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, estados.REVISADO)
+        transicao = self.job.transicoes.get()
+        self.assertEqual(transicao.de_status, estados.EXTRAIDO)
+        self.assertEqual(transicao.para_status, estados.REVISADO)
+        self.assertEqual(transicao.motivo, 'revisao_finalizada_sem_atos')
+        self.assertFalse(ImportacaoIA.objects.exists())
+        # Sem atos não há o que importar: nenhuma linha de lançamento/documento.
+        depois = self.contagens()
+        for modelo, quantidade in antes.items():
+            if modelo == 'OcrJobTransicao':
+                continue
+            self.assertEqual(depois[modelo], quantidade, modelo)
+        campo = self.extracao.campos.get(chave='/document/cartorio')
+        self.assertEqual(campo.cartorio_escolhido_id, self.cartorio.pk)
+        self.assertFalse(campo.criar_novo)
+
+    def test_criar_novo_sem_nome_nao_conclui(self):
+        resposta = self.post_escolhas(**{
+            'criar_novo:/document/cartorio': 'on',
+            'nome:/document/cartorio': '   ',
+            'escolha:/document/cri_atual': str(self.cartorio.pk),
+        })
+
+        self.assertRedirects(
+            resposta, self.url_entrada(), fetch_redirect_response=False,
+        )
+        self.assertIn('Nada foi gravado', ' '.join(self.mensagens(resposta)))
+        self._assert_nao_finalizada()
+        campo = self.extracao.campos.get(chave='/document/cartorio')
+        self.assertFalse(campo.criar_novo)
+        self.assertIsNone(campo.cartorio_escolhido_id)
+
+    def test_pendencia_que_a_pagina_nao_resolve_mantem_o_redirect(self):
+        # Além das escolhas, um campo de outro tipo pede revisão: a página
+        # não resolve isso, então vale o ramo antigo (mensagem + texto).
+        self.extracao.campos.filter(chave='/document/data').update(
+            requer_revisao=True,
+        )
+
+        resposta = self.client.get(self.url_entrada())
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertRedirects(
+            resposta,
+            reverse('texto_job_ocr', kwargs=self.kwargs()),
+            fetch_redirect_response=False,
+        )
         self.assertNotIn('revisao_sem_atos.html', [
             t.name for t in resposta.templates
         ])

@@ -23,12 +23,55 @@
         </p>
     </div>
 
-    <form method="post" action="{{ url_sem_atos }}" class="d-flex gap-2 flex-wrap">
+    <form method="post" action="{{ url_sem_atos }}">
         {% csrf_token %}
         {# Token do estado da revisão: mudou desde o GET, o serviço recusa. #}
         <input type="hidden" name="versao" value="{{ versao }}">
-        <button type="submit" class="btn btn-primary">Concluir sem atos</button>
-        <a href="{{ url_texto }}" class="btn btn-secondary">← Voltar ao texto</a>
+
+        {% if escolhas %}
+        <div class="mb-3">
+            <p>
+                Antes de concluir, diga o que fazer com os cadastros que a
+                extração não soube casar:
+            </p>
+            {% for escolha in escolhas %}
+            <div class="border rounded p-3 mb-3">
+                <label class="form-label fw-bold" for="escolha-{{ forloop.counter }}">
+                    {{ escolha.rotulo }}
+                    <code class="text-muted small">{{ escolha.chave }}</code>
+                </label>
+                <select class="form-select" name="escolha:{{ escolha.chave }}"
+                        id="escolha-{{ forloop.counter }}">
+                    <option value="">— escolha —</option>
+                    {% for opcao in escolha.opcoes %}
+                    <option value="{{ opcao.id }}"{% if escolha.escolhido == opcao.id %} selected{% endif %}>
+                        {{ opcao.rotulo }}
+                    </option>
+                    {% endfor %}
+                    <option value="criar_novo">Criar novo cadastro</option>
+                </select>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" value="on"
+                           name="criar_novo:{{ escolha.chave }}"
+                           id="criar-novo-{{ forloop.counter }}"
+                           {% if escolha.criar_novo %}checked{% endif %}>
+                    <label class="form-check-label" for="criar-novo-{{ forloop.counter }}">
+                        Criar novo cadastro com o nome abaixo
+                    </label>
+                </div>
+                <input class="form-control mt-1" type="text"
+                       name="nome:{{ escolha.chave }}"
+                       value="{{ escolha.nome_digitado }}"
+                       placeholder="Nome para o novo cadastro">
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-primary">Concluir sem atos</button>
+            <a href="{{ url_texto }}" class="btn btn-secondary">← Voltar ao texto</a>
+        </div>
     </form>
 </div>
 {% endblock %}

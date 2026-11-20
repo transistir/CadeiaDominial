@@ -14,7 +14,8 @@ Pacote desde a etapa 3 do limite de 400 linhas por arquivo —
 - ``paginas`` — ações de página (confirmar/editar/bulk/reprocessar/extração);
 - ``campos`` — entrada legada da tela de cards, agora redirect à revisão;
 - ``revisar`` — formulário do ato (I-14/#341);
-- ``revisar_extras`` — complementos da revisão (duplicata, sem atos);
+- ``revisar_extras`` — complementos da revisão (duplicata);
+- ``revisar_sem_atos`` — conclusão sem atos e escolhas de cabeçalho (#262/#341);
 - ``resposta`` — URLs e paginação.
 
 Regra sobre patches de teste — SÓ os nomes que os testes resolvem via
@@ -80,6 +81,9 @@ from ..mascaras import (  # noqa: F401 — alvos de patch/uso: ia_ocr.views._mas
 from .campos import campos_job_ocr  # noqa: F401
 from .revisar_extras import (  # noqa: F401
     revisar_ato_duplicata_ocr,
+)
+from .revisar_sem_atos import (  # noqa: F401
+    renderizar_sem_atos,
     revisar_sem_atos_ocr,
 )
 from .revisar import (  # noqa: F401
