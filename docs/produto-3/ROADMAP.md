@@ -771,7 +771,15 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    ("Sem Origem") no caso misto. *(Estender #174 sem mudar os badges
    existentes; respeitar escopo por usuário do #132.)*
 
-## F3 — Fase 3 (contrato FUNAPE, prazo 31/10/2026): IA/OCR e importação assistida — 🟡 EM EXECUÇÃO (trilha paralela)
+## F3 — Fase 3 (contrato FUNAPE, prazo 31/10/2026): IA/OCR e importação assistida — 🟢 I-14 FECHADO; rodada F3.1 aberta (21/11/2026)
+
+> **Auditoria de 21/11/2026 (Hiure pediu conferência antes da rodada nova):**
+> as 9 issues com entrega já em develop (#258, #259, #260, #261, #262, #263,
+> #300, #307, #315) foram **fechadas** com o PR de origem; **I-7 (#264)** e
+> **I-12 (#331)** foram **canceladas** pelo dono (*not planned*). O que sobra do
+> contrato FUNAPE é **I-8 (#265)** (regressão/smoke) e o aceite manual
+> **I-11e (#325)**. A rodada nova está em **F3.1 (#370–#373)**, ao fim desta
+> seção.
 
 > **Outro contrato** (FUNAPE/Umbelino), registrado aqui para a fila não ficar
 > ambígua; **não** disputa posição com R1–R10 e **não** reordena o Produto 3
@@ -992,25 +1000,49 @@ fecham na validação do bloco, não no merge.
      formulário = select na revisão; campo novo no schema exige destino no
      formulário.
    Bloqueadores: #311 (schema v1.1) e #315; #320 entra junto.
-8. **I-7 ⏭ DESLIZADO (pós-I-11)** #264 — admin de acompanhamento dos
-   processamentos + logs de auditoria mínimos (sem PII), exportáveis. **Escopo
-   mínimo quando entrar:** listagem/estado dos jobs + auditoria sem PII; o
-   exportável pode deslizar. #282 já resolvido no PR #303.
-9. **I-8 ⏭ DESLIZADO (pós-31/10)** #265 — regressão dos fluxos existentes +
-   smoke ponta a ponta com stubs — núcleo do Produto 5 (testes/documentação/
-   entrega). Roda **depois do I-9**, cujo "como validar" (#307) é o roteiro do
-   teste manual no test server.
-10. **I-12 🆕** #331 — prévia em planilha do que será importado (CSV/XLSX, um
-    registro por ato, colunas = campos do formulário de lançamento, status
-    novo/duplicado/pendência, **sem gravar**). Paridade obrigatória com
-    `importar()` (mesma função). Entra **depois do bloco I-11** (depende de
-    #322 e #328). Decidido pelo Hiure em 16/11.
-11. **I-13 🆕** #332 — separar pendência **bloqueante** de **informativa** e
-    liberar "importar e corrigir depois": hoje `revisao.py:862` marca tudo
-    bloqueante e `dados_revisados` recusa com qualquer pendência. Mapa de
-    motivos em fonte única; `dados_revisados` recusa só bloqueante; aviso
-    informativo fica visível no lançamento. Entra depois do I-12 (mesma região
-    de `revisao.py`). Decidido pelo Hiure em 16/11.
+8. **I-7 ❌ CANCELADO (Hiure, 21/11/2026)** #264 — admin de acompanhamento dos
+   processamentos + logs de auditoria mínimos (sem PII), exportáveis. **Não
+   entra na rodada nova;** issue fechada como *not planned*. #282 já resolvido
+   no PR #303.
+9. **I-8 ⏭ PENDENTE (débito do contrato FUNAPE)** #265 — regressão dos fluxos
+   existentes + smoke ponta a ponta com stubs — núcleo do Produto 5
+   (testes/documentação/entrega). Continua sem PR; não bloqueia a rodada nova
+   do Produto 3.
+10. **I-12 ❌ CANCELADA (Hiure, 21/11/2026)** #331 — o pedido original era a
+    revisão **em formato de planilha**, já entregue como o formulário web por
+    ato (I-14 / #364 + #366). O dono considerou o formato atual adequado e
+    cancelou; issue fechada como *not planned*. Não há trabalho pendente.
+11. **I-13 ✅ absorvido** #332 — separar pendência **bloqueante** de
+    **informativa** virou regra do I-14: o obrigatório impede o salvar **daquele
+    ato** e os demais atos seguem (#364/#366). Issue fechada.
+
+### F3.1 — rodada nova decidida em 21/11/2026 (Hiure, após o teste do M237)
+
+> Contexto: com o I-14 fechado, o formulário preenche direto. O dono pediu
+> quatro correções/insumos para o preenchimento parar de depender de adivinhação
+> da IA. Ordem proposta abaixo é a de execução.
+
+1. **#370 — sidebar da revisão na ordem decrescente (último ato primeiro)** —
+   `_revisao_sidebar.html` + `revisar.py`; navegação por `indice` não muda.
+   Interpretação de "maior→menor" registrada na issue (posição do ato) para
+   confirmação.
+2. **#371 — início de matrícula não é reconhecido** — caso real do M237. Exige
+   `job_id` + texto OCR anexados para virar fixture; regra do roadmap de 09/11
+   (primeiro/segundo parágrafo trazem o início de matrícula, varia por
+   documento) e `M` ≠ número do ato.
+3. **#373 — área normalizada em hectares com 4 casas** — converter só com
+   unidade explícita (ha, m²), persistir 4 casas, unificar `formatar_area`
+   (2 casas) com `formatar_area_ha` (4 casas) e manter área zerada como "-"
+   (decisão de 10/09).
+4. **#372 — dicionário por campo extraído do banco de produção (read-only)** —
+   cartório, tipo, forma, título, natureza, padrões de livro/folha/número e
+   formatos de área; JSON versionado + management command genérico; **sem PII e
+   sem acesso a produção em runtime**. É o insumo que faz #371 e #373 acertarem
+   com o vocabulário real.
+
+> **Pendências que continuam fora desta rodada:** I-8 (#265, regressão/smoke
+> do FUNAPE — débito declarado) e o aceite manual I-11e (#325, roteiro no M237;
+> o formulário já foi visto preenchendo em 21/11, falta o aceite formal).
 
 
 > **Achados da validação do I-3 no ambiente dev (16/10/2026 — Hiure):**
