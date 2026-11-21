@@ -2,7 +2,8 @@
 
 Gera um ZIP com os PDFs anexados aos documentos da cadeia, na ordem da
 tela. A fonte é a mesma da tela (`CadeiaDominialTabelaService` + as
-escolhas de origem da sessão): o ZIP segue o galho escolhido. View nova em
+escolhas de origem da sessão, com o ``?escolhas`` da URL valendo mais que
+a sessão — igual à tela): o ZIP segue o galho escolhido. View nova em
 módulo próprio porque o legado ``documento_digital_views.py`` está
 congelado no baseline de 400 linhas.
 """
@@ -25,6 +26,7 @@ from django.utils.text import slugify
 
 from ..models import DocumentoDigital
 from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
+from ..utils.escolhas_origem_utils import escolhas_da_url
 from ..utils.segregacao_utils import require_imovel_atribuido
 
 logger = logging.getLogger(__name__)
@@ -128,14 +130,21 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
 
     Mesma fonte da tela (`CadeiaDominialTabelaService` + a sessão de
     escolhas de origem): o ZIP segue o galho escolhido nos botões de origem,
-    na ordem das linhas. Sem nenhum PDF incluído, não gera ZIP vazio —
-    volta para a cadeia com mensagem. Arquivo ausente no storage é pulado
+    na ordem das linhas. O ``?escolhas`` da URL vale mais que a sessão,
+    com a mesma semântica e precedência da tela (`escolhas_da_url` — param
+    > sessão, inclusive vazio). Sem nenhum PDF incluído, não gera ZIP vazio
+    — volta para a cadeia com mensagem. Arquivo ausente no storage é pulado
     com log e o download dos demais não cai; falha na cópia ou na resposta
     fecha o spool e devolve erro — nunca um ZIP parcial com 200.
     """
     resultado = CadeiaDominialTabelaService(
         user=request.user
-    ).get_cadeia_dominial_tabela(tis_id, imovel_id, request.session)
+    ).get_cadeia_dominial_tabela(
+        tis_id,
+        imovel_id,
+        request.session,
+        escolhas_da_url(request.GET.get('escolhas')),
+    )
     imovel = resultado['imovel']
     pares = _com_pdfs(_documentos_da_cadeia(resultado['cadeia']))
 

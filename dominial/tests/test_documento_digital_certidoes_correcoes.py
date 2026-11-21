@@ -5,6 +5,8 @@ Em módulo próprio: com esses testes dentro,
 linhas imposto pelo CI. A cadeia base vem de ``_BaseCadeiaCertidoes``.
 """
 
+import json
+import re
 import tempfile
 from datetime import date
 from unittest import mock
@@ -16,6 +18,38 @@ from dominial.services.cadeia_dominial_tabela_service import (
     CadeiaDominialTabelaService,
 )
 from dominial.tests.test_documento_digital_certidoes import _BaseCadeiaCertidoes
+
+
+def _cadeia_com_dois_homonimos(cls):
+    """M12345 passa a citar duas origens reais (T50 e T40).
+
+    Complementa ``_BaseCadeiaCertidoes``: T40 vive no imóvel de origem,
+    ao lado de T50, e o lançamento da matrícula cita os dois. Sem escolha,
+    a cadeia segue T50 (padrão: maior número entre irmãos).
+    """
+    cls.doc_t40 = Documento.objects.create(
+        imovel=cls.imovel_origem,
+        tipo=cls.tipo_transcricao,
+        numero='T40',
+        data=date(2019, 3, 3),
+        cartorio=cls.cartorio,
+        livro='2',
+        folha='4',
+    )
+    Lancamento.objects.bulk_create([
+        Lancamento(
+            documento=cls.doc_t40,
+            tipo=cls.tipo_inicio,
+            data=date(2019, 3, 3),
+            cartorio_origem=cls.cartorio,
+            origem='',
+        ),
+    ])
+    # `.update()` não dispara signal de origens estruturadas: a leitura
+    # fica no fallback textual, com o cartório do próprio lançamento.
+    Lancamento.objects.filter(documento=cls.doc_matricula).update(
+        origem='T50; T40'
+    )
 
 
 class EscolhaDeOrigemNoZipTest(_BaseCadeiaCertidoes):
@@ -30,29 +64,7 @@ class EscolhaDeOrigemNoZipTest(_BaseCadeiaCertidoes):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.doc_t40 = Documento.objects.create(
-            imovel=cls.imovel_origem,
-            tipo=cls.tipo_transcricao,
-            numero='T40',
-            data=date(2019, 3, 3),
-            cartorio=cls.cartorio,
-            livro='2',
-            folha='4',
-        )
-        Lancamento.objects.bulk_create([
-            Lancamento(
-                documento=cls.doc_t40,
-                tipo=cls.tipo_inicio,
-                data=date(2019, 3, 3),
-                cartorio_origem=cls.cartorio,
-                origem='',
-            ),
-        ])
-        # `.update()` não dispara signal de origens estruturadas: a leitura
-        # fica no fallback textual, com o cartório do próprio lançamento.
-        Lancamento.objects.filter(documento=cls.doc_matricula).update(
-            origem='T50; T40'
-        )
+        _cadeia_com_dois_homonimos(cls)
 
     def test_zip_segue_a_origem_escolhida_na_sessao(self):
         self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
@@ -250,3 +262,106 @@ class SpoolFechadoEmErroTest(_BaseCadeiaCertidoes):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(criados), 1, criados)
         self.assertTrue(criados[0].closed)
+
+
+class EscolhasDaUrlNoZipTest(_BaseCadeiaCertidoes):
+    """MF1 (2ª rodada): o link do ZIP leva o ``?escolhas`` da URL.
+
+    A tela (``tronco_principal``) aceita
+    ``?escolhas={"<doc>":"documento:<origem>"}`` e SUBSTITUI a sessão —
+    inclusive ``{}``, que limpa. O botão "Baixar certidões" tem que levar o
+    parâmetro no href e a view do ZIP interpretá-lo com a mesma precedência
+    da tela (param > sessão, inclusive vazio): senão, sessão em T50 + URL
+    escolhendo T40 mostra T40 e o clique baixa T50.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        _cadeia_com_dois_homonimos(cls)
+
+    def _url_cadeia(self):
+        return reverse('tronco_principal', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
+        })
+
+    def _prender_sessao(self, numero):
+        session = self.client.session
+        session[f'origem_documento_{self.doc_matricula.id}'] = numero
+        session.save()
+
+    def _com_pdfs_t50_e_t40(self):
+        self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
+        self._criar_pdf(self.doc_t40, 'pdf-t40.pdf', b'%PDF-1.4 t40')
+
+    def test_link_do_zip_na_tela_leva_escolhas_da_url(self):
+        """tela → href → ZIP: o galho escolhido na URL é o baixado."""
+        self._com_pdfs_t50_e_t40()
+        self._prender_sessao('T50')
+
+        escolhas = json.dumps({
+            str(self.doc_matricula.id): f'documento:{self.doc_t40.pk}'
+        })
+        tela = self.client.get(
+            self._url_cadeia(), data={'escolhas': escolhas}
+        )
+        self.assertEqual(tela.status_code, 200)
+
+        correspondencia = re.search(
+            r'href="([^"]*certidoes\.zip[^"]*)"', tela.content.decode()
+        )
+        self.assertIsNotNone(correspondencia, 'botão do ZIP ausente na tela')
+        response = self.client.get(correspondencia.group(1))
+
+        self.assertEqual(response.status_code, 200)
+        # A tela segue T40 (?escolhas > sessão): o ZIP baixa o mesmo galho —
+        # e não o T50 preso na sessão.
+        self.assertEqual(
+            self._nomes_do_zip(response), ['02_Transcricao_T40_pdf-t40.pdf']
+        )
+
+    def test_escolhas_vazio_no_zip_iguala_sem_parametro(self):
+        """``?escolhas={}`` no ZIP = GET sem o parâmetro (não 500)."""
+        self._com_pdfs_t50_e_t40()
+        self._prender_sessao('T50')
+
+        sem_parametro = self._nomes_do_zip(self.client.get(self._url()))
+        com_vazio = self.client.get(self._url(), data={'escolhas': '{}'})
+
+        self.assertEqual(com_vazio.status_code, 200)
+        self.assertEqual(self._nomes_do_zip(com_vazio), sem_parametro)
+        self.assertEqual(sem_parametro, ['02_Transcricao_T50_pdf-t50.pdf'])
+
+    def test_escolhas_nao_json_no_zip_nao_quebra(self):
+        """``?escolhas=nao-e-json``: JSON inválido vira ``{}``, sem 500."""
+        self._com_pdfs_t50_e_t40()
+        self._prender_sessao('T50')
+
+        response = self.client.get(
+            self._url(), data={'escolhas': 'nao-e-json'}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self._nomes_do_zip(response), ['02_Transcricao_T50_pdf-t50.pdf']
+        )
+
+    def test_escolhas_vazio_descarta_a_sessao_nao_padrao(self):
+        """Precedência param > sessão, inclusive vazio, como na tela.
+
+        Sessão presa em T40 (não-padrão): sem parâmetro o ZIP segue T40;
+        com ``?escolhas={}`` a sessão é descartada e volta o padrão T50.
+        """
+        self._com_pdfs_t50_e_t40()
+        self._prender_sessao('T40')
+        self.assertEqual(
+            self._nomes_do_zip(self.client.get(self._url())),
+            ['02_Transcricao_T40_pdf-t40.pdf'],
+        )
+
+        response = self.client.get(self._url(), data={'escolhas': '{}'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self._nomes_do_zip(response), ['02_Transcricao_T50_pdf-t50.pdf']
+        )
