@@ -6,15 +6,21 @@ fachada em ``test_revisao_pendencias.py``. Corpos verbatim.
 """
 
 from copy import deepcopy
+
 from django.utils import timezone
 
 from dominial.models import Cartorios, Pessoas
 from ia_ocr.models import ExtracaoSugerida
-
 from ia_ocr.revisao import (
-    RevisaoInvalidada, _tipos_efetivos, aplicar_linha, avisos, dados_revisados,
-    garantir_placeholders_obrigatorios, pendencias,
+    RevisaoInvalidada,
+    _tipos_efetivos,
+    aplicar_linha,
+    avisos,
+    dados_revisados,
+    garantir_placeholders_obrigatorios,
+    pendencias,
 )
+
 from .payloads_extracao import payload_averbacao, payload_registro
 
 
@@ -59,7 +65,7 @@ class PendenciasEAvisosTestParte3:
     def test_sugestao_vence_quando_nao_ha_rotulo_nem_edicao(self):
         # (d) sugestão vence quando não há rótulo nem edição (#322 rodada 7)
         payload = payload_averbacao(self.job.job_id)
-        linhas = self._persistir(payload)
+        self._persistir(payload)
         self._sem_rotulo()
         linhas_atualizadas = {c.chave: c for c in self.extracao.campos.all()}
         tipos_por_ato, _ = _tipos_efetivos(
@@ -199,7 +205,9 @@ class PendenciasEAvisosTestParte3:
     def test_ato_descartado_nao_gera_pendencias_filhas(self):
         payload = payload_registro(self.job.job_id)
         payload['acts'][0]['data']['normalized'] = None
-        payload['acts'][0]['area']['unidade'] = 'm2'
+        payload['acts'][0]['area'].update(
+            unidade='alqueires', raw='12,50 alqueires',
+        )
         payload['acts'].append(payload_averbacao(self.job.job_id)['acts'][0])
         linhas = self._persistir(payload)
         parte = linhas['/acts/0/partes/0']

@@ -9,7 +9,6 @@ from decimal import Decimal, InvalidOperation
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
-
 _PREFIXO_CRI = "cartorio de registro de imoveis"
 
 _PADROES_FIM_CADEIA = (
@@ -329,19 +328,6 @@ def formatar_valor_monetario(valor):
         return "R$ 0,00"
 
 
-def formatar_area(area):
-    """
-    Formata uma área em hectares
-    """
-    if area is None:
-        return "0,00 ha"
-
-    try:
-        return f"{area:,.2f} ha".replace(",", "X").replace(".", ",").replace("X", ".")
-    except (ValueError, TypeError):
-        return "0,00 ha"
-
-
 def formatar_area_ha(area, padrao="-"):
     """
     Formata o campo `Lancamento.area` no padrão brasileiro, com 4 casas
@@ -359,8 +345,7 @@ def formatar_area_ha(area, padrao="-"):
     - Valor não convertível para número (ex.: texto não numérico) também
       retorna `padrao`, sem levantar exceção.
     - A conversão usa `Decimal(str(valor))` para evitar ruído binário de
-      `float` (mesma técnica de `formatar_area`/`formatar_valor_monetario`,
-      acima).
+      `float` (mesma técnica de `formatar_valor_monetario`, acima).
     """
     if area is None or area == "":
         return padrao

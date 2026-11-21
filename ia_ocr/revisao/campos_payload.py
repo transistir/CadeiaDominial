@@ -2,11 +2,19 @@
 
 from .. import destinos, valores
 from ..models import CampoSugerido
+from .area_ha import converter_para_hectares
 from .estruturas import (
-    LIMIAR_CONFIANCA, MATCH_PESSOA_CANDIDATOS, MOTIVO_BAIXA_CONFIANCA,
-    MOTIVO_CLOSURE, MOTIVO_EVIDENCIA_INVALIDA, MOTIVO_NORMALIZACAO_INVALIDA,
-    MOTIVO_TRECHO_AUSENTE, MOTIVO_UNIDADE_AREA, _AREA_DE_ATO,
-    _TIPOS_NORMALIZAVEIS, _eh_folha,
+    _AREA_DE_ATO,
+    _TIPOS_NORMALIZAVEIS,
+    LIMIAR_CONFIANCA,
+    MATCH_PESSOA_CANDIDATOS,
+    MOTIVO_BAIXA_CONFIANCA,
+    MOTIVO_CLOSURE,
+    MOTIVO_EVIDENCIA_INVALIDA,
+    MOTIVO_NORMALIZACAO_INVALIDA,
+    MOTIVO_TRECHO_AUSENTE,
+    MOTIVO_UNIDADE_AREA,
+    _eh_folha,
 )
 
 
@@ -29,6 +37,17 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
     motivos = []
 
     normalized = _valor_do_payload(tipo_valor, campo.get('normalized'))
+    unidade = campo.get('unidade')
+    eh_area_de_ato = bool(_AREA_DE_ATO.fullmatch(ponteiro))
+    convertida = False
+    if eh_area_de_ato and (normalized is None or unidade != 'ha'):
+        # #373: unidade explícita (ha, m²) ou composto hectare/are/centiare
+        # vira hectares na desnormalização. Sem conversão inequívoca, a
+        # unidade continua pendência do revisor.
+        convertido = converter_para_hectares(campo.get('raw'), unidade)
+        if convertido is not None:
+            normalized = f'{convertido:.4f}'
+            convertida = True
     if tipo_valor in _TIPOS_NORMALIZAVEIS:
         if normalized is None:
             # Não normalizado (null) ≠ vazio: sem canônico, há pendência.
@@ -39,7 +58,7 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
             except valores.ValorInvalido:
                 motivos.append(MOTIVO_NORMALIZACAO_INVALIDA)
                 normalized = None
-    if _AREA_DE_ATO.fullmatch(ponteiro) and campo.get('unidade') != 'ha':
+    if eh_area_de_ato and unidade != 'ha' and not convertida:
         motivos.append(MOTIVO_UNIDADE_AREA)
 
     confianca = campo.get('confianca')

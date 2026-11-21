@@ -11,7 +11,8 @@ from dominial.models import Lancamento
 from ia_ocr.models import CampoSugerido, ImportacaoIA, OcrJobTransicao
 
 from .test_revisao_formulario_view_base import (
-    RevisaoFormularioBase, post_do_html,
+    RevisaoFormularioBase,
+    post_do_html,
 )
 
 
@@ -160,9 +161,9 @@ class AreaEmOutraUnidadeSalvarTest(RevisaoFormularioBase):
         payload = self._payload_de_tres_atos()
         payload['acts'] = [payload['acts'][0]]
         payload['acts'][0]['area'] = {
-            **self._campo('120.00', 'área construída 120,00 m2'),
-            'unidade': 'm2',
-            'raw': '120,00 m2',
+            **self._campo('12.50', 'área 12,50 ha'),
+            'unidade': 'alqueires',
+            'raw': '12,50 alqueires',
         }
         self.job.extracoes.all().delete()
         self.extracao = self._aberta(payload)
@@ -212,7 +213,7 @@ class AreaEmOutraUnidadeSalvarTest(RevisaoFormularioBase):
             html,
             r'name="descartar_area"[^>]*form="lancamento-form"',
         )
-        self.assertIn('Área lida em m², descartada pelo revisor.', html)
+        self.assertIn('Área lida em alqueires, descartada pelo revisor.', html)
         campo = self.extracao.campos.get(chave='/acts/0/area')
         self.assertEqual(campo.status_revisao, 'sugerido')
         self.assertFalse(campo.area_convertida)
