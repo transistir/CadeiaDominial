@@ -142,14 +142,20 @@ class HectaresConfirmadosTest(SimpleTestCase):
             with self.subTest(normalizado=normalizado):
                 self.assertIsNone(hectares_confirmados('', normalizado))
 
-    def test_borda_da_tolerancia_compara_antes_de_quantizar(self):
-        # diff 0,000001 → aceita
+    def test_borda_compara_depois_de_quantizar(self):
+        # diff 0,000001 → quantizado bate
         self.assertEqual(hectares_confirmados('1,000001 ha', '1'), '1')
-        # diff exatamente 0,00005 (12,34565 − 12,3456) → aceita
+        # 12,34565 quantiza para 12,3457; canônico 12.3456 → recusa
+        self.assertIsNone(hectares_confirmados('12,34565 ha', '12.3456'))
+        # mesmo texto, canônico 12.3457 → aceita
         self.assertEqual(
-            hectares_confirmados('12,34565 ha', '12.3456'), '12.3456',
+            hectares_confirmados('12,34565 ha', '12.3457'), '12.3457',
         )
-        # diff 0,000099 → recusa
+        # borda de baixo: 12,34555 → 12,3456 (ROUND_HALF_UP) → aceita
+        self.assertEqual(
+            hectares_confirmados('12,34555 ha', '12.3456'), '12.3456',
+        )
+        # diff 0,000099 → quantizado diverge → recusa
         self.assertIsNone(hectares_confirmados('12,345699 ha', '12.3456'))
 
 

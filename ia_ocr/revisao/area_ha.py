@@ -27,9 +27,9 @@ regex só garantiria o sufixo ASCII. A sobra fora do par/composto só pode ser
 espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha``,
 ``169 ha, 9 a e quarenta ca`` e ``169 ha e 9 are`` (singular ``are`` não é
 consumido pelo composto) são ambíguos. Unidade do texto divergente do enum
-do A3, ou valor convertido que não bate com o ``normalized`` do A3
-(tolerância ``0.00005``, comparada **antes** de quantizar; em ``m2`` depois
-de ÷10.000), devolve ``None``: quem chama trata como pendência do revisor,
+do A3, ou valor convertido que, quantizado, não é **igual** ao ``normalized``
+do A3 quantizado (comparação feita depois de ÷10.000 quando a unidade é
+``m2``), devolve ``None``: quem chama trata como pendência do revisor,
 nunca como zero. A função não levanta exceção — dado de OCR é entrada hostil.
 """
 
@@ -52,6 +52,9 @@ _MAXIMO = Decimal('99999999.9999')
 _M2_POR_HA = Decimal(10000)
 _ARES_POR_HA = Decimal(100)
 _CENTIARES_POR_HA = Decimal(10000)
+# Mantida: `_bate_com_normalizado` (via `converter_para_hectares` com
+# `normalizado`) ainda compara com tolerância; `hectares_confirmados` usa
+# igualdade pós-quantização.
 _TOLERANCIA = Decimal('0.00005')
 
 
@@ -102,8 +105,8 @@ def hectares_confirmados(raw, normalizado):
     - canônico não numérico, ``<= 0`` ou acima do limite → ``None``;
     - ``raw`` vazio/nulo: não há o que confrontar → o canônico quantizado;
     - ``raw`` presente: **só** vale quando converte de forma inequívoca
-      (``converter_para_hectares``) e o valor convertido, **antes de
-      quantizar**, fica a no máximo ``0.00005`` do canônico quantizado;
+      (``converter_para_hectares``) e o valor convertido, quantizado com
+      ``ROUND_HALF_UP``, é **igual** ao canônico quantizado;
     - texto ilegível/ambíguo **não** é "consertado" pelo canônico: vira
       pendência do revisor (``None``).
     """
@@ -116,13 +119,8 @@ def hectares_confirmados(raw, normalizado):
     if not isinstance(raw, str) or not raw.strip():
         return quantizado
     try:
-        convertido = _converter(raw, 'ha', None)
-        if convertido is None or _normalizar(convertido) is None:
-            return None
-        with localcontext() as contexto:
-            contexto.prec = 50
-            diverge = abs(esperado - convertido) > _TOLERANCIA
-        if diverge:
+        convertido = _normalizar(_converter(raw, 'ha', None))
+        if convertido is None or convertido != esperado:
             return None
     except (ArithmeticError, TypeError, ValueError):
         return None
