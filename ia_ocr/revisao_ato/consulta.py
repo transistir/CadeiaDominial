@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from .. import importacao, revisao
 from ..models import ImportacaoIA
-from ..rotulos import analisar_rotulo
+from ..rotulos import analisar_rotulo, resolver_tipo
 
 ESTADO_PENDENTE = 'pendente'
 ESTADO_IMPORTADO = 'importado'
@@ -77,8 +77,18 @@ def atos_da_revisao(extracao, dados=None, linhas=None):
 
 
 def _eh_inicio_matricula(ato, analisado):
-    """Ato de abertura da matrícula: o tipo efetivo ou o rótulo dizem início."""
-    return 'inicio_matricula' in (ato.tipo, analisado.tipo)
+    """Ato de abertura: o tipo pela MESMA precedência da importação.
+
+    ``ato.tipo`` é ``valor(tipo_sugerido) or tipo_resolvido`` — a sugestão
+    crua do OCR vence e um ``R-5`` com ``tipo_sugerido=inicio_matricula``
+    iria para o fim da sidebar, embora a importação grave ``registro``.
+    Quem decide é ``resolver_tipo`` (explícito → rótulo R/Av → sugestão),
+    a regra de ``importacao/ato_documento.py`` e de ``_tipos_efetivos``.
+    """
+    tipo, _divergencia, _origem = resolver_tipo(
+        ato.tipo_explicito, analisado, ato.tipo_sugerido,
+    )
+    return tipo == 'inicio_matricula'
 
 
 def _rotulo_da_aba(ato, analisado, indice):
