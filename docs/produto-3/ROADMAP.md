@@ -771,6 +771,22 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
    ("Sem Origem") no caso misto. *(Estender #174 sem mudar os badges
    existentes; respeitar escopo por usuário do #132.)*
 
+## R11 — Fila final (pós-R10) — enfileirado 21/11/2026
+
+> Bloco criado a pedido do Hiure em 21/11/2026 para receber o que entra
+> **depois do R10**. Não reordena R4–R10 nem a trilha F3.
+
+1. **#375** fix(ui): lista de imóveis da TI — matrícula com cartório e ordem
+   pela última alteração da cadeia. A coluna Matrícula de `tis_detail` mostra
+   só o número (sem o cartório) e a ordenação atual não reflete edição: usa
+   `DateField` (empata no mesmo dia), não tem timestamp de atualização em
+   `Documento`/`Lancamento` e usa `Coalesce` em vez de `Greatest`, ignorando
+   lançamento quando existe documento. Solução envolve migração
+   (`atualizado_em` nos dois models) + service de ordenação — **não é tarefa
+   pequena**. Tentativa inicial de 21/11 está parada e preservada na branch
+   `fix/375-lista-imoveis-cartorio-ordem` (commit `7b415c88`, sem push); o
+   estado completo e os pendentes estão no comentário da issue #375.
+
 ## F3 — Fase 3 (contrato FUNAPE, prazo 31/10/2026): IA/OCR e importação assistida — 🟡 EM EXECUÇÃO (trilha paralela)
 
 > **Outro contrato** (FUNAPE/Umbelino), registrado aqui para a fila não ficar
