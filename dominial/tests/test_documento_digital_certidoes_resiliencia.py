@@ -14,18 +14,39 @@ Em módulo próprio: os irmãos (original e ``correcoes``) já estão no teto
 de 400 linhas imposto pelo CI. Cadeia base vem de `_BaseCadeiaCertidoes`.
 """
 
-from datetime import date
+import zipfile
+from datetime import date, timedelta
 from unittest import mock
 
 from django.db.models.fields.files import FieldFile
 from django.urls import reverse
+from django.utils import timezone
 
-from dominial.models import Documento, Imovel, UserImovel
+from dominial.models import Documento, DocumentoDigital, Imovel, UserImovel
 from dominial.tests.test_documento_digital_certidoes import (
     RAIZ_M12345,
     RAIZ_T50,
     _BaseCadeiaCertidoes,
 )
+
+
+def _fixar_ordem_de_upload(mais_recente, *anteriores):
+    """Distância determinística entre `data_upload` de uploads em teste.
+
+    `auto_now_add` ignora o `data_upload` passado ao create: dois uploads
+    criados no mesmo instante EMPATAM em `ordering = ['-data_upload']` e
+    a ordem de iteração vira indefinida — quem fica com o nome limpo e
+    quem fica com `_2` poderia trocar entre execuções. `update()` bypassa
+    o `pre_save` e fixa a ordem: `mais_recente` itera primeiro.
+    """
+    hora = timezone.now()
+    for registro in anteriores:
+        DocumentoDigital.objects.filter(pk=registro.pk).update(
+            data_upload=hora - timedelta(hours=1)
+        )
+    DocumentoDigital.objects.filter(pk=mais_recente.pk).update(
+        data_upload=hora
+    )
 
 
 class ArquivoIlegivelViraMarcadorTest(_BaseCadeiaCertidoes):
@@ -42,6 +63,24 @@ class ArquivoIlegivelViraMarcadorTest(_BaseCadeiaCertidoes):
             'open',
             side_effect=PermissionError('dono errado após restore'),
         )
+
+    def _ilegivel_apenas(self, nome_alvo):
+        """`PermissionError` só para `nome_alvo`; todo o resto abre normal.
+
+        Patch com função comum em vez de MagicMock: função é descritor,
+        então o FieldFile chega como `self` e o `name` dele distingue o
+        alvo — indispensable no caso misto, em que o irmão do mesmo
+        documento tem que abrir de verdade. O destino segue sendo a
+        CLASSE: a view recarrega os registros com FieldFile próprio.
+        """
+        original = FieldFile.open
+
+        def abrir_se_legivel(fieldfile, modo='rb'):
+            if fieldfile.name == nome_alvo:
+                raise PermissionError(f'dono errado: {nome_alvo}')
+            return original(fieldfile, modo)
+
+        return mock.patch.object(FieldFile, 'open', new=abrir_se_legivel)
 
     def _url_verificar(self):
         return reverse('baixar_certidoes_cadeia_verificar', kwargs={
@@ -81,6 +120,55 @@ class ArquivoIlegivelViraMarcadorTest(_BaseCadeiaCertidoes):
             }],
         })
 
+    def test_misto_um_legivel_e_um_ilegivel_dividem_a_mesma_posicao(self):
+        """Caso misto: o documento entrega o PDF E o marcador, juntos.
+
+        O legível não é refém do ilegível: PDF e `_INDISPONIVEL.txt`
+        dividem a mesma posição (a da matrícula), o PDF com o conteúdo
+        dele intacto. O ilegível fica com o upload mais recente para
+        iterar primeiro (`-data_upload`, fixado pelo helper).
+        """
+        bom = self._criar_pdf(self.doc_matricula, 'bom.pdf', b'%PDF-1.4 bom')
+        ruim = self._criar_pdf(self.doc_matricula, 'ruim.pdf', b'%PDF-1.4 ruim')
+        _fixar_ordem_de_upload(ruim, bom)
+
+        with self._ilegivel_apenas(ruim.arquivo.name), self.assertLogs(
+            'dominial.views.certidoes_views', level='WARNING'
+        ):
+            response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(self._zip_bytes(response)) as zipf:
+            self.assertEqual(zipf.namelist(), [
+                f'{RAIZ_M12345}_INDISPONIVEL.txt',
+                f'{RAIZ_M12345}.pdf',
+                f'{RAIZ_T50}_SEM_PDF.txt',
+            ])
+            self.assertEqual(zipf.read(f'{RAIZ_M12345}.pdf'), b'%PDF-1.4 bom')
+
+    def test_verificacao_misto_conta_com_pdf_e_lista_indisponivel(self):
+        """O documento misto conta em `com_pdf` E lista o arquivo em
+        `indisponiveis` — o modal não esconde nem promete o que falta."""
+        bom = self._criar_pdf(self.doc_matricula, 'bom.pdf', b'%PDF-1.4 bom')
+        ruim = self._criar_pdf(self.doc_matricula, 'ruim.pdf', b'%PDF-1.4 ruim')
+        _fixar_ordem_de_upload(ruim, bom)
+
+        with self._ilegivel_apenas(ruim.arquivo.name):
+            response = self.client.get(self._url_verificar())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            'total': 2,
+            'com_pdf': 1,
+            'sem_pdf': 1,
+            'indisponiveis': [{
+                'ordem': 1,
+                'tipo': 'Matrícula',
+                'numero': 'M12345',
+                'nome_original': 'ruim.pdf',
+            }],
+        })
+
 
 class ColisaoCasefoldTest(_BaseCadeiaCertidoes):
     """MF2: `.pdf` × `.PDF` não podem se sobrescrever na extração."""
@@ -88,22 +176,41 @@ class ColisaoCasefoldTest(_BaseCadeiaCertidoes):
     def test_extensoes_que_diferem_somente_na_caixa_ganham_sufixo(self):
         """Segunda entrada no mesmo raiz vira `_2` — caixa não distingue.
 
-        `ordering = ['-data_upload']`: o PDF anexado por último itera
-        primeiro e fica com o nome limpo; o `_2` fica no mais antigo.
+        A reserva no `usados` é por ``casefold()``: os dois nomes
+        dobrados divergem, então ambos sobrevivem à extração em FS
+        case-insensitive (Windows/macOS), e exatamente um termina em
+        `_2.pdf`. A ordem entre os dois uploads é fixada pelo helper:
+        sem ele, `auto_now_add` pode gravar os dois no mesmo instante e
+        o empate em `-data_upload` trocaria quem leva `_2`.
         """
-        self._criar_pdf(self.doc_matricula, 'scan.pdf', b'%PDF-1.4 um')
-        self._criar_pdf(self.doc_matricula, 'scan.PDF', b'%PDF-1.4 dois')
+        scan_pdf = self._criar_pdf(
+            self.doc_matricula, 'scan.pdf', b'%PDF-1.4 um'
+        )
+        scan_pdf_maiusculo = self._criar_pdf(
+            self.doc_matricula, 'scan.PDF', b'%PDF-1.4 dois'
+        )
+        _fixar_ordem_de_upload(scan_pdf_maiusculo, scan_pdf)
 
         response = self.client.get(self._url())
 
         self.assertEqual(response.status_code, 200)
+        nomes = self._nomes_do_zip(response)
+        proprios = [
+            nome for nome in nomes if nome.startswith(RAIZ_M12345)
+        ]
+        self.assertIn(f'{RAIZ_T50}_SEM_PDF.txt', nomes)
+        self.assertEqual(len(proprios), 2)
+        dobrados = {nome.casefold() for nome in proprios}
+        self.assertEqual(len(dobrados), 2)
         self.assertEqual(
-            sorted(self._nomes_do_zip(response)),
-            [
-                f'{RAIZ_M12345}.PDF',
-                f'{RAIZ_M12345}_2.pdf',
-                f'{RAIZ_T50}_SEM_PDF.txt',
-            ],
+            dobrados,
+            {
+                f'{RAIZ_M12345}.pdf'.casefold(),
+                f'{RAIZ_M12345}_2.pdf'.casefold(),
+            },
+        )
+        self.assertEqual(
+            sum(nome.endswith('_2.pdf') for nome in proprios), 1
         )
 
 
