@@ -476,7 +476,7 @@ gpt-6-sol xhigh: rodada 1 REJEITA, 6 MUST-FIX incorporados na v2 aprovada).
 > (b) `immutable` 30d em estáticos sem hash de versão (ManifestStaticFiles),
 > (c) alerta quando deploy do CI falha.
 
-0. **#334 🆕 P1 — PRIMEIRO ITEM DO R4 (executar assim que a F3 fechar)**
+0. **#334 🔁 P1 — EM EXECUÇÃO desde 21/11/2026 (a F3 fechou com o I-14)**
    botão **"Baixar certidões"** na `ver-cadeia-dominial`: ZIP com todos os PDFs
    anexados aos documentos da cadeia, em um clique. Escopo na issue: reutiliza
    `CadeiaCompletaService.get_cadeia_completa()` (inclui importados, cujo PDF
@@ -914,8 +914,7 @@ fecham na validação do bloco, não no merge.
    em rodada final de review no fechamento desta entrada. #328 (formulário
    como fonte de verdade; remove `valor_transacao`/`detalhes`) já em develop.
    O contrato v1.2 do lado do app entrou no PR #340 (#339).
-6d. **I-14 🔁 em andamento — form ✅ (#364), cards aposentados ✅ (#366);
-   falta o #271** #341 — **revisão dentro do
+6d. **I-14 ✅ FECHADO 21/11/2026 — #364 + #366 + #368** #341 — **revisão dentro do
    formulário de lançamento**: um ato por aba na sidebar (padrão
    `js-lancamento-resumo`), campos na ordem e com os rótulos do formulário,
    **gravação só no "Salvar lançamento" daquele ato** (`criar_lancamento_completo`,
@@ -940,6 +939,13 @@ fecham na validação do bloco, não no merge.
    Codex xhigh (2 MUST-FIX fechados) e Greptile 5/5; 996 testes em `ia_ocr`.
    **Próximo passo do I-14:** #271 (vocabulário canônico Forma/Título com
    sugestões no formulário), em PR próprio.
+   **Fechamento em 21/11/2026:** PR **#368** (squash `9f038467`) devolveu as
+   sugestões de Forma/Título por frequência real de uso — `forma_autocomplete`
+   com escopo por `Imovel.objects.for_user`, datalist dinâmico em
+   `forma_sugestoes.js` (sem `innerHTML`), fim do `autocomplete="off"` e do
+   datalist fixo. Codex xhigh sem MUST-FIX (2 P2 fechados) + Greptile 5/5;
+   `dominial.tests` 1175 com a mesma lista de falhas de ambiente. **Com isso o
+   I-14 fecha e a F3 está concluída.** Próximo da fila: **#334** (R4 item 0).
 6e. **I-12 🔁 reescopado** #331 — deixa de ser "prévia para conferir" e passa
    a **"exportar o que foi importado"** (CSV/XLSX a partir do que já está no
    banco), depois do I-14.
