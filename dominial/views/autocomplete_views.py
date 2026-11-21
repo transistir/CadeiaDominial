@@ -149,6 +149,46 @@ def cartorio_autocomplete(request):
     
     return JsonResponse({'results': results})
 
+_CAMPOS_FORMA = {'forma': 'forma', 'titulo': 'titulo'}
+
+
+@login_required
+def forma_autocomplete(request):
+    """
+    Sugestões de Forma/Título da transmissão por frequência de uso (#271).
+
+    Parâmetros GET:
+    - campo: 'forma' (padrão) ou 'titulo'; outro valor → 400
+    - q: filtro opcional (icontains) sobre o valor
+
+    Escopo: mesmo recorte do ramo de sugestões do ``cartorio_autocomplete`` —
+    lançamentos cujo ``documento.imovel`` está em
+    ``Imovel.objects.for_user(request.user)``.
+    """
+    from ..models import Lancamento
+
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    campo = _CAMPOS_FORMA.get(request.GET.get('campo', 'forma'))
+    if campo is None:
+        return JsonResponse({'error': 'campo inválido'}, status=400)
+    query = request.GET.get('q', '').strip()
+
+    qs = Lancamento.objects.filter(
+        documento__imovel__in=Imovel.objects.for_user(request.user),
+        **{f'{campo}__isnull': False},
+    ).exclude(**{f'{campo}__regex': r'^\s*$'})
+    if query:
+        qs = qs.filter(**{f'{campo}__icontains': query})
+    linhas = (
+        qs.values(campo)
+        .annotate(count=models.Count('id'))
+        .order_by('-count', campo)[:20]
+    )
+    results = [{'valor': linha[campo], 'count': linha['count']} for linha in linhas]
+    return JsonResponse({'results': results})
+
+
 @login_required
 def cartorio_imoveis_autocomplete(request):
     """

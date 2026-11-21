@@ -49,7 +49,6 @@
     "static/dominial/js/ocr_card.js": 413,
     "static/dominial/js/origem_simples.js": 954,
     "templates/dominial/cadeia_dominial_tabela.html": 499,
-    "templates/dominial/lancamento_detail.html": 625,
-    "templates/dominial/lancamento_form.html": 402
+    "templates/dominial/lancamento_detail.html": 625
   }
 }
