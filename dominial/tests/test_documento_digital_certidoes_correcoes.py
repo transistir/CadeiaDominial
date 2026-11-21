@@ -1,31 +1,59 @@
-"""MUST-FIX do review do Codex no ZIP "Baixar certidões" (#334).
+"""ZIP "Baixar certidões" — MUST-FIX do review e decisões do dono (21/11).
 
-Em módulo próprio: com esses testes dentro,
-``test_documento_digital_certidoes.py`` ficaria acima do teto de 400
-linhas imposto pelo CI. A cadeia base vem de ``_BaseCadeiaCertidoes``.
+1. ZIP = a MESMA lista do XLSX (fonte `CadeiaCompletaService`, a mesma de
+   `exportar_cadeia_dominial_excel`); a escolha de origem da tela NÃO filtra;
+2. todo documento entra na posição dele: PDF, `_INDISPONIVEL.txt` (registro
+   sumido do storage) ou `_SEM_PDF.txt` (sem registro de PDF);
+3. endpoint de verificação (JSON) alimenta o modal de aviso.
+
+Em módulo próprio: `test_documento_digital_certidoes.py` está perto do teto
+de 400 linhas imposto pelo CI. A cadeia base vem de `_BaseCadeiaCertidoes`.
 """
 
-import json
-import re
+import io
 import tempfile
+import zipfile
 from datetime import date
 from unittest import mock
 
 from django.urls import reverse
 
 from dominial.models import Documento, Imovel, Lancamento, UserImovel
+from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.cadeia_dominial_tabela_service import (
     CadeiaDominialTabelaService,
 )
 from dominial.tests.test_documento_digital_certidoes import _BaseCadeiaCertidoes
 
 
+def _conteudo_do_zip(response):
+    """``{nome: bytes}`` de um FileResponse de ZIP (streaming)."""
+    with zipfile.ZipFile(io.BytesIO(b''.join(response.streaming_content))) as zipf:
+        return {nome: zipf.read(nome) for nome in zipf.namelist()}
+
+
+# Cadeia homônima com PDF nos três documentos: é a lista que o XLSX traz.
+_NOMES_CADEIA_INTEIRA = [
+    '01_Matricula_M12345_pdf-m.pdf',
+    '02_Transcricao_T50_pdf-t50.pdf',
+    '03_Transcricao_T40_pdf-t40.pdf',
+]
+
+
+def _criar_fantasma_padrao(base, documento):
+    """Registro de PDF cujo arquivo sumiu do storage (caminho fixo)."""
+    return base._criar_registro_fantasma(
+        documento,
+        'fantasma.pdf',
+        'documentos_digitais/2024/01/fantasma.pdf',
+    )
+
+
 def _cadeia_com_dois_homonimos(cls):
     """M12345 passa a citar duas origens reais (T50 e T40).
 
-    Complementa ``_BaseCadeiaCertidoes``: T40 vive no imóvel de origem,
-    ao lado de T50, e o lançamento da matrícula cita os dois. Sem escolha,
-    a cadeia segue T50 (padrão: maior número entre irmãos).
+    T40 vive no imóvel de origem, ao lado de T50. Sem escolha, a TABELA
+    segue T50 (padrão: maior número) — o ZIP traz os dois.
     """
     cls.doc_t40 = Documento.objects.create(
         imovel=cls.imovel_origem,
@@ -52,35 +80,45 @@ def _cadeia_com_dois_homonimos(cls):
     )
 
 
-class EscolhaDeOrigemNoZipTest(_BaseCadeiaCertidoes):
-    """MF1: o ZIP segue a origem escolhida na sessão, como a tela.
-
-    M12345 passa a citar duas origens reais (T50 e T40). Sem escolha, a
-    cadeia segue T50 (padrão: maior número entre irmãos); com
-    ``origem_documento_<id> = 'T40'`` na sessão — o mesmo mecanismo que os
-    botões de origem da tela gravam (#201) — o ZIP tem que seguir T40.
-    """
+class CadeiaInteiraNoZipTest(_BaseCadeiaCertidoes):
+    """Decisões do dono 1–2: o ZIP é a mesma lista do XLSX, sem filtro."""
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
         _cadeia_com_dois_homonimos(cls)
 
-    def test_zip_segue_a_origem_escolhida_na_sessao(self):
+    def test_zip_e_a_mesma_lista_do_xlsx(self):
+        """(a) PDFs nos três → ZIP com os três, na ordem da lista do XLSX."""
+        self._criar_pdf(self.doc_matricula, 'pdf-m.pdf', b'%PDF-1.4 m')
         self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
         self._criar_pdf(self.doc_t40, 'pdf-t40.pdf', b'%PDF-1.4 t40')
 
-        # Sem escolha na sessão: o tronco segue T50.
-        self.assertEqual(
-            self._nomes_do_zip(self.client.get(self._url())),
-            ['02_Transcricao_T50_pdf-t50.pdf'],
-        )
+        cadeia = CadeiaCompletaService(
+            user=self.user
+        ).get_cadeia_completa(self.tis.id, self.imovel.id)['cadeia_completa']
+        ordem_xlsx = [
+            item['documento'].numero
+            for tronco in cadeia
+            for item in tronco['documentos']
+        ]
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        # NN = posição na MESMA lista que o XLSX renderiza:
+        self.assertEqual(ordem_xlsx, ['M12345', 'T50', 'T40'])
+        self.assertEqual(self._nomes_do_zip(response), _NOMES_CADEIA_INTEIRA)
+
+    def test_sessao_com_escolha_de_origem_nao_filtra_o_zip(self):
+        """(b) sessão presa em T40: a tabela mostra 2; o ZIP traz 3."""
+        self._criar_pdf(self.doc_matricula, 'pdf-m.pdf', b'%PDF-1.4 m')
+        self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
+        self._criar_pdf(self.doc_t40, 'pdf-t40.pdf', b'%PDF-1.4 t40')
 
         session = self.client.session
         session[f'origem_documento_{self.doc_matricula.id}'] = 'T40'
         session.save()
-
-        # A tela segue T40 — é esta lista que o ZIP tem que espelhar:
         linhas = CadeiaDominialTabelaService(
             user=self.user
         ).get_cadeia_dominial_tabela(
@@ -92,11 +130,137 @@ class EscolhaDeOrigemNoZipTest(_BaseCadeiaCertidoes):
 
         response = self.client.get(self._url())
 
+        # O ZIP não segue a escolha da sessão: lista inteira do XLSX.
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            self._nomes_do_zip(response),
-            ['02_Transcricao_T40_pdf-t40.pdf'],
-        )
+        self.assertEqual(self._nomes_do_zip(response), _NOMES_CADEIA_INTEIRA)
+
+    def test_todo_documento_da_cadeia_tem_entrada_no_zip(self):
+        """(e) PDF + indisponível + sem PDF: 3 documentos → 3 entradas."""
+        self._criar_pdf(self.doc_matricula, 'real.pdf', b'%PDF-1.4 real')
+        _criar_fantasma_padrao(self, self.doc_origem)
+
+        with self.assertLogs(
+            'dominial.views.certidoes_views', level='WARNING'
+        ):
+            response = self.client.get(self._url())
+
+        nomes = self._nomes_do_zip(response)
+        self.assertEqual(len(nomes), 3, nomes)
+        self.assertEqual([nome[:2] for nome in nomes], ['01', '02', '03'])
+        self.assertTrue(nomes[0].endswith('.pdf'))
+        self.assertIn('_INDISPONIVEL.txt', nomes[1])
+        self.assertIn('_SEM_PDF.txt', nomes[2])
+
+
+class MarcadoresNoZipTest(_BaseCadeiaCertidoes):
+    """Decisão do dono 2: marcadores explicam o caso, na posição certa."""
+
+    def test_arquivo_indisponivel_vira_marcador_na_posicao(self):
+        """(c) registro sumido do storage → `_INDISPONIVEL.txt` + texto."""
+        self._criar_pdf(self.doc_matricula, 'real.pdf', b'%PDF-1.4 real')
+        _criar_fantasma_padrao(self, self.doc_origem)
+
+        with self.assertLogs(
+            'dominial.views.certidoes_views', level='WARNING'
+        ):
+            response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        conteudo = _conteudo_do_zip(response)
+        nome = '02_Transcricao_T50_fantasma.pdf_INDISPONIVEL.txt'
+        self.assertEqual(list(conteudo), ['01_Matricula_M12345_real.pdf', nome])
+        texto = conteudo[nome].decode()
+        self.assertIn('Transcrição T50', texto)
+        self.assertIn('fantasma.pdf', texto)
+        self.assertIn('armazenamento', texto)
+
+    def test_documento_sem_pdf_vira_marcador_na_posicao(self):
+        """(d) documento sem registro de PDF → `_SEM_PDF.txt` + texto."""
+        self._criar_pdf(self.doc_matricula, 'real.pdf', b'%PDF-1.4 real')
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        conteudo = _conteudo_do_zip(response)
+        self.assertEqual(list(conteudo), [
+            '01_Matricula_M12345_real.pdf',
+            '02_Transcricao_T50_SEM_PDF.txt',
+        ])
+        texto = conteudo['02_Transcricao_T50_SEM_PDF.txt'].decode()
+        self.assertIn('Transcrição T50', texto)
+        self.assertIn('nenhum PDF', texto)
+
+    def test_somente_fantasma_vira_marcador_e_zip_e_entregue(self):
+        """MF4 (dono 21/11): só fantasma não redireciona — vira marcador."""
+        _criar_fantasma_padrao(self, self.doc_matricula)
+
+        with self.assertLogs(
+            'dominial.views.certidoes_views', level='WARNING'
+        ):
+            response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(_conteudo_do_zip(response)), [
+            '01_Matricula_M12345_fantasma.pdf_INDISPONIVEL.txt',
+            '02_Transcricao_T50_SEM_PDF.txt',
+        ])
+
+
+class VerificacaoAntesDeBaixarTest(_BaseCadeiaCertidoes):
+    """Decisão do dono 3: JSON que alimenta o modal de aviso."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        _cadeia_com_dois_homonimos(cls)
+
+    def _url_verificar(self):
+        return reverse('baixar_certidoes_cadeia_verificar', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
+        })
+
+    def test_verificacao_devolve_resumo_com_indisponiveis(self):
+        """(f) total, com_pdf, sem_pdf e a lista de indisponíveis."""
+        self._criar_pdf(self.doc_matricula, 'real.pdf', b'%PDF-1.4 real')
+        _criar_fantasma_padrao(self, self.doc_origem)
+
+        response = self.client.get(self._url_verificar())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            'total': 3,
+            'com_pdf': 1,
+            'sem_pdf': 1,
+            'indisponiveis': [{
+                'ordem': 2,
+                'tipo': 'Transcrição',
+                'numero': 'T50',
+                'nome_original': 'fantasma.pdf',
+            }],
+        })
+
+    def test_verificacao_sem_perdas_nao_lista_nada(self):
+        """Tudo disponível: com_pdf = total, sem_pdf 0, lista vazia."""
+        self._criar_pdf(self.doc_matricula, 'pdf-m.pdf', b'%PDF-1.4 m')
+        self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
+        self._criar_pdf(self.doc_t40, 'pdf-t40.pdf', b'%PDF-1.4 t40')
+
+        response = self.client.get(self._url_verificar())
+
+        self.assertEqual(response.json(), {
+            'total': 3,
+            'com_pdf': 3,
+            'sem_pdf': 0,
+            'indisponiveis': [],
+        })
+
+    def test_usuario_sem_acesso_recebe_404_no_zip_e_na_verificacao(self):
+        """(h) segregação (#132) vale para os dois endpoints."""
+        self._criar_pdf(self.doc_matricula, 'certidao.pdf')
+        self.client.login(username='outro_certidoes', password='testpass123')
+
+        self.assertEqual(self.client.get(self._url()).status_code, 404)
+        self.assertEqual(self.client.get(self._url_verificar()).status_code, 404)
 
 
 class SanitizacaoDoNumeroNoZipTest(_BaseCadeiaCertidoes):
@@ -205,35 +369,6 @@ class FalhaDuranteACopiaTest(_BaseCadeiaCertidoes):
         self.assertContains(seguida, 'Erro ao gerar o ZIP')
 
 
-class SomenteRegistrosFantasmaTest(_BaseCadeiaCertidoes):
-    """MF4: registro sem arquivo físico não entra na conta do "tem PDF"."""
-
-    def test_somente_fantasma_redireciona_com_mensagem(self):
-        """Só registro fantasma → 302 com MENSAGEM_SEM_PDF, sem ZIP."""
-        self._criar_registro_fantasma(
-            self.doc_matricula,
-            'fantasma.pdf',
-            'documentos_digitais/2024/01/fantasma.pdf',
-        )
-
-        with self.assertLogs(
-            'dominial.views.certidoes_views', level='WARNING'
-        ):
-            response = self.client.get(self._url())
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(
-            response.url,
-            reverse('tronco_principal', kwargs={
-                'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
-            }),
-        )
-        seguida = self.client.get(response.url)
-        self.assertContains(
-            seguida, 'Nenhum PDF anexado aos documentos desta cadeia.'
-        )
-
-
 class SpoolFechadoEmErroTest(_BaseCadeiaCertidoes):
     """MF5: o spool fecha em qualquer caminho de exceção."""
 
@@ -262,106 +397,3 @@ class SpoolFechadoEmErroTest(_BaseCadeiaCertidoes):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(criados), 1, criados)
         self.assertTrue(criados[0].closed)
-
-
-class EscolhasDaUrlNoZipTest(_BaseCadeiaCertidoes):
-    """MF1 (2ª rodada): o link do ZIP leva o ``?escolhas`` da URL.
-
-    A tela (``tronco_principal``) aceita
-    ``?escolhas={"<doc>":"documento:<origem>"}`` e SUBSTITUI a sessão —
-    inclusive ``{}``, que limpa. O botão "Baixar certidões" tem que levar o
-    parâmetro no href e a view do ZIP interpretá-lo com a mesma precedência
-    da tela (param > sessão, inclusive vazio): senão, sessão em T50 + URL
-    escolhendo T40 mostra T40 e o clique baixa T50.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        super().setUpTestData()
-        _cadeia_com_dois_homonimos(cls)
-
-    def _url_cadeia(self):
-        return reverse('tronco_principal', kwargs={
-            'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
-        })
-
-    def _prender_sessao(self, numero):
-        session = self.client.session
-        session[f'origem_documento_{self.doc_matricula.id}'] = numero
-        session.save()
-
-    def _com_pdfs_t50_e_t40(self):
-        self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
-        self._criar_pdf(self.doc_t40, 'pdf-t40.pdf', b'%PDF-1.4 t40')
-
-    def test_link_do_zip_na_tela_leva_escolhas_da_url(self):
-        """tela → href → ZIP: o galho escolhido na URL é o baixado."""
-        self._com_pdfs_t50_e_t40()
-        self._prender_sessao('T50')
-
-        escolhas = json.dumps({
-            str(self.doc_matricula.id): f'documento:{self.doc_t40.pk}'
-        })
-        tela = self.client.get(
-            self._url_cadeia(), data={'escolhas': escolhas}
-        )
-        self.assertEqual(tela.status_code, 200)
-
-        correspondencia = re.search(
-            r'href="([^"]*certidoes\.zip[^"]*)"', tela.content.decode()
-        )
-        self.assertIsNotNone(correspondencia, 'botão do ZIP ausente na tela')
-        response = self.client.get(correspondencia.group(1))
-
-        self.assertEqual(response.status_code, 200)
-        # A tela segue T40 (?escolhas > sessão): o ZIP baixa o mesmo galho —
-        # e não o T50 preso na sessão.
-        self.assertEqual(
-            self._nomes_do_zip(response), ['02_Transcricao_T40_pdf-t40.pdf']
-        )
-
-    def test_escolhas_vazio_no_zip_iguala_sem_parametro(self):
-        """``?escolhas={}`` no ZIP = GET sem o parâmetro (não 500)."""
-        self._com_pdfs_t50_e_t40()
-        self._prender_sessao('T50')
-
-        sem_parametro = self._nomes_do_zip(self.client.get(self._url()))
-        com_vazio = self.client.get(self._url(), data={'escolhas': '{}'})
-
-        self.assertEqual(com_vazio.status_code, 200)
-        self.assertEqual(self._nomes_do_zip(com_vazio), sem_parametro)
-        self.assertEqual(sem_parametro, ['02_Transcricao_T50_pdf-t50.pdf'])
-
-    def test_escolhas_nao_json_no_zip_nao_quebra(self):
-        """``?escolhas=nao-e-json``: JSON inválido vira ``{}``, sem 500."""
-        self._com_pdfs_t50_e_t40()
-        self._prender_sessao('T50')
-
-        response = self.client.get(
-            self._url(), data={'escolhas': 'nao-e-json'}
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            self._nomes_do_zip(response), ['02_Transcricao_T50_pdf-t50.pdf']
-        )
-
-    def test_escolhas_vazio_descarta_a_sessao_nao_padrao(self):
-        """Precedência param > sessão, inclusive vazio, como na tela.
-
-        Sessão presa em T40 (não-padrão): sem parâmetro o ZIP segue T40;
-        com ``?escolhas={}`` a sessão é descartada e volta o padrão T50.
-        """
-        self._com_pdfs_t50_e_t40()
-        self._prender_sessao('T40')
-        self.assertEqual(
-            self._nomes_do_zip(self.client.get(self._url())),
-            ['02_Transcricao_T40_pdf-t40.pdf'],
-        )
-
-        response = self.client.get(self._url(), data={'escolhas': '{}'})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            self._nomes_do_zip(response), ['02_Transcricao_T50_pdf-t50.pdf']
-        )

@@ -215,7 +215,10 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             self._nomes_do_zip(response),
-            ['01_Matricula_M12345_certidao.pdf'],
+            [
+                '01_Matricula_M12345_certidao.pdf',
+                '02_Transcricao_T50_SEM_PDF.txt',
+            ],
         )
 
     def test_documento_importado_inclui_pdf_do_imovel_de_origem(self):
@@ -225,11 +228,14 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         response = self.client.get(self._url())
 
         self.assertEqual(response.status_code, 200)
-        # Só a origem tem PDF, mas o NN dela continua sendo a posição
-        # do documento na cadeia (02), não a ordem dos itens coletados.
+        # Só a origem tem PDF, mas cada NN continua sendo a posição do
+        # documento na cadeia, não a ordem dos itens coletados.
         self.assertEqual(
             self._nomes_do_zip(response),
-            ['02_Transcricao_T50_certidao-origem.pdf'],
+            [
+                '01_Matricula_M12345_SEM_PDF.txt',
+                '02_Transcricao_T50_certidao-origem.pdf',
+            ],
         )
 
     def test_colisao_de_nome_ganha_sufixo(self):
@@ -245,27 +251,51 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
             [
                 '01_Matricula_M12345_igual.pdf',
                 '01_Matricula_M12345_igual_2.pdf',
+                '02_Transcricao_T50_SEM_PDF.txt',
             ],
         )
 
-    def test_sem_pdf_redireciona_com_mensagem(self):
-        """Sem nenhum PDF: sem ZIP vazio; volta para a cadeia com mensagem."""
+    def test_sem_pdf_em_toda_a_cadeia_vira_marcadores(self):
+        """Decisão do dono (21/11): sem PDF em documento nenhum, o ZIP
+        traz um marcador `_SEM_PDF.txt` por documento, na ordem da lista."""
         response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._nomes_do_zip(response), [
+            '01_Matricula_M12345_SEM_PDF.txt',
+            '02_Transcricao_T50_SEM_PDF.txt',
+        ])
+
+    def test_cadeia_sem_documento_redireciona_com_mensagem(self):
+        """Só cadeia sem documento nenhum volta com MENSAGEM_SEM_PDF."""
+        imovel_vazio = Imovel.objects.create(
+            terra_indigena_id=self.tis,
+            nome='Fazenda Vazia 334',
+            proprietario=self.proprietario,
+            matricula='M777',
+            cartorio=self.cartorio,
+        )
+        UserImovel.objects.create(user=self.user, imovel=imovel_vazio)
+        url = reverse('baixar_certidoes_cadeia', kwargs={
+            'tis_id': self.tis.id, 'imovel_id': imovel_vazio.id,
+        })
+
+        response = self.client.get(url)
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.url,
             reverse('tronco_principal', kwargs={
-                'tis_id': self.tis.id, 'imovel_id': self.imovel.id,
+                'tis_id': self.tis.id, 'imovel_id': imovel_vazio.id,
             }),
         )
-        response = self.client.get(self._url(), follow=True)
+        seguida = self.client.get(response.url)
         self.assertContains(
-            response, 'Nenhum PDF anexado aos documentos desta cadeia.'
+            seguida, 'Nenhum PDF anexado aos documentos desta cadeia.'
         )
 
-    def test_arquivo_ausente_no_storage_pula_e_conclui(self):
-        """Registro sem arquivo físico: warning no log; ZIP só com os demais."""
+    def test_arquivo_ausente_no_storage_vira_marcador_e_conclui(self):
+        """Registro sem arquivo físico: marcador no lugar + warning no log."""
         self._criar_pdf(self.doc_matricula, 'real.pdf', b'%PDF-1.4 real')
         fantasma = self._criar_registro_fantasma(
             self.doc_matricula,
@@ -279,19 +309,22 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
             response = self.client.get(self._url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            self._nomes_do_zip(response), ['01_Matricula_M12345_real.pdf']
-        )
+        self.assertEqual(self._nomes_do_zip(response), [
+            '01_Matricula_M12345_fantasma.pdf_INDISPONIVEL.txt',
+            '01_Matricula_M12345_real.pdf',
+            '02_Transcricao_T50_SEM_PDF.txt',
+        ])
         self.assertTrue(
             any(str(fantasma.id) in log for log in logs.output),
             logs.output,
         )
 
-    def test_documento_fora_do_escopo_nao_gera_zip(self):
+    def test_documento_fora_do_escopo_nao_entra_no_zip(self):
         """Documento fora do escopo do usuário (#132) não entra no ZIP.
 
         Com atribuição só ao imóvel principal, o escopo do usuário não
-        alcança a origem T50 — a cadeia dele não tem PDF nenhum.
+        alcança a origem T50 — o ZIP só tem a matrícula (como marcador,
+        pois ela não tem PDF visível).
         """
         self._criar_pdf(self.doc_origem, 'certidao-origem.pdf')
         UserImovel.objects.create(
@@ -301,8 +334,11 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
 
         response = self.client.get(self._url())
 
-        # Sem PDF visível → mesma regra do "sem PDF": redirect com mensagem.
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self._nomes_do_zip(response),
+            ['01_Matricula_M12345_SEM_PDF.txt'],
+        )
 
     def test_usuario_sem_acesso_recebe_404(self):
         """Segregação: usuário sem o imóvel atribuído recebe 404."""
@@ -315,7 +351,7 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
 
 
 class BotaoBaixarCertidoesTest(_BaseCadeiaCertidoes):
-    """Visibilidade do botão na ver-cadeia-dominial (.tree-actions)."""
+    """O botão não depende de PDF (dono 21/11); href não leva ``?escolhas``."""
 
     def _url_cadeia(self):
         return reverse('tronco_principal', kwargs={
@@ -331,9 +367,11 @@ class BotaoBaixarCertidoesTest(_BaseCadeiaCertidoes):
         self.assertContains(response, 'Baixar certidões')
         self.assertContains(response, self._url())
 
-    def test_botao_sai_quando_nao_ha_pdf(self):
+    def test_botao_fica_mesmo_sem_pdf_e_href_sem_escolhas(self):
+        """(g) sempre visível com lançamentos; ZIP não segue ``?escolhas``."""
         response = self.client.get(self._url_cadeia())
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Baixar certidões')
-        self.assertNotContains(response, 'certidoes.zip')
+        self.assertContains(response, 'Baixar certidões')
+        self.assertContains(response, 'certidoes.zip/')
+        self.assertNotContains(response, 'certidoes.zip/?escolhas')

@@ -1,11 +1,14 @@
 """Download em lote dos PDFs da cadeia dominial (#334).
 
-Gera um ZIP com os PDFs anexados aos documentos da cadeia, na ordem da
-tela. A fonte é a mesma da tela (`CadeiaDominialTabelaService` + as
-escolhas de origem da sessão, com o ``?escolhas`` da URL valendo mais que
-a sessão — igual à tela): o ZIP segue o galho escolhido. View nova em
-módulo próprio porque o legado ``documento_digital_views.py`` está
-congelado no baseline de 400 linhas.
+O ZIP baixa a cadeia INTEIRA — a MESMA lista que o XLSX renderiza, na
+mesma ordem. A fonte é ``CadeiaCompletaService.get_cadeia_completa``, a
+mesma de ``exportar_cadeia_dominial_excel``: a escolha de origem da tela
+não filtra o ZIP (decisão do dono, 21/11/2026). Todo documento da cadeia
+aparece na posição dele — com os PDFs disponíveis, com um marcador
+``_INDISPONIVEL.txt`` quando o registro existe mas o arquivo sumiu do
+storage, ou com um marcador ``_SEM_PDF.txt`` quando não há registro de
+PDF nenhum. View nova em módulo próprio porque o legado
+``documento_digital_views.py`` está congelado no baseline de 400 linhas.
 """
 
 import logging
@@ -18,15 +21,14 @@ import zipfile
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Prefetch, prefetch_related_objects
-from django.http import FileResponse
+from django.http import FileResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.http import content_disposition_header
 from django.utils.text import slugify
 
 from ..models import DocumentoDigital
-from ..services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
-from ..utils.escolhas_origem_utils import escolhas_da_url
+from ..services.cadeia_completa_service import CadeiaCompletaService
 from ..utils.segregacao_utils import require_imovel_atribuido
 
 logger = logging.getLogger(__name__)
@@ -55,24 +57,24 @@ def _sanitizar_para_zip(texto):
     return texto.strip(' .')
 
 
-def _documentos_da_cadeia(cadeia):
-    """Documentos das linhas da tabela, na ordem da tela, deduplicados por id.
+def _documentos_da_cadeia(context):
+    """Documentos do `cadeia_completa`, na MESMA lista/ordem do XLSX.
 
-    `cadeia` é a lista devolvida por ``CadeiaDominialTabelaService.
-    get_cadeia_dominial_tabela`` — a mesma lista, na mesma ordem, que a
-    tela renderiza, já seguindo as escolhas de origem da sessão. O mesmo
-    documento não deve reaparecer; se reaparecer, só a primeira aparição
-    vale. Documentos importados vêm na linha com o `Documento` do imóvel de
-    origem — que é onde o PDF dele vive (#297).
+    `context` é o retorno de ``CadeiaCompletaService.get_cadeia_completa``
+    — o mesmo objeto que ``exportar_cadeia_dominial_excel`` renderiza. O
+    mesmo documento não deve reaparecer entre troncos; se reaparecer, só a
+    primeira aparição vale. Documentos importados vêm com o `Documento` do
+    imóvel de origem — que é onde o PDF dele vive (#297).
     """
     vistos = set()
     documentos = []
-    for item in cadeia:
-        documento = item['documento']
-        if documento.id in vistos:
-            continue
-        vistos.add(documento.id)
-        documentos.append(documento)
+    for tronco in context['cadeia_completa']:
+        for item in tronco['documentos']:
+            documento = item['documento']
+            if documento.id in vistos:
+                continue
+            vistos.add(documento.id)
+            documentos.append(documento)
     return documentos
 
 
@@ -101,18 +103,43 @@ def _com_pdfs(documentos):
     ]
 
 
-def _nome_interno(posicao, documento, arquivo, usados):
-    """`NN_<tipo>_<numero>_<nome_original>`; colisão ganha sufixo _2, _3.
+def _coletar_pares(request, tis_id, imovel_id):
+    """Contexto do `CadeiaCompletaService` + os pares (documento, PDFs).
+
+    A mesma fonte do XLSX, para o ZIP e para a verificação do modal —
+    mesma autenticação, mesmo escopo (#132), mesma ordem.
+    """
+    context = CadeiaCompletaService(
+        user=request.user
+    ).get_cadeia_completa(tis_id, imovel_id)
+    return context, _com_pdfs(_documentos_da_cadeia(context))
+
+
+def _arquivo_disponivel(arquivo):
+    """O registro de PDF tem arquivo físico no storage? (`storage.exists`)"""
+    return arquivo.arquivo.storage.exists(arquivo.arquivo.name)
+
+
+def _raiz_de_nome(posicao, documento, cauda):
+    """`NN_<tipo>_<numero>` + `_cauda`, tudo sanitizado (sem separadores).
 
     NN é a posição do documento na cadeia (não a ordem dos arquivos
-    coletados), com zero à esquerda. Número e nome originais passam por
-    `_sanitizar_para_zip` antes da resolução de colisão, para não criarem
-    subpastas dentro do ZIP.
+    coletados), com zero à esquerda. Número e cauda passam por
+    `_sanitizar_para_zip` antes de virar nome, para não criarem subpastas
+    dentro do ZIP.
     """
     tipo = slugify(documento.tipo.get_tipo_display()).title() or 'Documento'
     numero = _sanitizar_para_zip(documento.numero) or 'Documento'
-    nome_original = _sanitizar_para_zip(arquivo.nome_original)
-    base = f'{posicao:02d}_{tipo}_{numero}_{nome_original}'
+    base = f'{posicao:02d}_{tipo}_{numero}'
+    cauda = _sanitizar_para_zip(cauda)
+    if cauda:
+        base = f'{base}_{cauda}'
+    return base
+
+
+def _nome_interno(posicao, documento, arquivo, usados):
+    """`NN_<tipo>_<numero>_<nome_original>`; colisão ganha sufixo _2, _3."""
+    base = _raiz_de_nome(posicao, documento, arquivo.nome_original)
     raiz, extensao = os.path.splitext(base)
     nome = base
     contador = 2
@@ -123,32 +150,62 @@ def _nome_interno(posicao, documento, arquivo, usados):
     return nome
 
 
+def _nome_marcador(posicao, documento, cauda, estado, usados):
+    """`NN_<tipo>_<numero>_<cauda>_<estado>.txt`; colisão vira _2, _3.
+
+    `estado` é ``INDISPONIVEL`` (o registro existe, o arquivo sumiu do
+    storage) ou ``SEM_PDF`` (documento sem registro de PDF nenhum).
+    Compartilha o `usados` dos nomes reais: marcador nunca sobrescreve um
+    PDF de mesmo nome, nem vice-versa.
+    """
+    raiz = f'{_raiz_de_nome(posicao, documento, cauda)}_{estado}'
+    nome = f'{raiz}.txt'
+    contador = 2
+    while nome in usados:
+        nome = f'{raiz}_{contador}.txt'
+        contador += 1
+    usados.add(nome)
+    return nome
+
+
+def _texto_marcador(documento, arquivo=None):
+    """Explica o caso: documento, tipo, número, data e arquivo esperado."""
+    data = documento.data_exibicao
+    linhas = [
+        'Este arquivo é um marcador de posição — não é o documento em si.',
+        '',
+        f'Documento: {documento.tipo.get_tipo_display()} {documento.numero}',
+        f'Data: {data.strftime("%d/%m/%Y") if data else "não informada"}',
+    ]
+    if arquivo is not None:
+        linhas += [
+            f'Arquivo esperado: {arquivo.nome_original}',
+            (
+                'Motivo: o registro do PDF existe, mas o arquivo não foi '
+                'encontrado no armazenamento.'
+            ),
+        ]
+    else:
+        linhas.append('Motivo: nenhum PDF foi anexado a este documento.')
+    return '\n'.join(linhas) + '\n'
+
+
 @login_required
 @require_imovel_atribuido
 def baixar_certidoes_cadeia(request, tis_id, imovel_id):
-    """ZIP com os PDFs da cadeia, espelho da tela (#334).
+    """ZIP com a cadeia inteira, idêntica à lista do XLSX (#334).
 
-    Mesma fonte da tela (`CadeiaDominialTabelaService` + a sessão de
-    escolhas de origem): o ZIP segue o galho escolhido nos botões de origem,
-    na ordem das linhas. O ``?escolhas`` da URL vale mais que a sessão,
-    com a mesma semântica e precedência da tela (`escolhas_da_url` — param
-    > sessão, inclusive vazio). Sem nenhum PDF incluído, não gera ZIP vazio
-    — volta para a cadeia com mensagem. Arquivo ausente no storage é pulado
-    com log e o download dos demais não cai; falha na cópia ou na resposta
-    fecha o spool e devolve erro — nunca um ZIP parcial com 200.
+    Baixa a cadeia inteira, idêntica à lista do XLSX; a escolha de origem
+    da tela não filtra (decisão do dono, 21/11/2026). Todo documento entra
+    na posição dele: os PDFs disponíveis, `_INDISPONIVEL.txt` quando o
+    registro existe mas o arquivo sumiu do storage e `_SEM_PDF.txt` quando
+    não há registro de PDF. Só cadeia sem documento nenhum volta com
+    MENSAGEM_SEM_PDF — com marcadores, sempre há o que entregar. Falha na
+    cópia ou na resposta fecha o spool e devolve erro — nunca um ZIP
+    parcial com 200.
     """
-    resultado = CadeiaDominialTabelaService(
-        user=request.user
-    ).get_cadeia_dominial_tabela(
-        tis_id,
-        imovel_id,
-        request.session,
-        escolhas_da_url(request.GET.get('escolhas')),
-    )
-    imovel = resultado['imovel']
-    pares = _com_pdfs(_documentos_da_cadeia(resultado['cadeia']))
-
-    if not any(arquivos for _, arquivos in pares):
+    context, pares = _coletar_pares(request, tis_id, imovel_id)
+    if not pares:
         messages.warning(request, MENSAGEM_SEM_PDF)
         return redirect('tronco_principal', tis_id=tis_id, imovel_id=imovel_id)
 
@@ -160,38 +217,59 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
     spool = tempfile.SpooledTemporaryFile(max_size=MAX_SPOOL)  # noqa: SIM115
     try:
         usados = set()
-        incluidos = 0
         with zipfile.ZipFile(spool, 'w', zipfile.ZIP_STORED) as zipf:
             for posicao, (documento, arquivos) in enumerate(pares, start=1):
                 if not arquivos:
+                    zipf.writestr(
+                        _nome_marcador(
+                            posicao, documento, '', 'SEM_PDF', usados
+                        ),
+                        _texto_marcador(documento),
+                    )
                     continue
                 for arquivo in arquivos:
-                    nome = _nome_interno(posicao, documento, arquivo, usados)
-                    # OSError só aqui: ausente no storage pula com warning.
+                    if not _arquivo_disponivel(arquivo):
+                        logger.warning(
+                            'Arquivo ausente no storage; vira marcador; '
+                            'arquivo_id=%s documento_id=%s',
+                            arquivo.id,
+                            documento.id,
+                        )
+                        zipf.writestr(
+                            _nome_marcador(
+                                posicao,
+                                documento,
+                                arquivo.nome_original,
+                                'INDISPONIVEL',
+                                usados,
+                            ),
+                            _texto_marcador(documento, arquivo),
+                        )
+                        continue
+                    # OSError só aqui: `exists` pode mentir num storage
+                    # lento; abrir pode falhar. O registro é pulado com
+                    # warning e o download dos demais não cai.
                     try:
                         fisico = arquivo.arquivo.open('rb')
                     except OSError:
                         logger.warning(
-                            'Arquivo ausente no storage; pulado do ZIP; '
+                            'Arquivo não pôde ser aberto; pulado do ZIP; '
                             'arquivo_id=%s documento_id=%s',
                             arquivo.id,
                             documento.id,
                         )
                         continue
                     try:
+                        nome = _nome_interno(
+                            posicao, documento, arquivo, usados
+                        )
                         with zipf.open(nome, 'w') as destino:
                             shutil.copyfileobj(fisico, destino)
                     finally:
                         fisico.close()
-                    incluidos += 1
-        if not incluidos:
-            spool.close()
-            messages.warning(request, MENSAGEM_SEM_PDF)
-            return redirect(
-                'tronco_principal', tis_id=tis_id, imovel_id=imovel_id
-            )
         spool.seek(0)
 
+        imovel = context['imovel']
         nome_zip = (
             f"certidoes_{slugify(imovel.matricula) or imovel.id}_"
             f"{timezone.localdate().strftime('%Y%m%d')}.zip"
@@ -211,3 +289,43 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
         )
         messages.error(request, MENSAGEM_ERRO_GERACAO)
         return redirect('tronco_principal', tis_id=tis_id, imovel_id=imovel_id)
+
+
+@login_required
+@require_imovel_atribuido
+def baixar_certidoes_cadeia_verificar(request, tis_id, imovel_id):
+    """Resumo do que o ZIP vai trazer — alimenta o modal de aviso (#334).
+
+    Mesmo escopo e mesma fonte do ZIP: cadeia inteira, idêntica à lista do
+    XLSX; a escolha de origem da tela não filtra (dono, 21/11/2026).
+    Devolve `total` (documentos da cadeia), `com_pdf` (com ao menos um PDF
+    disponível), `sem_pdf` (sem registro de PDF) e `indisponiveis` (os
+    registros cujo arquivo sumiu do storage, com posição e detalhes).
+    """
+    _, pares = _coletar_pares(request, tis_id, imovel_id)
+    com_pdf = 0
+    sem_pdf = 0
+    indisponiveis = []
+    for ordem, (documento, arquivos) in enumerate(pares, start=1):
+        if not arquivos:
+            sem_pdf += 1
+            continue
+        tem_disponivel = False
+        for arquivo in arquivos:
+            if _arquivo_disponivel(arquivo):
+                tem_disponivel = True
+            else:
+                indisponiveis.append({
+                    'ordem': ordem,
+                    'tipo': documento.tipo.get_tipo_display(),
+                    'numero': documento.numero,
+                    'nome_original': arquivo.nome_original,
+                })
+        if tem_disponivel:
+            com_pdf += 1
+    return JsonResponse({
+        'total': len(pares),
+        'com_pdf': com_pdf,
+        'sem_pdf': sem_pdf,
+        'indisponiveis': indisponiveis,
+    })
