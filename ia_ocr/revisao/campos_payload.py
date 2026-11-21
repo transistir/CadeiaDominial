@@ -2,7 +2,11 @@
 
 from .. import destinos, valores
 from ..models import CampoSugerido
-from .area_ha import converter_para_hectares
+from .area_ha import (
+    converter_para_hectares,
+    quantizar_hectares,
+    unidades_divergem,
+)
 from .estruturas import (
     _AREA_DE_ATO,
     _TIPOS_NORMALIZAVEIS,
@@ -40,14 +44,24 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
     unidade = campo.get('unidade')
     eh_area_de_ato = bool(_AREA_DE_ATO.fullmatch(ponteiro))
     convertida = False
-    if eh_area_de_ato and (normalized is None or unidade != 'ha'):
-        # #373: unidade explícita (ha, m²) ou composto hectare/are/centiare
-        # vira hectares na desnormalização. Sem conversão inequívoca, a
-        # unidade continua pendência do revisor.
-        convertido = converter_para_hectares(campo.get('raw'), unidade)
-        if convertido is not None:
-            normalized = f'{convertido:.4f}'
-            convertida = True
+    divergem = eh_area_de_ato and unidades_divergem(campo.get('raw'), unidade)
+    if eh_area_de_ato and not divergem:
+        if normalized is None or unidade != 'ha':
+            # #373: par número+unidade inequívoco (m², ha ou composto
+            # hectare/are/centiare) vira hectares na desnormalização; o
+            # valor convertido ainda tem de bater com o canônico do A3.
+            convertido = converter_para_hectares(
+                campo.get('raw'), unidade, normalized,
+            )
+            if convertido is not None:
+                normalized = f'{convertido:.4f}'
+                convertida = True
+        elif normalized is not None:
+            # A3 já em hectares: quantiza antes do formulário, que recusa
+            # mais de 4 casas sem pendência que explique o motivo.
+            quantizado = quantizar_hectares(normalized)
+            if quantizado is not None:
+                normalized = quantizado
     if tipo_valor in _TIPOS_NORMALIZAVEIS:
         if normalized is None:
             # Não normalizado (null) ≠ vazio: sem canônico, há pendência.
@@ -58,7 +72,9 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
             except valores.ValorInvalido:
                 motivos.append(MOTIVO_NORMALIZACAO_INVALIDA)
                 normalized = None
-    if eh_area_de_ato and unidade != 'ha' and not convertida:
+    if eh_area_de_ato and not convertida and (
+        divergem or unidade != 'ha'
+    ):
         motivos.append(MOTIVO_UNIDADE_AREA)
 
     confianca = campo.get('confianca')
