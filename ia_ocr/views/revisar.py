@@ -367,7 +367,12 @@ def _mostrar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
                         }) if item['lancamento_id'] else None
                     ),
                 )
-                for item in atos
+                # Só a EXIBIÇÃO vem decrescente — do maior ato para o menor
+                # (decisão do dono, #370, 21/11); o ``atos`` da revisão segue
+                # na ordem natural para salvar e navegar.
+                for item in sorted(
+                    atos, key=lambda a: (a['posicao'], a['indice']), reverse=True,
+                )
             ],
             'avisos': prefill['pendencias'],
             'bloqueios': revisao_ato.bloqueios_do_prefill(prefill),
