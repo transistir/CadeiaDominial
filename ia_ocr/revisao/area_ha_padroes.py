@@ -2,21 +2,26 @@
 
 Número pt-BR: começa e termina em dígito ASCII ("1.234,5678", "169");
 ``O``/``l`` nunca entram. Número colado a letra ("l20", "O50") não é
-número. A unidade colada ao número (par/composto) não pode ser seguida de
-letra/dígito ("ha" em "hectares"). Unidade solta (sem número) exige borda
-dos dois lados: o "a" de "área" e o "ha" de "Ilha" não são unidade; as
-formas curtas (``a``, ``ha``, ``ca``) só valem coladas ao número.
-``has``/``há`` são hectares.
+número, e separador decimal sem parte inteira (",5", ".5") também não: o
+separador denuncia OCR quebrado. A unidade colada ao número (par/composto)
+não pode ser seguida de letra/dígito ("ha" em "hectares"). Unidade solta
+(sem número) exige borda dos dois lados: o "a" de "área" e o "ha" de
+"Ilha" não são unidade; as formas curtas (``a``, ``ha``, ``ca``) só valem
+coladas ao número. ``has``/``há`` são hectares. O composto só consome
+``ares``/``a`` (o singular ``are`` fica como sobra ambígua).
 """
 
 import re
 
 _NUMERO = r'[0-9](?:[0-9.,]*[0-9])?'
 _BORDA_ESQUERDA = r'(?<![0-9A-Za-zÀ-ÿ])'
+# Número não pode vir colado a separador decimal (",5"/".5"): seria OCR
+# quebrado lendo só o sufixo ASCII.
+_BORDA_NUMERO = r'(?<![0-9A-Za-zÀ-ÿ.,])'
 _FIM_DA_UNIDADE = r'(?![^\W_])'
 _UNIDADE_M2 = r'(?:m²|m2)'
 _UNIDADE_HA = r'(?:hectares|hectare|has|há|ha\.?)'
-_UNIDADE_ARES = r'(?:ares|are|a\.?)'
+_UNIDADE_ARES = r'(?:ares|a\.?)'
 _UNIDADE_CENTIARES = r'(?:centiares|centiare|ca\.?)'
 _UNIDADE_ALQUEIRE = r'(?:alqueires|alqueire)'
 _UNIDADE_TODAS = (
@@ -26,16 +31,16 @@ _UNIDADE_TODAS = (
 
 _SEPARADOR = r'(?:,\s*(?:e\s+)?|\s+e\s+|\s+)'
 _COMPOSTO = re.compile(
-    rf'{_BORDA_ESQUERDA}(?P<hectares>{_NUMERO})\s*{_UNIDADE_HA}'
+    rf'{_BORDA_NUMERO}(?P<hectares>{_NUMERO})\s*{_UNIDADE_HA}'
     rf'{_FIM_DA_UNIDADE}{_SEPARADOR}'
-    rf'{_BORDA_ESQUERDA}(?P<ares>{_NUMERO})\s*{_UNIDADE_ARES}'
+    rf'{_BORDA_NUMERO}(?P<ares>{_NUMERO})\s*{_UNIDADE_ARES}'
     rf'{_FIM_DA_UNIDADE}(?:{_SEPARADOR}'
-    rf'{_BORDA_ESQUERDA}(?P<centiares>{_NUMERO})\s*{_UNIDADE_CENTIARES}'
+    rf'{_BORDA_NUMERO}(?P<centiares>{_NUMERO})\s*{_UNIDADE_CENTIARES}'
     rf'{_FIM_DA_UNIDADE})?',
     re.IGNORECASE,
 )
 _PAR = re.compile(
-    rf'{_BORDA_ESQUERDA}(?P<numero>{_NUMERO})\s*'
+    rf'{_BORDA_NUMERO}(?P<numero>{_NUMERO})\s*'
     rf'(?P<unidade>{_UNIDADE_TODAS}){_FIM_DA_UNIDADE}',
     re.IGNORECASE,
 )
@@ -45,11 +50,13 @@ _UNIDADE_SOLTA = re.compile(
     r'(?![0-9A-Za-zÀ-ÿ])',
     re.IGNORECASE,
 )
-# Sobra do par/composto: qualquer forma de unidade (inclusive curtas) a
-# torna ambígua, colada ou não ao número.
+# Sobra do par/composto: qualquer forma de unidade (inclusive as curtas e
+# o singular "are", que o composto não consome) torna a expressão ambígua,
+# colada ou não ao número.
 _UNIDADE_NA_SOBRA = re.compile(
     r'(?<![0-9A-Za-zÀ-ÿ])'
-    r'(?:hectares?|ares|centiares?|alqueires?|has|há|m²|m2|a|ha|ca|alq)'
+    r'(?:hectares?|centiares?|alqueires?|ares|are|has|há|m²|m2'
+    r'|alqs?\.?|ha\.?|a\.?|ca\.?)'
     r'(?![0-9A-Za-zÀ-ÿ])',
     re.IGNORECASE,
 )

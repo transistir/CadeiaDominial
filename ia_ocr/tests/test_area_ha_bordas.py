@@ -11,7 +11,11 @@ from django.test import SimpleTestCase
 
 from dominial.models import Lancamento
 from ia_ocr.formulario import prefill_do_ato
-from ia_ocr.revisao.area_ha import converter_para_hectares, quantizar_hectares
+from ia_ocr.revisao.area_ha import (
+    converter_para_hectares,
+    hectares_confirmados,
+    quantizar_hectares,
+)
 from ia_ocr.revisao.area_ha_padroes import unidades_divergem
 
 from .test_revisao_formulario_prefill_base import PrefillBase
@@ -55,6 +59,16 @@ CASOS = (
     ('área: 120,00 m2', None, Decimal('0.0120')),
     ('12,50 has', 'ha', Decimal('12.5000')),
     ('12,50 há', 'ha', Decimal('12.5000')),
+    # 3ª correção do review (Codex): separador sem parte inteira, dígito
+    # não-ASCII e singular "are" na sobra.
+    (',5 ha', 'ha', None),
+    ('.5 ha', 'ha', None),
+    ('１20 m²', 'm2', None),
+    ('١20 m²', 'm2', None),
+    ('１２０ m²', 'm2', None),
+    ('١٢٠ m²', 'm2', None),
+    ('169 ha e 9 are', None, None),
+    ('169 ha e nove are', None, None),
 )
 
 
@@ -96,6 +110,47 @@ class TabelaDeBordasTest(SimpleTestCase):
         self.assertIsNone(quantizar_hectares('abc'))
         self.assertIsNone(quantizar_hectares(None))
         self.assertIsNone(quantizar_hectares(''))
+
+
+class HectaresConfirmadosTest(SimpleTestCase):
+    """3ª revisão: o canônico do A3 não reverte uma recusa do texto."""
+
+    def test_texto_vazio_aceita_o_canonico_quantizado(self):
+        for raw in ('', '   ', None):
+            with self.subTest(raw=raw):
+                self.assertEqual(
+                    hectares_confirmados(raw, '12.500000'), '12.5000',
+                )
+        self.assertEqual(hectares_confirmados('', '12.50'), '12.50')
+
+    def test_texto_ambiguo_nao_e_consertado_pelo_canonico(self):
+        for raw, normalizado in (
+            ('1.234 ha', '1234'),
+            ('-5 ha', '-5'),
+            ('169 ha, 9 a e quarenta ca', '169.09'),
+            ('120 ha/m²', '120'),
+            ('área de 12,50', '12.50'),
+        ):
+            with self.subTest(raw=raw, normalizado=normalizado):
+                self.assertIsNone(hectares_confirmados(raw, normalizado))
+
+    def test_convertido_divergente_e_recusado(self):
+        self.assertIsNone(hectares_confirmados('12,34565 ha', '999.12345'))
+
+    def test_canonico_nao_positivo_ou_fora_do_limite_e_recusado(self):
+        for normalizado in ('0', '-5', '100000000', 'abc'):
+            with self.subTest(normalizado=normalizado):
+                self.assertIsNone(hectares_confirmados('', normalizado))
+
+    def test_borda_da_tolerancia_compara_antes_de_quantizar(self):
+        # diff 0,000001 → aceita
+        self.assertEqual(hectares_confirmados('1,000001 ha', '1'), '1')
+        # diff exatamente 0,00005 (12,34565 − 12,3456) → aceita
+        self.assertEqual(
+            hectares_confirmados('12,34565 ha', '12.3456'), '12.3456',
+        )
+        # diff 0,000099 → recusa
+        self.assertIsNone(hectares_confirmados('12,345699 ha', '12.3456'))
 
 
 class PrefillBordasTest(PrefillBase):
@@ -156,13 +211,14 @@ class PrefillBordasTest(PrefillBase):
         self.assertEqual(campo.normalized, '12.3457')
         self.assertEqual(campo.motivos_revisao, [])
 
-    def test_ha_do_a3_com_texto_sem_unidade_mantem_o_canonico(self):
+    def test_ha_do_a3_com_texto_sem_unidade_vira_pendencia(self):
+        # 3ª revisão: o canônico não "conserta" texto que não converte.
         resultado = self._prefill(self._com_area(
             '12.50', 'ha', 'área de 12,50',
         ))
 
-        self.assertEqual(resultado['form_data']['area'], '12.50')
-        self.assertEqual(self._pendencias_da_area(resultado), [])
+        self.assertNotIn('area', resultado['form_data'])
+        self.assertEqual(len(self._pendencias_da_area(resultado)), 1)
 
     def test_ha_divergente_do_texto_vira_pendencia(self):
         extracao = self._aberta(self._com_area(

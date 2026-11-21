@@ -20,13 +20,17 @@ Número pt-BR estrito: com vírgula o ponto é milhar em grupos de 3 (primeiro
 grupo de 1 a 3 dígitos); sem vírgula, ponto agrupando 3 em 3 é **ambíguo**
 (milhar ou decimal) e devolve ``None``; mais de um separador do mesmo tipo,
 vírgula solta e texto vazio também. O número precisa começar fora de letra
-(``l20``/``O50`` não são número) e a sobra fora do par/composto só pode ser
-espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha`` e
-``169 ha, 9 a e quarenta ca`` são ambíguos. Unidade do texto divergente do
-enum do A3, ou valor convertido que não bate com o ``normalized`` do A3
-(tolerância ``0.00005``; em ``m2`` depois de ÷10.000), devolve ``None``: quem
-chama trata como pendência do revisor, nunca como zero. A função não levanta
-exceção — dado de OCR é entrada hostil.
+(``l20``/``O50`` não são número) e não pode começar em separador decimal
+(``,5``/``.5``): o separador sem parte inteira é OCR quebrado. Dígito não
+ASCII (``１``, ``١``) no texto também recusa a conversão — ``[0-9]`` do
+regex só garantiria o sufixo ASCII. A sobra fora do par/composto só pode ser
+espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha``,
+``169 ha, 9 a e quarenta ca`` e ``169 ha e 9 are`` (singular ``are`` não é
+consumido pelo composto) são ambíguos. Unidade do texto divergente do enum
+do A3, ou valor convertido que não bate com o ``normalized`` do A3
+(tolerância ``0.00005``, comparada **antes** de quantizar; em ``m2`` depois
+de ÷10.000), devolve ``None``: quem chama trata como pendência do revisor,
+nunca como zero. A função não levanta exceção — dado de OCR é entrada hostil.
 """
 
 from decimal import ROUND_HALF_UP, Decimal, localcontext
@@ -62,9 +66,10 @@ def converter_para_hectares(raw, unidade, normalizado=None):
     exceção.
     """
     try:
-        return _converter(raw, unidade, normalizado)
+        valor = _converter(raw, unidade, normalizado)
     except (ArithmeticError, TypeError, ValueError):
         return None
+    return _normalizar(valor)
 
 
 def quantizar_hectares(valor):
@@ -92,20 +97,34 @@ def quantizar_hectares(valor):
 def hectares_confirmados(raw, normalizado):
     """``normalized`` do A3 em ha, quantizado e conferido com o texto.
 
-    Texto convertível igual ao canônico (tolerância ``0.00005``) → o
-    canônico quantizado; texto convertível divergente ou canônico não
-    numérico → ``None`` (pendência do revisor, nunca o canônico sozinho);
-    texto sem par número+unidade inequívoco → o canônico quantizado, pois
-    aí não há o que confrontar.
+    Regras (#373, 3ª revisão):
+
+    - canônico não numérico, ``<= 0`` ou acima do limite → ``None``;
+    - ``raw`` vazio/nulo: não há o que confrontar → o canônico quantizado;
+    - ``raw`` presente: **só** vale quando converte de forma inequívoca
+      (``converter_para_hectares``) e o valor convertido, **antes de
+      quantizar**, fica a no máximo ``0.00005`` do canônico quantizado;
+    - texto ilegível/ambíguo **não** é "consertado" pelo canônico: vira
+      pendência do revisor (``None``).
     """
     quantizado = quantizar_hectares(normalizado)
     if quantizado is None:
         return None
-    convertido = converter_para_hectares(raw, 'ha')
-    if convertido is None:
-        return quantizado
     esperado = _decimal_do_normalizado(quantizado)
-    if esperado is None or abs(esperado - convertido) > _TOLERANCIA:
+    if esperado is None or esperado <= 0 or esperado > _MAXIMO:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        return quantizado
+    try:
+        convertido = _converter(raw, 'ha', None)
+        if convertido is None or _normalizar(convertido) is None:
+            return None
+        with localcontext() as contexto:
+            contexto.prec = 50
+            diverge = abs(esperado - convertido) > _TOLERANCIA
+        if diverge:
+            return None
+    except (ArithmeticError, TypeError, ValueError):
         return None
     return quantizado
 
@@ -115,6 +134,11 @@ def _converter(raw, unidade, normalizado):
         return None
     texto = raw.strip()
     if not texto:
+        return None
+    if any(caractere.isdecimal() and not caractere.isascii()
+           for caractere in texto):
+        # Dígito de outro alfabeto ("１２０", "١٢٠"): [0-9] casaria só o
+        # sufixo ASCII e inventaria um valor. O "²" de m² não é isdecimal.
         return None
     codigo = _unidade_do_enum(unidade)
     if codigo == 'alqueires' or _ALQUEIRE.search(texto):
@@ -155,7 +179,7 @@ def _hectares_do_composto(texto, composto, codigo, normalizado):
     )
     if not _bate_com_normalizado(normalizado, valor, 'ha'):
         return None
-    return _normalizar(valor)
+    return valor
 
 
 def _hectares_do_par(texto, par, codigo, normalizado):
@@ -173,7 +197,7 @@ def _hectares_do_par(texto, par, codigo, normalizado):
     valor = numero / _M2_POR_HA if do_texto == 'm2' else numero
     if not _bate_com_normalizado(normalizado, valor, do_texto):
         return None
-    return _normalizar(valor)
+    return valor
 
 
 def _sobra_unidade(texto, achado):
@@ -289,7 +313,9 @@ def _normalizar(numero):
     """4 casas, ``ROUND_HALF_UP``; zero/negativo/fora do campo → ``None``."""
     if numero is None or not numero.is_finite():
         return None
-    hectare = numero.quantize(_QUANTUM, rounding=ROUND_HALF_UP)
+    with localcontext() as contexto:
+        contexto.prec = 50
+        hectare = numero.quantize(_QUANTUM, rounding=ROUND_HALF_UP)
     if hectare <= 0 or hectare > _MAXIMO:
         return None
     return hectare
