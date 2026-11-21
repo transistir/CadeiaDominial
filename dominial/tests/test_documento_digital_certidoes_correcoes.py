@@ -23,7 +23,11 @@ from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.cadeia_dominial_tabela_service import (
     CadeiaDominialTabelaService,
 )
-from dominial.tests.test_documento_digital_certidoes import _BaseCadeiaCertidoes
+from dominial.tests.test_documento_digital_certidoes import (
+    RAIZ_M12345,
+    RAIZ_T50,
+    _BaseCadeiaCertidoes,
+)
 
 
 def _conteudo_do_zip(response):
@@ -33,19 +37,18 @@ def _conteudo_do_zip(response):
 
 
 # Cadeia homônima com PDF nos três documentos: é a lista que o XLSX traz.
+RAIZ_T40 = 'T40_CRI-Cidade-TS'
 _NOMES_CADEIA_INTEIRA = [
-    '01_Matricula_M12345_pdf-m.pdf',
-    '02_Transcricao_T50_pdf-t50.pdf',
-    '03_Transcricao_T40_pdf-t40.pdf',
+    f'{RAIZ_M12345}.pdf',
+    f'{RAIZ_T50}.pdf',
+    f'{RAIZ_T40}.pdf',
 ]
 
 
 def _criar_fantasma_padrao(base, documento):
     """Registro de PDF cujo arquivo sumiu do storage (caminho fixo)."""
     return base._criar_registro_fantasma(
-        documento,
-        'fantasma.pdf',
-        'documentos_digitais/2024/01/fantasma.pdf',
+        documento, 'fantasma.pdf', 'documentos_digitais/2024/01/fantasma.pdf',
     )
 
 
@@ -94,9 +97,9 @@ class CadeiaInteiraNoZipTest(_BaseCadeiaCertidoes):
         self._criar_pdf(self.doc_origem, 'pdf-t50.pdf', b'%PDF-1.4 t50')
         self._criar_pdf(self.doc_t40, 'pdf-t40.pdf', b'%PDF-1.4 t40')
 
-        cadeia = CadeiaCompletaService(
-            user=self.user
-        ).get_cadeia_completa(self.tis.id, self.imovel.id)['cadeia_completa']
+        cadeia = CadeiaCompletaService(user=self.user).get_cadeia_completa(
+            self.tis.id, self.imovel.id
+        )['cadeia_completa']
         ordem_xlsx = [
             item['documento'].numero
             for tronco in cadeia
@@ -119,9 +122,8 @@ class CadeiaInteiraNoZipTest(_BaseCadeiaCertidoes):
         session = self.client.session
         session[f'origem_documento_{self.doc_matricula.id}'] = 'T40'
         session.save()
-        linhas = CadeiaDominialTabelaService(
-            user=self.user
-        ).get_cadeia_dominial_tabela(
+        tabela = CadeiaDominialTabelaService(user=self.user)
+        linhas = tabela.get_cadeia_dominial_tabela(
             self.tis.id, self.imovel.id, self.client.session
         )['cadeia']
         self.assertEqual(
@@ -144,12 +146,11 @@ class CadeiaInteiraNoZipTest(_BaseCadeiaCertidoes):
         ):
             response = self.client.get(self._url())
 
-        nomes = self._nomes_do_zip(response)
-        self.assertEqual(len(nomes), 3, nomes)
-        self.assertEqual([nome[:2] for nome in nomes], ['01', '02', '03'])
-        self.assertTrue(nomes[0].endswith('.pdf'))
-        self.assertIn('_INDISPONIVEL.txt', nomes[1])
-        self.assertIn('_SEM_PDF.txt', nomes[2])
+        self.assertEqual(self._nomes_do_zip(response), [
+            f'{RAIZ_M12345}.pdf',
+            f'{RAIZ_T50}_INDISPONIVEL.txt',
+            f'{RAIZ_T40}_SEM_PDF.txt',
+        ])
 
 
 class MarcadoresNoZipTest(_BaseCadeiaCertidoes):
@@ -167,8 +168,8 @@ class MarcadoresNoZipTest(_BaseCadeiaCertidoes):
 
         self.assertEqual(response.status_code, 200)
         conteudo = _conteudo_do_zip(response)
-        nome = '02_Transcricao_T50_fantasma.pdf_INDISPONIVEL.txt'
-        self.assertEqual(list(conteudo), ['01_Matricula_M12345_real.pdf', nome])
+        nome = f'{RAIZ_T50}_INDISPONIVEL.txt'
+        self.assertEqual(list(conteudo), [f'{RAIZ_M12345}.pdf', nome])
         texto = conteudo[nome].decode()
         self.assertIn('Transcrição T50', texto)
         self.assertIn('fantasma.pdf', texto)
@@ -183,10 +184,10 @@ class MarcadoresNoZipTest(_BaseCadeiaCertidoes):
         self.assertEqual(response.status_code, 200)
         conteudo = _conteudo_do_zip(response)
         self.assertEqual(list(conteudo), [
-            '01_Matricula_M12345_real.pdf',
-            '02_Transcricao_T50_SEM_PDF.txt',
+            f'{RAIZ_M12345}.pdf',
+            f'{RAIZ_T50}_SEM_PDF.txt',
         ])
-        texto = conteudo['02_Transcricao_T50_SEM_PDF.txt'].decode()
+        texto = conteudo[f'{RAIZ_T50}_SEM_PDF.txt'].decode()
         self.assertIn('Transcrição T50', texto)
         self.assertIn('nenhum PDF', texto)
 
@@ -201,8 +202,8 @@ class MarcadoresNoZipTest(_BaseCadeiaCertidoes):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(_conteudo_do_zip(response)), [
-            '01_Matricula_M12345_fantasma.pdf_INDISPONIVEL.txt',
-            '02_Transcricao_T50_SEM_PDF.txt',
+            f'{RAIZ_M12345}_INDISPONIVEL.txt',
+            f'{RAIZ_T50}_SEM_PDF.txt',
         ])
 
 
@@ -317,7 +318,7 @@ class SanitizacaoDoNumeroNoZipTest(_BaseCadeiaCertidoes):
 
         self.assertEqual(response.status_code, 200)
         nomes = self._nomes_do_zip(response)
-        self.assertEqual(nomes, ['01_Matricula_M123_45_certidao.pdf'])
+        self.assertEqual(nomes, ['M123_45_CRI-Cidade-TS.pdf'])
 
     def test_numero_com_pontos_nao_sobe_de_nivel(self):
         """`../evil` não sobra `..` nem `/` no nome dentro do ZIP."""
@@ -333,7 +334,7 @@ class SanitizacaoDoNumeroNoZipTest(_BaseCadeiaCertidoes):
             nomes,
         )
         # `../evil` → `__evil`: os dois pontos viram `_` e o `/` também.
-        self.assertEqual(nomes, ['01_Matricula___evil_certidao.pdf'])
+        self.assertEqual(nomes, ['__evil_CRI-Cidade-TS.pdf'])
 
 
 class FalhaDuranteACopiaTest(_BaseCadeiaCertidoes):

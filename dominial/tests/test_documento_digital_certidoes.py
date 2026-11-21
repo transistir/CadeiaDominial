@@ -28,6 +28,11 @@ from dominial.models import (
     UserImovel,
 )
 
+# Raízes dos nomes no ZIP: `<numero>_<CRI-Cidade-UF>` (dono, 21/11/2026).
+# O cartório da base é o único (CRI, Cidade, TS) — sigla sem desambiguação.
+RAIZ_M12345 = 'M12345_CRI-Cidade-TS'
+RAIZ_T50 = 'T50_CRI-Cidade-TS'
+
 
 class _BaseCadeiaCertidoes(TestCase):
     """Cadeia real: M12345 (imóvel principal) <- T50 (imóvel de origem).
@@ -188,21 +193,19 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         )
         self.assertIn('attachment', response['Content-Disposition'])
         self.assertIn(nome_esperado, response['Content-Disposition'])
-        # NN = posição na cadeia: 01 é a matrícula do imóvel, 02 a origem.
-        # Resposta streaming: o conteúdo é consumido uma única vez.
+        # Ordem da cadeia: matrícula primeiro, origem depois. Resposta
+        # streaming: o conteúdo é consumido uma única vez.
         with zipfile.ZipFile(self._zip_bytes(response)) as zipf:
             nomes = zipf.namelist()
             self.assertEqual(nomes, [
-                '01_Matricula_M12345_certidao-matricula.pdf',
-                '02_Transcricao_T50_certidao-transcricao.pdf',
+                f'{RAIZ_M12345}.pdf',
+                f'{RAIZ_T50}.pdf',
             ])
             self.assertEqual(
-                zipf.read('01_Matricula_M12345_certidao-matricula.pdf'),
-                b'%PDF-1.4 matricula',
+                zipf.read(f'{RAIZ_M12345}.pdf'), b'%PDF-1.4 matricula'
             )
             self.assertEqual(
-                zipf.read('02_Transcricao_T50_certidao-transcricao.pdf'),
-                b'%PDF-1.4 transcricao',
+                zipf.read(f'{RAIZ_T50}.pdf'), b'%PDF-1.4 transcricao'
             )
 
     def test_imagem_nao_entra_no_zip(self):
@@ -215,10 +218,7 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             self._nomes_do_zip(response),
-            [
-                '01_Matricula_M12345_certidao.pdf',
-                '02_Transcricao_T50_SEM_PDF.txt',
-            ],
+            [f'{RAIZ_M12345}.pdf', f'{RAIZ_T50}_SEM_PDF.txt'],
         )
 
     def test_documento_importado_inclui_pdf_do_imovel_de_origem(self):
@@ -228,14 +228,10 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         response = self.client.get(self._url())
 
         self.assertEqual(response.status_code, 200)
-        # Só a origem tem PDF, mas cada NN continua sendo a posição do
-        # documento na cadeia, não a ordem dos itens coletados.
+        # Só a origem tem PDF; a matrícula vira marcador, na ordem da cadeia.
         self.assertEqual(
             self._nomes_do_zip(response),
-            [
-                '01_Matricula_M12345_SEM_PDF.txt',
-                '02_Transcricao_T50_certidao-origem.pdf',
-            ],
+            [f'{RAIZ_M12345}_SEM_PDF.txt', f'{RAIZ_T50}.pdf'],
         )
 
     def test_colisao_de_nome_ganha_sufixo(self):
@@ -249,9 +245,9 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         self.assertEqual(
             sorted(self._nomes_do_zip(response)),
             [
-                '01_Matricula_M12345_igual.pdf',
-                '01_Matricula_M12345_igual_2.pdf',
-                '02_Transcricao_T50_SEM_PDF.txt',
+                f'{RAIZ_M12345}.pdf',
+                f'{RAIZ_M12345}_2.pdf',
+                f'{RAIZ_T50}_SEM_PDF.txt',
             ],
         )
 
@@ -262,8 +258,8 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._nomes_do_zip(response), [
-            '01_Matricula_M12345_SEM_PDF.txt',
-            '02_Transcricao_T50_SEM_PDF.txt',
+            f'{RAIZ_M12345}_SEM_PDF.txt',
+            f'{RAIZ_T50}_SEM_PDF.txt',
         ])
 
     def test_cadeia_sem_documento_redireciona_com_mensagem(self):
@@ -310,9 +306,9 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._nomes_do_zip(response), [
-            '01_Matricula_M12345_fantasma.pdf_INDISPONIVEL.txt',
-            '01_Matricula_M12345_real.pdf',
-            '02_Transcricao_T50_SEM_PDF.txt',
+            f'{RAIZ_M12345}_INDISPONIVEL.txt',
+            f'{RAIZ_M12345}.pdf',
+            f'{RAIZ_T50}_SEM_PDF.txt',
         ])
         self.assertTrue(
             any(str(fantasma.id) in log for log in logs.output),
@@ -337,7 +333,7 @@ class BaixarCertidoesCadeiaTest(_BaseCadeiaCertidoes):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             self._nomes_do_zip(response),
-            ['01_Matricula_M12345_SEM_PDF.txt'],
+            [f'{RAIZ_M12345}_SEM_PDF.txt'],
         )
 
     def test_usuario_sem_acesso_recebe_404(self):

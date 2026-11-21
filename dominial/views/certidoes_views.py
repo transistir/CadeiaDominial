@@ -7,7 +7,9 @@ não filtra o ZIP (decisão do dono, 21/11/2026). Todo documento da cadeia
 aparece na posição dele — com os PDFs disponíveis, com um marcador
 ``_INDISPONIVEL.txt`` quando o registro existe mas o arquivo sumiu do
 storage, ou com um marcador ``_SEM_PDF.txt`` quando não há registro de
-PDF nenhum. View nova em módulo próprio porque o legado
+PDF nenhum. Os arquivos se chamam ``<numero>_<cartório>.<ext>`` — sem NN
+e sem o tipo do documento (dono, 21/11/2026); marcadores usam a mesma
+raiz. View nova em módulo próprio porque o legado
 ``documento_digital_views.py`` está congelado no baseline de 400 linhas.
 """
 
@@ -27,7 +29,7 @@ from django.utils import timezone
 from django.utils.http import content_disposition_header
 from django.utils.text import slugify
 
-from ..models import DocumentoDigital
+from ..models import Cartorios, DocumentoDigital
 from ..services.cadeia_completa_service import CadeiaCompletaService
 from ..utils.segregacao_utils import require_imovel_atribuido
 
@@ -81,11 +83,11 @@ def _documentos_da_cadeia(context):
 def _com_pdfs(documentos):
     """Pares (documento, PDFs do documento) com prefetch filtrado — sem N+1.
 
-    Devolve TODOS os documentos da cadeia (mesmo sem PDF) para o NN do nome
-    interno ser a posição na cadeia, e não a ordem dos itens com arquivo. O
-    `Prefetch` já vem filtrado por `tipo_mime='application/pdf'`, então
-    imagens nem chegam ao ZIP e cada documento vira uma única consulta de
-    arquivos, executada em lote pelo prefetch.
+    Devolve TODOS os documentos da cadeia, mesmo os sem PDF: cada um ganha
+    entrada no ZIP — arquivo ou marcador. O `Prefetch` já vem filtrado por
+    `tipo_mime='application/pdf'`, então imagens nem chegam ao ZIP e cada
+    documento vira uma única consulta de arquivos, executada em lote pelo
+    prefetch.
     """
     if not documentos:
         return []
@@ -120,28 +122,86 @@ def _arquivo_disponivel(arquivo):
     return arquivo.arquivo.storage.exists(arquivo.arquivo.name)
 
 
-def _raiz_de_nome(posicao, documento, cauda):
-    """`NN_<tipo>_<numero>` + `_cauda`, tudo sanitizado (sem separadores).
+_ORDINAL_NO_NOME = re.compile(r'^\s*(\d+)\s*[º°ªoaOA]?\b')
 
-    NN é a posição do documento na cadeia (não a ordem dos arquivos
-    coletados), com zero à esquerda. Número e cauda passam por
-    `_sanitizar_para_zip` antes de virar nome, para não criarem subpastas
+
+class _SiglasCartorio:
+    """Parte do cartório no nome do arquivo: `CRI-Cuiaba-MT` (dono 21/11).
+
+    Um só cartório do tipo na cidade/UF → `CRI`; dois ou mais → ordinal do
+    `nome` (`1º` → `CRI1`); nome sem ordinal → cns no fim
+    (`CRI-Cuiaba-MT-334334`). Cidade/UF nulos são omitidos — nunca `--`.
+    O cache por `(tipo, cidade, estado)` faz a pergunta "há concorrente?"
+    custar uma consulta por combinação, não uma por documento.
+    """
+
+    def __init__(self):
+        self._concorrentes = {}
+
+    def _tem_concorrente(self, cartorio):
+        chave = (cartorio.tipo, cartorio.cidade, cartorio.estado)
+        if chave not in self._concorrentes:
+            self._concorrentes[chave] = (
+                Cartorios.objects.filter(
+                    tipo=cartorio.tipo,
+                    cidade=cartorio.cidade,
+                    estado=cartorio.estado,
+                ).count() > 1
+            )
+        return self._concorrentes[chave]
+
+    def parte_de(self, documento):
+        """Sigla sanitizada: `CRI-Cuiaba-MT`, `CRI2-Cuiaba-MT` ou
+        `SEM_CARTORIO` (documento sem cartório ou sem segmento utilizável).
+        """
+        cartorio = documento.cartorio
+        if cartorio is None:
+            return 'SEM_CARTORIO'
+        segmentos = [
+            texto for texto in (
+                _sanitizar_para_zip(cartorio.tipo),
+                _sanitizar_para_zip(cartorio.cidade),
+                _sanitizar_para_zip(cartorio.estado),
+            )
+            if texto
+        ]
+        if not segmentos:
+            return 'SEM_CARTORIO'
+        if self._tem_concorrente(cartorio):
+            ordinal = _ORDINAL_NO_NOME.match(cartorio.nome or '')
+            if ordinal:
+                segmentos[0] = f'{segmentos[0]}{ordinal.group(1)}'
+            else:
+                cns = _sanitizar_para_zip(cartorio.cns)
+                if cns:
+                    segmentos.append(cns)
+        return '-'.join(segmentos)
+
+
+def _raiz_de_nome(documento, siglas):
+    """`<numero>_<CRI-Cidade-UF>`, tudo sanitizado (dono 21/11/2026).
+
+    Sem NN e sem o tipo do documento: número + cartório abreviado
+    (`_SiglasCartorio`) identificam o arquivo. O número passa por
+    `_sanitizar_para_zip` antes de virar nome, para não criar subpastas
     dentro do ZIP.
     """
-    tipo = slugify(documento.tipo.get_tipo_display()).title() or 'Documento'
     numero = _sanitizar_para_zip(documento.numero) or 'Documento'
-    base = f'{posicao:02d}_{tipo}_{numero}'
-    cauda = _sanitizar_para_zip(cauda)
-    if cauda:
-        base = f'{base}_{cauda}'
-    return base
+    return f'{numero}_{siglas.parte_de(documento)}'
 
 
-def _nome_interno(posicao, documento, arquivo, usados):
-    """`NN_<tipo>_<numero>_<nome_original>`; colisão ganha sufixo _2, _3."""
-    base = _raiz_de_nome(posicao, documento, arquivo.nome_original)
-    raiz, extensao = os.path.splitext(base)
-    nome = base
+def _extensao_do_original(nome_original):
+    """Extensão do arquivo original, sanitizada e com ponto ('' se não há)."""
+    bruta = os.path.splitext(nome_original or '')[1]
+    texto = _sanitizar_para_zip(bruta[1:])
+    return f'.{texto}' if texto else ''
+
+
+def _nome_interno(documento, arquivo, siglas, usados):
+    """`<numero>_<cartório>.<ext original>`; colisão ganha sufixo _2, _3."""
+    raiz = _raiz_de_nome(documento, siglas)
+    extensao = _extensao_do_original(arquivo.nome_original)
+    nome = f'{raiz}{extensao}'
     contador = 2
     while nome in usados:
         nome = f'{raiz}_{contador}{extensao}'
@@ -150,15 +210,15 @@ def _nome_interno(posicao, documento, arquivo, usados):
     return nome
 
 
-def _nome_marcador(posicao, documento, cauda, estado, usados):
-    """`NN_<tipo>_<numero>_<cauda>_<estado>.txt`; colisão vira _2, _3.
+def _nome_marcador(documento, estado, siglas, usados):
+    """`<numero>_<cartório>_<estado>.txt`; colisão vira _2, _3.
 
     `estado` é ``INDISPONIVEL`` (o registro existe, o arquivo sumiu do
     storage) ou ``SEM_PDF`` (documento sem registro de PDF nenhum).
     Compartilha o `usados` dos nomes reais: marcador nunca sobrescreve um
     PDF de mesmo nome, nem vice-versa.
     """
-    raiz = f'{_raiz_de_nome(posicao, documento, cauda)}_{estado}'
+    raiz = f'{_raiz_de_nome(documento, siglas)}_{estado}'
     nome = f'{raiz}.txt'
     contador = 2
     while nome in usados:
@@ -217,12 +277,13 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
     spool = tempfile.SpooledTemporaryFile(max_size=MAX_SPOOL)  # noqa: SIM115
     try:
         usados = set()
+        siglas = _SiglasCartorio()
         with zipfile.ZipFile(spool, 'w', zipfile.ZIP_STORED) as zipf:
-            for posicao, (documento, arquivos) in enumerate(pares, start=1):
+            for documento, arquivos in pares:
                 if not arquivos:
                     zipf.writestr(
                         _nome_marcador(
-                            posicao, documento, '', 'SEM_PDF', usados
+                            documento, 'SEM_PDF', siglas, usados
                         ),
                         _texto_marcador(documento),
                     )
@@ -237,11 +298,7 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
                         )
                         zipf.writestr(
                             _nome_marcador(
-                                posicao,
-                                documento,
-                                arquivo.nome_original,
-                                'INDISPONIVEL',
-                                usados,
+                                documento, 'INDISPONIVEL', siglas, usados
                             ),
                             _texto_marcador(documento, arquivo),
                         )
@@ -261,7 +318,7 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
                         continue
                     try:
                         nome = _nome_interno(
-                            posicao, documento, arquivo, usados
+                            documento, arquivo, siglas, usados
                         )
                         with zipf.open(nome, 'w') as destino:
                             shutil.copyfileobj(fisico, destino)
