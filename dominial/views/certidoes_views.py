@@ -5,9 +5,10 @@ mesma ordem. A fonte é ``CadeiaCompletaService.get_cadeia_completa``, a
 mesma de ``exportar_cadeia_dominial_excel``: a escolha de origem da tela
 não filtra o ZIP (decisão do dono, 21/11/2026). Todo documento da cadeia
 aparece na posição dele — com os PDFs disponíveis, com um marcador
-``_INDISPONIVEL.txt`` quando o registro existe mas o arquivo sumiu do
-storage, ou com um marcador ``_SEM_PDF.txt`` quando não há registro de
-PDF nenhum. Os arquivos se chamam ``<numero>_<cartório>.<ext>`` — sem NN
+``_INDISPONIVEL.txt`` quando o registro existe mas o arquivo não pôde
+ser lido (sumiu do storage ou não abre), ou com um marcador
+``_SEM_PDF.txt`` quando não há registro de PDF nenhum. Os arquivos se
+chamam ``<numero>_<cartório>.<ext>`` — sem NN
 e sem o tipo do documento (dono, 21/11/2026); marcadores usam a mesma
 raiz. View nova em módulo próprio porque o legado
 ``documento_digital_views.py`` está congelado no baseline de 400 linhas.
@@ -40,21 +41,19 @@ MENSAGEM_SEM_PDF = 'Nenhum PDF anexado aos documentos desta cadeia.'
 MENSAGEM_ERRO_GERACAO = 'Erro ao gerar o ZIP das certidões. Tente novamente.'
 MAX_SPOOL = 10 * 1024 * 1024  # 10 MB em memória antes de virar arquivo temporário
 _PONTOS_SEGUIDOS = re.compile(r'\.{2,}')
+_PROIBIDOS_EM_NOME = re.compile(r'[\x00-\x1f\x7f/:*?"<>|\\]')
 
 
 def _sanitizar_para_zip(texto):
     """Texto seguro como parte de nome de arquivo dentro do ZIP.
 
-    Separadores de caminho (``/``, ``\\``) e caracteres de controle viram
-    `_`, corridas de pontos (`..`) viram `_` e pontas não sobrecarregam `.`
-    nem espaço. Assim o número `M123/45` não cria subpasta e `../evil` não
-    sobe de nível dentro do ZIP.
+    Separadores de caminho (``/``, ``\\``), caracteres de controle e os
+    proibidos no Windows (`: * ? " < > |`) viram `_`; corridas de pontos
+    (`..`) viram `_` e pontas não sobrecarregam `.` nem espaço. O ZIP é
+    extraído em Windows na maioria dos casos: o número `M123/45` não cria
+    subpasta, `M:123/45` não vira unidade lógica e `../evil` não sobe.
     """
-    texto = (texto or '').replace('/', '_').replace('\\', '_')
-    texto = ''.join(
-        '_' if ord(caractere) < 32 or ord(caractere) == 127 else caractere
-        for caractere in texto
-    )
+    texto = _PROIBIDOS_EM_NOME.sub('_', texto or '')
     texto = _PONTOS_SEGUIDOS.sub('_', texto)
     return texto.strip(' .')
 
@@ -117,9 +116,23 @@ def _coletar_pares(request, tis_id, imovel_id):
     return context, _com_pdfs(_documentos_da_cadeia(context))
 
 
-def _arquivo_disponivel(arquivo):
-    """O registro de PDF tem arquivo físico no storage? (`storage.exists`)"""
-    return arquivo.arquivo.storage.exists(arquivo.arquivo.name)
+def _abrir_pdf(arquivo):
+    """Handle de leitura do PDF, ou None se ele não puder entrar no ZIP.
+
+    Duas portas fecham: registro cujo arquivo sumiu do storage
+    (``storage.exists`` — alguns storages só falham na leitura) e
+    arquivo presente porém ilegível (`PermissionError` no `open`, dono
+    errado após um restore). None vira marcador `_INDISPONIVEL` — o
+    documento nunca some do ZIP — e a verificação do modal usa a MESMA
+    porta, para não prometer o que o ZIP não entrega. Quem recebe o
+    handle o fecha.
+    """
+    if not arquivo.arquivo.storage.exists(arquivo.arquivo.name):
+        return None
+    try:
+        return arquivo.arquivo.open('rb')
+    except OSError:
+        return None
 
 
 _ORDINAL_NO_NOME = re.compile(r'^\s*(\d+)\s*[º°ªoaOA]?\b')
@@ -197,35 +210,41 @@ def _extensao_do_original(nome_original):
     return f'.{texto}' if texto else ''
 
 
+def _nome_unico(raiz, extensao, usados):
+    """Primeiro `<raiz><extensao>` livre em `usados` (colisão vira _2, _3).
+
+    Reserva por ``casefold()`` — em FS case-insensitive (Windows/macOS),
+    `X.pdf` e `X.PDF` sobrescreveriam um ao outro na extração. O nome
+    devolvido preserva a caixa do original; o `usados` guarda a dobrada.
+    """
+    nome = f'{raiz}{extensao}'
+    contador = 2
+    while nome.casefold() in usados:
+        nome = f'{raiz}_{contador}{extensao}'
+        contador += 1
+    usados.add(nome.casefold())
+    return nome
+
+
 def _nome_interno(documento, arquivo, siglas, usados):
     """`<numero>_<cartório>.<ext original>`; colisão ganha sufixo _2, _3."""
     raiz = _raiz_de_nome(documento, siglas)
-    extensao = _extensao_do_original(arquivo.nome_original)
-    nome = f'{raiz}{extensao}'
-    contador = 2
-    while nome in usados:
-        nome = f'{raiz}_{contador}{extensao}'
-        contador += 1
-    usados.add(nome)
-    return nome
+    return _nome_unico(
+        raiz, _extensao_do_original(arquivo.nome_original), usados
+    )
 
 
 def _nome_marcador(documento, estado, siglas, usados):
     """`<numero>_<cartório>_<estado>.txt`; colisão vira _2, _3.
 
-    `estado` é ``INDISPONIVEL`` (o registro existe, o arquivo sumiu do
-    storage) ou ``SEM_PDF`` (documento sem registro de PDF nenhum).
-    Compartilha o `usados` dos nomes reais: marcador nunca sobrescreve um
-    PDF de mesmo nome, nem vice-versa.
+    `estado` é ``INDISPONIVEL`` (o registro existe, mas o arquivo não
+    pôde entrar) ou ``SEM_PDF`` (sem registro de PDF nenhum). Mesmo
+    `usados` dos nomes reais: marcador nunca sobrescreve um PDF, nem
+    vice-versa.
     """
-    raiz = f'{_raiz_de_nome(documento, siglas)}_{estado}'
-    nome = f'{raiz}.txt'
-    contador = 2
-    while nome in usados:
-        nome = f'{raiz}_{contador}.txt'
-        contador += 1
-    usados.add(nome)
-    return nome
+    return _nome_unico(
+        f'{_raiz_de_nome(documento, siglas)}_{estado}', '.txt', usados
+    )
 
 
 def _texto_marcador(documento, arquivo=None):
@@ -258,8 +277,8 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
     Baixa a cadeia inteira, idêntica à lista do XLSX; a escolha de origem
     da tela não filtra (decisão do dono, 21/11/2026). Todo documento entra
     na posição dele: os PDFs disponíveis, `_INDISPONIVEL.txt` quando o
-    registro existe mas o arquivo sumiu do storage e `_SEM_PDF.txt` quando
-    não há registro de PDF. Só cadeia sem documento nenhum volta com
+    registro existe mas o arquivo não pôde ser lido (sumiu do storage ou
+    não abre) e `_SEM_PDF.txt` quando não há registro de PDF. Só cadeia sem documento nenhum volta com
     MENSAGEM_SEM_PDF — com marcadores, sempre há o que entregar. Falha na
     cópia ou na resposta fecha o spool e devolve erro — nunca um ZIP
     parcial com 200.
@@ -289,10 +308,11 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
                     )
                     continue
                 for arquivo in arquivos:
-                    if not _arquivo_disponivel(arquivo):
+                    fisico = _abrir_pdf(arquivo)
+                    if fisico is None:
                         logger.warning(
-                            'Arquivo ausente no storage; vira marcador; '
-                            'arquivo_id=%s documento_id=%s',
+                            'Arquivo indisponível no storage; vira '
+                            'marcador; arquivo_id=%s documento_id=%s',
                             arquivo.id,
                             documento.id,
                         )
@@ -301,19 +321,6 @@ def baixar_certidoes_cadeia(request, tis_id, imovel_id):
                                 documento, 'INDISPONIVEL', siglas, usados
                             ),
                             _texto_marcador(documento, arquivo),
-                        )
-                        continue
-                    # OSError só aqui: `exists` pode mentir num storage
-                    # lento; abrir pode falhar. O registro é pulado com
-                    # warning e o download dos demais não cai.
-                    try:
-                        fisico = arquivo.arquivo.open('rb')
-                    except OSError:
-                        logger.warning(
-                            'Arquivo não pôde ser aberto; pulado do ZIP; '
-                            'arquivo_id=%s documento_id=%s',
-                            arquivo.id,
-                            documento.id,
                         )
                         continue
                     try:
@@ -357,7 +364,8 @@ def baixar_certidoes_cadeia_verificar(request, tis_id, imovel_id):
     XLSX; a escolha de origem da tela não filtra (dono, 21/11/2026).
     Devolve `total` (documentos da cadeia), `com_pdf` (com ao menos um PDF
     disponível), `sem_pdf` (sem registro de PDF) e `indisponiveis` (os
-    registros cujo arquivo sumiu do storage, com posição e detalhes).
+    registros cujo arquivo não pôde ser lido: sumiu do storage ou não
+    abre — com posição e detalhes).
     """
     _, pares = _coletar_pares(request, tis_id, imovel_id)
     com_pdf = 0
@@ -369,15 +377,17 @@ def baixar_certidoes_cadeia_verificar(request, tis_id, imovel_id):
             continue
         tem_disponivel = False
         for arquivo in arquivos:
-            if _arquivo_disponivel(arquivo):
-                tem_disponivel = True
-            else:
+            fisico = _abrir_pdf(arquivo)
+            if fisico is None:
                 indisponiveis.append({
                     'ordem': ordem,
                     'tipo': documento.tipo.get_tipo_display(),
                     'numero': documento.numero,
                     'nome_original': arquivo.nome_original,
                 })
+                continue
+            fisico.close()
+            tem_disponivel = True
         if tem_disponivel:
             com_pdf += 1
     return JsonResponse({
