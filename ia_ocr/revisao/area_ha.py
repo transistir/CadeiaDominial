@@ -9,7 +9,7 @@ O parser não procura "o primeiro número": extrai **pares número+unidade**
 quando a expressão inteira é inequívoca:
 
 - ``m²``/``m2`` → divide por 10.000;
-- ``ha``/``ha.``/``hectare(s)`` → valor como está;
+- ``ha``/``ha.``/``has``/``há``/``hectare(s)`` → valor como está;
 - composto ``"<N> hectares, <A> ares e <C> centiares"`` (``ha``/``a``/``ca``)
   → ``N + A/100 + C/10000``; ``A`` e ``C`` só valem de 0 a 99 e, no
   composto, o ponto de ``N`` é milhar (``1.069 hectares`` → 1069);
@@ -19,15 +19,28 @@ quando a expressão inteira é inequívoca:
 Número pt-BR estrito: com vírgula o ponto é milhar em grupos de 3 (primeiro
 grupo de 1 a 3 dígitos); sem vírgula, ponto agrupando 3 em 3 é **ambíguo**
 (milhar ou decimal) e devolve ``None``; mais de um separador do mesmo tipo,
-vírgula solta e texto vazio também. Unidade do texto divergente do enum do
-A3, ou valor convertido que não bate com o ``normalized`` do A3 (tolerância
-``0.00005``; em ``m2`` depois de ÷10.000), devolve ``None``: quem chama trata
-como pendência do revisor, nunca como zero. A função não levanta exceção —
-dado de OCR é entrada hostil.
+vírgula solta e texto vazio também. O número precisa começar fora de letra
+(``l20``/``O50`` não são número) e a sobra fora do par/composto só pode ser
+espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha`` e
+``169 ha, 9 a e quarenta ca`` são ambíguos. Unidade do texto divergente do
+enum do A3, ou valor convertido que não bate com o ``normalized`` do A3
+(tolerância ``0.00005``; em ``m2`` depois de ÷10.000), devolve ``None``: quem
+chama trata como pendência do revisor, nunca como zero. A função não levanta
+exceção — dado de OCR é entrada hostil.
 """
 
-import re
 from decimal import ROUND_HALF_UP, Decimal, localcontext
+
+from .area_ha_padroes import (
+    _ALQUEIRE,
+    _COMPOSTO,
+    _DIGITO,
+    _MENOS,
+    _PAR,
+    _UNIDADE_NA_SOBRA,
+    _codigo_da_unidade,
+    _unidade_do_enum,
+)
 
 CASAS_DECIMAIS = 4
 _QUANTUM = Decimal('0.0001')
@@ -36,54 +49,6 @@ _M2_POR_HA = Decimal(10000)
 _ARES_POR_HA = Decimal(100)
 _CENTIARES_POR_HA = Decimal(10000)
 _TOLERANCIA = Decimal('0.00005')
-
-# Número pt-BR: começa em dígito, termina em dígito ("1.234,5678", "169").
-# ``O``/``l`` nunca entram: dígito é ``\d``, não caractere parecido.
-_NUMERO = r'\d(?:[\d.,]*\d)?'
-# Unidade não pode ser seguida de letra/dígito ("ha" em "hectares").
-_FIM_DA_UNIDADE = r'(?![^\W_])'
-_UNIDADE_M2 = r'(?:m²|m2)'
-_UNIDADE_HA = r'(?:hectares|hectare|ha\.?)'
-_UNIDADE_ARES = r'(?:ares|are|a\.?)'
-_UNIDADE_CENTIARES = r'(?:centiares|centiare|ca\.?)'
-_UNIDADE_ALQUEIRE = r'(?:alqueires|alqueire)'
-_UNIDADE_TODAS = (
-    rf'(?:{_UNIDADE_ALQUEIRE}|{_UNIDADE_CENTIARES}|{_UNIDADE_HA}'
-    rf'|{_UNIDADE_M2}|{_UNIDADE_ARES})'
-)
-
-_SEPARADOR = r'(?:,\s*(?:e\s+)?|\s+e\s+|\s+)'
-_COMPOSTO = re.compile(
-    rf'(?<![\d.,])(?P<hectares>{_NUMERO})\s*{_UNIDADE_HA}'
-    rf'{_FIM_DA_UNIDADE}{_SEPARADOR}'
-    rf'(?P<ares>{_NUMERO})\s*{_UNIDADE_ARES}{_FIM_DA_UNIDADE}'
-    rf'(?:{_SEPARADOR}'
-    rf'(?P<centiares>{_NUMERO})\s*{_UNIDADE_CENTIARES}'
-    rf'{_FIM_DA_UNIDADE})?',
-    re.IGNORECASE,
-)
-_PAR = re.compile(
-    rf'(?<![\d.,])(?P<numero>{_NUMERO})\s*(?P<unidade>{_UNIDADE_TODAS})'
-    rf'{_FIM_DA_UNIDADE}',
-    re.IGNORECASE,
-)
-_UNIDADE_SOLTA = re.compile(
-    rf'(?:{_UNIDADE_TODAS}){_FIM_DA_UNIDADE}', re.IGNORECASE,
-)
-_UNIDADE_LONGA = re.compile(
-    r'hectares?|alqueires?|centiares?|ares', re.IGNORECASE,
-)
-_ALQUEIRE = re.compile(r'alqueire', re.IGNORECASE)
-_DIGITO = re.compile(r'\d')
-_MENOS = re.compile(r'[-−]')
-
-_UNIDADES_DO_ENUM = {
-    'ha': 'ha', 'hectare': 'ha', 'hectares': 'ha',
-    'm2': 'm2', 'm²': 'm2',
-    'are': 'ares', 'ares': 'ares',
-    'centiare': 'centiares', 'centiares': 'centiares',
-    'alqueire': 'alqueires', 'alqueires': 'alqueires',
-}
 
 
 def converter_para_hectares(raw, unidade, normalizado=None):
@@ -100,36 +65,6 @@ def converter_para_hectares(raw, unidade, normalizado=None):
         return _converter(raw, unidade, normalizado)
     except (ArithmeticError, TypeError, ValueError):
         return None
-
-
-def unidade_do_texto(raw):
-    """Código da unidade lida (``ha``/``m2``/``ares``/``centiares``/
-    ``alqueires``) ou ``None``.
-
-    Serve ao chamador para detectar divergência entre o texto e o enum do
-    A3 mesmo quando o valor do A3 já está em hectares.
-    """
-    if not isinstance(raw, str):
-        return None
-    texto = raw.strip()
-    if not texto:
-        return None
-    par = _PAR.search(texto)
-    if par is not None:
-        return _codigo_da_unidade(par.group('unidade'))
-    achado = _UNIDADE_SOLTA.search(texto)
-    return _codigo_da_unidade(achado.group(0)) if achado else None
-
-
-def unidades_divergem(raw, unidade):
-    """O texto e o enum do A3 trazem unidades incompatíveis?"""
-    do_texto = unidade_do_texto(raw)
-    do_enum = _unidade_do_enum(unidade)
-    return (
-        do_texto is not None
-        and do_enum is not None
-        and do_texto != do_enum
-    )
 
 
 def quantizar_hectares(valor):
@@ -152,6 +87,27 @@ def quantizar_hectares(valor):
         return f'{quantizado:.4f}'
     except (ArithmeticError, TypeError, ValueError):
         return None
+
+
+def hectares_confirmados(raw, normalizado):
+    """``normalized`` do A3 em ha, quantizado e conferido com o texto.
+
+    Texto convertível igual ao canônico (tolerância ``0.00005``) → o
+    canônico quantizado; texto convertível divergente ou canônico não
+    numérico → ``None`` (pendência do revisor, nunca o canônico sozinho);
+    texto sem par número+unidade inequívoco → o canônico quantizado, pois
+    aí não há o que confrontar.
+    """
+    quantizado = quantizar_hectares(normalizado)
+    if quantizado is None:
+        return None
+    convertido = converter_para_hectares(raw, 'ha')
+    if convertido is None:
+        return quantizado
+    esperado = _decimal_do_normalizado(quantizado)
+    if esperado is None or abs(esperado - convertido) > _TOLERANCIA:
+        return None
+    return quantizado
 
 
 def _converter(raw, unidade, normalizado):
@@ -221,9 +177,13 @@ def _hectares_do_par(texto, par, codigo, normalizado):
 
 
 def _sobra_unidade(texto, achado):
-    """Fora do par/composto: outro número ou outra unidade → ambíguo."""
+    """Fora do par/composto: dígito, unidade ou ``/`` → expressão ambígua."""
     resto = texto[:achado.start()] + texto[achado.end():]
-    return bool(_DIGITO.search(resto)) or bool(_UNIDADE_LONGA.search(resto))
+    return (
+        bool(_DIGITO.search(resto))
+        or '/' in resto
+        or bool(_UNIDADE_NA_SOBRA.search(resto))
+    )
 
 
 def _tem_menos(texto, fim):
@@ -239,30 +199,6 @@ def _bate_com_normalizado(normalizado, valor, codigo):
     if codigo == 'm2':
         esperado = esperado / _M2_POR_HA
     return abs(esperado - valor) <= _TOLERANCIA
-
-
-def _codigo_da_unidade(texto):
-    chave = texto.strip().rstrip('.').lower()
-    if chave in ('m2', 'm²'):
-        return 'm2'
-    if chave in ('ha', 'hectare', 'hectares'):
-        return 'ha'
-    if chave in ('a', 'are', 'ares'):
-        return 'ares'
-    if chave in ('ca', 'centiare', 'centiares'):
-        return 'centiares'
-    if chave in ('alqueire', 'alqueires'):
-        return 'alqueires'
-    return None
-
-
-def _unidade_do_enum(unidade):
-    if not isinstance(unidade, str):
-        return None
-    codigo = unidade.strip().lower()
-    if not codigo:
-        return None
-    return _UNIDADES_DO_ENUM.get(codigo, codigo)
 
 
 def _numero_composto(texto):

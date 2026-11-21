@@ -12,6 +12,7 @@ from django.test import SimpleTestCase
 from dominial.models import Lancamento
 from ia_ocr.formulario import prefill_do_ato
 from ia_ocr.revisao.area_ha import converter_para_hectares, quantizar_hectares
+from ia_ocr.revisao.area_ha_padroes import unidades_divergem
 
 from .test_revisao_formulario_prefill_base import PrefillBase
 from .test_revisao_formulario_view_base import RevisaoFormularioBase
@@ -44,7 +45,26 @@ CASOS = (
     ('169 ha, 109 ares', None, None),
     ('1.234,5678', None, None),
     ('alqueires', 'alqueires', None),
+    # 2ª correção do review (Opus/Codex): borda do número, unidade solta
+    # e sobra da expressão.
+    ('l20 m²', 'm2', None),
+    ('O50 m²', 'm2', None),
+    ('12 m²x', None, None),
+    ('169 ha, 9 a e quarenta ca', None, None),
+    ('120 m²/ha', None, None),
+    ('área: 120,00 m2', None, Decimal('0.0120')),
+    ('12,50 has', 'ha', Decimal('12.5000')),
+    ('12,50 há', 'ha', Decimal('12.5000')),
 )
+
+
+class UnidadeDoTextoTest(SimpleTestCase):
+    """Unidade solta exige borda: o "a" de "área" não é ares (#373)."""
+
+    def test_palavra_com_a_ou_ha_final_nao_e_unidade(self):
+        self.assertFalse(unidades_divergem('área de 12,50', 'ha'))
+        self.assertFalse(unidades_divergem('Fazenda Ilha', 'ha'))
+        self.assertFalse(unidades_divergem('Pororoca', 'ha'))
 
 
 class TabelaDeBordasTest(SimpleTestCase):
@@ -135,6 +155,45 @@ class PrefillBordasTest(PrefillBase):
         campo = extracao.campos.get(chave='/acts/0/area')
         self.assertEqual(campo.normalized, '12.3457')
         self.assertEqual(campo.motivos_revisao, [])
+
+    def test_ha_do_a3_com_texto_sem_unidade_mantem_o_canonico(self):
+        resultado = self._prefill(self._com_area(
+            '12.50', 'ha', 'área de 12,50',
+        ))
+
+        self.assertEqual(resultado['form_data']['area'], '12.50')
+        self.assertEqual(self._pendencias_da_area(resultado), [])
+
+    def test_ha_divergente_do_texto_vira_pendencia(self):
+        extracao = self._aberta(self._com_area(
+            '999.12345', 'ha', '12,34565 ha',
+        ))
+
+        resultado = prefill_do_ato(extracao, 0, self.documento)
+
+        self.assertNotIn('area', resultado['form_data'])
+        self.assertEqual(len(self._pendencias_da_area(resultado)), 1)
+        campo = extracao.campos.get(chave='/acts/0/area')
+        self.assertIsNone(campo.normalized)
+        self.assertIn('unidade_area', campo.motivos_revisao)
+
+    def test_composto_divergente_do_canonico_vira_pendencia(self):
+        texto = '169 hectares, 09 ares e 40 centiares'
+        resultado = self._prefill(self._com_area('169.00000', 'ha', texto))
+
+        self.assertNotIn('area', resultado['form_data'])
+        self.assertEqual(len(self._pendencias_da_area(resultado)), 1)
+
+    def test_conversao_recusada_em_ha_nao_descarta_em_silencio(self):
+        extracao = self._aberta(self._com_area(None, 'ha', '1.234 ha'))
+
+        resultado = prefill_do_ato(extracao, 0, self.documento)
+
+        self.assertNotIn('area', resultado['form_data'])
+        (aviso,) = self._pendencias_da_area(resultado)
+        self.assertTrue(aviso['bloqueante'])
+        campo = extracao.campos.get(chave='/acts/0/area')
+        self.assertIn('unidade_area', campo.motivos_revisao)
 
 
 class SalvarCompostoTest(RevisaoFormularioBase):
