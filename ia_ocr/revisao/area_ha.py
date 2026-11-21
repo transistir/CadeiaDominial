@@ -27,10 +27,14 @@ regex só garantiria o sufixo ASCII. A sobra fora do par/composto só pode ser
 espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha``,
 ``169 ha, 9 a e quarenta ca`` e ``169 ha e 9 are`` (singular ``are`` não é
 consumido pelo composto) são ambíguos. Unidade do texto divergente do enum
-do A3, ou valor convertido que, quantizado, não é **igual** ao ``normalized``
-do A3 quantizado (comparação feita depois de ÷10.000 quando a unidade é
-``m2``), devolve ``None``: quem chama trata como pendência do revisor,
-nunca como zero. A função não levanta exceção — dado de OCR é entrada hostil.
+do A3 devolve ``None``. O ``normalized`` do A3, quando informado, é só
+conferência: o valor gravado vem sempre do texto. Em
+``hectares_confirmados`` o canônico já está em hectares e a conferência é
+por **igualdade após quantizar**; nos demais caminhos (``m²``, unidade
+ausente, composto) ``converter_para_hectares`` compara com tolerância de
+meio quantum. Divergência devolve ``None``: quem chama trata como pendência
+do revisor, nunca como zero. As funções não levantam exceção — dado de OCR
+é entrada hostil.
 """
 
 from decimal import ROUND_HALF_UP, Decimal, localcontext
@@ -69,10 +73,11 @@ def converter_para_hectares(raw, unidade, normalizado=None):
     exceção.
     """
     try:
-        valor = _converter(raw, unidade, normalizado)
+        # A quantização também fica dentro da proteção: um número com mais
+        # dígitos que a precisão do contexto estoura ``InvalidOperation``.
+        return _normalizar(_converter(raw, unidade, normalizado))
     except (ArithmeticError, TypeError, ValueError):
         return None
-    return _normalizar(valor)
 
 
 def quantizar_hectares(valor):
@@ -102,7 +107,9 @@ def hectares_confirmados(raw, normalizado):
 
     Regras (#373, 3ª revisão):
 
-    - canônico não numérico, ``<= 0`` ou acima do limite → ``None``;
+    - canônico não numérico, ``<= 0`` ou acima do limite (conferido
+      **antes** de quantizar, para o arredondamento não trazer um valor
+      fora do campo para dentro) → ``None``;
     - ``raw`` vazio/nulo: não há o que confrontar → o canônico quantizado;
     - ``raw`` presente: **só** vale quando converte de forma inequívoca
       (``converter_para_hectares``) e o valor convertido, quantizado com
@@ -110,11 +117,16 @@ def hectares_confirmados(raw, normalizado):
     - texto ilegível/ambíguo **não** é "consertado" pelo canônico: vira
       pendência do revisor (``None``).
     """
+    canonico = _decimal_do_normalizado(normalizado)
+    if canonico is None or canonico <= 0 or canonico > _MAXIMO:
+        # O limite vale para o canônico original: um valor acima do campo
+        # não pode entrar só porque arredonda para dentro dele.
+        return None
     quantizado = quantizar_hectares(normalizado)
     if quantizado is None:
         return None
     esperado = _decimal_do_normalizado(quantizado)
-    if esperado is None or esperado <= 0 or esperado > _MAXIMO:
+    if esperado is None or esperado <= 0:
         return None
     if not isinstance(raw, str) or not raw.strip():
         return quantizado

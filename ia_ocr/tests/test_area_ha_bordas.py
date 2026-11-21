@@ -69,6 +69,9 @@ CASOS = (
     ('١٢٠ m²', 'm2', None),
     ('169 ha e 9 are', None, None),
     ('169 ha e nove are', None, None),
+    # 4ª correção do review (Codex): número com mais dígitos que a precisão
+    # do contexto estourava ``InvalidOperation`` fora do ``try``.
+    ('9' * 47 + ' ha', 'ha', None),
 )
 
 
@@ -142,6 +145,14 @@ class HectaresConfirmadosTest(SimpleTestCase):
             with self.subTest(normalizado=normalizado):
                 self.assertIsNone(hectares_confirmados('', normalizado))
 
+    def test_limite_conferido_antes_de_quantizar(self):
+        # 99999999,99991 arredonda para 99999999,9999 (dentro do campo),
+        # mas o canônico original está acima do limite de decimal(12,4).
+        self.assertIsNone(hectares_confirmados('', '99999999.99991'))
+        self.assertEqual(
+            hectares_confirmados('', '99999999.9999'), '99999999.9999',
+        )
+
     def test_borda_compara_depois_de_quantizar(self):
         # diff 0,000001 → quantizado bate
         self.assertEqual(hectares_confirmados('1,000001 ha', '1'), '1')
@@ -183,6 +194,14 @@ class PrefillBordasTest(PrefillBase):
     def test_m2_com_enum_ha_continua_pendencia_e_campo_vazio(self):
         resultado = self._prefill(
             self._com_area(None, 'ha', '120,00 m2'),
+        )
+
+        self.assertNotIn('area', resultado['form_data'])
+        self.assertEqual(len(self._pendencias_da_area(resultado)), 1)
+
+    def test_numero_gigante_fica_pendente_sem_derrubar_o_prefill(self):
+        resultado = self._prefill(
+            self._com_area(None, 'ha', '9' * 47 + ' ha'),
         )
 
         self.assertNotIn('area', resultado['form_data'])
