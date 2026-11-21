@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static dominial_extras %}
 
 {% block title %}Lista de Imóveis{% endblock %}
 
@@ -26,7 +26,7 @@
 
 <ul>
     {% for imovel in imoveis %}
-        <li><strong>{{ imovel.nome }}</strong> — matrícula: {{ imovel.matricula }}</li>
+        <li><strong>{{ imovel.nome }}</strong> — matrícula: {{ imovel.matricula|default:"Não informada" }} · {{ imovel.cartorio.nome|abreviar_cartorio }}</li>
     {% empty %}
         <li>Nenhum imóvel encontrado.</li>
     {% endfor %}

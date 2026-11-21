@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n static %}
+{% load i18n static dominial_extras %}
 
 {% block title %}{{ tis.nome }} - Imóveis{% endblock %}
 
@@ -74,7 +74,7 @@
                 {% for imovel in imoveis %}
                 <tr class="imovel-row" onclick="window.location.href='{% url 'cadeia_dominial' tis_id=tis.id imovel_id=imovel.id %}'">
                     <td class="td-matricula">
-                        <span class="matricula-value">{{ imovel.matricula|default:"Não informada" }}</span>
+                        <span class="matricula-value" title="{{ imovel.cartorio.nome }}">{{ imovel.matricula|default:"Não informada" }} · {{ imovel.cartorio.nome|abreviar_cartorio }}</span>
                     </td>
                     <td class="td-nome">
                         <span class="nome-value">{{ imovel.nome }}</span>

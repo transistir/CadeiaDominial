@@ -48,6 +48,9 @@ class Documento(models.Model):
     origem = models.TextField(null=True, blank=True)
     observacoes = models.TextField(null=True, blank=True)
     data_cadastro = models.DateField(auto_now_add=True)
+    # null=True intencional (#375): linhas anteriores à migração ficam NULL e a
+    # ordenação por atividade cai no fallback data_cadastro. Sem backfill.
+    atualizado_em = models.DateTimeField(auto_now=True, null=True, verbose_name='Atualizado em')
     nivel_manual = models.IntegerField(null=True, blank=True, help_text="Nível manual na árvore da cadeia dominial (0-10)")
     
     # Campo para classificação de fim de cadeia

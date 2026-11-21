@@ -251,8 +251,8 @@ def abreviar_cartorio(nome):
     """
     Substitui o prefixo "Cartório de Registro de Imóveis" pela sigla "CRI".
 
-    Usado APENAS nas exportações (Excel e PDF completo) — a UI de cadastro
-    mantém o nome por extenso (issue #50).
+    Usado nas exportações (Excel e PDF completo) e na lista de imóveis da TI
+    (#375) — a UI de cadastro mantém o nome por extenso (issue #50).
 
     - Falsy (None, "") retorna inalterado.
     - Só o prefixo exato casa (variantes como "do Registro" não são tocadas).

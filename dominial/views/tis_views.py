@@ -8,10 +8,10 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from ..models import TIs, TerraIndigenaReferencia, Imovel
 from ..forms import TIsForm, ImovelForm
-from django.db.models import Count, F, Max, Q
-from django.db.models.functions import Coalesce
+from django.db.models import Count, Q
 from django.http import Http404
 from ..managers import tis_for_user, usuario_ve_tudo, usuario_tem_ti_inteira
+from ..services.ordenacao_imoveis_service import ordenar_por_atividade
 from ..utils.permissoes_utils import usuario_pode_criar_ti
 from ..utils.segregacao_utils import MENSAGEM_SEM_IMOVEIS
 
@@ -95,22 +95,12 @@ def tis_detail(request, tis_id):
     status = request.GET.get('status', 'ativos')
     is_arquivado = status == 'arquivados'
     
-    # Ordenar imóveis pela atividade mais recente na cadeia dominial:
-    # documento mais recente, senão lançamento mais recente, senão o
-    # próprio cadastro do imóvel; matrícula como desempate.
-    imoveis_ordenados = (
+    # Ordenar imóveis pela atividade mais recente na cadeia dominial (#375):
+    # edição/criação de documento ou lançamento, senão o próprio cadastro do
+    # imóvel; matrícula como desempate.
+    imoveis_ordenados = ordenar_por_atividade(
         Imovel.objects.for_user(request.user)
         .filter(terra_indigena_id=tis, arquivado=is_arquivado)
-        .annotate(
-            ultimo_documento=Max('documentos__data_cadastro'),
-            ultimo_lancamento=Max('documentos__lancamentos__data_cadastro'),
-            atividade=Coalesce(
-                Max('documentos__data_cadastro'),
-                Max('documentos__lancamentos__data_cadastro'),
-                F('data_cadastro'),
-            ),
-        )
-        .order_by('-atividade', 'matricula')
     )
 
     from ..services.status_cadeia_service import StatusCadeiaService
@@ -186,10 +176,14 @@ def tis_delete(request, tis_id):
 def imoveis(request, tis_id=None):
     if tis_id:
         tis = get_object_or_404(TIs, id=tis_id)
-        imoveis = Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis).order_by('matricula')
+        imoveis = ordenar_por_atividade(
+            Imovel.objects.for_user(request.user).filter(terra_indigena_id=tis)
+        )
     else:
         # Listagem geral (sem TI): não há TI para o botão de export
         # consolidado (issue #179) apontar, por isso `tis` fica None.
+        # Mantém a ordem por matrícula — a agregação de atividade sobre TODOS
+        # os imóveis não foi pedida (#375) e a rota não é linkada em template.
         tis = None
         imoveis = Imovel.objects.for_user(request.user).order_by('matricula')
     return render(request, 'dominial/imoveis.html', {'imoveis': imoveis, 'tis': tis})

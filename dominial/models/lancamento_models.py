@@ -57,6 +57,9 @@ class Lancamento(models.Model):
     detalhes = models.TextField(null=True, blank=True)
     observacoes = models.TextField(null=True, blank=True)
     data_cadastro = models.DateField(auto_now_add=True)
+    # null=True intencional (#375): linhas anteriores à migração ficam NULL e a
+    # ordenação por atividade cai no fallback data_cadastro. Sem backfill.
+    atualizado_em = models.DateTimeField(auto_now=True, null=True, verbose_name='Atualizado em')
     
     # Novos campos para tipos específicos
     forma = models.CharField(max_length=100, null=True, blank=True)
