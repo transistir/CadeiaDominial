@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from .. import importacao, revisao
 from ..models import ImportacaoIA
-from ..rotulos import analisar_rotulo
+from ..rotulos import analisar_rotulo, resolver_tipo
 
 ESTADO_PENDENTE = 'pendente'
 ESTADO_IMPORTADO = 'importado'
@@ -38,7 +38,11 @@ class Resultado:
 
 def atos_da_revisao(extracao, dados=None, linhas=None):
     """As abas da revisão, na ordem do A3: ``[{indice, chave, posicao, rotulo,
-    estado, lancamento_id}]``.
+    eh_inicio, estado, lancamento_id}]``.
+
+    ``eh_inicio`` marca o ato de início de matrícula ("Abertura"): a sidebar
+    o exibe por ÚLTIMO (regra do dono, #370, 21/11), em qualquer posição que
+    ele ocupe no A3.
 
     ``importado`` = existe ``ImportacaoIA`` de um lançamento ATUAL (não
     excluído) para a linha do ato NESTA extração. Lançamento excluído depois
@@ -57,27 +61,43 @@ def atos_da_revisao(extracao, dados=None, linhas=None):
     for posicao, ato in enumerate(dados.atos, start=1):
         indice = int(ato.chave.rsplit('/', 1)[1])
         lancamento_id = salvos.get(ato.chave)
+        analisado = analisar_rotulo(
+            (revisao.rotulo_efetivo(ato.chave, linhas) or '').strip(),
+        )
         atos.append({
             'indice': indice,
             'chave': ato.chave,
             'posicao': posicao,
-            'rotulo': _rotulo_da_aba(ato, linhas, indice),
+            'rotulo': _rotulo_da_aba(ato, analisado, indice),
+            'eh_inicio': _eh_inicio_matricula(ato, analisado),
             'estado': ESTADO_IMPORTADO if lancamento_id else ESTADO_PENDENTE,
             'lancamento_id': lancamento_id,
         })
     return atos
 
 
-def _rotulo_da_aba(ato, linhas, indice):
-    """``R5``/``Av3``/``Abertura`` — o mesmo rótulo efetivo que decide o tipo."""
-    analisado = analisar_rotulo(
-        (revisao.rotulo_efetivo(ato.chave, linhas) or '').strip(),
+def _eh_inicio_matricula(ato, analisado):
+    """Ato de abertura: o tipo pela MESMA precedência da importação.
+
+    ``ato.tipo`` é ``valor(tipo_sugerido) or tipo_resolvido`` — a sugestão
+    crua do OCR vence e um ``R-5`` com ``tipo_sugerido=inicio_matricula``
+    iria para o fim da sidebar, embora a importação grave ``registro``.
+    Quem decide é ``resolver_tipo`` (explícito → rótulo R/Av → sugestão),
+    a regra de ``importacao/ato_documento.py`` e de ``_tipos_efetivos``.
+    """
+    tipo, _divergencia, _origem = resolver_tipo(
+        ato.tipo_explicito, analisado, ato.tipo_sugerido,
     )
+    return tipo == 'inicio_matricula'
+
+
+def _rotulo_da_aba(ato, analisado, indice):
+    """``R5``/``Av3``/``Abertura`` — o mesmo rótulo efetivo que decide o tipo."""
     if analisado.reconhecido and not analisado.eh_matricula and analisado.numero:
         prefixo = _PREFIXO_DA_ABA.get(analisado.tipo)
         if prefixo:
             return f'{prefixo}{analisado.numero}'
-    if 'inicio_matricula' in (ato.tipo, analisado.tipo):
+    if _eh_inicio_matricula(ato, analisado):
         return 'Abertura'
     return f'Ato {indice + 1}'
 
