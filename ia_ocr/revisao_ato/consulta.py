@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from dominial.models import Lancamento
+
 from .. import importacao, revisao
 from ..models import ImportacaoIA
 from ..rotulos import analisar_rotulo, resolver_tipo
@@ -44,6 +46,11 @@ def atos_da_revisao(extracao, dados=None, linhas=None):
     o exibe por ÚLTIMO (regra do dono, #370, 21/11), em qualquer posição que
     ele ocupe no A3.
 
+    O tipo que decide ``eh_inicio``/rótulo é o do ``Lancamento`` já gravado
+    quando existe: o revisor pode MUDAR o tipo no formulário e salvar, e daí
+    em diante a extração não manda mais (#370, review do PR #377). Sem
+    lançamento, vale a precedência da importação (``resolver_tipo``).
+
     ``importado`` = existe ``ImportacaoIA`` de um lançamento ATUAL (não
     excluído) para a linha do ato NESTA extração. Lançamento excluído depois
     deixa o rastro mas volta o ato a ``pendente`` — o revisor pode salvá-lo
@@ -57,6 +64,12 @@ def atos_da_revisao(extracao, dados=None, linhas=None):
             campo__extracao_id=extracao.pk, lancamento__isnull=False,
         ).values_list('campo__chave', 'lancamento_id')
     )
+    # Uma leitura em lote para todos os atos — nunca uma por ato (N+1).
+    tipos_salvos = dict(
+        Lancamento.objects.filter(pk__in=list(salvos.values())).values_list(
+            'id', 'tipo__tipo',
+        )
+    )
     atos = []
     for posicao, ato in enumerate(dados.atos, start=1):
         indice = int(ato.chave.rsplit('/', 1)[1])
@@ -64,41 +77,51 @@ def atos_da_revisao(extracao, dados=None, linhas=None):
         analisado = analisar_rotulo(
             (revisao.rotulo_efetivo(ato.chave, linhas) or '').strip(),
         )
+        tipo = _tipo_efetivo(ato, analisado, tipos_salvos.get(lancamento_id))
         atos.append({
             'indice': indice,
             'chave': ato.chave,
             'posicao': posicao,
-            'rotulo': _rotulo_da_aba(ato, analisado, indice),
-            'eh_inicio': _eh_inicio_matricula(ato, analisado),
+            'rotulo': _rotulo_da_aba(analisado, indice, tipo),
+            'eh_inicio': tipo == 'inicio_matricula',
             'estado': ESTADO_IMPORTADO if lancamento_id else ESTADO_PENDENTE,
             'lancamento_id': lancamento_id,
         })
     return atos
 
 
-def _eh_inicio_matricula(ato, analisado):
-    """Ato de abertura: o tipo pela MESMA precedência da importação.
+def _tipo_efetivo(ato, analisado, tipo_salvo):
+    """Tipo da aba: o ``Lancamento.tipo`` gravado vence; senão a extração.
 
     ``ato.tipo`` é ``valor(tipo_sugerido) or tipo_resolvido`` — a sugestão
     crua do OCR vence e um ``R-5`` com ``tipo_sugerido=inicio_matricula``
     iria para o fim da sidebar, embora a importação grave ``registro``.
     Quem decide é ``resolver_tipo`` (explícito → rótulo R/Av → sugestão),
     a regra de ``importacao/ato_documento.py`` e de ``_tipos_efetivos``.
+
+    Depois de salvo, é o banco que manda: o revisor pode trocar o tipo no
+    formulário e gravar.
     """
+    if tipo_salvo:
+        return tipo_salvo
     tipo, _divergencia, _origem = resolver_tipo(
         ato.tipo_explicito, analisado, ato.tipo_sugerido,
     )
-    return tipo == 'inicio_matricula'
+    return tipo
 
 
-def _rotulo_da_aba(ato, analisado, indice):
-    """``R5``/``Av3``/``Abertura`` — o mesmo rótulo efetivo que decide o tipo."""
+def _rotulo_da_aba(analisado, indice, tipo):
+    """``R5``/``Av3``/``Abertura`` — o mesmo tipo efetivo que decide a ordem.
+
+    ``inicio_matricula`` responde ANTES do ramo R/Av: um ``Av-1`` convertido
+    em abertura continua sendo abertura (#370, review do PR #377).
+    """
+    if tipo == 'inicio_matricula':
+        return 'Abertura'
     if analisado.reconhecido and not analisado.eh_matricula and analisado.numero:
         prefixo = _PREFIXO_DA_ABA.get(analisado.tipo)
         if prefixo:
             return f'{prefixo}{analisado.numero}'
-    if _eh_inicio_matricula(ato, analisado):
-        return 'Abertura'
     return f'Ato {indice + 1}'
 
 
