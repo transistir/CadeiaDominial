@@ -113,7 +113,7 @@ class ExportacaoCadeiaParidadeTest(SimpleTestCase):
             Path(settings.BASE_DIR)
             / "templates"
             / "dominial"
-            / "cadeia_dominial_tabela.html"
+            / "components/_cadeia_tree_actions.html"
         ).read_text(encoding="utf-8")
 
         link_esperado = (
