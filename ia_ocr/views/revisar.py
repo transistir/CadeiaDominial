@@ -367,11 +367,13 @@ def _mostrar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
                         }) if item['lancamento_id'] else None
                     ),
                 )
-                # Só a EXIBIÇÃO vem decrescente — do maior ato para o menor
-                # (decisão do dono, #370, 21/11); o ``atos`` da revisão segue
-                # na ordem natural para salvar e navegar.
+                # Regra do dono (#370, 21/11): do último ato reconhecido no
+                # documento para o menor, e o início de matrícula ("Abertura")
+                # SEMPRE por último — qualquer que seja a posição dele no A3.
+                # Só a EXIBIÇÃO: ``atos_da_revisao``, salvar e navegar seguem
+                # na ordem natural.
                 for item in sorted(
-                    atos, key=lambda a: (a['posicao'], a['indice']), reverse=True,
+                    atos, key=lambda a: (a['eh_inicio'], -a['posicao']),
                 )
             ],
             'avisos': prefill['pendencias'],

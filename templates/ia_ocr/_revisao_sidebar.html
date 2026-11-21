@@ -2,9 +2,11 @@
   Sidebar da revisão da extração (I-14 / #341): uma aba por ATO do documento.
   Substitui a sidebar de sequência do formulário manual só quando a view
   entrega ``revisao_ia``. Contexto: revisao_ia.atos = [{indice, posicao,
-  rotulo, estado, atual, url, url_lancamento}], em ordem DECRESCENTE de
-  posição — do maior ato para o menor (decisão do dono, #370, 21/11); só a
-  exibição: índice, salvar e navegar seguem na ordem natural.
+  rotulo, eh_inicio, estado, atual, url, url_lancamento}], em ordem
+  DECRESCENTE de posição — do maior ato para o menor — com o início de
+  matrícula ("Abertura") SEMPRE por último, venha ele em que posição vier no
+  A3 (decisão do dono, #370, 21/11); só a exibição: índice, salvar e navegar
+  seguem na ordem natural.
 
   - salvo: o ato já virou lançamento (ImportacaoIA) → link para a edição dele;
   - pendente: link para o ato. O JS (ocr_revisao_formulario.js) troca o clique

@@ -38,7 +38,11 @@ class Resultado:
 
 def atos_da_revisao(extracao, dados=None, linhas=None):
     """As abas da revisão, na ordem do A3: ``[{indice, chave, posicao, rotulo,
-    estado, lancamento_id}]``.
+    eh_inicio, estado, lancamento_id}]``.
+
+    ``eh_inicio`` marca o ato de início de matrícula ("Abertura"): a sidebar
+    o exibe por ÚLTIMO (regra do dono, #370, 21/11), em qualquer posição que
+    ele ocupe no A3.
 
     ``importado`` = existe ``ImportacaoIA`` de um lançamento ATUAL (não
     excluído) para a linha do ato NESTA extração. Lançamento excluído depois
@@ -57,27 +61,33 @@ def atos_da_revisao(extracao, dados=None, linhas=None):
     for posicao, ato in enumerate(dados.atos, start=1):
         indice = int(ato.chave.rsplit('/', 1)[1])
         lancamento_id = salvos.get(ato.chave)
+        analisado = analisar_rotulo(
+            (revisao.rotulo_efetivo(ato.chave, linhas) or '').strip(),
+        )
         atos.append({
             'indice': indice,
             'chave': ato.chave,
             'posicao': posicao,
-            'rotulo': _rotulo_da_aba(ato, linhas, indice),
+            'rotulo': _rotulo_da_aba(ato, analisado, indice),
+            'eh_inicio': _eh_inicio_matricula(ato, analisado),
             'estado': ESTADO_IMPORTADO if lancamento_id else ESTADO_PENDENTE,
             'lancamento_id': lancamento_id,
         })
     return atos
 
 
-def _rotulo_da_aba(ato, linhas, indice):
+def _eh_inicio_matricula(ato, analisado):
+    """Ato de abertura da matrícula: o tipo efetivo ou o rótulo dizem início."""
+    return 'inicio_matricula' in (ato.tipo, analisado.tipo)
+
+
+def _rotulo_da_aba(ato, analisado, indice):
     """``R5``/``Av3``/``Abertura`` — o mesmo rótulo efetivo que decide o tipo."""
-    analisado = analisar_rotulo(
-        (revisao.rotulo_efetivo(ato.chave, linhas) or '').strip(),
-    )
     if analisado.reconhecido and not analisado.eh_matricula and analisado.numero:
         prefixo = _PREFIXO_DA_ABA.get(analisado.tipo)
         if prefixo:
             return f'{prefixo}{analisado.numero}'
-    if 'inicio_matricula' in (ato.tipo, analisado.tipo):
+    if _eh_inicio_matricula(ato, analisado):
         return 'Abertura'
     return f'Ato {indice + 1}'
 

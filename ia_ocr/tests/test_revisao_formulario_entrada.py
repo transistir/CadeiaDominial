@@ -11,6 +11,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from ia_ocr import revisao_ato
 from ia_ocr.models import CampoSugerido
 
 from .test_revisao_formulario_view_base import (
@@ -316,7 +317,8 @@ class SidebarDecrescenteTest(RevisaoFormularioBase):
     def _abas_da_sidebar(self, html):
         sidebar = html[html.index('ia-revisao-sidebar'):]
         return re.findall(
-            r'>(\d+)\. (R\d+|Av\d+)', sidebar[:sidebar.index('</aside>')],
+            r'>(\d+)\. (R\d+|Av\d+|Abertura)',
+            sidebar[:sidebar.index('</aside>')],
         )
 
     def test_sidebar_vem_do_maior_para_o_menor(self):
@@ -371,3 +373,27 @@ class SidebarDecrescenteTest(RevisaoFormularioBase):
             [('3', 'R2'), ('2', 'Av1'), ('1', 'R1')],
         )
         self.assertIn('✔ salvo', html)
+
+    def _abas_com_abertura_na_posicao(self, posicao):
+        payload = self._payload_de_tres_atos()
+        ato = payload['acts'][posicao]
+        ato['rotulo'] = self._campo('M237', 'MATRÍCULA Nº 42.718')
+        ato['tipo_sugerido'] = self._campo('inicio_matricula', 'MATRÍCULA Nº 42.718')
+        self.extracao = self._aberta(payload)
+        return self._abas_da_sidebar(self.client.get(self.url_ato(0)).content.decode())
+
+    def test_abertura_depois_do_terceiro_ato_vai_para_o_fim(self):
+        self.assertEqual(self._abas_com_abertura_na_posicao(2), [
+            ('2', 'Av1'), ('1', 'R1'), ('3', 'Abertura'),
+        ])
+
+    def test_abertura_na_posicao_1_continua_por_ultimo(self):
+        self.assertEqual(self._abas_com_abertura_na_posicao(0), [
+            ('3', 'R2'), ('2', 'Av1'), ('1', 'Abertura'),
+        ])
+
+    def test_atos_da_revisao_segue_a_ordem_do_a3_com_eh_inicio(self):
+        self._abas_com_abertura_na_posicao(2)
+        atos = revisao_ato.atos_da_revisao(self.extracao)
+        self.assertEqual([(a['rotulo'], a['eh_inicio']) for a in atos],
+                         [('R1', False), ('Av1', False), ('Abertura', True)])
