@@ -914,7 +914,8 @@ fecham na validação do bloco, não no merge.
    em rodada final de review no fechamento desta entrada. #328 (formulário
    como fonte de verdade; remove `valor_transacao`/`detalhes`) já em develop.
    O contrato v1.2 do lado do app entrou no PR #340 (#339).
-6d. **I-14 🆕 P0 — PRÓXIMO DEPOIS DO #324** #341 — **revisão dentro do
+6d. **I-14 🔁 em andamento — form ✅ (#364), cards aposentados ✅ (#366);
+   falta o #271** #341 — **revisão dentro do
    formulário de lançamento**: um ato por aba na sidebar (padrão
    `js-lancamento-resumo`), campos na ordem e com os rótulos do formulário,
    **gravação só no "Salvar lançamento" daquele ato** (`criar_lancamento_completo`,
@@ -926,6 +927,19 @@ fecham na validação do bloco, não no merge.
    **Decisão do dono, 17/11/2026:** "a tela de cards some, os dados vão para o
    form e serão revisados lá; só serão salvos no banco depois que o usuário
    confirmar cada form de lançamento."
+   **Estado em 20/11/2026:** PR **#364** (squash `6c3ead27`) entregou o
+   formulário de revisão por ato — critérios 1–7 do #341, bloqueios por ato,
+   vínculo de `documento_origem` sem criar documento e duplicata com import
+   atômico. PR **#366** (squash `3e18f46a`) aposentou a tela de cards e o
+   importar em lote: `/campos/` virou redirect para a revisão,
+   `revisao_campos.html`, `ocr_revisao.js` e `views/decisoes.py` foram
+   removidos, e `/ocr/revisar/<...>/` passou a ser a entrada única. Junto veio
+   a decisão do dono de 20/11: **concluir sem atos não exige cabeçalho
+   revisado**, porque nesse caminho nada é gravado em `Documento`/`Lancamento`;
+   a revisão do cabeçalho vale para o caminho com atos. Revisado por Opus,
+   Codex xhigh (2 MUST-FIX fechados) e Greptile 5/5; 996 testes em `ia_ocr`.
+   **Próximo passo do I-14:** #271 (vocabulário canônico Forma/Título com
+   sugestões no formulário), em PR próprio.
 6e. **I-12 🔁 reescopado** #331 — deixa de ser "prévia para conferir" e passa
    a **"exportar o que foi importado"** (CSV/XLSX a partir do que já está no
    banco), depois do I-14.
