@@ -132,6 +132,12 @@ class FormaAutocompleteEndpointTest(_Base):
         response = Client().get(self.url)
         self.assertIn(response.status_code, (302, 403))
 
+    def test_metodo_nao_get_405_com_allow(self):
+        response = self.client.post(self.url, HTTP_X_CSRFTOKEN="x")
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response["Allow"], "GET")
+        self.assertIn("error", response.json())
+
     def test_ordena_por_contagem_e_ignora_vazios(self):
         for _ in range(3):
             self._lanc(forma="Doação")
@@ -191,3 +197,11 @@ class FormaSugestoesJsTest(TestCase):
         self.assertNotIn("innerHTML", js)
         self.assertIn("createElement('option')", js)
         self.assertIn("AbortController", js)
+
+    def test_js_aborta_no_input_antes_do_debounce(self):
+        """Inspeção de texto (não browser): no listener de ``input`` o
+        ``abort()`` ocorre antes do ``setTimeout`` do debounce."""
+        js = JS_PATH.read_text(encoding="utf-8")
+        inicio = js.index("addEventListener('input'")
+        trecho = js[inicio:]
+        self.assertLess(trecho.index("abort()"), trecho.index("setTimeout"))

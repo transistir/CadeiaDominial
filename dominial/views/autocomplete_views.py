@@ -168,7 +168,9 @@ def forma_autocomplete(request):
     from ..models import Lancamento
 
     if request.method != 'GET':
-        return JsonResponse({'error': 'Método não permitido'}, status=405)
+        response = JsonResponse({'error': 'Método não permitido'}, status=405)
+        response['Allow'] = 'GET'
+        return response
     campo = _CAMPOS_FORMA.get(request.GET.get('campo', 'forma'))
     if campo is None:
         return JsonResponse({'error': 'campo inválido'}, status=400)

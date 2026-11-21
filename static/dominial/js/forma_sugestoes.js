@@ -76,6 +76,11 @@
         input.addEventListener('focus', buscar);
         input.addEventListener('input', function () {
             clearTimeout(timer);
+            // Aborta já: nenhuma resposta pendente preenche durante o debounce.
+            if (controller) {
+                controller.abort();
+                controller = null;
+            }
             timer = setTimeout(buscar, DEBOUNCE_MS);
         });
     }
