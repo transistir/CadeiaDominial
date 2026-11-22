@@ -5,6 +5,7 @@
 
 from datetime import timedelta
 from hashlib import sha256
+
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase
 from django.utils import timezone
@@ -12,10 +13,13 @@ from django.utils import timezone
 from dominial.models import LancamentoTipo
 from ia_ocr import destinos, valores
 from ia_ocr.models import ExtracaoSugerida, OcrJob, PaginaOcr
-
 from ia_ocr.revisao import (
-    _valor_explicito, aplicar_linha, desnormalizar, versao_linha,
+    _valor_explicito,
+    aplicar_linha,
+    desnormalizar,
+    versao_linha,
 )
+
 from .payloads_extracao import TEXTO_PAGINA_1, payload_registro
 
 
@@ -27,11 +31,17 @@ class AplicarLinhaTest(SimpleTestCase):
             ocr_job=job, numero_pagina=1, texto_ocr=TEXTO_PAGINA_1
         )
         payload = payload_registro(job.job_id)
-        for area in (payload['acts'][0]['area'], payload['document']['area']):
-            area.update(
-                normalized='120.00', raw='120,00 m2', unidade='m2',
-                evidencia={'pagina': 1, 'trecho': '120,00 m2'},
-            )
+        # Ato com unidade NÃO conversível (alqueires): é ela que exige a
+        # decisão de conversão testada aqui. O documento fica em m², sem
+        # destino, para provar que a conversão automática não o alcança.
+        payload['acts'][0]['area'].update(
+            normalized='120.00', raw='120,00 alqueires', unidade='alqueires',
+            evidencia={'pagina': 1, 'trecho': '120,00 m2'},
+        )
+        payload['document']['area'].update(
+            normalized='120.00', raw='120,00 m2', unidade='m2',
+            evidencia={'pagina': 1, 'trecho': '120,00 m2'},
+        )
         self.linhas = {
             linha.chave: linha
             for linha in desnormalizar(extracao, payload, [pagina])
@@ -359,7 +369,7 @@ class AplicarLinhaTest(SimpleTestCase):
         campo.valor_final = 'Área conferida'
         esperado = sha256(
             '["sugerido","Área conferida",false,[],null,null,false,false,null]'
-            .encode('utf-8')
+            .encode()
         ).hexdigest()[:16]
 
         self.assertEqual(versao_linha(campo), esperado)

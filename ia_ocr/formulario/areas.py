@@ -1,8 +1,8 @@
-"""Área lida em unidade que não é hectare (M3): pendência que exige decisão."""
+"""Área que não pôde virar hectares (#341/#373): pendência de decisão."""
 
 from .. import importacao
-from .numeros import _numero_legivel
 from ..revisao import MOTIVO_UNIDADE_AREA
+from .numeros import _numero_legivel
 
 # Área lida em unidade que não é hectare: o input é em ha, então o valor NÃO
 # entra nele (120 m² viraria 120 ha). Mesmo motivo estável da revisão antiga.
@@ -33,10 +33,14 @@ def _area_em_outra_unidade(extracao, indice, linhas, chave):
     O input do formulário é em hectares. A linha de área marcada com
     ``unidade_area`` (e ainda sem conversão confirmada) traz o número na
     unidade do documento: colocá-lo no input trocaria a unidade em silêncio
-    — 120 m² seriam gravados como 120 ha (#341, M3). Aqui o valor original
-    vira pendência com a unidade; quem converte (ou preenche à mão) é o
-    revisor. Linha descartada, ou convertida na revisão (``area_convertida``,
-    cujo ``valor_final`` já está em ha), segue o caminho normal.
+    — 120 m² seriam gravados como 120 ha (#341, M3). Quando a unidade é
+    explicitamente conversível (``ha``, ``m²``) ou o texto é composto
+    hectare/are/centiare, a desnormalização já converte (#373) e este
+    motivo nem existe; aqui só chega o que NÃO pôde ser convertido sem
+    inventar (``alqueires``, unidade ausente, texto ilegível). Aí o valor
+    original vira pendência e quem preenche à mão é o revisor. Linha
+    descartada, ou convertida na revisão (``area_convertida``, cujo
+    ``valor_final`` já está em ha), segue o caminho normal.
     """
     campo = linhas.get(f'{chave}/area')
     if (

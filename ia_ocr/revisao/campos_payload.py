@@ -2,11 +2,23 @@
 
 from .. import destinos, valores
 from ..models import CampoSugerido
+from .area_ha import (
+    converter_para_hectares,
+    hectares_confirmados,
+)
+from .area_ha_padroes import unidades_divergem
 from .estruturas import (
-    LIMIAR_CONFIANCA, MATCH_PESSOA_CANDIDATOS, MOTIVO_BAIXA_CONFIANCA,
-    MOTIVO_CLOSURE, MOTIVO_EVIDENCIA_INVALIDA, MOTIVO_NORMALIZACAO_INVALIDA,
-    MOTIVO_TRECHO_AUSENTE, MOTIVO_UNIDADE_AREA, _AREA_DE_ATO,
-    _TIPOS_NORMALIZAVEIS, _eh_folha,
+    _AREA_DE_ATO,
+    _TIPOS_NORMALIZAVEIS,
+    LIMIAR_CONFIANCA,
+    MATCH_PESSOA_CANDIDATOS,
+    MOTIVO_BAIXA_CONFIANCA,
+    MOTIVO_CLOSURE,
+    MOTIVO_EVIDENCIA_INVALIDA,
+    MOTIVO_NORMALIZACAO_INVALIDA,
+    MOTIVO_TRECHO_AUSENTE,
+    MOTIVO_UNIDADE_AREA,
+    _eh_folha,
 )
 
 
@@ -29,6 +41,26 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
     motivos = []
 
     normalized = _valor_do_payload(tipo_valor, campo.get('normalized'))
+    unidade = campo.get('unidade')
+    eh_area_de_ato = bool(_AREA_DE_ATO.fullmatch(ponteiro))
+    raw = campo.get('raw')
+    texto_lido = raw.strip() if isinstance(raw, str) else ''
+    convertida = False
+    divergem = eh_area_de_ato and unidades_divergem(raw, unidade)
+    if eh_area_de_ato and not divergem:
+        if unidade == 'ha' and normalized is not None:
+            # A3 já em hectares: o texto ainda tem de confirmar o canônico
+            # quantizado; divergência (ou canônico ilegível) é pendência.
+            normalized = hectares_confirmados(raw, normalized)
+            convertida = normalized is not None
+        else:
+            # #373: par número+unidade inequívoco (m², ha ou composto
+            # hectare/are/centiare) vira hectares na desnormalização; o
+            # valor convertido ainda tem de bater com o canônico do A3.
+            convertido = converter_para_hectares(raw, unidade, normalized)
+            if convertido is not None:
+                normalized = f'{convertido:.4f}'
+                convertida = True
     if tipo_valor in _TIPOS_NORMALIZAVEIS:
         if normalized is None:
             # Não normalizado (null) ≠ vazio: sem canônico, há pendência.
@@ -39,7 +71,11 @@ def _de_campo(extracao, ponteiro, campo, texto_paginas):
             except valores.ValorInvalido:
                 motivos.append(MOTIVO_NORMALIZACAO_INVALIDA)
                 normalized = None
-    if _AREA_DE_ATO.fullmatch(ponteiro) and campo.get('unidade') != 'ha':
+    if eh_area_de_ato and not convertida and (
+        divergem or unidade != 'ha' or texto_lido or normalized is None
+    ):
+        # Conversão recusada (texto ilegível/divergente) nunca descarta a
+        # área em silêncio: o revisor decide.
         motivos.append(MOTIVO_UNIDADE_AREA)
 
     confianca = campo.get('confianca')

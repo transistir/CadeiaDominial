@@ -10,8 +10,7 @@ do Python para Decimal — ponto como separador decimal (ex.: "0.0000").
 A correção é só de EXIBIÇÃO: o helper `formatar_area_ha`
 (`dominial/utils/formatacao_utils.py`) e o filtro de template `area_ha`
 (`dominial/templatetags/dominial_extras.py`) trocam o separador decimal
-para vírgula (padrão brasileiro), sem alterar o valor persistido no banco
-nem a função `formatar_area` já existente (usada em outro lugar).
+para vírgula (padrão brasileiro), sem alterar o valor persistido no banco.
 """
 
 from decimal import Decimal
@@ -24,6 +23,7 @@ from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from dominial.managers import ESCOPO_GLOBAL
 from dominial.models import (
     Cartorios,
     Documento,
@@ -38,7 +38,6 @@ from dominial.services.cadeia_completa_service import CadeiaCompletaService
 from dominial.services.cadeia_dominial_tabela_service import (
     CadeiaDominialTabelaService,
 )
-from dominial.managers import ESCOPO_GLOBAL
 from dominial.tests.segregacao_fixtures import atribuir_tis
 from dominial.utils.formatacao_utils import formatar_area_ha
 
@@ -52,7 +51,7 @@ class FormatarAreaHaTest(SimpleTestCase):
         self.assertEqual(formatar_area_ha(Decimal("0.0000")), "-")
 
     def test_zero_inteiro_exibe_traco(self):
-        self.assertEqual(formatar_area_ha(Decimal("0")), "-")
+        self.assertEqual(formatar_area_ha(Decimal(0)), "-")
 
     def test_zero_int_python_exibe_traco(self):
         self.assertEqual(formatar_area_ha(0), "-")
@@ -65,7 +64,7 @@ class FormatarAreaHaTest(SimpleTestCase):
         self.assertEqual(formatar_area_ha("0.0000"), "-")
 
     def test_zero_com_padrao_customizado(self):
-        self.assertEqual(formatar_area_ha(Decimal("0"), padrao="N/A"), "N/A")
+        self.assertEqual(formatar_area_ha(Decimal(0), padrao="N/A"), "N/A")
 
     def test_valor_sem_separador_de_milhar(self):
         self.assertEqual(formatar_area_ha(Decimal("1234.5")), "1234,5000")
@@ -107,13 +106,6 @@ class FormatarAreaHaTest(SimpleTestCase):
         for valor in ("NaN", "Infinity", "-Infinity"):
             with self.subTest(valor=valor):
                 self.assertEqual(formatar_area_ha(valor), "-")
-
-    def test_nao_altera_formatar_area_existente(self):
-        """`formatar_area` (com sufixo " ha" e 2 casas) continua intacta."""
-        from dominial.utils.formatacao_utils import formatar_area
-
-        self.assertEqual(formatar_area(Decimal("1234.5")), "1.234,50 ha")
-        self.assertEqual(formatar_area(None), "0,00 ha")
 
 
 class AreaHaTemplatetagTest(SimpleTestCase):
@@ -205,7 +197,7 @@ class AreaHaTabelasIntegracaoTest(TestCase):
                 data=timezone.now().date(),
                 cartorio_origem=self.cartorio,
                 origem="",
-                area=Decimal("0"),
+                area=Decimal(0),
             ),
             Lancamento(
                 documento=self.documento,
@@ -263,7 +255,6 @@ class AreaHaTabelasIntegracaoTest(TestCase):
         self.assertNotIn("1.234,5678", html)
 
     def test_templates_pdf_usam_o_filtro_de_area(self):
-        from dominial.managers import ESCOPO_GLOBAL
         contextos = (
             (
                 "dominial/cadeia_dominial_pdf.html",

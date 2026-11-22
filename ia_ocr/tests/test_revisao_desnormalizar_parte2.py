@@ -6,8 +6,12 @@ o discovery do Django não a coleta; quem coleta é a fachada em
 """
 
 from ia_ocr.revisao import linha_ignorada
+
 from .payloads_extracao import (
-    _campo, payload_averbacao, payload_com_closure, payload_registro,
+    _campo,
+    payload_averbacao,
+    payload_com_closure,
+    payload_registro,
 )
 
 
@@ -204,15 +208,30 @@ class DesnormalizarTestParte2:
         self.assertIn('normalizacao_invalida', data.motivos_revisao)
         self.assertEqual(data.raw, '10 de janeiro de 2020')  # raw preservado
 
-    def test_unidade_area(self):
+    def test_unidade_area_metro_quadrado_converte(self):
         payload = payload_registro(self.job.job_id)
-        payload['acts'][0]['area']['unidade'] = 'm2'
+        payload['acts'][0]['area'].update(
+            unidade='m2', raw='120,00 m2', normalized=None,
+            evidencia={'pagina': 1, 'trecho': '120,00 m2'},
+        )
+
+        area = self._por_chave(self._linhas(payload))['/acts/0/area']
+
+        self.assertNotIn('unidade_area', area.motivos_revisao)
+        self.assertFalse(area.requer_revisao)
+        # #373: 120 m² = 0,0120 ha, já no canônico de 4 casas.
+        self.assertEqual(area.normalized, '0.0120')
+
+    def test_unidade_area_alqueires_continua_pendente(self):
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['area'].update(
+            unidade='alqueires', raw='12,50 alqueires',
+        )
 
         area = self._por_chave(self._linhas(payload))['/acts/0/area']
 
         self.assertIn('unidade_area', area.motivos_revisao)
         self.assertTrue(area.requer_revisao)
-        # O valor canônico permanece: converter unidade é decisão humana.
         self.assertEqual(area.normalized, '12.50')
 
     def test_normalizacao_invalida_em_area(self):
