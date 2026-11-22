@@ -674,7 +674,7 @@ class LancamentoCriacaoService:
             cartorio_origem=dados_lancamento['cartorio_origem'],
             cartorio_transacao=None,  # Legado - será preenchido pelo LancamentoCamposService se necessário
             cartorio_transmissao=None,  # Novo padrão - será preenchido pelo LancamentoCamposService se necessário
-            data_origem=dados_lancamento['data'],
+            data_origem=None,
         )
         
         # Processar área e origem
