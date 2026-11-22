@@ -19,7 +19,7 @@ não é incluído, esse nome **nunca chega ao POST**.
 | Livro do documento | `livro_documento` | `Documento.livro` | front se vazio e não edição; back só preenche se vazio (`lancamento_criacao_service.py:644`) | fica vazio |
 | Folha do documento | `folha_documento` | `Documento.folha` | front exceto matrícula (`:54`); back **ignora em matrícula** (`:648`, #138) | fica vazia |
 | Número | `numero_lancamento_simples` + `numero_lancamento` | `Lancamento.numero_lancamento` | back só registro/averbação (`:82`); início gera da sigla | erro claro |
-| Data do ato | `data` | `Lancamento.data` | front `required`; back sem validação amigável (inválida → `None` → INSERT) | 500 |
+| Data do ato | `data` | `Lancamento.data` | front `required`; back sem validação dedicada — inválida vira `None`, o `atomic` faz rollback e a view recebe mensagem genérica (`lancamento_criacao_service.py:282-311`) | rollback + mensagem genérica (não 500) |
 | Transmitentes/Adquirentes | `transmitente[]`/`transmitente_nome[]` (idem adquirente) | `LancamentoPessoa` + `Pessoas` | não | ato sem pessoas |
 | Área | `area_inicio_matricula` / `area` | `Lancamento.area` | não | vazio |
 | Tipo da origem | `tipo_origem_N` | `LancamentoOrigem.tipo_documento` | front obrigatório no início (`origem_simples.js:741-756`); back não | origem não vincula |
@@ -45,7 +45,11 @@ não é incluído, esse nome **nunca chega ao POST**.
   (`lancamento_views.py:213-256`; `lancamento_campos_service.py:327-361`).
 - `fim_cadeia[]` carrega só as linhas marcadas; os demais arrays de fim de
   cadeia são densos e alinhados por posição.
-- JS renumera ids/checkboxes ao remover (`origem_simples.js:625-680`).
+- `removeOrigem` **não** renumera `id`/`name`: só os **valores** dos checkboxes
+  `fim_cadeia[]` são realinhados por posição (`renumerarCheckboxesFimCadeia`,
+  `origem_simples.js:670-680`; comentário explícito em
+  `lancamento_form.js:765`). Nomes/IDs podem ficar com lacunas depois de
+  remover uma origem.
 - O form já aceita N origens; o contrato A3 v1.2 tem **um** objeto `origem`
   (limitação de contrato, não do app — ver issue #63 do `ocr-service`).
 
@@ -97,20 +101,50 @@ fluxo. Issue separada registrada — **sem coluna nova no MVP** (decisão do don
 `lancamento_campos_service.py:345-352`: se o nome digitado não existe no
 cadastro, o service **cria** `Cartorios` com `cns = CNS<10 dígitos aleatórios>`.
 
-- **No fluxo OCR**, a revisão bloqueia antes: linha de cartório sem
-  `cartorio_escolhido_id`/`criar_novo` gera `escolha_pendente`
-  (`ia_ocr/revisao/pendencias.py:83-94`) e `salvar_ato` recusa o POST
-  (`bloqueios_do_post`). "Criar novo" sem nome também bloqueia
-  (`MOTIVO_CRIAR_NOVO_SEM_NOME`, `:105-117`). Portanto **uma sugestão não
-  confirmada não deve chegar ao auto-create**.
+- **Pendências da revisão × bloqueio da criação — são coisas diferentes.**
+  `pendencias()`/`escolha_pendente` (`ia_ocr/revisao/pendencias.py:83-94`) são
+  avaliadas na **conclusão da revisão** (`services.dados_revisados`), não no
+  `salvar_ato` de um ato. O `salvar_ato` chama apenas `bloqueios_do_post`
+  (`ia_ocr/revisao_ato/bloqueios.py:21-35`), que cobre **área sem decisão,
+  cartório da TRANSMISSÃO não cadastrado e início sem origem** — **não** cobre
+  o cartório de uma origem.
+- **Consequência no fluxo OCR:** um `cartorio_origem_nome[]` sugerido e não
+  confirmado pode chegar ao `LancamentoCriacaoService`; se o nome não existir
+  no cadastro, `lancamento_campos_service.py:345-352` cria o cartório com CNS
+  aleatório. O bloqueio não está onde eu havia atribuído — está no caminho de
+  persistência, não na pendência da revisão.
+- Sem cartório (vazio), a origem não é vinculada (`lancamento_origem_service.py:341/766`)
+  e o documento de origem não é criado (`:1155/1175`) — falha visível, sem
+  cadastro inventado. O CNS aleatório só nasce quando há **nome** não
+  cadastrado.
 - **No formulário manual**, o comportamento continua: texto livre cria cadastro.
   Não será alterado nesta etapa (decisão do dono).
-- **Risco residual:** qualquer caminho futuro que chame o service sem a revisão
-  (script, importação em lote) volta a criar CNS aleatório. Proposta: guarda
-  explícita no service (`origem_confirmada=True` ou proibir criação quando o
-  cartório veio de texto e não de escolha), em issue separada.
+- **Risco residual:** o próprio `salvar_ato` não bloqueia cartório de origem;
+  qualquer nome sugerido e não confirmado que chegue ao POST cria cadastro.
+  Proposta (issue #388): guarda explícita no caminho de importação
+  (`apos_importacao=True`) — exigir `cartorio_origem[]` (id) e recusar criação
+  por texto, mantendo o formulário manual intacto.
 
-## 7. Pendente de verificação
+## 7. Teste integrado real — pendências (22/11/2026)
+
+PDF autorizado `M 14511 São Miguel do Iguaçu` (8 páginas) → OCR real → `/v1/extract`
+→ payload v1.2 válido (`validar_payload` OK). O que ficou pendente:
+
+1. **Número divergente:** o nome do PDF diz **M 14511**; a extração devolveu
+   **M-94511**. Registrar sem presumir qual é o correto — depende de conferência
+   documental.
+2. **Abertura na posição 4** dos 25 atos (após Av-01, Av-02, R-03), e não como
+   primeiro ato. A sidebar do app já força a abertura para o fim; a ordem do
+   contrato precisa ser conferida.
+3. **Cabeçalho com campos principais nulos:** `document.numero`, `data`,
+   `livro`, `folha`, `area`, `cartorio` = null; só `tipo` preenchido.
+4. **`partes[]` vazio em 25/25 atos** (ocr-service #50).
+5. **`act.origem` = null em 25/25 atos** (ocr-service #63).
+
+O teste cobre **PDF → OCR → contrato A3**. **Não** cobre revisão nem persistência
+no Umbelino — isso exige banco isolado e o fluxo de `salvar_ato`.
+
+## 8. Pendente de verificação
 
 - **Origens repetidas:** `LancamentoOrigem` tem
   `unique_together (lancamento, indice_origem)` e constraint
