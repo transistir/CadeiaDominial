@@ -20,7 +20,7 @@ from .test_revisao_formulario_view_base import RevisaoFormularioBase
 
 
 class ConverterComPreposicaoTest(SimpleTestCase):
-    """#381: ``a`` sem ponto não é ares quando não precede número."""
+    """#381: ``a`` antes do número é preposição; na sobra é ares."""
 
     def test_preposicao_antes_do_par_nao_invalida_a_conversao(self):
         self.assertEqual(
@@ -31,6 +31,18 @@ class ConverterComPreposicaoTest(SimpleTestCase):
             converter_para_hectares('correspondente a 1.500,00 m²', 'm2'),
             Decimal('0.1500'),
         )
+        self.assertEqual(
+            converter_para_hectares('a 12,50 ha', 'ha'),
+            Decimal('12.5000'),
+        )
+
+    def test_a_sem_ponto_na_sobra_e_ares_e_recusa(self):
+        for texto in (
+            '169 ha e nove a', '169 ha e nove a,',
+            '169 ha e quarenta a', '169 ha a',
+        ):
+            with self.subTest(texto=texto):
+                self.assertIsNone(converter_para_hectares(texto, 'ha'))
 
     def test_composto_hectare_are_centiare_continua_intacto(self):
         for texto in (

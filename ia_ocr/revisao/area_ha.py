@@ -25,16 +25,17 @@ vírgula solta e texto vazio também. O número precisa começar fora de letra
 ASCII (``１``, ``١``) no texto também recusa a conversão — ``[0-9]`` do
 regex só garantiria o sufixo ASCII. A sobra fora do par/composto só pode ser
 espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha``,
-``169 ha, 9 a e quarenta ca`` e ``169 ha e 9 are`` (singular ``are`` não é
-consumido pelo composto) são ambíguos. Unidade do texto divergente do enum
-do A3 devolve ``None``. O ``normalized`` do A3, quando informado, é só
-conferência: o valor gravado vem sempre do texto. Em
-``hectares_confirmados`` o canônico já está em hectares e a conferência é
-por **igualdade após quantizar**; nos demais caminhos (``m²``, unidade
-ausente, composto) ``converter_para_hectares`` compara com tolerância de
-meio quantum. Divergência devolve ``None``: quem chama trata como pendência
-do revisor, nunca como zero. As funções não levantam exceção — dado de OCR
-é entrada hostil.
+``169 ha, 9 a e quarenta ca``, ``169 ha e nove a`` e ``169 ha e 9 are``
+(singular ``are`` não é consumido pelo composto) são ambíguos. O ``a``
+logo antes do número é preposição (``equivalente a 12,50 ha``), não ares.
+Unidade do texto divergente do enum do A3 devolve ``None``. O
+``normalized`` do A3, quando informado, é só conferência: o valor gravado
+vem sempre do texto. Em ``hectares_confirmados`` o canônico já está em
+hectares e a conferência é por **igualdade após quantizar**; nos demais
+caminhos (``m²``, unidade ausente, composto) ``converter_para_hectares``
+compara com tolerância de meio quantum. Divergência devolve ``None``: quem
+chama trata como pendência do revisor, nunca como zero. As funções não
+levantam exceção — dado de OCR é entrada hostil.
 """
 
 import re
@@ -46,6 +47,7 @@ from .area_ha_padroes import (
     _DIGITO,
     _MENOS,
     _PAR,
+    _PREPOSICAO_A,
     _UNIDADE_NA_SOBRA,
     _codigo_da_unidade,
     _unidade_do_enum,
@@ -220,8 +222,17 @@ def _hectares_do_par(texto, par, codigo, normalizado):
 
 
 def _sobra_unidade(texto, achado):
-    """Fora do par/composto: dígito, unidade ou ``/`` → expressão ambígua."""
-    resto = texto[:achado.start()] + texto[achado.end():]
+    """Fora do par/composto: dígito, unidade ou ``/`` → expressão ambígua.
+
+    O ``a`` isolado que termina o texto imediatamente antes do número é
+    preposição ("equivalente a 12,50 ha") e sai antes do teste. Qualquer
+    outro ``a`` sem ponto na sobra é ares ("169 ha e nove a" → ambíguo).
+    """
+    antes = texto[:achado.start()]
+    preposicao = _PREPOSICAO_A.search(antes)
+    if preposicao is not None:
+        antes = antes[:preposicao.start()]
+    resto = antes + texto[achado.end():]
     return (
         bool(_DIGITO.search(resto))
         or '/' in resto
