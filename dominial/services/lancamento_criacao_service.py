@@ -355,9 +355,9 @@ class LancamentoCriacaoService:
             try:
                 tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
                 print(f"DEBUG: Tipo de lançamento encontrado: {tipo_lanc.tipo}")
-
-                # Atualizar o tipo do lançamento
+                # Atualizar o tipo (e a flag derivada) do lançamento
                 lancamento.tipo = tipo_lanc
+                lancamento.eh_inicio_matricula = tipo_lanc.tipo == 'inicio_matricula'
                 print(f"DEBUG: Tipo do lançamento atualizado para: {tipo_lanc.tipo}")
 
             except LancamentoTipo.DoesNotExist:
@@ -675,8 +675,8 @@ class LancamentoCriacaoService:
             cartorio_transacao=None,  # Legado - será preenchido pelo LancamentoCamposService se necessário
             cartorio_transmissao=None,  # Novo padrão - será preenchido pelo LancamentoCamposService se necessário
             data_origem=None,
+            eh_inicio_matricula=(tipo_lanc.tipo == 'inicio_matricula'),
         )
-        
         # Processar área e origem
         if dados_lancamento['area']:
             lancamento.area = float(dados_lancamento['area']) if dados_lancamento['area'] and dados_lancamento['area'].strip() else None

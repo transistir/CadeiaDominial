@@ -9,7 +9,8 @@ sendo o formulário de lançamento (I-14 / #341).
 
 import re
 
-from dominial.models import Documento
+from dominial.models import Documento, Lancamento
+from dominial.services.lancamento_criacao_service import LancamentoCriacaoService
 from ia_ocr import revisao_ato
 from ia_ocr.extracao_schema import validar_payload
 from ia_ocr.formulario import prefill_do_ato
@@ -166,3 +167,49 @@ class SemAberturaTest(AberturaM237Base):
         self.assertEqual(
             [ato['posicao'] for ato in atos], [1, 2, 3, 4, 5, 6, 7],
         )
+
+
+class SalvarAberturaEhInicioMatriculaTest(AberturaM237Base):
+    def test_salvar_abertura_grava_eh_inicio_matricula_true(self):
+        resposta = self.salvar(0)
+
+        self.assertEqual(resposta.status_code, 302)
+        lancamento = Lancamento.objects.get(documento=self.documento)
+        self.assertTrue(lancamento.eh_inicio_matricula)
+
+    def test_salvar_r_ou_av_grava_eh_inicio_matricula_false(self):
+        self.salvar(0)
+
+        resposta = self.salvar(1)
+
+        self.assertEqual(resposta.status_code, 302)
+        lancamentos = Lancamento.objects.filter(documento=self.documento).order_by('id')
+        self.assertEqual(lancamentos.count(), 2)
+        self.assertTrue(lancamentos[0].eh_inicio_matricula)
+        self.assertFalse(lancamentos[1].eh_inicio_matricula)
+
+    def test_criacao_manual_inicio_matricula_grava_true_e_registro_false(self):
+        dados_inicio = {
+            'tipo_lancamento': str(self.tipo_inicio.pk),
+            'numero_lancamento': '1',
+            'data': '2020-01-01',
+            'observacoes': '',
+            'forma': '',
+            'descricao': '',
+            'titulo': '',
+            'livro_origem': '',
+            'folha_origem': '',
+            'cartorio_origem': None,
+            'area': None,
+            'origem': '',
+        }
+        manual_inicio = LancamentoCriacaoService._criar_lancamento_basico(
+            self.documento, dados_inicio, self.tipo_inicio,
+        )
+        self.assertTrue(manual_inicio.eh_inicio_matricula)
+
+        dados_reg = dict(dados_inicio, numero_lancamento='2')
+        manual_reg = LancamentoCriacaoService._criar_lancamento_basico(
+            self.documento, dados_reg, self.tipo_registro,
+        )
+        self.assertFalse(manual_reg.eh_inicio_matricula)
