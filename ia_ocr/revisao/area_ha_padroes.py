@@ -56,7 +56,9 @@ _UNIDADE_SOLTA = re.compile(
 _UNIDADE_NA_SOBRA = re.compile(
     r'(?<![0-9A-Za-zÀ-ÿ])'
     r'(?:hectares?|centiares?|alqueires?|ares|are|has|há|m²|m2'
-    r'|alqs?\.?|ha\.?|a\.?|ca\.?)'
+    # "a." é ares; "a" sem ponto só é unidade quando precede número — em
+    # "equivalente a 12,50 ha" é preposição, não ares (#381).
+    r'|alqs?\.?|ha\.?|a\.|a(?=\s*[0-9])|ca\.?)'
     r'(?![0-9A-Za-zÀ-ÿ])',
     re.IGNORECASE,
 )
