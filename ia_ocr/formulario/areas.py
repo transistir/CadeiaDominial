@@ -1,5 +1,11 @@
 """Área que não pôde virar hectares (#341/#373): pendência de decisão."""
 
+import re
+
+from dominial.utils.area_br import AreaInvalida, parse_area_br
+
+_CANONICO_TRES_CASAS = re.compile(r'^\s*([0-9]{1,3})[.,]([0-9]{3})\s*$')
+
 from .. import importacao
 from ..revisao import MOTIVO_UNIDADE_AREA
 from .numeros import _numero_legivel
@@ -15,6 +21,24 @@ TEXTO_AREA_EM_OUTRA_UNIDADE = (
     'vazio: converta o valor e preencha o campo, ou marque o descarte '
     'explícito abaixo. Nada é convertido ou descartado sem a sua decisão.'
 )
+
+
+def area_para_input(valor):
+    """Canônico do ato no formato que o parser único aceita sem ambiguidade.
+
+    O canônico do A3 é **decimal com ponto** (não é entrada de usuário). Se ele
+    vier com exatamente 3 casas (``74.675``), o parser do #396 o classificaria
+    como ambíguo — correto para o que o usuário digita, errado para o que o
+    sistema já resolveu. Aqui só esse caso é normalizado para 4 casas; todo o
+    resto passa intacto (``12.50`` continua ``12.50``).
+    """
+    if valor in (None, ''):
+        return None
+    texto = valor if isinstance(valor, str) else f'{valor}'
+    achado = _CANONICO_TRES_CASAS.match(texto)
+    if achado and not achado.group(1).startswith('0'):
+        return f'{achado.group(1)}.{achado.group(2)}0'
+    return valor
 
 
 def _unidade_da_area_no_payload(extracao, indice):

@@ -35,6 +35,9 @@
         if (!/^[0-9]{1,3}(\.[0-9]{3})+$/.test(texto)) {
           return 'Área inválida: separador de milhar fora de grupos de 3.';
         }
+        if (texto.replace(/\./g, '').replace(/^0+/, '').length > 8) {
+          return 'Área inválida: valor acima do limite da coluna de área.';
+        }
         return '';
       }
       inteiro = partes[0];
@@ -45,11 +48,17 @@
       inteiro = partes[0];
       decimais = partes[1];
     } else {
+      if (((inteiro === undefined ? texto : inteiro).replace(/^0+/, '') || '0').length > 8) {
+        return 'Área inválida: valor acima do limite da coluna de área.';
+      }
       return '';
     }
 
     if (!inteiro) return 'Área inválida: falta a parte inteira.';
     if (decimais.length > CASAS) return 'Área inválida: máximo de 4 casas decimais.';
+    if ((inteiro.replace(/^0+/, '') || '0').length > 8) {
+      return 'Área inválida: valor acima do limite da coluna de área.';
+    }
     // `0.012` não é ambíguo: zero à esquerda não abre grupo de milhar.
     if (decimais.length === 3 && inteiro.length >= 1 && inteiro.length <= 3 &&
         inteiro.charAt(0) !== '0') {
