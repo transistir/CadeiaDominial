@@ -7,6 +7,8 @@
     - form_data: dados do formulário
     - area_id: ID personalizado para o campo (opcional, padrão: 'area')
 -->
+{% load static %}
+<script src="{% static 'dominial/js/area_br.js' %}"></script>
 <div class="form-group">
     <label for="{{ area_id|default:'area' }}">Área (ha){% if area_obrigatorio %} *{% endif %}</label>
     <input type="text" name="area_{{ area_id|default:'area' }}" id="{{ area_id|default:'area' }}" step="0.0001" inputmode="decimal"
@@ -32,11 +34,15 @@
             return;
         }
 
-        // Valida se é número decimal válido (só dígitos, vírgula ou ponto como separador)
-        // Aceita formato brasileiro com vírgula (Ex: 150,5000)
-        const regex = /^\d+([\.,]\d+)?$/;
-        if (!regex.test(valor)) {
-            areaInput.setCustomValidity('Valor inválido. Use apenas números.');
+        // #396: a mesma regra do backend (area_br.js). O regex antigo
+        // `/^\d+([\.,]\d+)?$/` aceitava `1.000` como decimal.
+        // Se o script não carregou, BLOQUEIA com mensagem — antes um `''`
+        // deixava `1.000` passar sem aviso.
+        const problema = window.problemaAreaPtBr
+            ? window.problemaAreaPtBr(valor)
+            : 'Não foi possível validar a área nesta página. Recarregue antes de salvar.';
+        if (problema) {
+            areaInput.setCustomValidity(problema);
             areaInput.classList.add('is-invalid');
             let errEl = document.getElementById('area-error-{{ area_id|default:"area" }}');
             if (!errEl) {
@@ -46,7 +52,7 @@
                 errEl.style.marginTop = '5px';
                 areaInput.parentNode.appendChild(errEl);
             }
-            errEl.textContent = 'Valor inválido. Use vírgula ou ponto para decimal.';
+            errEl.textContent = problema;
             errEl.style.display = 'block';
         } else {
             areaInput.setCustomValidity('');

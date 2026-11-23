@@ -105,6 +105,16 @@ class AreaEmOutraUnidadeTestParte:
         self.assertEqual(resultado['evidencias']['area']['trecho'], 'área 12,50 ha')
         self.assertEqual(self._pendencias_da_area(resultado), [])
 
+    def test_canonico_de_tres_casas_chega_ao_input_com_quatro(self):
+        # #396: `74.675` é canônico do A3 (decimal). Sem normalizar, o parser
+        # único o trataria como ambíguo e a revisão travaria no formulário.
+        resultado = self._prefill(self._com_area(
+            '74.675', 'área 74,675 ha', 'ha', raw='74,675 ha',
+        ))
+
+        self.assertEqual(resultado['form_data']['area'], '74.6750')
+        self.assertEqual(self._pendencias_da_area(resultado), [])
+
     def test_conversao_confirmada_pelo_revisor_preenche_o_valor_em_hectares(self):
         extracao = self._aberta(self._com_area(
             '12.50', 'área 12,50 alqueires', 'alqueires',

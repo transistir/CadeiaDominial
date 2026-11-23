@@ -15,6 +15,8 @@ import datetime
 import re
 from decimal import Decimal, InvalidOperation
 
+from dominial.utils.area_br import AreaInvalida, parse_area_br
+
 # Texto livre sem destino: o mesmo limite anti-lixo da validação de payload.
 LIMITE_TEXTO = 10_000
 
@@ -86,7 +88,7 @@ def do_formulario(tipo, texto, destino=None):
     if tipo == 'data':
         _validar_data(texto)
     elif tipo in ('decimal', 'area'):
-        return _texto_decimal(texto, destino)
+        return _texto_decimal(texto, destino, tipo)
     elif tipo == 'texto':
         limite = _max_length_do_destino(destino)
         if len(texto) > limite:
@@ -193,10 +195,15 @@ def validar_limites(campo, valor_efetivo, campo_sugerido=None):
         return None
 
     try:
-        do_formulario(
-            'texto' if tipo_valor == 'cartorio' else tipo_valor,
-            texto, campo,
-        )
+        if tipo_valor == 'area':
+            # Valor salvo é canônico, não texto digitado: a regra de
+            # ambiguidade do #396 não se aplica aqui.
+            texto_decimal_canonico(texto, campo)
+        else:
+            do_formulario(
+                'texto' if tipo_valor == 'cartorio' else tipo_valor,
+                texto, campo,
+            )
     except (ValorInvalido, ErroInterno):
         return MOTIVO_LIMITE
     return None
@@ -259,13 +266,67 @@ def _validar_data(texto):
         raise ValorInvalido('data inexistente no calendário') from None
 
 
-def _texto_decimal(texto, destino):
-    """Decimal ≥ 0 com ``.`` ou ``,``, cabendo em max_digits/decimal_places."""
-    canonico = ''.join(texto.split()).replace(',', '.')
+def _texto_decimal(texto, destino, tipo='decimal'):
+    """Decimal ≥ 0 com ``.`` ou ``,``, cabendo em max_digits/decimal_places.
+
+    ``tipo='area'`` passa pelo parser único do #396: aqui entra texto DO
+    FORMULÁRIO, e `''.join(texto.split()).replace(',', '.')` reproduzia o P0
+    (`1.000` → 1 ha). Ambiguidade vira ``ValorInvalido`` com a mensagem das
+    duas leituras, nunca magnitude adivinhada.
+    """
+    if tipo == 'area':
+        # SEM_DESTINO aceita 20 dígitos; quem limita é o destino, não o parser.
+        # max_digits é o TOTAL da coluna (12); o limite do parser é a parte
+        # inteira (max_digits - decimal_places = 8).
+        max_digits = getattr(destino, 'max_digits', None)
+        casas = getattr(destino, 'decimal_places', None)
+        max_inteiros = (
+            max_digits - casas
+            if _tem_destino_real(destino) and max_digits is not None and casas is not None
+            else None
+        )
+        try:
+            validado = parse_area_br(texto, max_inteiros=max_inteiros)
+        except AreaInvalida as exc:
+            raise ValorInvalido(exc.mensagem) from None
+        if validado is None:
+            return ''
+        # O canônico preserva a escala digitada (`0.0120` continua `0.0120`);
+        # só a notação de milhar é normalizada para o formato decimal.
+        limpo = ''.join(texto.split())
+        tem_milhar = (
+            (',' in limpo and '.' in limpo)
+            or limpo.count('.') > 1
+        )
+        canonico = (
+            format(validado.normalize(), 'f') if tem_milhar
+            else limpo.replace(',', '.')
+        )
+    else:
+        canonico = ''.join(texto.split()).replace(',', '.')
     try:
         numero = Decimal(canonico)
     except InvalidOperation:
         raise ValorInvalido('decimal não é número') from None
+    return _canonico_dentro_dos_limites(numero, destino)
+
+
+def texto_decimal_canonico(texto, destino):
+    """Canônico JÁ SALVO → texto canônico; ``74.675`` é 74,675 ha.
+
+    Sem a regra de ambiguidade do texto digitado (``1.000`` aqui é 1 ha).
+    Caminho de ``validar_limites`` na finalização (Greptile P1 no PR #403).
+    """
+    if not isinstance(texto, str):
+        raise ErroInterno('canônico de área não é str')
+    try:
+        numero = Decimal(''.join(texto.split()))
+    except InvalidOperation:
+        raise ValorInvalido('decimal canônico inválido') from None
+    return _canonico_dentro_dos_limites(numero, destino)
+
+
+def _canonico_dentro_dos_limites(numero, destino):
     numero = _validar_decimal_canonico(numero)
     if numero < 0:
         raise ValorInvalido('decimal negativo não cabe em campo de valor')

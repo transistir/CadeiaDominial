@@ -8,7 +8,7 @@ evidências de origem e de partes.
 from dominial.models import Cartorios, Pessoas
 
 from .. import importacao
-from .areas import _area_em_outra_unidade
+from .areas import _area_em_outra_unidade, area_para_input
 from ..destinos import _normalizar
 from .erros import AtoInexistente
 from .numeros import _numero_composto, _numero_simples
@@ -140,7 +140,8 @@ def prefill_do_ato(extracao, indice, documento):
     # M3: área em m²/alqueires/ares não entra no input em hectares.
     area_em_outra_unidade = _area_em_outra_unidade(extracao, indice, linhas, chave)
     if area_em_outra_unidade is None:
-        colocar(f'{chave}/area', ato.area)
+        # #396: sempre 4 casas — `74.675` seria lido como ambíguo.
+        colocar(f'{chave}/area', area_para_input(ato.area))
     colocar(f'{chave}/descricao', ato.descricao)
     colocar(f'{chave}/observacoes', ato.observacoes)
     colocar(f'{chave}/forma', ato.forma)
