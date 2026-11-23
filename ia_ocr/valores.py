@@ -302,27 +302,20 @@ def _texto_decimal(texto, destino, tipo='decimal'):
             format(validado.normalize(), 'f') if tem_milhar
             else limpo.replace(',', '.')
         )
-        try:
-            numero = Decimal(canonico)
-        except InvalidOperation:
-            raise ValorInvalido('decimal não é número') from None
     else:
         canonico = ''.join(texto.split()).replace(',', '.')
-        try:
-            numero = Decimal(canonico)
-        except InvalidOperation:
-            raise ValorInvalido('decimal não é número') from None
+    try:
+        numero = Decimal(canonico)
+    except InvalidOperation:
+        raise ValorInvalido('decimal não é número') from None
     return _canonico_dentro_dos_limites(numero, destino)
 
 
 def texto_decimal_canonico(texto, destino):
-    """Valor JÁ SALVO (canônico) → texto canônico, ou ``ValorInvalido``.
+    """Canônico JÁ SALVO → texto canônico; ``74.675`` é 74,675 ha.
 
-    Diferente de ``do_formulario``: aqui não há ambiguidade de texto digitado.
-    O canônico gravado usa ponto decimal e não tem separador de milhar, então
-    ``74.675`` é 74,675 ha (e ``1.000`` é 1 ha), mesmo que a mesma string seja
-    ambígua no formulário. É o caminho de ``validar_limites`` na finalização
-    (Greptile P1 no PR #403).
+    Sem a regra de ambiguidade do texto digitado (``1.000`` aqui é 1 ha).
+    Caminho de ``validar_limites`` na finalização (Greptile P1 no PR #403).
     """
     if not isinstance(texto, str):
         raise ErroInterno('canônico de área não é str')
