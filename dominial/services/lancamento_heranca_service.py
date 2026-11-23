@@ -2,7 +2,6 @@
 Service para herdar dados do primeiro lançamento do documento
 """
 from ..models import Lancamento
-from ..utils.area_br import parse_area_br
 
 class LancamentoHerancaService:
     @staticmethod
@@ -91,9 +90,7 @@ class LancamentoHerancaService:
             lancamento.origem = dados_primeiro['origem']
 
         if not lancamento.area and dados_primeiro.get('area'):
-            # #396: a herança pode receber o texto do POST — passa pelo parser
-            # único em vez de gravar texto cru no DecimalField.
-            lancamento.area = parse_area_br(dados_primeiro['area'])
+            lancamento.area = dados_primeiro['area']
 
         if not lancamento.forma and dados_primeiro.get('forma'):
             lancamento.forma = dados_primeiro['forma']

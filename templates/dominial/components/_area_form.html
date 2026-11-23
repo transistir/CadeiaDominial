@@ -36,9 +36,11 @@
 
         // #396: a mesma regra do backend (area_br.js). O regex antigo
         // `/^\d+([\.,]\d+)?$/` aceitava `1.000` como decimal.
+        // Se o script não carregou, BLOQUEIA com mensagem — antes um `''`
+        // deixava `1.000` passar sem aviso.
         const problema = window.problemaAreaPtBr
             ? window.problemaAreaPtBr(valor)
-            : '';
+            : 'Não foi possível validar a área nesta página. Recarregue antes de salvar.';
         if (problema) {
             areaInput.setCustomValidity(problema);
             areaInput.classList.add('is-invalid');

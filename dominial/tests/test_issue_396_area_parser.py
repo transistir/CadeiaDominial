@@ -168,6 +168,18 @@ class AreaViewTest(TestCase):
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(Lancamento.objects.get().area, Decimal("150.5000"))
 
+    def test_post_com_virgula_persiste(self):
+        resposta = self.client.post(self.url, self._payload(area="150,5"))
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(Lancamento.objects.get().area, Decimal("150.5000"))
+
+    def test_post_com_milhar_ptbr_persiste(self):
+        resposta = self.client.post(self.url, self._payload(area="1234,5678"))
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(Lancamento.objects.get().area, Decimal("1234.5678"))
+
     def test_area_canonica_com_ponto_persiste(self):
         """Canônico do A3 (ponto decimal, 4 casas) grava sem conversão.
 

@@ -271,7 +271,15 @@ def _texto_decimal(texto, destino, tipo='decimal'):
     """
     if tipo == 'area':
         # SEM_DESTINO aceita 20 dígitos; quem limita é o destino, não o parser.
-        max_inteiros = getattr(destino, 'max_digits', None)
+        # max_digits é o TOTAL da coluna (12); o limite do parser é a parte
+        # inteira (max_digits - decimal_places = 8).
+        max_digits = getattr(destino, 'max_digits', None)
+        casas = getattr(destino, 'decimal_places', None)
+        max_inteiros = (
+            max_digits - casas
+            if _tem_destino_real(destino) and max_digits is not None and casas is not None
+            else None
+        )
         try:
             validado = parse_area_br(texto, max_inteiros=max_inteiros)
         except AreaInvalida as exc:
