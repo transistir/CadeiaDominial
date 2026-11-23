@@ -47,5 +47,7 @@ erro('1,23456', '4 casas', 'cinco casas');
 erro('1,234.56', 'ponto depois da vírgula', 'convenção en-US');
 erro('123456789', 'limite', '9 dígitos inteiros (limite da coluna)');
 erro('1.234.567.890', 'limite', 'milhar acima de 8 dígitos');
+ok('12.345.678,9', 'milhar com 8 dígitos inteiros + vírgula');
+erro('1.234.567.890,1', 'limite', 'milhar com 10 dígitos inteiros + vírgula');
 
 console.log('area_br.test.js: OK');

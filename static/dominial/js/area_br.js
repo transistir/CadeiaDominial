@@ -56,7 +56,9 @@
 
     if (!inteiro) return 'Área inválida: falta a parte inteira.';
     if (decimais.length > CASAS) return 'Área inválida: máximo de 4 casas decimais.';
-    if ((inteiro.replace(/^0+/, '') || '0').length > 8) {
+    // `inteiro` no ramo misto ainda tem os pontos de milhar: contá-los
+    // fazia `12.345.678,9` (8 dígitos) ser recusado como 10.
+    if (((inteiro.replace(/\./g, '')).replace(/^0+/, '') || '0').length > 8) {
       return 'Área inválida: valor acima do limite da coluna de área.';
     }
     // `0.012` não é ambíguo: zero à esquerda não abre grupo de milhar.
