@@ -1093,6 +1093,20 @@ fecham na validação do bloco, não no merge.
 
 ---
 
+### F3.1 — OCR assistido (pós-reunião de 23/11/2026) — plano aprovado
+
+> Arquitetura, decisões (Q1=b, Q2, Q3), inventário, fases e mapa de issues em
+> **`docs/produto-3/ARQUITETURA_OCR_ASSISTIDO.md`**. É sub-trilha da F3 e
+> **não** reordena R1–R10 (FADESP intacto).
+>
+> **Ordem aprovada pelo Hiure em 23/11/2026:** **#396** (parser de área, P0
+> transversal) → observações documental × analítica (Q1=b) → vocabulário
+> compartilhado (#372 + `ocr-service` #74) → base de exemplos semânticos
+> (artefato privado) → recuperação contextual na extração → correção humana
+> vira exemplo → correções O-M237 (`ocr-service` #83 → #85 → #87 → #86 → #84)
+> → aceite #88. A **matriz documental da M237 (#395, Etapa 2)** fica depois da
+> #396. Nenhuma implementação em paralelo nos dois repositórios.
+
 ## Gates de decisão
 
 - **GATE-CLIENTE (#150 + #151):** disparar pergunta no início do R4.
