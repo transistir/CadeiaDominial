@@ -66,7 +66,7 @@ de 23/11/2026: **12.226 lançamentos** (averbação 5.404 · início de matrícu
 |---|---|---|
 | `forma` | vazio em 4.022 (33%) | maior lacuna de registro |
 | `titulo` | vazio em 7.519 (61%) | idem |
-| `descricao` | vazio em 95%; preenchido em 5.354 averbações (média 174, máx 4.226) e só 4 registros | é campo de **averbação**, confirmado por uso |
+| `descricao` | vazio em 6.868 (56%); preenchido em 5.358 (5.354 averbações + 4 registros; média 174, máx 4.226) | é campo de **averbação**, confirmado por uso |
 | `observacoes` | vazio em 7.762 (63%); 4.464 textos, média 239 chars; 220 com "atenção", 41 com "pendente" | já é usado para ressalva analítica, **sem marca** |
 | `area` | 2.012 zeros, 2.141 valores < 1 ha, máximo 17.720.830 ha | não há invariante; magnitude já se perdeu no histórico |
 | origens | 1.727 (transcrição 1.062 = 61% · matrícula 665); livro em 40%, folha em 12% | origem é predominantemente transcr. e raramente tem folha |
@@ -119,15 +119,19 @@ medido. Os achados de uma rodada não se transferem para a outra.
                      consumo: app (#372)                              consumo: ocr-service (contexto)
 ```
 
-- **Vocabulário** = valores de **domínio fechado**: cartório/CNS, `forma`,
-  `titulo`, `tipo_lancamento`, formatos de `livro`/`folha`, formatos de área.
-  Não tem PII por construção; entra no repositório público com contagem por
-  valor (schema `vocabulario-prod/v1`, ver ocr-service #74).
+- **Vocabulário** = valores de domínio fechado — cartório/CNS, `tipo_lancamento`,
+  formatos de `livro`/`folha` e formatos de área — **mais `forma` e `titulo`,
+  que são texto livre no cadastro**. Campos fechados entram com contagem por
+  valor (schema `vocabulario-prod/v1`, ver ocr-service #74). `forma` e `titulo`
+  só entram depois de **allowlist revisada por humano**: valor não aprovado
+  fica **fora** do JSON — não é mascarado nem "sanitizado". O teste automático
+  de PII complementa a revisão, não a substitui.
 - **Exemplos semânticos** = pares **(texto documental → valor preenchido)** por
   campo e tipo de ato, derivados de `descricao`, `observacoes`, `area`,
-  `origem` e das colunas fechadas. **Contém texto registral** e pode conter
-  nome de pessoa: é artefato **privado** (gerado por comando, gravado fora do
-  git, com sha256 e contagens), nunca commitado, nunca logado.
+  `origem` e das colunas fechadas. O texto registral vai **mascarado** (pessoa →
+  `transmitente 1`/`adquirente 1`; sem CPF/RG/endereço): é artefato **privado**
+  (gerado por comando, gravado fora do git, com sha256 e contagens), nunca
+  commitado, nunca logado e **sem PII** — mesma regra do plano do serviço (§3).
 - Regra de ouro: **vocabulário ensina grafia; exemplo ensina forma de
   escrever**. Os dois nunca viram "resposta" no prompt (lição medida em
   `workers_ai.py:50-52`).
@@ -230,11 +234,16 @@ Relatório reproduzível = comando + hash do PDF + `job_id` + data.
 | **F0** | Este documento + ajuste do `PLANO_INTEGRACAO` + seção F3.1 no ROADMAP | — | docs revisados, sem código | ½ dia |
 | **F1** | **#396** parser único de área pt-BR (formulário, revisão, edição) | — | teste RED→GREEN com `1.000`, `1.234,5678`, `1234,5678`, `150,5`, `150.5`; round-trip form→banco→exibição | 1 dia |
 | **F2** | Observações documental × analítica (§5) | F0 | teste: prefill nunca escreve marcador; análise só com autor; `buscar_keyword` ignora análise; PDF/Excel mostram marca | 1 dia |
-| **F3** | Vocabulário compartilhado: fecha ocr-service #74/#70 e app #372 | F0 | JSON com schema v1, sem PII (teste falha se aparecer nome próprio), hash fixado; prefill casa "Venda e compra" | 1–2 dias |
+| **F3** | Vocabulário compartilhado: fecha ocr-service #74/#70 e app #372 | F0 | Fase A (sintética): JSON schema v1 válido, teste de PII, hash fixado, prefill casa "Venda e compra". Fase B (produção): só após autorização do dono e com allowlist de `forma`/`titulo` aprovada | 1–2 dias |
 | **F4** | Base de exemplos privada + export read-only | F3 (reusa vocabulário) | artefato fora do git com sha256/contagens; zero PII; comando parametrizado | 2 dias |
 | **F5** | Recuperação contextual na extração | F4 | ganho medido no scorer com/sem contexto na mesma fixture; flag de rollback | 1–2 dias |
 | **F6** | Correção → exemplo (contínuo) | F4 | pares classificados; promoção só após revisão; nada automático | 1–2 dias |
 | **F7** | Correções O-M237 (ocr-service #83→#85→#87→#86→#84) + aceite #88 | F5 | matriz #395 verde por ato e campo | 4–6 dias |
+
+> **Regra operacional (23/11/2026):** até autorização explícita do dono, #74 e
+> #372 trabalham **só com dados sintéticos**. A geração read-only em produção é
+> uma fase separada e gated; a allowlist de `forma`/`titulo` é aprovada pelo
+> dono antes de qualquer publicação.
 
 ## 9. Mapa de issues
 
