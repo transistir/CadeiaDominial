@@ -48,7 +48,7 @@
       inteiro = partes[0];
       decimais = partes[1];
     } else {
-      if (((inteiro === undefined ? texto : inteiro).replace(/^0+/, '') || '0').length > 8) {
+      if ((texto.replace(/^0+/, '') || '0').length > 8) {
         return 'Área inválida: valor acima do limite da coluna de área.';
       }
       return '';

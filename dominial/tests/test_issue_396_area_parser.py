@@ -168,13 +168,58 @@ class AreaViewTest(TestCase):
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(Lancamento.objects.get().area, Decimal("150.5000"))
 
-    def test_area_da_revisao_ocr_persiste(self):
-        """A revisão OCR entrega o canônico em hectares (4 casas, ponto).
-        O mesmo input do formulário precisa gravar sem conversão divergente."""
+    def test_area_canonica_com_ponto_persiste(self):
+        """Canônico do A3 (ponto decimal, 4 casas) grava sem conversão.
+
+        A fiação do prefill (canônico de 3 casas → 4 no input) é provada em
+        `ia_ocr/tests/test_revisao_formulario_prefill_area_outra_unidade.py`
+        e o codec da revisão em `ia_ocr/tests/test_valores_area_396.py`.
+        """
         resposta = self.client.post(self.url, self._payload(area="74.6755"))
 
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(Lancamento.objects.get().area, Decimal("74.6755"))
+
+    def test_edicao_aceita_milhar_e_round_trip(self):
+        lancamento = Lancamento.objects.create(
+            documento=self.documento,
+            tipo=self.tipo_averbacao,
+            numero_lancamento="AV1",
+            data="2020-02-02",
+            area=Decimal("10.0000"),
+        )
+        url = reverse(
+            "editar_lancamento",
+            args=[self.tis.id, self.imovel.id, lancamento.id],
+        )
+        payload = {
+            "tipo_lancamento": str(self.tipo_averbacao.id),
+            "numero_lancamento": "AV1",
+            "numero_lancamento_simples": "1",
+            "data": "2020-02-02",
+            "forma_averbacao": "Averbação",
+            "descricao": "Descrição",
+            "area": "1.234,5678",
+        }
+
+        resposta = self.client.post(url, payload)
+        self.assertEqual(
+            resposta.status_code, 302,
+            [str(m) for m in resposta.context.get("messages", [])]
+            if resposta.context else resposta.content[:300],
+        )
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.area, Decimal("1234.5678"))
+
+        # Round-trip: a tela de edição devolve o valor exibido e o parser o
+        # re-aceita sem mudar a magnitude.
+        pagina = self.client.get(url)
+        self.assertContains(pagina, "1234.5678")
+        payload["area"] = "1234.5678"
+        segunda = self.client.post(url, payload)
+        self.assertEqual(segunda.status_code, 302)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.area, Decimal("1234.5678"))
 
     def test_edicao_rejeita_ambiguo_e_preserva_valor(self):
         lancamento = Lancamento.objects.create(

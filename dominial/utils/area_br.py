@@ -29,8 +29,8 @@ _QUANTUM = Decimal('0.0001')
 _MAX_ECO = 24  # não ecoar entrada gigante na mensagem de erro
 
 _SO_DIGITOS_E_SEPARADORES = re.compile(r'^[0-9.,]+$')
-_MILHAR_COM_VIRGULA = re.compile(r'^[0-9]{1,3}(?:\.[0-9]{3})+$')
-_MILHAR_SEM_VIRGULA = re.compile(r'^[0-9]{1,3}(?:\.[0-9]{3})+$')
+# Grupo de milhar com ponto: 1.234 / 1.234.567 (usado com e sem vírgula).
+_MILHAR = re.compile(r'^[0-9]{1,3}(?:\.[0-9]{3})+$')
 
 
 class AreaInvalida(ValueError):
@@ -78,7 +78,7 @@ def _partes(texto):
                 texto, 'Formato com ponto depois da vírgula não é aceito.'
             )
         inteiro, decimais = texto.rsplit(',', 1)
-        if not _MILHAR_COM_VIRGULA.match(inteiro):
+        if not _MILHAR.match(inteiro):
             raise _erro_invalido(texto, 'Separador de milhar fora de grupos de 3.')
         inteiro = inteiro.replace('.', '')
         return inteiro, decimais
@@ -97,7 +97,7 @@ def _partes(texto):
                 raise _erro_ambiguo(texto, inteiro, decimais)
             return inteiro, decimais
         # Dois ou mais pontos: só pode ser milhar (1.234.567).
-        if not _MILHAR_SEM_VIRGULA.match(texto):
+        if not _MILHAR.match(texto):
             raise _erro_invalido(texto, 'Separador de milhar fora de grupos de 3.')
         return texto.replace('.', ''), ''
 
@@ -117,7 +117,7 @@ def _partes(texto):
     return texto, ''
 
 
-def parse_area_br(valor):
+def parse_area_br(valor, max_inteiros=MAX_DIGITOS_INTEIROS):
     """Texto do formulário → ``Decimal`` em hectares (4 casas), ou ``None``.
 
     Aceita ``None``/string vazia como "sem área". ``Decimal`` já convertido é
@@ -153,7 +153,10 @@ def parse_area_br(valor):
         raise _erro_invalido(
             texto, f'Máximo de {CASAS_DECIMAIS} casas decimais.'
         )
-    if len(inteiro.lstrip('0') or '0') > MAX_DIGITOS_INTEIROS:
+    if (
+        max_inteiros is not None
+        and len(inteiro.lstrip('0') or '0') > max_inteiros
+    ):
         raise _erro_invalido(texto, 'Valor acima do limite da coluna de área.')
 
     try:

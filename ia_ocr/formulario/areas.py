@@ -2,13 +2,11 @@
 
 import re
 
-from dominial.utils.area_br import AreaInvalida, parse_area_br
-
-_CANONICO_TRES_CASAS = re.compile(r'^\s*([0-9]{1,3})[.,]([0-9]{3})\s*$')
-
 from .. import importacao
 from ..revisao import MOTIVO_UNIDADE_AREA
 from .numeros import _numero_legivel
+
+_CANONICO_TRES_CASAS = re.compile(r'^\s*([0-9]{1,3})[.,]([0-9]{3})\s*$')
 
 # Área lida em unidade que não é hectare: o input é em ha, então o valor NÃO
 # entra nele (120 m² viraria 120 ha). Mesmo motivo estável da revisão antiga.
@@ -34,7 +32,7 @@ def area_para_input(valor):
     """
     if valor in (None, ''):
         return None
-    texto = valor if isinstance(valor, str) else f'{valor}'
+    texto = valor if isinstance(valor, str) else format(valor, 'f')
     achado = _CANONICO_TRES_CASAS.match(texto)
     if achado and not achado.group(1).startswith('0'):
         return f'{achado.group(1)}.{achado.group(2)}0'
