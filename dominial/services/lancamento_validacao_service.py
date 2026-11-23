@@ -3,6 +3,7 @@ Service especializado para validações de lançamento
 """
 
 from ..models import Lancamento
+from ..utils.area_br import AreaInvalida, parse_area_br
 
 
 class LancamentoValidacaoService:
@@ -75,14 +76,25 @@ class LancamentoValidacaoService:
             except ValueError:
                 return False, 'A data fornecida não é válida.'
         
-        # Validar área (se fornecida, deve ser numérica)
-        area = dados_lancamento.get('area')
-        if area and area.strip():
-            try:
-                float(area)
-            except ValueError:
-                return False, 'A área deve ser um número válido.'
-        
+        # Validar área (se fornecida): parser único do #396. `float(area)`
+        # aceitava `1.000` como 1 ha e mudava a magnitude em silêncio.
+        valida_area, erro_area = LancamentoValidacaoService.validar_area(
+            dados_lancamento.get('area')
+        )
+        if not valida_area:
+            return False, erro_area
+
+        return True, None
+
+    @staticmethod
+    def validar_area(area):
+        """Valida a área pelo parser único (``dominial.utils.area_br``)."""
+        if area is None or (isinstance(area, str) and not area.strip()):
+            return True, None
+        try:
+            parse_area_br(area)
+        except AreaInvalida as exc:
+            return False, exc.mensagem
         return True, None
     
     @staticmethod

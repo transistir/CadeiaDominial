@@ -388,8 +388,10 @@
                 }
             }
 
-            // Converte vírgula (padrão brasileiro) para ponto (padrão do backend)
-            areaHidden.value = valor.replace(',', '.');
+            // #396: envia o texto como o usuário digitou. O backend tem o
+            // parser único (Decimal, milhar × decimal). Trocar a primeira
+            // vírgula aqui quebrava `1.234,5678` e aceitava `1.000` como 1 ha.
+            areaHidden.value = valor;
         });
     })();
 </script>

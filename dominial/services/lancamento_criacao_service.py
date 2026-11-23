@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from ..models import Documento, Lancamento, LancamentoTipo
+from ..utils.area_br import parse_area_br
 from .lancamento_form_service import LancamentoFormService
 from .lancamento_validacao_service import LancamentoValidacaoService
 from .lancamento_origem_service import LancamentoOrigemService
@@ -60,42 +61,40 @@ class LancamentoCriacaoService:
         if not documentos_autorizados.filter(pk=documento_ativo.pk).exists():
             return None, NAO_AUTORIZADO_DOCUMENTO
 
-        print(f"DEBUG: Iniciando criação de lançamento para documento {documento_ativo.id}")
-
         # Obter dados do formulário
         tipo_id = request.POST.get('tipo_lancamento')
-        print(f"DEBUG: Tipo de lançamento ID: {tipo_id}")
         
         if not tipo_id:
-            print("DEBUG: Erro - tipo_lancamento não fornecido")
             return None, "Tipo de lançamento é obrigatório"
         
         try:
             tipo_lanc = LancamentoTipo.objects.get(id=tipo_id)
-            print(f"DEBUG: Tipo de lançamento encontrado: {tipo_lanc.tipo}")
         except LancamentoTipo.DoesNotExist:
-            print(f"DEBUG: Erro - tipo de lançamento {tipo_id} não encontrado")
             return None, f"Tipo de lançamento {tipo_id} não encontrado"
         
         # Validar se o número simples foi fornecido para registro e averbação
         numero_simples = request.POST.get('numero_lancamento_simples', '').strip()
         if (tipo_lanc.tipo == 'registro' or tipo_lanc.tipo == 'averbacao') and not numero_simples:
-            print(f"DEBUG: Erro - número simples obrigatório para {tipo_lanc.tipo}")
             return None, f"Para lançamentos do tipo '{tipo_lanc.get_tipo_display()}', é obrigatório preencher o campo 'Número' (ex: 1, 5, etc.)"
         
         # Processar dados do lançamento
-        print("DEBUG: Processando dados do lançamento...")
         dados_lancamento = LancamentoFormService.processar_dados_lancamento(request, tipo_lanc)
+
+        # Área (#396): validar ANTES de qualquer escrita. `1.000` é ambíguo e
+        # precisa de erro explícito — nunca de uma magnitude adivinhada.
+        valida_area, erro_area = LancamentoValidacaoService.validar_area(
+            dados_lancamento.get('area')
+        )
+        if not valida_area:
+            return None, erro_area
 
         # Esta flag é um argumento interno confiável. Dados enviados pelo
         # cliente nunca podem desativar a verificação de duplicatas.
         if not apos_importacao:
-            print("DEBUG: Verificando duplicatas...")
             try:
                 duplicata_resultado = LancamentoDuplicataService.verificar_duplicata_antes_criacao(
                     request, documento_ativo
                 )
-                print("DEBUG: Verificação de duplicata executada com sucesso")
             except Exception:
                 # Falhar aberto aqui deixava passar exatamente a duplicata que a
                 # verificação existe para barrar: aborta em vez de assumir "sem
@@ -122,14 +121,10 @@ class LancamentoCriacaoService:
             print("DEBUG: Pulando verificação de duplicatas (após importação)")
         
         # Validar número do lançamento
-        print("DEBUG: Validando número do lançamento...")
         is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(
             dados_lancamento['numero_lancamento'], documento_ativo
         )
-        print(f"DEBUG: Validação do número: {is_valid}, mensagem: {error_message}")
-        
         if not is_valid:
-            print(f"DEBUG: Erro na validação: {error_message}")
             return None, error_message
         
         # CORREÇÃO: Validar cartórios das origens
@@ -171,7 +166,6 @@ class LancamentoCriacaoService:
         # (o finally não pode mascarar o erro original com UnboundLocalError).
         lancamento = None
         try:
-            print("DEBUG: Criando lançamento básico...")
             
             # ATOMICIDADE (#241): espelha atualizar_lancamento_completo (:305).
             # Qualquer erro após o lançamento básico (cartório de origem,
@@ -206,14 +200,10 @@ class LancamentoCriacaoService:
                 lancamento = LancamentoCriacaoService._criar_lancamento_basico(
                     documento_ativo, dados_lancamento, tipo_lanc
                 )
-                print(f"DEBUG: Lançamento criado com ID: {lancamento.id}")
-
                 # Processar cartório de origem
-                print("DEBUG: Processando cartório de origem...")
-                # Cartório de origem processado no service consolidado
+                # (processado no service consolidado)
 
                 # Processar campos específicos por tipo de lançamento
-                print("DEBUG: Processando campos específicos...")
                 LancamentoCamposService.processar_campos_por_tipo(
                     request, lancamento, documentos_queryset=documentos_autorizados
                 )
@@ -223,7 +213,6 @@ class LancamentoCriacaoService:
                 print(f"DEBUG: Lançamento salvo com sucesso: {lancamento.id}")
 
                 # APLICAR CAMPOS DO DOCUMENTO: aplicar livro e folha ao documento
-                print("DEBUG: Aplicando campos do documento...")
                 divergencias = LancamentoCriacaoService._divergencias_livro_folha(
                     lancamento.documento, dados_lancamento
                 )
@@ -369,6 +358,14 @@ class LancamentoCriacaoService:
             if (tipo_lanc.tipo == 'registro' or tipo_lanc.tipo == 'averbacao') and not numero_simples:
                 print(f"DEBUG: Erro - número simples obrigatório para {tipo_lanc.tipo}")
                 return False, f"Para lançamentos do tipo '{tipo_lanc.get_tipo_display()}', é obrigatório preencher o campo 'Número' (ex: 1, 5, etc.)"
+
+            # Área (#396): mesma trava da criação — erro explícito, sem
+            # gravar magnitude adivinhada na edição.
+            valida_area, erro_area = LancamentoValidacaoService.validar_area(
+                request.POST.get('area')
+            )
+            if not valida_area:
+                return False, erro_area
 
             # Obter dados do formulário
             numero_lancamento = request.POST.get('numero_lancamento')
@@ -677,9 +674,9 @@ class LancamentoCriacaoService:
             data_origem=None,
             eh_inicio_matricula=(tipo_lanc.tipo == 'inicio_matricula'),
         )
-        # Processar área e origem
+        # Processar área e origem (#396: Decimal, parser único — nada de float)
         if dados_lancamento['area']:
-            lancamento.area = float(dados_lancamento['area']) if dados_lancamento['area'] and dados_lancamento['area'].strip() else None
+            lancamento.area = parse_area_br(dados_lancamento['area'])
         if dados_lancamento['origem']:
             lancamento.origem = dados_lancamento['origem']
         

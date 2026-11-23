@@ -3,6 +3,7 @@ Service especializado para processamento de campos específicos por tipo de lan�
 """
 
 from ..models import Cartorios
+from ..utils.area_br import parse_area_br
 from .lancamento_origem_service import LancamentoOrigemService
 import uuid
 
@@ -108,9 +109,9 @@ class LancamentoCamposService:
         descricao_value = request.POST.get('descricao', '').strip()
         lancamento.descricao = descricao_value if descricao_value else None
         
-        # Processar área
+        # Processar área (#396): parser único, Decimal — sem float.
         area_value = request.POST.get('area', '').strip()
-        lancamento.area = float(area_value.replace(',', '.')) if area_value else None
+        lancamento.area = parse_area_br(area_value) if area_value else None
         
         # Processar origem (se presente)
         origem_value = request.POST.get('origem_completa', '').strip()
@@ -148,9 +149,9 @@ class LancamentoCamposService:
         # Campos específicos do registro (transmitentes e adquirentes são processados separadamente)
         # Não há mais campos específicos no bloco de registro, apenas pessoas
         
-        # Processar área
+        # Processar área (#396): parser único, Decimal — sem float.
         area_value = request.POST.get('area', '').strip()
-        lancamento.area = float(area_value.replace(',', '.')) if area_value else None
+        lancamento.area = parse_area_br(area_value) if area_value else None
         
         # Processar origem (se presente)
         origem_value = request.POST.get('origem_completa', '').strip()
@@ -437,13 +438,12 @@ class LancamentoCamposService:
         lancamento.livro_origem = livro_origem_encontrado
         lancamento.folha_origem = folha_origem_encontrada
         
-        # PROCESSAR ÁREA
+        # PROCESSAR ÁREA (#396): parser único. Entrada inválida levanta
+        # AreaInvalida — o chamador devolve a mensagem ao usuário; não se
+        # descarta o valor em silêncio como antes.
         area = request.POST.get('area', '').strip()
         if area:
-            try:
-                lancamento.area = float(area.replace(',', '.'))
-            except ValueError:
-                pass
+            lancamento.area = parse_area_br(area)
         
         # PROCESSAR DATA DE ORIGEM
         data_origem = request.POST.get('data_origem', '').strip()

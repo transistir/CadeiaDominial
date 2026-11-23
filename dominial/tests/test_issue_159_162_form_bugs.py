@@ -492,7 +492,7 @@ class Issue160AreaNoBlocoTransmissaoTest(TestCase):
         )
         LancamentoCamposService.processar_campos_por_tipo(request, lancamento)
         self.assertEqual(lancamento.titulo, "Escritura Pública")
-        self.assertEqual(lancamento.area, 123.45)
+        self.assertEqual(str(lancamento.area), "123.4500")  # #396: Decimal
 
 
 class Issue162RenumerarAoAdicionarRodada3Test(FormBugsBase):
