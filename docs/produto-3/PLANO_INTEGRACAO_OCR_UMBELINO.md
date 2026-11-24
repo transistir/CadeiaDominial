@@ -1,5 +1,12 @@
 # Plano de integração OCR ↔ Umbelino (Produto 3, contrato A3)
 
+> **Atualização 23/11/2026:** as decisões da reunião com o cliente e a
+> arquitetura de vocabulário/exemplos estão em
+> **`docs/produto-3/ARQUITETURA_OCR_ASSISTIDO.md`** (fila e mapa de issues).
+> Este documento continua sendo a matriz A3 → formulário → modelo; onde os dois
+> divergirem sobre **fila**, vale o novo.
+
+
 > Estado em `origin/develop` `dc6fbca4` (22/11/2026). Documento de plano e
 > matriz — **sem migração, sem deploy**. Decisões do dono (22/11) aplicadas:
 > nenhum campo novo de formulário, nenhuma coluna nova, nenhum papel novo em
