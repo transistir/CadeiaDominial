@@ -102,7 +102,12 @@ class Casamento:
 def sha256_do_arquivo(caminho=None):
     """sha256 dos bytes do arquivo (default: o JSON vendorizado)."""
     caminho = Path(caminho) if caminho is not None else CAMINHO_VOCABULARIO
-    return hashlib.sha256(caminho.read_bytes()).hexdigest()
+    try:
+        return hashlib.sha256(caminho.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise VocabularioInvalido(
+            f'não foi possível ler {caminho}: {exc}'
+        ) from exc
 
 
 def sha256_do_documento(documento):
@@ -130,8 +135,17 @@ def carregar():
             'vocabulario_prod.json não é a cópia byte a byte do artefato '
             f'dos bytes {SHA256_DO_ARQUIVO}'
         )
-    with CAMINHO_VOCABULARIO.open(encoding='utf-8') as arquivo:
-        documento = json.load(arquivo)
+    try:
+        with CAMINHO_VOCABULARIO.open(encoding='utf-8') as arquivo:
+            documento = json.load(arquivo)
+    except OSError as exc:
+        raise VocabularioInvalido(
+            f'não foi possível abrir {CAMINHO_VOCABULARIO}: {exc}'
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise VocabularioInvalido(
+            f'{CAMINHO_VOCABULARIO.name} não é JSON válido: {exc}'
+        ) from exc
     if documento.get('schema') != SCHEMA:
         raise VocabularioInvalido(
             f'schema {documento.get("schema")!r} != {SCHEMA!r}'
