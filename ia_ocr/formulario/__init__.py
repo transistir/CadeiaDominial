@@ -51,6 +51,10 @@ from .areas import (
 from .prefill import (
     CHAVE_PARA_INPUT,
     INPUT_FORMA_DA_AVERBACAO,
+    MOTIVO_FORMA_DO_VOCABULARIO,
+    ROTULO_DA_FORMA,
+    TEXTO_FORMA_DO_VOCABULARIO,
+    forma_do_vocabulario,
     input_do_campo,
     prefill_do_ato,
 )
@@ -68,12 +72,14 @@ from .partes import _partes
 
 __all__ = [
     'AtoInexistente', 'CHAVE_PARA_INPUT', 'INPUT_FORMA_DA_AVERBACAO',
-    'MOTIVO_AREA_EM_OUTRA_UNIDADE', 'MOTIVO_LIDO_SEM_CAMPO',
-    'ROTULO_DA_AREA', 'TEXTO_AREA_EM_OUTRA_UNIDADE', 'TEXTO_DA_ORIGEM',
+    'MOTIVO_AREA_EM_OUTRA_UNIDADE', 'MOTIVO_FORMA_DO_VOCABULARIO',
+    'MOTIVO_LIDO_SEM_CAMPO', 'ROTULO_DA_AREA', 'ROTULO_DA_FORMA',
+    'TEXTO_AREA_EM_OUTRA_UNIDADE', 'TEXTO_DA_ORIGEM',
+    'TEXTO_FORMA_DO_VOCABULARIO',
     'TEXTO_LIDO_SEM_CAMPO', 'UNIDADES_DE_AREA', '_ROTULO_DA_FOLHA_IGNORADA',
     '_area_em_outra_unidade', '_cartorio', '_como_texto', '_evidencia',
     '_lidos_sem_campo', '_nomes', '_numero_composto', '_numero_legivel',
     '_numero_simples', '_origens_separadas', '_partes', '_texto_da_origem',
-    '_unidade_da_area_no_payload', 'area_exige_decisao', 'input_do_campo',
-    'prefill_do_ato',
+    '_unidade_da_area_no_payload', 'area_exige_decisao',
+    'forma_do_vocabulario', 'input_do_campo', 'prefill_do_ato',
 ]
