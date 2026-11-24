@@ -1,0 +1,25 @@
+{
+  "triggerOnUpdates": false,
+  "triggerOnDrafts": false,
+  "strictness": 2,
+  "commentTypes": ["logic"],
+  "excludeAuthors": ["dependabot[bot]", "renovate[bot]"],
+  "ignorePatterns": "greptile.json\ndocs/**\n**/*.md\ntmp/**\nworktrees/**\n**/*.lock\n**/package-lock.json\n**/pnpm-lock.yaml\n**/node_modules/**\n**/*.min.*\ntests/fixtures/**\n",
+  "statusCommentsEnabled": false,
+  "confidenceScoreSection": {
+    "included": false,
+    "collapsible": false,
+    "defaultOpen": false
+  },
+  "issuesTableSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "summarySection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "shouldUpdateDescription": false
+}
