@@ -56,6 +56,27 @@ não ambígua o literal do documento (camada D) reproduzido na evidência. O lit
 vem do OCR A3 v1.2; a conferência visual da digitalização permanece como etapa de
 revisão humana registrada no rodapé. `n/d` = camada ausente, nunca célula vazia.
 
+### 1.3 Datas dos atos e estado de revisão (A3 v1.2)
+
+| Documento · ato | D (literal) | O `data.normalized` | B `data` | `confianca` (O) | `requer_revisao` (O) | `motivos_revisao` |
+|---|---|---|---|---|---|---|
+| M6141 · cabeçalho | `18.06.2015` | n/d (`raw` only) | — | 0.0 | true | n/d |
+| M6141 · abertura | `18.06.2015` | n/d (`raw` only) | 2015-06-18 | 0.0 | true | n/d |
+| M6141 · R.1 | `18 de junho de 2015` | 2015-06-18 | 2015-06-18 | 1.0 | true | n/d |
+| M237 · cabeçalho | `09.06.1982` | n/d (`raw` only) | — | 0.0 | true | n/d |
+| M237 · abertura | `09.06.1982` | n/d (`raw` only) | 1982-06-09 | 0.0 | true | n/d |
+| M237 · R.1 | `09 de junho de 1982` | 1982-06-09 | 1982-06-09 | 1.0 | false | — |
+| M237 · Av.2 | `19 de dezembro de 1983` | 1983-12-19 | 1983-12-19 | 1.0 | true | n/d |
+| M237 · Av.3 | `08 de outubro de 1986` | 1986-10-08 | 1986-10-08 | 1.0 | false | — |
+| M237 · R.4 | `14 de março de 1995` | 1995-03-14 | 1995-03-14 | 1.0 | true | n/d |
+| M237 · R.5 | `06 de maio de 2002` | 2002-05-06 | 2002-05-06 | 1.0 | true | n/d |
+| M237 · Av.6 | `18 de junho de 2015` | 2015-06-18 | 2015-06-18 | 1.0 | true | n/d |
+| M237 · Av.7 | `22 de fevereiro de 2017` | 2017-02-22 | 2017-02-22 | 1.0 | true | n/d |
+
+`motivos_revisao` não é preenchido pelo A3 v1.2 em nenhum ato desta medição — daí
+`n/d`. `requer_revisao = true` marca o ato para conferência humana; não é, por si
+só, erro confirmado (a classe de cada divergência está nas seções 2–3).
+
 ---
 
 ## 2. M6141 (documento 1086) — cabeçalho
@@ -132,6 +153,7 @@ revisão humana registrada no rodapé. `n/d` = camada ausente, nunca célula vaz
 | Campo | D | O | B | Evidência | Classe |
 |---|---|---|---|---|---|
 | Forma / título | escritura de 17.01.1995 / `Compra e venda` | idem | `Compra e Venda` / `Escritura pública` | p.1 | **erro_confirmado** (invertidos) |
+| Data do ato | `14.03.1995` | `1995-03-14` | `1995-03-14` | p.1 `R: 4-237` | dado_documental |
 | Área | `38 ha. e 72 a.` (transmitida) | idem | `130.3740` (remanescente) | p.1 `IMÓVEL: Área de 38 ha. e 72 a.` | calculo_derivado (semântica invertida) |
 | Valor | `R$ 20.000,00 majorado para R$ 25.000,00` | raw idem, norm. nulo | n/d | p.2 | erro_confirmado (omissão) |
 | Descrição | área de 38,72 ha do imóvel | idem | n/d | p.1 | erro_confirmado (omissão) |
@@ -154,6 +176,7 @@ revisão humana registrada no rodapé. `n/d` = camada ausente, nunca célula vaz
 | Campo | D | O | B | Evidência | Classe |
 |---|---|---|---|---|---|
 | Forma | `Por escritura pública de 10 de abril de 2015` | raw `Escritura Pública`, norm. nulo | `Compra e venda` | p.2 | divergencia_pendente |
+| Data do ato | `18.06.2015` | `2015-06-18` | `2015-06-18` | p.2 `Av: 6-237` | dado_documental |
 | Título | `Escritura Pública de 10 de abril de 2015` | raw idem, norm. nulo | n/d | p.2 | divergencia_pendente |
 | Área | `74 ha. 67 a. 55 ca.` (destacada) | idem | `55.6985` (remanescente) | p.2 | calculo_derivado (semântica invertida) |
 | Descrição / vínculo | "registrada … sob o nº 1, da matrícula 6.141 … em 18.06.2015" | campo só com partes | texto analítico com `6.141` | p.2 | interpretacao_humana (OCR perde o vínculo) |
@@ -165,10 +188,12 @@ revisão humana registrada no rodapé. `n/d` = camada ausente, nunca célula vaz
 | Campo | D | O | B | Evidência | Classe |
 |---|---|---|---|---|---|
 | Forma | `escritura pública de 07 de dezembro de 2016` | idem | `Compra e venda` | p.2 | **erro_confirmado** |
+| Data do ato | `22.02.2017` | `2017-02-22` | `2017-02-22` | p.2 `Av: 7-237` | dado_documental |
 | Título | não há "TÍTULO" no ato | `PROTOCOLO nº 28.492` | `Compra e venda` | p.2 | divergencia_pendente |
 | Área | `94 ha. 41 a. 85 ca.` = 38,7200 + 55,6985 | idem | n/d | p.2 | calculo_derivado (soma; campo vazio) |
 | Descrição | venda da área total a adquirente 1 | só partes | resumo analítico | p.2 | interpretacao_humana |
-| Observação / fim | `ficando ENCERRADA a presente escrituração` | n/d | texto analítico de encerramento | p.2 | dado_documental (D) / interpretacao_humana (B) |
+| Observação / fim (D) | `ficando ENCERRADA a presente escrituração` | n/d | — | p.2 | dado_documental |
+| Observação / fim (B) | — | n/d | texto analítico de encerramento | p.2 | interpretacao_humana |
 | Fim de cadeia | encerrada | n/d | `classificacao_fim_cadeia` vazio; `origemfimcadeia` vazio | p.2 | **erro_confirmado** |
 | Valor | `R$ 49,76` | `49.76` | `49.76` | p.2 | dado_documental |
 | Livro / folha / cartório | `34` / `037/038` / Itagimirim | idem | idem | p.2 | dado_documental |
