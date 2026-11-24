@@ -8,7 +8,10 @@ não pode ser seguida de letra/dígito ("ha" em "hectares"). Unidade solta
 (sem número) exige borda dos dois lados: o "a" de "área" e o "ha" de
 "Ilha" não são unidade; as formas curtas (``a``, ``ha``, ``ca``) só valem
 coladas ao número. ``has``/``há`` são hectares. O composto só consome
-``ares``/``a`` (o singular ``are`` fica como sobra ambígua).
+``ares``/``a`` (o singular ``are`` fica como sobra ambígua). Na sobra do
+par/composto, ``a``/``a.`` é ares mesmo separado do número; só a
+preposição imediatamente antes do número ("equivalente a 12,50 ha") é
+descartada.
 """
 
 import re
@@ -52,7 +55,10 @@ _UNIDADE_SOLTA = re.compile(
 )
 # Sobra do par/composto: qualquer forma de unidade (inclusive as curtas e
 # o singular "are", que o composto não consome) torna a expressão ambígua,
-# colada ou não ao número.
+# colada ou não ao número. ``a``/``a.`` na sobra é sempre ares — inclusive
+# no fim do texto ("169 ha e nove a"). A preposição ("equivalente a 12,50
+# ha") não chega aqui: ``_sobra_unidade`` remove o ``a`` que precede o
+# número no texto original antes de testar (#381).
 _UNIDADE_NA_SOBRA = re.compile(
     r'(?<![0-9A-Za-zÀ-ÿ])'
     r'(?:hectares?|centiares?|alqueires?|ares|are|has|há|m²|m2'
@@ -60,6 +66,9 @@ _UNIDADE_NA_SOBRA = re.compile(
     r'(?![0-9A-Za-zÀ-ÿ])',
     re.IGNORECASE,
 )
+# ``a`` isolado terminando o texto antes do número: preposição
+# ("equivalente a 12,50 ha"), não ares.
+_PREPOSICAO_A = re.compile(r'(?<![0-9A-Za-zÀ-ÿ])a\s*$', re.IGNORECASE)
 _ALQUEIRE = re.compile(r'alqueire', re.IGNORECASE)
 _DIGITO = re.compile(r'[0-9]')
 _MENOS = re.compile(r'[-−]')

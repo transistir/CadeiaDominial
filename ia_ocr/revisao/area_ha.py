@@ -25,18 +25,20 @@ vírgula solta e texto vazio também. O número precisa começar fora de letra
 ASCII (``１``, ``١``) no texto também recusa a conversão — ``[0-9]`` do
 regex só garantiria o sufixo ASCII. A sobra fora do par/composto só pode ser
 espaço, pontuação ou palavra sem dígito nem unidade: ``120 m²/ha``,
-``169 ha, 9 a e quarenta ca`` e ``169 ha e 9 are`` (singular ``are`` não é
-consumido pelo composto) são ambíguos. Unidade do texto divergente do enum
-do A3 devolve ``None``. O ``normalized`` do A3, quando informado, é só
-conferência: o valor gravado vem sempre do texto. Em
-``hectares_confirmados`` o canônico já está em hectares e a conferência é
-por **igualdade após quantizar**; nos demais caminhos (``m²``, unidade
-ausente, composto) ``converter_para_hectares`` compara com tolerância de
-meio quantum. Divergência devolve ``None``: quem chama trata como pendência
-do revisor, nunca como zero. As funções não levantam exceção — dado de OCR
-é entrada hostil.
+``169 ha, 9 a e quarenta ca``, ``169 ha e nove a`` e ``169 ha e 9 are``
+(singular ``are`` não é consumido pelo composto) são ambíguos. O ``a``
+logo antes do número é preposição (``equivalente a 12,50 ha``), não ares.
+Unidade do texto divergente do enum do A3 devolve ``None``. O
+``normalized`` do A3, quando informado, é só conferência: o valor gravado
+vem sempre do texto. Em ``hectares_confirmados`` o canônico já está em
+hectares e a conferência é por **igualdade após quantizar**; nos demais
+caminhos (``m²``, unidade ausente, composto) ``converter_para_hectares``
+compara com tolerância de meio quantum. Divergência devolve ``None``: quem
+chama trata como pendência do revisor, nunca como zero. As funções não
+levantam exceção — dado de OCR é entrada hostil.
 """
 
+import re
 from decimal import ROUND_HALF_UP, Decimal, localcontext
 
 from .area_ha_padroes import (
@@ -45,6 +47,7 @@ from .area_ha_padroes import (
     _DIGITO,
     _MENOS,
     _PAR,
+    _PREPOSICAO_A,
     _UNIDADE_NA_SOBRA,
     _codigo_da_unidade,
     _unidade_do_enum,
@@ -60,6 +63,9 @@ _CENTIARES_POR_HA = Decimal(10000)
 # `normalizado`) ainda compara com tolerância; `hectares_confirmados` usa
 # igualdade pós-quantização.
 _TOLERANCIA = Decimal('0.00005')
+# O A3 pode trazer o próprio valor em notação científica ("1E+5"). É número
+# de máquina, não prosa pt-BR: só confirma o canônico quando é o mesmo valor.
+_NUMERO_CIENTIFICO = re.compile(r'[+-]?[0-9]+(?:\.[0-9]+)?[eE][+-]?[0-9]+')
 
 
 def converter_para_hectares(raw, unidade, normalizado=None):
@@ -84,8 +90,9 @@ def quantizar_hectares(valor):
     """Valor do A3 em hectares → texto com no máximo 4 casas, ou ``None``.
 
     Só reescreve quando o valor tem mais de 4 casas (o campo do formulário
-    recusa o excedente, sem pendência que explique); o que já cabe volta
-    como veio.
+    recusa o excedente, sem pendência que explique); o que já cabe volta em
+    **notação fixa** (``'1E+5'`` → ``'100000'``), sem ``E``/``e`` e sem
+    inventar casas.
     """
     try:
         numero = _decimal_do_normalizado(valor)
@@ -93,7 +100,7 @@ def quantizar_hectares(valor):
             return None
         expoente = numero.as_tuple().exponent
         if isinstance(expoente, int) and expoente >= -CASAS_DECIMAIS:
-            return valor if isinstance(valor, str) else format(numero, 'f')
+            return format(numero, 'f')
         with localcontext() as contexto:
             contexto.prec = 50
             quantizado = numero.quantize(_QUANTUM, rounding=ROUND_HALF_UP)
@@ -113,7 +120,9 @@ def hectares_confirmados(raw, normalizado):
     - ``raw`` vazio/nulo: não há o que confrontar → o canônico quantizado;
     - ``raw`` presente: **só** vale quando converte de forma inequívoca
       (``converter_para_hectares``) e o valor convertido, quantizado com
-      ``ROUND_HALF_UP``, é **igual** ao canônico quantizado;
+      ``ROUND_HALF_UP``, é **igual** ao canônico quantizado. A exceção é o
+      próprio valor em notação científica (``'1E+5'``): é número de
+      máquina, não prosa pt-BR, e confirma o canônico por igualdade;
     - texto ilegível/ambíguo **não** é "consertado" pelo canônico: vira
       pendência do revisor (``None``).
     """
@@ -132,6 +141,8 @@ def hectares_confirmados(raw, normalizado):
         return quantizado
     try:
         convertido = _normalizar(_converter(raw, 'ha', None))
+        if convertido is None and _NUMERO_CIENTIFICO.fullmatch(raw.strip()):
+            convertido = _normalizar(_decimal_do_normalizado(raw.strip()))
         if convertido is None or convertido != esperado:
             return None
     except (ArithmeticError, TypeError, ValueError):
@@ -211,8 +222,17 @@ def _hectares_do_par(texto, par, codigo, normalizado):
 
 
 def _sobra_unidade(texto, achado):
-    """Fora do par/composto: dígito, unidade ou ``/`` → expressão ambígua."""
-    resto = texto[:achado.start()] + texto[achado.end():]
+    """Fora do par/composto: dígito, unidade ou ``/`` → expressão ambígua.
+
+    O ``a`` isolado que termina o texto imediatamente antes do número é
+    preposição ("equivalente a 12,50 ha") e sai antes do teste. Qualquer
+    outro ``a`` sem ponto na sobra é ares ("169 ha e nove a" → ambíguo).
+    """
+    antes = texto[:achado.start()]
+    preposicao = _PREPOSICAO_A.search(antes)
+    if preposicao is not None:
+        antes = antes[:preposicao.start()]
+    resto = antes + texto[achado.end():]
     return (
         bool(_DIGITO.search(resto))
         or '/' in resto
