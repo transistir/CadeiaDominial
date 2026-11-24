@@ -178,6 +178,47 @@ def _sem_resultado(campo, texto, motivo):
     return Casamento(campo=campo, texto=texto, motivo=motivo)
 
 
+def _token_com_erro_de_digitacao(lido, canonico):
+    """Um token é erro de digitação do outro: mesmo tamanho, ≤1 troca.
+
+    Vale 0 diferença, 1 substituição de caractere ou 1 transposição de
+    caracteres adjacentes. Inserção/remoção reprova (tamanhos diferentes).
+    """
+    if len(lido) != len(canonico):
+        return False
+    diferentes = [
+        indice for indice, (a, b) in enumerate(zip(lido, canonico)) if a != b
+    ]
+    if len(diferentes) <= 1:
+        return True
+    if len(diferentes) != 2:
+        return False
+    primeiro, segundo = diferentes
+    return (
+        segundo == primeiro + 1
+        and lido[primeiro] == canonico[segundo]
+        and lido[segundo] == canonico[primeiro]
+    )
+
+
+def _erro_de_digitacao(lido, canonico):
+    """``lido`` é erro de digitação token a token de ``canonico``?
+
+    Mesmo número de tokens (já normalizados e ordenados) e cada um na mesma
+    posição a até 1 substituição/transposição, com o MESMO tamanho. Por isso
+    ``'Daçao'`` (5 letras, pagamento em dinheiro) não casa com ``'Doação'``
+    (6 letras): faltou uma letra, não foi erro de digitação.
+    """
+    tokens_lidos = _tokens(lido)
+    tokens_canonicos = _tokens(canonico)
+    if not tokens_lidos or len(tokens_lidos) != len(tokens_canonicos):
+        return False
+    return all(
+        _token_com_erro_de_digitacao(a, b)
+        for a, b in zip(tokens_lidos, tokens_canonicos)
+    )
+
+
 def _resultado(campo, texto, entrada, metodo, similaridade):
     return Casamento(
         campo=campo,
@@ -222,16 +263,30 @@ def casar(campo, texto):
     if not tokens or len(normalizado) < MIN_CARACTERES_FUZZY:
         return _sem_resultado(campo, bruto, MOTIVO_BAIXA_CONFIANCA)
 
+    # Similaridade global sozinha dá falso positivo ('Daçao' ~ 'Doação').
+    # Só entram no fuzzy candidatos que sejam erro de digitação token a token.
+    aproximadas = [
+        item for item in candidatas if _erro_de_digitacao(bruto, item.valor)
+    ]
+    if not aproximadas:
+        return _sem_resultado(campo, bruto, MOTIVO_BAIXA_CONFIANCA)
+
     alvo = ' '.join(tokens)
+    # Chave explícita: nunca comparar ``Entrada`` (dois valores canônicos
+    # iguais empatam em ratio e valor — antes virava TypeError).
     pontuadas = sorted(
         (
-            SequenceMatcher(None, alvo, ' '.join(_tokens(item.valor))).ratio(),
-            item.valor,
-            item,
-        )
-        for item in candidatas
+            (
+                SequenceMatcher(
+                    None, alvo, ' '.join(_tokens(item.valor)),
+                ).ratio(),
+                item,
+            )
+            for item in aproximadas
+        ),
+        key=lambda par: (par[0], par[1].valor),
     )
-    melhor_ratio, _valor, melhor = pontuadas[-1]
+    melhor_ratio, melhor = pontuadas[-1]
     if melhor_ratio < LIMIAR_FUZZY:
         return _sem_resultado(campo, bruto, MOTIVO_BAIXA_CONFIANCA)
     if len(pontuadas) > 1 and melhor_ratio - pontuadas[-2][0] < MARGEM_FUZZY:

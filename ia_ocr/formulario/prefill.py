@@ -67,8 +67,15 @@ def forma_do_vocabulario(forma):
     troca o valor E deixa uma pendência informativa, para o revisor ver que
     houve ajuste. Empate, baixa confiança ou valor vazio devolvem a forma
     original intacta: o vocabulário nunca inventa valor.
+
+    Fail-open: se o JSON pinado não conferir (``VocabularioInvalido``), a
+    tela continua com o valor do A3 — o loader segue estrito, mas o prefill
+    não derruba a revisão.
     """
-    casamento = vocabulario.casar(vocabulario.CAMPO_FORMA, forma)
+    try:
+        casamento = vocabulario.casar(vocabulario.CAMPO_FORMA, forma)
+    except vocabulario.VocabularioInvalido:
+        return forma, None
     if not casamento.casa:
         return forma, None
     if casamento.metodo != vocabulario.FUZZY:

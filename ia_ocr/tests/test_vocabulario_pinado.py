@@ -159,6 +159,30 @@ class CasamentoTest(SimpleTestCase):
         self.assertIsNone(casamento.valor)
         self.assertEqual(casamento.motivo, vocabulario.MOTIVO_BAIXA_CONFIANCA)
 
+    def test_dacao_nao_casa_com_doacao(self):
+        # 'Daçao' (pagamento em dinheiro) não é erro de digitação de
+        # 'Doação': a similaridade global sozinha daria falso positivo.
+        casamento = vocabulario.casar('forma', 'Daçao')
+
+        self.assertFalse(casamento.casa)
+        self.assertIsNone(casamento.valor)
+        self.assertEqual(casamento.motivo, vocabulario.MOTIVO_BAIXA_CONFIANCA)
+
+    def test_valor_canonico_duplicado_nao_quebra(self):
+        # Dois ``Entrada`` com o MESMO valor empatam em ratio e valor; a
+        # ordenação não pode comparar ``Entrada`` (TypeError) — o empate
+        # continua sendo empate.
+        entradas = (
+            vocabulario.Entrada('Compra e Venda', 6),
+            vocabulario.Entrada('Compra e Venda', 2),
+            vocabulario.Entrada('Venda e Compra', 1),
+        )
+        with mock.patch.object(vocabulario, 'entradas', return_value=entradas):
+            casamento = vocabulario.casar('forma', 'Comrpa e Venda')
+
+        self.assertFalse(casamento.casa)
+        self.assertEqual(casamento.motivo, vocabulario.MOTIVO_EMPATE)
+
     def test_valor_vazio_nao_casa(self):
         casamento = vocabulario.casar('forma', '   ')
 
