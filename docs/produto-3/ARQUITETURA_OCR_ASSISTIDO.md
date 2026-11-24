@@ -66,10 +66,16 @@ de 23/11/2026: **12.226 lançamentos** (averbação 5.404 · início de matrícu
 |---|---|---|
 | `forma` | vazio em 4.022 (33%) | maior lacuna de registro |
 | `titulo` | vazio em 7.519 (61%) | idem |
-| `descricao` | vazio em 6.868 (56%); preenchido em 5.358 (5.354 averbações + 4 registros; média 174, máx 4.226) | é campo de **averbação**, confirmado por uso |
+| `descricao` | vazio em 6.868 de **12.226 lançamentos** (56%); preenchido em 5.358 (5.354 averbações + 4 registros; média 174, máx 4.226). Recorte de averbação: **50 vazios em 5.404 (0,9%)** | é campo de **averbação**, confirmado por uso; a taxa comparável ao scorer é a do recorte de averbação (§7) |
 | `observacoes` | vazio em 7.762 (63%); 4.464 textos, média 239 chars; 220 com "atenção", 41 com "pendente" | já é usado para ressalva analítica, **sem marca** |
 | `area` | 2.012 zeros, 2.141 valores < 1 ha, máximo 17.720.830 ha | não há invariante; magnitude já se perdeu no histórico |
 | origens | 1.727 (transcrição 1.062 = 61% · matrícula 665); livro em 40%, folha em 12% | origem é predominantemente transcr. e raramente tem folha |
+
+**Populações diferentes, números diferentes.** A tabela acima mede **todos os
+12.226 lançamentos**. O scorer (§7) conta `ausente` apenas quando o **gabarito
+tem valor**, por ato e por campo — para `descricao`, a população é a averbação.
+O vazio humano comparável é **50 de 5.404 (0,9%)**, não os 56% do total, que
+inclui início de matrícula e registro, onde o campo não é usado.
 
 Vocabulário real (com variantes): `forma` — "Compra e Venda" 1.041 × "Compra e
 venda" 432 × "Venda e compra" 280 × "Escritura Pública de Compra e Venda" 391 ×
@@ -219,7 +225,7 @@ Do scorer existente (`eval/score.py`):
 | Métrica | Definição | Meta |
 |---|---|---|
 | **Erro perigoso** (`errado_aceito`) | divergente do gabarito **sem** `requer_revisao` | **0** em área, número, origem e cartório |
-| `ausente` | gabarito tem valor, extração devolveu null | ≤ taxa de vazio do cadastro humano no mesmo campo (§2.3) |
+| `ausente` | gabarito tem valor, extração devolveu null — **população = campos com valor no gabarito**, por ato | ≤ vazio humano **na mesma população**; `descricao` em averbações: **0,9% (50/5.404)** — não os 56% de todos os lançamentos (§2.3) |
 | `extra` | valor onde o gabarito diz ilegível/ausente | só com evidência; nunca sem |
 | Taxa de edição | % de campos que o revisor alterou | tendência de queda por campo/tipo |
 | Correção crítica | edição em área/número/origem | 0 sem pendência registrada |
@@ -233,12 +239,17 @@ Relatório reproduzível = comando + hash do PDF + `job_id` + data.
 |---|---|---|---|---|
 | **F0** | Este documento + ajuste do `PLANO_INTEGRACAO` + seção F3.1 no ROADMAP | — | docs revisados, sem código | ½ dia |
 | **F1** | **#396** parser único de área pt-BR (formulário, revisão, edição) | — | teste RED→GREEN com `1.000`, `1.234,5678`, `1234,5678`, `150,5`, `150.5`; round-trip form→banco→exibição | 1 dia |
-| **F2** | Observações documental × analítica (§5) | F0 | teste: prefill nunca escreve marcador; análise só com autor; `buscar_keyword` ignora análise; PDF/Excel mostram marca | 1 dia |
-| **F3** | Vocabulário compartilhado: fecha ocr-service #74/#70 e app #372 | F0 | Fase A (sintética): JSON schema v1 válido, teste de PII, hash fixado, prefill casa "Venda e compra". Fase B (produção): só após autorização do dono e com allowlist de `forma`/`titulo` aprovada | 1–2 dias |
+| **F2** | Observações documental × analítica (§5) | F1 | teste: prefill nunca escreve marcador; análise só com autor; `buscar_keyword` ignora análise; PDF/Excel mostram marca | 1 dia |
+| **F3** | Vocabulário compartilhado: fecha ocr-service #74/#70 e app #372 | F2 | Fase A (sintética): JSON schema v1 válido, teste de PII, hash fixado, prefill casa "Venda e compra". Fase B (produção): só após autorização do dono e com allowlist de `forma`/`titulo` aprovada | 1–2 dias |
 | **F4** | Base de exemplos privada + export read-only | F3 (reusa vocabulário) | artefato fora do git com sha256/contagens; zero PII; comando parametrizado | 2 dias |
 | **F5** | Recuperação contextual na extração | F4 | ganho medido no scorer com/sem contexto na mesma fixture; flag de rollback | 1–2 dias |
-| **F6** | Correção → exemplo (contínuo) | F4 | pares classificados; promoção só após revisão; nada automático | 1–2 dias |
-| **F7** | Correções O-M237 (ocr-service #83→#85→#87→#86→#84) + aceite #88 | F5 | matriz #395 verde por ato e campo | 4–6 dias |
+| **F6** | Correção → exemplo (contínuo) | F5 | pares classificados; promoção só após revisão; nada automático | 1–2 dias |
+| **F7** | Correções O-M237 (ocr-service #83→#85→#87→#86→#84) + aceite #88 | F6 | matriz #395 verde por ato e campo | 4–6 dias |
+
+> **Ordem sequencial (ROADMAP §F3.1, aprovada em 23/11/2026):** a coluna
+> `Depende` reflete a ordem aprovada — cada fase começa depois da anterior
+> terminar. Não há implementação em paralelo, nem entre fases nem entre os dois
+> repositórios.
 
 > **Regra operacional (23/11/2026):** até autorização explícita do dono, #74 e
 > #372 trabalham **só com dados sintéticos**. A geração read-only em produção é
