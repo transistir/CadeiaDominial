@@ -7,7 +7,7 @@ evidências de origem e de partes.
 
 from dominial.models import Cartorios, Pessoas
 
-from .. import importacao
+from .. import importacao, vocabulario
 from .areas import _area_em_outra_unidade, area_para_input
 from ..destinos import _normalizar
 from .erros import AtoInexistente
@@ -48,6 +48,39 @@ CHAVE_PARA_INPUT = {
 }
 
 INPUT_FORMA_DA_AVERBACAO = 'forma_averbacao'
+
+# Vocabulário pinado (#372): o casamento aproximado não é silencioso.
+MOTIVO_FORMA_DO_VOCABULARIO = 'forma_ajustada_vocabulario'
+ROTULO_DA_FORMA = 'Forma'
+TEXTO_FORMA_DO_VOCABULARIO = (
+    "Forma lida '{lido}' casou por aproximação com '{canonica}' do "
+    "vocabulário congelado; confira o valor antes de salvar."
+)
+
+
+def forma_do_vocabulario(forma):
+    """``(valor, pendência)`` da forma; sem casamento, mantém o valor do A3.
+
+    O dicionário é a cópia pinada do artefato do ocr-service (``vocabulario``)
+    — nada de produção em runtime. Casar exato ou normalizado troca o valor
+    sem aviso (é o mesmo nome canônico). O casamento aproximado (``fuzzy``)
+    troca o valor E deixa uma pendência informativa, para o revisor ver que
+    houve ajuste. Empate, baixa confiança ou valor vazio devolvem a forma
+    original intacta: o vocabulário nunca inventa valor.
+    """
+    casamento = vocabulario.casar(vocabulario.CAMPO_FORMA, forma)
+    if not casamento.casa:
+        return forma, None
+    if casamento.metodo != vocabulario.FUZZY:
+        return casamento.valor, None
+    return casamento.valor, {
+        'motivo': MOTIVO_FORMA_DO_VOCABULARIO,
+        'rotulo': ROTULO_DA_FORMA,
+        'texto': TEXTO_FORMA_DO_VOCABULARIO.format(
+            lido=forma, canonica=casamento.valor,
+        ),
+        'bloqueante': False,
+    }
 
 
 def input_do_campo(chave, tipo=None, papel=None):
@@ -144,7 +177,8 @@ def prefill_do_ato(extracao, indice, documento):
         colocar(f'{chave}/area', area_para_input(ato.area))
     colocar(f'{chave}/descricao', ato.descricao)
     colocar(f'{chave}/observacoes', ato.observacoes)
-    colocar(f'{chave}/forma', ato.forma)
+    forma, aviso_da_forma = forma_do_vocabulario(ato.forma)
+    colocar(f'{chave}/forma', forma)
     colocar(f'{chave}/titulo', ato.titulo)
 
     id_transmissao, nome_transmissao = _cartorio(
@@ -167,6 +201,8 @@ def prefill_do_ato(extracao, indice, documento):
     if area_em_outra_unidade is not None:
         # Antes dos avisos informativos: é a única que pede decisão.
         pendencias.insert(0, area_em_outra_unidade)
+    if aviso_da_forma is not None:
+        pendencias.append(aviso_da_forma)
 
     return {
         'form_data': form_data,

@@ -1,0 +1,193 @@
+{
+  "area_formato": [
+    {
+      "ocorrencias": 3,
+      "valor": "alqueire"
+    },
+    {
+      "ocorrencias": 5,
+      "valor": "ha_m2"
+    },
+    {
+      "ocorrencias": 4,
+      "valor": "m2"
+    }
+  ],
+  "cartorios": [
+    {
+      "cns": "1234567",
+      "nome": "1º Ofício de Registro de Imóveis de Vila Fictícia",
+      "tipos_lancamento": [
+        "averbacao",
+        "inicio_matricula",
+        "registro"
+      ]
+    },
+    {
+      "cns": "2345678",
+      "nome": "2º Ofício de Registro de Imóveis de Cidade Exemplo",
+      "tipos_lancamento": [
+        "averbacao",
+        "inicio_matricula",
+        "registro"
+      ]
+    },
+    {
+      "cns": "3456789",
+      "nome": "3º Ofício de Registro de Imóveis de Distrito Modelo",
+      "tipos_lancamento": [
+        "averbacao",
+        "inicio_matricula",
+        "registro"
+      ]
+    }
+  ],
+  "folha": [
+    {
+      "ocorrencias": 1,
+      "valor": "1"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "10"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "11"
+    },
+    {
+      "ocorrencias": 2,
+      "valor": "12"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "2"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "3"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "34"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "4"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "56"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "78"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "9"
+    }
+  ],
+  "forma": [
+    {
+      "ocorrencias": 1,
+      "valor": "Adjudicação"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "Cessão de Direitos"
+    },
+    {
+      "ocorrencias": 6,
+      "valor": "Compra e Venda"
+    },
+    {
+      "ocorrencias": 2,
+      "valor": "Doação"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "Hipoteca"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "Inventário"
+    }
+  ],
+  "livro": [
+    {
+      "ocorrencias": 1,
+      "valor": "1"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "10F"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "11-G"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "2-B"
+    },
+    {
+      "ocorrencias": 2,
+      "valor": "3-A"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "4"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "5C"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "6-D"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "7"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "8-E"
+    },
+    {
+      "ocorrencias": 1,
+      "valor": "9"
+    }
+  ],
+  "meta": {
+    "allowlist_sha256": "d164129a44996accf45afb5eacf4d5a5ad0f90a6bcb0b38ffaae76b09e14665d",
+    "excluidos": {
+      "area_formato": [],
+      "folha": [],
+      "forma": [],
+      "livro": [],
+      "titulo": []
+    },
+    "fonte": "fixture:sintetico",
+    "gerado_em": "2026-11-23T00:00:00Z",
+    "registros_aceitos": 12,
+    "registros_lidos": 12,
+    "sha256": "232daf1b3c108e4280d82be8cf4c0b3c8fb2f38bb9f04038bf74b729bfaca8c6"
+  },
+  "schema": "vocabulario-prod/v1",
+  "titulo": [
+    {
+      "ocorrencias": 4,
+      "valor": "Averbação"
+    },
+    {
+      "ocorrencias": 3,
+      "valor": "Matrícula"
+    },
+    {
+      "ocorrencias": 5,
+      "valor": "Registro"
+    }
+  ]
+}
