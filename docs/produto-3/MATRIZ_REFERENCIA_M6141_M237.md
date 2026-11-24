@@ -44,7 +44,8 @@ O job da M237 foi reexecutado em 24/11/2026 sobre o PDF de produção, porque a
 `ExtracaoSugerida` 29 (job 25) não existe mais no banco de testes. O job da M6141 é
 o artefato de homologação pós-`48d1660`. **Lacuna conhecida:** em ambos os jobs a
 data do cabeçalho/abertura sai com `raw` preenchido e `normalized = null`; a
-correção está em `t_34a673b9`. A matriz registra o `raw` e **não infere** a data.
+correção está no PR transistir/ocr-service#94. Esta medição usa o A3 v1.2
+**anterior** ao fix. A matriz registra o `raw` e **não infere** a data.
 
 ### 1.2 Classes (fechadas)
 
