@@ -202,6 +202,11 @@ Regras de implementação (sem migration nesta etapa):
    na gravação (`observacoes_da_requisicao`) — o texto não vira análise nem
    autoria; só o servidor emite bloco marcado e fechado. A regra 5 é o caminho
    que fecha esse limite.
+7. A análise digitada sobrevive ao retry e à importação de cadeia duplicada:
+   `_form_data_do_post` devolve `analise_texto` ao re-render, o template de
+   duplicata o leva em campo oculto até `observacoes_da_requisicao`, e reenviar
+   o mesmo texto não cria bloco repetido — a comparação é pelo texto do
+   revisor, não pelo marcador (#400 v4b, P1 #3 do Greptile).
 
 ## 6. Aprendizado
 

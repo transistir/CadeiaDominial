@@ -203,6 +203,18 @@ def analises_marcadas(texto):
     return '\n\n'.join(blocos_de_analise(texto))
 
 
+def texto_do_bloco(bloco):
+    """Texto do revisor dentro de um bloco (sem marcador e sem fechamento)."""
+    texto = normalizar_quebras(bloco or '').lstrip()
+    marcador = MARCADOR_ANALISE_RE.match(texto)
+    if marcador:
+        texto = texto[marcador.end():]
+    fim = texto.find(DELIMITADOR_FIM)
+    if fim >= 0:
+        texto = texto[:fim]
+    return texto.strip()
+
+
 def remover_analises(texto):
     """Remove os blocos analíticos inteiros; preserva o documental.
 
@@ -226,7 +238,9 @@ def observacoes_da_requisicao(request, analise_existente=''):
     - os blocos já gravados (``analise_existente``, valor do banco) são
       reanexados intactos — editar outro campo não perde autor/data originais;
     - ``analise_texto`` é assinado pelo usuário logado (``AnaliseSemAutor`` sem
-      autor) e não duplica bloco já presente.
+      autor) e não duplica bloco já presente — a comparação é pelo texto do
+      revisor, não pelo marcador: reenviar o mesmo formulário noutro dia gera
+      outro marcador e antes criava um bloco repetido (#400 v4b).
 
     O contrato de quebra de linha do campo é ``\\n`` — o CRLF do textarea nunca
     chega ao banco (#400 v2).
@@ -235,10 +249,13 @@ def observacoes_da_requisicao(request, analise_existente=''):
     blocos = blocos_de_analise(analise_existente)
     texto_analise = normalizar_quebras(request.POST.get('analise_texto') or '')
 
-    if texto_analise.strip():
-        autor = nome_do_autor(getattr(request, 'user', None))
-        novo = registrar_analise('', texto_analise, autor)
-        if novo not in blocos:
-            blocos.append(novo)
+    texto_limpo = _sem_delimitadores(texto_analise)
+    if texto_limpo:
+        ja_registrada = any(
+            texto_do_bloco(bloco) == texto_limpo for bloco in blocos
+        )
+        if not ja_registrada:
+            autor = nome_do_autor(getattr(request, 'user', None))
+            blocos.append(registrar_analise('', texto_analise, autor))
 
     return '\n\n'.join(parte for parte in [documental] + blocos if parte)

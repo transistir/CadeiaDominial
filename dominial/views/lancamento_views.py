@@ -138,18 +138,17 @@ def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id, user):
 
 
 def _form_data_do_post(request):
-    """Reconstrói o estado do formulário de lançamento a partir do POST para
-       re-renderizar o formulário sem perder o que o usuário digitou depois de
-       um erro de validação ou do fluxo de duplicata (issue #157).
-
-       Inclui os 7 campos do bloco Transmissão (`*_transacao`), que antes eram
-       lidos por nomes fantasmas (`forma`/`titulo`) e nunca sobreviviam."""
+    """Estado do formulário reconstruído do POST (erro de validação ou
+       duplicata, issue #157): os 7 campos do bloco Transmissão antes eram
+       nomes fantasmas. #400 v4b: a análise digitada (`analise_texto`) volta
+       ao re-render."""
     return {
         'tipo_lancamento': request.POST.get('tipo_lancamento'),
         'numero_lancamento': request.POST.get('numero_lancamento'),
         'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
         'data': request.POST.get('data'),
         'observacoes': request.POST.get('observacoes'),
+        'analise_texto': request.POST.get('analise_texto'),
         'livro_documento': request.POST.get('livro_documento'),
         'folha_documento': request.POST.get('folha_documento'),
         'transmitente_ids': request.POST.getlist('transmitente[]'),
@@ -500,6 +499,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
                         'data': request.POST.get('data'),
                         'observacoes': request.POST.get('observacoes'),
+                        'analise_texto': request.POST.get('analise_texto'),
                         'livro_documento': request.POST.get('livro_documento'),
                         'folha_documento': request.POST.get('folha_documento'),
                         'cartorio': request.POST.get('cartorio'),

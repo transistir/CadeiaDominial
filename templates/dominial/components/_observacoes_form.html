@@ -36,11 +36,11 @@
 {# #400 (§5): análise só por ação explícita, sempre marcada com autor/data. #}
 {# <details> dispensa JS; o textarea só é postado se preenchido.            #}
 <div class="form-group analise-registro">
-    <details>
+    <details{% if form_data.analise_texto %} open{% endif %}>
         <summary class="btn btn-secondary">Registrar análise</summary>
         <label for="analise_texto">Análise do revisor</label>
         <textarea name="analise_texto" id="analise_texto" rows="3"
-                  placeholder="Ressalva, cálculo ou conclusão analítica"></textarea>
+                  placeholder="Ressalva, cálculo ou conclusão analítica">{% if form_data and form_data.analise_texto %}{{ form_data.analise_texto }}{% endif %}</textarea>
         <small class="form-text text-muted">
             Entra nas observações como
             <code>[ANÁLISE — {{ request.user|nome_autor }} — AAAA-MM-DD]</code>
