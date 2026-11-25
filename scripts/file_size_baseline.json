@@ -35,7 +35,7 @@
     "dominial/views/cadeia_dominial_views.py": 882,
     "dominial/views/documento_digital_views.py": 533,
     "dominial/views/documento_views.py": 423,
-    "dominial/views/lancamento_views.py": 1213,
+    "dominial/views/lancamento_views.py": 1210,
     "static/dominial/css/cadeia_dominial_d3.css": 603,
     "static/dominial/css/cadeia_dominial_tabela.css": 873,
     "static/dominial/css/documento_lancamentos.css": 476,

@@ -684,15 +684,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             if mensagem_origens:
                 messages.info(request, mensagem_origens)
             
-            # Verificar se o usuário marcou "finalizar"
-            finalizar = request.POST.get('finalizar') == 'on'
-            
-            if finalizar:
-                # Redirecionar para a visualização detalhada do documento
-                return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
-            else:
-                # Redirecionar para a página do documento detalhado
-                return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
+            # Sucesso: sempre volta ao documento detalhado (o "finalizar" não
+            # muda o destino — os dois ramos já redirecionavam igual, #400).
+            return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
         else:
             messages.error(request, mensagem_origens)
             # Re-render a partir do POST: nada foi salvo, então o banco e a
@@ -784,6 +778,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         # r3: preservar o id válido do POST no hidden (homônimos não colidem)
         'transmissao_id_do_post': transmissao_id_do_post,
         'post_rejeitado': post_rejeitado,
+        # v4c: POST rejeitado devolve ao re-render o que o revisor digitou
+        # (só texto; a autoria é do servidor na gravação).
+        'form_data': _form_data_do_post(request) if post_rejeitado else None,
         **_flags_livro_folha_definidos(lancamento.documento),
     }
     
