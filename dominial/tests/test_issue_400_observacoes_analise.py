@@ -103,6 +103,27 @@ class AutorTest(SimpleTestCase):
         self.assertIsNone(nome_do_autor(None))
         self.assertIsNone(nome_do_autor(AnonymousUser()))
 
+    def test_nome_com_caracteres_do_marcador_nao_derruba_a_gravacao(self):
+        # #400 v4d: "Maria [FUNAI]" fazia marcador_analise levantar
+        # AnaliseSemAutor na gravação (500). O nome sai sanitizado.
+        usuario = UsuarioDeTeste(username='maria', nome_completo='Maria [FUNAI]')
+
+        autor = nome_do_autor(usuario)
+
+        self.assertEqual(autor, 'Maria FUNAI')
+        self.assertEqual(
+            marcador_analise(autor, date(2026, 11, 25)),
+            '[ANÁLISE — Maria FUNAI — 2026-11-25]',
+        )
+
+    def test_nome_completo_so_com_invalidos_cai_para_o_username(self):
+        usuario = UsuarioDeTeste(username='maria', nome_completo='[—]')
+        self.assertEqual(nome_do_autor(usuario), 'maria')
+
+    def test_quebra_de_linha_no_username_vira_espaco(self):
+        usuario = UsuarioDeTeste(username='ma\nria', nome_completo='')
+        self.assertEqual(nome_do_autor(usuario), 'ma ria')
+
 
 class RegistrarAnaliseTest(SimpleTestCase):
     def test_autor_ausente_ou_so_espacos_levanta_erro(self):

@@ -703,7 +703,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # a partir do POST rejeitado.
             try:
                 lancamento.refresh_from_db(
-                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao']
+                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao', 'observacoes']
                 )
             except Lancamento.DoesNotExist:
                 # Casos extremos: lançamento foi rolled back

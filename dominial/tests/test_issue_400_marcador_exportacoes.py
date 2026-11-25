@@ -32,6 +32,7 @@ from dominial.models import (
     TIs,
 )
 from dominial.services.cadeia_completa_service import CadeiaCompletaService
+from dominial.services.cadeia_dominial_tabela_service import CadeiaDominialTabelaService
 from dominial.services.observacoes_analise import registrar_analise
 from dominial.tests.segregacao_fixtures import usuario_com_tis
 from dominial.views import cadeia_dominial_views
@@ -93,6 +94,21 @@ class PdfSomenteDocumentalTest(_BaseExportacao400):
         ).get_cadeia_completa(self.tis.id, self.imovel.id)
 
         html = render_to_string('dominial/cadeia_completa_pdf.html', contexto)
+
+        self.assertIn(TEXTO_DOCUMENTAL, html)
+        self.assertNotIn(MARCADOR, html)
+        self.assertNotIn(ANALISE, html)
+        self.assertNotIn('[/ANÁLISE]', html)
+
+    def test_pdf_da_cadeia_dominial_tambem_omite_o_bloco_de_analise(self):
+        # O outro template que usa ``texto_documental`` (linha do lançamento)
+        # fica no caminho do PDF da tabela: sem este teste, um revert do filtro
+        # vazaria a análise do revisor para o relatório.
+        contexto = CadeiaDominialTabelaService(
+            documentos_queryset=ESCOPO_GLOBAL,
+        ).get_cadeia_dominial_tabela(self.tis.id, self.imovel.id, session={})
+
+        html = render_to_string('dominial/cadeia_dominial_pdf.html', contexto)
 
         self.assertIn(TEXTO_DOCUMENTAL, html)
         self.assertNotIn(MARCADOR, html)

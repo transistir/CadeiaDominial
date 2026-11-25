@@ -10,6 +10,9 @@ A análise continua sendo do servidor (P1 #1, v4a): o que volta ao textarea é
 só o texto digitado — autor e data nascem do usuário logado na gravação.
 """
 
+import re
+from unittest.mock import patch
+
 from .test_issue_400_roundtrip_integracao import (
     ANALITICO,
     AUTOR,
@@ -20,12 +23,21 @@ from .test_issue_400_roundtrip_integracao import (
     _valor_do_textarea,
 )
 from dominial.models import Lancamento
+from dominial.services import lancamento_criacao_service
 from dominial.services.keyword_alerta_service import buscar_keyword
 from dominial.services.observacoes_analise import remover_analises
+
 
 FECHAMENTO = '[/ANÁLISE]'
 TEXTAREA_ANALISE = 'analise_texto'
 AREA_AMBIGUA = '1.000'  # parser único recusa (#396)
+
+
+def _analise_somente_leitura(html):
+    """Conteúdo do bloco somente leitura (``<pre>``), fora dos textareas."""
+    casamento = re.search(
+        r'<pre class="analise-registrada-texto">(.*?)</pre>', html, re.S)
+    return casamento.group(1) if casamento else ''
 
 
 class Issue400AnaliseSobreviveAoErroDeEdicaoTest(Issue400RoundTripBase):
@@ -51,6 +63,53 @@ class Issue400AnaliseSobreviveAoErroDeEdicaoTest(Issue400RoundTripBase):
             _valor_do_textarea(html, TEXTAREA_ANALISE).strip(),
             'Soma das áreas confere com o R.5.')
         # Nada foi gravado: o update foi rejeitado.
+        self.assertEqual(
+            Lancamento.objects.get(pk=lancamento.pk).observacoes, db_antes)
+
+    def test_erro_de_validacao_mostra_a_analise_do_banco_na_leitura(self):
+        # #400 v4d: a área somente leitura é do BANCO — o texto digitado e não
+        # gravado aparece no textarea, nunca como análise registrada.
+        lancamento = self.criar_com_analise()
+
+        response = self._editar_rejeitado(
+            lancamento, analise_texto='Soma das áreas confere com o R.5.')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('Análise registrada (somente leitura)', html)
+        self.assertEqual(
+            _analise_somente_leitura(html).strip(),
+            f'{MARCADOR} {ANALITICO}\n{FECHAMENTO}')
+        self.assertNotIn(
+            'Soma das áreas confere com o R.5.', _analise_somente_leitura(html))
+        # O que o revisor digitou continua no textarea da ação.
+        self.assertIn(
+            'Soma das áreas confere com o R.5.',
+            _valor_do_textarea(html, TEXTAREA_ANALISE))
+
+    def test_falha_inesperada_no_save_nao_mostra_analise_nao_gravada(self):
+        # O erro acontece DEPOIS de `lancamento.observacoes` receber o bloco
+        # novo: sem reload, o re-render exibiria como registrada uma análise
+        # que o rollback descartou.
+        lancamento = self.criar_com_analise()
+        db_antes = Lancamento.objects.get(pk=lancamento.pk).observacoes
+
+        with patch.object(
+            lancamento_criacao_service.LancamentoCamposService,
+            'processar_campos_por_tipo',
+            side_effect=RuntimeError('falha simulada no meio do save'),
+        ):
+            response = self.post_edicao(
+                lancamento, DOCUMENTAL,
+                analise_texto='Texto que NÃO foi gravado.')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertEqual(
+            _analise_somente_leitura(html).strip(),
+            f'{MARCADOR} {ANALITICO}\n{FECHAMENTO}')
+        self.assertNotIn('Texto que NÃO foi gravado.',
+                         _analise_somente_leitura(html))
         self.assertEqual(
             Lancamento.objects.get(pk=lancamento.pk).observacoes, db_antes)
 

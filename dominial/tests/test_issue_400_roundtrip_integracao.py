@@ -161,6 +161,40 @@ class Issue400PreviewAutorTest(Issue400RoundTripBase):
         self.assertIn('[ANÁLISE — semNome — AAAA-MM-DD]', html)
 
 
+class Issue400AutorSanitizadoTest(Issue400RoundTripBase):
+    """#400 v4d: nome com ``[``/``]``/``—`` não pode derrubar a gravação.
+
+    ``Maria [FUNAI]`` fazia ``nome_do_autor`` devolver o nome cru e
+    ``marcador_analise`` levantar ``AnaliseSemAutor`` no save (500). O nome
+    gravado sai sanitizado e o preview do formulário mostra o MESMO valor.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user.first_name = 'Maria'
+        cls.user.last_name = '[FUNAI]'
+        cls.user.save()
+
+    def test_analise_de_usuario_com_colchetes_no_nome_e_gravada_com_autor_sanitizado(self):
+        response = self.post_novo(DOCUMENTAL, ANALITICO)
+
+        self.assertEqual(
+            response.status_code, 302, response.content.decode()[:800])
+        lancamento = Lancamento.objects.get(documento=self.doc)
+        self.assertEqual(
+            lancamento.observacoes,
+            f'{DOCUMENTAL}\n\n[ANÁLISE — Maria FUNAI — {DATA}] {ANALITICO}'
+            '\n[/ANÁLISE]',
+        )
+
+    def test_preview_mostra_o_autor_sanitizado(self):
+        html = self.client.get(self.url_novo()).content.decode()
+
+        self.assertIn('[ANÁLISE — Maria FUNAI — AAAA-MM-DD]', html)
+        self.assertNotIn('[ANÁLISE — Maria [FUNAI]', html)
+
+
 class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
     """MUST-FIX 1: o marcador sobrevive ao round-trip com CRLF do navegador.
 

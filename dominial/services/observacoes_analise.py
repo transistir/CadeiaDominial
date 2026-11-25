@@ -37,15 +37,20 @@ DELIMITADOR_FIM = '[/ANÁLISE]'
 #
 #     [ANÁLISE — <autor> — AAAA-MM-DD]
 #
-# ``<autor>`` nunca contém ``—``, ``[``, ``]`` nem quebra de linha (validado em
-# ``marcador_analise``); ``AAAA-MM-DD`` é data ISO. Qualquer mudança aqui exige
-# mudar a regex junto — exportação/PDF/filtros dependem desta forma.
+# ``<autor>`` nunca contém ``—``, ``[``, ``]`` nem quebra de linha (sanitizado
+# em ``nome_do_autor``, validado em ``marcador_analise``); ``AAAA-MM-DD`` é data
+# ISO. Qualquer mudança aqui exige mudar a regex junto — exportação/PDF/filtros
+# dependem desta forma.
 MARCADOR_ANALISE_RE = re.compile(
     r'\[' + re.escape(ROTULO_ANALISE)
     + r' — (?P<autor>[^—\]]+) — (?P<data>\d{4}-\d{2}-\d{2})\]'
 )
 
 _DATA_ISO_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+# Caracteres que forjariam ou quebrariam o marcador dentro do nome do autor.
+_CARACTERES_DO_MARCADOR = '—[]\r\n'
+_TABELA_DO_AUTOR = str.maketrans({c: ' ' for c in _CARACTERES_DO_MARCADOR})
 
 
 class AnaliseSemAutor(ValueError):
@@ -66,16 +71,26 @@ def normalizar_quebras(texto):
     return texto.replace('\r\n', '\n').replace('\r', '\n')
 
 
-def nome_do_autor(user):
-    """Nome efetivo do autor, ou ``None`` para anônimo/sem nome.
+def _autor_para_o_marcador(nome):
+    """Troca ``—``/``[``/``]``/quebra de linha por espaço (colapsa espaços)."""
+    limpo = (nome or '').translate(_TABELA_DO_AUTOR)
+    return ' '.join(limpo.split())
 
-    ``get_full_name()`` tem prioridade; sem ele, ``get_username()``.
+
+def nome_do_autor(user):
+    """Nome efetivo do autor, já seguro para o marcador, ou ``None``.
+
+    ``get_full_name()`` tem prioridade; sem ele — ou quando o nome completo só
+    tem caracteres inválidos — ``get_username()``. Os caracteres que forjariam
+    o marcador viram espaço (``Maria [FUNAI]`` → ``Maria FUNAI``) para que um
+    nome de usuário não derrube a gravação com ``AnaliseSemAutor`` (500); a
+    barreira estrita continua em ``marcador_analise`` (#400 v4d).
     """
     if user is None or not getattr(user, 'is_authenticated', False):
         return None
-    nome = (user.get_full_name() or '').strip()
+    nome = _autor_para_o_marcador(user.get_full_name())
     if not nome:
-        nome = (user.get_username() or '').strip()
+        nome = _autor_para_o_marcador(user.get_username())
     return nome or None
 
 
