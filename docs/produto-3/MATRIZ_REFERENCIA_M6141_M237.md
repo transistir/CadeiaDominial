@@ -2,16 +2,19 @@
 
 **Issue:** transistir/CadeiaDominial#395 (U-M237-01, P0) · **Série:** U-M237
 **Status:** matriz medida (etapa 1 M6141 + etapa 2 M237). Não corrige dados.
-**Revisão:** 25/11/2026 — 7 must-fix da revisão Opus do PR #407 endereçados (§10).
+**Revisão:** 25/11/2026 — 1ª revisão Opus (7 must-fix) e 2ª revisão Opus (3 must-fix)
+do PR #407 endereçados (§10).
 **Base do repositório:** `origin/develop` @ `7ca71237` · **Data da medição:** 24/11/2026
 **Especificação:** `docs/produto-3/ESPEC_MATRIZ_REFERENCIA_M6141_M237.md` (PR #405)
 
 > A matriz mede o **ser** (documento × OCR × banco), não o dever-ser do contrato A3.
 > Toda célula nomeia a camada de origem (D = documento, O = OCR, B = banco) e a
-> evidência. Nenhum valor foi corrigido nem inferido. Artefato sem PII: partes
-> aparecem como papel (`transmitente 1`, `adquirente 1`).
+> evidência. Nenhum valor foi corrigido nem inferido; o cabeçalho da M237 foi
+> conferido visualmente em 25/11 (§3.1, §9). Artefato sem PII: partes aparecem
+> como papel (`transmitente 1`, `adquirente 1`).
 >
-> **Camada D = transcrição do OCR A3 v1.2, sem conferência visual humana** (§1.1).
+> **Camada D = transcrição do OCR A3 v1.2, sem conferência visual humana** (§1.1),
+> exceto o cabeçalho da M237, conferido em 25/11 (§9).
 > "Literal" nesta matriz significa literal do OCR, não do scan; as células
 > `erro_confirmado` valem contra esse literal.
 
@@ -57,8 +60,16 @@ job registrado acima), **sem conferência visual humana** da digitalização. El
 portanto, dependente da camada O: não é uma leitura independente do scan.
 Convenções: valor entre crases = citação literal do OCR (citação truncada leva
 `…`); prefixo `derivado:` = paráfrase, normalização ou conta feita a partir de
-literais; `n/d` = camada ausente. Nenhum valor foi conferido contra a imagem — a
-conferência visual página a página é etapa humana separada (§9).
+literais; `n/d` = camada ausente. Fora o cabeçalho da M237 conferido em 25/11
+(§3.1), nenhum valor foi conferido contra a imagem — a conferência visual página a
+página é etapa humana separada (§9).
+
+O A3 v1.2 **tem** `origem` por ato (`$defs/act.properties`: `tipo_documento`
+— `matricula`/`transcricao` —, `numero`, `cartorio`, `livro`, `folha`, `data`).
+Na abertura da M6141 o campo vem completo (`matricula` 237, livro 2, folha 237,
+06.05.2002); na abertura da M237, onde o literal traz `TÍTULO AQUISITIVO:
+Transcrição de nº 1-1.754…`, o job devolveu `origem = null`. É falha de extração,
+não lacuna de contrato (item 20).
 
 ### 1.2 Classes (fechadas)
 
@@ -72,8 +83,9 @@ Critérios usados nesta matriz:
   contém (campo ausente ou ato inteiro não cadastrado). A mesma situação recebe a
   mesma classe em todas as seções.
 - `divergencia_pendente` — a evidência não permite decidir: ambiguidade de campo
-  (ex.: `forma` × natureza), lacuna do OCR, campo sem representação no cadastro ou
-  vínculo sem lastro literal completo.
+  (ex.: `forma` × natureza), falha/lacuna do OCR (campo existe no contrato A3 e o
+  job não entregou — a ausência é da camada O, não do cadastro), campo sem
+  representação no cadastro ou vínculo sem lastro literal completo.
 - `dado_documental` — campo documental consistente entre as camadas, ou registro
   do que o documento traz sem juízo.
 - `interpretacao_humana` — leitura/rotulagem humana sem base literal direta.
@@ -82,6 +94,14 @@ Critérios usados nesta matriz:
 O `erro_confirmado` vale contra o **literal do OCR**; a conferência visual da
 digitalização permanece como etapa de revisão humana registrada no rodapé.
 `n/d` = camada ausente, nunca célula vazia.
+
+**Por que `forma`/`título` não recebe a mesma classe em todo ato.** Nos atos de
+registro (R.1 da M6141, R.4 e R.5 da M237) o documento traz rótulo explícito
+`TÍTULO:` com o negócio jurídico e a escritura em `FORMA DO TÍTULO:`; o banco
+grava a escritura no título e o negócio na forma — contradição direta,
+`erro_confirmado`. Nas averbações (Av.6 e Av.7) não existe rótulo `TÍTULO`: a
+escritura aparece no corpo do ato, sem campo documental de natureza a comparar —
+daí `divergencia_pendente` (item 12), não erro.
 
 ### 1.3 Datas dos atos e estado de revisão (A3 v1.2)
 
@@ -92,9 +112,9 @@ digitalização permanece como etapa de revisão humana registrada no rodapé.
 | M6141 · R.1 | `18 de junho de 2015` | 2015-06-18 | 2015-06-18 | 1.0 | true | n/d |
 | M237 · cabeçalho | `09.06.1982` | n/d (`raw` only) | — | 0.0 | true | n/d |
 | M237 · abertura | `09.06.1982` | n/d (`raw` only) | 1982-06-09 | 0.0 | true | n/d |
-| M237 · R.1 | `09 de junho de 1982` | 1982-06-09 | 1982-06-09 | 1.0 | false | — |
-| M237 · Av.2 | `19 de dezembro de 1983` | 1983-12-19 | 1983-12-19 | 1.0 | true | n/d |
-| M237 · Av.3 | `08 de outubro de 1986` | 1986-10-08 | 1986-10-08 | 1.0 | false | — |
+| M237 · R.1 | `09 de junho de 1982` | 1982-06-09 | n/d (ato ausente — §3.2) | 1.0 | false | — |
+| M237 · Av.2 | `19 de dezembro de 1983` | 1983-12-19 | n/d (ato ausente — §3.2) | 1.0 | true | n/d |
+| M237 · Av.3 | `08 de outubro de 1986` | 1986-10-08 | n/d (ato ausente — §3.2) | 1.0 | false | — |
 | M237 · R.4 | `14 de março de 1995` | 1995-03-14 | 1995-03-14 | 1.0 | true | n/d |
 | M237 · R.5 | `06 de maio de 2002` | 2002-05-06 | 2002-05-06 | 1.0 | true | n/d |
 | M237 · Av.6 | `18 de junho de 2015` | 2015-06-18 | 2015-06-18 | 1.0 | true | n/d |
@@ -105,6 +125,9 @@ digitalização permanece como etapa de revisão humana registrada no rodapé.
 `motivos_revisao` não é preenchido pelo A3 v1.2 em nenhum ato desta medição — daí
 `n/d`. `requer_revisao = true` marca o ato para conferência humana; não é, por si
 só, erro confirmado (a classe de cada divergência está nas seções 2–4).
+
+`B data = n/d` nas linhas da M237 sem lançamento marca ato **não cadastrado**
+(§3.2); não é célula vazia nem inferência a partir do OCR.
 
 ---
 
@@ -125,13 +148,13 @@ só, erro confirmado (a classe de cada divergência está nas seções 2–4).
 | Título / natureza | `derivado: abertura de matrícula` | `inicio_matricula` | `inicio_matricula` | p.1 `MATRÍCULA 6.141` | dado_documental |
 | Data do ato | `18.06.2015` (raw) | raw `18.06.2015`, norm. nulo | `2015-06-18` | p.1 `DATA 18.06.2015` | dado_documental (lacuna de normalização) |
 | Área | `74 ha. 67 a. 55 ca.` | raw idem, norm. nulo | `74.6755` | p.1 | dado_documental |
-| Origem — número | `R. 5, da matrícula 237` | `237` (matrícula) | `M237`; `LancamentoOrigem` matrícula 237 | p.1 `REGISTRO ANTERIOR: R. 5, da matrícula 237, livro nº 2, fls. 237, de 06.05.2002, deste Cartório.` | dado_documental (R.5 omitido) |
+| Origem — número | `R. 5, da matrícula 237` | `237` (matrícula) | `M237`; `LancamentoOrigem` matrícula 237 | p.1 `REGISTRO ANTERIOR: R. 5, da matrícula 237, livro nº 2, fls. 237, de 06.05.2002, deste Cartório.` | **erro_confirmado** (omissão do `R. 5`) |
 | Origem — livro/folha | `2` / `237` | `2` / `237` | `"None"` / `"None"` (texto, não nulo) | idem | **erro_confirmado** (omissão) |
 | Origem — data | `06.05.2002` | `2002-05-06` | `data_origem = 2015-06-18` | idem | **erro_confirmado** |
 | `documento_origem_id` | elo textual | n/d | `NULL` | — | dado_documental (vínculo só textual) |
 | `eh_inicio_matricula` | `derivado: abertura` | `true` | `false` | p.1 `MATRÍCULA 6.141` | **erro_confirmado** |
 | Observação | `derivado: INCRA/CCIR/NIRF` | presente | texto analítico "Suposto destaque…" | p.1 | interpretacao_humana |
-| Descrição | `derivado: descrição do imóvel` | presente | n/d | p.1 | dado_documental |
+| Descrição | `derivado: descrição do imóvel` | presente | n/d | p.1 | **erro_confirmado** (omissão) |
 
 ### 2.2 Ato 2 — R.1 M6141, banco 14804
 
@@ -143,7 +166,7 @@ só, erro confirmado (a classe de cada divergência está nas seções 2–4).
 | Título | `Venda e Compra` | idem | `Escritura pública` | p.1 | **erro_confirmado** (forma × título) |
 | Descrição | `O imóvel objeto desta matrícula.` | idem | n/d | p.1 | erro_confirmado (omissão) |
 | Detalhes / valor | `VALOR: R$ 90.647,60, majorados para R$ 186.688,75`; `O preço convencionado da venda e compra foi de R$ 100.000,00` | `valor_transacao = 186688.75`; `detalhes` com o preço de R$ 100.000,00 | n/d | p.1 | erro_confirmado (omissão) |
-| Livro / folha / data da transação | `02` / `116 a 117` / `10.04.2015` | `02` / `116 a 117` / `2015-04-10` | `02` / `116-117` / n/d | p.1 | dado_documental (data ausente) |
+| Livro / folha / data da transação | `02` / `116 a 117` / `10.04.2015` | `02` / `116 a 117` / `2015-04-10` | `02` / `116-117` / n/d | p.1 | **erro_confirmado** (data da transação omitida) |
 | Cartório da transmissão | `Tabelionato de Notas de Cachoeira do Mato` | idem | 4857 | p.1 | dado_documental |
 
 ---
@@ -153,10 +176,10 @@ só, erro confirmado (a classe de cada divergência está nas seções 2–4).
 | Campo | D | O | B | Evidência | Classe |
 |---|---|---|---|---|---|
 | Número | `237` | `237` | `M237` | p.1 `MATRÍCULA Nº 237` | dado_documental |
-| Livro / folha | `2` / `237` | `2` / `237` | `2` / `0` | p.1 `LIVRO 2 FLS 237` | interpretacao_humana (folha placeholder) |
+| Livro / folha | `2` / `237` | `2` / `237` | `2` / `0` | p.1 `LIVRO 2 FLS 237` | **erro_confirmado** (contradição: `FLS 237` × `0`), item 21 |
 | Data do documento | `09.06.1982` (raw) | raw idem, norm. nulo | `2026-11-12`, presumida `t` | p.1 `DATA 09.06.1982` | interpretacao_humana (data de cadastro) |
 | Cartório | `derivado: Itamaraju/BA (atos)`; cabeçalho literal sem município | `OFÍCIO DO REGISTRO DE IMÓVEIS E HIPOTECAS`; `municipio = REGISTRO DE IMÓVEIS COMARCA DE` | 393 | p.1–2 | divergencia_pendente (rótulo OCR) |
-| `classificacao_fim_cadeia` | n/d | n/d | vazio | — | n/d (campo classifica a ponta de origem; a M237 tem origem — ver §3.6) |
+| `classificacao_fim_cadeia` | n/d | n/d | vazio | — | n/d (campo classifica a ponta de origem; a M237 tem título aquisitivo — §3.1) |
 
 ### 3.1 Ato 1 — Abertura sintética (M-237), banco 14805
 
@@ -165,15 +188,21 @@ só, erro confirmado (a classe de cada divergência está nas seções 2–4).
 | Natureza | `derivado: cabeçalho da matrícula` | `inicio_matricula` | `inicio_matricula` | p.1 | interpretacao_humana (não é ato registral) |
 | Data | `09.06.1982` (raw) | raw idem, norm. nulo | `1982-06-09` | p.1 | dado_documental |
 | Área | `169 hectares, 09 ares e 40 centiares` | raw idem, norm. nulo | `169.0940` | p.1 | dado_documental |
-| Origem — título aquisitivo | `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de Imóveis da Comarca de Prado-Ba` | n/d (A3 v1.2 não emite origem no cabeçalho) | `M1754` em cartório **1615** (Prados/MG) | p.1, após `PROPRIETÁRIOS`; M1754 p.1 | **erro_confirmado** (cartório do vínculo) |
+| Origem — título aquisitivo | `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de Imóveis da Comarca de Prado-Ba` | `origem = null` (campo existe no A3 v1.2; extração não preencheu) | `M1754` em cartório **1615** (Prados/MG) | p.1, após `PROPRIETÁRIOS`; M1754 p.1 | **erro_confirmado** (cartório do vínculo) |
 | `eh_inicio_matricula` | `derivado: abertura` | `true` | `false` | p.1 | **erro_confirmado** |
-| Observação | `derivado: INCRA/FUNRURAL` | presente | n/d | p.1 | dado_documental (omissão) |
+| Observação | `derivado: INCRA/FUNRURAL` | presente | n/d | p.1 | **erro_confirmado** (omissão) |
+
+A camada O desta linha é `origem = null`, não `n/d` por falta de campo: o A3 v1.2
+tem `origem` por ato e o preenche na abertura da M6141 (§2.1) — a falha é da
+extração (item 20). Critério verificável do #86 para este ato:
+`origem.tipo_documento.normalized = transcricao` (literal), `origem.numero.raw =
+1-1.754`, `origem.cartorio` = Comarca de Prado-BA.
 
 ### 3.2 Atos 2–4 — R.1, Av.2 e Av.3 (ausentes no banco)
 
 | Ato | D (literal) | O | B | Classe |
 |---|---|---|---|---|
-| R.1 | `R: 1-237 – Itamaraju, 09 de junho de 1982`; hipoteca cedular de 2º grau, `Cr$ 1.525.273,12`, livro 3, fls. 194 | presente | **n/d** | **erro_confirmado** (ato não cadastrado — ônus) |
+| R.1 | `R: 1-237 – Itamaraju, 09 de junho de 1982`; `hipoteca cedular de 2º grau`, `Cr$ 1.525.273,12`, livro 3, fls. 194 | presente | **n/d** | **erro_confirmado** (ato não cadastrado — ônus) |
 | Av.2 | `Av: 2-237 – Itamaraju, 19 de dezembro de 1983`; `Por Cédula Rural Hipotecária`; `Cr$ 2.504.829,00` | presente | **n/d** | **erro_confirmado** (ato não cadastrado — ônus) |
 | Av.3 | `Av: 3-237 – … 08 de outubro de 1986`; cancela o `R: 1-237` | presente | **n/d** | **erro_confirmado** (ato não cadastrado — baixa de ônus) |
 
@@ -237,7 +266,7 @@ D/O/B dos campos que sustentam esses itens — nada além disso foi medido.
 | Campo | D | O | B | Evidência | Classe |
 |---|---|---|---|---|---|
 | Cartório do cabeçalho | `REGISTRO DE IMÓVEIS HIPOTECAS PRADO - BAHIA` | raw idem, norm. idem; `municipio = REGISTRO DE IMÓVEIS COMARCA DE` | documento 4981: **1615** (Prados/MG); lançamento 15073 origem 483 (Prado/BA) | p.1 | **erro_confirmado** |
-| `eh_inicio_matricula` | `derivado: abertura` (`MATRÍCULA N.º 1.754`) | `true` (conf. 1.0) | `false` (lançamento 15073) | p.1 | **erro_confirmado** |
+| `eh_inicio_matricula` | `derivado: abertura` (`MATRÍCULA N.º 1.754`) | `true` em `eh_inicio_matricula` (conf. 1.0 no campo; a `confianca` do ato é 0.0) | `false` (lançamento 15073) | p.1 | **erro_confirmado** |
 | Data do documento | `31/maio/1977` | raw idem, norm. nulo; `requer_revisao = true` | `2026-11-12` (presumida `t`) | p.1 | interpretacao_humana (data de cadastro) |
 | Área | `169ba.09a.40ca.` (literal do OCR) | raw idem, norm. nulo | `169.0940` | p.1 | dado_documental |
 | Atos R.1–Av.5 | 5 atos: R.1 1977, R.2 1977, R.3 1978, Av.4 1986, Av.5 2001 | presente | **n/d** | p.1 | **erro_confirmado** (atos não cadastrados — item 18) |
@@ -262,15 +291,17 @@ transferidas entre si.
 
 O elo **M237 → M1754** é outro vínculo e está tratado à parte: a §3.1 mostra o
 literal `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de Imóveis da
-Comarca de Prado-Ba`, mas o OCR A3 v1.2 não emite esse campo e o cadastro aponta
-cartório divergente (item 20).
+Comarca de Prado-Ba`; o OCR devolveu `origem = null` nesse ato — falha de extração,
+porque o campo existe no contrato A3 v1.2 (item 20) — e o cadastro aponta cartório
+divergente. O elo existe como M1754 **só no banco**.
 
 ---
 
 ## 6. Divergências priorizadas
 
-Prioridade = impacto na cadeia/aceite. Cada item tem **uma** classe. São 20 itens:
-os 18 da medição original mais dois abertos nesta revisão (19 e 20).
+Prioridade = impacto na cadeia/aceite. Cada item tem **uma** classe. São 22 itens:
+os 18 da medição original, dois abertos na 1ª revisão (19 e 20) e dois na 2ª
+revisão (21 e 22).
 
 ### P0 — bloqueiam o aceite da M237
 
@@ -286,23 +317,27 @@ os 18 da medição original mais dois abertos nesta revisão (19 e 20).
    p.2) e rodapé `MATRÍCULA ENCERRADA`. O cadastro não tem campo de encerramento:
    `documento.classificacao_fim_cadeia` e `OrigemFimCadeia.classificacao_fim_cadeia`
    classificam a **ponta de origem** (`origem_lidima` / `sem_origem` / `inconclusa`),
-   não "matrícula encerrada"; `origemfimcadeia` está vazio. Como a M237 tem origem
-   (M1754), não é ponta de origem e a ausência de classificação não é erro de dado:
+   não "matrícula encerrada"; `origemfimcadeia` está vazio. Como a M237 tem título
+   aquisitivo (§3.1), não é ponta de origem e a ausência de classificação não é erro:
    é lacuna de cadastro/contrato. `divergencia_pendente`.
 4. **M6141 `data_origem` = 2015-06-18**, mas o registro anterior é de **06.05.2002**.
    `erro_confirmado`.
 5. **Áreas com semântica invertida:** R.4 (B 130.3740 remanescente × D 38,72
    transmitida), Av.6 (B 55.6985 remanescente × D 74,6755 destacada) e Av.7 (B
    vazio × D 94,4185 = 38,7200 + 55,6985). `calculo_derivado`.
-6. **R.1, Av.2 e Av.3 da M237 não cadastrados** (3 atos). O R.1 é **Hipoteca
-   Cedular de 2º Grau** (ônus real), a Av.2 é outra Cédula Rural Hipotecária e a
-   Av.3 dá baixa no R.1: sem os três o app perde o histórico de ônus do imóvel,
-   não só a sequência de transmissões — daí o P0. `erro_confirmado` (omissão).
+6. **R.1, Av.2 e Av.3 da M237 não cadastrados** (3 atos). O R.1 traz
+   `hipoteca cedular de 2º grau` (derivado: rótulo do corpo do ato; ônus real), a
+   Av.2 é outra Cédula Rural Hipotecária e a Av.3 dá baixa no R.1: sem os três o
+   app perde o histórico de ônus do imóvel, não só a sequência de transmissões —
+   daí o P0. `erro_confirmado` (omissão).
 7. **`eh_inicio_matricula = false` nos três inícios** (M6141, M237, M1754), embora
-   o OCR v1.2 emita `true` com evidência do cabeçalho e confiança 1.0 (§4).
+   o OCR v1.2 emita `eh_inicio_matricula.normalized = true`, com evidência do
+   cabeçalho e `confianca = 1.0` **nesse campo** (§4); a `confianca` do ato é 0.0
+   porque a data sai sem `normalized` (§1.3). `erro_confirmado`.
+8. **Origem da M6141 sem o `R. 5` no número e sem livro/folha** no banco; o
+   número vira só `237` (matrícula), livro/folha são gravados como a string
+   `"None"` e a `data_origem` recebe a data da própria abertura (item 4).
    `erro_confirmado`.
-8. **Origem da M6141 sem livro/folha e sem o ato R.5** no banco; livro/folha
-   gravados como a string `"None"`. `erro_confirmado`.
 
 ### P1 — qualidade e contrato A3
 
@@ -326,21 +361,36 @@ os 18 da medição original mais dois abertos nesta revisão (19 e 20).
     é interpretação do cadastro a partir do cabeçalho. `interpretacao_humana`.
 15. **Observações analíticas na coluna documental** (R.4, Av.6, Av.7): texto de
     analista sem marcador de autoria (#400). `interpretacao_humana`.
-19. **Descrição do ato não gravada no banco:** R.1 M6141
-    (`O imóvel objeto desta matrícula.`) e R.4 M237 (`IMÓVEL: Área de 38 ha. e 72
-    a. … do imóvel objeto desta matrícula.`) têm descrição no documento e
-    `descricao = null` no banco. `erro_confirmado` (omissão).
-20. **OCR M237 não emite o título aquisitivo (vínculo de origem).** O literal
-    traz `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de Imóveis da
-    Comarca de Prado-Ba`, mas o A3 v1.2 não tem campo de origem no cabeçalho: a
-    camada O fica `n/d` e o elo M237→M1754 só aparece no banco. O lastro literal é
-    **parcial** (número `1.754` + comarca Prado-BA); o documento não rotula
-    "M1754". `divergencia_pendente`.
+19. **Descrição e data da transação não gravadas no banco:** a abertura da M6141,
+    o R.1 M6141 (`O imóvel objeto desta matrícula.`) e o R.4 M237 (`IMÓVEL: Área
+    de 38 ha. e 72 a. … do imóvel objeto desta matrícula.`) têm descrição no
+    documento e `descricao = null` no banco; no R.1 M6141 a `data_transacao` da
+    escritura (`10.04.2015`) também não é gravada. `erro_confirmado` (omissão).
+20. **OCR M237 devolve `origem = null` na abertura — falha de extração.** O
+    literal traz `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de
+    Imóveis da Comarca de Prado-Ba`, mas o A3 v1.2 — que **tem** `origem` por ato
+    (`tipo_documento`, `numero`, `cartorio`, `livro`, `folha`, `data`) e o preenche
+    na abertura da M6141 (§2.1) — devolveu `origem = null` neste ato. Critério
+    verificável do #86: `origem.tipo_documento.normalized = transcricao` (literal),
+    `origem.numero.raw = 1-1.754`, `origem.cartorio` = Comarca de Prado-BA. O elo
+    M237→M1754 existe como M1754 **só no banco**. `divergencia_pendente` (falha de
+    extração no serviço, não lacuna de contrato). Divergência de tipo registrada
+    junto: o documento rotula `Transcrição` e o banco modela `matrícula` M1754;
+    `1-1.754` pode ser o R.1 da matrícula 1.754, no mesmo formato de
+    `R. 1-6.141` — `divergencia_pendente`.
+
+21. **Folha do cabeçalho da M237 gravada como `0`** contra `FLS 237` no literal
+    (`MATRÍCULA Nº 237 LIVRO 2 FLS 237 DATA 09.06.1982`). Aqui não é placeholder:
+    o documento traz a folha e o banco contradiz. `erro_confirmado`.
+22. **Observação documental INCRA/FUNRURAL da abertura da M237 não gravada.** O
+    documento traz a observação (`derivado: INCRA/FUNRURAL`) e o banco fica
+    `n/d`. `erro_confirmado` (omissão).
 
 ### P2 — contexto e higiene
 
-16. **Folha `0`** nos três documentos é placeholder, não valor documental.
-    `interpretacao_humana`.
+16. **Folha `0`** é placeholder só onde o literal não traz folha (M6141, cuja D é
+    `n/d`), não valor documental. `interpretacao_humana`. Na M237 o mesmo `0`
+    contradiz `FLS 237` — item 21, `erro_confirmado`.
 17. **Cartório do cabeçalho da M237** no OCR sai genérico
     (`OFÍCIO DO REGISTRO DE IMÓVEIS E HIPOTECAS`) e com `municipio` mal parseado
     (`REGISTRO DE IMÓVEIS COMARCA DE`); os atos e o banco apontam Itamaraju.
@@ -354,23 +404,24 @@ os 18 da medição original mais dois abertos nesta revisão (19 e 20).
 
 | Documento | Atos no documento | Atos no banco | Ausentes | Células `erro_confirmado` | Células `divergencia_pendente` |
 |---|---|---|---|---|---|
-| M6141 | 2 (abertura + R.1) | 2 | 0 | 8 | 0 |
-| M237 | 8 (abertura + 7 atos) | 5 (abertura sintética + 4 atos) | 3 (R.1, Av.2, Av.3) | 9 | 7 |
+| M6141 | 2 (abertura + R.1) | 2 | 0 | 11 | 0 |
+| M237 | 8 (abertura + 7 atos) | 5 (abertura sintética + 4 atos) | 3 (R.1, Av.2, Av.3) | 11 | 7 |
 | M1754 | 6 | 1 (abertura sintética) | 5 | 3 | 0 |
-| **Total** | **16** | **8** | **8** | **20** | **7** |
+| **Total** | **16** | **8** | **8** | **25** | **7** |
 
 Contagem por célula das tabelas das seções 2, 3 e 4 (uma classe por célula;
-`n/d` não conta). Campos com mais erros confirmados: `origem` (cartório/data/livro),
-`area` (semântica), `forma`/`titulo`, `eh_inicio_matricula`, descrição e atos
-ausentes. A ausência de `classificacao_fim_cadeia` **não** é erro (item 3).
+`n/d` não conta). Campos com mais erros confirmados: `origem`
+(cartório/data/livro/número), `area` (semântica), `forma`/`titulo`,
+`eh_inicio_matricula`, descrição e data da transação, folha e observação omitidas
+e atos ausentes. A ausência de `classificacao_fim_cadeia` **não** é erro (item 3).
 
 ---
 
 ## 8. OCR destravadas por esta matriz
 
 Nenhuma issue é destravada apenas pela camada D: a transcrição do A3 v1.2 não
-passou por conferência visual humana (§1.1). As issues abaixo usam células D e
-ficam condicionadas a essa conferência.
+passou por conferência visual humana, exceto o cabeçalho da M237 (§9). As issues
+abaixo usam células D e ficam condicionadas a essa conferência.
 
 | Issue | Situação | Células entregues |
 |---|---|---|
@@ -378,7 +429,7 @@ ficam condicionadas a essa conferência.
 | [#83](https://github.com/transistir/ocr-service/issues/83) O-M237-01 | **destravada após conferência humana das células D usadas pela issue** | R.4 38,72 × 130,374; Av.6 74,6755 × 55,6985; Av.7 `94 ha. 41 a. 85 ca.` = 38,7200 + 55,6985 (conta); abertura 169,0940 |
 | [#84](https://github.com/transistir/ocr-service/issues/84) O-M237-02 | **destravada após conferência humana das células D usadas pela issue** | pares D/O/B de `forma`, `titulo` e natureza em R.1, R.4, R.5, Av.6, Av.7 |
 | [#85](https://github.com/transistir/ocr-service/issues/85) O-M237-03 | **destravada após conferência humana das células D usadas pela issue** | observações analíticas no banco × literais do documento em R.4, Av.6, Av.7 |
-| [#86](https://github.com/transistir/ocr-service/issues/86) O-M237-04 | **destravada após conferência humana das células D usadas pela issue** | M6141 → R.5 M237 (livro 2, fls. 237, 06.05.2002); Av.6 → 6.141; título aquisitivo da M237 (`Transcrição de nº 1-1.754`, Comarca de Prado-BA) — o OCR deve emitir o título aquisitivo do cabeçalho, não o rótulo `M1754` (item 20); cartório 1615 comprovadamente errado |
+| [#86](https://github.com/transistir/ocr-service/issues/86) O-M237-04 | **destravada após conferência humana das células D usadas pela issue** | M6141 → R.5 M237 (livro 2, fls. 237, 06.05.2002); Av.6 → 6.141; título aquisitivo da M237 (`Transcrição de nº 1-1.754`, Comarca de Prado-BA) — o A3 v1.2 tem `origem` por ato e devolveu `null` neste ato (item 20: falha de extração; critério `tipo_documento = transcricao`, `numero.raw = 1-1.754`, `cartorio` = Prado-BA); cartório 1615 comprovadamente errado |
 | [#87](https://github.com/transistir/ocr-service/issues/87) O-M237-05 | **destravada após conferência humana das células D usadas pela issue** | Av.6 (destaque de 74,6755) e Av.7 (`ENCERRADA`); requisito de OCR: emitir Av.7 como averbação com a observação `ENCERRADA` (item 12); a ausência de marcação de encerramento no banco é lacuna de cadastro (item 3), não de OCR |
 | [#88](https://github.com/transistir/ocr-service/issues/88) O-M237-07 | **linha de base entregue; aceite bloqueado** | 8 atos medidos; P0 1–8 precisam de decisão antes do aceite; conferência humana das células D pendente |
 
@@ -387,9 +438,10 @@ ficam condicionadas a essa conferência.
 ## 9. O que não foi verificado
 
 - **Conferência visual humana** página a página das digitalizações: as camadas D
-  vêm do OCR A3 v1.2 (job registrado), **sem conferência humana**. Células
-  marcadas `erro_confirmado` valem contra o literal OCR; a revisão humana do scan
-  ainda é etapa separada.
+  vêm do OCR A3 v1.2 (job registrado). **Exceção:** o cabeçalho da M237 (p.1) foi
+  conferido visualmente em 25/11/2026 por Hiure — `MATRÍCULA Nº 237`, `LIVRO 2`,
+  `FLS 237`, `DATA 09.06.1982`, e **sem** `14.905` na página. O restante segue sem
+  conferência humana; células `erro_confirmado` valem contra o literal OCR.
 - **`dominial_cartorios`**: liberada e consultada (393/483/1615/4293/4857), mas o
   nome do cartório da M237 no OCR não traz município; não foi inferido.
 - **M1754** entrou apenas como contexto (§4); não foi medida como documento de
@@ -400,23 +452,25 @@ ficam condicionadas a essa conferência.
 
 ---
 
-## 10. Correções da revisão de 25/11 (PR #407)
+## 10. Correções das revisões de 25/11 (PR #407)
 
-Revisão Opus de 25/11: REJECT com 7 must-fix. Todos foram endereçados neste
-commit. Em um deles (item 3) a evidência contradisse a premissa da revisão —
+### 1ª revisão (v2): 7 must-fix
+
+Revisão Opus de 25/11: REJECT com 7 must-fix. Todos foram endereçados no commit
+`315dbe1d`. Em um deles (item 3) a evidência contradisse a premissa da revisão —
 registrado abaixo com o literal que sustenta a correção.
 
 | Must-fix | O que mudou |
 |---|---|
 | 1. P0 #3 não é fim de cadeia | P0 #3 reescrito como divergência de **cadastro** (`Av.7 ENCERRADA` sem marcação de encerramento); expressão "sem fim de cadeia" removida; célula D de `classificacao_fim_cadeia` da M237 virou `n/d`; §3.6 renomeada para "Encerramento"; item 12 e a linha #87 ajustados |
 | 2. Camada D não é independente | Cabeçalho e §1.1 rotulam D como **transcrição do OCR A3 v1.2, sem conferência visual humana**; #83–#87 passam a "destravada após conferência humana das células D usadas pela issue" |
-| 3. Elo M237→M1754 sem lastro | Aberto o item 20 (`divergencia_pendente`): o OCR não emite o título aquisitivo e o elo fica só no banco. **Premissa corrigida:** o número não aparece só no banco — o cabeçalho da M237 traz `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de Imóveis da Comarca de Prado-Ba`; o lastro é literal mas **parcial** (número + comarca, sem o rótulo M1754) e foi incorporado à §3.1. #86 deixou de exigir `M1754` e passa a exigir o título aquisitivo |
+| 3. Elo M237→M1754 sem lastro | Aberto o item 20 (`divergencia_pendente`); a redação da v2 atribuía a lacuna ao contrato e foi **corrigida na 2ª revisão/v3** (abaixo): o A3 v1.2 tem `origem` por ato e o job devolveu `null`. **Premissa corrigida:** o número não aparece só no banco — o cabeçalho da M237 traz `TÍTULO AQUISITIVO: Transcrição de nº 1-1.754, do Cartório de Imóveis da Comarca de Prado-Ba`; o lastro é literal mas **parcial** (número + comarca, sem o rótulo M1754) e foi incorporado à §3.1. #86 deixou de exigir `M1754` e passa a exigir o título aquisitivo |
 | 4. M1754 sem tabela própria | Incluída a §4 com D/O/B de cartório do cabeçalho, `eh_inicio_matricula`, data e atos ausentes, que sustentam P0 #2/#7/#11. O payload tem os dados: **nada foi rebaixado para P1 nem zerado** |
 | 5. Paráfrase como literal | Coluna D: `escritura de 17.01.1995`, `área de 38,72 ha do imóvel`, `venda da área total` e `94,4185 = 38,7200 + 55,6985` viraram citação literal ou `derivado:`; convenção registrada em §1.1 |
 | 6. Classes desuniformizadas | Forma Av.6 × Av.7: ambas `divergencia_pendente` (item 12); omissões de campo × atos omitidos: todas `erro_confirmado` (critério em §1.2); item 17 × célula do cartório da M237: ambas `divergencia_pendente`. A célula O da forma da Av.7 foi corrigida para o valor real do A3 (`raw = normalized = escritura pública de 07 de dezembro de 2016`) e o item 12 foi corrigido: quem tem `normalized = null` é a Av.6; a Av.7 normaliza o título como `PROTOCOLO nº 28.492` |
 | 7. `erro_confirmado` sem item na §5 | Item 19 cobre as descrições omitidas (R.1 M6141 e R.4 M237); a forma da Av.7 deixou de ser `erro_confirmado` (item 6) e cai no item 12. Nenhuma célula `erro_confirmado` ficou sem item; contagens da §7 refeitas |
 
-### Células por classe — antes/depois
+### Células por classe — 1ª revisão (v1 → v2)
 
 | Documento | `erro_confirmado` antes | depois | `divergencia_pendente` antes | depois |
 |---|---|---|---|---|
@@ -429,3 +483,31 @@ Mudanças de célula na M237: +3 atos não cadastrados (§3.2, agora
 `erro_confirmado`), −1 `classificacao_fim_cadeia` (virou `n/d`), −1 forma da Av.7
 e −1 fim de cadeia (ambas viraram `divergencia_pendente`), +1 cartório do cabeçalho
 (`dado_documental` → `divergencia_pendente`).
+
+### 2ª revisão (v3): 3 must-fix
+
+| Must-fix | O que mudou |
+|---|---|
+| 1. Item 20 errado sobre o contrato | Item 20 virou **falha de extração**: o A3 v1.2 tem `origem` por ato e devolveu `null` na abertura da M237; critério do #86 registrado; conflito de tipo (`Transcrição` × `matrícula` M1754) e a hipótese `1-1.754` = R.1 da matrícula 1.754 ficam como `divergencia_pendente`; frases "o A3 não emite origem no cabeçalho" removidas (§1.1, §3.1, §5, item 20) |
+| 2. Regra da §1.2 violada | As 5 células apontadas passaram a `erro_confirmado`: origem—número `R. 5` (§2.1), descrição da abertura da M6141 (§2.1), data da transação do R.1 M6141 (§2.2), observação INCRA/FUNRURAL da M237 (§3.1) e folha `FLS 237` × `0` da M237 (§3). Itens 8 e 19 absorveram as omissões; itens 21 (folha) e 22 (observação) foram abertos; contagens da §7 refeitas |
+| 3. Datas de atos inexistentes | §1.3: `B data` de R.1, Av.2 e Av.3 da M237 passou a `n/d` (ato não cadastrado, §3.2) |
+
+Não bloqueantes aplicados: conferência visual do cabeçalho da M237 (25/11, p.1) em
+§3.1/§9; item 3 e item 20 falam em título aquisitivo e "só no banco";
+`hipoteca cedular de 2º grau` em crases; §1.2 explica registro × averbação; item 7
+diz de qual campo é a confiança 1.0.
+
+#### Células por classe — 2ª revisão (v2 → v3)
+
+| Documento | `erro_confirmado` v2 | v3 | `divergencia_pendente` v2 | v3 |
+|---|---|---|---|---|
+| M6141 | 8 | 11 | 0 | 0 |
+| M237 | 9 | 11 | 7 | 7 |
+| M1754 | 3 | 3 | 0 | 0 |
+| **Total** | **20** | **25** | **7** | **7** |
+
+Mudanças de célula: +3 na M6141 (`origem`—número, descrição da abertura, data da
+transação) e +2 na M237 (folha e observação), todas de `dado_documental`/
+`interpretacao_humana` para `erro_confirmado`. Toda célula `erro_confirmado` tem
+item: origem—número→item 8; descrição/data da transação→item 19; folha→item 21;
+observação→item 22; as demais já tinham item na §6.
