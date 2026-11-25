@@ -15,6 +15,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import SimpleTestCase
 from django.utils import timezone
 
+from dominial.services.keyword_alerta_service import buscar_keyword
 from dominial.services.observacoes_analise import (
     AnaliseSemAutor,
     MARCADOR_ANALISE_RE,
@@ -225,3 +226,63 @@ class ObservacoesDaRequisicaoTest(SimpleTestCase):
 
         with self.assertRaises(AnaliseSemAutor):
             observacoes_da_requisicao(request)
+
+
+class QuebrasDeLinhaTest(SimpleTestCase):
+    """MUST-FIX 1 (#400 v2): o textarea posta CRLF; o contrato é ``\\n``.
+
+    Sem normalizar, ``doc\\r\\n\\r\\n[ANÁLISE — …]`` vira um parágrafo único e o
+    bloco do revisor volta a alimentar ``buscar_keyword``/``tem_analise``.
+    """
+
+    def _request(self, post, user=None):
+        return SimpleNamespace(POST=post, user=user)
+
+    def test_documental_sem_analise_tem_crlf_normalizado(self):
+        request = self._request({'observacoes': 'linha 1\r\nlinha 2\rlinha 3'})
+
+        self.assertEqual(
+            observacoes_da_requisicao(request), 'linha 1\nlinha 2\nlinha 3')
+
+    def test_documental_com_crlf_nao_duplica_o_bloco_analitico(self):
+        request = self._request(
+            {
+                'observacoes': (
+                    'documental\r\n\r\n'
+                    '[ANÁLISE — fulano — 2026-11-25] análise antiga'
+                ),
+                'analise_texto': 'análise nova',
+            },
+            UsuarioDeTeste(),
+        )
+
+        self.assertEqual(
+            observacoes_da_requisicao(request),
+            'documental\n\n'
+            '[ANÁLISE — fulano — 2026-11-25] análise antiga\n\n'
+            f'[ANÁLISE — fulano — {timezone.localdate().isoformat()}] '
+            'análise nova',
+        )
+
+    def test_remover_analises_cobre_linha_legada_gravada_com_crlf(self):
+        legado = (
+            'Área remanescente de 55 ha\r\n\r\n'
+            '[ANÁLISE — fulano — 2026-11-25] PENDENTE de certidão'
+        )
+
+        self.assertEqual(remover_analises(legado), 'Área remanescente de 55 ha')
+
+    def test_tem_analise_cobre_linha_legada_gravada_com_crlf(self):
+        self.assertTrue(
+            tem_analise(
+                'documental\r\n\r\n[ANÁLISE — fulano — 2026-11-25] texto'
+            )
+        )
+
+    def test_buscar_keyword_ignora_analise_legada_com_crlf(self):
+        legado = (
+            'Área remanescente\r\n\r\n'
+            '[ANÁLISE — fulano — 2026-11-25] PENDENTE de certidão'
+        )
+
+        self.assertIsNone(buscar_keyword(legado))
