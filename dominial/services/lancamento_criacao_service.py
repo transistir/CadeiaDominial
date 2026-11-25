@@ -371,13 +371,7 @@ class LancamentoCriacaoService:
             # Obter dados do formulário
             numero_lancamento = request.POST.get('numero_lancamento')
             data = request.POST.get('data')
-            # #400 v2: a edição usa o MESMO contrato da criação — normaliza o
-            # CRLF do textarea e aceita a análise digitada no formulário. Ler
-            # `request.POST['observacoes']` cru gravava o texto do round-trip
-            # verbatim (bloco analítico virava texto documental) e descartava
-            # em silêncio a análise nova.
-            observacoes = observacoes_da_requisicao(request)
-
+            observacoes = observacoes_da_requisicao(request)  # #400: CRLF + análise
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:
                 is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(
