@@ -144,6 +144,23 @@ class Issue400CriacaoPelaViewTest(Issue400RoundTripBase):
             Lancamento.objects.get(documento=self.doc).observacoes, DOCUMENTAL)
 
 
+class Issue400PreviewAutorTest(Issue400RoundTripBase):
+    """O preview do formulário mostra o MESMO nome que o serviço grava."""
+
+    def test_preview_usa_o_nome_completo_do_autor(self):
+        html = self.client.get(self.url_novo()).content.decode()
+        self.assertIn(f'[ANÁLISE — {AUTOR} — AAAA-MM-DD]', html)
+
+    def test_sem_nome_completo_o_preview_usa_o_username(self):
+        outro = User.objects.create_user(
+            username='semNome', password='semNomePass', first_name='   ')
+        atribuir_tis(outro, self.tis)
+        self.client.login(username='semNome', password='semNomePass')
+
+        html = self.client.get(self.url_novo()).content.decode()
+        self.assertIn('[ANÁLISE — semNome — AAAA-MM-DD]', html)
+
+
 class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
     """MUST-FIX 1: o marcador sobrevive ao round-trip com CRLF do navegador."""
 
@@ -187,9 +204,10 @@ class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
             response.status_code, 302, response.content.decode()[:800])
 
         lancamento.refresh_from_db()
+        self.assertIn(f'{MARCADOR} {ANALITICO}', lancamento.observacoes)
         self.assertIn(f'{MARCADOR} Soma das áreas confere com o R.5.',
                       lancamento.observacoes)
-        self.assertEqual(lancamento.observacoes.count(MARCADOR), 1)
+        self.assertTrue(lancamento.observacoes.startswith(DOCUMENTAL))
 
     def test_duas_edicoes_seguidas_nao_duplicam_nem_perdem_o_marcador(self):
         lancamento = self.criar_com_analise()

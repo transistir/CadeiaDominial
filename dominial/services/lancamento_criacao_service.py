@@ -11,6 +11,7 @@ from django.db import transaction
 from ..models import Documento, Lancamento, LancamentoTipo
 from ..utils.area_br import parse_area_br
 from .lancamento_form_service import LancamentoFormService
+from .observacoes_analise import observacoes_da_requisicao
 from .lancamento_validacao_service import LancamentoValidacaoService
 from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_campos_service import LancamentoCamposService
@@ -370,7 +371,12 @@ class LancamentoCriacaoService:
             # Obter dados do formulário
             numero_lancamento = request.POST.get('numero_lancamento')
             data = request.POST.get('data')
-            observacoes = request.POST.get('observacoes')
+            # #400 v2: a edição usa o MESMO contrato da criação — normaliza o
+            # CRLF do textarea e aceita a análise digitada no formulário. Ler
+            # `request.POST['observacoes']` cru gravava o texto do round-trip
+            # verbatim (bloco analítico virava texto documental) e descartava
+            # em silêncio a análise nova.
+            observacoes = observacoes_da_requisicao(request)
 
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:

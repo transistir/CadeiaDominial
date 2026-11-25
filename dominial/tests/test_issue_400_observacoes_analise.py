@@ -22,6 +22,7 @@ from dominial.services.observacoes_analise import (
     ROTULO_ANALISE,
     marcador_analise,
     nome_do_autor,
+    normalizar_quebras,
     observacoes_da_requisicao,
     registrar_analise,
     remover_analises,
@@ -74,6 +75,19 @@ class MarcadorAnaliseTest(SimpleTestCase):
         self.assertIsNone(
             MARCADOR_ANALISE_RE.match('Área remanescente de 55 ha 69 a 85 ca')
         )
+
+    def test_autor_com_caractere_do_marcador_ou_quebra_levanta_erro(self):
+        # O formato é contrato: autor não pode forjar nem quebrar o marcador.
+        for autor in ('fulano — x', 'fulano]', '[ANÁLISE', 'fulano\nforjado',
+                      'fulano\rforjado'):
+            with self.subTest(autor=autor):
+                with self.assertRaises(AnaliseSemAutor):
+                    marcador_analise(autor, date(2026, 11, 25))
+
+    def test_normalizar_quebras_converte_crlf_e_cr(self):
+        self.assertEqual(normalizar_quebras('a\r\nb\rc'), 'a\nb\nc')
+        self.assertEqual(normalizar_quebras(''), '')
+        self.assertIsNone(normalizar_quebras(None))
 
 
 class AutorTest(SimpleTestCase):

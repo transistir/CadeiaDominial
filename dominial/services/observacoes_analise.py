@@ -23,9 +23,13 @@ from django.utils import timezone
 
 ROTULO_ANALISE = 'ANÁLISE'
 
-# Autor sem ``—`` nem ``]``; data ISO — mesma forma que ``marcador_analise``
-# emite. Exportada porque exibição/filtros futuros precisam reconhecer o
-# bloco sem importar detalhes de implementação.
+# Contrato do marcador (formato EXATO, reconhecido por ``MARCADOR_ANALISE_RE``):
+#
+#     [ANÁLISE — <autor> — AAAA-MM-DD]
+#
+# ``<autor>`` nunca contém ``—``, ``[``, ``]`` nem quebra de linha (validado em
+# ``marcador_analise``); ``AAAA-MM-DD`` é data ISO. Qualquer mudança aqui exige
+# mudar a regex junto — exportação/PDF/filtros dependem desta forma.
 MARCADOR_ANALISE_RE = re.compile(
     r'\[' + re.escape(ROTULO_ANALISE)
     + r' — (?P<autor>[^—\]]+) — (?P<data>\d{4}-\d{2}-\d{2})\]'
@@ -36,6 +40,20 @@ _DATA_ISO_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 class AnaliseSemAutor(ValueError):
     """Análise só existe com autoria: falta de autor é erro explícito."""
+
+
+def normalizar_quebras(texto):
+    """Quebra de linha do campo é ``\\n`` — converte CRLF/CR na entrada.
+
+    O textarea do navegador submete ``\\r\\n`` mesmo quando o serviço gravou
+    ``\\n\\n`` como separador de blocos. Sem normalizar, o bloco analítico
+    volta colado ao documental num único parágrafo, ``remover_analises``
+    deixa de separá-lo e o texto do revisor passa a alimentar
+    ``buscar_keyword`` (#400 v2). ``None``/``''`` são preservados.
+    """
+    if not texto:
+        return texto
+    return texto.replace('\r\n', '\n').replace('\r', '\n')
 
 
 def nome_do_autor(user):
@@ -54,12 +72,15 @@ def nome_do_autor(user):
 def marcador_analise(autor, data=None):
     """``[ANÁLISE — <autor> — AAAA-MM-DD]``; data default = hoje local.
 
-    Autor vazio/só espaços, autor com ``—``/``]`` (quebraria o próprio
-    marcador) ou data fora do ISO ``AAAA-MM-DD`` levantam ``AnaliseSemAutor``.
+    Autor vazio/só espaços, autor com ``—``/``[``/``]`` ou quebra de linha
+    (qualquer um quebraria ou forjaria o próprio marcador) ou data fora do
+    ISO ``AAAA-MM-DD`` levantam ``AnaliseSemAutor``.
     """
     nome = str(autor).strip() if autor is not None else ''
-    if not nome or '—' in nome or ']' in nome:
-        raise AnaliseSemAutor('Análise exige autor válido (sem — nem ]).')
+    if not nome or any(caractere in nome for caractere in '—][\r\n'):
+        raise AnaliseSemAutor(
+            'Análise exige autor válido (sem —, [, ] nem quebras de linha).'
+        )
 
     if data is None:
         data = timezone.localdate()
@@ -81,12 +102,12 @@ def registrar_analise(documental, texto_analise, autor, data=None):
     - senão: documental normalizado + ``\\n\\n`` + marcador + texto. Sem
       documental, sai só o bloco analítico.
     """
-    texto = (texto_analise or '').strip()
+    texto = normalizar_quebras(texto_analise or '').strip()
     if not texto:
         return documental
 
     marcador = marcador_analise(autor, data)
-    documental_limpo = (documental or '').strip()
+    documental_limpo = normalizar_quebras(documental or '').strip()
     bloco = f'{marcador} {texto}'
     if documental_limpo:
         return f'{documental_limpo}\n\n{bloco}'
@@ -94,7 +115,9 @@ def registrar_analise(documental, texto_analise, autor, data=None):
 
 
 def _blocos_de_paragrafo(texto):
-    return texto.split('\n\n')
+    # Normaliza na entrada: linhas legadas já gravadas com CRLF (e o POST de
+    # edição do navegador) precisam separar blocos igual às gravadas com \n\n.
+    return normalizar_quebras(texto).split('\n\n')
 
 
 def remover_analises(texto):
@@ -126,11 +149,13 @@ def tem_analise(texto):
 def observacoes_da_requisicao(request):
     """Valor de ``observacoes`` a gravar, já com a análise marcada.
 
-    Sem ``analise_texto`` devolve o POST do campo documental EXATAMENTE como
-    veio (preserva ``None``/``''``). Com análise, exige usuário autenticado:
-    sem autor levanta ``AnaliseSemAutor`` e nada é gravado.
+    Sem ``analise_texto`` devolve o POST do campo documental com as quebras
+    de linha normalizadas para ``\\n`` (preserva ``None``/``''``/espaços).
+    Com análise, exige usuário autenticado: sem autor levanta
+    ``AnaliseSemAutor`` e nada é gravado. Nos dois ramos o contrato do campo
+    é ``\\n`` — o CRLF do textarea nunca chega ao banco (#400 v2).
     """
-    documental = request.POST.get('observacoes')
+    documental = normalizar_quebras(request.POST.get('observacoes'))
     texto_analise = request.POST.get('analise_texto')
     if not (texto_analise or '').strip():
         return documental
