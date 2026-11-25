@@ -234,8 +234,11 @@
                                           -
                                         {% endif %}
                                       </td>
-                                    <!-- Observações do lançamento -->
-                                    <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                                    <!-- Observações do lançamento: só o texto
+                                         documental — a análise do revisor
+                                         (#400) é pendência de revisão e não
+                                         entra na exportação. -->
+                                    <td>{{ lancamento.observacoes|texto_documental|default:"-" }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

@@ -7,13 +7,22 @@ tipos de conteúdo e eles NUNCA se misturam sem marca:
 
 - **documental** — texto literal com lastro no documento, sem prefixo;
 - **analítica** — ressalva/cálculo/conclusão do revisor, sempre marcada com
-  autor e data: ``[ANÁLISE — <autor> — AAAA-MM-DD] <texto>``.
+  autor e data e delimitada:
+
+      [ANÁLISE — <autor> — AAAA-MM-DD] <texto, com parágrafos>
+      [/ANÁLISE]
+
+O delimitador de fim existe para o bloco analítico ter fronteira mesmo com
+``\\n\\n`` internos: sem ele, só o primeiro parágrafo do revisor saía do texto e o
+resto virava documental — e disparava badge (P1 #2 do Greptile, #400 v4).
 
 Não há migration nesta etapa: a autoria vive no próprio texto. A evolução
 para campo/tabela própria fica para depois, condicionada ao dono.
 
-O prefill escreve apenas texto documental; a análise só entra por ação
-explícita do revisor e com usuário autenticado.
+**O texto analítico é do servidor.** ``observacoes_da_requisicao`` nunca aceita
+marcador vindo do POST: o textarea documental passa por ``remover_analises`` e
+os blocos já gravados no banco são reanexados por ``analise_existente``. Autor e
+data só nascem do usuário autenticado (P1 #1 do Greptile, #400 v4).
 """
 
 import re
@@ -22,6 +31,7 @@ from django.utils import timezone
 
 
 ROTULO_ANALISE = 'ANÁLISE'
+DELIMITADOR_FIM = '[/ANÁLISE]'
 
 # Contrato do marcador (formato EXATO, reconhecido por ``MARCADOR_ANALISE_RE``):
 #
@@ -93,72 +103,142 @@ def marcador_analise(autor, data=None):
     return f'[{ROTULO_ANALISE} — {nome} — {data_iso}]'
 
 
+def _sem_delimitadores(texto):
+    """Tira do texto do revisor o que forjaria o próprio bloco.
+
+    Marcador e ``[/ANÁLISE]`` são do servidor: digitados no texto analítico,
+    encerrariam o bloco antes da hora e o resto do texto do revisor vazaria
+    como documental (badge indevido).
+    """
+    limpo = MARCADOR_ANALISE_RE.sub('', texto.replace(DELIMITADOR_FIM, ''))
+    return limpo.strip()
+
+
 def registrar_analise(documental, texto_analise, autor, data=None):
-    """Junta documental + bloco analítico marcado.
+    """Junta documental + bloco analítico marcado e fechado.
 
     - ``texto_analise`` vazio/só espaços devolve ``documental`` INTACTO
       (documental nunca recebe prefixo);
     - sem autor levanta ``AnaliseSemAutor``;
-    - senão: documental normalizado + ``\\n\\n`` + marcador + texto. Sem
-      documental, sai só o bloco analítico.
+    - senão: documental normalizado + ``\\n\\n`` + marcador + texto +
+      ``\\n[/ANÁLISE]``. Sem documental, sai só o bloco analítico.
     """
-    texto = normalizar_quebras(texto_analise or '').strip()
+    texto = _sem_delimitadores(normalizar_quebras(texto_analise or ''))
     if not texto:
         return documental
 
     marcador = marcador_analise(autor, data)
     documental_limpo = normalizar_quebras(documental or '').strip()
-    bloco = f'{marcador} {texto}'
+    bloco = f'{marcador} {texto}\n{DELIMITADOR_FIM}'
     if documental_limpo:
         return f'{documental_limpo}\n\n{bloco}'
     return bloco
 
 
-def _blocos_de_paragrafo(texto):
-    # Normaliza na entrada: linhas legadas já gravadas com CRLF (e o POST de
-    # edição do navegador) precisam separar blocos igual às gravadas com \n\n.
-    return normalizar_quebras(texto).split('\n\n')
+def _particionar(texto):
+    """``(documental, blocos_analíticos)`` numa única passada, por parágrafo.
+
+    Regra do bloco: começa num parágrafo com marcador e termina no
+    ``[/ANÁLISE]`` — inclusive quando o texto do revisor tem ``\\n\\n``
+    internos. Bloco **legado** (gravado antes do delimitador de fim, v1–v3)
+    não tem fronteira confiável: vale do marcador até o próximo marcador ou o
+    fim do texto; a regra é escolhida a favor de não vazar análise como
+    documental (badge do sistema nasceria do texto do revisor).
+
+    Fechamento e marcador são procurados dentro do parágrafo: sobra documental
+    no mesmo parágrafo depois do ``[/ANÁLISE]`` é preservada.
+    """
+    documental, analises = [], []
+    texto = normalizar_quebras(texto)
+    if not texto:
+        return '', []
+
+    em_analise = None
+    for bruto in texto.split('\n\n'):
+        resto = bruto
+        if em_analise is not None:
+            if MARCADOR_ANALISE_RE.match(resto.lstrip()):
+                # Legado sem fechamento termina no próximo marcador.
+                analises.append('\n\n'.join(em_analise).strip())
+                em_analise = None
+            else:
+                fim = resto.find(DELIMITADOR_FIM)
+                if fim < 0:
+                    em_analise.append(resto)
+                    continue
+                em_analise.append(resto[:fim + len(DELIMITADOR_FIM)])
+                analises.append('\n\n'.join(em_analise).strip())
+                em_analise = None
+                sobra = resto[fim + len(DELIMITADOR_FIM):]
+                if sobra.strip():
+                    documental.append(sobra)
+                continue
+
+        if not MARCADOR_ANALISE_RE.match(resto.lstrip()):
+            documental.append(bruto)
+            continue
+
+        fim = resto.find(DELIMITADOR_FIM)
+        if fim < 0:
+            em_analise = [resto]
+            continue
+        analises.append(resto[:fim + len(DELIMITADOR_FIM)].strip())
+        sobra = resto[fim + len(DELIMITADOR_FIM):]
+        if sobra.strip():
+            documental.append(sobra)
+
+    if em_analise is not None:
+        analises.append('\n\n'.join(em_analise).strip())
+
+    return '\n\n'.join(documental).strip(), analises
+
+
+def blocos_de_analise(texto):
+    """Blocos analíticos completos (marcador + texto + fechamento) do campo."""
+    return _particionar(texto)[1]
+
+
+def analises_marcadas(texto):
+    """Blocos analíticos prontos para exibição somente leitura (``\\n\\n``)."""
+    return '\n\n'.join(blocos_de_analise(texto))
 
 
 def remover_analises(texto):
-    """Remove blocos analíticos inteiros; preserva o documental.
+    """Remove os blocos analíticos inteiros; preserva o documental.
 
-    Determinístico por parágrafo: descarta o bloco cujo texto começa com o
-    marcador, rejunta o resto com ``\\n\\n``.
+    Única implementação usada por badge (``buscar_keyword``), gravação e
+    exportações (PDF/Excel): o que não é documental não dispara alerta nem
+    vaza para o documento.
     """
-    if not texto:
-        return ''
-    blocos = _blocos_de_paragrafo(texto)
-    restantes = [
-        bloco for bloco in blocos
-        if not MARCADOR_ANALISE_RE.match(bloco.lstrip())
-    ]
-    return '\n\n'.join(restantes)
+    return _particionar(texto)[0]
 
 
 def tem_analise(texto):
     """Há ao menos um bloco analítico marcado?"""
-    if not texto:
-        return False
-    return any(
-        MARCADOR_ANALISE_RE.match(bloco.lstrip())
-        for bloco in _blocos_de_paragrafo(texto)
-    )
+    return bool(blocos_de_analise(texto))
 
 
-def observacoes_da_requisicao(request):
-    """Valor de ``observacoes`` a gravar, já com a análise marcada.
+def observacoes_da_requisicao(request, analise_existente=''):
+    """Valor de ``observacoes`` a gravar: documental do POST + análise do servidor.
 
-    Sem ``analise_texto`` devolve o POST do campo documental com as quebras
-    de linha normalizadas para ``\\n`` (preserva ``None``/``''``/espaços).
-    Com análise, exige usuário autenticado: sem autor levanta
-    ``AnaliseSemAutor`` e nada é gravado. Nos dois ramos o contrato do campo
-    é ``\\n`` — o CRLF do textarea nunca chega ao banco (#400 v2).
+    - o textarea documental passa por ``remover_analises``: marcador digitado
+      ali é descartado e nunca vira autoria (#400 v4, P1 #1);
+    - os blocos já gravados (``analise_existente``, valor do banco) são
+      reanexados intactos — editar outro campo não perde autor/data originais;
+    - ``analise_texto`` é assinado pelo usuário logado (``AnaliseSemAutor`` sem
+      autor) e não duplica bloco já presente.
+
+    O contrato de quebra de linha do campo é ``\\n`` — o CRLF do textarea nunca
+    chega ao banco (#400 v2).
     """
-    documental = normalizar_quebras(request.POST.get('observacoes'))
-    texto_analise = request.POST.get('analise_texto')
-    if not (texto_analise or '').strip():
-        return documental
+    documental = remover_analises(request.POST.get('observacoes'))
+    blocos = blocos_de_analise(analise_existente)
+    texto_analise = normalizar_quebras(request.POST.get('analise_texto') or '')
 
-    autor = nome_do_autor(getattr(request, 'user', None))
-    return registrar_analise(documental, texto_analise, autor)
+    if texto_analise.strip():
+        autor = nome_do_autor(getattr(request, 'user', None))
+        novo = registrar_analise('', texto_analise, autor)
+        if novo not in blocos:
+            blocos.append(novo)
+
+    return '\n\n'.join(parte for parte in [documental] + blocos if parte)

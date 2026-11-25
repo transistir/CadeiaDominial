@@ -371,7 +371,7 @@ class LancamentoCriacaoService:
             # Obter dados do formulário
             numero_lancamento = request.POST.get('numero_lancamento')
             data = request.POST.get('data')
-            observacoes = observacoes_da_requisicao(request)  # #400: CRLF + análise
+            observacoes = observacoes_da_requisicao(request, analise_existente=lancamento.observacoes)  # #400: CRLF + análise do servidor
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:
                 is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(

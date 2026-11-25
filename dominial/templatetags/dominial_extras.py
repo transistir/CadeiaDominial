@@ -7,7 +7,11 @@ from dominial.utils.formatacao_utils import (
     formatar_area_ha as _formatar_area_ha,
     formatar_origem_completa,
 )
-from dominial.services.observacoes_analise import nome_do_autor
+from dominial.services.observacoes_analise import (
+    analises_marcadas as _analises_marcadas,
+    nome_do_autor,
+    remover_analises as _remover_analises,
+)
 
 register = template.Library()
 
@@ -36,6 +40,22 @@ def nome_autor(user):
     pode divergir do nome que vai para o banco.
     """
     return nome_do_autor(user) or ''
+
+
+@register.filter
+def texto_documental(observacoes):
+    """Só o texto documental de ``observacoes`` (#400 v4).
+
+    Usado no textarea do formulário (o bloco analítico tem área somente
+    leitura própria) e nas exportações PDF/Excel.
+    """
+    return _remover_analises(observacoes)
+
+
+@register.filter
+def analises_marcadas(observacoes):
+    """Blocos analíticos do campo, para exibição somente leitura (#400 v4)."""
+    return _analises_marcadas(observacoes)
 
 @register.filter
 def get_item(dictionary, key):

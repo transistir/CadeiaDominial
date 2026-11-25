@@ -133,7 +133,7 @@ class Issue400CriacaoPelaViewTest(Issue400RoundTripBase):
 
         self.assertEqual(
             lancamento.observacoes,
-            f'{DOCUMENTAL}\n\n{MARCADOR} {ANALITICO}',
+            f'{DOCUMENTAL}\n\n{MARCADOR} {ANALITICO}\n[/ANÁLISE]',
         )
 
     def test_criacao_sem_analise_nao_prefixa_o_documental(self):
@@ -162,15 +162,23 @@ class Issue400PreviewAutorTest(Issue400RoundTripBase):
 
 
 class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
-    """MUST-FIX 1: o marcador sobrevive ao round-trip com CRLF do navegador."""
+    """MUST-FIX 1: o marcador sobrevive ao round-trip com CRLF do navegador.
 
-    def test_edicao_de_outro_campo_nao_gera_badge_a_partir_da_analise(self):
+    v4: o textarea leva SÓ o documental — o bloco analítico fica em área
+    somente leitura e o servidor o reanexa a cada gravação.
+    """
+
+    def test_edicao_de_outro_campo_nao_perde_nem_duplica_a_analise(self):
         lancamento = self.criar_com_analise()
 
         # O navegador reenvia o textarea pré-preenchido COM CRLF.
         html = self.client.get(self.url_editar(lancamento)).content.decode()
         textarea = _valor_do_textarea(html, 'observacoes')
-        self.assertIn(MARCADOR, textarea)
+        self.assertNotIn(MARCADOR, textarea)
+        self.assertEqual(textarea.strip(), DOCUMENTAL)
+        # O bloco do banco aparece fora do textarea (somente leitura).
+        self.assertIn(MARCADOR, html)
+        self.assertIn(ANALITICO, html)
 
         response = self.post_edicao(
             lancamento, textarea.replace('\n', '\r\n'), data='1951-04-11')
@@ -179,7 +187,8 @@ class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
 
         lancamento.refresh_from_db()
         self.assertNotIn('\r', lancamento.observacoes)
-        self.assertIn(MARCADOR, lancamento.observacoes)
+        self.assertEqual(lancamento.observacoes.count(MARCADOR), 1)
+        self.assertIn(f'{MARCADOR} {ANALITICO}', lancamento.observacoes)
         # O badge NÃO pode nascer da análise do revisor.
         self.assertIsNone(buscar_keyword(lancamento.observacoes))
         self.assertEqual(remover_analises(lancamento.observacoes), DOCUMENTAL)
@@ -198,7 +207,7 @@ class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
         lancamento = self.criar_com_analise()
 
         response = self.post_edicao(
-            lancamento, f'{DOCUMENTAL}\n\n{MARCADOR} {ANALITICO}',
+            lancamento, DOCUMENTAL,
             analise_texto='Soma das áreas confere com o R.5.')
         self.assertEqual(
             response.status_code, 302, response.content.decode()[:800])
@@ -222,3 +231,91 @@ class Issue400RoundTripEdicaoTest(Issue400RoundTripBase):
 
         self.assertEqual(lancamento.observacoes.count(MARCADOR), 1)
         self.assertIsNone(buscar_keyword(lancamento.observacoes))
+
+
+class Issue400ForjaDeAutorTest(Issue400RoundTripBase):
+    """P1 #1 do Greptile: o POST documental não cria análise nem autoria."""
+
+    FORJADO = f'[ANÁLISE — Outro revisor — 2026-11-25] aprovado'
+
+    def test_marcador_forjado_no_textarea_nao_chega_ao_banco(self):
+        response = self.post_novo(f'{DOCUMENTAL}\n\n{self.FORJADO}')
+        self.assertEqual(
+            response.status_code, 302, response.content.decode()[:800])
+
+        lancamento = Lancamento.objects.get(documento=self.doc)
+        self.assertNotIn('[ANÁLISE', lancamento.observacoes)
+        self.assertNotIn('Outro revisor', lancamento.observacoes)
+        self.assertEqual(remover_analises(lancamento.observacoes), DOCUMENTAL)
+
+    def test_html_de_edicao_nao_exibe_a_autoria_forjada(self):
+        self.post_novo(f'{DOCUMENTAL}\n\n{self.FORJADO}')
+        lancamento = Lancamento.objects.get(documento=self.doc)
+
+        html = self.client.get(self.url_editar(lancamento)).content.decode()
+
+        self.assertNotIn('Outro revisor', html)
+        self.assertNotIn('aprovado', html)
+
+    def test_keyword_digitado_no_campo_documental_dispara_badge(self):
+        response = self.post_novo(
+            f'PENDENTE de certidão\n\n{self.FORJADO}')
+        self.assertEqual(response.status_code, 302)
+
+        lancamento = Lancamento.objects.get(documento=self.doc)
+        resultado = buscar_keyword(lancamento.observacoes)
+
+        self.assertIsNotNone(resultado)
+        self.assertEqual(resultado['label'], 'PENDENTE')
+        self.assertNotIn('Outro revisor', lancamento.observacoes)
+
+    def test_edicao_com_marcador_forjado_preserva_so_a_analise_do_banco(self):
+        lancamento = self.criar_com_analise()
+
+        response = self.post_edicao(
+            lancamento, f'{DOCUMENTAL}\n\n{self.FORJADO}')
+        self.assertEqual(response.status_code, 302)
+
+        lancamento.refresh_from_db()
+        self.assertNotIn('Outro revisor', lancamento.observacoes)
+        self.assertEqual(lancamento.observacoes.count(MARCADOR), 1)
+
+
+class Issue400AnaliseMultiParagrafoTest(Issue400RoundTripBase):
+    """P1 #2 do Greptile: todos os parágrafos do revisor ficam no bloco."""
+
+    ANALISE_2_PARAGRAFOS = 'Soma confere.\n\nPENDENTE de certidão'
+
+    def test_analise_com_dois_paragrafos_nao_gera_badge(self):
+        response = self.post_novo(DOCUMENTAL, self.ANALISE_2_PARAGRAFOS)
+        self.assertEqual(
+            response.status_code, 302, response.content.decode()[:800])
+
+        lancamento = Lancamento.objects.get(documento=self.doc)
+
+        self.assertIsNone(buscar_keyword(lancamento.observacoes))
+        self.assertIn('[/ANÁLISE]', lancamento.observacoes)
+        self.assertEqual(remover_analises(lancamento.observacoes), DOCUMENTAL)
+
+    def test_segundo_paragrafo_nao_aparece_no_textarea_documental(self):
+        self.post_novo(DOCUMENTAL, self.ANALISE_2_PARAGRAFOS)
+        lancamento = Lancamento.objects.get(documento=self.doc)
+
+        html = self.client.get(self.url_editar(lancamento)).content.decode()
+        textarea = _valor_do_textarea(html, 'observacoes')
+
+        self.assertEqual(textarea.strip(), DOCUMENTAL)
+        # ...mas o revisor continua vendo a análise inteira na leitura.
+        self.assertIn('PENDENTE de certidão', html)
+
+    def test_edicao_posterior_nao_libera_o_segundo_paragrafo(self):
+        self.post_novo(DOCUMENTAL, self.ANALISE_2_PARAGRAFOS)
+        lancamento = Lancamento.objects.get(documento=self.doc)
+
+        response = self.post_edicao(lancamento, DOCUMENTAL)
+        self.assertEqual(response.status_code, 302)
+
+        lancamento.refresh_from_db()
+        self.assertIsNone(buscar_keyword(lancamento.observacoes))
+        self.assertIn('PENDENTE de certidão', lancamento.observacoes)
+        self.assertEqual(remover_analises(lancamento.observacoes), DOCUMENTAL)

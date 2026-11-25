@@ -179,7 +179,7 @@
                                   -
                                 {% endif %}
                               </td>
-                            <td>{{ lancamento.observacoes|default_if_none:"-" }}</td>
+                            <td>{{ lancamento.observacoes|texto_documental|default:"-" }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

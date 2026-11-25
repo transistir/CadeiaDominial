@@ -1,8 +1,11 @@
 """
-Issue #400 — PDF e Excel já imprimem ``Lancamento.observacoes`` cru: o
-marcador ``[ANÁLISE — autor — data]`` precisa aparecer verbatim nas duas
-exportações (§5, regra 3). Nenhuma alteração nesses arquivos — o teste prova
-o comportamento existente contra a fixture real da cadeia.
+Issue #400 — PDF e Excel exportam SÓ o texto documental.
+
+v4 (P1 #1/#2 do Greptile): o bloco ``[ANÁLISE — autor — data] … [/ANÁLISE]`` é
+pendência de revisão, não texto do cartório — sai das duas exportações pela
+mesma ``remover_analises`` usada pelo badge e pela gravação. Antes o texto ia
+verbatim (regra 3 original do §5) e uma autoria forjada no textarea documental
+chegava ao PDF/Excel.
 
 Fixture no molde de ``test_issue_172_suprimir_troncos.py``:
 ``Lancamento.objects.bulk_create`` evita o signal de origens automáticas e
@@ -36,9 +39,10 @@ from dominial.views import cadeia_dominial_views
 
 TEXTO_DOCUMENTAL = 'Área remanescente de 55 ha 69 a 85 ca'
 MARCADOR = '[ANÁLISE — fulano — 2026-11-25]'
+ANALISE = 'Soma das áreas confere com o R.5.'
 OBSERVACOES = registrar_analise(
     TEXTO_DOCUMENTAL,
-    'Soma das áreas confere com o R.5.',
+    ANALISE,
     'fulano',
     date(2026, 11, 25),
 )
@@ -82,8 +86,8 @@ class _BaseExportacao400(TestCase):
         ])
 
 
-class PdfMarcadorAnaliseTest(_BaseExportacao400):
-    def test_pdf_mostra_documental_e_marcador_verbatim(self):
+class PdfSomenteDocumentalTest(_BaseExportacao400):
+    def test_pdf_mostra_o_documental_e_omite_o_bloco_de_analise(self):
         contexto = CadeiaCompletaService(
             documentos_queryset=ESCOPO_GLOBAL,
         ).get_cadeia_completa(self.tis.id, self.imovel.id)
@@ -91,11 +95,12 @@ class PdfMarcadorAnaliseTest(_BaseExportacao400):
         html = render_to_string('dominial/cadeia_completa_pdf.html', contexto)
 
         self.assertIn(TEXTO_DOCUMENTAL, html)
-        self.assertIn(MARCADOR, html)
-        self.assertIn('Soma das áreas confere com o R.5.', html)
+        self.assertNotIn(MARCADOR, html)
+        self.assertNotIn(ANALISE, html)
+        self.assertNotIn('[/ANÁLISE]', html)
 
 
-class ExcelMarcadorAnaliseTest(_BaseExportacao400):
+class ExcelSomenteDocumentalTest(_BaseExportacao400):
     def _workbook(self):
         request = RequestFactory().get('/excel/')
         request.user = usuario_com_tis('user_test_400', self.tis)
@@ -108,7 +113,7 @@ class ExcelMarcadorAnaliseTest(_BaseExportacao400):
         self.assertEqual(resposta.status_code, 200)
         return load_workbook(BytesIO(resposta.content))
 
-    def test_excel_mostra_documental_e_marcador_em_celula(self):
+    def test_excel_mostra_o_documental_e_omite_o_bloco_de_analise(self):
         workbook = self._workbook()
         celulas = [
             str(cell.value)
@@ -120,4 +125,6 @@ class ExcelMarcadorAnaliseTest(_BaseExportacao400):
         texto = '\n'.join(celulas)
 
         self.assertIn(TEXTO_DOCUMENTAL, texto)
-        self.assertIn(MARCADOR, texto)
+        self.assertNotIn(MARCADOR, texto)
+        self.assertNotIn(ANALISE, texto)
+        self.assertNotIn('[/ANÁLISE]', texto)
