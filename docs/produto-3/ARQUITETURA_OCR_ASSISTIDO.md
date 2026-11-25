@@ -181,13 +181,32 @@ Regras de implementação (sem migration nesta etapa):
 1. O prefill escreve **só** texto documental em `observacoes`; análise nunca é
    preenchida automaticamente.
 2. A tela de revisão e o formulário manual ganham ação explícita "registrar
-   análise"; o texto sai com o marcador e o autor.
-3. Exibição, PDF e Excel mostram o marcador (não há como confundir).
+   análise"; o texto sai com o marcador e o autor. O contrato de quebra de linha
+   do campo é `\n`: o CRLF que o textarea do navegador devolve é normalizado na
+   entrada (criação **e** edição), senão o bloco analítico volta colado ao
+   documental e o badge do sistema nasce do texto do revisor (#400 v2).
+3. Exibição (tela e formulário) mostra o marcador e o fechamento
+   `[/ANÁLISE]` — não há como confundir. **PDF e Excel exportam só o texto
+   documental**: a análise é pendência de revisão, não texto do cartório
+   (#400 v4, achados P1 do Greptile no PR #409).
 4. `buscar_keyword` (`keyword_alerta_service.py:11`) **ignora** blocos
    analíticos ao procurar "atenção"/"pendente" — alerta do sistema não pode ser
    criado por texto do sistema. Teste dedicado.
 5. Migração para campo/tabela própria (autor, tipo, vínculo) fica como
    evolução futura, condicionada a aprovação do dono.
+6. **Limite aceito do Q1=b:** colar à mão um bloco analítico — ou um texto que
+   imite o marcador — no campo documental continua possível; o campo é texto
+   livre e não há migration nesta etapa. A marca (autor + data) é o que separa
+   os dois tipos; sem ela, o conteúdo é documental por definição. O que muda
+   com o #400 v4: o marcador digitado no textarea documental é **descartado**
+   na gravação (`observacoes_da_requisicao`) — o texto não vira análise nem
+   autoria; só o servidor emite bloco marcado e fechado. A regra 5 é o caminho
+   que fecha esse limite.
+7. A análise digitada sobrevive ao retry e à importação de cadeia duplicada:
+   `_form_data_do_post` devolve `analise_texto` ao re-render, o template de
+   duplicata o leva em campo oculto até `observacoes_da_requisicao`, e reenviar
+   o mesmo texto não cria bloco repetido — a comparação é pelo texto do
+   revisor, não pelo marcador (#400 v4b, P1 #3 do Greptile).
 
 ## 6. Aprendizado
 
@@ -239,7 +258,7 @@ Relatório reproduzível = comando + hash do PDF + `job_id` + data.
 |---|---|---|---|---|
 | **F0** | Este documento + ajuste do `PLANO_INTEGRACAO` + seção F3.1 no ROADMAP | — | docs revisados, sem código | ½ dia |
 | **F1** | **#396** parser único de área pt-BR (formulário, revisão, edição) | — | teste RED→GREEN com `1.000`, `1.234,5678`, `1234,5678`, `150,5`, `150.5`; round-trip form→banco→exibição | 1 dia |
-| **F2** | Observações documental × analítica (§5) | F1 | teste: prefill nunca escreve marcador; análise só com autor; `buscar_keyword` ignora análise; PDF/Excel mostram marca | 1 dia |
+| **F2** | Observações documental × analítica (§5) | F1 | teste: prefill nunca escreve marcador; análise só com autor; `buscar_keyword` ignora análise; tela mostra a marca e PDF/Excel exportam só o documental | 1 dia |
 | **F3** | Vocabulário compartilhado: fecha ocr-service #74/#70 e app #372 | F2 | Fase A (sintética): JSON schema v1 válido, teste de PII, hash fixado, prefill casa "Venda e compra". Fase B (produção): só após autorização do dono e com allowlist de `forma`/`titulo` aprovada | 1–2 dias |
 | **F4** | Base de exemplos privada + export read-only | F3 (reusa vocabulário) | artefato fora do git com sha256/contagens; zero PII; comando parametrizado | 2 dias |
 | **F5** | Recuperação contextual na extração | F4 | ganho medido no scorer com/sem contexto na mesma fixture; flag de rollback | 1–2 dias |

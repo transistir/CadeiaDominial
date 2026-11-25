@@ -138,18 +138,17 @@ def _resolver_lancamento_no_contexto_do_imovel(imovel, lancamento_id, user):
 
 
 def _form_data_do_post(request):
-    """Reconstrói o estado do formulário de lançamento a partir do POST para
-       re-renderizar o formulário sem perder o que o usuário digitou depois de
-       um erro de validação ou do fluxo de duplicata (issue #157).
-
-       Inclui os 7 campos do bloco Transmissão (`*_transacao`), que antes eram
-       lidos por nomes fantasmas (`forma`/`titulo`) e nunca sobreviviam."""
+    """Estado do formulário reconstruído do POST (erro de validação ou
+       duplicata, issue #157): os 7 campos do bloco Transmissão antes eram
+       nomes fantasmas. #400 v4b: a análise digitada (`analise_texto`) volta
+       ao re-render."""
     return {
         'tipo_lancamento': request.POST.get('tipo_lancamento'),
         'numero_lancamento': request.POST.get('numero_lancamento'),
         'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
         'data': request.POST.get('data'),
         'observacoes': request.POST.get('observacoes'),
+        'analise_texto': request.POST.get('analise_texto'),
         'livro_documento': request.POST.get('livro_documento'),
         'folha_documento': request.POST.get('folha_documento'),
         'transmitente_ids': request.POST.getlist('transmitente[]'),
@@ -500,6 +499,7 @@ def novo_lancamento(request, tis_id, imovel_id, documento_id=None):
                         'numero_lancamento_simples': request.POST.get('numero_lancamento_simples'),
                         'data': request.POST.get('data'),
                         'observacoes': request.POST.get('observacoes'),
+                        'analise_texto': request.POST.get('analise_texto'),
                         'livro_documento': request.POST.get('livro_documento'),
                         'folha_documento': request.POST.get('folha_documento'),
                         'cartorio': request.POST.get('cartorio'),
@@ -684,15 +684,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             if mensagem_origens:
                 messages.info(request, mensagem_origens)
             
-            # Verificar se o usuário marcou "finalizar"
-            finalizar = request.POST.get('finalizar') == 'on'
-            
-            if finalizar:
-                # Redirecionar para a visualização detalhada do documento
-                return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
-            else:
-                # Redirecionar para a página do documento detalhado
-                return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
+            # Sucesso: sempre volta ao documento detalhado (o "finalizar" não
+            # muda o destino — os dois ramos já redirecionavam igual, #400).
+            return redirect('documento_detalhado', tis_id=tis.id, imovel_id=imovel.id, documento_id=lancamento.documento.id)
         else:
             messages.error(request, mensagem_origens)
             # Re-render a partir do POST: nada foi salvo, então o banco e a
@@ -709,7 +703,7 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
             # a partir do POST rejeitado.
             try:
                 lancamento.refresh_from_db(
-                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao']
+                    fields=['cartorio_origem', 'cartorio_transmissao', 'cartorio_transacao', 'observacoes']
                 )
             except Lancamento.DoesNotExist:
                 # Casos extremos: lançamento foi rolled back
@@ -784,6 +778,9 @@ def editar_lancamento(request, tis_id, imovel_id, lancamento_id):
         # r3: preservar o id válido do POST no hidden (homônimos não colidem)
         'transmissao_id_do_post': transmissao_id_do_post,
         'post_rejeitado': post_rejeitado,
+        # v4c: POST rejeitado devolve ao re-render o que o revisor digitou
+        # (só texto; a autoria é do servidor na gravação).
+        'form_data': _form_data_do_post(request) if post_rejeitado else None,
         **_flags_livro_folha_definidos(lancamento.documento),
     }
     

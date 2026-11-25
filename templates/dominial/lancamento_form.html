@@ -168,7 +168,7 @@
         <!-- Campo de área e origem -->
         {% include "dominial/components/_area_origem_form.html" with area_obrigatorio=False origem_obrigatorio=True container_id="origens-container" %}
 
-        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" %}
+        {% include "dominial/components/_observacoes_form.html" with observacoes_obrigatorio=False placeholder="Observações adicionais sobre o lançamento" permite_registrar_analise=True %}
 
         <div class="form-actions">
             <button type="submit" class="btn btn-success">Salvar Lançamento</button>

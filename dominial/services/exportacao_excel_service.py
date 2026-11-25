@@ -10,10 +10,8 @@ exatamente o mesmo layout de colunas usado no PDF completo
 (`cadeia_completa_pdf.html`): mesmos cabeçalhos, mesmas larguras de coluna,
 mesmos estilos e a mesma lógica de escrita de cada documento/lançamento.
 
-Este módulo concentra esse layout num único lugar (extraído da view
-original de exportação por imóvel) justamente para que os dois exports não
-divirjam ao longo do tempo: qualquer ajuste de coluna, cor ou formatação
-deve ser feito aqui, uma única vez, e passa a valer para os dois.
+Este módulo concentra o layout num único lugar (extraído da view original de
+exportação por imóvel): os dois exports não divergem e o ajuste é feito aqui.
 """
 
 import re
@@ -26,6 +24,7 @@ from openpyxl.worksheet.properties import PageSetupProperties
 
 from ..utils import abreviar_cartorio, normalizar_texto_opcional
 from ..utils.formatacao_utils import formatar_area_ha, formatar_origem_completa
+from .observacoes_analise import remover_analises
 
 # 16 colunas (A até P). `ULTIMA_COLUNA` é derivada de `TOTAL_COLUNAS` para
 # nunca ficarem dessincronizadas.
@@ -435,8 +434,9 @@ def escrever_secao_documentos(ws, cadeia_completa, linha_inicial, estilos=None):
                 escrever_celula_segura(
                     ws, row, 15, formatar_origem_completa(lancamento)
                 ).border = border
+                # Observações (#400): exporta só o documental (análise é revisão).
                 escrever_celula_segura(
-                    ws, row, 16, lancamento.observacoes or "-"
+                    ws, row, 16, remover_analises(lancamento.observacoes) or "-"
                 ).border = border
 
                 zebra_fill = (

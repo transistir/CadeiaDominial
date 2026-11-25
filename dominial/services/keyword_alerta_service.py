@@ -1,6 +1,8 @@
 import re
 import unicodedata
 
+from .observacoes_analise import remover_analises
+
 
 PALAVRAS_CHAVE_ALERTA = [
     {'label': 'ATENÇÃO', 'slug': 'atencao', 'priority': 2, 'css_class': 'alerta-atencao'},
@@ -18,6 +20,12 @@ def buscar_keyword(observacoes):
     - Retorna o dict da PALAVRAS_CHAVE_ALERTA correspondente
     """
     if not observacoes:
+        return None
+
+    # #400: o badge não pode nascer de texto do sistema. Blocos analíticos
+    # ([ANÁLISE — autor — data]) saem antes da busca; só o documental conta.
+    observacoes = remover_analises(observacoes)
+    if not observacoes.strip():
         return None
 
     # Normalizar acentos: remover diacritics

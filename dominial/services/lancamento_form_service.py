@@ -3,6 +3,8 @@ Service para processamento de dados do formulário de lançamento
 """
 from ..models import LancamentoTipo
 
+from .observacoes_analise import observacoes_da_requisicao
+
 class LancamentoFormService:
     @staticmethod
     def processar_dados_lancamento(request, tipo_lanc):
@@ -22,7 +24,7 @@ class LancamentoFormService:
                 numero_lancamento = ''
         
         data = request.POST.get('data')
-        observacoes = request.POST.get('observacoes')
+        observacoes = observacoes_da_requisicao(request)
         
         # Processar data com validação
         data_clean = None

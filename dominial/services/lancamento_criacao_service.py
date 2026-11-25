@@ -11,6 +11,7 @@ from django.db import transaction
 from ..models import Documento, Lancamento, LancamentoTipo
 from ..utils.area_br import parse_area_br
 from .lancamento_form_service import LancamentoFormService
+from .observacoes_analise import observacoes_da_requisicao
 from .lancamento_validacao_service import LancamentoValidacaoService
 from .lancamento_origem_service import LancamentoOrigemService
 from .lancamento_campos_service import LancamentoCamposService
@@ -370,8 +371,7 @@ class LancamentoCriacaoService:
             # Obter dados do formulário
             numero_lancamento = request.POST.get('numero_lancamento')
             data = request.POST.get('data')
-            observacoes = request.POST.get('observacoes')
-
+            observacoes = observacoes_da_requisicao(request, analise_existente=lancamento.observacoes)  # #400: CRLF + análise do servidor
             # Validar número do lançamento (exceto se for o mesmo)
             if numero_lancamento != lancamento.numero_lancamento:
                 is_valid, error_message = LancamentoValidacaoService.validar_numero_lancamento(
