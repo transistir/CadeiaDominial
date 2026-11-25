@@ -181,13 +181,21 @@ Regras de implementação (sem migration nesta etapa):
 1. O prefill escreve **só** texto documental em `observacoes`; análise nunca é
    preenchida automaticamente.
 2. A tela de revisão e o formulário manual ganham ação explícita "registrar
-   análise"; o texto sai com o marcador e o autor.
+   análise"; o texto sai com o marcador e o autor. O contrato de quebra de linha
+   do campo é `\n`: o CRLF que o textarea do navegador devolve é normalizado na
+   entrada (criação **e** edição), senão o bloco analítico volta colado ao
+   documental e o badge do sistema nasce do texto do revisor (#400 v2).
 3. Exibição, PDF e Excel mostram o marcador (não há como confundir).
 4. `buscar_keyword` (`keyword_alerta_service.py:11`) **ignora** blocos
    analíticos ao procurar "atenção"/"pendente" — alerta do sistema não pode ser
    criado por texto do sistema. Teste dedicado.
 5. Migração para campo/tabela própria (autor, tipo, vínculo) fica como
    evolução futura, condicionada a aprovação do dono.
+6. **Limite aceito do Q1=b:** colar à mão um bloco analítico — ou um texto que
+   imite o marcador — no campo documental continua possível; o campo é texto
+   livre e não há migration nesta etapa. A marca (autor + data) é o que separa
+   os dois tipos; sem ela, o conteúdo é documental por definição. A regra 5 é o
+   caminho que fecha esse limite.
 
 ## 6. Aprendizado
 

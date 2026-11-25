@@ -11,7 +11,7 @@
     - campo_somente_leitura: desabilita o campo (#245 documento)
     - permite_registrar_analise: ação explícita de análise com autoria
       (#400; default falso — imóvel/documento NÃO usam)
---->
+--->{% load dominial_extras %}
 <div class="form-group">
     <label for="observacoes">Observações{% if observacoes_obrigatorio %} *{% endif %}</label>
     <textarea name="observacoes" id="observacoes" 
@@ -30,7 +30,7 @@
                   placeholder="Ressalva, cálculo ou conclusão analítica"></textarea>
         <small class="form-text text-muted">
             Entra nas observações como
-            <code>[ANÁLISE — {{ request.user.get_full_name|default:request.user.username }} — AAAA-MM-DD]</code>.
+            <code>[ANÁLISE — {{ request.user|nome_autor }} — AAAA-MM-DD]</code>.
         </small>
     </details>
 </div>

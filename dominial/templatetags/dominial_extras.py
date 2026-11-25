@@ -7,6 +7,7 @@ from dominial.utils.formatacao_utils import (
     formatar_area_ha as _formatar_area_ha,
     formatar_origem_completa,
 )
+from dominial.services.observacoes_analise import nome_do_autor
 
 register = template.Library()
 
@@ -25,6 +26,16 @@ def abreviar_cartorio(valor):
 def area_ha(valor, padrao="-"):
     """Formata a área (ha) no padrão brasileiro: vírgula e 4 casas decimais."""
     return _formatar_area_ha(valor, padrao)
+
+
+@register.filter
+def nome_autor(user):
+    """Nome que o marcador de análise grava (#400): full_name, senão username.
+
+    Espelha ``observacoes_analise.nome_do_autor`` — o preview do formulário não
+    pode divergir do nome que vai para o banco.
+    """
+    return nome_do_autor(user) or ''
 
 @register.filter
 def get_item(dictionary, key):
