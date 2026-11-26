@@ -20,6 +20,9 @@ MENSAGEM_INICIO_SEM_ORIGEM = (
     '❌ Informe a origem deste início de matrícula ou marque fim de cadeia / '
     'sem documento anterior. Nada foi gravado.'
 )
+MENSAGEM_DATA_ABERTURA = (
+    '❌ Informe a data do ato de abertura. Nada foi gravado.'
+)
 
 
 def bloqueios_do_post(post, extracao, indice, linhas):
@@ -40,6 +43,10 @@ def bloqueios_do_post(post, extracao, indice, linhas):
         )
     if _inicio_sem_origem(post):
         bloqueios.append(MENSAGEM_INICIO_SEM_ORIGEM)
+    if _inicio_sem_data(post):
+        # A mensagem específica vale só para o início de matrícula; nos
+        # demais tipos a falta de data segue a mensagem do service.
+        bloqueios.append(MENSAGEM_DATA_ABERTURA)
     return bloqueios
 
 
@@ -119,6 +126,12 @@ def _cartorios_de_origem_nao_cadastrados(post):
             acrescentar(nome)
 
     return nao_cadastrados
+
+
+def _inicio_sem_data(post):
+    if not _tipo_eh_inicio(post.get('tipo_lancamento')):
+        return False
+    return not (post.get('data') or '').strip()
 
 
 def _inicio_sem_origem(post):

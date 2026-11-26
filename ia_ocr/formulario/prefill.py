@@ -14,7 +14,7 @@ from .erros import AtoInexistente
 from .numeros import _numero_composto, _numero_simples
 from ..revisao import _montar_dados
 from ..rotulos import analisar_rotulo
-from .texto import _como_texto, _evidencia, _nomes
+from .texto import _como_texto, _evidencia, _nomes, data_do_raw
 
 # Chave da linha (o padrão de ``destinos.DESTINOS``, índices como ``*``) →
 # nome do input do formulário que a recebe. Fonte ÚNICA: o prefill escreve o
@@ -176,7 +176,14 @@ def prefill_do_ato(extracao, indice, documento):
     composto = _numero_composto(tipo, numero, documento)
     if composto is not None:
         form_data['numero_lancamento'] = composto
-    colocar(f'{chave}/data', ato.data)
+    # O A3 pode trazer ``normalized: null`` com ``raw`` numérico: o ``raw``
+    # só vira data quando casa 100% com um formato determinístico (nada é
+    # inventado). Texto ambíguo/por extenso fica sem data.
+    data = ato.data
+    if data is None:
+        campo_data = linhas.get(f'{chave}/data')
+        data = data_do_raw(campo_data.raw if campo_data is not None else None)
+    colocar(f'{chave}/data', data)
     # M3: área em m²/alqueires/ares não entra no input em hectares.
     area_em_outra_unidade = _area_em_outra_unidade(extracao, indice, linhas, chave)
     if area_em_outra_unidade is None:
