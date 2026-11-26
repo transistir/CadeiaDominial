@@ -7,7 +7,7 @@
     "dominial/services/cadeia_dominial_tabela_service.py": 628,
     "dominial/services/exportacao_excel_service.py": 535,
     "dominial/services/hierarquia_arvore_service.py": 506,
-    "dominial/services/lancamento_campos_service.py": 496,
+    "dominial/services/lancamento_campos_service.py": 494,
     "dominial/services/lancamento_criacao_service.py": 683,
     "dominial/services/lancamento_origem_service.py": 1475,
     "dominial/tests/test_documento_digital.py": 910,

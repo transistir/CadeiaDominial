@@ -457,40 +457,38 @@ class LancamentoCamposService:
         # PROCESSAR INFORMAÇÕES DE FIM DE CADEIA POR ORIGEM
         # Limpar registros existentes
         lancamento.origens_fim_cadeia.all().delete()
-        
-        # Criar novos registros para cada origem com fim de cadeia
-        for i, origem in enumerate(origens_completas):
-            if origem and origem.strip():
-                fim_cadeia_esta_origem = str(i) in fim_cadeia_indices
-                
-                if fim_cadeia_esta_origem:
-                    # Encontrar os dados correspondentes a esta origem
-                    tipo_fim_cadeia = None
-                    especificacao_fim_cadeia = None
-                    classificacao_fim_cadeia = None
-                    info_adicional_fim_cadeia = None
 
-                    # Buscar nos arrays por índice
-                    for j, indice in enumerate(fim_cadeia_indices):
-                        if indice == str(i):
-                            if j < len(tipos_fim_cadeia):
-                                tipo_fim_cadeia = tipos_fim_cadeia[j]
-                            if j < len(especificacoes_fim_cadeia):
-                                especificacao_fim_cadeia = especificacoes_fim_cadeia[j]
-                            if j < len(classificacoes_fim_cadeia):
-                                classificacao_fim_cadeia = classificacoes_fim_cadeia[j]
-                            if j < len(infos_adicionais_fim_cadeia):
-                                info_adicional_fim_cadeia = infos_adicionais_fim_cadeia[j].strip() or None
-                            break
+        # Criar registro para TODA linha marcada em `fim_cadeia[]` (#407): a
+        # linha pode não ter documento anterior ("sem origem") e o input
+        # `origem_completa[]` chega vazio — exigi-lo descartava o índice em
+        # silêncio (lançamento 13108/M237 ficou sem tipo de fim de cadeia).
+        # A linha vazia NÃO vira `lancamento.origem` nem origem estruturada.
+        marcados = [i for i in range(len(origens_completas))
+                    if str(i) in fim_cadeia_indices]
+        for i in marcados:
+            j = fim_cadeia_indices.index(str(i))
 
-                    # Criar registro de fim de cadeia para esta origem
-                    from ..models import OrigemFimCadeia
-                    OrigemFimCadeia.objects.create(
-                        lancamento=lancamento,
-                        indice_origem=i,
-                        fim_cadeia=True,
-                        tipo_fim_cadeia=tipo_fim_cadeia,
-                        especificacao_fim_cadeia=especificacao_fim_cadeia,
-                        classificacao_fim_cadeia=classificacao_fim_cadeia,
-                        info_adicional_fim_cadeia=info_adicional_fim_cadeia
-                    )
+            # O formulário atual envia arrays DENSOS (uma posição por linha):
+            # vale a posição `i`. POSTs esparsos/legados trazem só as linhas
+            # marcadas — neles vale `j` (indexar sempre por `j` gravava o
+            # tipo/classificação de OUTRA linha).
+            def campo(array):
+                if i < len(array):
+                    return array[i]
+                return array[j] if j < len(array) else None
+
+            tipo = campo(tipos_fim_cadeia)
+            especificacao = campo(especificacoes_fim_cadeia)
+            classificacao = campo(classificacoes_fim_cadeia)
+            info = (campo(infos_adicionais_fim_cadeia) or '').strip() or None
+
+            from ..models import OrigemFimCadeia
+            OrigemFimCadeia.objects.create(
+                lancamento=lancamento,
+                indice_origem=i,
+                fim_cadeia=True,
+                tipo_fim_cadeia=tipo,
+                especificacao_fim_cadeia=especificacao,
+                classificacao_fim_cadeia=classificacao,
+                info_adicional_fim_cadeia=info,
+            )
