@@ -55,7 +55,7 @@ class SwapFormaTituloTest(_FormaTituloBase):
         self.assertFalse(pendencia['bloqueante'])
         self.assertTrue(pendencia['texto'].strip())
 
-    def test_titulo_instrumento_e_forma_natureza_swap(self):
+    def test_titulo_instrumento_e_forma_natureza_sem_swap(self):
         resultado = self._prefill(self._registro(
             forma=self._campo('Compra e Venda', _EVIDENCIA_GENERICA),
             titulo=self._campo(
@@ -69,8 +69,59 @@ class SwapFormaTituloTest(_FormaTituloBase):
             form_data['titulo_transacao'],
             'Escritura Pública de Compra e Venda',
         )
-        (pendencia,) = self._pendencia(resultado, MOTIVO_FORMA_TITULO)
-        self.assertFalse(pendencia['bloqueante'])
+        self.assertNotIn(MOTIVO_FORMA_TITULO, self._motivos(resultado))
+
+    def test_evidencias_sem_swap_ficam_com_o_campo_de_origem(self):
+        resultado = self._prefill(self._registro(
+            forma=self._campo('Compra e Venda', 'R-1/42.718'),
+            titulo=self._campo(
+                'Escritura Pública', 'Escritura Pública de Compra e Venda',
+            ),
+            data_transacao=self._campo(
+                '2015-06-18', 'de 15 de fevereiro de 2020',
+            ),
+        ))
+
+        evidencias = resultado['evidencias']
+        self.assertEqual(evidencias['forma_transacao']['trecho'], 'R-1/42.718')
+        self.assertEqual(
+            evidencias['titulo_transacao']['trecho'],
+            'Escritura Pública de Compra e Venda',
+        )
+        self.assertEqual(
+            evidencias['data_transacao']['trecho'],
+            'de 15 de fevereiro de 2020',
+        )
+        self.assertNotIn(MOTIVO_FORMA_TITULO, self._motivos(resultado))
+
+    def test_evidencias_com_swap_e_data_vem_do_instrumento(self):
+        resultado = self._prefill(self._registro(
+            forma=self._campo('Escritura pública de 10.04.2015', 'R-1/42.718'),
+            titulo=self._campo(
+                'Venda e Compra', 'Escritura Pública de Compra e Venda',
+            ),
+            data_transacao=self._campo(
+                '2015-06-18', 'de 15 de fevereiro de 2020',
+            ),
+        ))
+
+        evidencias = resultado['evidencias']
+        self.assertEqual(
+            resultado['form_data']['forma_transacao'], 'Compra e Venda',
+        )
+        self.assertEqual(
+            evidencias['forma_transacao']['trecho'],
+            'Escritura Pública de Compra e Venda',
+        )
+        self.assertEqual(
+            evidencias['titulo_transacao']['trecho'], 'R-1/42.718',
+        )
+        self.assertEqual(
+            resultado['form_data']['data_transacao'], '2015-04-10',
+        )
+        self.assertEqual(
+            evidencias['data_transacao']['trecho'], 'R-1/42.718',
+        )
 
     def test_ambos_natureza_nao_swap(self):
         resultado = self._prefill(self._registro(
@@ -195,9 +246,59 @@ class DataDoInstrumentoTest(_FormaTituloBase):
         )
         self.assertNotIn(MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado))
 
+    def test_data_igual_ao_a3_nao_gera_pendencia(self):
+        resultado = self._prefill(self._registro(
+            forma=self._campo(
+                'Escritura Pública de 10.04.2015', _EVIDENCIA_GENERICA,
+            ),
+            data_transacao=self._campo(
+                '2015-04-10', '10 de abril de 2015',
+            ),
+        ))
+
+        self.assertEqual(
+            resultado['form_data']['data_transacao'], '2015-04-10',
+        )
+        self.assertNotIn(MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado))
+
+    def test_duas_datas_distintas_nao_deriva(self):
+        # Sonda do revisor: numérica (registro) e por extenso (instrumento)
+        # no mesmo texto. Não presumir qual é a do instrumento.
+        resultado = self._prefill(self._registro(
+            forma=self._campo(
+                'Escritura de 10 de abril de 2015, registrada em 18.06.2015',
+                _EVIDENCIA_GENERICA,
+            ),
+            data_transacao=self._campo(
+                '2000-01-01', '1 de janeiro de 2000',
+            ),
+        ))
+
+        self.assertEqual(
+            resultado['form_data']['data_transacao'], '2000-01-01',
+        )
+        self.assertNotIn(MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado))
+
+    def test_data_dentro_de_identificador_nao_deriva(self):
+        # Sonda do revisor: "123.10.04.2015.999" é um identificador, não
+        # uma data do instrumento.
+        resultado = self._prefill(self._registro(
+            forma=self._campo(
+                'Escritura nº 123.10.04.2015.999', _EVIDENCIA_GENERICA,
+            ),
+            data_transacao=self._campo(
+                '2000-01-01', '1 de janeiro de 2000',
+            ),
+        ))
+
+        self.assertEqual(
+            resultado['form_data']['data_transacao'], '2000-01-01',
+        )
+        self.assertNotIn(MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado))
 
 class M6141RegressaoTest(_FormaTituloBase):
-    """Fluxo real medido no M6141: 2 atos, área 74.6755, origem M237/2/237."""
+    """Reprodução em payload sintético do caso M6141: 2 atos, área 74.6755,
+    origem M237/2/237."""
 
     def _payload_m6141(self):
         payload = self._registro(

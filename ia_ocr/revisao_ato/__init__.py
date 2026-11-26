@@ -58,6 +58,7 @@ from .estado_post import _pessoas_do_post, estado_do_formulario
 from .bloqueios import (
     MENSAGEM_AREA_SEM_DECISAO,
     MENSAGEM_CARTORIO_NAO_CADASTRADO,
+    MENSAGEM_DATA_ABERTURA,
     MENSAGEM_INICIO_SEM_ORIGEM,
     bloqueios_do_post,
     bloqueios_do_prefill,
@@ -81,6 +82,7 @@ __all__ = [
     'MENSAGEM_AREA_SEM_DECISAO',
     'MENSAGEM_ATO_FORA_DA_REVISAO',
     'MENSAGEM_CARTORIO_NAO_CADASTRADO',
+    'MENSAGEM_DATA_ABERTURA',
     'MENSAGEM_INICIO_SEM_ORIGEM',
     'MENSAGEM_JOB_FORA_DE_REVISAO',
     'MOTIVO_TRANSICAO',

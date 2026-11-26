@@ -6,6 +6,7 @@ invenção) e o POST sem data precisa parar antes de gravar.
 """
 
 from dominial.models import Lancamento
+from dominial.services.lancamento_criacao_service import ERRO_CRIACAO
 from ia_ocr.formulario import prefill_do_ato
 
 from .payloads_extracao import TEXTO_M237, payload_m237_abertura
@@ -52,12 +53,48 @@ class AberturaDataRawTest(AberturaM237Base):
 
         self.assertEqual(form_data['data'], '1982-06-09')
 
+    def test_prefill_recusa_raw_com_separadores_mistos(self):
+        extracao = self._extracao_com_data_raw('18.06/2015')
+
+        form_data = prefill_do_ato(extracao, 0, self.documento)['form_data']
+
+        self.assertNotIn('data', form_data)
+
+    def test_prefill_recusa_raw_com_dia_unico(self):
+        extracao = self._extracao_com_data_raw('1/2/2015')
+
+        form_data = prefill_do_ato(extracao, 0, self.documento)['form_data']
+
+        self.assertNotIn('data', form_data)
+
+    def test_prefill_nao_ressuscita_raw_de_linha_descartada(self):
+        extracao = self._extracao_com_data_raw('18.06.2015')
+        extracao.campos.filter(chave='/acts/0/data').update(
+            status_revisao='descartado',
+        )
+
+        form_data = prefill_do_ato(extracao, 0, self.documento)['form_data']
+
+        self.assertNotIn('data', form_data)
+
 
 class AberturaSemDataNoPostTest(AberturaM237Base):
     def test_post_sem_data_bloqueia_ato_de_abertura_antes_de_gravar(self):
         antes = self.contagens()
 
         resposta = self.salvar(0, data='')
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(MENSAGEM_DATA_ABERTURA, self.mensagens(resposta))
+        self.assertEqual(self.contagens(), antes)
+        self.assertFalse(
+            Lancamento.objects.filter(documento=self.documento).exists()
+        )
+
+    def test_post_com_data_invalida_bloqueia_ato_de_abertura_antes_de_gravar(self):
+        antes = self.contagens()
+
+        resposta = self.salvar(0, data='18/06/2015')
 
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(MENSAGEM_DATA_ABERTURA, self.mensagens(resposta))
@@ -79,3 +116,4 @@ class AberturaSemDataNoPostTest(AberturaM237Base):
         self.assertFalse(
             any(mensagem == MENSAGEM_DATA_ABERTURA for mensagem in mensagens)
         )
+        self.assertIn(ERRO_CRIACAO, mensagens)

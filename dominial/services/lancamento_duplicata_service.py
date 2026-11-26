@@ -15,7 +15,21 @@ class LancamentoDuplicataService:
     """
     Service para integrar verificação de duplicatas ao processo de criação de lançamentos
     """
-    
+
+    @staticmethod
+    def _resolver_cartorio_origem(cartorio_origem_id, nome):
+        """ID de origem: o informado, senão ``nome__iexact`` (``.first()``), senão None.
+
+        Fallback ÚNICO da detecção e da confirmação; não cria cartório.
+        """
+        if cartorio_origem_id:
+            return cartorio_origem_id
+        nome = (nome or '').strip()
+        if not nome:
+            return None
+        cartorio = Cartorios.objects.filter(nome__iexact=nome).first()
+        return cartorio.id if cartorio is not None else None
+
     @staticmethod
     def verificar_duplicata_antes_criacao(request, documento_ativo):
         """
@@ -50,19 +64,13 @@ class LancamentoDuplicataService:
         for i, origem in enumerate(origens):
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
-            # A revisão OCR manda o nome lido sem o ID quando não há cadastro
-            # escolhido. Resolver o ID pelo MESMO fallback de nome da gravação
-            # (``lancamento_campos_service``/``lancamento_origem_service``)
-            # antes de checar duplicata; nome sem cadastro único segue sem ID e
-            # NÃO cria cartório aqui.
-            if not cartorio_origem_id and i < len(nomes_cartorios_origem):
-                nome = (nomes_cartorios_origem[i] or '').strip()
-                if nome:
-                    cartorio = Cartorios.objects.filter(
-                        nome__iexact=nome,
-                    ).first()
-                    if cartorio is not None:
-                        cartorio_origem_id = cartorio.id
+            # Nome lido sem ID: MESMO fallback da gravação (``.first()``).
+            cartorio_origem_id = (
+                LancamentoDuplicataService._resolver_cartorio_origem(
+                    cartorio_origem_id,
+                    nomes_cartorios_origem[i] if i < len(nomes_cartorios_origem) else None,
+                )
+            )
             
             print(f"DEBUG DUPLICATA: Verificando origem {i}: '{origem}'")
             print(f"DEBUG DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
@@ -229,10 +237,19 @@ class LancamentoDuplicataService:
         """
         origens = request.POST.getlist('origem_completa[]')
         cartorios_origem = request.POST.getlist('cartorio_origem[]')
+        nomes_cartorios_origem = request.POST.getlist('cartorio_origem_nome[]')
 
         for i, origem in enumerate(origens):
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
+            # A confirmação relê o POST preservado; o ID pode vir vazio com
+            # o nome preenchido. Usa o MESMO helper da detecção.
+            cartorio_origem_id = (
+                LancamentoDuplicataService._resolver_cartorio_origem(
+                    cartorio_origem_id,
+                    nomes_cartorios_origem[i] if i < len(nomes_cartorios_origem) else None,
+                )
+            )
             if not origem or not cartorio_origem_id:
                 continue
 

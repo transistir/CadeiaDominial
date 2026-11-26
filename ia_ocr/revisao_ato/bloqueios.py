@@ -1,5 +1,7 @@
 """Bloqueios de negócio por ato na revisão do formulário (#341/#332)."""
 
+from datetime import datetime
+
 from dominial.models import Cartorios, LancamentoTipo
 
 from ..formulario import area_exige_decisao
@@ -128,10 +130,27 @@ def _cartorios_de_origem_nao_cadastrados(post):
     return nao_cadastrados
 
 
+def _data_do_post_valida(valor):
+    """A MESMA validação de data do service: só ``aaaa-mm-dd`` válido.
+
+    O service grava ``None`` para string fora desse formato (mesmo com
+    conteúdo); deixar passar aqui faria o bloqueio de abertura não valer
+    para um input não-date como ``18/06/2015``.
+    """
+    valor = (valor or '').strip()
+    if len(valor) != 10 or valor.count('-') != 2:
+        return False
+    try:
+        datetime.strptime(valor, '%Y-%m-%d')
+    except ValueError:
+        return False
+    return True
+
+
 def _inicio_sem_data(post):
     if not _tipo_eh_inicio(post.get('tipo_lancamento')):
         return False
-    return not (post.get('data') or '').strip()
+    return not _data_do_post_valida(post.get('data'))
 
 
 def _inicio_sem_origem(post):

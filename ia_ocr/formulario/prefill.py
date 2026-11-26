@@ -5,16 +5,19 @@
 evidências de origem e de partes.
 """
 
-import re
-import unicodedata
-from datetime import date
-
 from dominial.models import Cartorios, Pessoas
 
 from .. import importacao, vocabulario
 from .areas import _area_em_outra_unidade, area_para_input
 from ..destinos import _normalizar
 from .erros import AtoInexistente
+from .forma_transacao import (
+    MOTIVO_FORMA_TITULO_REINTERPRETADOS,
+    ROTULO_FORMA_E_TITULO,
+    TEXTO_FORMA_TITULO_REINTERPRETADOS,
+    _data_transacao_do_instrumento,
+    _forma_e_titulo,
+)
 from .numeros import _numero_composto, _numero_simples
 from ..revisao import _montar_dados
 from ..rotulos import analisar_rotulo
@@ -90,136 +93,6 @@ def forma_do_vocabulario(forma):
         'texto': TEXTO_FORMA_DO_VOCABULARIO.format(
             lido=forma, canonica=casamento.valor,
         ),
-        'bloqueante': False,
-    }
-
-
-# Item 4: forma = natureza, título = instrumento, data_transacao = data do
-# instrumento. A classificação é literal (sem acento/caixa), sem adivinhar.
-MARCAS_DE_INSTRUMENTO = (
-    'escritura', 'transcri', 'carta de', 'formal de partilha',
-    'alvara', 'mandado', 'termo de', 'instrumento',
-)
-MOTIVO_FORMA_TITULO_REINTERPRETADOS = 'forma_titulo_reinterpretados'
-ROTULO_FORMA_E_TITULO = 'Forma e título'
-TEXTO_FORMA_TITULO_REINTERPRETADOS = (
-    "Forma e título reinterpretados: o instrumento '{instrumento}' foi para "
-    "o título e a natureza '{natureza}' para a forma; confira antes de salvar."
-)
-MOTIVO_DATA_TRANSACAO_DO_INSTRUMENTO = 'data_transacao_do_instrumento'
-ROTULO_DATA_TRANSACAO = 'Data da transmissão'
-TEXTO_DATA_TRANSACAO_DO_INSTRUMENTO = (
-    'Data da transmissão ajustada para a data do instrumento ({data}).'
-)
-TEXTO_DATA_TRANSACAO_DIVERGENTE = (
-    'Data da transmissão do A3 ({a3}) difere da data do instrumento '
-    '({data}); vale a data do instrumento.'
-)
-
-_MESES_PT_SEM_ACENTO = {
-    'janeiro': 1, 'fevereiro': 2, 'marco': 3, 'abril': 4, 'maio': 5,
-    'junho': 6, 'julho': 7, 'agosto': 8, 'setembro': 9, 'outubro': 10,
-    'novembro': 11, 'dezembro': 12,
-}
-_DATA_NUMERICA_NO_TEXTO = re.compile(
-    r'(?<!\d)(?P<dia>\d{1,2})[./](?P<mes>\d{1,2})[./](?P<ano>\d{4})(?!\d)'
-)
-_DATA_POR_EXTENSO = re.compile(
-    r'(?<!\d)(?P<dia>\d{1,2})\s+de\s+(?P<mes>[a-z]+)\s+de\s+'
-    r'(?P<ano>\d{4})(?!\d)'
-)
-
-
-def _sem_acento(texto):
-    """Texto em minúsculas e sem acento (classificação e meses pt-BR)."""
-    decomposto = unicodedata.normalize('NFKD', texto)
-    return ''.join(
-        caractere for caractere in decomposto
-        if not unicodedata.combining(caractere)
-    ).lower()
-
-
-def _classe_da_forma(texto):
-    """``'instrumento'``, ``'natureza'`` ou ``None`` para texto vazio."""
-    if not isinstance(texto, str) or not texto.strip():
-        return None
-    normalizado = _sem_acento(texto)
-    if any(marca in normalizado for marca in MARCAS_DE_INSTRUMENTO):
-        return 'instrumento'
-    return 'natureza'
-
-
-def _forma_e_titulo(forma, titulo):
-    """``(forma, titulo, instrumento, houve_swap)`` do ato.
-
-    Troca SÓ quando um dos textos é instrumento e o outro é natureza. Mesma
-    classe (ou texto ausente) mantém o mapeamento atual do A3.
-    """
-    classe_forma = _classe_da_forma(forma)
-    classe_titulo = _classe_da_forma(titulo)
-    if (
-        classe_forma is not None and classe_titulo is not None
-        and classe_forma != classe_titulo
-    ):
-        if classe_forma == 'instrumento':
-            return titulo, forma, forma, True
-        return forma, titulo, titulo, True
-    instrumento = forma if classe_forma == 'instrumento' else (
-        titulo if classe_titulo == 'instrumento' else None
-    )
-    return forma, titulo, instrumento, False
-
-
-def _data_valida(dia, mes, ano):
-    try:
-        return date(int(ano), int(mes), int(dia))
-    except (TypeError, ValueError):
-        return None
-
-
-def data_do_instrumento(texto):
-    """Data explícita no texto do instrumento, ou ``None``.
-
-    Aceita ``dd.mm.aaaa``, ``dd/mm/aaaa`` e ``dd de <mês> de aaaa`` (meses
-    pt-BR sem acento), sempre validando o calendário. Não completa dígitos
-    nem aproxima: fora do formato exato devolve ``None``.
-    """
-    if not isinstance(texto, str) or not texto.strip():
-        return None
-    normalizado = _sem_acento(texto)
-    for achado in _DATA_NUMERICA_NO_TEXTO.finditer(normalizado):
-        data = _data_valida(
-            achado.group('dia'), achado.group('mes'), achado.group('ano'),
-        )
-        if data is not None:
-            return data
-    for achado in _DATA_POR_EXTENSO.finditer(normalizado):
-        mes = _MESES_PT_SEM_ACENTO.get(achado.group('mes'))
-        if mes is None:
-            continue
-        data = _data_valida(achado.group('dia'), mes, achado.group('ano'))
-        if data is not None:
-            return data
-    return None
-
-
-def _data_transacao_do_instrumento(instrumento, data_do_a3):
-    """``(data, pendência)``: a data do instrumento vence a do A3, se houver."""
-    data = data_do_instrumento(instrumento)
-    if data is None:
-        return data_do_a3, None
-    if data_do_a3 is not None and data != data_do_a3:
-        texto = TEXTO_DATA_TRANSACAO_DIVERGENTE.format(
-            a3=data_do_a3, data=data.isoformat(),
-        )
-    else:
-        texto = TEXTO_DATA_TRANSACAO_DO_INSTRUMENTO.format(
-            data=data.isoformat(),
-        )
-    return data, {
-        'motivo': MOTIVO_DATA_TRANSACAO_DO_INSTRUMENTO,
-        'rotulo': ROTULO_DATA_TRANSACAO,
-        'texto': texto,
         'bloqueante': False,
     }
 
@@ -317,8 +190,12 @@ def prefill_do_ato(extracao, indice, documento):
     # inventado). Texto ambíguo/por extenso fica sem data.
     data = ato.data
     if data is None:
+        # Linha descartada na revisão não volta a decidir: ``_montar_dados``
+        # já a excluiu, então o fallback do ``raw`` também precisa respeitar
+        # o ``status_revisao`` (nada de ressuscitar o valor descartado).
         campo_data = linhas.get(f'{chave}/data')
-        data = data_do_raw(campo_data.raw if campo_data is not None else None)
+        if campo_data is not None and campo_data.status_revisao != 'descartado':
+            data = data_do_raw(campo_data.raw)
     colocar(f'{chave}/data', data)
     # M3: área em m²/alqueires/ares não entra no input em hectares.
     area_em_outra_unidade = _area_em_outra_unidade(extracao, indice, linhas, chave)
@@ -327,9 +204,9 @@ def prefill_do_ato(extracao, indice, documento):
         colocar(f'{chave}/area', area_para_input(ato.area))
     colocar(f'{chave}/descricao', ato.descricao)
     colocar(f'{chave}/observacoes', ato.observacoes)
-    forma_lida, titulo_lido, instrumento, houve_swap = _forma_e_titulo(
-        ato.forma, ato.titulo,
-    )
+    (
+        forma_lida, titulo_lido, instrumento, houve_swap, chave_do_instrumento,
+    ) = _forma_e_titulo(ato.forma, ato.titulo)
     forma, aviso_da_forma = forma_do_vocabulario(forma_lida)
     if houve_swap:
         colocar(f'{chave}/forma', forma, f'{chave}/titulo')
@@ -347,10 +224,17 @@ def prefill_do_ato(extracao, indice, documento):
     colocar(f'{chave}/cartorio_transmissao', nome_transmissao)
     colocar(f'{chave}/livro_transacao', ato.livro_transacao)
     colocar(f'{chave}/folha_transacao', ato.folha_transacao)
-    data_transacao, pendencia_data = _data_transacao_do_instrumento(
-        instrumento, ato.data_transacao,
+    data_transacao, pendencia_data, data_derivada = (
+        _data_transacao_do_instrumento(instrumento, ato.data_transacao)
     )
-    colocar(f'{chave}/data_transacao', data_transacao)
+    # A evidência acompanha o input que DEU ORIGEM ao valor: quando a data
+    # vem do instrumento, é a evidência de forma/título, não a do
+    # ``data_transacao`` do A3 que foi substituído.
+    evidencia_da_data = (
+        f'{chave}/{chave_do_instrumento}'
+        if data_derivada and chave_do_instrumento else None
+    )
+    colocar(f'{chave}/data_transacao', data_transacao, evidencia_da_data)
 
     origens_separadas = _origens_separadas(
         ato, linhas, nomes_cartorios, evidencias,

@@ -209,6 +209,9 @@
                 {% for cartorio in form_data.cartorio_origem %}
                 <input type="hidden" name="cartorio_origem[]" value="{{ cartorio }}">
                 {% endfor %}
+                {% for cartorio_nome in form_data.cartorio_origem_nome %}
+                <input type="hidden" name="cartorio_origem_nome[]" value="{{ cartorio_nome }}">
+                {% endfor %}
                 
                 <!-- Preservar livros de origem -->
                 {% for livro in form_data.livro_origem %}
