@@ -9,6 +9,7 @@ e carregar/casar não abrem rede nem leem nada fora do pacote.
 import ast
 import io
 import socket
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -62,6 +63,25 @@ class ArtefatoPinadoTest(SimpleTestCase):
         with mock.patch.object(vocabulario, 'SHA256_DO_DOCUMENTO', '0' * 64):
             with self.assertRaises(vocabulario.VocabularioInvalido):
                 vocabulario.carregar()
+
+    def test_arquivo_ausente_vira_vocabulario_invalido(self):
+        with mock.patch.object(
+            vocabulario, 'CAMINHO_VOCABULARIO', Path('/nao/existe/vocabulario.json'),
+        ):
+            with self.assertRaises(vocabulario.VocabularioInvalido):
+                vocabulario.carregar()
+
+    def test_json_invalido_vira_vocabulario_invalido(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruim = Path(tmp) / 'vocabulario_prod.json'
+            ruim.write_text('{', encoding='utf-8')
+            with mock.patch.object(vocabulario, 'CAMINHO_VOCABULARIO', ruim), \
+                    mock.patch.object(
+                        vocabulario, 'sha256_do_arquivo',
+                        return_value=vocabulario.SHA256_DO_ARQUIVO,
+                    ):
+                with self.assertRaises(vocabulario.VocabularioInvalido):
+                    vocabulario.carregar()
 
     def test_entradas_do_campo_forma(self):
         valores = {entrada.valor for entrada in vocabulario.entradas('forma')}
