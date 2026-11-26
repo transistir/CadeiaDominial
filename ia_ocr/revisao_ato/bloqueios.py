@@ -1,5 +1,7 @@
 """Bloqueios de negócio por ato na revisão do formulário (#341/#332)."""
 
+from datetime import datetime
+
 from dominial.models import Cartorios, LancamentoTipo
 
 from ..formulario import area_exige_decisao
@@ -19,6 +21,9 @@ MENSAGEM_CARTORIO_ORIGEM_NAO_CADASTRADO = (
 MENSAGEM_INICIO_SEM_ORIGEM = (
     '❌ Informe a origem deste início de matrícula ou marque fim de cadeia / '
     'sem documento anterior. Nada foi gravado.'
+)
+MENSAGEM_DATA_ABERTURA = (
+    '❌ Informe a data do ato de abertura. Nada foi gravado.'
 )
 
 
@@ -40,6 +45,10 @@ def bloqueios_do_post(post, extracao, indice, linhas):
         )
     if _inicio_sem_origem(post):
         bloqueios.append(MENSAGEM_INICIO_SEM_ORIGEM)
+    if _inicio_sem_data(post):
+        # A mensagem específica vale só para o início de matrícula; nos
+        # demais tipos a falta de data segue a mensagem do service.
+        bloqueios.append(MENSAGEM_DATA_ABERTURA)
     return bloqueios
 
 
@@ -119,6 +128,29 @@ def _cartorios_de_origem_nao_cadastrados(post):
             acrescentar(nome)
 
     return nao_cadastrados
+
+
+def _data_do_post_valida(valor):
+    """A MESMA validação de data do service: só ``aaaa-mm-dd`` válido.
+
+    O service grava ``None`` para string fora desse formato (mesmo com
+    conteúdo); deixar passar aqui faria o bloqueio de abertura não valer
+    para um input não-date como ``18/06/2015``.
+    """
+    valor = (valor or '').strip()
+    if len(valor) != 10 or valor.count('-') != 2:
+        return False
+    try:
+        datetime.strptime(valor, '%Y-%m-%d')
+    except ValueError:
+        return False
+    return True
+
+
+def _inicio_sem_data(post):
+    if not _tipo_eh_inicio(post.get('tipo_lancamento')):
+        return False
+    return not _data_do_post_valida(post.get('data'))
 
 
 def _inicio_sem_origem(post):

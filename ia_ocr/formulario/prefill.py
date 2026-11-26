@@ -11,10 +11,17 @@ from .. import importacao, vocabulario
 from .areas import _area_em_outra_unidade, area_para_input
 from ..destinos import _normalizar
 from .erros import AtoInexistente
+from .forma_transacao import (
+    MOTIVO_FORMA_TITULO_REINTERPRETADOS,
+    ROTULO_FORMA_E_TITULO,
+    TEXTO_FORMA_TITULO_REINTERPRETADOS,
+    _data_transacao_do_instrumento,
+    _forma_e_titulo,
+)
 from .numeros import _numero_composto, _numero_simples
 from ..revisao import _montar_dados
 from ..rotulos import analisar_rotulo
-from .texto import _como_texto, _evidencia, _nomes
+from .texto import _como_texto, _evidencia, _nomes, data_do_raw
 
 # Chave da linha (o padrão de ``destinos.DESTINOS``, índices como ``*``) →
 # nome do input do formulário que a recebe. Fonte ÚNICA: o prefill escreve o
@@ -151,14 +158,16 @@ def prefill_do_ato(extracao, indice, documento):
     form_data = {}
     evidencias = {}
 
-    def colocar(chave_da_linha, valor):
+    def colocar(chave_da_linha, valor, chave_da_evidencia=None):
         """Escreve ``valor`` no input da linha e anexa a evidência dela."""
         texto = _como_texto(valor)
         if texto is None:
             return
         nome = input_do_campo(chave_da_linha, tipo_codigo)
         form_data[nome] = texto
-        evidencia = _evidencia(linhas, chave_da_linha)
+        evidencia = _evidencia(
+            linhas, chave_da_evidencia or chave_da_linha,
+        )
         if evidencia is not None:
             evidencias[nome] = evidencia
 
@@ -176,7 +185,18 @@ def prefill_do_ato(extracao, indice, documento):
     composto = _numero_composto(tipo, numero, documento)
     if composto is not None:
         form_data['numero_lancamento'] = composto
-    colocar(f'{chave}/data', ato.data)
+    # O A3 pode trazer ``normalized: null`` com ``raw`` numérico: o ``raw``
+    # só vira data quando casa 100% com um formato determinístico (nada é
+    # inventado). Texto ambíguo/por extenso fica sem data.
+    data = ato.data
+    if data is None:
+        # Linha descartada na revisão não volta a decidir: ``_montar_dados``
+        # já a excluiu, então o fallback do ``raw`` também precisa respeitar
+        # o ``status_revisao`` (nada de ressuscitar o valor descartado).
+        campo_data = linhas.get(f'{chave}/data')
+        if campo_data is not None and campo_data.status_revisao != 'descartado':
+            data = data_do_raw(campo_data.raw)
+    colocar(f'{chave}/data', data)
     # M3: área em m²/alqueires/ares não entra no input em hectares.
     area_em_outra_unidade = _area_em_outra_unidade(extracao, indice, linhas, chave)
     if area_em_outra_unidade is None:
@@ -184,9 +204,16 @@ def prefill_do_ato(extracao, indice, documento):
         colocar(f'{chave}/area', area_para_input(ato.area))
     colocar(f'{chave}/descricao', ato.descricao)
     colocar(f'{chave}/observacoes', ato.observacoes)
-    forma, aviso_da_forma = forma_do_vocabulario(ato.forma)
-    colocar(f'{chave}/forma', forma)
-    colocar(f'{chave}/titulo', ato.titulo)
+    (
+        forma_lida, titulo_lido, instrumento, houve_swap, chave_do_instrumento,
+    ) = _forma_e_titulo(ato.forma, ato.titulo)
+    forma, aviso_da_forma = forma_do_vocabulario(forma_lida)
+    if houve_swap:
+        colocar(f'{chave}/forma', forma, f'{chave}/titulo')
+        colocar(f'{chave}/titulo', titulo_lido, f'{chave}/forma')
+    else:
+        colocar(f'{chave}/forma', forma)
+        colocar(f'{chave}/titulo', titulo_lido)
 
     id_transmissao, nome_transmissao = _cartorio(
         ato.cartorio_transmissao_id, ato.cartorio_transmissao_nome,
@@ -197,7 +224,17 @@ def prefill_do_ato(extracao, indice, documento):
     colocar(f'{chave}/cartorio_transmissao', nome_transmissao)
     colocar(f'{chave}/livro_transacao', ato.livro_transacao)
     colocar(f'{chave}/folha_transacao', ato.folha_transacao)
-    colocar(f'{chave}/data_transacao', ato.data_transacao)
+    data_transacao, pendencia_data, data_derivada = (
+        _data_transacao_do_instrumento(instrumento, ato.data_transacao)
+    )
+    # A evidência acompanha o input que DEU ORIGEM ao valor: quando a data
+    # vem do instrumento, é a evidência de forma/título, não a do
+    # ``data_transacao`` do A3 que foi substituído.
+    evidencia_da_data = (
+        f'{chave}/{chave_do_instrumento}'
+        if data_derivada and chave_do_instrumento else None
+    )
+    colocar(f'{chave}/data_transacao', data_transacao, evidencia_da_data)
 
     origens_separadas = _origens_separadas(
         ato, linhas, nomes_cartorios, evidencias,
@@ -210,6 +247,17 @@ def prefill_do_ato(extracao, indice, documento):
         pendencias.insert(0, area_em_outra_unidade)
     if aviso_da_forma is not None:
         pendencias.append(aviso_da_forma)
+    if houve_swap:
+        pendencias.append({
+            'motivo': MOTIVO_FORMA_TITULO_REINTERPRETADOS,
+            'rotulo': ROTULO_FORMA_E_TITULO,
+            'texto': TEXTO_FORMA_TITULO_REINTERPRETADOS.format(
+                instrumento=titulo_lido, natureza=forma,
+            ),
+            'bloqueante': False,
+        })
+    if pendencia_data is not None:
+        pendencias.append(pendencia_data)
 
     return {
         'form_data': form_data,

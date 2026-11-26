@@ -17,7 +17,7 @@ from django.views.decorators.http import require_POST
 from dominial.models import Documento, DocumentoDigital
 from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
 
-from .. import estados, revisao_ato, services, views
+from .. import estados, importacao, revisao_ato, services, views
 from .jobs import _contexto_job, _kwargs_job
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,14 @@ class _DuplicataRecusada(Exception):
     """Interrompe a transação externa sem gravar importação parcial."""
 
     def __init__(self, mensagem=''):
+        super().__init__(mensagem)
+        self.mensagem = mensagem
+
+
+class _AtoBloqueado(Exception):
+    """Bloqueio de negócio do POST, ANTES de qualquer gravação/importação."""
+
+    def __init__(self, mensagem):
         super().__init__(mensagem)
         self.mensagem = mensagem
 
@@ -82,15 +90,27 @@ def revisar_ato_duplicata_ocr(request, tis_id, imovel_id, documento_id, job_id,
             if ato and ato['estado'] == revisao_ato.ESTADO_IMPORTADO:
                 raise _DuplicataRecusada('Este ato já foi salvo.')
             Documento.objects.select_for_update().get(pk=documento.pk)
-            importacao = LancamentoDuplicataService.processar_importacao_duplicata(
-                request, documento, request.user,
+            # Os MESMOS bloqueios do ``salvar_ato`` valem antes de importar:
+            # a importação grava documentos e não pode rodar para um POST que
+            # o salvamento recusaria depois (ex.: abertura sem data).
+            bloqueios = revisao_ato.bloqueios_do_post(
+                request.POST, extracao, indice,
+                importacao._linhas_por_chave(extracao),
             )
-            erros = importacao.get('erros') or ()
+            if bloqueios:
+                raise _AtoBloqueado('\n'.join(bloqueios))
+            resultado_importacao = (
+                LancamentoDuplicataService.processar_importacao_duplicata(
+                    request, documento, request.user,
+                )
+            )
+            erros = resultado_importacao.get('erros') or ()
             if erros:
                 raise _DuplicataRecusada('; '.join(erros))
-            if not importacao.get('sucesso'):
+            if not resultado_importacao.get('sucesso'):
                 raise _DuplicataRecusada(
-                    importacao.get('mensagem') or importacao.get('erro') or '',
+                    resultado_importacao.get('mensagem')
+                    or resultado_importacao.get('erro') or '',
                 )
             resultado = revisao_ato.salvar_ato(
                 request, tis, imovel, documento, job, extracao, indice,
@@ -103,6 +123,9 @@ def revisar_ato_duplicata_ocr(request, tis_id, imovel_id, documento_id, job_id,
     except services.ExtracaoRecusada:
         messages.warning(request, '⚠️ A extração deste documento mudou; recarregue a revisão.')
         return redirect(reverse('revisar_job_ocr', kwargs=kwargs_job))
+    except _AtoBloqueado as erro:
+        messages.error(request, erro.mensagem)
+        return redirect(reverse('revisar_ato_ocr', kwargs={**kwargs_job, 'indice': indice}))
     except _DuplicataRecusada as erro:
         motivo = f' {erro.mensagem}' if erro.mensagem else ''
         messages.error(
@@ -149,13 +172,28 @@ def _dados_do_formulario(post):
 
 
 def _campos_preservados(post):
-    """Pares nome/valor do POST para a confirmação, sem seus próprios campos."""
+    """Pares nome/valor do POST para a confirmação, sem seus próprios campos.
+
+    O ``cartorio_origem[]`` vazio é resolvido pelo MESMO fallback de nome da
+    duplicata antes de virar hidden: assim o segundo POST chega com o ID (o
+    salvamento manual não aceita cartório de origem só por nome) sem perder
+    o nome original, que segue preservado.
+    """
     excluidos = {
         'csrfmiddlewaretoken', 'extracao_id', 'documento_origem_id',
         'documentos_importaveis[]',
     }
-    return [
-        (nome, valor)
-        for nome, valores in post.lists() if nome not in excluidos
-        for valor in valores
-    ]
+    nomes = post.getlist('cartorio_origem_nome[]')
+    campos = []
+    for nome, valores in post.lists():
+        if nome in excluidos:
+            continue
+        if nome == 'cartorio_origem[]':
+            valores = [
+                LancamentoDuplicataService._resolver_cartorio_origem(
+                    valor, nomes[i] if i < len(nomes) else None,
+                ) or ''
+                for i, valor in enumerate(valores)
+            ]
+        campos.extend((nome, valor) for valor in valores)
+    return campos
