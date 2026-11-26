@@ -31,6 +31,7 @@ class LancamentoDuplicataService:
         # Obter dados do formulário (campos são enviados como arrays)
         origens = request.POST.getlist('origem_completa[]')
         cartorios_origem = request.POST.getlist('cartorio_origem[]')
+        nomes_cartorios_origem = request.POST.getlist('cartorio_origem_nome[]')
         
         print(f"DEBUG DUPLICATA: Origens recebidas: {origens}")
         print(f"DEBUG DUPLICATA: Cartórios origem recebidos: {cartorios_origem}")
@@ -49,6 +50,19 @@ class LancamentoDuplicataService:
         for i, origem in enumerate(origens):
             origem = origem.strip() if origem else ''
             cartorio_origem_id = cartorios_origem[i] if i < len(cartorios_origem) and cartorios_origem[i] else None
+            # A revisão OCR manda o nome lido sem o ID quando não há cadastro
+            # escolhido. Resolver o ID pelo MESMO fallback de nome da gravação
+            # (``lancamento_campos_service``/``lancamento_origem_service``)
+            # antes de checar duplicata; nome sem cadastro único segue sem ID e
+            # NÃO cria cartório aqui.
+            if not cartorio_origem_id and i < len(nomes_cartorios_origem):
+                nome = (nomes_cartorios_origem[i] or '').strip()
+                if nome:
+                    cartorio = Cartorios.objects.filter(
+                        nome__iexact=nome,
+                    ).first()
+                    if cartorio is not None:
+                        cartorio_origem_id = cartorio.id
             
             print(f"DEBUG DUPLICATA: Verificando origem {i}: '{origem}'")
             print(f"DEBUG DUPLICATA: Cartório origem ID {i}: '{cartorio_origem_id}'")
