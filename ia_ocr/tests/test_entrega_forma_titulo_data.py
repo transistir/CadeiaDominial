@@ -279,22 +279,28 @@ class DataDoInstrumentoTest(_FormaTituloBase):
         )
         self.assertNotIn(MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado))
 
-    def test_data_dentro_de_identificador_nao_deriva(self):
-        # Sonda do revisor: "123.10.04.2015.999" é um identificador, não
-        # uma data do instrumento.
-        resultado = self._prefill(self._registro(
-            forma=self._campo(
-                'Escritura nº 123.10.04.2015.999', _EVIDENCIA_GENERICA,
-            ),
-            data_transacao=self._campo(
-                '2000-01-01', '1 de janeiro de 2000',
-            ),
-        ))
+    def test_data_colada_em_identificador_nao_deriva(self):
+        # Sondas do revisor: identificadores com ponto/barra nas bordas,
+        # inclusive a família do OUTRO separador dos dois lados.
+        for texto in (
+            'Escritura nº 123.10.04.2015.999',
+            'Escritura no 123/10/04/2015/999', '10/04/2015/999',
+            '123/10.04.2015', '123.10/04.2015',
+        ):
+            with self.subTest(texto=texto):
+                resultado = self._prefill(self._registro(
+                    forma=self._campo(texto, _EVIDENCIA_GENERICA),
+                    data_transacao=self._campo(
+                        '2000-01-01', '1 de janeiro de 2000',
+                    ),
+                ))
 
-        self.assertEqual(
-            resultado['form_data']['data_transacao'], '2000-01-01',
-        )
-        self.assertNotIn(MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado))
+                self.assertEqual(
+                    resultado['form_data']['data_transacao'], '2000-01-01',
+                )
+                self.assertNotIn(
+                    MOTIVO_DATA_INSTRUMENTO, self._motivos(resultado),
+                )
 
 class M6141RegressaoTest(_FormaTituloBase):
     """Reprodução em payload sintético do caso M6141: 2 atos, área 74.6755,

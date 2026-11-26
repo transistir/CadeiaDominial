@@ -18,6 +18,7 @@ from dominial.models import (
     Cartorios, Documento, DocumentoTipo, Imovel, Lancamento,
 )
 from dominial.services.importacao_cadeia_service import ImportacaoCadeiaService
+from dominial.services.lancamento_duplicata_service import LancamentoDuplicataService
 from ia_ocr.revisao_ato.bloqueios import MENSAGEM_DATA_ABERTURA
 
 from .payloads_extracao import payload_m237_abertura
@@ -105,6 +106,30 @@ class ConfirmacaoDuplicataOrigemNomeTest(_OrigemSoNomeBase):
             antes + 1,
             self.mensagens(resposta),
         )
+
+    def test_confirmacao_com_id_vazio_resolve_nome_no_validar(self):
+        # Sem o ID resolvido por ``_campos_preservados``: o POST de
+        # confirmação chega com ``cartorio_origem[]`` vazio e só o nome.
+        confirmacao = self._pagina_da_duplicata()
+        post = post_da_confirmacao(confirmacao)
+        post['cartorio_origem[]'] = ['']
+        post['cartorio_origem_nome[]'] = ['CRI de Itamaraju']
+        validacoes = []
+        original = LancamentoDuplicataService._validar_identidade_duplicata
+
+        def validar(*args, **kwargs):
+            resultado = original(*args, **kwargs)
+            validacoes.append(resultado)
+            return resultado
+
+        with mock.patch.object(
+            LancamentoDuplicataService, '_validar_identidade_duplicata',
+            side_effect=validar,
+        ):
+            self.client.post(self.url_ato(0) + 'duplicata/', post)
+
+        self.assertEqual(len(validacoes), 1)
+        self.assertTrue(validacoes[0]['sucesso'], validacoes[0])
 
 
 class AberturaSemDataNaConfirmacaoDuplicataTest(_OrigemSoNomeBase):

@@ -38,15 +38,16 @@ _MESES_PT_SEM_ACENTO = {
 
 # Data numérica COMPLETA no texto. Os dois separadores iguais, dia/mês com
 # dois dígitos e ano com quatro. As bordas recusam casar dentro de um
-# identificador maior (dígito/letra/ponto antes; dígito/letra depois); um
-# ponto final de frase continua valendo, mas não um ".999" de token.
+# identificador maior em qualquer família: dígito/letra/ponto/barra antes;
+# dígito/letra ou ponto/barra seguido de dígito depois. Um ponto final de
+# frase continua valendo, mas não um ".999"/"/999" de token.
 _DATA_PONTOS_NO_TEXTO = re.compile(
-    r'(?<![\dA-Za-z.])(?P<dia>\d{2})\.(?P<mes>\d{2})\.'
-    r'(?P<ano>\d{4})(?![\dA-Za-z])(?!\.\d)'
+    r'(?<![\dA-Za-z./])(?P<dia>\d{2})\.(?P<mes>\d{2})\.'
+    r'(?P<ano>\d{4})(?![\dA-Za-z])(?![./]\d)'
 )
 _DATA_BARRAS_NO_TEXTO = re.compile(
-    r'(?<![\dA-Za-z.])(?P<dia>\d{2})/(?P<mes>\d{2})/'
-    r'(?P<ano>\d{4})(?![\dA-Za-z])(?!\.\d)'
+    r'(?<![\dA-Za-z./])(?P<dia>\d{2})/(?P<mes>\d{2})/'
+    r'(?P<ano>\d{4})(?![\dA-Za-z])(?![./]\d)'
 )
 _DATA_POR_EXTENSO = re.compile(
     r'(?<!\d)(?P<dia>\d{1,2})\s+de\s+(?P<mes>[a-z]+)\s+de\s+'
