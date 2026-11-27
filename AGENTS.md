@@ -9,9 +9,9 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
   `dominial/` (aplicação principal), `ia_ocr/` (extração assistida), `templates/` e `static/`.
 - Dependências: `requirements.txt`. Versão de Python: `runtime.txt` (3.11).
 - Ambiente local e de teste: `docker-compose.yml` e `docker-compose.dev.yml`.
-- **V2** (Cloudflare Workers, D1, pnpm, backlog #61–#72) está **arquivada**. Não existe nesta árvore.
-  O histórico está na branch `docs/archive-v2-hermes`. Não planeje, implemente nem revisite a V2
-  sem autorização explícita na sessão.
+- **V2** (Cloudflare Workers, D1, pnpm, backlog #61–#72) está **arquivada**. Não é mantida na `develop`.
+  O histórico está na branch remota `v2` (ponta `d6226621`). Restos locais em `packages/` de checkouts
+  antigos devem ser ignorados. Não planeje, implemente nem revisite a V2 sem autorização explícita na sessão.
 
 ## Fila de trabalho — obrigatória no início de cada sessão
 
@@ -34,10 +34,10 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 ## Fluxo de branch e PR
 
-- Branches de trabalho saem de `develop`. PRs apontam para `develop`.
+- Branch, worktree e PR seguem o `branch_policy` de `projects.cadeia_dominial` no harness vigente (PR para `develop`).
 - `main` recebe apenas merge de `develop` com tag de release (`vX.Y.Z`). Não abra PR de feature para `main`.
-- Merge, tag, deploy de produção, mudança de banco e comandos destrutivos exigem autorização humana
-  explícita, mesmo com revisões aprovadas.
+- Merge segue o `merge_delegation` do harness vigente: sem a condição descrita ali, exige consentimento humano.
+- Tag, deploy de produção, mudança de banco e comandos destrutivos exigem autorização humana explícita.
 
 ## Limite de 400 linhas por arquivo (CI)
 
@@ -69,5 +69,3 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 - Não leia nem commite `.env`. Credenciais não entram em commit nem em log.
 - Não use `--no-verify` para contornar hook. Corrija a causa.
 - Ao criar commit, use mensagem em Conventional Commits.
-- Não há dependência de caminhos do servidor: todos os caminhos acima são relativos a este repositório,
-  exceto o harness, que é declarado acima com o nome do arquivo.
