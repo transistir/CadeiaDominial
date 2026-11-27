@@ -32,12 +32,15 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
   corrija este arquivo, não o harness, em um PR separado.
 - A regra de custo e rota por modelo (`model_access`) também vale somente pelo harness.
 
-## Fluxo de branch e PR
+## PR cycle (luandro's standing rule)
 
-- Branch, worktree e PR seguem o `branch_policy` de `projects.cadeia_dominial` no harness vigente (PR para `develop`).
+- Branch, worktree e PR seguem o `branch_policy` de `projects.cadeia_dominial` no harness vigente. PRs vão para `develop`.
 - `main` recebe apenas merge de `develop` com tag de release (`vX.Y.Z`). Não abra PR de feature para `main`.
-- Merge segue o `merge_delegation` do harness vigente: sem a condição descrita ali, exige consentimento humano.
-- Tag, deploy de produção, mudança de banco e comandos destrutivos exigem autorização humana explícita.
+- Ciclo: corrigir, revisar, commitar e revisar de novo até os revisores exigidos aprovarem. Quais revisores e rotas, o harness define.
+- Merge: consentimento humano, conforme `projects.cadeia_dominial.roles.evaluator.decision_rule.merge_authority`.
+  A delegação condicional de `merge_delegation` não se aplica a `develop` sem confirmação explícita do responsável.
+- Push de branch e abertura de PR: `projects.cadeia_dominial.roles.evaluator.push_delegation`.
+  Tag, deploy, produção e operações de release seguem autorização humana explícita.
 
 ## Limite de 400 linhas por arquivo (CI)
 
@@ -66,6 +69,6 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 ## Regras gerais
 
-- Não leia nem commite `.env`. Credenciais não entram em commit nem em log.
+- Credenciais e `.env`: seguir as regras de segurança do harness vigente e do SOUL do perfil.
 - Não use `--no-verify` para contornar hook. Corrija a causa.
 - Ao criar commit, use mensagem em Conventional Commits.
