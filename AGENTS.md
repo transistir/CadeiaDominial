@@ -1,4 +1,4 @@
-# AGENTS.md — Cadeia Dominial
+# AGENTS.md — Umbelino (Sistema Cadeia Dominial V1)
 
 Ponto de entrada para qualquer agente de código (Hermes, Claude Code, Codex) neste repositório.
 Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; não as replica.
@@ -17,6 +17,7 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 - **`docs/produto-3/ROADMAP.md` é a fonte única do que fazer.** Siga a fila (R1–R10) na ordem e com as
   exceções de gate definidas ali. Não escolha issue por recência ou preferência.
+- Ao planejar ou retomar trabalho, consulte também as issues e os PRs abertos e o estado real do Kanban. O roadmap sozinho não representa a fila operacional.
 - Os gates (GATE-CLIENTE, GATE-LUANDRO, GATE-PRODUTO) e o que cada um bloqueia estão definidos no roadmap.
   Não os reinterprete aqui.
 - Reordenar a fila exige aprovação explícita do usuário, registrada no próprio roadmap.
@@ -34,7 +35,7 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 ## PR cycle (luandro's standing rule)
 
-- Branch, worktree e PR seguem o `branch_policy` de `projects.cadeia_dominial` no harness vigente. PRs vão para `develop`.
+- Branch, worktree e PR seguem o `branch_policy` de `projects.cadeia_dominial` no harness vigente.
 - `main` recebe apenas merge de `develop` com tag de release (`vX.Y.Z`). Não abra PR de feature para `main`.
 - Ciclo: corrigir, revisar, commitar e revisar de novo até os revisores exigidos aprovarem. Quais revisores e rotas, o harness define.
 - Merge: consentimento humano, conforme `projects.cadeia_dominial.roles.evaluator.decision_rule.merge_authority`.
@@ -69,5 +70,5 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 ## Regras gerais
 
-- Credenciais e `.env`: seguir as regras de segurança do harness vigente e do SOUL do perfil.
+- Não leia nem commite `.env`.
 - Não use `--no-verify` para contornar hook. Corrija a causa.
