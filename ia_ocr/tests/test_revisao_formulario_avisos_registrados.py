@@ -5,7 +5,7 @@ from unittest import mock
 
 from django.urls import reverse
 
-from dominial.models import Lancamento
+from dominial.models import Lancamento, Pessoas
 from ia_ocr.models import ImportacaoIA
 from ia_ocr.revisao_ato.avisos_registrados import avisos_do_lancamento
 
@@ -91,10 +91,49 @@ class AvisosRegistradosTest(RevisaoFormularioBase):
     def test_requer_forma_some_quando_o_post_preenche_a_forma(self):
         self._registro_sem_forma_que_requer_forma()
 
-        self.salvar(0, forma_averbacao='Compra e venda')
+        self.salvar(0, forma_transacao='Compra e venda')
 
         motivos = [aviso['motivo'] for aviso in self._snapshot()]
         self.assertNotIn('requer_forma', motivos)
+        self.assertEqual(self._lancamento().forma, 'Compra e venda')
+
+    def test_requer_forma_fica_quando_so_forma_averbacao_no_registro(self):
+        self._registro_sem_forma_que_requer_forma()
+
+        self.salvar(0, forma_averbacao='Compra e venda', forma_transacao='')
+
+        motivos = [aviso['motivo'] for aviso in self._snapshot()]
+        self.assertIn('requer_forma', motivos)
+        self.assertIsNone(self._lancamento().forma)
+
+    def test_snapshot_guarda_todos_os_lidos_sem_campo(self):
+        self.salvar(0)
+
+        rotulos = [
+            aviso['rotulo'] for aviso in self._snapshot()
+            if aviso['motivo'] == 'lido_sem_campo'
+        ]
+        self.assertIn('CPF/RG das partes', rotulos)
+        self.assertIn('Valor da transação', rotulos)
+
+    def test_requer_transmissao_some_com_lista_que_tem_linha_vazia(self):
+        self.tipo_registro.requer_transmissao = True
+        self.tipo_registro.save(update_fields=['requer_transmissao'])
+        payload = payload_registro(self.job.job_id)
+        payload['acts'][0]['partes'] = payload['acts'][0]['partes'][2:]
+        self.job.extracoes.all().delete()
+        self.extracao = self._aberta(payload)
+        pessoa = Pessoas.objects.create(nome='FULANO DE TAL')
+
+        self.salvar(0, **{
+            'transmitente[]': [str(pessoa.pk), ''],
+            'transmitente_nome[]': ['FULANO DE TAL', ''],
+            'adquirente[]': [str(pessoa.pk), ''],
+            'adquirente_nome[]': ['FULANO DE TAL', ''],
+        })
+
+        motivos = [aviso['motivo'] for aviso in self._snapshot()]
+        self.assertNotIn('requer_transmissao', motivos)
 
     def test_requer_forma_fica_quando_o_post_nao_preenche(self):
         self._registro_sem_forma_que_requer_forma()

@@ -136,6 +136,61 @@ class BannerGruposTest(RevisaoFormularioBase):
 
         self.assertNotIn('/acts/', _banner(html))
 
+    def test_lidos_sem_campo_nao_sao_deduplicados(self):
+        html = self.client.get(self.url_ato(0)).content.decode()
+
+        avisos = _grupo(html, 'ia-revisao-avisos')
+        self.assertIn('CPF/RG das partes', avisos)
+        self.assertIn('Valor da transação', avisos)
+
+    def test_data_da_origem_convive_com_cpf_rg(self):
+        payload = self._payload_de_tres_atos()
+        payload['acts'][0]['origem'] = {
+            'tipo_documento': self._campo('matricula', 'MATRÍCULA Nº 42.718'),
+            'numero': self._campo('M42.718', '42.718'),
+            'data': self._campo('2019-01-01', '1º de janeiro de 2019'),
+        }
+        self.job.extracoes.all().delete()
+        self.extracao = self._aberta(payload)
+
+        html = self.client.get(self.url_ato(0)).content.decode()
+
+        avisos = _grupo(html, 'ia-revisao-avisos')
+        self.assertIn('Data da origem', avisos)
+        self.assertIn('CPF/RG das partes', avisos)
+
+    def test_descarte_nao_efetivo_nao_afirma_descarte(self):
+        self._com_area_em_alqueires(inicio_sem_data=True)
+
+        resposta = self.salvar(0, area='0.012', descartar_area='1')
+
+        self.assertEqual(resposta.status_code, 200)
+        html = resposta.content.decode()
+        avisos = (
+            _grupo(html, 'ia-revisao-avisos')
+            if 'ia-revisao-avisos' in html else ''
+        )
+        self.assertNotIn('descartada pelo revisor', avisos)
+
+    def test_area_invalida_mostra_mensagem_do_parser(self):
+        self._com_area_em_alqueires()
+
+        resposta = self.salvar(0, area='1.000')
+
+        self.assertEqual(resposta.status_code, 200)
+        bloqueios = _grupo(resposta.content.decode(), 'ia-revisao-bloqueios')
+        self.assertIn('Área ambígua', bloqueios)
+        self.assertIn('ia-revisao-descarte-area', bloqueios)
+
+    def test_area_vazia_mostra_texto_do_prefill(self):
+        self._com_area_em_alqueires()
+
+        resposta = self.salvar(0, area='')
+
+        self.assertEqual(resposta.status_code, 200)
+        bloqueios = _grupo(resposta.content.decode(), 'ia-revisao-bloqueios')
+        self.assertIn('12,5 alqueires no documento', bloqueios)
+
 
 class BannerSemRascunhoTest(RevisaoFormularioBase):
     def test_payload_limpo_nao_inventa_bloqueio(self):

@@ -13,11 +13,14 @@ estiver pendente: no bloqueante com o valor vazio e no informativo quando o
 rascunho já marcou o descarte. Ele nunca some no reenvio — era o trap da #320.
 """
 
+from dominial.models import LancamentoTipo
+
 from .. import importacao, revisao
 from ..classe_pendencia import eh_bloqueante
 from ..formulario import input_do_campo
 from .bloqueios import (
-    MOTIVO_AREA_SEM_DECISAO, bloqueios_do_post_itens, bloqueios_do_prefill,
+    MOTIVO_AREA_SEM_DECISAO, _descarte_efetivo, bloqueios_do_post_itens,
+    bloqueios_do_prefill,
 )
 
 MOTIVO_AREA_DESCARTADA = 'area_descartada'
@@ -54,20 +57,32 @@ def aviso_resolvido_no_post(aviso, post):
     chave = aviso.get('chave') or ''
     if not motivo.startswith('requer_') or chave.endswith('/origem/data'):
         return False
-    nome = input_do_campo(chave)
+    nome = input_do_campo(chave, _tipo_do_post(post))
     if nome is None:
         return False
-    nomes = [nome]
-    if chave.endswith('/forma'):
-        nomes.append('forma_averbacao')
-    return any(_campo_preenchido(post, item) for item in nomes)
+    return _campo_preenchido(post, nome)
+
+
+def _tipo_do_post(post):
+    """Código do ``LancamentoTipo`` do POST (``registro``, ``averbacao``...)."""
+    tipo_id = post.get('tipo_lancamento')
+    if not str(tipo_id or '').strip():
+        return None
+    try:
+        return LancamentoTipo.objects.filter(
+            pk=tipo_id,
+        ).values_list('tipo', flat=True).first()
+    except (TypeError, ValueError):
+        return None
 
 
 def _campo_preenchido(post, nome):
-    return bool(
-        (post.get(nome) or '').strip()
-        or (post.get(f'{nome}[]') or '').strip()
-    )
+    """Qualquer valor não vazio da lista conta (o service grava todos)."""
+    for chave in (nome, f'{nome}[]'):
+        for valor in post.getlist(chave):
+            if (valor or '').strip():
+                return True
+    return False
 
 
 def _transmissao_preenchida(post):
@@ -83,13 +98,19 @@ def _transmissao_preenchida(post):
 
 
 def _dedupe_por_motivo(avisos):
+    """Deduplica pela identidade completa ``(motivo, rotulo)``.
+
+    ``lido_sem_campo`` aparece VÁRIAS vezes no mesmo ato (CPF/RG, valor,
+    data da origem...), cada um com o seu ``rotulo``. Deduplicar só pelo
+    motivo engolia todos menos o primeiro.
+    """
     vistos = set()
     resultado = []
     for aviso in avisos:
-        motivo = aviso.get('motivo')
-        if motivo in vistos:
+        identidade = (aviso.get('motivo'), aviso.get('rotulo'))
+        if identidade in vistos:
             continue
-        vistos.add(motivo)
+        vistos.add(identidade)
         resultado.append(aviso)
     return resultado
 
@@ -123,7 +144,7 @@ def grupos_do_banner(prefill, extracao, indice, rascunho=None):
 
 def _area_descartada(prefill, post):
     """Checkbox da área preservado quando o rascunho já a descartou."""
-    if post.get('descartar_area') != '1':
+    if not _descarte_efetivo(post):
         return []
     area = next(
         (item for item in prefill.get('pendencias', ())

@@ -46,14 +46,35 @@ def _item(motivo, rotulo, texto, **extras):
     }
 
 
+def _descarte_efetivo(post):
+    """Descarte que o service/snapshot realmente registram (#320).
+
+    O checkbox só vale quando a área está vazia: com área preenchida o
+    serviço a grava e o snapshot não registra o descarte. Banner e snapshot
+    precisam da MESMA regra, senão um afirma o que o outro omite.
+    """
+    return (
+        post.get('descartar_area') == '1'
+        and not (post.get('area') or '').strip()
+    )
+
+
 def _area_resolvida_do_post(post):
-    """Descarte explícito ou área que o parser único aceita sem ambiguidade."""
-    if post.get('descartar_area') == '1':
-        return True
+    """``(resolvida, erro)`` da área no POST.
+
+    ``erro`` é a mensagem do parser único quando a área foi preenchida e não
+    parseia; vazio significa "sem área" (toque do texto detalhado do prefill
+    fica a cargo de quem monta o item).
+    """
+    if _descarte_efetivo(post):
+        return True, None
+    valor = (post.get('area') or '').strip()
+    if not valor:
+        return False, None
     try:
-        return parse_area_br(post.get('area')) is not None
-    except AreaInvalida:
-        return False
+        return parse_area_br(valor) is not None, None
+    except AreaInvalida as erro:
+        return False, erro.mensagem
 
 
 def bloqueios_do_post_itens(post, extracao, indice, linhas):
@@ -62,11 +83,14 @@ def bloqueios_do_post_itens(post, extracao, indice, linhas):
     area = _area_em_outra_unidade(
         extracao, int(indice), linhas, f'/acts/{int(indice)}',
     )
-    if area is not None and not _area_resolvida_do_post(post):
-        bloqueios.append(_item(
-            MOTIVO_AREA_SEM_DECISAO, area['rotulo'], MENSAGEM_AREA_SEM_DECISAO,
-            rotulo_descarte=area.get('rotulo_descarte'),
-        ))
+    if area is not None:
+        resolvida, erro = _area_resolvida_do_post(post)
+        if not resolvida:
+            bloqueios.append(_item(
+                MOTIVO_AREA_SEM_DECISAO, area['rotulo'],
+                erro if erro else area['texto'],
+                rotulo_descarte=area.get('rotulo_descarte'),
+            ))
     nome = _cartorio_da_transmissao_nao_cadastrado(post)
     if nome:
         bloqueios.append(_item(

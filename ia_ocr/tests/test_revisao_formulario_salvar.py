@@ -205,7 +205,7 @@ class AreaEmOutraUnidadeSalvarTest(RevisaoFormularioBase):
         )
         self.assertFalse(ImportacaoIA.objects.filter(ocr_job=self.job).exists())
         self.assertIn(
-            'A área foi lida em unidade diferente de hectare',
+            '12,5 alqueires no documento',
             ' '.join(self.mensagens(resposta)),
         )
         html = resposta.content.decode()

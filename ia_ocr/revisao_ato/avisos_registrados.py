@@ -12,11 +12,17 @@ nomes de partes ou chave de linha (``/acts/...``).
 
 from .. import formulario
 from ..models import ImportacaoIA
-from .banner import MOTIVO_AREA_DESCARTADA, avisos_do_formulario
+from .banner import (
+    MOTIVO_AREA_DESCARTADA, _descarte_efetivo, avisos_do_formulario,
+)
 
 # Texto fixo por motivo que interpolava texto livre do OCR (forma, título,
 # datas). O banner continua detalhado; o snapshot persistido, não: CPF/nome
 # no campo errado não podem virar histórico.
+#
+# SÓ os motivos listados abaixo têm texto fixo. Motivo novo que interpole
+# texto do OCR continua risco conhecido: use o texto controlado aqui ou não
+# deixe o valor cru chegar ao snapshot.
 TEXTO_CONTROLADO = {
     'forma_ajustada_vocabulario': (
         'Forma lida ajustada ao vocabulário; confira o valor antes de salvar.'
@@ -42,10 +48,7 @@ def avisos_para_registrar(extracao, indice, documento, post):
     except formulario.AtoInexistente:
         return []
     avisos = avisos_do_formulario(prefill, extracao, indice, post=post)
-    if (
-        post.get('descartar_area') == '1'
-        and not (post.get('area') or '').strip()
-    ):
+    if _descarte_efetivo(post):
         area = next(
             (item for item in prefill.get('pendencias', ())
              if item['motivo'] == 'unidade_area'),
