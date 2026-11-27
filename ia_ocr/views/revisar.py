@@ -266,9 +266,16 @@ def _salvar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
             ato, rascunho=request.POST,
         )
 
+    falha = f'Ato {ato["rotulo"]} não foi salvo. '
     if resultado.situacao == 'salvo':
         revisao_ato.limpar_rascunho(request, extracao, indice)
         messages.success(request, f'✅ Ato {ato["rotulo"]} salvo como lançamento.')
+        if resultado.avisos_registrados:
+            messages.info(request, (
+                f'ℹ️ O ato {ato["rotulo"]} foi salvo com '
+                f'{resultado.avisos_registrados} aviso(s) para conferir '
+                'depois. Eles ficam registrados na edição do lançamento.'
+            ))
         if resultado.mensagem_origens:
             messages.info(request, resultado.mensagem_origens)
         return _depois_de_salvar(request, tis, imovel, documento, extracao,
@@ -278,7 +285,7 @@ def _salvar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
         return _depois_de_salvar(request, tis, imovel, documento, extracao,
                                  kwargs_job, indice)
     if resultado.situacao == 'recusado':
-        messages.error(request, resultado.mensagem)
+        messages.error(request, f'{falha}{resultado.mensagem}')
         return redirect(_url_tela(kwargs_job))
 
     if resultado.situacao == 'duplicata':
@@ -288,7 +295,7 @@ def _salvar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
             resultado.duplicata_info,
         )
     if resultado.situacao == 'invalido':
-        messages.error(request, resultado.mensagem)
+        messages.error(request, f'{falha}{resultado.mensagem}')
     return _mostrar_ato(
         request, tis, imovel, documento, job, extracao, kwargs_job, atos, ato,
         rascunho=request.POST,
@@ -376,8 +383,9 @@ def _mostrar_ato(request, tis, imovel, documento, job, extracao, kwargs_job,
                     atos, key=lambda a: (a['eh_inicio'], -a['posicao']),
                 )
             ],
-            'avisos': prefill['pendencias'],
-            'bloqueios': revisao_ato.bloqueios_do_prefill(prefill),
+            **revisao_ato.grupos_do_banner(
+                prefill, extracao, indice, rascunho,
+            ),
             'descartar_area': bool(
                 rascunho is not None
                 and rascunho.get('descartar_area') == '1'

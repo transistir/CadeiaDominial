@@ -61,8 +61,10 @@ from .bloqueios import (
     MENSAGEM_DATA_ABERTURA,
     MENSAGEM_INICIO_SEM_ORIGEM,
     bloqueios_do_post,
+    bloqueios_do_post_itens,
     bloqueios_do_prefill,
 )
+from .banner import avisos_do_formulario, grupos_do_banner
 from .salvar import (
     MENSAGEM_ATO_FORA_DA_REVISAO,
     MENSAGEM_JOB_FORA_DE_REVISAO,
@@ -93,8 +95,11 @@ __all__ = [
     '_restantes',
     '_rotulo_da_aba',
     'atos_da_revisao',
+    'avisos_do_formulario',
     'bloqueios_do_post',
+    'bloqueios_do_post_itens',
     'bloqueios_do_prefill',
+    'grupos_do_banner',
     'estado_do_formulario',
     'estados',
     'guardar_rascunho',

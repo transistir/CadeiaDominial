@@ -67,6 +67,9 @@ class ImportacaoIA(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         related_name='+',
     )
+    # "Importar e corrigir depois" (#332): avisos informativos do ato no
+    # momento do save. Só motivo/rotulo/texto de negócio — nunca PII.
+    avisos = models.JSONField(default=list, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

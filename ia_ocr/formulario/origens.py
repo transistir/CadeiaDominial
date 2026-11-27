@@ -5,6 +5,7 @@ import re
 from dominial.utils.documento_identidade_utils import normalizar_numero_documento
 
 from .. import importacao, revisao
+from ..classe_pendencia import eh_bloqueante
 from .prefill import input_do_campo
 from .texto import _evidencia
 
@@ -136,7 +137,7 @@ def _lidos_sem_campo(extracao, indice, ato):
             'motivo': MOTIVO_LIDO_SEM_CAMPO,
             'rotulo': rotulo,
             'texto': TEXTO_LIDO_SEM_CAMPO,
-            'bloqueante': False,
+            'bloqueante': eh_bloqueante(MOTIVO_LIDO_SEM_CAMPO),
         }
         for rotulo in rotulos
     ]

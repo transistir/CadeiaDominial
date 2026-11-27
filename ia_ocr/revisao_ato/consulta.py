@@ -32,6 +32,9 @@ class Resultado:
     # Índices dos atos que continuam pendentes depois deste POST, na ordem
     # da revisão. Vazio com ``salvo`` = a revisão acabou.
     restantes: list = field(default_factory=list)
+    # #332: quantos avisos informativos ficaram gravados para correção
+    # posterior na edição do lançamento.
+    avisos_registrados: int = 0
 
 
 # ---------------------------------------------------------------------------

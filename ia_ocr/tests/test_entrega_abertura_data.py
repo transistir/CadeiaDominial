@@ -85,7 +85,9 @@ class AberturaSemDataNoPostTest(AberturaM237Base):
         resposta = self.salvar(0, data='')
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn(MENSAGEM_DATA_ABERTURA, self.mensagens(resposta))
+        self.assertIn(
+            MENSAGEM_DATA_ABERTURA, '\n'.join(self.mensagens(resposta)),
+        )
         self.assertEqual(self.contagens(), antes)
         self.assertFalse(
             Lancamento.objects.filter(documento=self.documento).exists()
@@ -97,7 +99,9 @@ class AberturaSemDataNoPostTest(AberturaM237Base):
         resposta = self.salvar(0, data='18/06/2015')
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn(MENSAGEM_DATA_ABERTURA, self.mensagens(resposta))
+        self.assertIn(
+            MENSAGEM_DATA_ABERTURA, '\n'.join(self.mensagens(resposta)),
+        )
         self.assertEqual(self.contagens(), antes)
         self.assertFalse(
             Lancamento.objects.filter(documento=self.documento).exists()
@@ -114,6 +118,6 @@ class AberturaSemDataNoPostTest(AberturaM237Base):
         self.assertEqual(self.contagens(), antes)
         mensagens = self.mensagens(resposta)
         self.assertFalse(
-            any(mensagem == MENSAGEM_DATA_ABERTURA for mensagem in mensagens)
+            any(MENSAGEM_DATA_ABERTURA in mensagem for mensagem in mensagens)
         )
-        self.assertIn(ERRO_CRIACAO, mensagens)
+        self.assertTrue(any(ERRO_CRIACAO in m for m in mensagens))

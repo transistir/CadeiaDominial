@@ -48,7 +48,7 @@ class RevisaoCartorioOrigemNaoCadastradoTest(RevisaoFormularioBase):
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(
             MENSAGEM_CARTORIO_ORIGEM_NAO_CADASTRADO.format(nome=nome),
-            self.mensagens(resposta),
+            '\n'.join(self.mensagens(resposta)),
         )
 
     def test_cartorio_origem_fantasma_nao_e_criado_e_ato_nao_e_salvo(self):

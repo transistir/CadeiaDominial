@@ -3,6 +3,7 @@
 from dominial.models import Cartorios, Pessoas
 
 from .. import destinos, valores
+from ..classe_pendencia import eh_bloqueante
 from .estruturas import (
     MOTIVO_CRIAR_NOVO_SEM_NOME, MOTIVO_UNIDADE_AREA, _AREA_DE_ATO,
     _OBRIGATORIOS_ATO, _OBRIGATORIOS_DOCUMENTO,
@@ -17,10 +18,17 @@ from .tipos import (
 
 
 def pendencias(extracao) -> list[dict]:
-    """Bloqueios das linhas incluídas e dos destinos obrigatórios ausentes."""
+    """Bloqueios das linhas incluídas e dos destinos obrigatórios ausentes.
+
+    O conjunto continua sendo o BLOQUEANTE; a classe de cada motivo vem do
+    mapa único em ``classe_pendencia`` (#332).
+    """
     linhas, atos = _contexto_revisao(extracao)
     if not atos:
-        return [{'chave': '/acts', 'motivo': 'nenhum_ato', 'bloqueante': True}]
+        return [{
+            'chave': '/acts', 'motivo': 'nenhum_ato',
+            'bloqueante': eh_bloqueante('nenhum_ato'),
+        }]
     return _pendencias_de_linhas(linhas, atos)
 
 
@@ -40,7 +48,10 @@ def _pendencias_de_linhas(linhas, atos) -> list[dict]:
     resultado = []
 
     def adicionar(chave, motivo):
-        resultado.append({'chave': chave, 'motivo': motivo, 'bloqueante': True})
+        resultado.append({
+            'chave': chave, 'motivo': motivo,
+            'bloqueante': eh_bloqueante(motivo),
+        })
 
     escolhas = [
         campo for campo in linhas.values()

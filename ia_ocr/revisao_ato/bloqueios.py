@@ -3,8 +3,10 @@
 from datetime import datetime
 
 from dominial.models import Cartorios, LancamentoTipo
+from dominial.utils.area_br import AreaInvalida, parse_area_br
 
-from ..formulario import area_exige_decisao
+from ..classe_pendencia import eh_bloqueante
+from ..formulario import _area_em_outra_unidade
 
 MENSAGEM_AREA_SEM_DECISAO = (
     '❌ A área foi lida em unidade diferente de hectare. Preencha a área em '
@@ -26,41 +28,122 @@ MENSAGEM_DATA_ABERTURA = (
     '❌ Informe a data do ato de abertura. Nada foi gravado.'
 )
 
+MOTIVO_AREA_SEM_DECISAO = 'unidade_area'
+MOTIVO_CARTORIO_TRANSMISSAO = 'cartorio_transmissao_nao_cadastrado'
+MOTIVO_CARTORIO_ORIGEM = 'cartorio_origem_nao_cadastrado'
+MOTIVO_INICIO_SEM_ORIGEM = 'inicio_sem_origem'
+MOTIVO_INICIO_SEM_DATA = 'inicio_sem_data'
 
-def bloqueios_do_post(post, extracao, indice, linhas):
-    """Bloqueios avaliados no POST de um ato, sem persistir nada."""
-    bloqueios = []
-    if (
-        area_exige_decisao(extracao, indice, linhas)
+ROTULO_ORIGEM = 'Origem'
+ROTULO_DATA = 'Data'
+ROTULO_CARTORIO_TRANSMISSAO = 'Cartório da transmissão'
+ROTULO_CARTORIO_ORIGEM = 'Cartório da origem'
+
+
+def _item(motivo, rotulo, texto, **extras):
+    return {
+        'motivo': motivo, 'rotulo': rotulo, 'texto': texto, **extras,
+    }
+
+
+def _descarte_efetivo(post):
+    """Descarte que o service/snapshot realmente registram (#320).
+
+    O checkbox só vale quando a área está vazia: com área preenchida o
+    serviço a grava e o snapshot não registra o descarte. Banner e snapshot
+    precisam da MESMA regra, senão um afirma o que o outro omite.
+    """
+    return (
+        post.get('descartar_area') == '1'
         and not (post.get('area') or '').strip()
-        and post.get('descartar_area') != '1'
-    ):
-        bloqueios.append(MENSAGEM_AREA_SEM_DECISAO)
+    )
+
+
+def _area_resolvida_do_post(post):
+    """``(resolvida, erro)`` da área no POST.
+
+    ``erro`` é a mensagem do parser único quando a área foi preenchida e não
+    parseia; vazio significa "sem área" (toque do texto detalhado do prefill
+    fica a cargo de quem monta o item).
+    """
+    if _descarte_efetivo(post):
+        return True, None
+    valor = (post.get('area') or '').strip()
+    if not valor:
+        return False, None
+    try:
+        return parse_area_br(valor) is not None, None
+    except AreaInvalida as erro:
+        return False, erro.mensagem
+
+
+def bloqueios_do_post_itens(post, extracao, indice, linhas):
+    """Bloqueios do POST como ``{motivo, rotulo, texto}`` (banner #332)."""
+    bloqueios = []
+    area = _area_em_outra_unidade(
+        extracao, int(indice), linhas, f'/acts/{int(indice)}',
+    )
+    if area is not None:
+        resolvida, erro = _area_resolvida_do_post(post)
+        if not resolvida:
+            bloqueios.append(_item(
+                MOTIVO_AREA_SEM_DECISAO, area['rotulo'],
+                erro if erro else area['texto'],
+                rotulo_descarte=area.get('rotulo_descarte'),
+            ))
     nome = _cartorio_da_transmissao_nao_cadastrado(post)
     if nome:
-        bloqueios.append(MENSAGEM_CARTORIO_NAO_CADASTRADO.format(nome=nome))
+        bloqueios.append(_item(
+            MOTIVO_CARTORIO_TRANSMISSAO, ROTULO_CARTORIO_TRANSMISSAO,
+            MENSAGEM_CARTORIO_NAO_CADASTRADO.format(nome=nome),
+        ))
     for nome_origem in _cartorios_de_origem_nao_cadastrados(post):
-        bloqueios.append(
-            MENSAGEM_CARTORIO_ORIGEM_NAO_CADASTRADO.format(nome=nome_origem)
-        )
+        bloqueios.append(_item(
+            MOTIVO_CARTORIO_ORIGEM, ROTULO_CARTORIO_ORIGEM,
+            MENSAGEM_CARTORIO_ORIGEM_NAO_CADASTRADO.format(nome=nome_origem),
+        ))
     if _inicio_sem_origem(post):
-        bloqueios.append(MENSAGEM_INICIO_SEM_ORIGEM)
+        bloqueios.append(_item(
+            MOTIVO_INICIO_SEM_ORIGEM, ROTULO_ORIGEM, MENSAGEM_INICIO_SEM_ORIGEM,
+        ))
     if _inicio_sem_data(post):
         # A mensagem específica vale só para o início de matrícula; nos
         # demais tipos a falta de data segue a mensagem do service.
-        bloqueios.append(MENSAGEM_DATA_ABERTURA)
-    return bloqueios
+        bloqueios.append(_item(
+            MOTIVO_INICIO_SEM_DATA, ROTULO_DATA, MENSAGEM_DATA_ABERTURA,
+        ))
+    return [
+        {**item, 'bloqueante': eh_bloqueante(item['motivo'])}
+        for item in bloqueios
+    ]
+
+
+def bloqueios_do_post(post, extracao, indice, linhas):
+    """Bloqueios avaliados no POST de um ato, sem persistir nada."""
+    return [
+        item['texto']
+        for item in bloqueios_do_post_itens(post, extracao, indice, linhas)
+    ]
 
 
 def bloqueios_do_prefill(prefill):
     """Bloqueios que o GET mostra no banner, sem desabilitar o formulário."""
     form_data = prefill.get('form_data', {})
-    if _tipo_eh_inicio(form_data.get('tipo_lancamento')) and not any(
+    if not _tipo_eh_inicio(form_data.get('tipo_lancamento')):
+        return []
+    bloqueios = []
+    if not any(
         _origem_tem_identidade(origem) or origem.get('fim_cadeia')
         for origem in prefill.get('origens_separadas', ())
     ):
-        return [MENSAGEM_INICIO_SEM_ORIGEM]
-    return []
+        bloqueios.append(_item(
+            MOTIVO_INICIO_SEM_ORIGEM, ROTULO_ORIGEM, MENSAGEM_INICIO_SEM_ORIGEM,
+        ))
+    if not _data_do_post_valida(form_data.get('data')):
+        bloqueios.append(_item(
+            MOTIVO_INICIO_SEM_DATA, ROTULO_DATA, MENSAGEM_DATA_ABERTURA,
+        ))
+    return bloqueios
 
 
 def _cartorio_da_transmissao_nao_cadastrado(post):

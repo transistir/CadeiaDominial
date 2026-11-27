@@ -23,7 +23,17 @@
     {% if revisao_ia.bloqueios %}
     <ul class="ia-revisao-bloqueios">
         {% for bloqueio in revisao_ia.bloqueios %}
-        <li>{{ bloqueio }}</li>
+        <li>
+            <strong>{{ bloqueio.rotulo }}</strong>: {{ bloqueio.texto }}
+            {% if bloqueio.rotulo_descarte %}
+            <label class="ia-revisao-descarte-area">
+                <input type="checkbox" name="descartar_area" value="1"
+                       form="lancamento-form"
+                       {% if revisao_ia.descartar_area %}checked{% endif %}>
+                {{ bloqueio.rotulo_descarte }}
+            </label>
+            {% endif %}
+        </li>
         {% endfor %}
     </ul>
     {% endif %}
@@ -32,7 +42,7 @@
         {% for aviso in revisao_ia.avisos %}
         <li>
             <strong>{{ aviso.rotulo }}</strong>: {{ aviso.texto }}
-            {% if aviso.motivo == "unidade_area" %}
+            {% if aviso.rotulo_descarte %}
             <label class="ia-revisao-descarte-area">
                 <input type="checkbox" name="descartar_area" value="1"
                        form="lancamento-form"

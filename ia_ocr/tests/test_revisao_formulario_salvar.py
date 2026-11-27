@@ -205,7 +205,7 @@ class AreaEmOutraUnidadeSalvarTest(RevisaoFormularioBase):
         )
         self.assertFalse(ImportacaoIA.objects.filter(ocr_job=self.job).exists())
         self.assertIn(
-            'A área foi lida em unidade diferente de hectare',
+            '12,5 alqueires no documento',
             ' '.join(self.mensagens(resposta)),
         )
         html = resposta.content.decode()
@@ -270,7 +270,10 @@ class DuplicataTest(RevisaoFormularioBase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(self.contagens(), antes)
-        self.assertIn('Tipo de lançamento é obrigatório', self.mensagens(resposta))
+        self.assertIn(
+            'Tipo de lançamento é obrigatório',
+            ' '.join(self.mensagens(resposta)),
+        )
         html = resposta.content.decode()
         self.assertIn('texto digitado', html)
         self.assertRegex(html, r'name="numero_lancamento_simples"[^>]*value="7"')
