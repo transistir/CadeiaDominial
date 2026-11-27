@@ -15,9 +15,9 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 ## Fila de trabalho — obrigatória no início de cada sessão
 
-- **`docs/produto-3/ROADMAP.md` é a fonte única do que fazer.** Siga a fila (R1–R10) na ordem e com as
+- **`docs/produto-3/ROADMAP.md` é a fonte da ordem de prioridade (R1–R10).** Siga a fila (R1–R10) na ordem e com as
   exceções de gate definidas ali. Não escolha issue por recência ou preferência.
-- Ao planejar ou retomar trabalho, consulte também as issues e os PRs abertos e o estado real do Kanban. O roadmap sozinho não representa a fila operacional.
+- Ao planejar ou retomar trabalho, consulte também as issues e os PRs abertos e o estado real do Kanban do Hermes. O roadmap sozinho não representa a fila operacional. Se issues, PRs ou o Kanban divergirem do roadmap, reporte a divergência; não reordene por conta própria.
 - Os gates (GATE-CLIENTE, GATE-LUANDRO, GATE-PRODUTO) e o que cada um bloqueia estão definidos no roadmap.
   Não os reinterprete aqui.
 - Reordenar a fila exige aprovação explícita do usuário, registrada no próprio roadmap.
@@ -70,5 +70,5 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 ## Regras gerais
 
-- Não leia nem commite `.env`.
+- Não leia nem commite `.env`. Demais regras de credenciais: harness vigente.
 - Não use `--no-verify` para contornar hook. Corrija a causa.
