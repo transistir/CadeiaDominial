@@ -38,7 +38,7 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 - `main` recebe apenas merge de `develop` com tag de release (`vX.Y.Z`). Não abra PR de feature para `main`.
 - Ciclo: corrigir, revisar, commitar e revisar de novo até os revisores exigidos aprovarem. Quais revisores e rotas, o harness define.
 - Merge: consentimento humano, conforme `projects.cadeia_dominial.roles.evaluator.decision_rule.merge_authority`.
-  A delegação condicional de `merge_delegation` não se aplica a `develop` sem confirmação explícita do responsável.
+  A delegação de `merge_delegation` depende das condições descritas no harness; não é regra deste arquivo.
 - Push de branch e abertura de PR: `projects.cadeia_dominial.roles.evaluator.push_delegation`.
   Tag, deploy, produção e operações de release seguem autorização humana explícita.
 
@@ -71,4 +71,3 @@ Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; n�
 
 - Credenciais e `.env`: seguir as regras de segurança do harness vigente e do SOUL do perfil.
 - Não use `--no-verify` para contornar hook. Corrija a causa.
-- Ao criar commit, use mensagem em Conventional Commits.
