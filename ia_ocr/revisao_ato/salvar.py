@@ -10,6 +10,8 @@ from dominial.services.lancamento_service import LancamentoService
 from dominial.utils.criacao_automatica import sem_criacao_automatica
 
 from .. import estados, importacao, revisao, services
+from ..models import ImportacaoIA
+from .avisos_registrados import avisos_para_registrar
 from .bloqueios import bloqueios_do_post
 from .consulta import (
     ESTADO_IMPORTADO,
@@ -83,6 +85,11 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice, *,
         if bloqueios:
             return Resultado('invalido', mensagem='\n'.join(bloqueios))
 
+        # ANTES do service: ele altera ``documento`` em memória (livro/folha).
+        avisos = avisos_para_registrar(
+            extracao, indice, documento, request.POST,
+        )
+
         with sem_criacao_automatica():
             resultado = LancamentoService.criar_lancamento_completo(
                 request, tis, imovel, documento, apos_importacao=apos_importacao,
@@ -107,6 +114,10 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice, *,
             job, request.user, lancamento,
             _registros_do_ato(lancamento, ato, chave), linhas,
         )
+        if avisos:
+            ImportacaoIA.objects.filter(
+                modelo='Lancamento', objeto_id=lancamento.pk,
+            ).update(avisos=avisos)
         importacao._marcar_importadas(extracao, request.user, [chave])
 
         restantes = _restantes(atos, indice)
@@ -126,6 +137,7 @@ def salvar_ato(request, tis, imovel, documento, job, extracao, indice, *,
         return Resultado(
             'salvo', mensagem_origens=segundo, lancamento=lancamento,
             lancamento_id=lancamento.pk, restantes=restantes,
+            avisos_registrados=len(avisos),
         )
 
 

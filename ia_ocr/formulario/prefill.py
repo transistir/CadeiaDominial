@@ -8,6 +8,7 @@ evidências de origem e de partes.
 from dominial.models import Cartorios, Pessoas
 
 from .. import importacao, vocabulario
+from ..classe_pendencia import eh_bloqueante
 from .areas import _area_em_outra_unidade, area_para_input
 from ..destinos import _normalizar
 from .erros import AtoInexistente
@@ -93,7 +94,7 @@ def forma_do_vocabulario(forma):
         'texto': TEXTO_FORMA_DO_VOCABULARIO.format(
             lido=forma, canonica=casamento.valor,
         ),
-        'bloqueante': False,
+        'bloqueante': eh_bloqueante(MOTIVO_FORMA_DO_VOCABULARIO),
     }
 
 
@@ -254,7 +255,7 @@ def prefill_do_ato(extracao, indice, documento):
             'texto': TEXTO_FORMA_TITULO_REINTERPRETADOS.format(
                 instrumento=titulo_lido, natureza=forma,
             ),
-            'bloqueante': False,
+            'bloqueante': eh_bloqueante(MOTIVO_FORMA_TITULO_REINTERPRETADOS),
         })
     if pendencia_data is not None:
         pendencias.append(pendencia_data)

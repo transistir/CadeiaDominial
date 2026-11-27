@@ -1,0 +1,17 @@
+{% comment %}
+  Avisos informativos do ato gravados na importação assistida (#332).
+  Só texto de negócio: nenhuma chave de linha e nenhuma PII.
+{% endcomment %}
+{% if avisos %}
+<div class="alert alert-warning ia-avisos-importacao" role="status">
+    <strong>ℹ️ Avisos registrados na importação</strong>
+    <p>Este lançamento foi salvo com avisos para conferir depois.</p>
+    <ul>
+        {% for aviso in avisos %}
+        <li>
+            {% if aviso.rotulo %}<strong>{{ aviso.rotulo }}</strong>: {% endif %}{{ aviso.texto }}
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}

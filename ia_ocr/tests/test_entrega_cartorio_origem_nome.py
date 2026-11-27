@@ -149,7 +149,9 @@ class AberturaSemDataNaConfirmacaoDuplicataTest(_OrigemSoNomeBase):
 
         self.assertEqual(resposta.status_code, 302)
         marcar.assert_not_called()
-        self.assertIn(MENSAGEM_DATA_ABERTURA, self.mensagens(resposta))
+        self.assertIn(
+            MENSAGEM_DATA_ABERTURA, '\n'.join(self.mensagens(resposta)),
+        )
         self.assertEqual(self.contagens(), antes)
         self.assertFalse(
             Lancamento.objects.filter(documento=self.documento).exists()

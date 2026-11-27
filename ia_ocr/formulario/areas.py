@@ -3,6 +3,7 @@
 import re
 
 from .. import importacao
+from ..classe_pendencia import eh_bloqueante
 from ..revisao import MOTIVO_UNIDADE_AREA
 from .numeros import _numero_legivel
 
@@ -92,7 +93,7 @@ def _area_em_outra_unidade(extracao, indice, linhas, chave):
             f'Área lida em {unidade or "unidade não identificada"}, '
             'descartada pelo revisor.'
         ),
-        'bloqueante': True,
+        'bloqueante': eh_bloqueante(MOTIVO_AREA_EM_OUTRA_UNIDADE),
     }
 
 

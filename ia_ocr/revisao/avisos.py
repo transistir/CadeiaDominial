@@ -3,6 +3,7 @@
 from dominial.models import Cartorios
 from dominial.services.lancamento_origem_service import LancamentoOrigemService
 
+from ..classe_pendencia import eh_bloqueante
 from .linhas import (
     _campo_ausente, _cartorio_id_da_linha, _contexto_revisao, _valor_efetivo,
 )
@@ -71,7 +72,8 @@ def _origem_nao_consta(linhas, ato):
         chave = f'{ato.chave}/origem/{nome}'
         if _campo_ausente(linhas, chave):
             achados.append({
-                'chave': chave, 'motivo': motivo, 'bloqueante': False,
+                'chave': chave, 'motivo': motivo,
+                'bloqueante': eh_bloqueante(motivo),
             })
     return achados
 
@@ -126,7 +128,7 @@ def _origens_homonimas(linhas, atos, documentos_queryset):
         chave: {
             'chave': chave_numero_por_ato[chave],
             'motivo': MOTIVO_ORIGEM_HOMONIMA,
-            'bloqueante': False,
+            'bloqueante': eh_bloqueante(MOTIVO_ORIGEM_HOMONIMA),
         }
         for chave, homonimo in homonimos.items()
         if homonimo is not None
@@ -175,7 +177,8 @@ def avisos(extracao, documentos_queryset=None) -> list[dict]:
                 continue
             if getattr(tipo, flag) and _campo_ausente(linhas, chave):
                 resultado.append({
-                    'chave': chave, 'motivo': flag, 'bloqueante': False,
+                    'chave': chave, 'motivo': flag,
+                    'bloqueante': eh_bloqueante(flag),
                 })
         if tipo.requer_transmissao:
             papeis = {
@@ -186,6 +189,7 @@ def avisos(extracao, documentos_queryset=None) -> list[dict]:
             if not {'transmitente', 'adquirente'} <= papeis:
                 resultado.append({
                     'chave': f'{ato.chave}/partes',
-                    'motivo': 'requer_transmissao', 'bloqueante': False,
+                    'motivo': 'requer_transmissao',
+                    'bloqueante': eh_bloqueante('requer_transmissao'),
                 })
     return resultado

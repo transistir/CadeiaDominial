@@ -10,6 +10,8 @@ import re
 import unicodedata
 from datetime import date
 
+from ..classe_pendencia import eh_bloqueante
+
 MARCAS_DE_INSTRUMENTO = (
     'escritura', 'transcri', 'carta de', 'formal de partilha',
     'alvara', 'mandado', 'termo de', 'instrumento',
@@ -166,5 +168,5 @@ def _data_transacao_do_instrumento(instrumento, data_do_a3):
         'motivo': MOTIVO_DATA_TRANSACAO_DO_INSTRUMENTO,
         'rotulo': ROTULO_DATA_TRANSACAO,
         'texto': texto,
-        'bloqueante': False,
+        'bloqueante': eh_bloqueante(MOTIVO_DATA_TRANSACAO_DO_INSTRUMENTO),
     }, True
