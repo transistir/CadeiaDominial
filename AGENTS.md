@@ -1,162 +1,73 @@
 # AGENTS.md — Cadeia Dominial
 
-Conventions for any coding agent (Hermes, Claude Code, Codex) working in this repo.
-Read this before touching code. Pairs with the repo's `CLAUDE.md` (legacy) and
-the user's `~/.hermes/memory/memory.md` for cross-project facts.
+Ponto de entrada para qualquer agente de código (Hermes, Claude Code, Codex) neste repositório.
+Leia antes de alterar código. Este arquivo aponta para as fontes de verdade; não as replica.
 
-## Output style
+## Arquitetura vigente
 
-This project uses the **`i-have-adhd`** output style by default (every harness).
-The skill is installed at:
+- **V1 Django** é a arquitetura ativa do produto. Código em `manage.py`, `cadeia_dominial/` (configuração),
+  `dominial/` (aplicação principal), `ia_ocr/` (extração assistida), `templates/` e `static/`.
+- Dependências: `requirements.txt`. Versão de Python: `runtime.txt` (3.11).
+- Ambiente local e de teste: `docker-compose.yml` e `docker-compose.dev.yml`.
+- **V2** (Cloudflare Workers, D1, pnpm, backlog #61–#72) está **arquivada**. Não é mantida na `develop`.
+  O histórico está na branch remota `v2` (ponta `d6226621`). Restos locais em `packages/` de checkouts
+  antigos devem ser ignorados. Não planeje, implemente nem revisite a V2 sem autorização explícita na sessão.
 
-- Hermes: `~/.hermes/skills/i-have-adhd/SKILL.md`
-- Claude Code: `claude plugin install i-have-adhd@i-have-adhd`
-- Codex: `codex plugin add i-have-adhd@i-have-adhd`
+## Fila de trabalho — obrigatória no início de cada sessão
 
-Lead with the next action, number multi-step work, restate state every turn, end
-with one concrete next step. Full rules in the SKILL.md.
+- **`docs/produto-3/ROADMAP.md` é a fonte única do que fazer.** Siga a fila (R1–R10) na ordem e com as
+  exceções de gate definidas ali. Não escolha issue por recência ou preferência.
+- Os gates (GATE-CLIENTE, GATE-LUANDRO, GATE-PRODUTO) e o que cada um bloqueia estão definidos no roadmap.
+  Não os reinterprete aqui.
+- Reordenar a fila exige aprovação explícita do usuário, registrada no próprio roadmap.
+- `docs/PLANO_SPRINTS.md` é histórico. Não planeje a partir dele.
+- O escopo do Produto 3 (FADESP 019/2026) está em `docs/produto-3/LEVANTAMENTO_PRODUTO3_CONTRATO.md`.
+  A trilha de IA/OCR do contrato FUNAPE aparece na seção F3 do roadmap, marcada como outro contrato.
 
-## Development queue — MANDATORY at session start
+## Papéis e modelos de desenvolvimento
 
-**`docs/produto-3/ROADMAP.md` is the single source of truth for what to work on.**
-
-- At the START of every new session (any harness), read that file first and
-  follow the R1–R9 queue in the order and with the gate exceptions defined
-  there. Do not pick issues by recency or preference.
-- `docs/PLANO_SPRINTS.md` is HISTORICAL — never plan from it.
-- Reordering the queue requires explicit user approval, recorded in the
-  roadmap file itself.
-- Gates must be respected with their roadmap-defined scope: GATE-CLIENTE
-  blocks R7, GATE-LUANDRO blocks only the production release/tag in R1, and
-  GATE-PRODUTO blocks R9.
-- Except for an explicit gate exception in the roadmap, mark each release
-  block done before starting the next one.
-
-## Stack
-
-- **Monorepo:** pnpm workspaces
-- **Frontend:** React + Vite + TanStack Query (in `packages/web`)
-- **API:** Cloudflare Workers + D1 SQLite (in `packages/api`)
-- **Shared types:** `packages/shared`
-- **Seed scripts:** `scripts/seed` (TypeScript, raw better-sqlite3 for bulk inserts)
-- **Schema:** Drizzle ORM (SQLite dialect); migrations live in `packages/api/drizzle/`
-- **Test:** Vitest (jsdom for web, node for api/shared/seed)
-
-## Build/test commands (always scoped)
-
-```bash
-# From the repo root
-pnpm typecheck                       # all packages, 5 packages
-pnpm test                            # all packages
-pnpm --dir scripts/seed typecheck    # scoped — fast iteration
-pnpm --dir scripts/seed test
-pnpm --dir packages/web test
-```
-
-**PATH caveat:** pnpm lives at `/root/.hermes/node/bin` and is NOT on the default
-PATH. If `pnpm` is not found, `export PATH=/root/.hermes/node/bin:$PATH` first.
-
-## Schema decisions — CHECK BEFORE ADDING COLUMNS
-
-The v2 schema removed many PII fields. Decisions are tracked in:
-- `docs/db/SCHEMA_DECISOES_PENDENTES.md` (authoritative)
-- Each schema file's docstring (`packages/api/drizzle/schema/*.ts`)
-
-**Active decisions that commonly bite:**
-
-| Tag | Decision | What it means |
-|---|---|---|
-| **Q5** | REMOVER cpf/rg/email/telefone from `pessoa` | Only `id, nome, created_at, updated_at, deleted_at`. Never insert into these removed columns. |
-| **Q4** | No PII encryption for v2 pessoa | The `pessoa` entity is a *cartório attribution source* (public name in a property chain). No encryption needed. |
-| **Q2=B** | Soft-delete via `deleted_at` | LGPD-compliant without breaking FKs. Use `deleted_at IS NULL` for "active" queries. |
-
-**Always** read the schema file's docstring + `docs/db/SCHEMA_DECISOES_PENDENTES.md`
-before adding a column. If a test fails with `table X has no column named Y`,
-the answer is **almost never** to add the column — it's to remove the INSERT.
+- Quem implementa, quem revisa e quais modelos ou rotas podem ser usados são definidos pelo **harness vigente**,
+  declarado no `harness-state` do Hermes, seção `projects.cadeia_dominial` (no servidor: `~/.hermes/harness-state.yaml`).
+- Este repositório não replica essa tabela. Se algum texto aqui divergir do harness, **vale o harness**;
+  corrija este arquivo, não o harness, em um PR separado.
+- A regra de custo e rota por modelo (`model_access`) também vale somente pelo harness.
 
 ## PR cycle (luandro's standing rule)
 
-**Loop `fix → Codex review → commit → Codex PR review` until all 3 frontier models
-APPROVE.** Don't merge on partial consensus.
+- Branch, worktree e PR seguem o `branch_policy` de `projects.cadeia_dominial` no harness vigente. PRs vão para `develop`.
+- `main` recebe apenas merge de `develop` com tag de release (`vX.Y.Z`). Não abra PR de feature para `main`.
+- Ciclo: corrigir, revisar, commitar e revisar de novo até os revisores exigidos aprovarem. Quais revisores e rotas, o harness define.
+- Merge: consentimento humano, conforme `projects.cadeia_dominial.roles.evaluator.decision_rule.merge_authority`.
+  A delegação de `merge_delegation` depende das condições descritas no harness; não é regra deste arquivo.
+- Push de branch e abertura de PR: `projects.cadeia_dominial.roles.evaluator.push_delegation`.
+  Tag, deploy, produção e operações de release seguem autorização humana explícita.
 
-| Stage | Model | Use for |
-|---|---|---|
-| Implementation | **Sonnet 5** (`claude --model sonnet`) | Bug fixes, test adaptation, refactors, known recipes |
-| Architecture / planning / final review | **Opus 5** (`claude --model opus`) | Design choices, risky refactors, cross-validation, sign-off |
-| Runtime / sandbox review | **Codex GPT-5.6-sol xhigh** | PR readiness, final gate, code review |
-| Fallback (reviews only) | **Z.AI GLM-5.2** | When Opus is unavailable — NOT for implementation |
+## Limite de 400 linhas por arquivo (CI)
 
-**Codex sandbox limits:** Codex can't run scripts that import `better-sqlite3`
-(ERR_MODULE_NOT_FOUND on tsx module resolution). Hand it file paths, not
-script-execution requests. Opus/Sonnet with file access substitute well.
-
-**Pre-merge gate:** Never merge without explicit human authorization. The 3-model
-APPROVE is necessary, not sufficient — the user has the final say.
-
-**Branch model (always):** development branches are cut FROM `develop` and PRs
-target `develop` (tested on the test server). `main` only receives merge→tag
-releases (PR `develop → main` + tag `vX.Y.Z` triggers prod deploy). Never open
-a feature PR directly against `main`.
-
-## Pre-commit hooks
-
-ESLint, typecheck, and tests run automatically. **Fix root causes, don't bypass
-with `--no-verify`.** Hook failures:
-
-- ESLint: most are auto-fixable with `pnpm --dir <pkg> lint --fix`
-- Typecheck: usually missing import or wrong type for a removed column (Q5)
-- Tests: re-run with `pnpm --dir <pkg> test -- <pattern>` to scope
-
-## Tamanho de arquivo — 400 linhas (imposto por CI)
-
-Nenhum arquivo `.py`, `.js`, `.html` ou `.css` pode passar de **400 linhas**.
-O estado atual que já excede o limite está congelado em
-`scripts/file_size_baseline.json` — o baseline **só pode encolher**.
-
-- Rodar o check: `python scripts/check_file_size.py` (exit 1 se violar;
-  `--quiet` imprime só as violações).
-- Rodar os testes do verificador: `python -m unittest discover -s scripts/tests -v`.
-- Atualizar o baseline: **obrigatório quando um arquivo legado diminuiu** —
-  encolher sem atualizar o baseline é violação ("baseline desatualizado;
-  rode --write-baseline"). Rode
-  `python scripts/check_file_size.py --write-baseline` e revise o diff;
-  `--write-baseline` só reduz ou remove entradas (nunca adiciona ou aumenta).
-  Nunca rode `--write-baseline` para "calar" um arquivo novo acima do limite.
-- Comparar o baseline com a base do PR (o PR não pode abençoar o próprio
-  baseline; funciona mesmo quando a base ainda não tem o JSON):
-  `python scripts/check_file_size.py --base-ref origin/develop`.
-- Hook opcional de pre-commit: `git config core.hooksPath .githooks`.
+- Nenhum arquivo de código (.py, .js, .html, .css) pode passar de 400 linhas. Arquivos legados acima do limite
+  estão em `scripts/file_size_baseline.json`, que só pode encolher.
+- Verificar: `python scripts/check_file_size.py`. Testes do verificador:
+  `python -m unittest discover -s scripts/tests -v`.
+- Atualizar o baseline quando um arquivo legado diminuiu: `python scripts/check_file_size.py --write-baseline`.
+  Nunca use `--write-baseline` para aceitar um arquivo novo acima do limite.
+- Comparação com a base do PR: `python scripts/check_file_size.py --base-ref origin/develop`.
+- Hook de pre-commit: `git config core.hooksPath .githooks` (o hook só checa tamanho).
 - Contexto e plano de redução: `docs/refatoracao/PLANO_400_LINHAS.md`.
+- O CI de PR executa esse check (`.github/workflows/file-size.yml`). O workflow de deploy de testes
+  (`.github/workflows/deploy-develop.yml`) não executa suíte de testes.
 
-## Code style
+## Decisões de dados
 
-- **TypeScript strict** — no `any` unless wrapped in a comment explaining why
-- **Drizzle queries** for reads; **raw better-sqlite3** for bulk inserts (Drizzle
-  is ~10× slower for 10k+ rows)
-- **Tests colocated** with source as `*.test.ts` (Vitest auto-discovers)
-- **Vitest `describe` blocks** named for the function under test
+- Decisões de persistência canônica: `docs/correcao-identidade-documentos/DECISAO_PERSISTENCIA_CANONICA.md`.
+- Schemas de extração: `ia_ocr/schemas/`. Antes de alterar um campo, confira o schema e os testes em `ia_ocr/tests/`.
+- Antes de adicionar coluna ou campo, leia a decisão correspondente. Se a decisão não existir, pergunte; não invente.
 
-## Repo layout quick reference
+## Testes
 
-```
-.
-├── packages/
-│   ├── api/         # Cloudflare Workers + D1, Drizzle schema lives here
-│   ├── web/         # React + Vite frontend
-│   ├── shared/      # Cross-package types and utilities
-│   ├── chain-topology/  # S-1 orchestrator (topology + PII filler)
-│   └── legacy-fit/  # Legacy migration scripts
-├── scripts/
-│   └── seed/        # S-2 writer (raw SQL persistence)
-├── docs/
-│   └── db/          # Schema decisions, migration plans
-└── worktrees/       # Active worktrees (one per PR)
-```
+- Suíte Django: `python manage.py test` (comando padrão do projeto; o CI não a executa).
+- Antes de declarar pronto, rode os testes do módulo alterado.
 
-## Don't
+## Regras gerais
 
-- Don't add cpf/rg/email/telefone columns to `pessoa` — see Q5 above
-- Don't use Drizzle for bulk inserts in the seed — use raw better-sqlite3
-- Don't use `claude --model claude-fable-5` — that name returns 400. Use `opus` or `sonnet`
-- Don't merge without explicit user authorization, even if all 3 models APPROVE
-- Don't read or commit `.env` files — credentials are redacted by default
+- Credenciais e `.env`: seguir as regras de segurança do harness vigente e do SOUL do perfil.
+- Não use `--no-verify` para contornar hook. Corrija a causa.
