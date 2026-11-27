@@ -89,6 +89,24 @@ class BannerGruposTest(RevisaoFormularioBase):
         self.assertNotIn('12,5 alqueires no documento', bloqueios)
         self.assertIn('Informe a data do ato de abertura', bloqueios)
 
+    def test_reenvio_recusado_preserva_informativos_do_prefill(self):
+        recusa = self.salvar(0, tipo_lancamento='')
+
+        self.assertEqual(recusa.status_code, 200)
+        avisos = _grupo(recusa.content.decode(), 'ia-revisao-avisos')
+        self.assertIn('CPF/RG das partes', avisos)
+
+    def test_area_invalida_no_reenvio_mantem_checkbox_de_descarte(self):
+        self._com_area_em_alqueires()
+        antes = self.contagens()
+
+        resposta = self.salvar(0, area='1.000')
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(self.contagens(), antes)
+        bloqueios = _grupo(resposta.content.decode(), 'ia-revisao-bloqueios')
+        self.assertIn('ia-revisao-descarte-area', bloqueios)
+
     def test_checkbox_de_descarte_sobrevive_ao_reenvio(self):
         self._com_area_em_alqueires(inicio_sem_data=True)
 
@@ -105,6 +123,7 @@ class BannerGruposTest(RevisaoFormularioBase):
         avisos = _grupo(html, 'ia-revisao-avisos')
         self.assertIn('descartada pelo revisor', avisos)
         self.assertIn('ia-revisao-descarte-area', avisos)
+        self.assertIn('checked', avisos)
         self.assertNotIn(
             '12,5 alqueires no documento',
             _grupo(html, 'ia-revisao-bloqueios'),

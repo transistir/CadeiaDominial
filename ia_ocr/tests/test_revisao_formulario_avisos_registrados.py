@@ -9,7 +9,7 @@ from dominial.models import Lancamento
 from ia_ocr.models import ImportacaoIA
 from ia_ocr.revisao_ato.avisos_registrados import avisos_do_lancamento
 
-from .payloads_extracao import payload_averbacao
+from .payloads_extracao import payload_averbacao, payload_registro
 from .test_revisao_formulario_view_base import (
     RevisaoFormularioBase, post_do_html,
 )
@@ -48,8 +48,79 @@ class AvisosRegistradosTest(RevisaoFormularioBase):
 
         serializado = json.dumps(self._snapshot(), ensure_ascii=False)
 
-        for proibido in ('123.456.789-00', '987.654.321-00', 'JOÃO', 'PEDRO'):
+        for proibido in (
+            '123.456.789-00', '987.654.321-00', '12345678900',
+            '98765432100', 'JOÃO', 'MARIA', 'PEDRO',
+        ):
             self.assertNotIn(proibido, serializado)
+
+    def _com_forma_trocada_com_cpf(self):
+        payload = payload_registro(self.job.job_id)
+        ato = payload['acts'][0]
+        ato['forma'] = self._campo(
+            'Escritura Pública CPF 123.456.789-00', 'Escritura Pública',
+        )
+        ato['titulo'] = self._campo('Venda e Compra', 'Venda e Compra')
+        self.job.extracoes.all().delete()
+        self.extracao = self._aberta(payload)
+
+    def test_snapshot_usa_texto_controlado_sem_pii(self):
+        self._com_forma_trocada_com_cpf()
+
+        self.salvar(0)
+
+        avisos = self._snapshot()
+        aviso = next(
+            item for item in avisos
+            if item['motivo'] == 'forma_titulo_reinterpretados'
+        )
+        self.assertEqual(
+            aviso['texto'],
+            'Forma e título foram reinterpretados; confira os dois campos.',
+        )
+        serializado = json.dumps(avisos, ensure_ascii=False)
+        for proibido in ('123.456.789-00', '12345678900'):
+            self.assertNotIn(proibido, serializado)
+
+    def _registro_sem_forma_que_requer_forma(self):
+        self.tipo_registro.requer_forma = True
+        self.tipo_registro.save(update_fields=['requer_forma'])
+        self.job.extracoes.all().delete()
+        self.extracao = self._aberta(payload_registro(self.job.job_id))
+
+    def test_requer_forma_some_quando_o_post_preenche_a_forma(self):
+        self._registro_sem_forma_que_requer_forma()
+
+        self.salvar(0, forma_averbacao='Compra e venda')
+
+        motivos = [aviso['motivo'] for aviso in self._snapshot()]
+        self.assertNotIn('requer_forma', motivos)
+
+    def test_requer_forma_fica_quando_o_post_nao_preenche(self):
+        self._registro_sem_forma_que_requer_forma()
+
+        self.salvar(0)
+
+        motivos = [aviso['motivo'] for aviso in self._snapshot()]
+        self.assertIn('requer_forma', motivos)
+
+    def test_requer_observacao_some_com_observacoes_no_post(self):
+        payload = payload_averbacao(self.job.job_id)
+        self.job.extracoes.all().delete()
+        self.extracao = self._aberta(payload)
+
+        self.salvar(0, observacoes='x')
+
+        motivos = [aviso['motivo'] for aviso in self._snapshot()]
+        self.assertNotIn('requer_observacao', motivos)
+
+    def test_area_salva_nao_registra_area_descartada(self):
+        self._ultimo_com_area(None)
+
+        self.salvar(0, area='0.012', descartar_area='1')
+
+        motivos = [aviso['motivo'] for aviso in self._snapshot()]
+        self.assertNotIn('area_descartada', motivos)
 
     def test_bloqueante_resolvido_nao_vira_aviso(self):
         self._ultimo_com_area('0.0120')

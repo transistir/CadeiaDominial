@@ -1,8 +1,9 @@
 """Classe única de cada motivo de pendência (#332).
 
-Módulo-folha: não importa nada de ``ia_ocr`` (evita ciclo). É a fonte única
-que separa o que BLOQUEIA a gravação do ato do que é apenas INFORMATIVO.
-Motivo desconhecido falha fechado: bloqueante.
+Módulo-folha: não importa nada de ``ia_ocr`` (evita ciclo). O mapa decide o
+GRUPO do banner (bloqueios × avisos), NÃO o que o ``save`` recusa — essa
+decisão continua nos services do lançamento. Motivo desconhecido falha
+fechado: grupo bloqueante.
 """
 
 BLOQUEANTE = True

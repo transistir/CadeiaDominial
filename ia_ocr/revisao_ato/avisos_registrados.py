@@ -14,7 +14,20 @@ from .. import formulario
 from ..models import ImportacaoIA
 from .banner import MOTIVO_AREA_DESCARTADA, avisos_do_formulario
 
-CAMPOS_DO_AVISO = ('motivo', 'rotulo', 'texto')
+# Texto fixo por motivo que interpolava texto livre do OCR (forma, título,
+# datas). O banner continua detalhado; o snapshot persistido, não: CPF/nome
+# no campo errado não podem virar histórico.
+TEXTO_CONTROLADO = {
+    'forma_ajustada_vocabulario': (
+        'Forma lida ajustada ao vocabulário; confira o valor antes de salvar.'
+    ),
+    'forma_titulo_reinterpretados': (
+        'Forma e título foram reinterpretados; confira os dois campos.'
+    ),
+    'data_transacao_do_instrumento': (
+        'Data da transação derivada do instrumento; confira o valor.'
+    ),
+}
 
 
 def avisos_para_registrar(extracao, indice, documento, post):
@@ -28,8 +41,11 @@ def avisos_para_registrar(extracao, indice, documento, post):
         prefill = formulario.prefill_do_ato(extracao, indice, documento)
     except formulario.AtoInexistente:
         return []
-    avisos = avisos_do_formulario(prefill, extracao, indice)
-    if post.get('descartar_area') == '1':
+    avisos = avisos_do_formulario(prefill, extracao, indice, post=post)
+    if (
+        post.get('descartar_area') == '1'
+        and not (post.get('area') or '').strip()
+    ):
         area = next(
             (item for item in prefill.get('pendencias', ())
              if item['motivo'] == 'unidade_area'),
@@ -59,4 +75,9 @@ def avisos_do_lancamento(lancamento):
 
 
 def _somente_texto(aviso):
-    return {campo: aviso.get(campo) or '' for campo in CAMPOS_DO_AVISO}
+    motivo = aviso.get('motivo')
+    return {
+        'motivo': motivo or '',
+        'rotulo': aviso.get('rotulo') or '',
+        'texto': TEXTO_CONTROLADO.get(motivo, aviso.get('texto') or ''),
+    }

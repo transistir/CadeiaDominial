@@ -118,6 +118,6 @@ class AberturaSemDataNoPostTest(AberturaM237Base):
         self.assertEqual(self.contagens(), antes)
         mensagens = self.mensagens(resposta)
         self.assertFalse(
-            any(mensagem == MENSAGEM_DATA_ABERTURA for mensagem in mensagens)
+            any(MENSAGEM_DATA_ABERTURA in mensagem for mensagem in mensagens)
         )
         self.assertTrue(any(ERRO_CRIACAO in m for m in mensagens))

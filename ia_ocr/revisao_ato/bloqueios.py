@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from dominial.models import Cartorios, LancamentoTipo
+from dominial.utils.area_br import AreaInvalida, parse_area_br
 
 from ..classe_pendencia import eh_bloqueante
 from ..formulario import _area_em_outra_unidade
@@ -45,17 +46,23 @@ def _item(motivo, rotulo, texto, **extras):
     }
 
 
+def _area_resolvida_do_post(post):
+    """Descarte explícito ou área que o parser único aceita sem ambiguidade."""
+    if post.get('descartar_area') == '1':
+        return True
+    try:
+        return parse_area_br(post.get('area')) is not None
+    except AreaInvalida:
+        return False
+
+
 def bloqueios_do_post_itens(post, extracao, indice, linhas):
     """Bloqueios do POST como ``{motivo, rotulo, texto}`` (banner #332)."""
     bloqueios = []
     area = _area_em_outra_unidade(
         extracao, int(indice), linhas, f'/acts/{int(indice)}',
     )
-    if (
-        area is not None
-        and not (post.get('area') or '').strip()
-        and post.get('descartar_area') != '1'
-    ):
+    if area is not None and not _area_resolvida_do_post(post):
         bloqueios.append(_item(
             MOTIVO_AREA_SEM_DECISAO, area['rotulo'], MENSAGEM_AREA_SEM_DECISAO,
             rotulo_descarte=area.get('rotulo_descarte'),
